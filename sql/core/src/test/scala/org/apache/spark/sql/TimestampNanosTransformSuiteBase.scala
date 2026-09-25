@@ -58,6 +58,26 @@ abstract class TimestampNanosTransformSuiteBase extends QueryTest with SharedSpa
     checkAnswer(df, spark.sql(
       "SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'").collect().head)
   }
+
+  test("TRANSFORM output floors an over-precise value to the declared precision") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    // 9 fractional digits fed into p=7 (100 ns) and p=8 (10 ns) columns are floored on read.
+    val df = spark.sql(
+      """SELECT TRANSFORM(s7, s8) USING 'cat' AS (c7 TIMESTAMP_NTZ(7), c8 TIMESTAMP_NTZ(8))
+        |FROM VALUES ('2020-01-01 00:00:00.123456789',
+        |             '2020-01-01 00:00:00.123456789') t(s7, s8)""".stripMargin)
+    checkAnswer(df, spark.sql(
+      "SELECT '2020-01-01 00:00:00.123456789' :: timestamp_ntz(7), " +
+        "'2020-01-01 00:00:00.123456789' :: timestamp_ntz(8)").collect().head)
+  }
+
+  test("TRANSFORM output is null for the null token and unparseable text") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    val df = spark.sql(
+      """SELECT TRANSFORM(s) USING 'cat' AS (c TIMESTAMP_NTZ(9))
+        |FROM VALUES ('not a timestamp'), (CAST(NULL AS STRING)) t(s)""".stripMargin)
+    checkAnswer(df, Seq(Row(null), Row(null)))
+  }
 }
 
 class TimestampNanosTransformAnsiOnSuite extends TimestampNanosTransformSuiteBase {
