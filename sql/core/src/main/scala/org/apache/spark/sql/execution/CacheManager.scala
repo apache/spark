@@ -412,12 +412,17 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       relation: DataSourceV2Relation,
       directNamedCacheOnly: Boolean = false): Seq[TableCacheDescriptor] = {
     cachedData.flatMap { cd =>
-      val cachedRelation = if (directNamedCacheOnly) {
+      val hasRelation = if (directNamedCacheOnly) {
         directV2TableRelation(cd.plan)
+          .exists(_.sameResultWithUnboundCharVarcharScanMode(relation))
       } else {
-        cd.plan.collectFirst { case cached: DataSourceV2Relation => cached }
+        cd.plan.exists {
+          case cached: DataSourceV2Relation =>
+            cached.sameResultWithUnboundCharVarcharScanMode(relation)
+          case _ => false
+        }
       }
-      if (cachedRelation.exists(_.sameResultWithUnboundCharVarcharScanMode(relation))) {
+      if (hasRelation) {
         Some(TableCacheDescriptor(
           cd.plan,
           cd.cachedRepresentation.cacheBuilder.storageLevel))

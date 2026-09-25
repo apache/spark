@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   V2TableReference}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
 import org.apache.spark.sql.connector.catalog.{
   DelegatingTable,
   Identifier,
@@ -1710,6 +1711,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         .analyzed
         .collectFirst { case r: DataSourceV2Relation => r }
         .getOrElse(fail("expected a v2 relation"))
+        .copy(charVarcharScanMode = Some(CharVarcharScanMode.PreserveNative))
       val initialRef = V2TableReference.createForTempView(cached, Seq("state_view"))
       val otherOptionsRef = V2TableReference.createForTempView(
         cached.copy(options = new CaseInsensitiveStringMap(
@@ -1755,6 +1757,9 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         assert(otherOptionsRelation.table eq cached.table)
         assert(initialRelation.options.get("split-size") == "5")
         assert(otherOptionsRelation.options.get("split-size") == "9")
+        assert(initialRelation.charVarcharScanMode.isEmpty)
+        assert(cachedRelation.charVarcharScanMode.isEmpty)
+        assert(otherOptionsRelation.charVarcharScanMode.isEmpty)
         assert(AnalysisContext.get.tableCache.size == 1)
         assert(AnalysisContext.get.relationCache.size == 2)
       }

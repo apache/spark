@@ -43,7 +43,7 @@ case class LogicalRelation(
     override val isStreaming: Boolean,
     @transient stream: Option[SparkDataStream],
     // Bound at analysis so sameResult / cache reuse distinguish preserve-only vs standard
-    // CHAR/VARCHAR scans. None means the relation was not analyzed under first-class types.
+    // CHAR/VARCHAR scans. None means no scan mode was bound.
     charVarcharScanMode: Option[CharVarcharScanMode])
   extends LeafNode
   with StreamSourceAwareLogicalPlan
@@ -83,11 +83,6 @@ case class LogicalRelation(
   def hasCharVarchar: Boolean = output.exists { attr =>
     CharVarcharUtils.hasCharVarchar(attr.dataType) ||
       CharVarcharUtils.getRawType(attr.metadata).exists(CharVarcharUtils.hasCharVarchar)
-  }
-
-  def sameResultWithUnboundCharVarcharScanMode(other: LogicalRelation): Boolean = {
-    copy(output = other.output, charVarcharScanMode = None)
-      .sameResult(other.copy(charVarcharScanMode = None))
   }
 
   override def simpleString(maxFields: Int): String = {

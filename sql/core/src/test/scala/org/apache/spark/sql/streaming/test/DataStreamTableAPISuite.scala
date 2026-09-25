@@ -28,7 +28,11 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
-import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomSchema, InMemoryTableSessionCatalog}
+import org.apache.spark.sql.connector.{
+  CharVarcharWritableDataSource,
+  FakeV2Provider,
+  FakeV2ProviderWithCustomSchema,
+  InMemoryTableSessionCatalog}
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableInfo, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, Transform}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
@@ -560,6 +564,59 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
           preserveRead.unpersist()
           standardRead.unpersist()
         }
+      }
+    }
+  }
+
+  test("catalog-less micro-batch V2 write invalidates all bound CHAR/VARCHAR scan modes") {
+    val format = classOf[CharVarcharWritableDataSource].getName
+    val preserveConf = Seq(
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
+    val standardConf = Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
+    val cacheManager = spark.sharedState.cacheManager
+
+    withTempDir { dir =>
+      val path = new File(dir, "data").getCanonicalPath
+      val checkpoint = new File(dir, "checkpoint").getCanonicalPath
+      def readData: DataFrame = spark.read.format(format).option("path", path).load()
+
+      Seq(("a", "x")).toDF("c", "v").write
+        .format(format).option("path", path).mode("append").save()
+      val preserveRead = withSQLConf(preserveConf: _*) {
+        val read = readData.persist(MEMORY_ONLY)
+        checkAnswer(read, Row("a", "x"))
+        read
+      }
+      val standardRead = withSQLConf(standardConf: _*) {
+        val read = readData.persist(DISK_ONLY)
+        checkAnswer(read, Row("a", "x"))
+        read
+      }
+
+      val stream = MemoryStream[(String, String)]
+      val sq = stream.toDF().toDF("c", "v").writeStream
+        .format(format)
+        .option("path", path)
+        .option("checkpointLocation", checkpoint)
+        .start()
+      try {
+        stream.addData(("b", "y"))
+        sq.processAllAvailable()
+        withSQLConf(preserveConf: _*) {
+          checkAnswer(readData, Seq(Row("a", "x"), Row("b", "y")))
+        }
+        withSQLConf(standardConf: _*) {
+          checkAnswer(readData, Seq(Row("a", "x"), Row("b", "y")))
+        }
+        val currentRelation = readData.queryExecution.analyzed.collectFirst {
+          case relation: DataSourceV2Relation => relation
+        }.get
+        assert(cacheManager.lookupCacheDescriptorsByV2Relation(currentRelation).isEmpty)
+      } finally {
+        sq.stop()
+        preserveRead.unpersist()
+        standardRead.unpersist()
       }
     }
   }

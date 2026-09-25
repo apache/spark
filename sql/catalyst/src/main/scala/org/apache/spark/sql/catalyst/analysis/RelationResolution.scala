@@ -594,7 +594,10 @@ class RelationResolution(
     cached transform {
       case r: DataSourceV2Relation if matchesReference(r, ref) =>
         V2TableReferenceUtils.validateLoadedTable(r.table, ref)
-        r.copy(output = ref.output, options = ref.options)
+        r.copy(
+          output = ref.output,
+          options = ref.options,
+          charVarcharScanMode = None)
     }
   }
 

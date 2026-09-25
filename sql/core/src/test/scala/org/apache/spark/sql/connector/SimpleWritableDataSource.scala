@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapabi
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, ScanBuilder}
 import org.apache.spark.sql.connector.write._
+import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.{StructType, VarcharType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -170,6 +171,37 @@ class CharVarcharWritableDataSource extends SimpleWritableDataSource {
     }
   }
 
+  class CharVarcharStreamingWrite(queryId: String, path: String, conf: Configuration)
+    extends StreamingWrite {
+
+    override def createStreamingWriterFactory(
+        info: PhysicalWriteInfo): StreamingDataWriterFactory = {
+      new CharVarcharStreamingDataWriterFactory(
+        path, queryId, new SerializableConfiguration(conf))
+    }
+
+    override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+      val finalPath = new Path(path)
+      val jobPath = new Path(new Path(finalPath, "_temporary"), s"$queryId-$epochId")
+      val fs = jobPath.getFileSystem(conf)
+      try {
+        for (file <- fs.listStatus(jobPath).map(_.getPath)) {
+          val dest = new Path(finalPath, file.getName)
+          if (!fs.rename(file, dest)) {
+            throw new IOException(s"failed to rename($file, $dest)")
+          }
+        }
+      } finally {
+        fs.delete(jobPath, true)
+      }
+    }
+
+    override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+      val jobPath = new Path(new Path(path, "_temporary"), s"$queryId-$epochId")
+      jobPath.getFileSystem(conf).delete(jobPath, true)
+    }
+  }
+
   class CharVarcharTable(options: CaseInsensitiveStringMap) extends MyTable(options) {
     override def schema(): StructType = charVarcharSchema
 
@@ -190,10 +222,19 @@ class CharVarcharWritableDataSource extends SimpleWritableDataSource {
               }
               new CharVarcharBatchWrite(queryId, hadoopPath.toUri.toString, hadoopConf)
             }
+
+            override def toStreaming: StreamingWrite = {
+              val hadoopPath = new Path(path)
+              val hadoopConf = SparkContext.getActive.get.hadoopConfiguration
+              new CharVarcharStreamingWrite(queryId, hadoopPath.toUri.toString, hadoopConf)
+            }
           }
         }
       }
     }
+
+    override def capabilities(): java.util.Set[TableCapability] =
+      java.util.EnumSet.of(BATCH_READ, BATCH_WRITE, STREAMING_WRITE, TRUNCATE)
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = charVarcharSchema
@@ -335,6 +376,22 @@ class CharVarcharCSVDataWriterFactory(
       taskId: Long): DataWriter[InternalRow] = {
     val jobPath = new Path(new Path(path, "_temporary"), jobId)
     val filePath = new Path(jobPath, s"$jobId-$partitionId-$taskId")
+    val fs = filePath.getFileSystem(conf.value)
+    new CharVarcharCSVDataWriter(fs, filePath)
+  }
+}
+
+class CharVarcharStreamingDataWriterFactory(
+    path: String,
+    queryId: String,
+    conf: SerializableConfiguration) extends StreamingDataWriterFactory {
+
+  override def createWriter(
+      partitionId: Int,
+      taskId: Long,
+      epochId: Long): DataWriter[InternalRow] = {
+    val jobPath = new Path(new Path(path, "_temporary"), s"$queryId-$epochId")
+    val filePath = new Path(jobPath, s"$queryId-$epochId-$partitionId-$taskId")
     val fs = filePath.getFileSystem(conf.value)
     new CharVarcharCSVDataWriter(fs, filePath)
   }

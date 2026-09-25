@@ -2433,6 +2433,30 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
+  test("V2 cache descriptor lookup searches every relation in a dependent query") {
+    val left = "testcat.left_tbl"
+    val right = "testcat.right_tbl"
+    withTable(left, right) {
+      sql(s"CREATE TABLE $left (id int) USING foo")
+      sql(s"CREATE TABLE $right (id int) USING foo")
+      sql(s"INSERT INTO $left VALUES (1)")
+      sql(s"INSERT INTO $right VALUES (1)")
+
+      val joined = sql(s"SELECT * FROM $left JOIN $right USING (id)").cache()
+      try {
+        checkAnswer(joined, Row(1))
+        val rightRelation = spark.table(right).queryExecution.analyzed.collectFirst {
+          case relation: DataSourceV2Relation => relation
+        }.get
+        assert(cacheManager.lookupCacheDescriptorsByV2Relation(rightRelation).size == 1)
+        assert(cacheManager.lookupCacheDescriptorsByV2Relation(
+          rightRelation, directNamedCacheOnly = true).isEmpty)
+      } finally {
+        joined.unpersist()
+      }
+    }
+  }
+
   test("catalog V2 recache preserves all bound CHAR/VARCHAR scan modes") {
     val t = "testcat.tbl"
     val preserveConf = Seq(
