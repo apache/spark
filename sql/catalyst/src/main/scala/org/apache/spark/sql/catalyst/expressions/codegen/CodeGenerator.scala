@@ -1259,6 +1259,18 @@ class CodegenContext extends Logging {
   }
 
   /**
+   * How many calls to split functions taking `arguments` fit in one method with room to spare
+   * below the 8000 bytes HotSpot compiles; see `groupFunctionCalls`.
+   *
+   * The budget is per call of `splitExpressions`. A method that calls it more than once, as
+   * `ConcatWs` does three times on its vararg path, can hold several sets of calls, each within
+   * the budget, whose sum is not; with a call at about 15 bytes one ungrouped set is at most
+   * about 2500 bytes, so three leave room for the caller's own code, but not much.
+   */
+  private def splitCallsPerMethod(arguments: Seq[(String, String)]): Int = math.max(2,
+    DEFAULT_JVM_HUGE_METHOD_LIMIT / 2 / (MAX_BYTES_PER_SPLIT_CALL + 2 * arguments.length))
+
+  /**
    * The calls to the functions `splitExpressions` split out, grouped into functions of their own
    * where there are too many for the calling method to be JIT-compiled, level by level.
    *
@@ -1276,13 +1288,6 @@ class CodegenContext extends Logging {
    * `generateInnerClassesFunctionCalls` does with the functions of one inner class, so every
    * caller of `splitExpressions` supports it.
    */
-  /**
-   * How many calls to split functions taking `arguments` fit in one method with room to spare
-   * below the 8000 bytes HotSpot compiles; see `groupFunctionCalls`.
-   */
-  private def splitCallsPerMethod(arguments: Seq[(String, String)]): Int = math.max(2,
-    DEFAULT_JVM_HUGE_METHOD_LIMIT / 2 / (MAX_BYTES_PER_SPLIT_CALL + 2 * arguments.length))
-
   private def groupFunctionCalls(
       calls: Seq[String],
       funcName: String,
@@ -1382,9 +1387,12 @@ class CodegenContext extends Logging {
         // thus here they are in reversed order
         val orderedFunctions = innerClassFunctions.reverse
         if (orderedFunctions.size > callsPerMethod) {
-          // Too many calls for one method to stay JIT-compilable: one merged method per part,
-          // whose calls the caller groups further if there are still too many of them.
-          orderedFunctions.grouped(callsPerMethod).zipWithIndex.map { case (part, i) =>
+          // Too many calls for one method to stay JIT-compilable: one merged method per part of
+          // `SPLIT_CALLS_PER_GROUP` calls, the size C2 inlines within its budget (see
+          // `groupFunctionCalls`), whose calls the caller groups further. Each part adds one
+          // method reference to the outer class's constant pool, which the merge exists to
+          // keep small (SPARK-22226): a few entries per part, against the pool's 65535.
+          orderedFunctions.grouped(SPLIT_CALLS_PER_GROUP).zipWithIndex.map { case (part, i) =>
             val name = s"${funcName}_part$i"
             val body = foldFunctions(part.map(f => s"$f($argInvocationString)"))
             val code = s"""
@@ -1817,7 +1825,10 @@ object CodeGenerator extends Logging {
 
   /**
    * The most bytecode a call to a split function and its fold take in the calling method,
-   * besides a load per argument; see `CodegenContext.groupFunctionCalls`.
+   * besides a load per argument; see `CodegenContext.groupFunctionCalls`. Measured with
+   * `javap -c` on generated classes: a `CASE WHEN` call with its fold (invoke, loads, store,
+   * compare and branch) is about 15 bytes, and a call into another nested class, with the
+   * instance loaded through two `getfield`s, is 13 to 15 bytes.
    */
   final val MAX_BYTES_PER_SPLIT_CALL = 20
 
