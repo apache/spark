@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.collection.mutable
-
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
@@ -27,7 +25,7 @@ import org.apache.spark.sql.catalyst.optimizer.BuildLeft
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.execution.{InputAdapter, LocalTableScanExec, SparkPlan, WholeStageCodegenExec}
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
+import org.apache.spark.sql.execution.debug
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -93,30 +91,20 @@ abstract class BenchmarkQueryTest extends SharedSparkSession {
           s"and JIT optimization might not work:\n${subtree.treeString}")
     }
   }
-
 }
 
 object BenchmarkQueryTest {
 
   /**
    * The whole-stage codegen subtrees of `plan` and of its subqueries, in stage id order, each
-   * with the code it generates for data (see [[withRowBroadcasts]]). The walk follows an
-   * adaptive plan into its current plan and query stages, as `debug.codegenStringSeq` does; for
-   * a plan that has not run, that holds no whole-stage codegen subtree yet.
+   * with the code it generates for data (see [[withRowBroadcasts]]). The subtrees are the ones
+   * `debug.codegenStringSeq` reports; for an adaptive plan that has not run there are none yet.
    */
   def generatedCode(plan: SparkPlan): Seq[(WholeStageCodegenExec, CodeAndComment)] = {
-    val subtrees = new mutable.LinkedHashSet[WholeStageCodegenExec]()
-    def findSubtrees(plan: SparkPlan): Unit = plan foreach {
-      case s: WholeStageCodegenExec => subtrees += s
-      case a: AdaptiveSparkPlanExec => findSubtrees(a.executedPlan)
-      case s: QueryStageExec => findSubtrees(s.plan)
-      case s => s.subqueries.foreach(findSubtrees)
-    }
-    findSubtrees(plan)
     // One replacement per broadcast exchange of the plan, shared by the subtrees that read it, so
     // each runs its one-row broadcast once.
     val replacements = new java.util.IdentityHashMap[BroadcastExchangeExec, BroadcastExchangeExec]
-    subtrees.toSeq.sortBy(_.codegenStageId).map { s =>
+    debug.codegenSubtrees(plan).map { s =>
       s -> withRowBroadcasts(s, replacements).doCodeGen()._2
     }
   }
@@ -137,35 +125,46 @@ object BenchmarkQueryTest {
    * Fails if a broadcast join of the copy still reads anything but such a row, so that no join
    * can generate its empty-build-side code unnoticed.
    */
-  def withRowBroadcasts(
+  private def withRowBroadcasts(
       subtree: WholeStageCodegenExec,
-      replacements: java.util.Map[BroadcastExchangeExec, BroadcastExchangeExec] =
-        new java.util.IdentityHashMap[BroadcastExchangeExec, BroadcastExchangeExec]
+      replacements: java.util.Map[BroadcastExchangeExec, BroadcastExchangeExec]
   ): WholeStageCodegenExec = {
     def rowBroadcast(b: BroadcastExchangeExec): BroadcastExchangeExec =
       replacements.computeIfAbsent(b, _ => b.copy(child = LocalTableScanExec(b.child.output,
         Seq(InternalRow.fromSeq(b.child.output.map(a => Literal.default(a.dataType).value))),
         None)))
-    // Top down, so an exchange is replaced before its build side would be copied.
-    val copy = subtree.transformDown {
+    // Rewrites the stage only: below an input adapter is another stage's input, so only a
+    // broadcast read right there is replaced, and nothing under it is copied.
+    def inStage(p: SparkPlan): SparkPlan = p match {
       case r @ ReusedExchangeExec(_, b: BroadcastExchangeExec) => r.copy(child = rowBroadcast(b))
       case b: BroadcastExchangeExec => rowBroadcast(b)
-    }.asInstanceOf[WholeStageCodegenExec]
+      case a: InputAdapter => a.withNewChildren(a.children.map {
+        case c @ (_: BroadcastExchangeExec | ReusedExchangeExec(_, _: BroadcastExchangeExec)) =>
+          inStage(c)
+        case c => c
+      })
+      case other => other.withNewChildren(other.children.map(inStage))
+    }
+    val copy = inStage(subtree).asInstanceOf[WholeStageCodegenExec]
+    def stageNodes(p: SparkPlan): Seq[SparkPlan] = p +: (p match {
+      case _: InputAdapter => Nil
+      case other => other.children.flatMap(stageNodes)
+    })
     def isRow(p: SparkPlan): Boolean = p match {
       case InputAdapter(child) => isRow(child)
       case BroadcastExchangeExec(_, _: LocalTableScanExec) => true
       case ReusedExchangeExec(_, BroadcastExchangeExec(_, _: LocalTableScanExec)) => true
       case _ => false
     }
-    copy.foreach {
+    stageNodes(copy).foreach {
       case j: BroadcastHashJoinExec =>
         val build = if (j.buildSide == BuildLeft) j.left else j.right
         assert(isRow(build), s"a broadcast hash join reads ${build.nodeName}, not a one-row " +
-          s"broadcast:\n${subtree.treeString}")
+          s"broadcast, in stage ${subtree.codegenStageId}:\n${subtree.treeString}")
       case j: BroadcastNestedLoopJoinExec =>
         val build = if (j.buildSide == BuildLeft) j.left else j.right
         assert(isRow(build), s"a broadcast nested loop join reads ${build.nodeName}, not a " +
-          s"one-row broadcast:\n${subtree.treeString}")
+          s"one-row broadcast, in stage ${subtree.codegenStageId}:\n${subtree.treeString}")
       case _ =>
     }
     copy
