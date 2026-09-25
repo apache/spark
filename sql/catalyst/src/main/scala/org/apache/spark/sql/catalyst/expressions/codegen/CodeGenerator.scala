@@ -1260,61 +1260,55 @@ class CodegenContext extends Logging {
 
   /**
    * The calls to the functions `splitExpressions` split out, grouped into functions of their own
-   * wherever their fold would be longer than the split threshold, level by level, until it is not.
+   * where there are too many for the calling method to be JIT-compiled, level by level.
    *
-   * The calls are what is left in the calling method, and there are as many as the code had
-   * blocks: a `CASE WHEN` of a thousand branches splits into hundreds of functions, whose calls
-   * alone take the caller past the 8000 bytes HotSpot compiles, so that the caller - the method
-   * every row goes through - runs interpreted. A group is folded with `foldFunctions` and wrapped
-   * with `makeSplitFunction`, which is what `generateInnerClassesFunctionCalls` does with the
-   * functions of one inner class, so a caller already supports it.
+   * The calls are what is left in the calling method, one per block of code, and a `CASE WHEN`
+   * of a thousand branches has hundreds of blocks: their calls alone take the caller past the
+   * 8000 bytes HotSpot compiles (`CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT`), so the method
+   * every row goes through runs interpreted. A call and its fold compile to at most about 20 bytes
+   * plus 2 for each argument - the invocation, a load per argument, and the fold's store, test
+   * and branch - so the calls are left as they are while they fit in half of that limit, the rest
+   * being the caller's own code, and grouped otherwise. The groups are small, of
+   * `CodeGenerator.SPLIT_CALLS_PER_GROUP` calls, so that C2 can inline the split functions into
+   * each group within its inlining budget; a group of hundreds of calls stays compilable but has
+   * most of its calls left out of inlining, and runs slower. A group is folded with
+   * `foldFunctions` and wrapped with `makeSplitFunction`, which is what
+   * `generateInnerClassesFunctionCalls` does with the functions of one inner class, so every
+   * caller of `splitExpressions` supports it.
    */
+  /**
+   * How many calls to split functions taking `arguments` fit in one method with room to spare
+   * below the 8000 bytes HotSpot compiles; see `groupFunctionCalls`.
+   */
+  private def splitCallsPerMethod(arguments: Seq[(String, String)]): Int = math.max(2,
+    DEFAULT_JVM_HUGE_METHOD_LIMIT / 2 / (MAX_BYTES_PER_SPLIT_CALL + 2 * arguments.length))
+
   private def groupFunctionCalls(
       calls: Seq[String],
       funcName: String,
       arguments: Seq[(String, String)],
       returnType: String,
       makeSplitFunction: String => String,
-      foldFunctions: Seq[String] => String): Seq[String] = {
-    val splitThreshold = SQLConf.get.methodSplitThreshold
-    if (calls.length <= 1 || foldFunctions(calls).length <= splitThreshold) {
+      foldFunctions: Seq[String] => String,
+      level: Int = 0): Seq[String] = {
+    val callsPerMethod = splitCallsPerMethod(arguments)
+    if (calls.length <= callsPerMethod) {
       calls
     } else {
-      val groups = new ArrayBuffer[Seq[String]]()
-      var group = new ArrayBuffer[String]()
-      var length = 0
-      for (call <- calls) {
-        val callLength = foldFunctions(Seq(call)).length
-        if (group.nonEmpty && length + callLength > splitThreshold) {
-          groups += group.toSeq
-          group = new ArrayBuffer[String]()
-          length = 0
-        }
-        group += call
-        length += callLength
-      }
-      groups += group.toSeq
-      if (groups.length == calls.length) {
-        // Every call is past the threshold on its own, so a group would only add a level.
-        calls
-      } else {
-        val argDefinitionString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
-        val argInvocationString = arguments.map(_._2).mkString(", ")
-        val groupCalls = groups.toSeq.map { calls =>
-          val name = freshName(s"${funcName}_group")
-          val code =
-            s"""
-               |private $returnType $name($argDefinitionString) {
-               |  ${makeSplitFunction(foldFunctions(calls))}
-               |}
-             """.stripMargin
-          val function = addNewFunctionInternal(name, code, inlineToOuterClass = false)
-          function.innerClassInstance.map(instance => s"$instance.").getOrElse("") +
-            s"${function.functionName}($argInvocationString)"
-        }
-        groupFunctionCalls(
-          groupCalls, funcName, arguments, returnType, makeSplitFunction, foldFunctions)
-      }
+      val argDefinitionString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
+      val argInvocationString = arguments.map(_._2).mkString(", ")
+      val groupCalls = calls.grouped(SPLIT_CALLS_PER_GROUP).zipWithIndex.map { case (group, i) =>
+        val name = s"${funcName}_group${level}_$i"
+        val code =
+          s"""
+             |private $returnType $name($argDefinitionString) {
+             |  ${makeSplitFunction(foldFunctions(group))}
+             |}
+           """.stripMargin
+        s"${addNewFunction(name, code)}($argInvocationString)"
+      }.toSeq
+      groupFunctionCalls(groupCalls, funcName, arguments, returnType, makeSplitFunction,
+        foldFunctions, level + 1)
     }
   }
 
@@ -1380,13 +1374,28 @@ class CodegenContext extends Logging {
 
     val argDefinitionString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
     val argInvocationString = arguments.map(_._2).mkString(", ")
+    val callsPerMethod = splitCallsPerMethod(arguments)
 
     innerClassToFunctions.flatMap {
       case ((innerClassName, innerClassInstance), innerClassFunctions) =>
         // for performance reasons, the functions are prepended, instead of appended,
         // thus here they are in reversed order
         val orderedFunctions = innerClassFunctions.reverse
-        if (orderedFunctions.size > MERGE_SPLIT_METHODS_THRESHOLD) {
+        if (orderedFunctions.size > callsPerMethod) {
+          // Too many calls for one method to stay JIT-compilable: one merged method per part,
+          // whose calls the caller groups further if there are still too many of them.
+          orderedFunctions.grouped(callsPerMethod).zipWithIndex.map { case (part, i) =>
+            val name = s"${funcName}_part$i"
+            val body = foldFunctions(part.map(f => s"$f($argInvocationString)"))
+            val code = s"""
+                |private $returnType $name($argDefinitionString) {
+                |  ${makeSplitFunction(body)}
+                |}
+              """.stripMargin
+            addNewFunctionToClass(name, code, innerClassName)
+            s"$innerClassInstance.$name($argInvocationString)"
+          }.toSeq
+        } else if (orderedFunctions.size > MERGE_SPLIT_METHODS_THRESHOLD) {
           // Adding a new function to each inner class which contains the invocation of all the
           // ones which have been added to that inner class. For example,
           //   private class NestedClass {
@@ -1805,6 +1814,19 @@ object CodeGenerator extends Logging {
   // This is the threshold over which the methods in an inner class are grouped in a single
   // method which is going to be called by the outer class instead of the many small ones
   final val MERGE_SPLIT_METHODS_THRESHOLD = 3
+
+  /**
+   * The most bytecode a call to a split function and its fold take in the calling method,
+   * besides a load per argument; see `CodegenContext.groupFunctionCalls`.
+   */
+  final val MAX_BYTES_PER_SPLIT_CALL = 20
+
+  /**
+   * How many calls to split functions `CodegenContext.groupFunctionCalls` puts in one group: few
+   * enough that the split functions, each of at most `spark.sql.codegen.methodSplitThreshold`
+   * characters of code, can all be inlined into the group by C2.
+   */
+  final val SPLIT_CALLS_PER_GROUP = 8
 
   // The number of named constants that can exist in the class is limited by the Constant Pool
   // limit, 65,536. We cannot know how many constants will be inserted for a class, so we use a
