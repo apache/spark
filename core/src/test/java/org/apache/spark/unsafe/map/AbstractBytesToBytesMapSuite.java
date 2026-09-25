@@ -1173,11 +1173,11 @@ public abstract class AbstractBytesToBytesMapSuite {
         recoveryAllocationEntered.countDown();
         try {
           if (!releaseRecoveryAllocation.await(30, TimeUnit.SECONDS)) {
-            throw new AssertionError("Recovery allocation was not released");
+            fail("Recovery allocation was not released");
           }
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
-          throw new AssertionError("Recovery allocation was interrupted", e);
+          fail("Recovery allocation was interrupted", e);
         }
       });
 
