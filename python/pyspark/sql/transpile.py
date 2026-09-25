@@ -372,10 +372,10 @@ class CatalystTranspiler(AbstractTranspiler):
         Numeric sub-categories (``"integer"`` vs ``"float"``) are treated as
         compatible; Spark widens to double in the comparison.
 
-        For floating-point operands a NaN guard is added: ``NaN == NaN`` is
-        ``False`` in Python (IEEE 754), but Spark's ``EqualTo`` returns
-        ``True`` for ``NaN = NaN``. When both operands are provably integral
-        the guard is skipped because integers cannot be NaN.
+        A NaN guard is added unless both operands are provably ``"integer"``:
+        ``NaN == NaN`` is ``False`` in Python (IEEE 754), but Spark's
+        ``EqualTo`` returns ``True``. ``"numeric"`` is an unknown sub-type
+        that may resolve to a float column, so it keeps the guard.
 
         One value-level difference remains for ordering comparisons (tracked
         separately): Spark orders NaN as greater than every value, whereas
@@ -396,11 +396,10 @@ class CatalystTranspiler(AbstractTranspiler):
         left_null = left_col.isNull()
         right_null = right_col.isNull()
         # NaN guard: Python's `NaN == NaN` is False (IEEE 754 reflexivity fails),
-        # but Spark's EqualTo returns True. Only emit when at least one operand
-        # is "float" -- that variant is only selected for FractionalType columns
-        # (see ResolveTranspiledPythonUDFOptions), so isnan() is safe without a
-        # cast. For "integer" and "numeric" columns NaN is impossible.
-        if lc == "float" or rc == "float":
+        # but Spark's EqualTo returns True. Skip only when both operands are
+        # provably integral ("integer"); "numeric" is an unknown sub-type that
+        # may resolve to a float column, so it keeps the guard.
+        if not (lc == "integer" and rc == "integer"):
             nan_result = lit(not equal)
             nan_cmp = isnan(left_col) | isnan(right_col)
             value_cmp: Column = when(nan_cmp, nan_result).otherwise(
