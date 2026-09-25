@@ -239,6 +239,16 @@ abstract class Dataset[T] extends Serializable {
   def explain(mode: String): Unit
 
   /**
+   * For debugging purposes, prints all generated code found in this Dataset plan to stdout.
+   * This is equivalent to `explain("codegen")` and includes each WholeStageCodegen subtree.
+   *
+   * @group basic
+   * @since 5.0.0
+   */
+  @DeveloperApi
+  def debugCodegen(): Unit = explain("codegen")
+
+  /**
    * Prints the plans (logical and physical) to the console for debugging purposes.
    *
    * @param extended
