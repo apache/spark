@@ -330,20 +330,26 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-59574: injected hint rules are bound by spark.sql.analyzer.maxIterations") {
+    val maxIterations = 5
     Seq(false, true).foreach { singlePass =>
       withSession(Seq(_.injectHintResolutionRule(_ => AddLimitAlways))) { session =>
-        session.conf.set(SQLConf.ANALYZER_MAX_ITERATIONS.key, "5")
+        session.conf.set(SQLConf.ANALYZER_MAX_ITERATIONS.key, maxIterations.toString)
         session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
         session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
 
         // The rule never reaches a fixed point, so both analyzers are expected to stop at
-        // spark.sql.analyzer.maxIterations and to point at that config in the error message.
+        // spark.sql.analyzer.maxIterations and to report that exact bound in the error.
         val error = intercept[RuntimeException] {
           session.range(1).logicalPlan
         }
+        val message = error.getMessage
         assert(
-          error.getMessage.contains(SQLConf.ANALYZER_MAX_ITERATIONS.key),
-          s"unexpected error for singlePass=$singlePass: ${error.getMessage}"
+          message.contains(s"Max iterations ($maxIterations) reached for batch Hints"),
+          s"unexpected error for singlePass=$singlePass: $message"
+        )
+        assert(
+          message.contains(SQLConf.ANALYZER_MAX_ITERATIONS.key),
+          s"unexpected error for singlePass=$singlePass: $message"
         )
       }
     }

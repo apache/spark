@@ -78,8 +78,10 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
  *   relation operators in [[MetadataResolver]].
  * @param externalRelationResolution An optional [[RelationResolution]] with to override the default
  *   one. The default is constructed using [[Resolver.createRelationResolution]].
- * @param hintResolutionRules Rules of the fixed-point Analyzer's "Hints" batch that are injected
- *   through `SparkSessionExtensions.injectHintResolutionRule`. See [[HintResolutionRunner]].
+ * @param hintResolutionRules Single-pass hint resolution rules, applied before relation metadata
+ *   is resolved. Defaults to the fixed-point Analyzer's `injectHintResolutionRule` sequence;
+ *   an Analyzer may override `singlePassHintResolutionRules` with a different list. See
+ *   [[HintResolutionRunner]].
  */
 class Resolver(
     catalogManager: CatalogManager,
