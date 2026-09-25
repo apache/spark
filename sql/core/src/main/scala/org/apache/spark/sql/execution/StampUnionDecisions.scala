@@ -73,16 +73,14 @@ class StampUnionDecisions(snapshot: UnionConfSnapshot) extends Rule[SparkPlan] {
  * partitions.
  *
  * The same gap opens between two injected rules: one can return a `UnionExec` of its own, which
- * carries no record yet, and a later one can plan requirements over it or ask its codegen gate.
- * [[SnapshotUnionPreparationConf.before]] closes that for the two injected lists whose rules can
- * still add or drop an exchange, the AQE post-planner-strategy rules and the query-stage
- * preparation rules. Two windows stay open, and in neither can a reader add or drop an exchange.
- * The injected columnar rules share one `ApplyColumnarRulesAndInsertTransitions`, so a pass cannot
- * be listed between them from outside it. The injected query-stage optimizer rules run on a plan
- * whose exchanges are fixed, and they are listed after the built-in ones, so what a live read there
- * can still move is what the codegen gate answers, whose own barrier lands before
- * `CollapseCodegenStages`, and, for an injected rule that is itself an `AQEShuffleReadRule`,
- * whether `ValidateRequirements` keeps its rewrite.
+ * carries no record yet, and a later one can plan requirements over it, build a parent over it, or
+ * ask its codegen gate. [[SnapshotUnionPreparationConf.before]] closes that for the two lists whose
+ * rules are listed as plain `Rule[SparkPlan]`, the AQE post-planner-strategy rules and the
+ * query-stage preparation rules. [[SnapshotUnionPreparationConf.after]] closes it for the injected
+ * columnar rules, which share one `ApplyColumnarRulesAndInsertTransitions` and so have no place
+ * between them for a listed pass: the record rides on each rule's own transitions instead.
+ * `AdaptiveSparkPlanExec.optimizeQueryStage` writes it on each rule result it folds over, which
+ * covers the next rule and the `ValidateRequirements` check on an `AQEShuffleReadRule`'s rewrite.
  *
  * Only the confs are recorded, never a partitioning. `EnsureRequirements` has not inserted the
  * exchanges it adds yet, so a decision taken now would freeze plain on a union whose children only
@@ -109,6 +107,35 @@ object SnapshotUnionPreparationConf {
    */
   def before(snapshot: UnionConfSnapshot, rules: Seq[Rule[SparkPlan]]): Seq[Rule[SparkPlan]] =
     rules.flatMap(rule => Seq(new SnapshotUnionPreparationConf(snapshot), rule))
+
+  /**
+   * `rules` with the same record written behind each of their transitions.
+   * `ApplyColumnarRulesAndInsertTransitions` applies these itself, every
+   * `preColumnarTransitions` in order and then every `postColumnarTransitions` in reverse, so a
+   * pass cannot be listed between two of them from outside; wrapping the transitions puts it there.
+   * Behind rather than ahead, because the plan reaching the wrapper has passed a barrier already,
+   * and it is what a rule returns that can hold a union no pass has seen. `rules` is empty unless
+   * an extension injected something.
+   */
+  def after(snapshot: UnionConfSnapshot, rules: Seq[ColumnarRule]): Seq[ColumnarRule] =
+    rules.map(new RecordUnionPreparationConf(_, snapshot))
+}
+
+/**
+ * Records `snapshot` on each `UnionExec` in what `inner` returns, so a union `inner` created is
+ * read from the preparation's confs by the next rule in the same
+ * `ApplyColumnarRulesAndInsertTransitions`. See [[SnapshotUnionPreparationConf.after]].
+ */
+private class RecordUnionPreparationConf(inner: ColumnarRule, snapshot: UnionConfSnapshot)
+  extends ColumnarRule {
+
+  private val record = new SnapshotUnionPreparationConf(snapshot)
+
+  override def preColumnarTransitions: Rule[SparkPlan] =
+    plan => record(inner.preColumnarTransitions(plan))
+
+  override def postColumnarTransitions: Rule[SparkPlan] =
+    plan => record(inner.postColumnarTransitions(plan))
 }
 
 /**

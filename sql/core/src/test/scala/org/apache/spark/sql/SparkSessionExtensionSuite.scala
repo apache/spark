@@ -720,6 +720,45 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
       s"the snapshot pass between the two rules must have recorded the conf: $seen")
   }
 
+  test("SPARK-59122: a union one injected stage optimizer rule adds is recorded before the next") {
+    // These rules are folded over inside `optimizeQueryStage`, which validates an
+    // `AQEShuffleReadRule`'s rewrite and then folds on, both before the barrier in
+    // `postStageCreationRules`. The record is written on each rule's result there, there being no
+    // list to put a pass into.
+    val seen = ListBuffer.empty[Partitioning]
+    withSession(create { extensions =>
+      extensions.injectQueryStageOptimizerRule(_ => WrapRootInUnion)
+      extensions.injectQueryStageOptimizerRule(_ => ObserveUnionPartitioning(seen))
+    }) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      val df = session.range(0, 20, 1, 2).selectExpr("id % 5 AS k", "id AS v")
+        .repartition(4, col("k")).selectExpr("k", "v + 1 AS w")
+      assert(df.collect().map(_.getLong(1)).sorted.toSeq == (1L to 20L).toSeq,
+        "the injected union must not drop or duplicate rows")
+      // These rules run on each stage's plan as well, and the union the first one adds inside the
+      // shuffle stands over a range, which has nothing to pass through either way.
+      assert(seen.exists(!_.isInstanceOf[UnknownPartitioning]),
+        s"the union over the shuffle read must answer from the recorded conf: $seen")
+    }
+  }
+
+  test("SPARK-59122: a union one injected columnar rule adds is recorded before the next") {
+    // The injected columnar rules share one `ApplyColumnarRulesAndInsertTransitions`, so the record
+    // rides on each rule's own transitions. Those run in reverse order on the way out, so the rule
+    // that adds the union is the one injected second.
+    Seq(false, true).foreach { aqeEnabled =>
+      val seen = ListBuffer.empty[Partitioning]
+      checkInjectedUnionIsStamped(
+        create { extensions =>
+          extensions.injectColumnar(_ => ObserveUnionPartitioningColumnarRule(seen))
+          extensions.injectColumnar(_ => WrapRootInUnionColumnarRule)
+        }, aqeEnabled)
+      assert(seen.nonEmpty, s"the second columnar rule must have seen the union, aqe=$aqeEnabled")
+      assert(!seen.exists(_.isInstanceOf[UnknownPartitioning]),
+        s"the record must be written behind the rule that added it, aqe=$aqeEnabled: $seen")
+    }
+  }
+
   test("SPARK-59122: the codegen conf is recorded for a prep rule after the one that added it") {
     // The same window, read through the codegen gate rather than the partitioning. The repartition
     // is what makes AQE engage at all; it is round-robin, so the union above it has nothing to pass
@@ -1629,6 +1668,12 @@ case class ObserveUnionPartitioning(seen: ListBuffer[Partitioning]) extends Rule
     }
     plan
   }
+}
+
+/** The columnar-rule wrapper for `ObserveUnionPartitioning`. */
+case class ObserveUnionPartitioningColumnarRule(seen: ListBuffer[Partitioning])
+  extends ColumnarRule {
+  override def postColumnarTransitions: Rule[SparkPlan] = ObserveUnionPartitioning(seen)
 }
 
 /**

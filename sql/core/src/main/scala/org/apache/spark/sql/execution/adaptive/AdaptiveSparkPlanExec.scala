@@ -124,6 +124,10 @@ case class AdaptiveSparkPlanExec(
   // same session conf this query's `QueryExecution.preparations` reads.
   @transient private val unionConf = UnionConfSnapshot(context.session.sessionState.conf)
 
+  // The same record the listed passes write, for the two places that need it between two rules
+  // rather than as a pass of their own. See `SnapshotUnionPreparationConf`.
+  @transient private val recordUnionConf = new SnapshotUnionPreparationConf(unionConf)
+
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
@@ -205,7 +209,8 @@ case class AdaptiveSparkPlanExec(
   // plan to these rules has exchange as its root node.
   private def postStageCreationRules(outputsColumnar: Boolean) = Seq(
     ApplyColumnarRulesAndInsertTransitions(
-      context.session.sessionState.columnarRules, outputsColumnar),
+      SnapshotUnionPreparationConf.after(unionConf, context.session.sessionState.columnarRules),
+      outputsColumnar),
     // A barrier for a `UnionExec` an injected stage-optimizer or columnar rule just created, which
     // has no decision yet and would otherwise take one wherever it is first asked. A decision
     // already stamped on a node is kept, so this pass cannot move one.
@@ -222,6 +227,13 @@ case class AdaptiveSparkPlanExec(
     }
     val optimized = rules.foldLeft(plan) { case (latestPlan, rule) =>
       val applied = rule.apply(latestPlan)
+      if (applied ne latestPlan) {
+        // A `UnionExec` this rule just created carries no record of the confs this execution
+        // answers from, and the `ValidateRequirements` check below and the next rule both read the
+        // plan before the barrier in `postStageCreationRules` stamps it. A rule that returned its
+        // input added nothing.
+        recordUnionConf(applied)
+      }
       val result = rule match {
         case _: AQEShuffleReadRule if !applied.fastEquals(latestPlan) =>
           val distribution = if (isFinalStage) {
