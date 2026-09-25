@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.streaming
 
+import org.scalatest.time.SpanSugar._
+
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.StatefulStreamlineAggregateExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingAggregationStateManager
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
@@ -134,28 +137,42 @@ class StreamlineStreamingAggregationRealTimeSuite extends StreamRealTimeModeSuit
 
   testWithAllStateVersions("global aggregation over empty input emits the initialized row") {
     val inputData = LowLatencyMemoryStream[Int]
+    val sink = new ContinuousMemorySink()
 
     val agg = inputData.toDF()
       .filter($"value" < 0)
       .agg(count("*").as("count"), sum("value").as("sum"))
 
-    // The contains check tolerates repeated emissions from no-data batches in real-time mode,
-    // which the operator may produce in Update mode; it only asserts the rows are observed.
-    testStream(agg, OutputMode.Update, sink = new ContinuousMemorySink())(
+    // Update mode may re-emit the current row for no-data batches in real-time mode, so the
+    // assertions pin the value of every emitted row instead of counting rows.
+    testStream(agg, OutputMode.Update, sink = sink)(
       StartStream(),
       AddData(inputData, 1, 2),
-      // Every row is filtered out, so the aggregation input is empty for this batch: the
-      // initialized row must still be emitted, as the ordinary plan does.
-      CheckAnswerRowsContainsWithTimeout(60000, (0L, null)),
+      Execute { _ =>
+        // Every row is filtered out, so the aggregation input is empty for this batch: only the
+        // initialized value may be emitted, as the ordinary plan does.
+        eventually(timeout(60.seconds)) {
+          assert(sink.allData.nonEmpty, "expected the initialized row for the empty batch")
+        }
+        assert(sink.allData.forall(_ == Row(0L, null)),
+          s"unexpected rows for the empty batch: ${sink.allData}")
+        sink.clear()
+      },
+      AddData(inputData, -5),
       Execute { q =>
+        eventually(timeout(60.seconds)) {
+          assert(sink.allData.contains(Row(1L, -5L)),
+            s"missing the accumulated row: ${sink.allData}")
+        }
+        // No-data batches must keep re-emitting the accumulated value, never a stale one.
+        assert(sink.allData.last == Row(1L, -5L),
+          s"the last emitted row must be the accumulated result: ${sink.allData}")
         val aggregates = q.lastExecution.executedPlan.collect {
           case a: StatefulStreamlineAggregateExec => a
         }
         assert(aggregates.size == 1,
           s"expected the streamline aggregate operator, got:\n${q.lastExecution.executedPlan}")
       },
-      AddData(inputData, -5),
-      CheckAnswerRowsContainsWithTimeout(60000, (1L, -5L)),
       StopStream
     )
   }

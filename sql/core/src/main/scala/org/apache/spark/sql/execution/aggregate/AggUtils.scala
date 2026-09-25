@@ -463,6 +463,13 @@ object AggUtils {
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
 
       ProjectAggregationBufferExec(
+        // A global aggregation must initialize its buffer exactly once per empty batch. Planning
+        // the initialization on a single partition (AllTuples) makes the per-partition
+        // empty-input guard fire once per batch, including a batch whose child RDD has no
+        // partitions; grouped aggregations keep the child partitioning because the stateful
+        // stage below performs the shuffle.
+        requiredChildDistributionExpressions =
+          if (groupingExpressions.isEmpty) Some(Nil) else None,
         numShufflePartitions = None,
         groupingExpressions = groupingExpressions,
         aggregateExpressions = aggregateExpressions,
