@@ -25,12 +25,15 @@ import org.apache.spark.sql.internal.SQLConf
  * defined point.
  *
  * `UnionExec` derives both from state that moves: its children's `outputPartitioning` sharpens as
- * AQE finalises the plans behind them, and `conf` is the live session conf. Every reader used to
- * derive its own answer, so the answer depended on when it was read: the codegen gate could fuse a
- * union whose copy in the shell then answered the other way, so `metrics` came back empty and
- * `doProduce` failed asking `metricTerm` for `numOutputRows`. This rule asks right after
- * `EnsureRequirements`, so the decision the exchanges around a union were planned against is the
- * one `unionRDDs` and the codegen gate use.
+ * AQE finalises the plans behind them, and `conf` is the live session conf. That sharpening does
+ * not run backwards: a cached plan is executed at most once, through `SparkPlan`'s memoized
+ * `execute` or `executeColumnar`, so a node planned against it cannot see the window where it
+ * reports no final plan reopen, and a rebuild replaces the relation rather than re-entering that
+ * plan. Every reader used to derive its own answer, so the answer depended on when it was read: the
+ * codegen gate could fuse a union whose copy in the shell then answered the other way, so `metrics`
+ * came back empty and `doProduce` failed asking `metricTerm` for `numOutputRows`. This rule asks
+ * right after `EnsureRequirements`, so the decision the exchanges around a union were planned
+ * against is the one `unionRDDs` and the codegen gate use.
  *
  * It is listed again after the injected columnar and query-stage rules, the hooks that can add a
  * `UnionExec` of their own. One created there has no decision yet, and would otherwise take one

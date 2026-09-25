@@ -42,10 +42,10 @@ import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, AQEShuffleReadExec, QueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, AQEShuffleReadExec, AQEShuffleReadRule, QueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.datasources.{FileFormat, WriteFilesExec, WriteFilesExecBase, WriteFilesSpec}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ENSURE_REQUIREMENTS, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -788,6 +788,29 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
       assert(seen.nonEmpty, "the second prep rule must have seen the union")
       assert(seen.forall(identity),
         s"the snapshot pass between the two rules must have recorded the codegen conf: $seen")
+    }
+  }
+
+  test("SPARK-59122: an injected shuffle read rule's union is recorded before validation") {
+    // The other consumer inside `optimizeQueryStage`. For an `AQEShuffleReadRule` the fold checks
+    // the rewrite with `ValidateRequirements` and keeps the plan from before the rule when it
+    // fails, so a union the rule put under the aggregate is present afterwards only if the check
+    // saw the recorded conf. The flip lands after the wrapper read its snapshot, so the live value
+    // says the union concatenates while the record says it passes the partitioning through.
+    withSession(create(_.injectQueryStageOptimizerRule(_ => WrapAggChildInUnion))) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, true)
+      val df = session.range(0, 20, 1, 2).selectExpr("id % 5 AS k").groupBy("k").count()
+      assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, false)
+      assert(df.collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq ==
+        (0L until 5L).map((_, 4L)), "the injected union must not drop or duplicate rows")
+
+      val unions = collect(df.queryExecution.executedPlan) { case u: UnionExec => u }
+      assert(unions.size == 1,
+        "the aggregate's requirement must have been judged against the recorded conf, or the " +
+          s"rewrite was dropped, got\n${df.queryExecution.executedPlan}")
     }
   }
 
@@ -1634,6 +1657,25 @@ object WrapRootInUnion extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = plan match {
     case p: ProjectExec => UnionExec(Seq(p))
     case other => other
+  }
+}
+
+/**
+ * Stands for an injected shuffle-read optimizer that builds a parent over a `UnionExec` of its own:
+ * a fresh one-child union under the final aggregate, which leaves the rows alone and makes
+ * `ValidateRequirements` judge the aggregate's clustering requirement against what that union
+ * reports. `optimizeQueryStage` drops the whole rewrite when that check fails, so the union
+ * survives only if it answered from the recorded conf. Matching `Final` mode keeps it off the
+ * partial aggregate inside the shuffle stage, whose requirement is unspecified either way.
+ */
+object WrapAggChildInUnion extends Rule[SparkPlan] with AQEShuffleReadRule {
+  override protected def supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
+
+  override def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
+    case agg: HashAggregateExec
+        if agg.aggregateExpressions.exists(_.mode == Final) &&
+          !agg.child.isInstanceOf[UnionExec] =>
+      agg.withNewChildren(Seq(UnionExec(Seq(agg.child))))
   }
 }
 
