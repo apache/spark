@@ -64,7 +64,7 @@ public class SaslRpcHandler extends AbstractAuthRpcHandler {
       Channel channel,
       RpcHandler delegate,
       SecretKeyHolder secretKeyHolder) {
-    super(delegate);
+    super(delegate, conf.requireAuthForStreamRequests());
     this.conf = conf;
     this.channel = channel;
     this.secretKeyHolder = secretKeyHolder;

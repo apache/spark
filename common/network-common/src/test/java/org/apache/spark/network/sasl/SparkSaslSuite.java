@@ -360,7 +360,8 @@ public class SparkSaslSuite {
     // Tests all delegates exception for receive(), which is more complicated and already handled
     // by all other tests.
     RpcHandler handler = mock(RpcHandler.class);
-    RpcHandler saslHandler = new SaslRpcHandler(null, null, handler, null);
+    RpcHandler saslHandler = new SaslRpcHandler(
+      new TransportConf("shuffle", MapConfigProvider.EMPTY), null, handler, null);
 
     saslHandler.getStreamManager();
     verify(handler).getStreamManager();
@@ -370,6 +371,19 @@ public class SparkSaslSuite {
 
     saslHandler.exceptionCaught(null, null);
     verify(handler).exceptionCaught(isNull(), isNull());
+  }
+
+  @Test
+  public void testStreamManagerFailsClosedWhenConfigured() {
+    // Pins the wiring: with the conf set, the handler must return the fail-closed wrapper.
+    RpcHandler handler = mock(RpcHandler.class);
+    when(handler.getStreamManager()).thenReturn(mock(StreamManager.class));
+    TransportConf conf = new TransportConf("shuffle", new MapConfigProvider(
+      ImmutableMap.of("spark.network.auth.requireAuthForStreamRequests", "true")));
+    RpcHandler saslHandler = new SaslRpcHandler(conf, null, handler, null);
+
+    assertThrows(SecurityException.class,
+      () -> saslHandler.getStreamManager().openStream("/jars/app.jar"));
   }
 
   @Test
