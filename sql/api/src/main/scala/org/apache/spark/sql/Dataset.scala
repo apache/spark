@@ -243,7 +243,7 @@ abstract class Dataset[T] extends Serializable {
    * This is equivalent to `explain("codegen")` and includes each WholeStageCodegen subtree.
    *
    * @group basic
-   * @since 5.0.0
+   * @since 4.4.0
    */
   @DeveloperApi
   def debugCodegen(): Unit = explain("codegen")
