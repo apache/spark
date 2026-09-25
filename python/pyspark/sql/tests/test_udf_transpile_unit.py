@@ -1525,12 +1525,12 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             # unresolved and ResolveRandomSeed then gives each spliced copy its OWN seed. Both have
             # to end up sharing one evaluation, or `x == x` compares two independent draws.
             #
-            # Sharing leaves `col = col`, which SimplifyBinaryComparison folds to true and column
-            # pruning then drops the draw entirely -- so zero draws in the plan is the proof that
-            # both sides became the same column. Two independent draws would leave both.
+            # The NaN guard for the untyped (numeric) parameter keeps one `isnan` reference to the
+            # shared arg, so one draw remains in the plan after SimplifyBinaryComparison folds
+            # `col == col` to true. Two independent draws would leave both.
             for arg in (rand(), expr("rand()")):
                 eq_df = rows.select(eq_udf(arg).alias("v"))
-                self.assertEqual(0, self._draw_count(eq_df))
+                self.assertEqual(1, self._draw_count(eq_df))
                 self.assertTrue(all(r[0] for r in eq_df.collect()))
 
             clamped = rows.select(clamp_udf(rand()).alias("v"))
