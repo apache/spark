@@ -65,7 +65,8 @@ private[pipelines] object Scd2VersionMap {
    * Keys are field paths rendered as fully quoted multipart identifiers using
    * [[QuotingUtils.quoteNameParts]]. Quoting each name part distinguishes a nested path from a
    * column whose name contains dots. Name parts use the persisted target schema's canonical
-   * spelling.
+   * spelling, which is stable across runs regardless of changes in source-schema casing or schema
+   * evolution.
    *
    * Values indicate authorship: `true` means authored-null, `false` means unauthored-null.
    * Null values never appear in the map.
@@ -146,8 +147,8 @@ private[pipelines] object Scd2VersionMap {
    *
    * @param versionMap Version map containing keys serialized with
    *   [[QuotingUtils.quoteNameParts]].
-   * @param columnPath Raw, unquoted leaf-name parts. Their spelling must exactly match the path
-   *   used to construct the version-map key, including casing and special characters.
+   * @param columnPath Raw, unquoted leaf-name parts normalized to the canonical target-schema
+   *   spelling.
    */
   private[autocdc] def entryValue(
       versionMap: Column,
@@ -161,7 +162,8 @@ private[pipelines] object Scd2VersionMap {
    *
    * @param authorshipEntry Authorship value read from the version map, or null if absent.
    * @param currentColumnValue Current stored value for the same leaf.
-   * @param columnPath Raw leaf-name parts used to identify the column in an error.
+   * @param columnPath Raw leaf-name parts normalized to the canonical target-schema spelling,
+   *   used to identify the column in an error.
    * @return A column that evaluates to true for a valid pairing and raises an internal error
    *   otherwise.
    */
@@ -194,7 +196,7 @@ private[pipelines] object Scd2VersionMap {
    *
    * @param versionMap Version map for the row, or null when the row has no authorship record.
    * @param currentColumnValue Current stored value for the leaf.
-   * @param columnPath Raw leaf-name parts matching the key's canonical schema spelling.
+   * @param columnPath Raw leaf-name parts normalized to the canonical target-schema spelling.
    * @return Whether the originating upsert authored the stored leaf value.
    */
   private[autocdc] def isAuthored(
@@ -237,7 +239,7 @@ private[pipelines] object Scd2VersionMap {
    *
    * @param versionMap Version map for the row, or null when ignore-null authorship is not tracked.
    * @param currentColumnValue Current stored value for the leaf.
-   * @param columnPath Raw leaf-name parts matching the key's canonical schema spelling.
+   * @param columnPath Raw leaf-name parts normalized to the canonical target-schema spelling.
    * @param valueToInherit Value the row would inherit from a preceding row. A null may represent
    *   either a null value to inherit or the absence of a value to inherit; both cases are treated
    *   identically by this method.
