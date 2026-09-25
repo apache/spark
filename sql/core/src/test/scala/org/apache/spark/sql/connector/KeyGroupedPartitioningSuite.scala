@@ -6751,6 +6751,17 @@ class KeyGroupedPartitioningSuite
     assert(raw.reducers(withParam).isDefined && withParam.reducers(raw).isDefined)
   }
 
+  test("SPARK-50593: mixed-arity transforms whose arguments do not line up are not reducible") {
+    // Arguments are aligned by position before the connector is asked, so a zero-parameter
+    // transform cannot be offered one whose literal comes first: `raw(id)` against
+    // `withParam(2, id)` puts the column against the literal. ZeroOrOneParamFunction would reduce
+    // any pair whose parameter counts differ, so a None here comes from Spark, not the connector.
+    val raw = TransformExpression(ZeroOrOneParamFunction, Seq(attr("id")))
+    val literalFirst = TransformExpression(ZeroOrOneParamFunction, Seq(Literal(2), attr("id")))
+    assert(!raw.isCompatible(literalFirst))
+    assert(raw.reducers(literalFirst).isEmpty && literalFirst.reducers(raw).isEmpty)
+  }
+
   test("SPARK-50593: CalendarIntervalType literal param is reducible (not treated as complex)") {
     // CalendarIntervalType is non-complex but not an AtomicType; its literal param must not be
     // rejected as a complex container before the reducer is consulted. IntervalParamFunction is

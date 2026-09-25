@@ -66,16 +66,18 @@ public interface ReducibleFunction<I, O> {
    *
    * If this function is 'reducible' on another function, return the {@link Reducer}.
    * <p>
-   * Each parameter is a non-complex {@link Literal} carrying both its value and data type:
-   * array/map/struct/UDT-typed values are filtered out by Spark and not passed here, but other
-   * scalar values (e.g. bucket numBuckets, truncate width, or a
-   * {@code CalendarInterval}) may be. {@link Literal#value()} is Spark's internal representation
-   * (e.g. {@code UTF8String} for strings, {@code Decimal} for decimals); use
-   * {@link Literal#dataType()} to interpret it rather than assuming a JVM type.
+   * Each parameter is a {@link Literal} carrying both its value and data type, such as a bucket
+   * count, a truncate width, or a {@code CalendarInterval}. {@link Literal#value()} is Spark's
+   * internal representation (e.g. {@code UTF8String} for strings, {@code Decimal} for decimals);
+   * use {@link Literal#dataType()} to interpret it rather than assuming a JVM type. Spark does not
+   * call this method for a pair where either side has a literal of array, map, struct or UDT type,
+   * or of a type other than the function declares; the join shuffles instead.
    * <p>
    * {@code thisParams} and {@code otherParams} hold each side's own literal parameters and may have
    * different lengths -- for example a zero-parameter transform reducing onto a one-parameter one.
    * Implementations must check each array's length before indexing into it.
+   * Spark only asks when the two transforms' arguments line up position by position, so
+   * {@code days(ts)} may be offered {@code truncate(ts, 3)} but never {@code bucket(4, ts)}.
    * <p>
    * Returning {@code null} means "not reducible for these parameters" and is authoritative:
    * Spark consults no other overload. Dispatch order: Spark tries this generalized overload
