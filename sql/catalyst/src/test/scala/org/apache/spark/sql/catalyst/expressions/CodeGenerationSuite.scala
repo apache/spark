@@ -102,6 +102,27 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual.head == cases)
   }
 
+  test("the calls to split functions are grouped, so the method holding them is JIT-compiled") {
+    // A CASE WHEN of 3000 branches splits into hundreds of functions, and their calls alone took
+    // the method holding them past the 8000 bytes HotSpot compiles, so every row ran it
+    // interpreted. Grouped into functions of their own, level by level, the calls stay short.
+    val input = BoundReference(0, IntegerType, nullable = false)
+    val expression = CaseWhen(
+      (1 to 3000).map(k => (EqualTo(input, Literal(k)), Multiply(input, Literal(k)))), Literal(0))
+    val appender = new LogAppender("methods too long to be JIT compiled")
+    withLogAppender(appender,
+        loggerNames = Seq("org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator"),
+        level = Some(org.apache.logging.log4j.Level.INFO)) {
+      val projection = GenerateMutableProjection.generate(Seq(expression))
+      Seq(7 -> 49, 3000 -> 9000000, 3001 -> 0).foreach { case (in, out) =>
+        assert(projection(new GenericInternalRow(Array[Any](in))).getInt(0) == out)
+      }
+    }
+    val tooLong = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("too long to be JIT compiled"))
+    assert(tooLong.isEmpty, tooLong.mkString("\n"))
+  }
+
   test("SPARK-22543: split large if expressions into blocks due to JVM code size limit") {
     var strExpr: Expression = Literal("abc")
     for (_ <- 1 to 150) {

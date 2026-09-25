@@ -1248,7 +1248,73 @@ class CodegenContext extends Logging {
         makeSplitFunction,
         foldFunctions)
 
-      foldFunctions(outerClassFunctionCalls ++ innerClassFunctionCalls)
+      foldFunctions(groupFunctionCalls(
+        (outerClassFunctionCalls ++ innerClassFunctionCalls).toSeq,
+        func,
+        arguments,
+        returnType,
+        makeSplitFunction,
+        foldFunctions))
+    }
+  }
+
+  /**
+   * The calls to the functions `splitExpressions` split out, grouped into functions of their own
+   * wherever their fold would be longer than the split threshold, level by level, until it is not.
+   *
+   * The calls are what is left in the calling method, and there are as many as the code had
+   * blocks: a `CASE WHEN` of a thousand branches splits into hundreds of functions, whose calls
+   * alone take the caller past the 8000 bytes HotSpot compiles, so that the caller - the method
+   * every row goes through - runs interpreted. A group is folded with `foldFunctions` and wrapped
+   * with `makeSplitFunction`, which is what `generateInnerClassesFunctionCalls` does with the
+   * functions of one inner class, so a caller already supports it.
+   */
+  private def groupFunctionCalls(
+      calls: Seq[String],
+      funcName: String,
+      arguments: Seq[(String, String)],
+      returnType: String,
+      makeSplitFunction: String => String,
+      foldFunctions: Seq[String] => String): Seq[String] = {
+    val splitThreshold = SQLConf.get.methodSplitThreshold
+    if (calls.length <= 1 || foldFunctions(calls).length <= splitThreshold) {
+      calls
+    } else {
+      val groups = new ArrayBuffer[Seq[String]]()
+      var group = new ArrayBuffer[String]()
+      var length = 0
+      for (call <- calls) {
+        val callLength = foldFunctions(Seq(call)).length
+        if (group.nonEmpty && length + callLength > splitThreshold) {
+          groups += group.toSeq
+          group = new ArrayBuffer[String]()
+          length = 0
+        }
+        group += call
+        length += callLength
+      }
+      groups += group.toSeq
+      if (groups.length == calls.length) {
+        // Every call is past the threshold on its own, so a group would only add a level.
+        calls
+      } else {
+        val argDefinitionString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
+        val argInvocationString = arguments.map(_._2).mkString(", ")
+        val groupCalls = groups.toSeq.map { calls =>
+          val name = freshName(s"${funcName}_group")
+          val code =
+            s"""
+               |private $returnType $name($argDefinitionString) {
+               |  ${makeSplitFunction(foldFunctions(calls))}
+               |}
+             """.stripMargin
+          val function = addNewFunctionInternal(name, code, inlineToOuterClass = false)
+          function.innerClassInstance.map(instance => s"$instance.").getOrElse("") +
+            s"${function.functionName}($argInvocationString)"
+        }
+        groupFunctionCalls(
+          groupCalls, funcName, arguments, returnType, makeSplitFunction, foldFunctions)
+      }
     }
   }
 
