@@ -27,7 +27,6 @@ import org.apache.spark.util.ArrayImplicits._
 /** Resolves runtime Ivy dependencies using one immutable Spark configuration snapshot. */
 private[spark] final class RuntimeDependencyResolver(
     ivySettingsPath: Option[String],
-    configuredRepositories: Seq[String],
     ivyPath: Option[String],
     localIvyPath: Option[String] = None) {
   import RuntimeDependencyResolver._
@@ -58,7 +57,8 @@ private[spark] final class RuntimeDependencyResolver(
       .map(_.trim)
       .filter(_.nonEmpty)
       .toImmutableArraySeq
-    val repositories = (configuredRepositories ++ repositoryPolicy.validate(requested))
+    val repositories = repositoryPolicy
+      .validate(requested)
       .iterator
       .map(_.trim)
       .filter(_.nonEmpty)

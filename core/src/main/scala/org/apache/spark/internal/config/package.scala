@@ -3045,7 +3045,8 @@ package object config {
       .doc("Path to an Ivy settings file to customize resolution of jars specified " +
         "using spark.jars.packages or ivy:// URIs passed to SparkSession.addArtifact instead " +
         "of the built-in defaults, such as maven central. " +
-        "Additional repositories from spark.jars.repositories will also be included. " +
+        "For spark.jars.packages, additional repositories from spark.jars.repositories will " +
+        "also be included. " +
         "Client-resolved Spark Connect Ivy URIs do not use this setting. " +
         "The spark-submit --repositories option applies to submission-time resolution. " +
         "Useful for allowing Spark to resolve artifacts from behind a firewall " +
@@ -3108,9 +3109,7 @@ package object config {
   private[spark] val JAR_REPOSITORIES =
     ConfigBuilder("spark.jars.repositories")
       .doc("Comma-separated list of additional remote repositories to search " +
-        "for the maven coordinates given with --packages, spark.jars.packages, or ivy:// URIs " +
-        "passed to SparkSession.addArtifact. Client-resolved Spark Connect Ivy URIs do not use " +
-        "this setting.")
+        "for the maven coordinates given with --packages or spark.jars.packages.")
       .version("2.3.0")
       .stringConf
       .toSequence

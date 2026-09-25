@@ -179,7 +179,6 @@ class MavenUtilsSuite
            |</ivysettings>""".stripMargin)
       val resolver = new RuntimeDependencyResolver(
         ivySettingsPath = Some(settings.toString),
-        configuredRepositories = Nil,
         ivyPath = Some(tempIvyPath))
 
       val resolved = resolver.resolve(
@@ -193,7 +192,7 @@ class MavenUtilsSuite
   }
 
   test("runtime dependency resolver applies the repository policy") {
-    val resolver = new RuntimeDependencyResolver(None, Nil, Some(tempIvyPath))
+    val resolver = new RuntimeDependencyResolver(None, Some(tempIvyPath))
     val error = intercept[IllegalArgumentException] {
       resolver.resolve(
         URI.create("ivy://my.runtime.lib:mylib:0.1?repos=https://example.com/repository"),
@@ -206,7 +205,7 @@ class MavenUtilsSuite
   }
 
   test("runtime dependency resolver honors cancellation before resolution") {
-    val resolver = new RuntimeDependencyResolver(None, Nil, Some(tempIvyPath))
+    val resolver = new RuntimeDependencyResolver(None, Some(tempIvyPath))
 
     intercept[CancellationException] {
       resolver.resolve(
@@ -254,7 +253,6 @@ class MavenUtilsSuite
         val waitingForIvy = new CountDownLatch(1)
         val resolver = new RuntimeDependencyResolver(
           ivySettingsPath = None,
-          configuredRepositories = Seq(repo),
           ivyPath = Some(Paths.get(tempIvyPath, "second").toString))
         val second = Future {
           resolver.resolve(
@@ -296,7 +294,6 @@ class MavenUtilsSuite
       useIvyLayout = true) { _ =>
       val resolver = new RuntimeDependencyResolver(
         ivySettingsPath = None,
-        configuredRepositories = Nil,
         ivyPath = Some(runtimeIvyPath.toString),
         localIvyPath = Some(localIvyHome.toString))
 

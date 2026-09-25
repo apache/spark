@@ -1074,7 +1074,8 @@ Apart from these, the following properties are also available, and may be useful
     Path to an Ivy settings file to customize resolution of jars specified using
     <code>spark.jars.packages</code> or <code>ivy://</code> URIs passed to
     <code>SparkSession.addArtifact</code> instead of the built-in defaults, such as maven central.
-    Additional repositories from <code>spark.jars.repositories</code> will also be included.
+    For <code>spark.jars.packages</code>, additional repositories from
+    <code>spark.jars.repositories</code> will also be included.
     The <code>spark-submit --repositories</code> option applies to submission-time resolution.
     In Spark Connect, Ivy URIs with a <code>repos</code> query parameter or sent to a server without
     server-side Maven resolution are resolved by the client and do not use this setting. Other Ivy
@@ -1117,9 +1118,7 @@ Apart from these, the following properties are also available, and may be useful
   <td></td>
   <td>
     Comma-separated list of additional remote repositories to search for the maven coordinates
-    given with <code>--packages</code>, <code>spark.jars.packages</code>, or <code>ivy://</code> URIs
-    passed to <code>SparkSession.addArtifact</code>.
-    Client-resolved Spark Connect Ivy URIs do not use this setting.
+    given with <code>--packages</code> or <code>spark.jars.packages</code>.
   </td>
   <td>2.3.0</td>
 </tr>
