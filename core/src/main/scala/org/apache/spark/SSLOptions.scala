@@ -237,8 +237,9 @@ private[spark] object SSLOptions extends Logging {
       ns: String,
       defaults: Option[SSLOptions] = None): SSLOptions = {
 
-    // RPC does not inherit the default enabled setting due to backwards compatibility reasons
-    val enabledDefault = if (ns == "spark.ssl.rpc") {
+    // RPC and Spark Connect do not inherit the default enabled setting: RPC for
+    // backwards compatibility, Spark Connect to keep TLS strictly opt-in.
+    val enabledDefault = if (ns == "spark.ssl.rpc" || ns == "spark.ssl.connect") {
       false
     } else {
       defaults.exists(_.enabled)
