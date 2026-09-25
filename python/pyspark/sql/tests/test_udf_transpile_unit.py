@@ -1525,12 +1525,12 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             # unresolved and ResolveRandomSeed then gives each spliced copy its OWN seed. Both have
             # to end up sharing one evaluation, or `x == x` compares two independent draws.
             #
-            # Sharing leaves `col = col`, which SimplifyBinaryComparison folds to true and column
-            # pruning then drops the draw entirely -- so zero draws in the plan is the proof that
-            # both sides became the same column. Two independent draws would leave both.
+            # The NaN guard for the untyped (numeric) parameter keeps one `isnan` reference to the
+            # shared arg, so one draw remains in the plan after SimplifyBinaryComparison folds
+            # `col == col` to true. Two independent draws would leave both.
             for arg in (rand(), expr("rand()")):
                 eq_df = rows.select(eq_udf(arg).alias("v"))
-                self.assertEqual(0, self._draw_count(eq_df))
+                self.assertEqual(1, self._draw_count(eq_df))
                 self.assertTrue(all(r[0] for r in eq_df.collect()))
 
             clamped = rows.select(clamp_udf(rand()).alias("v"))
@@ -2496,16 +2496,119 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_param_category_combos_caps_preserve_typed_pins(self):
         # With more than three untyped params the cap collapses the untyped ones
-        # to numeric/string but keeps each typed param pinned (here a: str).
+        # to integer/float/string but keeps each typed param pinned (here a: str).
         import ast as _ast
 
         from pyspark.sql.transpile import _param_category_combos
 
         fn = _ast.parse("def f(a: str, b, c, d, e): return a").body[0]
         combos = _param_category_combos(fn, ["a", "b", "c", "d", "e"])
-        self.assertEqual(len(combos), 2)
+        # Three fill values: integer / float / string -> 3 combos.
+        self.assertEqual(len(combos), 3)
         for combo in combos:
             self.assertEqual(combo[0], "string")
+
+    def test_udf_transpile_integer_eq_no_nan_guard(self):
+        # `a == b` on BIGINT columns must NOT emit a NaN guard. Integers can never
+        # be NaN, so emitting `isnan(cast(bigint as double))` is unnecessary dead
+        # code. Verify via the logical plan: neither "isnan" nor an implicit double
+        # cast should appear for the integer equality variant.
+        from pyspark.sql.types import StructField, StructType
+
+        def x_eq_y(x: int, y: int) -> bool:
+            return x == y
+
+        schema = StructType(
+            [
+                StructField("a", LongType(), nullable=True),
+                StructField("b", LongType(), nullable=True),
+            ]
+        )
+        with self.sql_conf(_TRANSPILE_ON):
+            pudf = UserDefinedFunction(x_eq_y, BooleanType())
+            self.assertTrue(pudf.transpiled, "annotated int == int should transpile")
+            df = self.spark.createDataFrame([(1, 1), (1, 2), (None, None)], schema=schema)
+            projected = df.select(pudf("a", "b").alias("r"))
+            # Verify no Python eval node (plan was rewritten to Catalyst).
+            self.assertEqual(0, self._eval_python_count(projected))
+            # Verify isnan is NOT in the logical plan.
+            logical_plan = projected._jdf.queryExecution().analyzed().toString()
+            self.assertNotIn("isnan", logical_plan.lower(), "integer == must not emit NaN guard")
+            # Verify correct results: (1==1, 1==2, None==None in Python == True).
+            results = [r[0] for r in projected.collect()]
+            self.assertEqual(results, [True, False, True])
+
+    def test_udf_transpile_float_eq_nan_semantics(self):
+        # `a == b` on DOUBLE columns must correctly implement Python's NaN semantics:
+        # IEEE 754 says NaN != NaN (Python returns False), while Spark's EqualTo
+        # returns True for NaN = NaN. The NaN guard fixes this for float columns.
+        from pyspark.sql.types import DoubleType, StructField, StructType
+
+        def x_eq_y(x: float, y: float) -> bool:
+            return x == y
+
+        def x_neq_y(x: float, y: float) -> bool:
+            return x != y
+
+        schema = StructType(
+            [
+                StructField("a", DoubleType(), nullable=True),
+                StructField("b", DoubleType(), nullable=True),
+            ]
+        )
+        nan = float("nan")
+        with self.sql_conf(_TRANSPILE_ON):
+            pudf_eq = UserDefinedFunction(x_eq_y, BooleanType())
+            pudf_neq = UserDefinedFunction(x_neq_y, BooleanType())
+            self.assertTrue(pudf_eq.transpiled, "annotated float == float should transpile")
+            self.assertTrue(pudf_neq.transpiled, "annotated float != float should transpile")
+            # Verify isnan IS present in the logical plan (NaN guard was emitted).
+            df = self.spark.createDataFrame([(1.0, 1.0)], schema=schema)
+            projected_eq = df.select(pudf_eq("a", "b").alias("r"))
+            logical_plan = projected_eq._jdf.queryExecution().analyzed().toString()
+            self.assertIn("isnan", logical_plan.lower(), "float == must emit NaN guard")
+            # Verify semantics: NaN == NaN -> False (Python), None == None -> True.
+            rows = [
+                (nan, nan),  # NaN == NaN -> False in Python
+                (nan, 1.0),  # NaN == 1.0 -> False in Python
+                (1.0, 1.0),  # 1.0 == 1.0 -> True
+                (1.0, 2.0),  # 1.0 == 2.0 -> False
+                (None, None),  # None == None -> True (Python semantics)
+                (None, 1.0),  # None == 1.0 -> False
+            ]
+            df = self.spark.createDataFrame(rows, schema=schema)
+            eq_results = [r[0] for r in df.select(pudf_eq("a", "b")).collect()]
+            neq_results = [r[0] for r in df.select(pudf_neq("a", "b")).collect()]
+            self.assertEqual(eq_results, [False, False, True, False, True, False])
+            self.assertEqual(neq_results, [True, True, False, True, False, True])
+
+    def test_udf_transpile_int_float_annotation_categories(self):
+        # `int` annotation -> "integer" category; `float` annotation -> "float"
+        # category. For mixed-numeric comparisons the wider category is used.
+        import ast as _ast
+
+        from pyspark.sql.transpile import _annotation_category, _param_category_combos
+
+        # _annotation_category: int -> "integer", float -> "float".
+        fn_ann = _ast.parse("def f(x: int, y: float): pass").body[0]
+        int_ann = fn_ann.args.args[0].annotation
+        flt_ann = fn_ann.args.args[1].annotation
+        self.assertEqual(_annotation_category(int_ann), "integer")
+        self.assertEqual(_annotation_category(flt_ann), "float")
+
+        # _param_category_combos pins typed params and tries all three for untyped.
+        fn_typed = _ast.parse("def f(a: int, b: float): return a + b").body[0]
+        combos = _param_category_combos(fn_typed, ["a", "b"])
+        # One combo: both typed -> single variant {0: "integer", 1: "float"}.
+        self.assertEqual(len(combos), 1)
+        self.assertEqual(combos[0][0], "integer")
+        self.assertEqual(combos[0][1], "float")
+
+        fn_untyped = _ast.parse("def f(a): return a").body[0]
+        combos_u = _param_category_combos(fn_untyped, ["a"])
+        # Three combos for a single untyped param: integer / float / string.
+        self.assertEqual(len(combos_u), 3)
+        self.assertEqual({c[0] for c in combos_u}, {"integer", "float", "string"})
 
 
 if __name__ == "__main__":
