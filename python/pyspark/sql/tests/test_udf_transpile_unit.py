@@ -2494,6 +2494,118 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertFalse(UserDefinedFunction(bool_add, LongType()).transpiled)
             self.assertTrue(UserDefinedFunction(bytes_ident, BinaryType()).transpiled)
 
+    def test_udf_transpile_null_strictness_strict_default(self):
+        # strict is the default: ordering comparison on a NULL operand raises
+        # (matching Python's TypeError), not silently produces NULL.
+        from pyspark.sql.types import StructField, StructType
+
+        def gt_zero(x):
+            return x > 0
+
+        schema = StructType([StructField("a", LongType(), nullable=True)])
+        with self.sql_conf(_TRANSPILE_ON):
+            pudf = UserDefinedFunction(gt_zero, BooleanType())
+            self.assertTrue(pudf.transpiled, "gt_zero should transpile under strict")
+            df = self.spark.createDataFrame([Row(a=None)], schema=schema)
+            with self.assertRaises(Exception) as ctx:
+                df.select(pudf("a")).collect()
+            self.assertIn("cannot compare NULL", str(ctx.exception))
+
+        # Explicit strict= has the same behavior.
+        with self.sql_conf(
+            {
+                **_TRANSPILE_ON,
+                "spark.sql.experimental.optimizer.transpileNullStrictness": "strict",
+            }
+        ):
+            pudf = UserDefinedFunction(gt_zero, BooleanType())
+            self.assertTrue(pudf.transpiled)
+            df = self.spark.createDataFrame([Row(a=None)], schema=schema)
+            with self.assertRaises(Exception):
+                df.select(pudf("a")).collect()
+
+    def test_udf_transpile_null_strictness_loose(self):
+        # loose mode: NULL operand propagates as NULL instead of raising.
+        # The transpiled result matches Spark three-valued logic rather than
+        # Python's TypeError, which is the documented trade-off.
+        from pyspark.sql.types import StructField, StructType
+
+        _LOOSE = {
+            **_TRANSPILE_ON,
+            "spark.sql.experimental.optimizer.transpileNullStrictness": "loose",
+        }
+
+        def gt_zero(x):
+            return x > 0
+
+        def lt_zero(x):
+            return x < 0
+
+        def lte_zero(x):
+            return x <= 0
+
+        def gte_zero(x):
+            return x >= 0
+
+        schema = StructType([StructField("a", LongType(), nullable=True)])
+        with self.sql_conf(_LOOSE):
+            for func, non_null_val, non_null_expected in [
+                (gt_zero, 1, True),
+                (gt_zero, -1, False),
+                (lt_zero, -1, True),
+                (lt_zero, 1, False),
+                (lte_zero, 0, True),
+                (gte_zero, 0, True),
+            ]:
+                with self.subTest(func=func.__name__, x=non_null_val):
+                    pudf = UserDefinedFunction(func, BooleanType())
+                    self.assertTrue(
+                        pudf.transpiled,
+                        f"{func.__name__} should transpile under loose",
+                    )
+                    # Non-NULL input: result matches Python.
+                    df = self.spark.createDataFrame([Row(a=non_null_val)], schema=schema)
+                    [row] = df.select(pudf("a")).collect()
+                    self.assertEqual(row[0], non_null_expected)
+                    # NULL input: result is NULL (not a raised error).
+                    df_null = self.spark.createDataFrame([Row(a=None)], schema=schema)
+                    [row_null] = df_null.select(pudf("a")).collect()
+                    self.assertIsNone(row_null[0])
+
+    def test_udf_transpile_null_strictness_loose_does_not_affect_eq(self):
+        # The null-strictness setting only affects ordering operators.
+        # == / != use _lower_eq which always mirrors Python None equality
+        # (None == None -> True, None == x -> False) regardless of the setting.
+        from pyspark.sql.types import StructField, StructType
+
+        def x_eq_y(x, y):
+            return x == y
+
+        _LOOSE = {
+            **_TRANSPILE_ON,
+            "spark.sql.experimental.optimizer.transpileNullStrictness": "loose",
+        }
+        schema = StructType(
+            [
+                StructField("a", LongType(), nullable=True),
+                StructField("b", LongType(), nullable=True),
+            ]
+        )
+        with self.sql_conf(_LOOSE):
+            pudf = UserDefinedFunction(x_eq_y, BooleanType())
+            self.assertTrue(pudf.transpiled)
+            for x, y, expected in [
+                (None, None, True),
+                (None, 0, False),
+                (0, None, False),
+                (1, 1, True),
+                (1, 2, False),
+            ]:
+                with self.subTest(x=x, y=y):
+                    df = self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+                    [row] = df.select(pudf("a", "b")).collect()
+                    self.assertEqual(row[0], expected, f"({x} == {y})")
+
     def test_param_category_combos_caps_preserve_typed_pins(self):
         # With more than three untyped params the cap collapses the untyped ones
         # to numeric/string but keeps each typed param pinned (here a: str).

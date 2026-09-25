@@ -19,7 +19,12 @@ Experimental tools for transpiling UDFS.
 
 Transpilation is only attempted when both
 ``spark.sql.experimental.optimizer.transpilePyUDFs=true`` and
-``spark.sql.ansi.enabled=true``. The generated Catalyst expressions
+``spark.sql.ansi.enabled=true``. A third knob,
+``spark.sql.experimental.optimizer.transpileNullStrictness`` (``strict``
+by default), controls ordering-comparison null behavior: under ``strict``
+a NULL operand causes a runtime error matching Python's TypeError; under
+``loose`` NULL propagates as NULL, allowing more UDFs to transpile at the
+cost of minor semantic divergence on NULL inputs. The generated Catalyst expressions
 target ANSI-mode SQL semantics (overflow raises, divide-by-zero raises,
 etc.); running them under non-ANSI mode would silently diverge from the
 Python interpretation in ways we don't currently track. If you flip
@@ -134,6 +139,11 @@ class AbstractTranspiler(object):
     # Specify the "friendly" name a user can add to spark.sql.experimental.optimizer.pyTranspilers
     # to enable this transpiler.
     variety: str = ""
+
+    def __init__(self, null_strict: bool = True) -> None:
+        # When True, ordering comparisons on NULL raise an error (Python TypeError semantics).
+        # When False, NULL propagates as NULL (Spark three-valued logic).
+        self._null_strict = null_strict
 
     @classmethod
     def register(cls) -> None:
@@ -410,6 +420,10 @@ class CatalystTranspiler(AbstractTranspiler):
             )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
+        if not self._null_strict:
+            # loose mode: let NULL propagate as NULL (Spark three-valued logic)
+            # instead of raising to match Python's TypeError.
+            return op(left_col, right_col)
         null_guard = left_col.isNull() | right_col.isNull()
         err = lit(
             "Python UDF transpiler: cannot compare NULL with operator "
@@ -853,9 +867,13 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
     configured_transpilers = session.conf.get("spark.sql.experimental.optimizer.pyTranspilers")
     if not configured_transpilers:
         return []
+    null_strictness = session.conf.get(
+        "spark.sql.experimental.optimizer.transpileNullStrictness", "strict"
+    )
+    null_strict = null_strictness != "loose"
     transpiler_names = configured_transpilers.split(",")
     return [
-        AbstractTranspiler.varieties[name]()
+        AbstractTranspiler.varieties[name](null_strict=null_strict)
         for name in transpiler_names
         if name in AbstractTranspiler.varieties
     ]

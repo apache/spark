@@ -638,6 +638,21 @@ object SQLConf {
     .stringConf
     .createWithDefault("catalyst")
 
+  val PYTHON_UDF_TRANSPILE_NULL_STRICTNESS =
+    buildConf("spark.sql.experimental.optimizer.transpileNullStrictness")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .doc("Controls how the Python UDF transpiler handles null/None semantics for ordering " +
+      "comparisons (``<``, ``<=``, ``>``, ``>=``). Under ``strict`` (the default) a NULL " +
+      "operand causes the expression to raise an error, matching Python's TypeError. Under " +
+      "``loose`` a NULL operand silently propagates as NULL instead of raising, which allows " +
+      "more UDFs to be transpiled at the cost of minor semantic divergence on NULL inputs.")
+    .version("4.3.0")
+    .stringConf
+    .checkValue(
+      v => v == "strict" || v == "loose",
+      "Invalid value. Must be 'strict' or 'loose'.")
+    .createWithDefault("strict")
+
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
