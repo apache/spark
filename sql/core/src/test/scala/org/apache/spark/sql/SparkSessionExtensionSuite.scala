@@ -721,10 +721,11 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-59122: a union one injected stage optimizer rule adds is recorded before the next") {
-    // These rules are folded over inside `optimizeQueryStage`, which validates an
-    // `AQEShuffleReadRule`'s rewrite and then folds on, both before the barrier in
-    // `postStageCreationRules`. The record is written on each rule's result there, there being no
-    // list to put a pass into.
+    // These rules are folded over inside `optimizeQueryStage`, which has no list to put a pass
+    // into, so the record is written on each rule result that changed the plan. What this case
+    // reads is the next rule; the `ValidateRequirements` check in the same fold answers from the
+    // same write, and reaching it takes an injected rule that is itself an `AQEShuffleReadRule`,
+    // since the built-in ones are listed ahead of the injected list.
     val seen = ListBuffer.empty[Partitioning]
     withSession(create { extensions =>
       extensions.injectQueryStageOptimizerRule(_ => WrapRootInUnion)
@@ -744,18 +745,28 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
 
   test("SPARK-59122: a union one injected columnar rule adds is recorded before the next") {
     // The injected columnar rules share one `ApplyColumnarRulesAndInsertTransitions`, so the record
-    // rides on each rule's own transitions. Those run in reverse order on the way out, so the rule
-    // that adds the union is the one injected second.
+    // rides on each rule's own transitions, one override per phase. The post transitions run in
+    // reverse list order and the pre transitions in list order, so each phase needs the rule that
+    // adds the union injected at the other end.
     Seq(false, true).foreach { aqeEnabled =>
-      val seen = ListBuffer.empty[Partitioning]
+      val post = ListBuffer.empty[Partitioning]
       checkInjectedUnionIsStamped(
         create { extensions =>
-          extensions.injectColumnar(_ => ObserveUnionPartitioningColumnarRule(seen))
+          extensions.injectColumnar(_ => ObserveUnionPartitioningColumnarRule(post))
           extensions.injectColumnar(_ => WrapRootInUnionColumnarRule)
         }, aqeEnabled)
-      assert(seen.nonEmpty, s"the second columnar rule must have seen the union, aqe=$aqeEnabled")
-      assert(!seen.exists(_.isInstanceOf[UnknownPartitioning]),
-        s"the record must be written behind the rule that added it, aqe=$aqeEnabled: $seen")
+      val pre = ListBuffer.empty[Partitioning]
+      checkInjectedUnionIsStamped(
+        create { extensions =>
+          extensions.injectColumnar(_ => WrapRootInUnionPreColumnarRule)
+          extensions.injectColumnar(_ => ObserveUnionPartitioningPreColumnarRule(pre))
+        }, aqeEnabled)
+      Seq("post" -> post, "pre" -> pre).foreach { case (phase, seen) =>
+        assert(seen.nonEmpty,
+          s"the second columnar rule must have seen the union, $phase, aqe=$aqeEnabled")
+        assert(!seen.exists(_.isInstanceOf[UnknownPartitioning]),
+          s"the record must ride behind the rule that added it, $phase, aqe=$aqeEnabled: $seen")
+      }
     }
   }
 
@@ -1631,6 +1642,11 @@ object WrapRootInUnionColumnarRule extends ColumnarRule {
   override def postColumnarTransitions: Rule[SparkPlan] = WrapRootInUnion
 }
 
+/** `WrapRootInUnion` in the other phase, where the injected rules run in list order. */
+object WrapRootInUnionPreColumnarRule extends ColumnarRule {
+  override def preColumnarTransitions: Rule[SparkPlan] = WrapRootInUnion
+}
+
 /**
  * Stands for an extension that returns a `UnionExec` of its own in place of one already in the
  * plan: a fresh instance over the same children, so it carries no stamped decision, and the rows
@@ -1674,6 +1690,12 @@ case class ObserveUnionPartitioning(seen: ListBuffer[Partitioning]) extends Rule
 case class ObserveUnionPartitioningColumnarRule(seen: ListBuffer[Partitioning])
   extends ColumnarRule {
   override def postColumnarTransitions: Rule[SparkPlan] = ObserveUnionPartitioning(seen)
+}
+
+/** `ObserveUnionPartitioning` in the other phase. */
+case class ObserveUnionPartitioningPreColumnarRule(seen: ListBuffer[Partitioning])
+  extends ColumnarRule {
+  override def preColumnarTransitions: Rule[SparkPlan] = ObserveUnionPartitioning(seen)
 }
 
 /**

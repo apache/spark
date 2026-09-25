@@ -229,9 +229,10 @@ case class AdaptiveSparkPlanExec(
       val applied = rule.apply(latestPlan)
       if (applied ne latestPlan) {
         // A `UnionExec` this rule just created carries no record of the confs this execution
-        // answers from, and the `ValidateRequirements` check below and the next rule both read the
-        // plan before the barrier in `postStageCreationRules` stamps it. A rule that returned its
-        // input added nothing.
+        // answers from, and the next rule reads the plan before the barrier in
+        // `postStageCreationRules` stamps it. So does the `ValidateRequirements` check below, for a
+        // rule that is itself an `AQEShuffleReadRule`. A rule that returned its input added
+        // nothing.
         recordUnionConf(applied)
       }
       val result = rule match {

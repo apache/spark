@@ -79,8 +79,10 @@ class StampUnionDecisions(snapshot: UnionConfSnapshot) extends Rule[SparkPlan] {
  * query-stage preparation rules. [[SnapshotUnionPreparationConf.after]] closes it for the injected
  * columnar rules, which share one `ApplyColumnarRulesAndInsertTransitions` and so have no place
  * between them for a listed pass: the record rides on each rule's own transitions instead.
- * `AdaptiveSparkPlanExec.optimizeQueryStage` writes it on each rule result it folds over, which
- * covers the next rule and the `ValidateRequirements` check on an `AQEShuffleReadRule`'s rewrite.
+ * `AdaptiveSparkPlanExec.optimizeQueryStage` writes it on every rule result that changed the plan,
+ * which covers the next rule, and `ValidateRequirements` for an injected rule that is itself an
+ * `AQEShuffleReadRule`. The built-in ones are listed ahead of the injected list, so what they
+ * validate holds no union without a record.
  *
  * Only the confs are recorded, never a partitioning. `EnsureRequirements` has not inserted the
  * exchanges it adds yet, so a decision taken now would freeze plain on a union whose children only
@@ -118,7 +120,7 @@ object SnapshotUnionPreparationConf {
    * an extension injected something.
    */
   def after(snapshot: UnionConfSnapshot, rules: Seq[ColumnarRule]): Seq[ColumnarRule] =
-    rules.map(new RecordUnionPreparationConf(_, snapshot))
+    rules.map(RecordUnionPreparationConf(_, snapshot))
 }
 
 /**
@@ -126,7 +128,7 @@ object SnapshotUnionPreparationConf {
  * read from the preparation's confs by the next rule in the same
  * `ApplyColumnarRulesAndInsertTransitions`. See [[SnapshotUnionPreparationConf.after]].
  */
-private class RecordUnionPreparationConf(inner: ColumnarRule, snapshot: UnionConfSnapshot)
+private case class RecordUnionPreparationConf(inner: ColumnarRule, snapshot: UnionConfSnapshot)
   extends ColumnarRule {
 
   private val record = new SnapshotUnionPreparationConf(snapshot)

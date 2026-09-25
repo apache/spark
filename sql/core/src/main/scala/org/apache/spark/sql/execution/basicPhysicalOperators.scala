@@ -1094,8 +1094,10 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * Records the confs this node answers from until its decisions are stamped, read once per
    * preparation into a `UnionConfSnapshot` and passed in here. `SnapshotUnionPreparationConf` does
    * it ahead of `EnsureRequirements`, whose reads the following stamp has to agree with, and ahead
-   * of the two injected lists that can still change an exchange; see that rule for the two windows
-   * it does not cover. `stampDecisions` does it for a node no such pass saw. Only the confs, never
+   * of the two injected lists that can still change an exchange. Two more writers cover the rules
+   * that are folded over rather than listed: each injected columnar rule's transitions carry the
+   * record behind them, and `optimizeQueryStage` writes it on every rule result that changed the
+   * plan. `stampDecisions` does it for a node no such pass saw. Only the confs, never
    * a partitioning: the exchanges `EnsureRequirements` adds are not there yet, so a decision taken
    * there would freeze plain on a union whose children only become co-partitioned in it.
    */
@@ -1455,9 +1457,10 @@ object UnionExec {
    * keeps answering from. See `recordPreparationConf`. `SnapshotUnionPreparationConf` writes it
    * before `EnsureRequirements`, and the stamp after it reads what that rule wrote, so both phases
    * use one value; the same rule runs ahead of the two injected lists that can still change an
-   * exchange, and `stampDecisions` writes it itself for a node no such pass saw. The tag travels
-   * onto rebuilt nodes the same way `DECISIONS` does, which is what carries it across the copies
-   * `EnsureRequirements` makes.
+   * exchange, behind each injected columnar rule's transitions, and on every rule result
+   * `optimizeQueryStage` sees changed, and `stampDecisions` writes it itself for a node no such
+   * pass saw. The tag travels onto rebuilt nodes the same way `DECISIONS` does, which is what
+   * carries it across the copies `EnsureRequirements` makes.
    */
   private val PREPARATION_CONF = TreeNodeTag[UnionConfSnapshot]("unionPreparationConf")
 
