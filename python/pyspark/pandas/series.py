@@ -4368,7 +4368,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         # 'top' always assigns rank 1 to NaN (nulls first in window order).
         # 'bottom' always assigns the largest rank to NaN (nulls last). 'keep' also nulls last.
         nulls_first = na_option == "top"
-        asc_func = PySparkColumn.asc if ascending else PySparkColumn.desc
         if ascending:
             null_func = (
                 PySparkColumn.asc_nulls_first if nulls_first else PySparkColumn.asc_nulls_last
@@ -4378,9 +4377,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 PySparkColumn.desc_nulls_first if nulls_first else PySparkColumn.desc_nulls_last
             )
         sort_col = null_func(self.spark.column)
-        # TODO(SPARK-59011): method='first' with ascending=False produces wrong ranks for
-        # tied values — ties should always be broken by original position in the array.
-        nat_order_col = asc_func(F.col(NATURAL_ORDER_COLUMN_NAME))
+        nat_order_col = F.col(NATURAL_ORDER_COLUMN_NAME).asc()
 
         if method == "first":
             window = (
