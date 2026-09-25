@@ -439,6 +439,19 @@ Security options for the Spark History Server are covered more detail in the
     <td>3.0.0</td>
   </tr>
   <tr>
+    <td>spark.history.fs.eventLog.maxLineLength</td>
+    <td>512m</td>
+    <td>
+      Maximum length of a single event log line during replay. Lines longer than this are
+      skipped with a warning instead of being read into memory, which bounds the memory replay
+      can use when an event log is corrupt or unexpectedly large. Setting this to 0 or a
+      negative value disables the limit.<br/>
+      Introduced in 4.3.0; also available in 3.5.10, 4.0.5, 4.1.4 and 4.2.1; and in all
+      versions after 4.3.0.
+    </td>
+    <td>4.2.1</td>
+  </tr>
+  <tr>
     <td>spark.history.fs.eventLog.rolling.maxFilesToRetain</td>
     <td>Int.MaxValue</td>
     <td>
