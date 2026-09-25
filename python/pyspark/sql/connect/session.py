@@ -91,6 +91,7 @@ from pyspark.sql.session import classproperty
 from pyspark.sql.types import (
     ArrayType,
     AtomicType,
+    CharType,
     DataType,
     DayTimeIntervalType,
     MapType,
@@ -99,6 +100,7 @@ from pyspark.sql.types import (
     StructField,
     StructType,
     TimestampType,
+    VarcharType,
     _has_nulltype,
     _infer_schema,
     _merge_type,
