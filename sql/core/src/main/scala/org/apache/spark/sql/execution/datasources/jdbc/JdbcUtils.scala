@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData,
+  SQLException, SQLTransientConnectionException}
 import java.time.{Instant, LocalDate}
 import java.util
 
@@ -30,7 +31,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SparkContext, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{DEFAULT_ISOLATION_LEVEL, ISOLATION_LEVEL}
+import org.apache.spark.internal.LogKeys.{DEFAULT_ISOLATION_LEVEL, ISOLATION_LEVEL, MAX_ATTEMPTS, NUM_RETRY, RETRY_WAIT_TIME}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{DecimalPrecisionTypeCoercion, Resolver}
@@ -670,7 +671,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
-    val conn = dialect.createConnectionFactory(options)(-1)
+    val conn = createConnectionFactory(dialect, options)(-1)
 
     // Close JDBC connection so blocked native reads (e.g. executeBatch) fail instead of
     // ignoring Thread.interrupt(). Listener registered after opening the connection; we don't need
@@ -1250,12 +1251,65 @@ object JdbcUtils extends Logging with SQLConfHelper {
       description = "Failed to connect",
       isRuntime = false
     ) {
-      conn = dialect.createConnectionFactory(options)(-1)
+      conn = createConnectionFactory(dialect, options)(-1)
     }
     try {
       f(conn)
     } finally {
       conn.close()
     }
+  }
+
+  /**
+   * Returns the dialect's connection factory, wrapped so that transient connection failures are
+   * retried according to the `connectionRetryAttempts` and `connectionRetryDelayMs` options.
+   *
+   * Wrapping happens here rather than in [[JdbcDialect.createConnectionFactory]] so that dialects
+   * overriding that method get retry behaviour without having to implement it themselves. When
+   * retries are disabled, which is the default, the dialect's factory is returned untouched.
+   */
+  def createConnectionFactory(dialect: JdbcDialect, options: JDBCOptions): Int => Connection = {
+    val rawFactory = dialect.createConnectionFactory(options)
+    if (options.connectionRetryAttempts == 0) {
+      rawFactory
+    } else {
+      (partitionId: Int) => connectWithRetry(rawFactory, partitionId, options)
+    }
+  }
+
+  /**
+   * True for failures that establishing the connection again may recover from, such as a database
+   * failover. SQLState class `08` is "connection exception" in the SQL standard. Errors like a bad
+   * password (class `28`) are not retried, since retrying cannot make them succeed.
+   */
+  private def isTransientConnectionFailure(e: SQLException): Boolean = e match {
+    case _: SQLTransientConnectionException => true
+    case _ => Option(e.getSQLState).exists(_.startsWith("08"))
+  }
+
+  private def connectWithRetry(
+      rawFactory: Int => Connection,
+      partitionId: Int,
+      options: JDBCOptions): Connection = {
+    val maxRetries = options.connectionRetryAttempts
+    var retries = 0
+    // Some(null) short-circuits the loop, so a dialect that returns null instead of throwing keeps
+    // its existing behaviour rather than spinning here forever.
+    var connection: Option[Connection] = None
+    while (connection.isEmpty) {
+      try {
+        connection = Some(rawFactory(partitionId))
+      } catch {
+        case e: SQLException if retries < maxRetries && isTransientConnectionFailure(e) =>
+          retries += 1
+          logWarning(log"Transient failure establishing a JDBC connection, retry " +
+            log"${MDC(NUM_RETRY, retries)} of ${MDC(MAX_ATTEMPTS, maxRetries)} after " +
+            log"${MDC(RETRY_WAIT_TIME, options.connectionRetryDelayMs)} ms", e)
+          // Thread.sleep throws InterruptedException when the task is cancelled, which propagates
+          // and aborts the retry loop, so cancellation does not wait out the remaining delay.
+          Thread.sleep(options.connectionRetryDelayMs)
+      }
+    }
+    connection.get
   }
 }

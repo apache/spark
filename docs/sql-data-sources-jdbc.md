@@ -178,6 +178,31 @@ logging into the data sources.
   </tr>
 
   <tr>
+    <td><code>connectionRetryAttempts</code></td>
+    <td><code>0</code></td>
+    <td>
+      The number of additional attempts to make when establishing a JDBC connection fails with a
+      transient connection error, such as a database failover. Zero, the default, fails on the
+      first error and matches the behaviour of earlier Spark versions. Only errors that retrying
+      can recover from are retried, namely <code>SQLTransientConnectionException</code> and any
+      <code>SQLException</code> whose SQLState is in class <code>08</code> (connection exception);
+      errors such as bad credentials fail immediately.
+    </td>
+    <td>read/write</td>
+  </tr>
+
+  <tr>
+    <td><code>connectionRetryDelayMs</code></td>
+    <td><code>1000</code></td>
+    <td>
+      How long to wait, in milliseconds, between connection attempts when
+      <code>connectionRetryAttempts</code> is greater than zero. The wait is interrupted if the
+      task is cancelled.
+    </td>
+    <td>read/write</td>
+  </tr>
+
+  <tr>
     <td><code>queryTimeout</code></td>
     <td><code>0</code></td>
     <td>

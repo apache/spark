@@ -182,7 +182,7 @@ object JDBCRDD extends Logging {
       // these are already quoted in JDBCScanBuilder
       requiredColumns
     }
-    val connectionFactory = dialect.createConnectionFactory(options)
+    val connectionFactory = JdbcUtils.createConnectionFactory(dialect, options)
 
     new JDBCRDD(
       sc,
