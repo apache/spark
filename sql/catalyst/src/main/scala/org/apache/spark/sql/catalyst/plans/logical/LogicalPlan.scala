@@ -160,7 +160,7 @@ abstract class LogicalPlan
   private def attributesForResolution(
       output: Seq[Attribute],
       metadataOutput: Seq[Attribute]): AttributeSeq = {
-    val outputSet = AttributeSet(output)
+    lazy val outputSet = AttributeSet(output)
     new AttributeSeq(
       output.map(_.markAsAllowAnyAccess()) ++
         metadataOutput.filter(attribute =>

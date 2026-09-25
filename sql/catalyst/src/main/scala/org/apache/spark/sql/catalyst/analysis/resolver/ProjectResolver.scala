@@ -108,7 +108,8 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
         )
       } else {
         val retainedProjectList =
-          if (unresolvedProject.containsTag(ResolverTag.TOP_LEVEL_OPERATOR)) {
+          if (retainedPipeSetOutput.isEmpty ||
+              unresolvedProject.containsTag(ResolverTag.TOP_LEVEL_OPERATOR)) {
             Seq.empty
           } else {
             missingRetainedOutput(retainedPipeSetOutput, resolvedProjectList.expressions)

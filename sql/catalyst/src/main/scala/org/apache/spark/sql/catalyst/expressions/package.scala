@@ -98,6 +98,10 @@ package object expressions  {
     def mergeHiddenAndVisibleOutput(
         hiddenOutput: Seq[Attribute],
         visibleOutput: Seq[Attribute]): Seq[Attribute] = {
+      if (hiddenOutput.isEmpty) {
+        return visibleOutput
+      }
+
       val visible = visibleOutput.toIndexedSeq
       val visibleIndicesByExprId = mutable.HashMap.empty[ExprId, mutable.Queue[Int]]
       visible.zipWithIndex.foreach { case (attribute, index) =>
