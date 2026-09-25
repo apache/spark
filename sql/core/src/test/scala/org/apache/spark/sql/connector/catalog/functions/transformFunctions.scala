@@ -272,6 +272,42 @@ object LegacyBucketFunction extends ScalarFunction[Int] with ReducibleFunction[I
 }
 
 /**
+ * A bucket function that only overrides the deprecated `reducer(int, func, int)` method and,
+ * trusting its documented "bucket against bucket" contract, does not check the other function.
+ */
+object CarelessLegacyBucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "careless_bucket"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = {
+    Math.floorMod(input.getLong(1), input.getInt(0))
+  }
+
+  override def reducer(
+      thisNumBuckets: Int,
+      otherFunc: ReducibleFunction[_, _],
+      otherNumBuckets: Int): Reducer[Int, Int] = {
+    val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
+    if (gcd > 1 && gcd != thisNumBuckets) BucketReducer(gcd) else null
+  }
+}
+
+/**
+ * A non-bucket function with a single int parameter in the first position, the same argument
+ * layout as `bucket(n, col)`.
+ */
+object LiteralFirstIntFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "literal_first_int"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = input.getLong(1).toInt
+}
+
+/**
  * A bucket function that implements BOTH reducer overloads: the deprecated `reducer(int, ..., int)`
  * always returns null (not reducible via the old API), while the new `reducer(Literal[], ...)`
  * returns a GCD-based reducer. Used to verify that the dispatch falls back to the generalized

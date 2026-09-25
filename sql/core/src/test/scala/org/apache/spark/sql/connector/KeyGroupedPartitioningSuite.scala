@@ -6499,8 +6499,9 @@ class KeyGroupedPartitioningSuite
   }
 
   test("SPARK-50593: deprecated int reducer API still works (legacy connector backward compat)") {
-    // The reducer dispatch attempts the deprecated reducer(int, func, int) first for single-int
-    // params, so a ReducibleFunction that overrides ONLY the deprecated method still reduces.
+    // The dispatch falls back to the deprecated reducer(int, func, int) when the generalized
+    // overload is not implemented, so a ReducibleFunction that overrides ONLY the deprecated
+    // method still reduces.
     // This mirrors how Iceberg 1.10.0 (and earlier) ship -- they predate the Literal[] API.
     val bucketExpr4 = TransformExpression(LegacyBucketFunction, Seq(Literal(4), attr("id")))
     val bucketExpr2 = TransformExpression(LegacyBucketFunction, Seq(Literal(2), attr("id")))
@@ -6513,6 +6514,21 @@ class KeyGroupedPartitioningSuite
     val r = reducer.get.asInstanceOf[Reducer[Integer, Integer]]
     assert(r.reduce(3) == 1, s"Expected reduce(3) == 1, got ${r.reduce(3)}")
     assert(r.reduce(2) == 0, s"Expected reduce(2) == 0, got ${r.reduce(2)}")
+  }
+
+  test("SPARK-50593: the deprecated int reducer is only offered a pair of the same function") {
+    // The deprecated overload is documented for bucket against bucket, so a connector may not
+    // check the other function. CarelessLegacyBucketFunction does not, and would return a gcd
+    // reducer for any pair of ints; offered a different function with the same argument layout, it
+    // would pair partitions that do not hold the same rows.
+    val careless4 = TransformExpression(CarelessLegacyBucketFunction, Seq(Literal(4), attr("id")))
+    val careless2 = TransformExpression(CarelessLegacyBucketFunction, Seq(Literal(2), attr("id")))
+    val other2 = TransformExpression(LiteralFirstIntFunction, Seq(Literal(2), attr("id")))
+
+    assert(careless4.reducers(other2).isEmpty && other2.reducers(careless4).isEmpty,
+      "a different function must not be offered the deprecated overload")
+    assert(!careless4.isCompatible(other2))
+    assert(careless4.reducers(careless2).isDefined, "the same function still reduces")
   }
 
   test("SPARK-50593: a non-IntegerType param (DateType) does not reach the deprecated " +

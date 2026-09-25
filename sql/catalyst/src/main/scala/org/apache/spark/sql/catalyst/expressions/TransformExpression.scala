@@ -330,7 +330,10 @@ case class TransformExpression(
         probe(thisFunction.reducer(otherFunction))
       } else {
         probe(thisFunction.reducer(thisParams, otherFunction, otherParams)) match {
-          case Unimplemented if isSingleInt(thisParams) && isSingleInt(otherParams) =>
+          // The deprecated overload is documented for bucket against bucket, so only offer it a
+          // pair of the same function.
+          case Unimplemented if isSingleInt(thisParams) && isSingleInt(otherParams) &&
+              function.name() == other.function.name() =>
             probe(thisFunction.reducer(
               thisParams(0).value().asInstanceOf[Int], otherFunction,
               otherParams(0).value().asInstanceOf[Int]))
