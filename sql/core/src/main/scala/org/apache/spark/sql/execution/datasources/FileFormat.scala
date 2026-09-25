@@ -220,6 +220,9 @@ trait FileFormat {
    * shapes and column types a reader supports stay in that reader's own package. Answering true
    * says the reader can evaluate the expression, not that it will: the conjunct stays in the
    * post-scan `Filter`, so a reader is free to give a file up.
+   *
+   * `expr` is the expression [[buildReaderWithStorageFilters]] will be given, not a canonicalized
+   * form of it, so a format may decide by column name or field metadata.
    */
   def supportsStorageFilter(expr: Expression): Boolean = false
 
