@@ -112,7 +112,7 @@ class EventLogFileCompactor(
    * them via replaying events in given files.
    */
   private def initializeBuilders(fs: FileSystem, files: Seq[Path]): Seq[EventFilterBuilder] = {
-    val bus = new ReplayListenerBus()
+    val bus = new ReplayListenerBus(ReplayListenerBus.maxLineLength(sparkConf))
 
     val builders = ServiceLoader.load(classOf[EventFilterBuilder],
       Utils.getContextOrSparkClassLoader).asScala.toSeq
