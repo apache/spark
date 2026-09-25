@@ -700,6 +700,7 @@ class Analyzer(
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
       CleanupAliases),
+    Batch("Eliminate Resolved Pipe SET Inputs", Once, EliminateResolvedPipeSetInputs),
     Batch("HandleSpecialCommand", Once,
       HandleSpecialCommand),
     Batch("Remove watermark for batch query", Once,

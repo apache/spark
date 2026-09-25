@@ -818,9 +818,8 @@ table t
 |> set x = 1
 -- !query analysis
 Project [1 AS x#x, y#x]
-+- PipeSetInput
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -828,9 +827,8 @@ table t
 |> set y = x
 -- !query analysis
 Project [x#x, x#x AS y#x]
-+- PipeSetInput
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -839,10 +837,9 @@ table t
 |> set z = x + length(y)
 -- !query analysis
 Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
-+- PipeSetInput
-   +- Project [x#x, y#x, 1 AS z#x]
-      +- SubqueryAlias spark_catalog.default.t
-         +- Relation spark_catalog.default.t[x#x,y#x] csv
++- Project [x#x, y#x, 1 AS z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -852,13 +849,11 @@ table t
 |> set z = x + length(y), zz = x + 1
 -- !query analysis
 Project [x#x, y#x, z#x, (x#x + 1) AS zz#x]
-+- PipeSetInput
-   +- Project [x#x, y#x, (x#x + length(y#x)) AS z#x, zz#x]
-      +- PipeSetInput
-         +- Project [x#x, y#x, z#x, 2 AS zz#x]
-            +- Project [x#x, y#x, 1 AS z#x]
-               +- SubqueryAlias spark_catalog.default.t
-                  +- Relation spark_catalog.default.t[x#x,y#x] csv
++- Project [x#x, y#x, (x#x + length(y#x)) AS z#x, zz#x]
+   +- Project [x#x, y#x, z#x, 2 AS zz#x]
+      +- Project [x#x, y#x, 1 AS z#x]
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -867,12 +862,10 @@ table other
 |> set a = b, b = c
 -- !query analysis
 Project [a#x, c#x AS b#x, c#x]
-+- PipeSetInput
-   +- Project [b#x AS a#x, b#x, c#x]
-      +- PipeSetInput
-         +- Project [a#x, b#x, 3 AS c#x]
-            +- SubqueryAlias spark_catalog.default.other
-               +- Relation spark_catalog.default.other[a#x,b#x] json
++- Project [b#x AS a#x, b#x, c#x]
+   +- Project [a#x, b#x, 3 AS c#x]
+      +- SubqueryAlias spark_catalog.default.other
+         +- Relation spark_catalog.default.other[a#x,b#x] json
 
 
 -- !query
@@ -882,13 +875,11 @@ table t
 |> set z = x + length(y), zz = z + 1
 -- !query analysis
 Project [x#x, y#x, z#x, (z#x + 1) AS zz#x]
-+- PipeSetInput
-   +- Project [x#x, y#x, (x#x + length(y#x)) AS z#x, zz#x]
-      +- PipeSetInput
-         +- Project [x#x, y#x, z#x, 2 AS zz#x]
-            +- Project [x#x, y#x, 1 AS z#x]
-               +- SubqueryAlias spark_catalog.default.t
-                  +- Relation spark_catalog.default.t[x#x,y#x] csv
++- Project [x#x, y#x, (x#x + length(y#x)) AS z#x, zz#x]
+   +- Project [x#x, y#x, z#x, 2 AS zz#x]
+      +- Project [x#x, y#x, 1 AS z#x]
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -898,12 +889,10 @@ table t
 |> set z = z + 1
 -- !query analysis
 Project [x#x, y#x, (z#x + 1) AS z#x]
-+- PipeSetInput
-   +- Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
-      +- PipeSetInput
-         +- Project [x#x, y#x, 1 AS z#x]
-            +- SubqueryAlias spark_catalog.default.t
-               +- Relation spark_catalog.default.t[x#x,y#x] csv
++- Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
+   +- Project [x#x, y#x, 1 AS z#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -912,12 +901,10 @@ table t
 |> set z = x + length(y), z = z + 1
 -- !query analysis
 Project [x#x, y#x, (z#x + 1) AS z#x]
-+- PipeSetInput
-   +- Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
-      +- PipeSetInput
-         +- Project [x#x, y#x, 1 AS z#x]
-            +- SubqueryAlias spark_catalog.default.t
-               +- Relation spark_catalog.default.t[x#x,y#x] csv
++- Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
+   +- Project [x#x, y#x, 1 AS z#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -926,11 +913,10 @@ select col from st
 |> set z = col.i1
 -- !query analysis
 Project [col#x, col#x.i1 AS z#x]
-+- PipeSetInput
-   +- Project [col#x, 1 AS z#x]
-      +- Project [col#x]
-         +- SubqueryAlias spark_catalog.default.st
-            +- Relation spark_catalog.default.st[x#x,col#x] parquet
++- Project [col#x, 1 AS z#x]
+   +- Project [col#x]
+      +- SubqueryAlias spark_catalog.default.st
+         +- Relation spark_catalog.default.st[x#x,col#x] parquet
 
 
 -- !query
@@ -944,9 +930,8 @@ Project [x#x, scalar-subquery#x [x#x] AS y#x]
 :           +- Filter (outer(x#x) = a#x)
 :              +- SubqueryAlias spark_catalog.default.other
 :                 +- Relation spark_catalog.default.other[a#x,b#x] json
-+- PipeSetInput
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -955,10 +940,9 @@ table t
 |> set `x.y.z` = x + length(y)
 -- !query analysis
 Project [x#x, y#x, (x#x + length(y#x)) AS x.y.z#x]
-+- PipeSetInput
-   +- Project [x#x, y#x, 1 AS x.y.z#x]
-      +- SubqueryAlias spark_catalog.default.t
-         +- Relation spark_catalog.default.t[x#x,y#x] csv
++- Project [x#x, y#x, 1 AS x.y.z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -970,10 +954,9 @@ Project [x#x, y#x, z#x]
 +- Project [x#x, y#x, z#x, z#x]
    +- Window [first_value(x#x, false) windowspecdefinition(y#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS z#x], [y#x]
       +- Project [x#x, y#x]
-         +- PipeSetInput
-            +- Project [x#x, y#x, 1 AS z#x]
-               +- SubqueryAlias spark_catalog.default.t
-                  +- Relation spark_catalog.default.t[x#x,y#x] csv
+         +- Project [x#x, y#x, 1 AS z#x]
+            +- SubqueryAlias spark_catalog.default.t
+               +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -993,21 +976,20 @@ Project [a#x, a#x, z2#x]
    +- LocalLimit 2
       +- PipeOperator
          +- Project [a#x, 4 AS z2#x, a#x]
-            +- PipeSetInput
-               +- Project [a#x, z2#x, a#x]
-                  +- Sort [a#x ASC NULLS FIRST, a#x ASC NULLS FIRST, z2#x ASC NULLS FIRST], true
-                     +- PipeOperator
-                        +- Filter (z2#x = 0)
-                           +- PipeOperator
-                              +- Project [a#x, z2#x, a#x]
-                                 +- Project [a#x, z1#x, (a#x - a#x) AS z2#x, a#x]
-                                    +- Project [a#x, (a#x + a#x) AS z1#x, a#x]
-                                       +- Project [a#x, a#x]
-                                          +- Join Inner, (a#x = a#x)
-                                             :- SubqueryAlias lhs
-                                             :  +- LocalRelation [a#x]
-                                             +- SubqueryAlias rhs
-                                                +- LocalRelation [a#x]
+            +- Project [a#x, z2#x, a#x]
+               +- Sort [a#x ASC NULLS FIRST, a#x ASC NULLS FIRST, z2#x ASC NULLS FIRST], true
+                  +- PipeOperator
+                     +- Filter (z2#x = 0)
+                        +- PipeOperator
+                           +- Project [a#x, z2#x, a#x]
+                              +- Project [a#x, z1#x, (a#x - a#x) AS z2#x, a#x]
+                                 +- Project [a#x, (a#x + a#x) AS z1#x, a#x]
+                                    +- Project [a#x, a#x]
+                                       +- Join Inner, (a#x = a#x)
+                                          :- SubqueryAlias lhs
+                                          :  +- LocalRelation [a#x]
+                                          +- SubqueryAlias rhs
+                                             +- LocalRelation [a#x]
 
 
 -- !query
@@ -1017,9 +999,8 @@ values (1, 10) as t(a, b)
 -- !query analysis
 Project [a#x]
 +- Project [(a#x + 1) AS a#x, b#x, a#x]
-   +- PipeSetInput
-      +- SubqueryAlias t
-         +- LocalRelation [a#x, b#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x]
 
 
 -- !query
@@ -1029,9 +1010,8 @@ values (1, 10) as t(a, b)
 -- !query analysis
 Project [a#x, a#x, b#x]
 +- Project [(a#x + 1) AS a#x, b#x, a#x]
-   +- PipeSetInput
-      +- SubqueryAlias t
-         +- LocalRelation [a#x, b#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x]
 
 
 -- !query
@@ -1041,9 +1021,8 @@ values (1, 10) as t(a, b)
 -- !query analysis
 SubqueryAlias u
 +- Project [(a#x + 1) AS a#x, b#x]
-   +- PipeSetInput
-      +- SubqueryAlias t
-         +- LocalRelation [a#x, b#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x]
 
 
 -- !query
@@ -1054,10 +1033,9 @@ select 1 as x, named_struct('x', 2) as col
 -- !query analysis
 Project [x#x, x#x]
 +- Project [(x#x + 1) AS x#x, col#x, x#x]
-   +- PipeSetInput
-      +- SubqueryAlias col
-         +- Project [1 AS x#x, named_struct(x, 2) AS col#x]
-            +- OneRowRelation
+   +- SubqueryAlias col
+      +- Project [1 AS x#x, named_struct(x, 2) AS col#x]
+         +- OneRowRelation
 
 
 -- !query
@@ -1067,9 +1045,8 @@ values (1, 10) as t(a, b)
 -- !query analysis
 Project [a#x, b#x]
 +- Project [(a#x + 1) AS a#x, b#x]
-   +- PipeSetInput
-      +- SubqueryAlias t
-         +- LocalRelation [a#x, b#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x]
 
 
 -- !query
@@ -1079,9 +1056,8 @@ values (1, 2, 3) as t(a, b, c)
 -- !query analysis
 Project [a#x, b#x, c#x]
 +- Project [a#x, 20 AS b#x, c#x, b#x]
-   +- PipeSetInput
-      +- SubqueryAlias t
-         +- LocalRelation [a#x, b#x, c#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x, c#x]
 
 
 -- !query
@@ -1091,11 +1067,9 @@ values (1, 10) as t(a, b)
 -- !query analysis
 Project [a#x, b#x, a#x, b#x]
 +- Project [a#x, (b#x + 1) AS b#x, a#x, b#x]
-   +- PipeSetInput
-      +- Project [(a#x + 1) AS a#x, b#x, a#x]
-         +- PipeSetInput
-            +- SubqueryAlias t
-               +- LocalRelation [a#x, b#x]
+   +- Project [(a#x + 1) AS a#x, b#x, a#x]
+      +- SubqueryAlias t
+         +- LocalRelation [a#x, b#x]
 
 
 -- !query
@@ -1107,11 +1081,10 @@ values (1, 2) as s(a, b)
 -- !query analysis
 Project [a#x, a#x, b#x]
 +- Project [a#x, a#x, 3 AS b#x, b#x]
-   +- PipeSetInput
-      +- SubqueryAlias t
-         +- Project [a#x, a#x, b#x]
-            +- SubqueryAlias s
-               +- LocalRelation [a#x, b#x]
+   +- SubqueryAlias t
+      +- Project [a#x, a#x, b#x]
+         +- SubqueryAlias s
+            +- LocalRelation [a#x, b#x]
 
 
 -- !query
@@ -1124,9 +1097,8 @@ Project [a#x, a#x]
 +- Filter (a#x = 1)
    +- PipeOperator
       +- Project [(a#x + 1) AS a#x, b#x, a#x]
-         +- PipeSetInput
-            +- SubqueryAlias t
-               +- LocalRelation [a#x, b#x]
+         +- SubqueryAlias t
+            +- LocalRelation [a#x, b#x]
 
 
 -- !query
@@ -1166,9 +1138,8 @@ Sort [a#x ASC NULLS FIRST], true
       +- Distinct
          +- Project [a#x, a#x]
             +- Project [0 AS a#x, a#x]
-               +- PipeSetInput
-                  +- SubqueryAlias t
-                     +- LocalRelation [a#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [a#x]
 
 
 -- !query
@@ -1188,13 +1159,12 @@ values (1, 10) as lhs(k, l)
 -- !query analysis
 Project [k#x, k#x, k#x, l#x, r#x]
 +- Project [(k#x + 1) AS k#x, l#x, r#x, k#x, k#x]
-   +- PipeSetInput
-      +- Project [k#x, l#x, r#x, k#x]
-         +- Join Inner, (k#x = k#x)
-            :- SubqueryAlias lhs
-            :  +- LocalRelation [k#x, l#x]
-            +- SubqueryAlias rhs
-               +- LocalRelation [k#x, r#x]
+   +- Project [k#x, l#x, r#x, k#x]
+      +- Join Inner, (k#x = k#x)
+         :- SubqueryAlias lhs
+         :  +- LocalRelation [k#x, l#x]
+         +- SubqueryAlias rhs
+            +- LocalRelation [k#x, r#x]
 
 
 -- !query
@@ -1222,9 +1192,8 @@ Sort [x#x ASC NULLS FIRST], true
 +- PipeOperator
    +- Project [x#x, isnotnull(_metadata#x.file_name) AS has_file_name#x]
       +- Project [(x#x + 1) AS x#x, y#x, _metadata#x]
-         +- PipeSetInput
-            +- SubqueryAlias spark_catalog.default.t
-               +- Relation spark_catalog.default.t[x#x,y#x,_metadata#x] csv
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x,_metadata#x] csv
 
 
 -- !query
@@ -1239,10 +1208,9 @@ Sort [x#x ASC NULLS FIRST], true
 +- PipeOperator
    +- Project [x#x, _metadata#x, isnotnull(_metadata#x.file_name) AS original_metadata_available#x]
       +- Project [x#x, y#x, 1 AS _metadata#x, _metadata#x]
-         +- PipeSetInput
-            +- Project [x#x, y#x, _metadata#x]
-               +- SubqueryAlias spark_catalog.default.t
-                  +- Relation spark_catalog.default.t[x#x,y#x,_metadata#x] csv
+         +- Project [x#x, y#x, _metadata#x]
+            +- SubqueryAlias spark_catalog.default.t
+               +- Relation spark_catalog.default.t[x#x,y#x,_metadata#x] csv
 
 
 -- !query
@@ -5006,10 +4974,9 @@ table t
 | set z = x + length(y)
 -- !query analysis
 Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
-+- PipeSetInput
-   +- Project [x#x, y#x, 1 AS z#x]
-      +- SubqueryAlias spark_catalog.default.t
-         +- Relation spark_catalog.default.t[x#x,y#x] csv
++- Project [x#x, y#x, 1 AS z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query

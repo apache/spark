@@ -1938,6 +1938,51 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assert(setInput.maxRowsPerPartition === child.maxRowsPerPartition)
   }
 
+  test("SPARK-59146: pipe SET cleanup reaches subqueries") {
+    val attribute = AttributeReference("a", IntegerType)()
+    val subquery = ScalarSubquery(PipeSetInput(LocalRelation(attribute)))
+    val plan = Project(Seq(Alias(subquery, "a")()), OneRowRelation())
+
+    val cleaned = EliminateResolvedPipeSetInputs(plan)
+
+    assert(cleaned.collectWithSubqueries { case _: PipeSetInput => () }.isEmpty)
+  }
+
+  test("SPARK-59146: pipe SET cleanup removes nested retained hidden output") {
+    val attribute = AttributeReference("a", IntegerType)().withQualifier(Seq("t"))
+    val retained = attribute.markAsQualifiedAccessOnly().markAsPipeSetRetained()
+    val ordinary = AttributeReference("a", IntegerType)()
+      .withQualifier(Seq("u"))
+      .markAsQualifiedAccessOnly()
+    val taggedProject = Project(Seq(attribute), LocalRelation(attribute))
+    taggedProject.setTagValue(Project.hiddenOutputTag, Seq(retained, ordinary))
+    val plan = SubqueryAlias("outer", taggedProject)
+
+    val cleaned = EliminateResolvedPipeSetInputs(plan)
+    val cleanedProject = cleaned.collectFirst { case project: Project => project }.get
+
+    assert(cleanedProject.getTagValue(Project.hiddenOutputTag).contains(Seq(ordinary)))
+  }
+
+  test("SPARK-59146: pipe SET cleanup preserves empty hidden output overrides") {
+    case class MetadataLeaf(
+        override val output: Seq[Attribute],
+        override val metadataOutput: Seq[Attribute]) extends LeafNode
+
+    val attribute = AttributeReference("a", IntegerType)().withQualifier(Seq("t"))
+    val metadata = MetadataAttribute("_metadata", StringType)
+    val child = MetadataLeaf(Seq(attribute), Seq(metadata))
+    val project = Project(Seq(attribute), PipeSetInput(child))
+    val retained = attribute.markAsQualifiedAccessOnly().markAsPipeSetRetained()
+    project.setTagValue(Project.hiddenOutputTag, Seq(retained))
+
+    val cleanedProject = EliminateResolvedPipeSetInputs(project).asInstanceOf[Project]
+
+    assert(!cleanedProject.exists(_.isInstanceOf[PipeSetInput]))
+    assert(cleanedProject.getTagValue(Project.hiddenOutputTag).contains(Nil))
+    assert(cleanedProject.metadataOutput.isEmpty)
+  }
+
   test("SPARK-59146: pipe SET metadata lookup is linear in assignment count") {
     case class CountingMetadataLeaf(override val output: Seq[Attribute]) extends LeafNode {
       var metadataOutputCalls: Int = 0

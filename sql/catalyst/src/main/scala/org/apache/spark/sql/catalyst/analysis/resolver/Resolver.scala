@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
   AttributeSeq,
   AttributeSet,
+  EliminateResolvedPipeSetInputs,
   Expression,
   ExprId,
   PipeSetInput
@@ -136,7 +137,9 @@ class Resolver(
    * `planRewriter` is used to rewrite the plan and the subqueries inside by applying
    * `planRewriteRules`.
    */
-  private val planRewriter = new PlanRewriter(planRewriteRules, extendedRewriteRules)
+  private val planRewriter = new PlanRewriter(
+    planRewriteRules,
+    extendedRewriteRules :+ EliminateResolvedPipeSetInputs)
 
   /**
    * [[relationMetadataProvider]] is used to resolve metadata for relations. It's initialized with

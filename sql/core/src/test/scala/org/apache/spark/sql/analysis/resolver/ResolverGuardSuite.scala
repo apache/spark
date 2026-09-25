@@ -25,8 +25,9 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
   Resolver,
   ResolverGuard
 }
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Literal, PipeSetInput}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -155,6 +156,60 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
         "SELECT x FROM VALUES (1, 2), (3, 0) AS t(x, y) |> SET x = x + 1")
       assert(dataFrame.orderBy("y").collect().map(_.getInt(0)) === Array(4, 2))
     }
+  }
+
+  test("SPARK-59146: pipe SET metadata does not cross Dataset boundaries") {
+    Seq(false, true).foreach { singlePassEnabled =>
+      withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePassEnabled.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        val dataFrame = sql("VALUES (1, 10) AS t(a, b) |> SET a = a + 1")
+        assert(!dataFrame.queryExecution.analyzed.exists(_.isInstanceOf[PipeSetInput]))
+
+        val error = intercept[SparkThrowable] {
+          dataFrame("t.a")
+        }
+        assert(error.getCondition === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+
+        val joinedDataFrame = sql(
+          "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 " +
+            "|> INNER JOIN VALUES (2, 20) AS u(a, c) USING (a)")
+        val analyzedJoin = joinedDataFrame.queryExecution.analyzed
+        assert(!analyzedJoin.exists(_.isInstanceOf[PipeSetInput]))
+        assert(!analyzedJoin.exists {
+          case project: Project =>
+            project.getTagValue(Project.hiddenOutputTag).exists(_.exists(_.pipeSetRetained))
+          case _ => false
+        })
+
+        val joinError = intercept[SparkThrowable] {
+          joinedDataFrame.select("t.a").queryExecution.analyzed
+        }
+        assert(joinError.getCondition === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+        assert(analyzedJoin.metadataOutput.exists { attribute =>
+          attribute.name == "a" && attribute.qualifier == Seq("u") && !attribute.pipeSetRetained
+        })
+      }
+    }
+  }
+
+  test("SPARK-59146: clean pipe SET input before finalizing analysis-only commands") {
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      "CREATE TEMPORARY VIEW pipe_set_view AS " +
+        "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 " +
+        "|> INNER JOIN VALUES (2, 20) AS u(a, c) USING (a)")
+    val analyzedCommand = spark.sessionState.analyzer.execute(parsedPlan)
+
+    assert(analyzedCommand.children.isEmpty)
+    assert(analyzedCommand.innerChildren.length === 1)
+    val analyzedViewPlan = analyzedCommand.innerChildren.head.asInstanceOf[LogicalPlan]
+    assert(!analyzedViewPlan.exists(_.isInstanceOf[PipeSetInput]))
+    assert(!analyzedViewPlan.exists {
+      case project: Project =>
+        project.getTagValue(Project.hiddenOutputTag).exists(_.exists(_.pipeSetRetained))
+      case _ => false
+    })
   }
 
   test("SPARK-59146: dropDuplicates discards hidden pipe SET values") {
