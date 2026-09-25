@@ -257,8 +257,8 @@ def is_none_branch(x):
 
 
 def truthy_bool_branch(x: bool):
-    # SPARK-56925: bare ``if x:`` on a bool-annotated parameter now transpiles
-    # via coalesce(x, False), correctly treating NULL as falsy.
+    # bare ``if x:`` on a bool-annotated parameter transpiles via
+    # coalesce(x, False), correctly treating NULL as falsy.
     if x:
         return 1
     else:
@@ -504,9 +504,9 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @given(value=_bool_strategy)
         @_seed_examples(_BOOL_EDGES)
         def test_truthy_bool_branch_matches_python(self, value):
-            # SPARK-56925: bare ``if x:`` on a bool-annotated parameter now
-            # transpiles correctly. NULL is treated as falsy (coalesce(x, False)),
-            # matching Python's ``None is falsy`` semantics.
+            # bare ``if x:`` on a bool-annotated parameter transpiles correctly.
+            # NULL is treated as falsy (coalesce(x, False)), matching Python's
+            # ``None is falsy`` semantics.
             df = self._single_arg_df(value, BooleanType())
             transpiled, interpreted = self._run(truthy_bool_branch, LongType(), df, "a")
             self.assertEqual(transpiled, interpreted, f"truthy_bool_branch mismatch on {value!r}")
