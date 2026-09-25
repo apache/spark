@@ -348,6 +348,16 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     }
   }
 
+  test("SPARK-35198: debugCodegen is available without an implicit conversion") {
+    val df = spark.range(10).toDF()
+    val output = new java.io.ByteArrayOutputStream()
+    Console.withOut(output) {
+      df.debugCodegen()
+    }
+    assert(output.toString.contains("WholeStageCodegen subtrees."))
+    assert(output.toString.replaceAll("#\\d+", "#x") == getNormalizedExplain(df, CodegenMode))
+  }
+
   test("Support ExplainMode in Dataset.explain") {
     val df1 = Seq((1, 2), (2, 3)).toDF("k", "v1")
     val df2 = Seq((2, 3), (1, 1)).toDF("k", "v2")
