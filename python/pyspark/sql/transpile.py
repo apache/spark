@@ -138,6 +138,8 @@ def _is_numeric_cat(cat: str) -> bool:
 
 def _wider_numeric(lc: str, rc: str) -> str:
     """Return the wider of two numeric categories (float > integer > numeric)."""
+    if not (_is_numeric_cat(lc) and _is_numeric_cat(rc)):
+        raise ValueError(f"_wider_numeric called with non-numeric categories: {lc!r}, {rc!r}")
     if "float" in (lc, rc):
         return "float"
     if "integer" in (lc, rc):
@@ -395,12 +397,10 @@ class CatalystTranspiler(AbstractTranspiler):
         right_null = right_col.isNull()
         # NaN guard: Python's `NaN == NaN` is False (IEEE 754 reflexivity fails),
         # but Spark's EqualTo returns True. Only emit when at least one operand
-        # is "float" -- the "float" variant is only selected for FractionalType
-        # columns (see ResolveTranspiledPythonUDFOptions), so isnan() is safe to
-        # call without a cast. For "integer" and "numeric" (integral columns)
-        # NaN is impossible and the guard is dead code.
-        has_float = lc == "float" or rc == "float"
-        if has_float:
+        # is "float" -- that variant is only selected for FractionalType columns
+        # (see ResolveTranspiledPythonUDFOptions), so isnan() is safe without a
+        # cast. For "integer" and "numeric" columns NaN is impossible.
+        if lc == "float" or rc == "float":
             nan_result = lit(not equal)
             nan_cmp = isnan(left_col) | isnan(right_col)
             value_cmp: Column = when(nan_cmp, nan_result).otherwise(
