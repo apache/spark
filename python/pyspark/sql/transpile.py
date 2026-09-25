@@ -269,13 +269,14 @@ class CatalystTranspiler(AbstractTranspiler):
             safe_test = coalesce(test_col, lit(False))
         else:
             cat = self._safe_category(params, test_node)
-            safe_test = _truthiness_col(cat, test_col)
-            if safe_test is None:
+            _maybe_test = _truthiness_col(cat, test_col)
+            if _maybe_test is None:
                 raise UnsupportedOperationException(
                     f"bare truthiness test ({ast.dump(test_node)}) in if/ternary: "
                     "the operand's category is unknown or unsupported, so the "
                     "transpiler falls back to interpreted Python"
                 )
+            safe_test = _maybe_test
         # When the two branches resolve to concrete but different categories
         # (e.g. numeric vs string), the lowered ``when(...).otherwise(...)`` is a
         # CASE WHEN whose branch values share no common type under ANSI. That node
