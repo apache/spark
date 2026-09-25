@@ -896,6 +896,39 @@ public abstract class AbstractBytesToBytesMapSuite {
   }
 
   @Test
+  public void configuredKeyOperationsRejectLookupAfterFree() {
+    BytesToBytesMap.KeyOperationsFactory keyOperationsFactory =
+      () -> new BytesToBytesMap.KeyOperations() {
+        @Override
+        public int hash(Object base, long offset, int length) {
+          return 0;
+        }
+
+        @Override
+        public boolean equals(
+            Object leftBase,
+            long leftOffset,
+            int leftLength,
+            Object rightBase,
+            long rightOffset,
+            int rightLength) {
+          return false;
+        }
+      };
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, 64, PAGE_SIZE_BYTES, keyOperationsFactory);
+    final long[] key = new long[]{1L};
+    try {
+      map.free();
+      assertThrows(
+        IllegalStateException.class,
+        () -> map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8));
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
   public void operationsAfterDestructiveIterationFail() {
     memoryManager.limit(PAGE_SIZE_BYTES);
     BytesToBytesMap map =

@@ -490,6 +490,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * The returned iterator is thread-safe. However if the map is modified while iterating over it,
    * the behavior of the returned iterator is undefined.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public MapIterator iterator() {
     ensureReady();
@@ -505,6 +508,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * The returned iterator is thread-safe. However if the map is modified while iterating over it,
    * the behavior of the returned iterator is undefined.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public MapIterator destructiveIterator() {
     ensureReady();
@@ -560,6 +566,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * The returned iterator is NOT thread-safe. If the map is modified while iterating over it,
    * the behavior of the returned iterator is undefined.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public MapIteratorWithKeyIndex iteratorWithKeyIndex() {
     ensureReady();
