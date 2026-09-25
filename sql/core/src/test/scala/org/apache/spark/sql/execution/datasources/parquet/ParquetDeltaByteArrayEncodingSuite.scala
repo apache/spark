@@ -16,9 +16,15 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.parquet.bytes.DirectByteBufferAllocator
+import java.nio.charset.StandardCharsets
+
+import org.apache.parquet.bytes.{ByteBufferInputStream, BytesInput, DirectByteBufferAllocator}
 import org.apache.parquet.column.values.Utils
+import org.apache.parquet.column.values.delta.DeltaBinaryPackingValuesWriterForInteger
+import org.apache.parquet.column.values.deltalengthbytearray.DeltaLengthByteArrayValuesWriter
 import org.apache.parquet.column.values.deltastrings.DeltaByteArrayWriter
+import org.apache.parquet.io.ParquetDecodingException
+import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -58,6 +64,58 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
     assertReadWriteWithSkipN(writer, reader, randvalues)
   }
 
+  test("prefix length larger than the previous value is rejected") {
+    // Craft a page by hand: a benign 2-byte first value, then a value whose prefix length
+    // claims 65536 bytes of a 2-byte previous value.
+    val is = craftPage(prefixLengths = Array(0, 65536), suffixes = Array("ab", ""))
+    reader.initFromPage(2, is)
+    writableColumnVector = new OnHeapColumnVector(2, StringType)
+    val e = intercept[ParquetDecodingException] {
+      reader.readBinary(2, writableColumnVector, 0)
+    }
+    assert(e.getMessage.contains("prefix length 65536"))
+  }
+
+  test("negative prefix length is rejected") {
+    val is = craftPage(prefixLengths = Array(0, -1), suffixes = Array("ab", "cd"))
+    reader.initFromPage(2, is)
+    writableColumnVector = new OnHeapColumnVector(2, StringType)
+    val e = intercept[ParquetDecodingException] {
+      reader.readBinary(2, writableColumnVector, 0)
+    }
+    assert(e.getMessage.contains("negative prefix length"))
+  }
+
+  test("prefix length larger than the previous value is rejected when skipping") {
+    val is = craftPage(prefixLengths = Array(0, 65536), suffixes = Array("ab", ""))
+    reader.initFromPage(2, is)
+    val e = intercept[ParquetDecodingException] {
+      reader.skipBinary(2)
+    }
+    assert(e.getMessage.contains("prefix length 65536"))
+  }
+
+  test("prefix length one byte past the previous value is rejected") {
+    // With on-heap vectors previous.array() is the whole backing buffer, so without the
+    // validation this off-by-one prefix silently copied a stale byte instead of failing.
+    val is = craftPage(prefixLengths = Array(0, 3), suffixes = Array("ab", ""))
+    reader.initFromPage(2, is)
+    writableColumnVector = new OnHeapColumnVector(2, StringType)
+    val e = intercept[ParquetDecodingException] {
+      reader.readBinary(2, writableColumnVector, 0)
+    }
+    assert(e.getMessage.contains("prefix length 3"))
+  }
+
+  test("prefix length equal to the previous value's length is accepted") {
+    val is = craftPage(prefixLengths = Array(0, 2), suffixes = Array("ab", ""))
+    reader.initFromPage(2, is)
+    writableColumnVector = new OnHeapColumnVector(2, StringType)
+    reader.readBinary(2, writableColumnVector, 0)
+    assert(writableColumnVector.getBinary(0) sameElements "ab".getBytes)
+    assert(writableColumnVector.getBinary(1) sameElements "ab".getBytes)
+  }
+
   test("test lengths") {
     var reader = new VectorizedDeltaBinaryPackedReader
     Utils.writeData(writer, values)
@@ -79,6 +137,25 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
     assert(10 == writableColumnVector.getInt(0))
     assert(0 == writableColumnVector.getInt(1))
     assert(7 == writableColumnVector.getInt(2))
+  }
+
+  /** Builds a raw DELTA_BYTE_ARRAY page from explicit prefix lengths and suffixes. */
+  private def craftPage(
+      prefixLengths: Array[Int],
+      suffixes: Array[String]): ByteBufferInputStream = {
+    craftPage(prefixLengths, suffixes.map(_.getBytes(StandardCharsets.UTF_8)))
+  }
+
+  private def craftPage(
+      prefixLengths: Array[Int],
+      suffixes: Array[Array[Byte]]): ByteBufferInputStream = {
+    val allocator = new DirectByteBufferAllocator
+    val prefixWriter =
+      new DeltaBinaryPackingValuesWriterForInteger(128, 4, 64 * 1024, 64 * 1024, allocator)
+    val suffixWriter = new DeltaLengthByteArrayValuesWriter(64 * 1024, 64 * 1024, allocator)
+    prefixLengths.foreach(prefixWriter.writeInteger)
+    suffixes.foreach(s => suffixWriter.writeBytes(Binary.fromConstantByteArray(s)))
+    BytesInput.concat(prefixWriter.getBytes, suffixWriter.getBytes).toInputStream
   }
 
   private def assertReadWrite(
