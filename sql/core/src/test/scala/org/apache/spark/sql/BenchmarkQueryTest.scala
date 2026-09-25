@@ -25,13 +25,18 @@ import org.apache.spark.sql.catalyst.optimizer.BuildLeft
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.execution.{InputAdapter, LocalTableScanExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, DisableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.debug
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-abstract class BenchmarkQueryTest extends SharedSparkSession {
+// Disable AQE because these suites only plan their queries, and the whole-stage codegen subtrees
+// of an AdaptiveSparkPlanExec are created only when the query runs, so `checkGeneratedCode`
+// would find none to check.
+abstract class BenchmarkQueryTest
+  extends QueryTest with SharedSparkSession with DisableAdaptiveExecutionSuite {
 
   // When Utils.isTesting is true, the RuleExecutor will issue an exception when hitting
   // the max iteration of analyzer/optimizer batches.
@@ -68,7 +73,18 @@ abstract class BenchmarkQueryTest extends SharedSparkSession {
   }
 
   protected def checkGeneratedCode(plan: SparkPlan, checkMethodCodeSize: Boolean = true): Unit = {
-    BenchmarkQueryTest.generatedCode(plan).foreach { case (subtree, code) =>
+    def failOnAdaptivePlan(plan: SparkPlan): Unit = plan foreach {
+      case a: AdaptiveSparkPlanExec =>
+        fail("the plan to check has an AdaptiveSparkPlanExec, whose whole-stage codegen " +
+          s"subtrees are not created until the query runs:\n${a.treeString}")
+      case s => s.subqueries.foreach(failOnAdaptivePlan)
+    }
+
+    failOnAdaptivePlan(plan)
+    val stages = BenchmarkQueryTest.generatedCode(plan)
+    assert(stages.nonEmpty,
+      s"no WholeStageCodegenExec subtree found to check in the plan:\n${plan.treeString}")
+    stages.foreach { case (subtree, code) =>
       val (_, ByteCodeStats(maxMethodCodeSize, _, _)) = try {
         // Just check the generated code can be properly compiled
         CodeGenerator.compile(code)
