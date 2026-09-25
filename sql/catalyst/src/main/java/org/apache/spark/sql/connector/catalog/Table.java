@@ -96,6 +96,18 @@ public interface Table extends Relation {
   }
 
   /**
+   * Returns the string map of properties exposed by commands that display table metadata.
+   *
+   * <p>The default implementation returns {@link #properties()}. Implementations may include
+   * transient metadata that should not be treated as persisted table properties.
+   *
+   * @since 4.4.0
+   */
+  default Map<String, String> displayProperties() {
+    return properties();
+  }
+
+  /**
    * Returns the set of capabilities for this table.
    */
   Set<TableCapability> capabilities();

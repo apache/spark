@@ -189,7 +189,8 @@ case class DescribeTableExec(
     rows += toCatalystRow("# Detailed Table Information", "", "")
     addIdentifierRows(rows, catalogName, identifier, entityLabel = "Table")
 
-    val tableType = if (table.properties().containsKey(TableCatalog.PROP_EXTERNAL)) {
+    val displayProperties = table.displayProperties()
+    val tableType = if (displayProperties.containsKey(TableCatalog.PROP_EXTERNAL)) {
       CatalogTableType.EXTERNAL.name
     } else {
       CatalogTableType.MANAGED.name
@@ -198,12 +199,12 @@ case class DescribeTableExec(
     CatalogV2Util.TABLE_RESERVED_PROPERTIES
       .filterNot(_ == TableCatalog.PROP_EXTERNAL)
       .foreach(propKey => {
-        if (table.properties.containsKey(propKey)) {
-          rows += toCatalystRow(propKey.capitalize, table.properties.get(propKey), "")
+        if (displayProperties.containsKey(propKey)) {
+          rows += toCatalystRow(propKey.capitalize, displayProperties.get(propKey), "")
         }
       })
     val properties =
-      conf.redactOptions(table.properties.asScala.toMap).toList
+      conf.redactOptions(displayProperties.asScala.toMap).toList
         .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
         .sortBy(_._1).map {
         case (key, value) => key + "=" + value

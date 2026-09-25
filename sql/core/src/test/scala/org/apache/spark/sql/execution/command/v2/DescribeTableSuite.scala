@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import java.util
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command
@@ -217,6 +219,37 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           Row(TableCatalog.PROP_OWNER.capitalize, Utils.getCurrentUserName(), ""),
           Row("Table Properties", "[bar=baz]", ""),
           Row("Statistics", "0 bytes, 0 rows", null)))
+    }
+  }
+
+  test("display commands use display properties without exposing them to SHOW CREATE TABLE") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint) $defaultUsing " +
+        "TBLPROPERTIES ('persisted' = 'stored')")
+
+      val table = loadTable(catalog, "ns", "table")
+      val displayProperties = new util.HashMap[String, String](table.properties)
+      displayProperties.put("catalog-label", "catalog-value")
+      table.setDisplayProperties(displayProperties)
+
+      val describeRows = sql(s"DESCRIBE TABLE EXTENDED $tbl").collect()
+      val properties = describeRows.find(_.getString(0) == "Table Properties")
+      assert(properties.exists(_.getString(1) ==
+        "[catalog-label=catalog-value,persisted=stored]"))
+
+      val shownProperties = sql(s"SHOW TBLPROPERTIES $tbl").collect()
+        .map(row => row.getString(0) -> row.getString(1)).toMap
+      assert(shownProperties("catalog-label") == "catalog-value")
+      assert(shownProperties("persisted") == "stored")
+
+      val extendedInfo = sql(s"SHOW TABLE EXTENDED IN $catalog.ns LIKE 'table'")
+        .collect()(0).getString(3)
+      assert(extendedInfo.contains(
+        "Table Properties: [catalog-label=catalog-value, persisted=stored]"))
+
+      val createDDL = sql(s"SHOW CREATE TABLE $tbl").head().getString(0)
+      assert(createDDL.contains("'persisted' = 'stored'"))
+      assert(!createDDL.contains("catalog-label"))
     }
   }
 
