@@ -3099,6 +3099,12 @@
     ],
     "sqlState" : "42822"
   },
+  "HIVE_THRIFT_SERVER_INEFFECTIVE_DOAS" : {
+    "message" : [
+      "<doAsConf> is set to true, but the Spark Thrift Server impersonates the connecting user only on the driver, for Hive metastore calls and driver-side file system access: executor-side data access still runs as the server's own service identity, so storage permissions are checked against the service principal rather than the connecting user (SPARK-5159). That can expose data the connecting user is not authorized to read. To start anyway, set <allowIneffectiveDoAsConf> to true; it is a static conf, so it must be set before the SparkSession is created. Setting <doAsConf> to false also starts the server, but note that it stops impersonating metastore calls too, so it is not a no-op (and unsetting it does not help -- Hive's own default is true)."
+    ],
+    "sqlState" : "42616"
+  },
   "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the `hll_sketch_agg` function)."

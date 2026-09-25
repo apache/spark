@@ -101,12 +101,10 @@ package object debug {
   }
 
   /**
-   * Get WholeStageCodegenExec subtrees and the codegen in a query plan
-   *
-   * @param plan the query plan for codegen
-   * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
+   * The whole-stage codegen subtrees of `plan` and of its subqueries, in stage id order. The walk
+   * follows an adaptive plan into its current executed plan and its query stages.
    */
-  def codegenStringSeq(plan: SparkPlan): Seq[(String, String, ByteCodeStats)] = {
+  private[sql] def codegenSubtrees(plan: SparkPlan): Seq[WholeStageCodegenExec] = {
     val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
 
     def findSubtrees(plan: SparkPlan): Unit = {
@@ -124,7 +122,17 @@ package object debug {
     }
 
     findSubtrees(plan)
-    codegenSubtrees.toSeq.sortBy(_.codegenStageId).map { subtree =>
+    codegenSubtrees.toSeq.sortBy(_.codegenStageId)
+  }
+
+  /**
+   * Get WholeStageCodegenExec subtrees and the codegen in a query plan
+   *
+   * @param plan the query plan for codegen
+   * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
+   */
+  def codegenStringSeq(plan: SparkPlan): Seq[(String, String, ByteCodeStats)] = {
+    codegenSubtrees(plan).map { subtree =>
       val (_, source) = subtree.doCodeGen()
       val codeStats = try {
         CodeGenerator.compile(source)._2
