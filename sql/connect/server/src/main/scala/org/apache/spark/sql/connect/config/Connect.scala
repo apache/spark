@@ -53,7 +53,9 @@ object Connect {
     buildStaticConf("spark.connect.grpc.interceptor.classes")
       .doc(
         "Comma separated list of class names that must " +
-          "implement the io.grpc.ServerInterceptor interface.")
+          "implement the io.grpc.ServerInterceptor interface. When authentication is enabled " +
+          "these interceptors run after it, so they only see calls that have already been " +
+          "authenticated and cannot supply the Authorization header themselves.")
       .version("3.4.0")
       .stringConf
       .createOptional
