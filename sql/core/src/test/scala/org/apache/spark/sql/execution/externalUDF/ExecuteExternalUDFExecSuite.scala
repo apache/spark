@@ -277,7 +277,7 @@ object ExecuteExternalUDFExecSuite {
         expectedLargeVarTypes,
         requestCount,
         closeCount)
-      registerWorkerSessionCompletionListener(taskContext, session)
+      taskContext.addTaskCompletionListener[Unit](_ => session.close())
       f(session)
     }
   }

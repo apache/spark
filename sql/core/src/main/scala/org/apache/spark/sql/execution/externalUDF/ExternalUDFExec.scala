@@ -63,11 +63,12 @@ trait ExternalUDFExec extends UnaryExecNode {
    * Finalizes the session on task completion (which fires on both success and
    * failure). [[WorkerSession#close]] is the single finalizer: it fetches the
    * `FinishResponse` if processing completed, or cancels anything still in
-   * flight and waits for the `CancelResponse`. Its returned termination is a
-   * cleanup outcome and does not determine whether the Spark task succeeds; the
-   * result iterator is responsible for surfacing execution errors. The provided
-   * function receives the session and must return the result iterator. It may
-   * use the session but MUST NOT close it.
+   * flight and waits for the `CancelResponse`. For the UDF sessions used here,
+   * exhausting the data iterator completes execution and surfaces execution or
+   * finish errors. Therefore, `close` only cleans up the session and its returned
+   * termination does not determine whether the Spark task succeeds. The provided
+   * function receives the session and must return the result iterator. It may use
+   * the session but MUST NOT close it.
    */
   protected def withUDFWorkerSession(
       taskContext: TaskContext,
@@ -97,22 +98,12 @@ trait ExternalUDFExec extends UnaryExecNode {
     //    raising it (a thread interrupt may still propagate); the underlying
     //    failure has already surfaced through the result iterator.
     //
-    // close() also releases or invalidates the worker handle according to the
-    // settled termination. Its return value is intentionally ignored: close is
-    // task cleanup, and a close-only outcome must not change the task result.
+    // For these UDF sessions, exhausting the data iterator covers execution and
+    // surfaces its errors. close() only cleans up protocol state and releases or
+    // invalidates the worker handle, so its return value is intentionally ignored.
     //
-    registerWorkerSessionCompletionListener(taskContext, session)
+    taskContext.addTaskCompletionListener[Unit](_ => session.close())
 
     f(session)
-  }
-
-  /** Registers the single session finalizer. */
-  protected final def registerWorkerSessionCompletionListener(
-      taskContext: TaskContext,
-      session: WorkerSession): Unit = {
-    taskContext.addTaskCompletionListener[Unit] { _ =>
-      session.close()
-      ()
-    }
   }
 }
