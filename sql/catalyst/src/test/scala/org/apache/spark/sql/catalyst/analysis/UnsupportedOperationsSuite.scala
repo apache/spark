@@ -106,7 +106,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       excludeColumns = None,
       storedAsScdType = 1,
       trackHistoryColumns = None,
-      trackHistoryExceptColumns = None))
+      trackHistoryExceptColumns = None,
+      ignoreNullUpdates = false,
+      ignoreNullUpdatesColumns = None,
+      ignoreNullUpdatesExceptColumns = None))
 
   /*
     =======================================================================================
@@ -395,6 +398,34 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     Deduplicate(Seq(att), batchRelation),
     outputMode = Append
   )
+
+  def asOfJoin(left: LogicalPlan, right: LogicalPlan): AsOfJoin = {
+    AsOfJoin(
+      left,
+      right,
+      left.output.head >= right.output.head,
+      condition = None,
+      joinType = Inner,
+      orderExpression = left.output.head - right.output.head,
+      toleranceAssertion = None)
+  }
+
+  assertSupportedInStreamingPlan(
+    "ASOF join with stream-static relations",
+    asOfJoin(streamRelation, batchRelation),
+    outputMode = Append)
+
+  assertNotSupportedInStreamingPlan(
+    "ASOF join with static-stream relations",
+    asOfJoin(batchRelation, streamRelation),
+    outputMode = Append,
+    expectedMsgs = Seq("ASOF join", "streaming DataFrame/Dataset on the right"))
+
+  assertNotSupportedInStreamingPlan(
+    "ASOF join with stream-stream relations",
+    asOfJoin(streamRelation, streamRelation),
+    outputMode = Append,
+    expectedMsgs = Seq("ASOF join", "streaming DataFrame/Dataset on the right"))
 
   // Inner joins: Multiple stream-stream joins supported only in append mode
   testBinaryOperationInStreamingPlan(
@@ -774,12 +805,32 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     streamBatchSupported = false,
     batchStreamSupported = false)
 
-  // Except: *-stream not supported
+  // Except: by default, streaming input on either side is not supported
   testBinaryOperationInStreamingPlan(
     "except",
     _.except(_, isAll = false),
     streamStreamSupported = false,
+    streamBatchSupported = false,
     batchStreamSupported = false)
+
+  testBinaryOperationInStreamingPlan(
+    "except all",
+    _.except(_, isAll = true),
+    streamStreamSupported = false,
+    streamBatchSupported = false,
+    batchStreamSupported = false)
+
+  assertSupportedInStreamingPlan(
+    "except with stream-batch relations and legacy compatibility enabled",
+    streamRelation.except(batchRelation, isAll = false),
+    Append,
+    SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "true")
+
+  assertSupportedInStreamingPlan(
+    "except all with stream-batch relations and legacy compatibility enabled",
+    streamRelation.except(batchRelation, isAll = true),
+    Append,
+    SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "true")
 
   // Intersect: not supported
   testBinaryOperationInStreamingPlan(
@@ -973,10 +1024,32 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     Update
   )
 
+  assertSupportedForRealTime(
+    "real-time with deduplicate within watermark - update mode",
+    DeduplicateWithinWatermark(Seq(attribute), streamRelation),
+    Update
+  )
+
+  assertSupportedForRealTime(
+    "real-time with deduplicate within watermark after union - update mode",
+    DeduplicateWithinWatermark(
+      Seq(attribute),
+      streamRelation.union(new TestStreamingRelation(attribute.newInstance()))),
+    Update
+  )
+
   assertNotSupportedForRealTime(
     "real-time with Scala transformWithState on both sides of union - update mode",
     scalaTransformWithState(streamRelation)
       .union(scalaTransformWithState(new TestStreamingRelation(attribute.newInstance()))),
+    Update,
+    "STREAMING_REAL_TIME_MODE.STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED"
+  )
+
+  assertNotSupportedForRealTime(
+    "real-time with deduplicate within watermark before union - update mode",
+    DeduplicateWithinWatermark(Seq(attribute), streamRelation)
+      .union(new TestStreamingRelation(attribute.newInstance())),
     Update,
     "STREAMING_REAL_TIME_MODE.STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED"
   )

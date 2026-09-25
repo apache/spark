@@ -353,66 +353,6 @@ trait JoinSelectionHelper extends Logging {
     }
   }
 
-  def getBroadcastNestedLoopJoinDesiredBuildSide(join: Join): BuildSide = {
-    if (join.joinType.isInstanceOf[InnerLike] || join.joinType == FullOuter) {
-      getSmallerSide(join.left, join.right)
-    } else {
-      // For perf reasons, BroadcastNestedLoopJoinExec prefers to broadcast the left side for a
-      // right join and the right side for a left join. If one side is much smaller, revisiting
-      // that preference may be worthwhile.
-      if (canBuildBroadcastLeft(join.joinType)) BuildLeft else BuildRight
-    }
-  }
-
-  def getBroadcastNestedLoopJoinBuildSide(
-      join: Join,
-      hintOnly: Boolean,
-      conf: SQLConf): Option[BuildSide] = {
-    lazy val buildLeft = if (hintOnly) {
-      hintToBroadcastLeft(join.hint)
-    } else {
-      canBroadcastBySize(join.left, conf) &&
-        !hintToNotBroadcastAndReplicateLeft(join.hint)
-    }
-    lazy val buildRight = if (hintOnly) {
-      hintToBroadcastRight(join.hint)
-    } else {
-      canBroadcastBySize(join.right, conf) &&
-        !hintToNotBroadcastAndReplicateRight(join.hint)
-    }
-
-    if (join.joinType.isInstanceOf[InnerLike] || join.joinType == FullOuter) {
-      if (buildLeft && buildRight) {
-        Some(getBroadcastNestedLoopJoinDesiredBuildSide(join))
-      } else if (buildLeft) {
-        Some(BuildLeft)
-      } else if (buildRight) {
-        Some(BuildRight)
-      } else {
-        None
-      }
-    } else {
-      getBroadcastNestedLoopJoinDesiredBuildSide(join) match {
-        case BuildLeft =>
-          if (buildLeft) Some(BuildLeft) else if (buildRight) Some(BuildRight) else None
-        case BuildRight =>
-          if (buildRight) Some(BuildRight) else if (buildLeft) Some(BuildLeft) else None
-      }
-    }
-  }
-
-  def getBroadcastNestedLoopJoinBuildSide(join: Join, conf: SQLConf): BuildSide = {
-    val hintedBuildSide = if (join.hint.isEmpty) {
-      None
-    } else {
-      getBroadcastNestedLoopJoinBuildSide(join, hintOnly = true, conf)
-    }
-    hintedBuildSide
-      .orElse(getBroadcastNestedLoopJoinBuildSide(join, hintOnly = false, conf))
-      .orElse(getBroadcastNestedLoopJoinBuildSide(join.hint, join.joinType))
-      .getOrElse(getBroadcastNestedLoopJoinDesiredBuildSide(join))
-  }
-
   def getSmallerSide(left: LogicalPlan, right: LogicalPlan): BuildSide = {
     if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
   }
@@ -477,14 +417,13 @@ trait JoinSelectionHelper extends Logging {
 
   /**
    * The build side a broadcast hash join would use, or `None` when one is ruled out by the join
-   * shape or by a hint.
+   * shape, a hint, or its size.
    *
-   * `Some` does not promise the planner picks a broadcast hash join: a `SHUFFLE_MERGE` or
-   * `SHUFFLE_REPLICATE_NL` hint is tried before the sizes are consulted, join keys no hash join
-   * supports send it to a sort merge join, and AQE re-estimates the sizes at runtime. Within the
-   * broadcast decision itself this does follow the planner's precedence: a hinted broadcast first,
-   * a hinted shuffle hash join as a veto, then the sizes. Callers that only need to know whether a
-   * broadcast hash join is possible should use `canPlanAsBroadcastHashJoin`.
+   * For equi-joins, `Some` does not promise the planner picks a broadcast hash join: other hints,
+   * unsupported join keys, or AQE can select another strategy. For a single-column null-aware anti
+   * join, the dedicated and automatic broadcast thresholds determine eligibility before hints.
+   * Callers that only need to know whether a broadcast hash join is possible should use
+   * `canPlanAsBroadcastHashJoin`.
    */
   def getBroadcastHashJoinBuildSide(join: Join, conf: SQLConf): Option[BuildSide] = join match {
     case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) =>
@@ -498,9 +437,20 @@ trait JoinSelectionHelper extends Logging {
       getBroadcastBuildSide(join, hintOnly = true, conf).orElse {
         if (noShufflePlannedBefore) getBroadcastBuildSide(join, hintOnly = false, conf) else None
       }
-    case j if ExtractSingleColumnNullAwareAntiJoin.extract(j).isDefined =>
-      if (NullAwareAntiJoinPlanning.decide(j, conf) ==
-          NullAwareAntiJoinPlanning.BroadcastHash) {
+    // `JoinSelection` always builds from the right for this shape. The applicable automatic
+    // broadcast threshold floors a nonnegative dedicated threshold. As before, threshold
+    // eligibility takes precedence over join hints. This same decision intentionally controls
+    // aggregate pushdown. If neither threshold admits the hash join, regular planning may still
+    // broadcast the right side for a nested-loop join. The thresholds limit hash relation
+    // construction, not all broadcasts.
+    case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) =>
+      val dedicatedThreshold = conf.nullAwareAntiJoinBroadcastThreshold
+      val canBroadcast = dedicatedThreshold < 0 ||
+        (dedicatedThreshold > 0 && {
+          val rightSize = j.right.stats.sizeInBytes
+          rightSize >= 0 && rightSize <= dedicatedThreshold
+        }) || canBroadcastBySize(j.right, conf)
+      if (canBroadcast) {
         Some(BuildRight)
       } else {
         None
@@ -626,21 +576,5 @@ trait JoinSelectionHelper extends Logging {
   private def forceApplyShuffledHashJoin(conf: SQLConf): Boolean = {
     Utils.isTesting &&
       conf.getConfString("spark.sql.join.forceApplyShuffledHashJoin", "false") == "true"
-  }
-}
-
-private[sql] object NullAwareAntiJoinPlanning extends JoinSelectionHelper {
-  sealed trait Decision
-  case object BroadcastHash extends Decision
-  case object BroadcastNestedLoop extends Decision
-
-  def decide(join: Join, conf: SQLConf): Decision = {
-    if (conf.optimizeNullAwareAntiJoin &&
-        canBroadcastBySize(join.right, conf) &&
-        getBroadcastNestedLoopJoinBuildSide(join, conf) == BuildRight) {
-      BroadcastHash
-    } else {
-      BroadcastNestedLoop
-    }
   }
 }

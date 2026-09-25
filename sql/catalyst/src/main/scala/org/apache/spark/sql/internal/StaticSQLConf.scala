@@ -147,6 +147,22 @@ object StaticSQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS =
+    buildStaticConf("spark.sql.hive.thriftServer.allowIneffectiveDoAs")
+      .doc("With hive.server2.enable.doAs=true the Spark Thrift Server impersonates the " +
+        "connecting user for Hive metastore calls and driver-side file system access, but " +
+        "executor-side data access still runs as the server's own service identity " +
+        "(SPARK-5159), so storage-level permissions are checked against the privileged " +
+        "service principal instead of the impersonated user. Because that can silently " +
+        "grant users access to data they could not read with their own credentials, the " +
+        "server refuses to start when hive.server2.enable.doAs=true and " +
+        "hive.server2.authentication verifies user identities (any recognized type other " +
+        "than NONE/NOSASL), unless this option is set to true to acknowledge the limitation.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
     .doc("A comma-separated list of classes that implement " +
       "Function1[SparkSessionExtensions, Unit] used to configure Spark Session extensions. The " +
@@ -377,6 +393,35 @@ object StaticSQLConf {
       "Every entry must be a valid regular expression.")
     .createWithDefault(Nil)
 
+  val RESTRICTED_MODE_ENABLED = buildStaticConf("spark.sql.restrictedMode.enabled")
+    .internal()
+    .doc("When true, SQL features that load or execute externally provided code or scripts from " +
+      "the query itself are disabled: the reflect, java_method and try_reflect functions and the " +
+      "TRANSFORM ... USING clause are rejected during analysis. This is an opt-in profile for " +
+      "deployments that want a more constrained SQL surface. As a static configuration it can " +
+      "only be set when starting the driver, and not from a session, so that a session cannot " +
+      "turn it off for itself. The default of false preserves the previous behavior.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
+
+  val AVRO_SCHEMA_URL_ALLOWED_SCHEMES =
+    buildStaticConf("spark.sql.avro.schemaUrlAllowedSchemes")
+      .internal()
+      .doc("A comma-separated allowlist of URI schemes permitted for the 'avroSchemaUrl' Avro " +
+        "option. Empty by default, which permits any scheme and preserves the previous behavior; " +
+        "when non-empty, an avroSchemaUrl whose scheme is not listed is rejected before it is " +
+        "opened. As a static configuration it can only be set when starting the driver, and not " +
+        "from a session. It restricts the scheme an avroSchemaUrl may name; it does not restrict " +
+        "which file system serves that scheme. That is decided by fs.<scheme>.impl, which a " +
+        "session can still set.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   // Bounds on the environment a session may install in its Python workers through the reserved
   // `spark.pythonWorkerEnv.` prefix. Static, so a session cannot raise its own limits. Their keys
   // are deliberately not under that prefix: every SparkConf entry is copied into a new session's
@@ -418,4 +463,21 @@ object StaticSQLConf {
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ >= 0, "The maximum total size must not be negative.")
       .createWithDefault(128 * 1024) // 128 KiB
+
+  val KAFKA_DISALLOWED_OPTIONS =
+    buildStaticConf("spark.sql.kafka.disallowedOptions")
+      .internal()
+      .doc("A comma-separated list of Kafka client option names (without the 'kafka.' prefix) " +
+        "that are not allowed to be set through Kafka source/sink options. Empty by default, " +
+        "which allows all options and preserves the previous behavior; when non-empty, setting a " +
+        "listed option raises an error. This is a static configuration fixed when the " +
+        "SparkSession is created and cannot be changed at runtime, so it acts as an operator " +
+        "boundary that a session cannot turn off.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .checkValue(_.forall(!_.toLowerCase(Locale.ROOT).startsWith("kafka.")),
+        "Kafka option names must be listed without the 'kafka.' prefix.")
+      .createWithDefault(Nil)
 }

@@ -100,6 +100,17 @@ class ExternalAppendOnlyUnsafeRowArray(
   def isEmpty: Boolean = numRows == 0
 
   /**
+   * Whether this array has switched to the [[UnsafeExternalSorter]] backing store (which may
+   * not have written anything to disk yet, see [[spillSize]] for that).
+   *
+   * This decides the row ownership contract of [[generateIterator]]: while it is false the
+   * iterator yields the distinct [[UnsafeRow]]s stored in the in-memory buffer, while once it
+   * is true the iterator re-points a single [[UnsafeRow]] on every `next()`, so a caller that
+   * retains a row past the current iteration step has to copy it.
+   */
+  def isSpillBacked: Boolean = spillableArray != null
+
+  /**
    * Total number of bytes that has been spilled into disk so far.
    */
   def spillSize: Long = {

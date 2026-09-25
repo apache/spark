@@ -57,7 +57,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Set up QEMU
         uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8
       - name: Set up Docker Buildx
@@ -185,6 +185,8 @@ jobs:
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./dev/spark-test-image/python-312-pandas-3/
+          build-contexts: |
+            root=./
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-312-pandas-3-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-312-pandas-3-cache:${{ github.ref_name }}
@@ -231,6 +233,8 @@ jobs:
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./dev/spark-test-image/python-314-nogil/
+          build-contexts: |
+            root=./
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-314-nogil-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-314-nogil-cache:${{ github.ref_name }}

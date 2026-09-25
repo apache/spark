@@ -658,7 +658,7 @@ ctes
     ;
 
 namedQuery
-    : name=errorCapturingIdentifier (columnAliases=identifierList)? (MAX RECURSION LEVEL integerValue)? AS? LEFT_PAREN query RIGHT_PAREN
+    : name=errorCapturingIdentifier (columnAliases=identifierList)? (MAX RECURSION LEVEL integerValue)? AS? (NOT? MATERIALIZED)? LEFT_PAREN query RIGHT_PAREN
     ;
 
 tableProvider
@@ -775,7 +775,8 @@ autoCdcParameters
         | autoCdcSequenceByClause
         | autoCdcColumnsClause
         | autoCdcStoredAsClause
-        | autoCdcTrackHistoryClause)*
+        | autoCdcTrackHistoryClause
+        | autoCdcIgnoreNullClause)*
     ;
 
 autoCdcDeleteClause
@@ -800,6 +801,12 @@ autoCdcTrackHistoryClause
     : TRACK HISTORY ON (
         LEFT_PAREN trackCols=identifierSeq RIGHT_PAREN |
         ASTERISK EXCEPT LEFT_PAREN nonTrackCols=identifierSeq RIGHT_PAREN)
+    ;
+
+autoCdcIgnoreNullClause
+    : IGNORE NULL UPDATES (ON (
+        LEFT_PAREN ignoreNullCols=identifierSeq RIGHT_PAREN |
+        ASTERISK EXCEPT LEFT_PAREN ignoreNullExceptCols=identifierSeq RIGHT_PAREN))?
     ;
 
 identifierReference
@@ -1445,7 +1452,7 @@ shiftOperator
 datetimeUnit
     : YEAR | QUARTER | MONTH
     | WEEK | DAY | DAYOFYEAR
-    | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND
+    | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND | NANOSECOND
     ;
 
 primaryExpression
@@ -2497,6 +2504,7 @@ ansiNonReserved
     | UNSET
     | UNTIL
     | UPDATE
+    | UPDATES
     | USE
     | VALUE
     | VALUES
@@ -2970,6 +2978,7 @@ nonReserved
     | UNSET
     | UNTIL
     | UPDATE
+    | UPDATES
     | USE
     | USER
     | VALUE

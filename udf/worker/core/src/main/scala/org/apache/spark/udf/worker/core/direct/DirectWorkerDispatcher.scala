@@ -356,6 +356,7 @@ abstract class DirectWorkerDispatcher(
         }
       }
     }
+    interrupted = Thread.interrupted() || interrupted
     interrupted
   }
 

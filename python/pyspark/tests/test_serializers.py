@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import collections
 import math
+import pickle
 import sys
 import unittest
 
@@ -156,6 +158,15 @@ class SerializationTestCase(unittest.TestCase):
         hash(CartesianDeserializer(NoOpSerializer(), UTF8Deserializer()))
         hash(CompressedSerializer(CPickleSerializer()))
         hash(FlattenedValuesSerializer(CPickleSerializer()))
+
+    def test_restricted_unpickler(self):
+        ser = CloudPickleSerializer(allowed_names=[("collections", "deque")])
+        q = collections.deque([1, 2, 3])
+        q2 = ser.loads(ser.dumps(q))
+        self.assertEqual(q, q2)
+
+        with self.assertRaises(pickle.UnpicklingError):
+            ser.loads(ser.dumps(collections.defaultdict(int)))
 
 
 @unittest.skipIf(not have_scipy, "SciPy not installed")

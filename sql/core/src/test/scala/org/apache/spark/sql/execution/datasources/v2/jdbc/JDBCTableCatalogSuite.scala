@@ -25,10 +25,10 @@ import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{Identifier, TableSummary}
+import org.apache.spark.sql.connector.catalog.{Identifier, TableChange, TableSummary}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLStmt}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.internal.SQLConf
@@ -227,6 +227,33 @@ class JDBCTableCatalogSuite extends SharedSparkSession {
       }
       checkErrorTableNotFound(e, expected)
     }
+  }
+
+  test("SPARK-58945: H2 renameTable reports source table when it is missing") {
+    val e = intercept[NoSuchTableException] {
+      tableCatalog.renameTable(
+        Identifier.of(Array("test"), "not_existing_table"),
+        Identifier.of(Array("test"), "dst_table"))
+    }
+    checkErrorTableNotFoundWithSearchPath(
+      e,
+      "`test`.`not_existing_table`",
+      searchPath = "not available")
+  }
+
+  // `test`.`people` exists, so H2 reports `test`.`PEOPLE` as not found with candidates (42103).
+  // Only the parser's not-found path returns 42103. `renameTable` resolves the table in
+  // `AlterTable.update()`, which always returns 42102, so `alterTable` is needed here.
+  test("SPARK-58945: H2 alterTable reports source table when it is missing") {
+    val e = intercept[NoSuchTableException] {
+      tableCatalog.alterTable(
+        Identifier.of(Array("test"), "PEOPLE"),
+        TableChange.deleteColumn(Array("id"), false))
+    }
+    checkErrorTableNotFoundWithSearchPath(
+      e,
+      "`test`.`PEOPLE`",
+      searchPath = "not available")
   }
 
   test("create a table") {

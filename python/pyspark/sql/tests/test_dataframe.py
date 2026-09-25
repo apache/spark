@@ -1228,6 +1228,37 @@ class DataFrameTestsMixin:
             self.assertIsInstance(df, DataFrame)
             self.assertEqual(df.select("value").count(), 10)
 
+    def test_rdd_conversion_propagates_sql_conf(self):
+        # Converting a DataFrame to an RDD must run under a tracked SQL execution so
+        # that session SQLConfs are propagated to the executors, mirroring the classic
+        # Scala Dataset.rdd behavior (SPARK-50994). Otherwise the non-vectorized parquet
+        # reader on the executor side would not see spark.sql.caseSensitive and would
+        # resolve the two same-named but differently-cased columns wrongly, failing to
+        # read the file. Accessing `.rdd` eagerly materializes the shuffle map stage
+        # (the parquet scan) under adaptive execution; disabling shuffle-file cleanup
+        # (off by default outside of tests) lets `collect` reuse that materialized
+        # output instead of recomputing the scan without the propagated conf.
+        with self.sql_conf(
+            {
+                "spark.sql.caseSensitive": True,
+                "spark.sql.parquet.enableVectorizedReader": False,
+                "spark.sql.classic.shuffleDependency.fileCleanup.enabled": False,
+            }
+        ):
+            with tempfile.TemporaryDirectory(prefix="test_rdd_conversion_sql_conf") as d:
+                self.spark.createDataFrame(
+                    [(1, 1.0), (2, 2.0), (3, 3.0), (1, 1.0)], ["a", "A"]
+                ).write.format("parquet").mode("overwrite").save(d)
+
+                deduplicated = self.spark.read.parquet(d).dropDuplicates(["a"])
+
+                rows = deduplicated.rdd.collect()
+
+                self.assertEqual(
+                    sorted((row[0], row[1]) for row in rows),
+                    [(1, 1.0), (2, 2.0), (3, 3.0)],
+                )
+
     def test_zip_with_index(self):
         df = self.spark.createDataFrame([("a", 1), ("b", 2), ("c", 3)], ["letter", "number"])
 

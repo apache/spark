@@ -21,7 +21,7 @@ import com.fasterxml.jackson.core.{JsonFactory, JsonProcessingException}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
@@ -647,6 +647,19 @@ case class JsonTable(
 }
 
 /**
+ * A SQL/JSON built-in whose clause-free call can route through function resolution, letting a
+ * same-named routine on the SQL PATH shadow it. So when `sql` renders an otherwise clause-free
+ * form, it appends the default clause to keep the reparse bound to this built-in. `sqlString`'s
+ * `forceBuiltinOwnership` gates that clause (true for `sql`, false for the never-reparsed pretty
+ * form) and `renderChild` renders each child.
+ */
+trait RoutedSqlJsonExpression extends Expression {
+  private[sql] def sqlString(
+      forceBuiltinOwnership: Boolean,
+      renderChild: Expression => String): String
+}
+
+/**
  * Behavior of `JSON_VALUE`'s `ON EMPTY` / `ON ERROR` clause: what to produce when the path matches
  * nothing, or when the input/extraction fails.
  */
@@ -687,6 +700,7 @@ object JsonValueBehavior {
  * }}}
  */
 // scalastyle:on line.size.limit
+
 case class JsonValue(
     child: Expression,
     path: String,
@@ -701,7 +715,8 @@ case class JsonValue(
   with TimeZoneAwareExpression
   with CodegenFallback
   with ExpectsInputTypes
-  with QueryErrorsBase {
+  with QueryErrorsBase
+  with RoutedSqlJsonExpression {
 
   override def nullable: Boolean = true
 
@@ -825,7 +840,12 @@ case class JsonValue(
 
   override def prettyName: String = "json_value"
 
-  override def sql: String = {
+  override def sql: String = sqlString(forceBuiltinOwnership = true, _.sql)
+
+  // See [[RoutedSqlJsonExpression]] for `forceBuiltinOwnership` and `renderChild`.
+  private[sql] def sqlString(
+      forceBuiltinOwnership: Boolean,
+      renderChild: Expression => String): String = {
     // Reference identity, not value equality: an explicitly collated `RETURNING STRING COLLATE
     // UTF8_BINARY` is a distinct instance that compares `==` to the companion, so `==` would drop
     // it. Only the companion (by reference) renders nothing -- reached by omission and by a plain
@@ -835,7 +855,7 @@ case class JsonValue(
     def behaviorSQL(b: JsonValueBehavior, default: Option[Expression]): String = b match {
       case JsonValueBehavior.Null => "NULL"
       case JsonValueBehavior.Error => "ERROR"
-      case JsonValueBehavior.Default => s"DEFAULT ${default.get.sql}"
+      case JsonValueBehavior.Default => s"DEFAULT ${renderChild(default.get)}"
     }
     val emptySQL = if (onEmpty == JsonValueBehavior.Null) ""
       else s" ${behaviorSQL(onEmpty, emptyDefault)} ON EMPTY"
@@ -844,7 +864,12 @@ case class JsonValue(
     // Render the path as a properly escaped string literal so bracket-quoted paths such as
     // `$['a']` (and any path containing a quote or backslash) round-trip as valid SQL.
     val pathSQL = Literal(UTF8String.fromString(path), StringType).sql
-    s"JSON_VALUE(${child.sql}, $pathSQL$returningSQL$emptySQL$errorSQL)"
+    // Append the default `RETURNING STRING` when the render is otherwise clause-free.
+    val ownershipClause =
+      if (forceBuiltinOwnership && returningSQL.isEmpty && emptySQL.isEmpty && errorSQL.isEmpty) {
+        " RETURNING STRING"
+      } else ""
+    s"JSON_VALUE(${renderChild(child)}, $pathSQL$returningSQL$emptySQL$errorSQL$ownershipClause)"
   }
 
   override protected def withNewChildrenInternal(
@@ -918,7 +943,8 @@ case class JsonExists(
   extends UnaryExpression
   with CodegenFallback
   with ExpectsInputTypes
-  with QueryErrorsBase {
+  with QueryErrorsBase
+  with RoutedSqlJsonExpression {
 
   // The result is NULL only when the input is SQL NULL, or when `UNKNOWN ON ERROR` turns malformed
   // input into a BOOLEAN NULL. With a non-nullable input and any other ON ERROR behavior the result
@@ -979,14 +1005,21 @@ case class JsonExists(
 
   override def prettyName: String = "json_exists"
 
-  override def sql: String = {
+  override def sql: String = sqlString(forceBuiltinOwnership = true, _.sql)
+
+  // See [[RoutedSqlJsonExpression]] for `forceBuiltinOwnership` and `renderChild`.
+  private[sql] def sqlString(
+      forceBuiltinOwnership: Boolean,
+      renderChild: Expression => String): String = {
     val errorSQL = onError match {
       case JsonExistsBehavior.False => "" // the default
       case JsonExistsBehavior.True => " TRUE ON ERROR"
       case JsonExistsBehavior.Unknown => " UNKNOWN ON ERROR"
       case JsonExistsBehavior.Error => " ERROR ON ERROR"
     }
-    s"JSON_EXISTS(${child.sql}, ${toSQLValue(path)}$errorSQL)"
+    // Append the default `FALSE ON ERROR` when the render is otherwise clause-free.
+    val ownershipClause = if (forceBuiltinOwnership && errorSQL.isEmpty) " FALSE ON ERROR" else ""
+    s"JSON_EXISTS(${renderChild(child)}, ${toSQLValue(path)}$errorSQL$ownershipClause)"
   }
 
   override protected def withNewChildInternal(newChild: Expression): JsonExists =
@@ -1069,7 +1102,8 @@ case class JsonQuery(
   with CodegenFallback
   with ExpectsInputTypes
   with QueryErrorsBase
-  with ImplicitlyFormattedAsJson {
+  with ImplicitlyFormattedAsJson
+  with RoutedSqlJsonExpression {
 
   override def nullable: Boolean = true
 
@@ -1163,7 +1197,12 @@ case class JsonQuery(
 
   override def prettyName: String = "json_query"
 
-  override def sql: String = {
+  override def sql: String = sqlString(forceBuiltinOwnership = true, _.sql)
+
+  // See [[RoutedSqlJsonExpression]] for `forceBuiltinOwnership` and `renderChild`.
+  private[sql] def sqlString(
+      forceBuiltinOwnership: Boolean,
+      renderChild: Expression => String): String = {
     // Reference identity, not value equality, so an explicitly collated `RETURNING STRING COLLATE
     // UTF8_BINARY` (a distinct instance that compares `==` to the companion) is still rendered.
     // Only the companion (by reference) renders nothing -- reached by omission and by a plain
@@ -1191,7 +1230,16 @@ case class JsonQuery(
       if (onError == JsonQueryBehavior.Null) "" else s" ${behaviorSQL(onError)} ON ERROR"
     // Render the path as a properly escaped string literal so bracket-quoted paths round-trip.
     val pathSQL = Literal(UTF8String.fromString(path), StringType).sql
-    s"JSON_QUERY(${child.sql}, $pathSQL$returningSQL$wrapperSQL$quotesSQL$emptySQL$errorSQL)"
+    // Append the default `RETURNING STRING` when the render is otherwise clause-free.
+    val ownershipClause =
+      if (forceBuiltinOwnership && returningSQL.isEmpty && wrapperSQL.isEmpty &&
+          quotesSQL.isEmpty && emptySQL.isEmpty && errorSQL.isEmpty) {
+        " RETURNING STRING"
+      } else {
+        ""
+      }
+    s"JSON_QUERY(${renderChild(child)}, " +
+      s"$pathSQL$returningSQL$wrapperSQL$quotesSQL$emptySQL$errorSQL$ownershipClause)"
   }
 
   override protected def withNewChildInternal(newChild: Expression): JsonQuery =
@@ -1300,7 +1348,8 @@ case class JsonArray(
   with ExpectsInputTypes
   with QueryErrorsBase
   with DefaultStringProducingExpression
-  with ImplicitlyFormattedAsJson {
+  with ImplicitlyFormattedAsJson
+  with RoutedSqlJsonExpression {
 
   // `formatJson(i)` freezes whether element `i` is spliced raw (vs quoted); `needsValidation(i)`
   // freezes whether its raw text is arbitrary user input that must be JSON-validated at eval (an
@@ -1553,7 +1602,12 @@ case class JsonArray(
 
   override def prettyName: String = "json_array"
 
-  override def sql: String = {
+  override def sql: String = sqlString(forceBuiltinOwnership = true, _.sql)
+
+  // See [[RoutedSqlJsonExpression]] for `forceBuiltinOwnership` and `renderChild`.
+  private[sql] def sqlString(
+      forceBuiltinOwnership: Boolean,
+      renderChild: Expression => String): String = {
     val valuesSQL = values.zip(formatJson).map { case (v, isJson) =>
       // Emit SQL that reparses to the same splice/quote decision as the frozen `formatJson` flag.
       // The parser splices a value iff it is an explicit `FORMAT JSON` or a lexically-nested JSON
@@ -1577,11 +1631,11 @@ case class JsonArray(
       }
       val transitivelyImplicit = JsonArray.isImplicitlyJson(v)
       if (isJson && !directlyImplicit) {
-        s"${v.sql} FORMAT JSON"
+        s"${renderChild(v)} FORMAT JSON"
       } else if (!isJson && transitivelyImplicit) {
-        s"CAST(${v.sql} AS STRING)"
+        s"CAST(${renderChild(v)} AS STRING)"
       } else {
-        v.sql
+        renderChild(v)
       }
     }.mkString(", ")
     // Reference identity, not value equality: an explicitly collated `RETURNING STRING COLLATE
@@ -1594,7 +1648,15 @@ case class JsonArray(
       case JsonConstructorNullBehavior.Null => " NULL ON NULL"
       case JsonConstructorNullBehavior.Absent => ""
     }
-    s"JSON_ARRAY($valuesSQL$nullSQL$returningSQL)"
+    // Append the default `RETURNING STRING` when the render is otherwise clause-free. A spliced
+    // element (an explicit `FORMAT JSON`, or a nested constructor that reparses as implicit JSON)
+    // already forces the direct grammar branch, so it needs no clause.
+    val ownershipClause =
+      if (forceBuiltinOwnership && !formatJson.exists(identity) && nullSQL.isEmpty &&
+          returningSQL.isEmpty) {
+        " RETURNING STRING"
+      } else ""
+    s"JSON_ARRAY($valuesSQL$nullSQL$returningSQL$ownershipClause)"
   }
 
   override protected def withNewChildrenInternal(
@@ -1649,6 +1711,134 @@ object JsonArray {
     case udt: UserDefinedType[_] => containsUnsupportedJsonType(udt.sqlType)
     case _ => false
   }
+}
+
+// Built-in forms for the plain SQL/JSON constructor and path-function calls that `AstBuilder`
+// routes through function resolution. Each rebuilds its expression with the standard clause
+// defaults when unshadowed.
+
+@ExpressionDescription(
+  usage = "_FUNC_([expr[, ...]]) - Returns a JSON array string with NULL elements dropped.",
+  arguments = """
+    Arguments:
+      * expr - the elements to place in the array.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1, 'x', true);
+       [1,"x",true]
+      > SELECT _FUNC_(1, NULL, 3);
+       [1,3]
+      > SELECT _FUNC_();
+       []
+  """,
+  since = "4.4.0",
+  group = "json_funcs")
+object JsonArrayExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // A routed call carries no lexical FORMAT JSON, so every element is a plain value (quoted).
+    // Splicing a JSON-producing argument is only preserved via `JSON_ARRAY(...)` syntax (which
+    // freezes the decision lexically).
+    // TODO(SPARK-59243): splice JSON-producing arguments reached through routed/qualified calls.
+    val flags = expressions.map(_ => false)
+    JsonArray(expressions, flags, flags, JsonConstructorNullBehavior.Absent, StringType)
+  }
+}
+
+/**
+ * Shared builder for the plain `JSON_VALUE` / `JSON_QUERY` / `JSON_EXISTS` forms. The path must
+ * be a foldable string expression; the parser-only SQL/JSON syntax supplies a string literal,
+ * while ordinary function-call syntax can reach this builder with any constant string expression.
+ */
+abstract class JsonPathExpressionBuilder extends ExpressionBuilder {
+  protected def buildWithPath(jsonExpr: Expression, path: String): Expression
+
+  override final def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    if (expressions.length != 2) {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), expressions.length)
+    }
+    val pathExpr = expressions(1)
+    pathExpr.dataType match {
+      case _: StringType if pathExpr.foldable =>
+        // TODO(SPARK-59244): wrap eval() so a foldable-but-throwing path re-throws as a clean
+        // invalid-argument analysis error naming `path`.
+        val pathValue = pathExpr.eval()
+        if (pathValue == null) {
+          throw QueryCompilationErrors.unexpectedNullError("path", pathExpr)
+        }
+        buildWithPath(expressions.head, pathValue.toString)
+      case _: StringType =>
+        throw QueryCompilationErrors.nonFoldableArgumentError(
+          funcName, "path", pathExpr.dataType)
+      case _ =>
+        throw QueryCompilationErrors.unexpectedInputDataTypeError(
+          funcName, 2, StringType, pathExpr)
+    }
+  }
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(jsonStr, path) - Extracts a SQL scalar as a string.",
+  arguments = """
+    Arguments:
+      * jsonStr - a JSON string.
+      * path - a SQL/JSON path expression given as a foldable string expression. The path must be
+          wildcard-free, since a single scalar is returned.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('{"id":7,"name":"Ada"}', '$.name');
+       Ada
+  """,
+  since = "4.4.0",
+  group = "json_funcs")
+object JsonValueExpressionBuilder extends JsonPathExpressionBuilder {
+  override protected def buildWithPath(jsonExpr: Expression, path: String): Expression =
+    JsonValue(
+      jsonExpr, path, StringType, JsonValueBehavior.Null, JsonValueBehavior.Null, None, None)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(jsonStr, path) - Extracts a JSON fragment as JSON text.",
+  arguments = """
+    Arguments:
+      * jsonStr - a JSON string.
+      * path - a SQL/JSON path expression given as a foldable string expression. The path must be
+          wildcard-free, since a single value is resolved.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('{"a":[1,2]}', '$.a');
+       [1,2]
+  """,
+  since = "4.4.0",
+  group = "json_funcs")
+object JsonQueryExpressionBuilder extends JsonPathExpressionBuilder {
+  override protected def buildWithPath(jsonExpr: Expression, path: String): Expression =
+    JsonQuery(
+      jsonExpr, path, StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Keep,
+      JsonQueryBehavior.Null, JsonQueryBehavior.Null)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(jsonStr, path) - Returns true if the path selects at least one value.",
+  arguments = """
+    Arguments:
+      * jsonStr - a JSON string.
+      * path - a SQL/JSON path expression given as a foldable string expression.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('{"a":1}', '$.a');
+       true
+      > SELECT _FUNC_('{"a":1}', '$.b');
+       false
+  """,
+  since = "4.4.0",
+  group = "json_funcs")
+object JsonExistsExpressionBuilder extends JsonPathExpressionBuilder {
+  override protected def buildWithPath(jsonExpr: Expression, path: String): Expression =
+    JsonExists(jsonExpr, path, JsonExistsBehavior.False)
 }
 
 /**

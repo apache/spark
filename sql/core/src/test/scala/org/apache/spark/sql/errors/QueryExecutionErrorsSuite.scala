@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.analysis.{NamedParameter, UnresolvedGenerat
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Concat, CreateArray, EmptyRow, Expression, Flatten, Grouping, Literal, RowNumber, UnaryExpression, Years}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.rules.RuleIdCollection
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
@@ -227,6 +227,31 @@ class QueryExecutionErrorsSuite
       "ECB", "None")
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'CBC', 'NoPadding')"),
       "CBC", "NoPadding")
+  }
+
+  test("SPARK-58945: invalid file extension reports invalidValue") {
+    withTempDir { dir =>
+      val path = new File(dir, "data").getCanonicalPath
+      // Use a value that is unambiguously invalid so this test focuses on the
+      // rendered error message rather than the full extension validation matrix.
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          spark.range(1).write.option("extension", "12").csv(path)
+        },
+        condition = "INVALID_PARAMETER_VALUE.EXTENSION",
+        parameters = Map(
+          "functionName" -> "`csv`",
+          "parameter" -> "`extension`",
+          "invalidValue" -> "`12`"))
+    }
+  }
+
+  test("SPARK-58945: invalid writer commit message reports detail") {
+    checkError(
+      exception = QueryExecutionErrors.invalidWriterCommitMessageError("zero")
+        .asInstanceOf[SparkRuntimeException],
+      condition = "INVALID_WRITER_COMMIT_MESSAGE",
+      parameters = Map("detail" -> "zero"))
   }
 
   test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in lit()") {
@@ -1315,35 +1340,53 @@ class QueryExecutionErrorsSuite
   test("Elements exceed limit for concat()") {
     val array = new ColumnarArray(
       new ConstantColumnVector(Int.MaxValue, BooleanType), 0, Int.MaxValue)
+    val expr = Concat(Seq(Literal.create(array, ArrayType(BooleanType))))
 
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        Concat(Seq(Literal.create(array, ArrayType(BooleanType)))).eval(EmptyRow)
-      },
-      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
-      parameters = Map(
-        "numberOfElements" -> Int.MaxValue.toString,
-        "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString,
-        "functionName" -> toSQLId("concat")
+    // SPARK-59374: the generated code has to reject the length as well. Interpreted evaluation
+    // has always checked it, but codegen used to reach `ArrayData.allocateArrayData` and fail
+    // there with an internal error instead.
+    Seq(
+      () => expr.eval(EmptyRow),
+      () => GenerateUnsafeProjection.generate(Seq(expr)).apply(EmptyRow)
+    ).foreach { evaluate =>
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          evaluate()
+        },
+        condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
+        parameters = Map(
+          "numberOfElements" -> Int.MaxValue.toString,
+          "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString,
+          "functionName" -> toSQLId("concat")
+        )
       )
-    )
+    }
   }
 
   test("Elements exceed limit for flatten()") {
     val array = new ColumnarArray(
       new ConstantColumnVector(Int.MaxValue, BooleanType), 0, Int.MaxValue)
+    val expr = Flatten(CreateArray(Seq(Literal.create(array, ArrayType(BooleanType)))))
 
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        Flatten(CreateArray(Seq(Literal.create(array, ArrayType(BooleanType))))).eval(EmptyRow)
-      },
-      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
-      parameters = Map(
-        "numberOfElements" -> Int.MaxValue.toString,
-        "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString,
-        "functionName" -> toSQLId("flatten")
+    // SPARK-59375: the generated code has to reject the length as well. Interpreted evaluation
+    // has always checked it, but codegen used to reach `ArrayData.allocateArrayData` and fail
+    // there with an internal error instead.
+    Seq(
+      () => expr.eval(EmptyRow),
+      () => GenerateUnsafeProjection.generate(Seq(expr)).apply(EmptyRow)
+    ).foreach { evaluate =>
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          evaluate()
+        },
+        condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
+        parameters = Map(
+          "numberOfElements" -> Int.MaxValue.toString,
+          "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString,
+          "functionName" -> toSQLId("flatten")
+        )
       )
-    )
+    }
   }
 
   test("Elements exceed limit for array_repeat()") {

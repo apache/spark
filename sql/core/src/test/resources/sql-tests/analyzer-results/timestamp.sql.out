@@ -1162,6 +1162,12 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+select timestampdiff(NANOSECOND, timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 01:02:04')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 select timediff(QUARTER, timestamp'2023-08-10 01:02:03', timestamp'2022-01-14 01:02:03')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]

@@ -41,6 +41,51 @@ of its own. Passed straight to ``udf(...)``, wrapped in another call, returned
 by another lambda, or sharing a line with a second lambda, nothing in the
 source read back says which lambda is the UDF, so it falls back to interpreted
 Python rather than risk the wrong body.
+
+A lowered UDF computes each argument it uses once per row (SPARK-58626): the
+argument becomes a column on the operator's input, and however many times the
+body reads that parameter it reads that one column. Two parameters bound to the
+same deterministic argument share the column, so ``f(a + 1, a + 1)`` computes
+``a + 1`` once.
+
+A call inside a higher-order function's lambda is never lowered: Spark already
+applies a Python UDF over the whole array there, and that path is left to it.
+Otherwise a few positions have nowhere to put the column -- under a ``groupBy``,
+in a join condition, in a command such as ``DELETE FROM``, or a draw anywhere
+above a join, where the column would cost the join its condition -- and there a
+body reading the parameter more than once stays an interpreted Python UDF, which
+computes its inputs once, rather than being lowered into an argument evaluated
+per read. One evaluation per parameter per row either way; ``f(rand(), rand())``
+is two parameters and so still two draws::
+
+    body = lambda x: x if x > 0.5 else 0.0
+    clamp = udf(body, "double")
+    df.select(clamp(rand()))  # never a value the body's own condition rejects
+
+Where the column stands it is computed for every row reaching the operator, which
+makes the argument eager even where the call sits in a branch that may not run:
+under ANSI ``when(cond, f(a / b))`` can raise on a row with ``b = 0`` and ``cond``
+false. That is what the interpreted Python UDF does too, evaluating its inputs in
+a projection feeding the worker, below the conditional -- unlike a bare Catalyst
+``when``, which is lazy. Whether such an error surfaces is not a guarantee in
+either direction: an argument left inline, or inlined again by a later rule, is
+lazy once more.
+
+Two arguments no projection can hold count as those positions too: one that is
+itself an aggregate (``f(sum(a))``), and one reading an outer query's column when
+correlated-subquery decorrelation is disabled.
+
+An argument read once gets no column, since one read is one evaluation anyway,
+and neither does one as cheap to repeat as to read -- a bare column or a literal.
+Anything more, arithmetic included, is either computed once or left to
+interpreted Python; a repeated ``a + 1`` gets a column where one fits and stops
+the UDF being lowered where one does not.
+
+That column is what we emit, not what necessarily runs: later optimizer rules may
+inline a deterministic one again where that is faster, as they may for any other
+expression. A draw is never inlined, because those rules check determinism.
+
+An argument the body never reads is not computed at all.
 """
 
 import ast
@@ -51,7 +96,7 @@ import sys
 import textwrap
 import threading
 import warnings
-from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Optional, Tuple, Union
 
 from pyspark.errors import UnsupportedOperationException
 from pyspark.sql.column import Column
@@ -850,7 +895,8 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
     matrix small) while keeping every typed param pinned.
     """
     n = len(public_params)
-    public_args = function_ast.args.args[len(function_ast.args.args) - n :]
+    all_args = _positional_args(function_ast)
+    public_args = all_args[len(all_args) - n :]
     candidates: List[List[str]] = []
     untyped = 0
     for arg in public_args:
@@ -982,9 +1028,14 @@ def _get_src_ast_from_func(func: Callable) -> Tuple[Optional[str], Optional[ast.
     return src, ast_info
 
 
-def _get_parameter_list(node: ast.FunctionDef) -> list[str]:
-    """Return the positional argument names in order."""
-    return [arg.arg for arg in node.args.args]
+def _positional_args(node: Union[ast.FunctionDef, ast.Lambda]) -> List[ast.arg]:
+    """Return the positional argument nodes in order, positional-only first."""
+    return node.args.posonlyargs + node.args.args
+
+
+def _get_parameter_list(node: Union[ast.FunctionDef, ast.Lambda]) -> list[str]:
+    """Return the positional argument names in order, positional-only first."""
+    return [arg.arg for arg in _positional_args(node)]
 
 
 def _get_function_from_ast(body: ast.AST, held_code: Any) -> Tuple[Optional[ast.FunctionDef], str]:
@@ -1040,7 +1091,7 @@ def _get_function_from_ast(body: ast.AST, held_code: Any) -> Tuple[Optional[ast.
         # be the UDF) from one that RETURNED the lambda we hold, as in the one-line
         # ``make_adder = lambda n: lambda x: x + n`` -- there the outer lambda is
         # located and the inner is held, and lowering the outer would be wrong.
-        located_args = [arg.arg for arg in stmt.args.args]
+        located_args = _get_parameter_list(stmt)
         if located_args != list(held_code.co_varnames[: held_code.co_argcount]):
             return None, (
                 "the lambda defined in the source read for this one takes different "
@@ -1084,7 +1135,7 @@ def _transpile_func(
     session: "SparkSession",
     func: Callable[..., Any],
     returnType: "DataTypeOrString",
-) -> Tuple[List[Column], List[str], List[str], List[List[str]]]:
+) -> Tuple[List[Column], List[str], List[str], List[List[str]], List[str]]:
     """
     An experimental internal function that attempts to transpile a callable function.
 
@@ -1099,6 +1150,9 @@ def _transpile_func(
     list of per-option input-type categories (``"numeric"`` / ``"string"`` per
     public param) -- the JVM picks the option whose categories match the bound
     column types, or falls back to the Python UDF when none match.
+    list of the public parameter names Python forbids calling by keyword
+    (positional-only) -- the caller must NOT resolve a kwarg matching one of these
+    to a position, since Python itself rejects that call.
     """
     try:
         # The transpiler lowers to atomic (numeric/string/boolean/binary)
@@ -1126,6 +1180,7 @@ def _transpile_func(
                 ],
                 [],
                 [],
+                [],
             )
         # A functools.wraps-style decorator makes ``inspect.getsource`` return
         # the WRAPPED function's source (getsource follows ``__wrapped__``),
@@ -1147,22 +1202,23 @@ def _transpile_func(
                 ],
                 [],
                 [],
+                [],
             )
         # Not ``ast``: that name would shadow the module for this whole function.
         src, ast_info = _get_src_ast_from_func(func)
         if ast_info is None:
-            return ([], ["Error getting ast for function, cannot transpile"], [], [])
+            return ([], ["Error getting ast for function, cannot transpile"], [], [], [])
         # Get the lambda body and parameters
         function_ast, extraction_error = _get_function_from_ast(ast_info, _held_code(func))
         if function_ast is None:
-            return ([], [extraction_error], [], [])
-        # Default, variadic (``*args`` / ``**kwargs``), keyword-only, and
-        # positional-only parameters can't be represented by the positional
-        # ``_udf_param_N`` placeholder scheme: a call site may omit a
-        # defaulted argument, leaving the placeholder referencing a position
-        # the call never bound, and ``_get_parameter_list`` only reads
-        # ``args``. Fall back to interpreted Python rather than emit an
-        # invalid plan.
+            return ([], [extraction_error], [], [], [])
+        # Default, variadic (``*args`` / ``**kwargs``) and keyword-only params
+        # can't be represented by the positional ``_udf_param_N`` placeholder
+        # scheme: a call site may omit a defaulted argument, leaving the
+        # placeholder referencing a position the call never bound. A
+        # positional-only param has no such gap -- it is always bound by
+        # position -- so it is not refused here; a DEFAULTED one still hits
+        # ``fn_args.defaults`` above.
         fn_args = function_ast.args
         if (
             fn_args.defaults
@@ -1170,14 +1226,14 @@ def _transpile_func(
             or fn_args.kwonlyargs
             or fn_args.vararg is not None
             or fn_args.kwarg is not None
-            or fn_args.posonlyargs
         ):
             return (
                 [],
                 [
-                    "functions with default, variadic, keyword-only, or "
-                    "positional-only arguments are not supported by the transpiler"
+                    "functions with default, variadic, or keyword-only "
+                    "arguments are not supported by the transpiler"
                 ],
+                [],
                 [],
                 [],
             )
@@ -1217,6 +1273,7 @@ def _transpile_func(
                     ],
                     [],
                     [],
+                    [],
                 )
             spoken_for = int(
                 inspect.isfunction(call_entry) or isinstance(call_entry, classmethod)
@@ -1226,11 +1283,16 @@ def _transpile_func(
             # prepends the class ON TOP of the method's own ``__self__`` -- or one with
             # no parameter to hold it. Python raises for whatever the call site passes,
             # so there is nothing correct to lower.
-            return ([], ["callable leaves no parameter for the call site to bind"], [], [])
+            return ([], ["callable leaves no parameter for the call site to bind"], [], [], [])
         # Caller-facing params: callers match user-supplied kwargs against this,
         # and the receiver is not named at the call site. Everything downstream
         # indexes off THIS list, so the placeholder numbering needs no offset.
         public_params = params[spoken_for:]
+        # Subset of ``public_params`` Python forbids calling by keyword. The
+        # call-site kwargs-to-positional rewrite in ``udf.py`` must not "fix" a
+        # keyword call to one of these, since Python itself would reject it.
+        posonly_names = {arg.arg for arg in function_ast.args.posonlyargs}
+        positional_only_public_params = [p for p in public_params if p in posonly_names]
         transpiled: list[Column] = []
         input_categories: list[list[str]] = []
         errors = []
@@ -1253,9 +1315,15 @@ def _transpile_func(
                         )
                 except Exception as e:
                     errors.append(str(e))
-        return (transpiled, errors, public_params, input_categories)
+        return (
+            transpiled,
+            errors,
+            public_params,
+            input_categories,
+            positional_only_public_params,
+        )
     except Exception as e:
         # Don't re-raise: an inability to transpile must never break a
         # working UDF. The caller treats an empty ``transpiled`` list as a
         # silent fall-back to interpreted Python.
-        return ([], [str(e)], [], [])
+        return ([], [str(e)], [], [], [])

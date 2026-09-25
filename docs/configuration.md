@@ -826,10 +826,31 @@ Apart from these, the following properties are also available, and may be useful
     Where both set the same variable, this one wins. An environment variable that Spark sets for a
     Python worker itself takes precedence over both.
     <br /><br />
-    Currently applied to the regular scalar Python UDF: its Arrow-optimized form, its non-Arrow
-    form, and the element-wise form a UDF takes inside the lambda of a higher-order function such
-    as <code>transform</code>. Other Python function families -- pandas UDFs, Python UDTFs, and the
-    streaming and listener paths -- do not receive it yet.
+    Applied to every Python worker the session launches for a Python function it supplied: scalar
+    UDFs in each of their forms, including Arrow-optimized, non-Arrow, pandas, iterator and the
+    element-wise form a UDF takes inside the lambda of a higher-order function such as
+    <code>transform</code>; <code>mapInPandas</code> and <code>mapInArrow</code>; grouped-map,
+    cogrouped-map, grouped-aggregate and window functions; Python UDTFs, both row and Arrow;
+    <code>applyInPandasWithState</code> and <code>transformWithState</code>;
+    <code>writeStream.foreach</code>; and Python data sources, including the workers that plan them
+    and read a streaming source.
+    <br /><br />
+    A running streaming query holds a configuration snapshot, because its batches run on a cloned
+    session whose configurations are copied when the query starts. A change made while a query is
+    running therefore reaches it only when the query restarts.
+    <br /><br />
+    A dynamic Python UDTF's <code>analyze</code> method and a Python data source's schema and
+    partition planning run in a worker while a query is being planned. Those results are resolved
+    once for a given DataFrame and are not recomputed if the environment changes afterwards; a new
+    read picks up the current values.
+    <br /><br />
+    Some Python code a session supplies does not run in a worker Spark launches, and no session
+    environment applies to it. <code>foreachBatch</code> receives the environment on Spark Connect,
+    where the function runs in a worker the server starts, but not on classic Spark, where it is a
+    callback into the client's own Python process. A streaming query listener added with
+    <code>addListener</code> likewise runs its callbacks in the client process on both classic Spark
+    and Spark Connect. In each of those cases the client process's own environment is what the
+    callback observes.
     <br /><br />
     Names Spark reserves for itself are rejected: any name beginning with <code>SPARK_</code>,
     <code>PYSPARK_</code> or <code>PYTHON_WORKER_FACTORY_</code>, together with
@@ -888,7 +909,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Regex to decide which parts of strings produced by Spark contain sensitive information.
     When this regex matches a string part, that string part is replaced by a dummy value.
-    This is currently used to redact the output of SQL explain commands.
+    This is currently used to redact the output of SQL explain commands and the exit exception annotation on Kubernetes.
   </td>
   <td>2.2.0</td>
 </tr>
@@ -1665,6 +1686,30 @@ Apart from these, the following properties are also available, and may be useful
     Allows jobs and stages to be killed from the web UI.
   </td>
   <td>1.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.actionsViaGetEnabled</code></td>
+  <td><code>true</code> on YARN, <code>false</code> otherwise</td>
+  <td>
+    Whether the state-changing endpoints of the web UI (job/stage kill, application hold
+    and resume) accept HTTP GET requests in addition to POST. Left unset, this follows
+    the cluster manager: GET is accepted when <code>spark.master</code> is
+    <code>yarn</code>, because the YARN ResourceManager/AM proxy does not forward POST
+    requests, and refused everywhere else.
+    Either way the state-changing endpoints require the random per-UI CSRF token embedded
+    in the forms the UI renders, and reject prefetch requests (identified by
+    the Purpose, Sec-Purpose, or X-Moz headers) and HEAD requests, so forged cross-site
+    requests and incidental fetches cannot trigger them. Scripted clients can read
+    the token from the jobs page before calling the endpoint. The kill controls on the
+    jobs and stages pages and the hold/resume control on the jobs page are the same forms
+    in both modes; only their method follows this setting. In GET mode the browser
+    submits the token in the URL's query string, so it can be recorded in browser history
+    and server or proxy access logs; it is random per UI instance and grants nothing
+    beyond the UI's own state-changing endpoints. Prefetch rejection relies on the
+    prefetcher identifying itself via those headers; one that sends none of them is not
+    detected.
+  </td>
+  <td>4.3.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.holdEnabled</code></td>
@@ -3623,7 +3668,7 @@ They are typically set via the config file and command-line options with `--conf
   <td>
     (none)
   </td>
-  <td>Comma separated list of class names that must implement the <code>io.grpc.ServerInterceptor</code> interface</td>
+  <td>Comma separated list of class names that must implement the <code>io.grpc.ServerInterceptor</code> interface. When authentication is enabled these interceptors run after it, so they only see calls that have already been authenticated and cannot supply the <code>Authorization</code> header themselves.</td>
   <td>3.4.0</td>
 </tr>
 <tr>
@@ -3765,6 +3810,10 @@ Command types in proto.</td>
 
 Please refer to the [Security](security.html) page for available options on how to secure different
 Spark subsystems.
+
+For OIDC credential propagation (obtaining and distributing short-lived, identity-derived
+credentials to executors), the `spark.security.oidc.*` configuration keys are documented under
+[OIDC Credential Propagation](security.html#oidc-credential-propagation).
 
 
 ### Spark SQL

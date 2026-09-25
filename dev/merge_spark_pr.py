@@ -44,7 +44,7 @@ import re
 import subprocess
 import sys
 import traceback
-from typing import List
+from typing import List, Optional
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -137,6 +137,25 @@ def semver_branch_rank(name):
     return (-1, -1)
 
 
+def parse_version(name: str) -> Optional[tuple[int, int, int]]:
+    """Parse a dotted ``x.y.z`` version name into an ``(int, int, int)`` tuple.
+
+    Returns None for anything that is not a plain three-part numeric version, so the
+    result can be compared directly and non-version names are skipped by callers.
+
+    >>> parse_version("4.4.0")
+    (4, 4, 0)
+    >>> parse_version("4.10.2")
+    (4, 10, 2)
+    >>> parse_version("branch-4.x") is None
+    True
+    >>> parse_version("4.4") is None
+    True
+    """
+    m = re.match(r"^(\d+)\.(\d+)\.(\d+)$", name)
+    return tuple(int(g) for g in m.groups()) if m else None
+
+
 def _semver_max_version(names):
     """
     Highest dotted version by numeric semver (SPARK Fix Version naming).
@@ -146,9 +165,10 @@ def _semver_max_version(names):
     >>> _semver_max_version(["5.0.0", "6.0.0"])
     '6.0.0'
     """
-    if not names:
+    parsed = [(parse_version(n), n) for n in names]
+    parsed = [(t, n) for t, n in parsed if t is not None]
+    if not parsed:
         return None
-    parsed = [(tuple(int(p) for p in n.split(".")), n) for n in names]
     return max(parsed)[1]
 
 
@@ -368,6 +388,24 @@ def fix_version_additions(inferred_versions, existing_versions):
     return additions, bool(inferred_versions) and not additions
 
 
+def parse_version_list(raw: str) -> list[str]:
+    """Split a comma-separated version string into trimmed, de-duplicated names.
+
+    Surrounding whitespace on each entry is stripped and empty entries are dropped, so a
+    blank or all-separator string yields no names. Input order is preserved. Shared by the
+    Fix Version and Affects Version prompts so both parse committer input the same way.
+
+    >>> parse_version_list("5.0.0, 4.3.0")
+    ['5.0.0', '4.3.0']
+    >>> parse_version_list(" 4.4.0 , , 4.4.0 ")
+    ['4.4.0']
+    >>> parse_version_list("   ")
+    []
+    """
+    names = [segment.strip() for segment in raw.split(",")]
+    return list(dict.fromkeys(n for n in names if n))
+
+
 def fix_versions_from_input(raw_input, default_fix_versions):
     """Resolve the Fix Version prompt's raw input into a list of version names.
 
@@ -387,10 +425,70 @@ def fix_versions_from_input(raw_input, default_fix_versions):
     """
     if raw_input == "":
         raw_input = default_fix_versions
-    stripped = raw_input.replace(" ", "")
-    if stripped == "":
-        return []
-    return stripped.split(",")
+    return parse_version_list(raw_input)
+
+
+def fix_precedes_affects(fix_version_names: list[str], affects_version_names: list[str]) -> bool:
+    """Whether the earliest fix version is below the earliest recorded Affects Version.
+
+    True means the affected floor sits above a fixed release, so the ticket omits a
+    version the fix reaches -- either too-high on a fresh resolve (fixed 4.4.0, affects
+    only 5.0.0) or a backport to an earlier line (affects 4.4.0, backport adds fix 4.3.x).
+    Non-``x.y.z`` names and empty lists compare as absent, so they never trigger a prompt.
+
+    >>> fix_precedes_affects(["4.4.0"], ["5.0.0"])
+    True
+    >>> fix_precedes_affects(["4.4.0"], ["4.3.0"])
+    False
+    >>> fix_precedes_affects(["4.4.0"], ["4.4.0"])
+    False
+    >>> fix_precedes_affects(["4.4.0", "4.3.1"], ["4.4.0"])
+    True
+    >>> fix_precedes_affects(["4.4.0"], ["4.10.0"])
+    True
+    >>> fix_precedes_affects([], ["5.0.0"])
+    False
+    """
+    fix = [t for t in map(parse_version, fix_version_names) if t is not None]
+    affects = [t for t in map(parse_version, affects_version_names) if t is not None]
+    if not fix or not affects:
+        return False
+    return min(fix) < min(affects)
+
+
+def suggest_affects_version(
+    fix_version_names: list[str], unreleased_version_names: list[str]
+) -> str:
+    """Suggest the earliest fix version only if it is an unreleased major or minor release.
+
+    An unreleased x.y.0 can identify affected development builds. A patch fix version
+    does not identify the earlier release affected by the bug.
+
+    >>> unreleased = ["5.0.0", "4.4.0", "4.2.1"]
+    >>> suggest_affects_version(["4.4.0"], unreleased)
+    '4.4.0'
+    >>> suggest_affects_version(["5.0.0"], unreleased)
+    '5.0.0'
+    >>> suggest_affects_version(["5.0.0", "4.4.0"], unreleased)
+    '4.4.0'
+    >>> suggest_affects_version(["4.2.1"], unreleased)
+    ''
+    >>> suggest_affects_version(["4.4.0", "4.2.1"], unreleased)
+    ''
+    >>> suggest_affects_version(["4.3.0", "4.4.0"], unreleased)
+    ''
+    >>> suggest_affects_version(["4.10.0", "4.9.0"], ["4.10.0", "4.9.0"])
+    '4.9.0'
+    >>> suggest_affects_version([], unreleased)
+    ''
+    >>> suggest_affects_version(["unknown", "4.4.0"], unreleased)
+    ''
+    """
+    versions = [(parse_version(name), name) for name in fix_version_names]
+    if not versions or any(version is None for version, _ in versions):
+        return ""
+    version, name = min(versions)
+    return name if version[2] == 0 and name in unreleased_version_names else ""
 
 
 def red(text):
@@ -779,6 +877,7 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
 
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
     git.run("git checkout %s" % pick_branch_name)
+    pick_head = git.run("git rev-parse HEAD").strip()
 
     try:
         git.run(
@@ -796,18 +895,21 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
         continue_maybe(msg, True)
         msg = "Okay, please fix any conflicts and 'git add' conflicting files... Finished?"
         continue_maybe(msg, True)
-        # Important to use `scissors` and `--edit` otherwise git will strip lines starting with `#`
-        # when calling `--continue`. See: https://github.com/apache/spark/pull/58214
-        git.run(
-            [
-                "git",
-                "-c",
-                "commit.cleanup=scissors",
-                "cherry-pick",
-                "--continue",
-                "--edit",
-            ]
-        )
+        if git.run("git rev-parse HEAD").strip() == pick_head:
+            # Important to use `scissors` and `--edit` otherwise git will strip lines starting
+            # with `#` when calling `--continue`. See: https://github.com/apache/spark/pull/58214
+            git.run(
+                [
+                    "git",
+                    "-c",
+                    "commit.cleanup=scissors",
+                    "cherry-pick",
+                    "--continue",
+                    "--edit",
+                ]
+            )
+        else:
+            print("Cherry-pick already completed manually; continuing with the backport.")
 
     continue_maybe(
         "Pick complete (local ref %s). Push to %s?" % (pick_branch_name, PUSH_REMOTE_NAME)
@@ -1243,6 +1345,80 @@ def reconcile_jira_components(issue, title_components):
     jira_ops.update_components(issue, new_names)
 
 
+def reconcile_jira_affects_versions(
+    issue,
+    fix_version_names: list[str],
+    affects_available: set[str],
+    unreleased_version_names: list[str],
+) -> None:
+    """Prompt the committer to correct Affects Version/s newer than the earliest fix.
+
+    Blank input accepts the suggested version, or skips when none is available. Versions
+    are validated against ``affects_available`` before the committer chooses to append
+    (default), overwrite, or keep. Entering 'skip' or [k]eep leaves the field untouched.
+    Writes go through ``jira_ops`` so a dry run only logs them.
+    """
+    current_names = [v.name for v in issue.fields.versions]
+    default_affects_version = suggest_affects_version(fix_version_names, unreleased_version_names)
+    if default_affects_version:
+        prompt_suffix = f"[{default_affects_version}] (or 'skip')"
+        skip_hint = "enter 'skip'"
+    else:
+        prompt_suffix = "(blank to skip)"
+        skip_hint = "leave blank to skip"
+    print()
+    print("=" * 80)
+    print(
+        f"JIRA {issue.key} Affects Version/s {current_names if current_names else '(none)'} "
+        f"vs Fix Version/s {fix_version_names}: at least one Affects Version must be at or before "
+        f"the earliest Fix Version, so the recorded affected version is likely wrong."
+    )
+    print("=" * 80)
+    while True:
+        try:
+            raw = bold_input(f"Enter comma-separated affects version(s) {prompt_suffix}: ").strip()
+            if raw.lower() == "skip" or (not raw and not default_affects_version):
+                print(f"Affects Version/s left unchanged; update {issue.key} manually.")
+                return
+            new_names = parse_version_list(raw or default_affects_version)
+            if new_names and set(new_names).issubset(affects_available):
+                break
+            print(
+                f"Specified version(s) [{', '.join(new_names)}] not found in the available "
+                f"versions, try again (or {skip_hint})."
+            )
+        except KeyboardInterrupt:
+            raise
+        except BaseException:
+            traceback.print_exc()
+            print(f"Error setting affects version(s), try again (or {skip_hint}).")
+
+    if current_names:
+        choice = get_input(
+            f"[a]ppend to / [o]verwrite existing {current_names} / [k]eep as is "
+            "(default: append): ",
+            {"a": ["a", "append", ""], "o": ["o", "overwrite"], "k": ["k", "keep"]},
+        )
+        if choice == "k":
+            print(f"Keeping JIRA {issue.key} Affects Version/s unchanged.")
+            return
+        if choice == "a":
+            # Keep the existing versions first, then add the entered ones.
+            new_names = list(dict.fromkeys(current_names + new_names))
+
+    jira_ops.update_affects_versions(issue, new_names)
+
+
+def maybe_reconcile_jira_affects_versions(
+    issue, fix_version_names, affects_available, unreleased_version_names
+):
+    """Reconcile the Affects Version/s only when they fail to precede the fix version(s)."""
+    if fix_precedes_affects(fix_version_names, [v.name for v in issue.fields.versions]):
+        reconcile_jira_affects_versions(
+            issue, fix_version_names, affects_available, unreleased_version_names
+        )
+
+
 def get_jira_issue(prompt, default_jira_id=""):
     jira_id = bold_input("%s [%s]: " % (prompt, default_jira_id))
     if jira_id == "":
@@ -1295,14 +1471,19 @@ def resolve_jira_issue(
 
         reconcile_jira_components(issue, title_components)
 
-    versions = asf_jira.project_versions("SPARK")
+    all_versions = asf_jira.project_versions("SPARK")
     # Consider only x.y.z, unreleased, unarchived versions
     versions = [
         x
-        for x in versions
-        if not x.raw["released"] and not x.raw["archived"] and re.match(r"\d+\.\d+\.\d+", x.name)
+        for x in all_versions
+        if not x.raw["released"] and not x.raw["archived"] and parse_version(x.name) is not None
     ]
     versions = sorted(versions, key=lambda x: x.name, reverse=True)
+    # Affects Version/s may name an already-released version, so validate the affects prompt
+    # against all unarchived x.y.z versions, not just the unreleased fix candidates.
+    affects_available = {
+        x.name for x in all_versions if not x.raw["archived"] and parse_version(x.name) is not None
+    }
 
     unreleased_names = [v.name for v in versions]
     default_fix_list, infer_warnings = compute_merge_default_fix_versions(
@@ -1321,8 +1502,12 @@ def resolve_jira_issue(
         )
         if all_inferred_present:
             print(
-                "JIRA issue %s already contains all inferred fix versions; no update needed."
-                % issue.key
+                "JIRA issue %s already contains all inferred fix versions; no fix version "
+                "update needed." % issue.key
+            )
+            # A re-run may still have Affects Version/s sitting above the unchanged fix set.
+            maybe_reconcile_jira_affects_versions(
+                issue, existing_fix_version_names, affects_available, unreleased_names
             )
             return
         if default_fix_list:
@@ -1331,6 +1516,11 @@ def resolve_jira_issue(
                 % (issue.key, existing_fix_version_names, default_fix_list)
             )
             if get_input("Add these fix version(s)? (y/N): ", ["y", "n", ""]) != "y":
+                # Declining the addition still leaves any Affects Version/s that sit above
+                # the already-recorded fix version(s) to reconcile.
+                maybe_reconcile_jira_affects_versions(
+                    issue, existing_fix_version_names, affects_available, unreleased_names
+                )
                 return
         else:
             # Nothing inferred, so there is nothing to confirm; fall through to the prompt.
@@ -1365,6 +1555,13 @@ def resolve_jira_issue(
             traceback.print_exc()
             print("Error setting fix version(s), try again (or leave blank and fix manually)")
 
+    # On a fresh resolve, offer to update the Affects Version/s when they sit above the fix
+    # version(s) just chosen; the already-resolved paths handle their own cases.
+    if not is_resolved:
+        maybe_reconcile_jira_affects_versions(
+            issue, fix_versions, affects_available, unreleased_names
+        )
+
     def get_version_json(version_str):
         return list(filter(lambda v: v.name == version_str, versions))[0].raw
 
@@ -1375,7 +1572,16 @@ def resolve_jira_issue(
         jira_fix_versions = [v for v in jira_fix_versions if v["name"] not in existing_names]
         if not jira_fix_versions:
             print("No new fix versions selected for JIRA issue %s; no update needed." % issue.key)
+            maybe_reconcile_jira_affects_versions(
+                issue, existing_fix_version_names, affects_available, unreleased_names
+            )
             return
+        # A backport adds an earlier fix line, which usually means that line is affected too;
+        # offer to extend the Affects Version/s down when they miss the full fix set.
+        full_fix_names = existing_fix_version_names + [v["name"] for v in jira_fix_versions]
+        maybe_reconcile_jira_affects_versions(
+            issue, full_fix_names, affects_available, unreleased_names
+        )
         jira_ops.add_fix_versions(issue, existing_fix_versions, jira_fix_versions)
         return
 
@@ -1465,6 +1671,13 @@ class Jira:
         except Exception as e:
             print_error("Failed to update components on JIRA %s: %s" % (issue.key, e))
 
+    def update_affects_versions(self, issue, new_names: list[str]) -> None:
+        try:
+            issue.update(fields={"versions": [{"name": n} for n in new_names]})
+            print(f"Updated JIRA {issue.key} Affects Version/s to: {', '.join(new_names)}")
+        except Exception as e:
+            print_error(f"Failed to update Affects Version/s on JIRA {issue.key}: {e}")
+
     def add_fix_versions(self, issue, existing_fix_versions, new_version_jsons):
         issue.update(
             fields={"fixVersions": [v.raw for v in existing_fix_versions] + new_version_jsons}
@@ -1513,6 +1726,9 @@ class DryRunJira(Jira):
 
     def update_components(self, issue, new_names):
         print("DRY-RUN: would set JIRA %s components to: %s" % (issue.key, ", ".join(new_names)))
+
+    def update_affects_versions(self, issue, new_names: list[str]) -> None:
+        print(f"DRY-RUN: would set JIRA {issue.key} Affects Version/s to: {', '.join(new_names)}")
 
     def add_fix_versions(self, issue, existing_fix_versions, new_version_jsons):
         print(
@@ -2323,6 +2539,45 @@ def main():
         # This is deliberately in the finally block: once the target branch has been pushed,
         # cancelling a later cherry-pick must not bypass the JIRA update decision.
         update_jira_for_pr(pr_num, title, merged_refs, title_components)
+
+
+__test__ = {
+    "reconcile_jira_affects_versions": """
+    Blank input accepts the suggested version and appends it to the existing versions:
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from types import SimpleNamespace
+    >>> from unittest.mock import Mock, patch
+    >>> issue = SimpleNamespace(
+    ...     key="SPARK-1", fields=SimpleNamespace(versions=[SimpleNamespace(name="5.0.0")]))
+    >>> available = {"5.0.0", "4.4.0"}
+    >>> writer = Mock(spec=Jira)
+    >>> with (
+    ...     patch.dict(reconcile_jira_affects_versions.__globals__, jira_ops=writer),
+    ...     patch("builtins.input", side_effect=["", "", KeyboardInterrupt]) as user_input,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     reconcile_jira_affects_versions(issue, ["4.4.0"], available, ["4.4.0"])
+    >>> writer.update_affects_versions.assert_called_once_with(issue, ["5.0.0", "4.4.0"])
+    >>> user_input.call_count
+    2
+
+    Explicitly skipping an eligible suggestion leaves the JIRA writer untouched:
+
+    >>> writer.reset_mock()
+    >>> with (
+    ...     patch.dict(reconcile_jira_affects_versions.__globals__, jira_ops=writer),
+    ...     patch("builtins.input", side_effect=["skip", KeyboardInterrupt]) as user_input,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     reconcile_jira_affects_versions(issue, ["4.4.0"], available, ["4.4.0"])
+    >>> writer.mock_calls
+    []
+    >>> user_input.call_count
+    1
+    """,
+}
 
 
 if __name__ == "__main__":

@@ -448,7 +448,7 @@ Project [greatest(c1#x, c2#x, cast(c3#x as int), c4#x, c5#x) AS greatest(c1, c2,
 -- !query
 SELECT 5 IN (*) FROM v1
 -- !query analysis
-Project [cast(5 as int) IN (cast(c1#x as int),cast(c2#x as int),cast(c3#x as int),cast(c4#x as int),cast(c5#x as int)) AS (5 IN (c1, c2, c3, c4, c5))#x]
+Project [5 IN (c1#x,c2#x,cast(c3#x as int),c4#x,c5#x) AS (5 IN (c1, c2, c3, c4, c5))#x]
 +- SubqueryAlias v1
    +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
       +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
@@ -492,7 +492,7 @@ Project [1 AS 1#x]
 SELECT 1 FROM v1 WHERE 4 IN (*)
 -- !query analysis
 Project [1 AS 1#x]
-+- Filter cast(4 as int) IN (cast(c1#x as int),cast(c2#x as int),cast(c3#x as int),cast(c4#x as int),cast(c5#x as int))
++- Filter 4 IN (c1#x,c2#x,cast(c3#x as int),c4#x,c5#x)
    +- SubqueryAlias v1
       +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
          +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]

@@ -296,7 +296,7 @@ private[jdbc] object JDBCValueGetter {
           (t: Timestamp) => localDateTimeToMicros(dialect.convertJavaTimestampToTimestampNTZ(t))
         }
 
-      case StringType =>
+      case _: StringType =>
         arrayConverter[Object]((obj: Object) => UTF8String.fromString(obj.toString))
 
       case DateType => arrayConverter[Date] {
