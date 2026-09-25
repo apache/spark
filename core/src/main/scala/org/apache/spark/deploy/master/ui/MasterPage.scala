@@ -317,6 +317,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <form action="app/kill/" method="POST" class="d-inline">
         <input type="hidden" name="id" value={app.id}/>
         <input type="hidden" name="terminate" value="true"/>
+        <input type="hidden" name="csrfToken" value={parent.csrfToken}/>
         <a href="#"
            data-kill-message={s"Are you sure you want to kill application ${app.id} ?"}
            class="kill-link float-end">(kill)</a>
@@ -366,6 +367,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <form action="driver/kill/" method="POST" class="d-inline">
         <input type="hidden" name="id" value={driver.id}/>
         <input type="hidden" name="terminate" value="true"/>
+        <input type="hidden" name="csrfToken" value={parent.csrfToken}/>
         <a href="#"
            data-kill-message={s"Are you sure you want to kill driver ${driver.id} ?"}
            class="kill-link float-end">(kill)</a>
