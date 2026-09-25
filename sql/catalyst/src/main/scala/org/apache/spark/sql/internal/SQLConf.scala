@@ -1960,7 +1960,9 @@ object SQLConf {
         "more read of the key columns, since the phase that evaluated the filter already read " +
         "them. A file written with no Parquet page index is read with the filter applied only " +
         "where it empties a whole row group, since narrowing to part of one needs that index, so " +
-        "every row group of it that keeps a row pays that. Note that " +
+        "every row group of it that keeps a row pays that. Setting " +
+        "parquet.filter.columnindex.enabled to false turns this off entirely, because reading " +
+        "part of a row group goes through the page index. Note that " +
         "the surviving key values of a whole row group are buffered before the " +
         "first batch of that row group is produced, so a task holds up to one extra copy of the " +
         "key columns for one row group.")
