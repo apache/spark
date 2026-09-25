@@ -191,6 +191,41 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("AT_RUNTIME: long and decimal to timestamp casts are rejected") {
+    withTable(s"$relaxed.t") {
+      sql(s"CREATE TABLE $relaxed.t (c TIMESTAMP) USING foo")
+      withAnsiPolicy {
+        Seq(
+          "9223372036854775807L",
+          "cast(99999999999999999999999999999999999999 as decimal(38, 0))"
+        ).foreach { value =>
+          val error = intercept[AnalysisException] {
+            sql(s"INSERT INTO $relaxed.t VALUES ($value)")
+          }
+          assert(error.getCondition == "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST")
+        }
+      }
+    }
+  }
+
+  test("AT_RUNTIME: variant-to-complex casts are rejected") {
+    Seq(
+      "STRUCT<a: INT>" -> "parse_json('{}')",
+      "ARRAY<INT>" -> "parse_json('[]')",
+      "MAP<STRING, INT>" -> "parse_json('{}')"
+    ).foreach { case (targetType, value) =>
+      withTable(s"$relaxed.t") {
+        sql(s"CREATE TABLE $relaxed.t (c $targetType) USING foo")
+        withAnsiPolicy {
+          val error = intercept[AnalysisException] {
+            sql(s"INSERT INTO $relaxed.t VALUES ($value)")
+          }
+          assert(error.getCondition == "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST")
+        }
+      }
+    }
+  }
+
   test("schema alignment config survives ALTER TABLE ADD COLUMNS") {
     withTable(s"$relaxed.t", s"$strict.t") {
       sql(s"CREATE TABLE $relaxed.t (id INT) USING foo")
