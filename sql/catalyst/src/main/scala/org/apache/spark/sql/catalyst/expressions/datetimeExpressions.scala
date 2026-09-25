@@ -5203,7 +5203,13 @@ case class TimestampDiff(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(endTimestamp.dataType)
+  // Each operand's local fields are read in its own zone: an NTZ operand in UTC (wall-clock
+  // preserving), an LTZ operand in the session zone. Micro operands always coerce to LTZ, so both
+  // resolve to the session zone; only the natively-accepted nanosecond types can differ in family
+  // (e.g. a TIMESTAMP_NTZ(p) start against a TIMESTAMP_LTZ(p) end), where a single shared zone
+  // would mis-apply the offset to one operand.
+  @transient private lazy val startZoneId: ZoneId = zoneIdForType(startTimestamp.dataType)
+  @transient private lazy val endZoneId: ZoneId = zoneIdForType(endTimestamp.dataType)
 
   // For the nanosecond carrier the child value is a boxed TimestampNanosVal; the microsecond
   // timestamp types are already boxed Longs whose sub-microsecond remainder is zero.
@@ -5220,17 +5226,19 @@ case class TimestampDiff(
     if (isNanos) {
       DateTimeUtils.timestampDiffNanos(
         unit, epochMicrosOf(start), fractionOf(start), epochMicrosOf(end), fractionOf(end),
-        zoneIdInEval)
+        startZoneId, endZoneId)
     } else {
+      // Both micro operands are LTZ, so startZoneId == endZoneId == the session zone.
       DateTimeUtils.timestampDiff(
-        unit, start.asInstanceOf[Long], end.asInstanceOf[Long], zoneIdInEval)
+        unit, start.asInstanceOf[Long], end.asInstanceOf[Long], endZoneId)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
+    val endZid = ctx.addReferenceObj("endZoneId", endZoneId, classOf[ZoneId].getName)
     if (isNanos) {
+      val startZid = ctx.addReferenceObj("startZoneId", startZoneId, classOf[ZoneId].getName)
       // The nanosecond carrier exposes epochMicros / nanosWithinMicro as public fields; the
       // microsecond types are primitive longs with a zero fraction.
       def microsCode(e: Expression): String => String = e.dataType match {
@@ -5246,10 +5254,11 @@ case class TimestampDiff(
       val eM = microsCode(endTimestamp)
       val eF = fractionCode(endTimestamp)
       defineCodeGen(ctx, ev, (s, e) =>
-        s"""$dtu.timestampDiffNanos("$unit", ${sM(s)}, ${sF(s)}, ${eM(e)}, ${eF(e)}, $zid)""")
+        s"""$dtu.timestampDiffNanos("$unit", ${sM(s)}, ${sF(s)}, """ +
+          s"""${eM(e)}, ${eF(e)}, $startZid, $endZid)""")
     } else {
       defineCodeGen(ctx, ev, (s, e) =>
-        s"""$dtu.timestampDiff("$unit", $s, $e, $zid)""")
+        s"""$dtu.timestampDiff("$unit", $s, $e, $endZid)""")
     }
   }
 

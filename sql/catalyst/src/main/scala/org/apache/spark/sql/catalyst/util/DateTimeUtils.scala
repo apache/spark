@@ -1104,7 +1104,10 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @param startFraction `nanosWithinMicro` in [0, 999] of the start timestamp.
    * @param endMicros `epochMicros` of the timestamp from which `start` is subtracted.
    * @param endFraction `nanosWithinMicro` in [0, 999] of the end timestamp.
-   * @param zoneId The time zone ID at which the operation is performed.
+   * @param startZoneId The time zone ID in which the start timestamp's local fields are read.
+   * @param endZoneId The time zone ID in which the end timestamp's local fields are read. This is
+   *                  separate from `startZoneId` because the operands may belong to different zone
+   *                  families (an NTZ operand is read in UTC, an LTZ operand in the session zone).
    * @return The truncated difference in the requested unit.
    */
   def timestampDiffNanos(
@@ -1113,12 +1116,15 @@ object DateTimeUtils extends SparkDateTimeUtils {
       startFraction: Int,
       endMicros: Long,
       endFraction: Int,
-      zoneId: ZoneId): Long = {
+      startZoneId: ZoneId,
+      endZoneId: ZoneId): Long = {
     val unitInUpperCase = unit.toUpperCase(Locale.ROOT)
     timestampDiffMap.get(unitInUpperCase) match {
       case Some(diff) =>
-        val startLocalTs = getLocalDateTime(startMicros, zoneId).plusNanos(startFraction.toLong)
-        val endLocalTs = getLocalDateTime(endMicros, zoneId).plusNanos(endFraction.toLong)
+        val startLocalTs =
+          getLocalDateTime(startMicros, startZoneId).plusNanos(startFraction.toLong)
+        val endLocalTs =
+          getLocalDateTime(endMicros, endZoneId).plusNanos(endFraction.toLong)
         try {
           diff(startLocalTs, endLocalTs)
         } catch {

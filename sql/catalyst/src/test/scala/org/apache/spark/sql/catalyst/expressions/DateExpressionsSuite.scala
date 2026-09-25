@@ -3045,6 +3045,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       TimestampDiff("SECOND", Literal(0L, TimestampType), ltz(sec, 500), Some("UTC")), 1L)
 
+    // Mixed zone families: an NTZ operand's local fields are read in UTC, an LTZ operand's in the
+    // session zone, so each operand needs its own zone. NTZ wall clock 10:00 (read in UTC) and the
+    // LTZ instant 19:00Z = 11:00 in LA are one hour apart; applying a single shared zone to both
+    // would instead report 9 (or -9 in the reversed form).
+    val hour = 3600 * sec
+    val la = Some("America/Los_Angeles")
+    checkEvaluation(TimestampDiff("HOUR", ntz(10 * hour, 0), ltz(19 * hour, 0), la), 1L)
+    checkEvaluation(
+      TimestampDiff("HOUR", ntz(10 * hour, 0), Literal(19 * hour, TimestampType), la), 1L)
+    checkEvaluation(TimestampDiff("HOUR", ltz(19 * hour, 0), ntz(10 * hour, 0), la), -1L)
+
     // NANOSECOND between two microsecond timestamps is well-defined (fractions are zero): the
     // difference is a whole number of microseconds times 1000.
     checkEvaluation(

@@ -1688,3 +1688,24 @@ SELECT timestampdiff(MICROSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900',
 -- !query analysis
 Project [timestampdiff(MICROSECOND, 2020-01-01 00:00:00.0000009, 2020-01-01 00:00:00.0000021, Some(America/Los_Angeles)) AS timestampdiff(MICROSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900', TIMESTAMP_NTZ '2020-01-01 00:00:00.000002100')#xL]
 +- OneRowRelation
+
+
+-- !query
+SELECT timestampdiff(HOUR, '2020-01-01 10:00:00' :: timestamp_ntz(9),
+    '2020-01-01 19:00:00 UTC' :: timestamp_ltz(9))
+-- !query analysis
+Project [timestampdiff(HOUR, cast(2020-01-01 10:00:00 as timestamp_ntz(9)), cast(2020-01-01 19:00:00 UTC as timestamp_ltz(9)), Some(America/Los_Angeles)) AS timestampdiff(HOUR, CAST(2020-01-01 10:00:00 AS TIMESTAMP_NTZ(9)), CAST(2020-01-01 19:00:00 UTC AS TIMESTAMP_LTZ(9)))#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampdiff(HOUR, '2020-01-01 10:00:00' :: timestamp_ntz(9),
+    TIMESTAMP_LTZ '2020-01-01 19:00:00 UTC')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT timestampdiff(HOUR, DATE '2020-01-01', '2020-01-01 05:00:00' :: timestamp_ntz(9))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]

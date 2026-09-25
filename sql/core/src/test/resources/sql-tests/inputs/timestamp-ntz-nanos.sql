@@ -592,3 +592,13 @@ SELECT timestampadd(NANOSECOND, 50, '2020-01-01 00:00:00.0000001' :: timestamp_n
 SELECT timestampdiff(NANOSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900');
 SELECT timestampdiff(SECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900', TIMESTAMP_NTZ '2020-01-01 00:00:01.000000100');
 SELECT timestampdiff(MICROSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900', TIMESTAMP_NTZ '2020-01-01 00:00:00.000002100');
+
+-- SPARK-57833: mixed zone families in the nanos path. An NTZ operand's wall clock is read in UTC
+-- and an LTZ (or DATE-coerced) operand in the session zone (America/Los_Angeles, -8h), so each
+-- operand is diffed in its own zone rather than one shared zone. NTZ 10:00 and LTZ 19:00 UTC
+-- (= 11:00 LA) are 1 hour apart; a DATE start coerces to LTZ midnight (08:00 UTC in LA).
+SELECT timestampdiff(HOUR, '2020-01-01 10:00:00' :: timestamp_ntz(9),
+    '2020-01-01 19:00:00 UTC' :: timestamp_ltz(9));
+SELECT timestampdiff(HOUR, '2020-01-01 10:00:00' :: timestamp_ntz(9),
+    TIMESTAMP_LTZ '2020-01-01 19:00:00 UTC');
+SELECT timestampdiff(HOUR, DATE '2020-01-01', '2020-01-01 05:00:00' :: timestamp_ntz(9));
