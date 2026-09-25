@@ -210,4 +210,12 @@ public class RocksDBTypeInfoSuite {
 
   }
 
+
+  @Test
+  public void testStringValuesRejectKeySeparator() throws Exception {
+    RocksDBTypeInfo.Index idx = newTypeInfo(CustomType1.class).indices().iterator().next();
+    assertThrows(IllegalArgumentException.class, () -> idx.toKey("key\u0000suffix"));
+    assertThrows(IllegalArgumentException.class,
+      () -> idx.toKey(new String[] { "ok", "bad\u0000" }));
+  }
 }
