@@ -162,7 +162,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
    * to hold their row ranges, without the answer depending on it.
    *
    * Two of the conditions are per scan, and failing either offers nothing:
-   *  - The storage-filter pushdown SQL conf is on.
+   *  - [[FileFormat.supportsStorageFilterPushdown]] holds. That is where a format reads the conf
+   *    that enables this, so a format's own conf never decides for another format, and asking it
+   *    first keeps everything below off the path of a scan that will not use it.
    *  - [[FileFormat.supportBatch]] holds for the schema the reader will see,
    *    `partitionSchema ++ outputDataSchema`, which is the schema a format's reader builder derives
    *    its own vectorized-read decision from. Late materialization needs a batch read, so this asks
@@ -189,17 +191,19 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       readDataColumns: Seq[Attribute],
       outputDataSchema: StructType): Seq[Expression] = {
     val sparkSession = fsRelation.sparkSession
-    val sqlConf = sparkSession.sessionState.conf
-    if (!sqlConf.parquetStorageFilterPushdownEnabled) return Nil
+    if (!fsRelation.fileFormat.supportsStorageFilterPushdown(sparkSession)) return Nil
     val resultSchema = StructType(fsRelation.partitionSchema.fields ++ outputDataSchema.fields)
     if (!fsRelation.fileFormat.supportBatch(sparkSession, resultSchema)) return Nil
 
     val dataAttrs = AttributeSet(readDataColumns)
-    val offered = afterScanFilters.filter { expr =>
+    // Over `toSeq` rather than the set: `ExpressionSet.filter` hands the predicate
+    // `e.canonicalized`, which drops attribute names and metadata, and a format deciding by either
+    // would answer about an expression it will never be given.
+    val offered = afterScanFilters.toSeq.filter { expr =>
       val refs = expr.references
       expr.deterministic && refs.nonEmpty && refs.forall(dataAttrs.contains) &&
         fsRelation.fileFormat.supportsStorageFilter(expr)
-    }.toSeq
+    }
     val keyAttrs = AttributeSet(offered.flatMap(_.references))
     if (readDataColumns.forall(keyAttrs.contains)) Nil else offered
   }
