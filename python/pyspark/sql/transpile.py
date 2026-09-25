@@ -137,14 +137,14 @@ def _is_numeric_cat(cat: str) -> bool:
 
 
 def _wider_numeric(lc: str, rc: str) -> str:
-    """Return the wider of two numeric categories (float > integer > numeric)."""
+    """Return the wider of two numeric categories (numeric > float > integer)."""
     if not (_is_numeric_cat(lc) and _is_numeric_cat(rc)):
         raise ValueError(f"_wider_numeric called with non-numeric categories: {lc!r}, {rc!r}")
+    if "numeric" in (lc, rc):
+        return "numeric"
     if "float" in (lc, rc):
         return "float"
-    if "integer" in (lc, rc):
-        return "integer"
-    return "numeric"
+    return "integer"
 
 
 class AbstractTranspiler(object):
