@@ -140,7 +140,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * while position {@code 2 * i + 1} in the array holds key's full 32-bit hashcode.
    */
   @Nullable private LongArray longArray;
-
   // TODO: we're wasting 32 bits of space here; we can probably store fewer bits of the hashcode
   // and exploit word-alignment to use fewer bits to hold the address.  This might let us store
   // only one long per map entry, increasing the chance that this array will fit in cache at the
@@ -151,16 +150,15 @@ public final class BytesToBytesMap extends MemoryConsumer {
   // full base addresses in the page table for off-heap mode so that we can reconstruct the full
   // absolute memory addresses.
 
-  /**
-   * Whether a completed reset needs to restore longArray after its allocation failed.
-   *
-   * Volatile so that clearing this flag safely publishes the replacement array to concurrent
-   * safeLookup callers.
-   */
-  private volatile boolean longArrayRecoveryRequired = false;
+  private enum MapState {
+    READY,
+    RESET_FAILED,
+    DESTRUCTIVE,
+    FREED
+  }
 
-  /** Whether {@link #free()} has permanently released this map. */
-  private volatile boolean freed = false;
+  /** The lifecycle state that controls whether array-dependent operations are legal. */
+  private MapState state = MapState.READY;
 
   /**
    * Whether or not the longArray can grow. We will not insert more elements if it's false.
@@ -322,6 +320,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       this.loc = loc;
       this.destructive = destructive;
       if (destructive) {
+        state = MapState.DESTRUCTIVE;
         destructiveIterator = this;
         // longArray will not be used anymore if destructive is true, release it now.
         if (longArray != null) {
@@ -493,6 +492,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * the behavior of the returned iterator is undefined.
    */
   public MapIterator iterator() {
+    ensureReady();
     return new MapIterator(numValues, new Location(), false);
   }
 
@@ -507,6 +507,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * the behavior of the returned iterator is undefined.
    */
   public MapIterator destructiveIterator() {
+    ensureReady();
     updatePeakMemoryUsed();
     return new MapIterator(numValues, new Location(), true);
   }
@@ -561,6 +562,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * the behavior of the returned iterator is undefined.
    */
   public MapIteratorWithKeyIndex iteratorWithKeyIndex() {
+    ensureReady();
     return new MapIteratorWithKeyIndex();
   }
 
@@ -568,13 +570,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * The maximum number of allowed keys index.
    *
    * The value of allowed keys index is in the range of [0, maxNumKeysIndex - 1].
-   * If the pointer-array allocation in a previous {@link #reset()} failed, this method retries
-   * that allocation before returning.
    *
-   * @throws SparkOutOfMemoryError if the pointer array still cannot be allocated
+   * @throws IllegalStateException if the map is not ready for use
    */
   public int maxNumKeysIndex() {
-    restoreArrayAfterFailedReset();
+    ensureReady();
     return (int) (longArray.size() / 2);
   }
 
@@ -584,6 +584,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This function always returns the same {@link Location} instance to avoid object allocation.
    * This function is not thread-safe.
+   *
+   * @throws IllegalStateException if the map is not ready for use
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength) {
     safeLookup(keyBase, keyOffset, keyLength, loc);
@@ -598,43 +600,17 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This function always returns the same {@link Location} instance to avoid object allocation.
    * This function is not thread-safe.
+   *
+   * @throws IllegalStateException if the map is not ready for use
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength, int hash) {
     safeLookup(keyBase, keyOffset, keyLength, loc, hash);
     return loc;
   }
 
-  /**
-   * Restores the hash array after a {@link #reset()} freed it but its eager reallocation failed
-   * with an OOM, leaving {@code longArray == null}. A reset() empties the map, so re-allocating at
-   * {@code initialCapacity} here is correct. If memory is still unavailable this throws a
-   * SparkOutOfMemoryError instead of exposing the null array.
-   */
-  private void restoreArrayAfterFailedReset() {
-    if (freed) {
-      throw new IllegalStateException("BytesToBytesMap has already been freed");
-    }
-    if (longArrayRecoveryRequired) {
-      // Only the failed-reset state is recoverable here: the map is empty, so a fresh
-      // initial-capacity array is correct. `destructiveIterator != null` means destructive
-      // iteration has begun, after which map operations are illegal.
-      //
-      // allocate() acquires the TaskMemoryManager monitor while this monitor is held. The memory
-      // manager may call spill() while holding its monitor, so spill() and anything reachable
-      // from it must not acquire this monitor.
-      synchronized (this) {
-        if (freed) {
-          throw new IllegalStateException("BytesToBytesMap has already been freed");
-        }
-        if (destructiveIterator != null) {
-          throw new IllegalStateException(
-            "BytesToBytesMap cannot be used after destructiveIterator() has been called");
-        }
-        if (longArray == null && longArrayRecoveryRequired) {
-          allocate(initialCapacity);
-          longArrayRecoveryRequired = false;
-        }
-      }
+  private void ensureReady() {
+    if (state != MapState.READY) {
+      throw new IllegalStateException("BytesToBytesMap is not usable in state " + state);
     }
   }
 
@@ -643,11 +619,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This is a thread-safe version of `lookup`, provided that each thread supplies its own
    * {@link Location}. This guarantee excludes probe statistics, which may be inaccurate under
-   * concurrent lookup. After {@link #reset()} has completed exceptionally because its pointer-array
-   * allocation failed, concurrent calls may safely retry that allocation. The map must not
-   * otherwise be modified concurrently.
+   * concurrent lookup. The map must not be modified concurrently.
    *
-   * @throws SparkOutOfMemoryError if a pointer-array allocation retried after reset still fails
+   * @throws IllegalStateException if the map is not ready for use
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc) {
     if (keyOperationsFactory == null) {
@@ -658,7 +632,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         loc,
         Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
     } else {
-      restoreArrayAfterFailedReset();
+      ensureReady();
       safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
     }
   }
@@ -668,14 +642,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * The provided hash is ignored when this map has configured key operations. Each thread must
    * supply its own {@link Location}. Probe statistics may be inaccurate under concurrent lookup,
-   * and the map must not otherwise be modified concurrently. After {@link #reset()} has completed
-   * exceptionally because its pointer-array allocation failed, concurrent calls may safely retry
-   * that allocation.
+   * and the map must not be modified concurrently.
    *
-   * @throws SparkOutOfMemoryError if a pointer-array allocation retried after reset still fails
+   * @throws IllegalStateException if the map is not ready for use
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
-    restoreArrayAfterFailedReset();
+    ensureReady();
     assert(longArray != null);
     if (keyOperationsFactory != null) {
       safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
@@ -1097,11 +1069,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * as well as the hash map array itself.
    *
    * This method is idempotent and can be called multiple times.
-   * After this method is called, the map cannot be reused and {@link #reset()} is a no-op.
+   * After this method is called, the map cannot be reused.
    */
-  public synchronized void free() {
-    freed = true;
-    longArrayRecoveryRequired = false;
+  public void free() {
+    state = MapState.FREED;
     updatePeakMemoryUsed();
     if (longArray != null) {
       freeArray(longArray);
@@ -1173,39 +1144,31 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Returns the underlying long array. If the pointer-array allocation in a previous
-   * {@link #reset()} failed, this method retries that allocation before returning.
+   * Returns the underlying long array.
    *
-   * @throws SparkOutOfMemoryError if the pointer array still cannot be allocated
+   * @throws IllegalStateException if the map is not ready for use
    */
   public LongArray getArray() {
-    restoreArrayAfterFailedReset();
+    ensureReady();
     assert(longArray != null);
     return longArray;
   }
 
   /**
-   * Reset this map to initialized state. If {@link #free()} has been called, the map cannot be
-   * reinitialized and this method is a no-op. If the replacement pointer array cannot be
-   * allocated, the map remains empty and the next lookup, {@link #getArray()}, or
-   * {@link #maxNumKeysIndex()} retries the allocation.
+   * Resets this map to initialized state. If the replacement pointer array cannot be allocated,
+   * the map remains empty but cannot be used until a later call to this method succeeds.
    *
    * @throws SparkOutOfMemoryError if the replacement pointer array cannot be allocated
-   * @throws IllegalStateException if destructive iteration has begun
+   * @throws IllegalStateException if the map has been freed or destructive iteration has begun
    */
-  public synchronized void reset() {
-    if (freed) {
-      return;
+  public void reset() {
+    if (state == MapState.FREED || state == MapState.DESTRUCTIVE) {
+      throw new IllegalStateException("BytesToBytesMap cannot be reset in state " + state);
     }
-    if (destructiveIterator != null) {
-      throw new IllegalStateException(
-        "BytesToBytesMap cannot be used after destructiveIterator() has been called");
-    }
+    state = MapState.RESET_FAILED;
     updatePeakMemoryUsed();
-    // Put the map into its empty state up front so that if the allocate() below fails with an OOM,
-    // the map is left consistently empty (longArray == null, no stale currentPage) rather than
-    // half-reset. A subsequent lookup then restores the array lazily (restoreArrayAfterFailedReset)
-    // instead of dereferencing a null longArray or writing into a freed currentPage.
+    // Put the map into its empty state before allocating so that a failed allocation cannot leave
+    // stale page state. A caller may retry reset(), but cannot use the map until reset succeeds.
     numKeys = 0;
     numValues = 0;
     canGrowArray = true;
@@ -1219,9 +1182,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       MemoryBlock dataPage = dataPages.removeLast();
       freePage(dataPage);
     }
-    longArrayRecoveryRequired = true;
     allocate(initialCapacity);
-    longArrayRecoveryRequired = false;
+    state = MapState.READY;
   }
 
   /**
