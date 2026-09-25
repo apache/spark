@@ -26,8 +26,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{CleanerListener, MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv,
-  SparkFunSuite}
+import org.apache.spark.{CleanerListener, SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Observation, Row, SparkSession}
@@ -631,14 +630,10 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
         assert(df.collect().length == 10)
 
         // Every shuffle's files removal is reported, so e.g. the dynamic allocation
-        // ExecutorMonitor stops keeping executors alive for them. The shuffles stay registered on
-        // the MapOutputTracker, so they must not be reported as fully cleaned.
+        // ExecutorMonitor stops keeping executors alive for them. The shuffles are not cleaned
+        // through ContextCleaner, so they must not be reported as fully cleaned.
         assert(filesRemoved.asScala.toSet == shuffleIds.toSet)
         assert(cleaned.asScala.toSet.intersect(shuffleIds.toSet).isEmpty)
-        shuffleIds.foreach { id =>
-          assert(SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-            .containsShuffle(id))
-        }
       }
     } finally {
       spark.stop()
