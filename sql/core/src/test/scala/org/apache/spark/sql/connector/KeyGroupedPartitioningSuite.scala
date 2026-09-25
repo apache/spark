@@ -6398,10 +6398,9 @@ class KeyGroupedPartitioningSuite
     assert(bucket(4, a).isSameFunction(bucket(4, b)))
     assert(!bucket(4, a).isSameFunction(bucket(2, b)))
 
-    // Nested transforms recurse. An earlier revision compared only the literal values, which made
-    // these two the same function because both literal lists are just [4]; raised by peter-toth on
-    // the PR. `supportsExpressions` does reject nested shapes for SPJ planning, but identity is
-    // consulted elsewhere (isCompatible, ValidateRequirements), so it must be honest on its own.
+    // Nested transforms are compared recursively, although both literal lists here are [4].
+    // supportsExpressions rejects nested shapes for SPJ, but isCompatible and ValidateRequirements
+    // consult identity too.
     assert(!bucket(4, years(a)).isSameFunction(bucket(4, days(a))),
       "a different nested transform is a different function")
     assert(bucket(4, years(a)).isSameFunction(bucket(4, years(b))),
@@ -6422,10 +6421,8 @@ class KeyGroupedPartitioningSuite
 
   test("SPARK-50593: generalized identity is strictly more discriminating than " +
       "bucket-only identity") {
-    // R1/R2: the widened TransformFunctionId(canonicalName, literalChildren) must separate
-    // truncate widths, which a bucket-only identity (a bare Option[Int] bucket count) could not
-    // -- that is the whole point of this change -- while still separating every pair master's
-    // identity already did.
+    // Identity must separate truncate widths, and still separate everything a bucket count alone
+    // separated.
     val a = attr("a")
     import org.apache.spark.sql.catalyst.expressions.Expression
     def truncate(e: Expression, width: Int): TransformExpression =
@@ -6433,11 +6430,11 @@ class KeyGroupedPartitioningSuite
     def bucket(n: Int, e: Expression): TransformExpression =
       TransformExpression(BucketFunction, Seq(Literal(n), e))
 
-    // New: truncate widths must now be distinguished (unreachable on bucket-only identity).
+    // Truncate widths are distinguished.
     assert(!truncate(a, 3).isSameFunction(truncate(a, 5)))
     assert(truncate(a, 3).isSameFunction(truncate(a, 3)))
 
-    // Preserved: everything master's bucket-only identity already separated stays separated.
+    // Bucket counts and function names are still distinguished, and the column is still ignored.
     assert(bucket(4, a).isSameFunction(bucket(4, attr("b"))), "bucket count equal, column ignored")
     assert(!bucket(4, a).isSameFunction(bucket(8, a)), "bucket count differs")
     assert(!TransformExpression(DaysFunction, Seq(a)).isSameFunction(

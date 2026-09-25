@@ -105,14 +105,8 @@ case class TransformExpression(
     children.collect { case l: Literal => l }
 
   /**
-   * The identity of this expression's transform function, or `None` when it has none.
-   *
-   * A transform has an identity when every argument is a literal, a nested transform that itself
-   * has one, or a plain column reference. Any other argument -- a value-changing expression such as
-   * `c + 1` or `cast(c)` -- is not a shape identity can affirm, so the transform is never the same
-   * as anything, not even an identical copy. `None` is how that is expressed: a value would always
-   * be equal to itself. `KeyedPartitioning.supportsExpressions` rejects such transforms before
-   * planning, so for SPJ this is a backstop rather than a path.
+   * This transform's identity, or None if some argument is not a literal, a nested transform or a
+   * column reference (e.g. `c + 1`); such a transform is not the same as any other.
    */
   lazy val functionId: Option[TransformFunctionId] = {
     import TransformFunctionId.ArgumentShape
@@ -211,11 +205,7 @@ case class TransformExpression(
       case c => rewriteColumn(c)
     })
 
-  /**
-   * This transform's column arguments -- its children that are not literal parameters. For a
-   * partitioning expression admitted by `KeyedPartitioning.supportsExpressions` this holds exactly
-   * one element.
-   */
+  /** The non-literal arguments. */
   def columnSlots: Seq[Expression] = children.filterNot(_.isInstanceOf[Literal])
 
   /**
@@ -267,31 +257,15 @@ case class TransformExpression(
   lazy val literalParamsMatchInputTypes: Boolean = inputTypesMatch(_.isInstanceOf[Literal])
 
   /**
-   * Whether every argument -- columns AND literals -- matches its declared input type, at exactly
-   * the declared arity. Required before directly evaluating the transform (the
-   * identity-vs-transform reducer in `KeyedShuffleSpec`), which feeds every child through the
-   * function's `SpecificInternalRow(inputTypes())`: a child whose type differs would raise a
-   * `ClassCastException`, and a child *beyond* the declared arity would raise an
-   * `ArrayIndexOutOfBoundsException` (the row is sized to `inputTypes().length`). The exact-arity
-   * requirement is specific to this eval path -- the transform-vs-transform path passes literals to
-   * the connector's reducer (no eval) and deliberately allows mixed arity, so it uses
-   * [[literalParamsMatchInputTypes]], which keeps the beyond-arity short-circuit. The check is one
-   * level and reads each child's `dataType`: the non-literal child is a column reference -- an
-   * [[Attribute]] or [[GetStructField]] chain, never a nested transform (rejected by the scan gate
-   * `supportsExpressions`/`isColumnRef`) -- so there is no inner-transform column to recurse into.
-   * A `GetStructField` chain retargeted by [[withReference]] at a non-struct key cannot report a
-   * `dataType` at all; [[inputTypesMatch]] treats that as not matching rather than letting the read
-   * throw. Stronger than [[literalParamsMatchInputTypes]].
+   * Whether every argument has its declared type, at exactly the declared arity. Required before
+   * evaluating the transform directly: no cast is applied, and a mismatch would fail at evaluation.
    */
   lazy val argsMatchInputTypes: Boolean =
     children.length == function.inputTypes().length && inputTypesMatch(_ => true)
 
   /**
-   * Reducer precondition: positionally-aligned argument structure with `other` -- at each zipped
-   * position a literal aligns with a literal, and any other slot is a column reference on both
-   * sides. Only literal *values* may differ. Arity is NOT required to match: children are zipped (a
-   * shorter side truncates), so a zero-vs-one parameter pair is admitted and left to the connector
-   * reducer. Unlike [[isSameFunction]] the function name is not compared.
+   * Whether each position holds a literal on both sides or a column reference on both sides.
+   * Literal values and arity may differ; the connector reducer decides those.
    */
   private def sameArgumentLayout(other: TransformExpression): Boolean =
     children.zip(other.children).forall {
@@ -300,13 +274,8 @@ case class TransformExpression(
     }
 
   /**
-   * Whether no literal parameter has a complex type. A literal is rejected if its [[DataType]] is
-   * [[ArrayType]] / [[MapType]] / [[StructType]] / [[UserDefinedType]]. Such params (whose value is
-   * a Catalyst-internal container, or -- for a UDT -- whatever its `sqlType` serializes to) must
-   * not cross the public reducer boundary, so the transform is treated as not reducible. Keying off
-   * the type (not the value) also rejects a null-valued complex literal, and rejecting all UDTs is
-   * a safe over-approximation (a UDT transform parameter is exotic; the cost is a shuffle). Scalar
-   * types such as `CalendarIntervalType` are admitted (the connector interprets them via the type).
+   * Whether no literal parameter has an array, map, struct or UDT type; those are not passed to a
+   * connector reducer. Other scalars, such as intervals, are.
    */
   private def noComplexLiteralParams: Boolean =
     literalChildren.forall(_.dataType match {
@@ -340,12 +309,8 @@ case class TransformExpression(
     val otherParams = other.extractParameters
     val thisName = function.canonicalName()
 
-    // A single non-null IntegerType param on each side is the shape the deprecated
-    // reducer(int, ..., int) fallback accepts. Gate on the DataType, not the boxed runtime class
-    // (DateType / YearMonthInterval also box to Int). A typed null (Literal(null, IntegerType)) is
-    // excluded: null.asInstanceOf[Int] would fabricate a 0 a legacy reducer might accept, so a
-    // typed null must not reach the deprecated fallback (the generalized overload sees the real
-    // null).
+    // Only a single non-null IntegerType parameter per side may use the deprecated int overload; a
+    // typed null would otherwise be read as 0.
     def isSingleInt(p: Array[V2Literal[_]]): Boolean = {
       p.length == 1 && p(0).dataType == IntegerType && p(0).value() != null
     }
@@ -358,17 +323,13 @@ case class TransformExpression(
       case Failure(e) => Threw(e)
     }
 
-    // Prefer the generalized Literal[] overload; fall back to the deprecated int overload only for
-    // a single-int pair, and only when the generalized one is not implemented.
-    // Modern connectors never touch the deprecated path; deprecated-only connectors still reduce.
+    // Prefer the generalized overload. Use the deprecated one only if the generalized one is not
+    // implemented; any other outcome is final.
     val outcome =
       if (thisParams.isEmpty && otherParams.isEmpty) {
         probe(thisFunction.reducer(otherFunction))
       } else {
         probe(thisFunction.reducer(thisParams, otherFunction, otherParams)) match {
-          // Generalized overload not implemented: fall back to the deprecated int overload, but
-          // only for a single-int pair. Any other generalized outcome (reducible, deliberately not
-          // reducible, or a thrown bug) is authoritative.
           case Unimplemented if isSingleInt(thisParams) && isSingleInt(otherParams) =>
             probe(thisFunction.reducer(
               thisParams(0).value().asInstanceOf[Int], otherFunction,
@@ -413,14 +374,9 @@ case class TransformExpression(
     reducedKeySpace.isDefined && reducedKeySpace == other.reducedKeySpace
 
   /**
-   * Records that this expression's keys were reduced together with `other`'s.
-   *
-   * Both sides need an identity: `reducedWith` stores the partner's, and `isDefined` on it is what
-   * marks the keys as reduced, so there is no way to record a reduce with a partner that has none.
-   * Silently skipping the mark would report reduced keys as raw, which is the wrong-results
-   * direction, so this fails loudly instead. It is unreachable: the only producer,
-   * `KeyedShuffleSpec.reducersBothWays`, sees only partitionings admitted by
-   * `KeyedPartitioning.supportsExpressions`, and those always have an identity.
+   * Records that this expression's keys were reduced together with `other`'s. Both need an
+   * identity; this fails rather than leave reduced keys looking raw. Unreachable, since
+   * supportsExpressions admits only transforms that have one.
    */
   def reducedTogetherWith(other: TransformExpression): TransformExpression =
     (functionId, other.functionId) match {

@@ -118,12 +118,8 @@ class TransformExpressionSuite extends SparkFunSuite {
   }
 
   test("SPARK-50593: hasSameReducedKeys discriminates non-bucket (truncate-style) reductions") {
-    // On master's bucket-only identity, every non-bucket transform's functionId is
-    // (canonicalName, None) regardless of its literal parameter, so truncate(3)/truncate(5)
-    // (lcm 15) and truncate(7)/truncate(11) (lcm 77) would both collapse to the same
-    // TransformFunctionId pair and compare equal here -- two unrelated key spaces mistaken for
-    // one. The widened identity (literal params instead of an Option[Int] bucket count) fixes
-    // that.
+    // Truncate reductions onto different key spaces must not compare equal: 3 with 5 lands on
+    // lcm 15, and 7 with 11 on lcm 77. They would if identity ignored the width.
     val fn = new NamedFunction("test.truncate")
     def truncate(width: Int): TransformExpression = bucket(fn, a, width)
 
@@ -165,9 +161,8 @@ class TransformExpressionSuite extends SparkFunSuite {
     val days = new NamedFunction("test.days")
     assert(TransformExpression(days, Seq(a)).isSameFunction(TransformExpression(days, Seq(b))))
 
-    // Nested transforms recurse: same outer function and literal, different inner function, is NOT
-    // the same. Raised by peter-toth on the PR; a flat comparison of the literal values misses it
-    // because both sides' literal list is just [4].
+    // Nested transforms are compared recursively: the same outer function and literal over a
+    // different inner transform is not the same function, although both literal lists are [4].
     val years = new NamedFunction("test.years")
     val outer = new NamedFunction("test.bucket")
     val overYears = TransformExpression(outer, Seq(Literal(4), TransformExpression(years, Seq(a))))
@@ -211,9 +206,8 @@ class TransformExpressionSuite extends SparkFunSuite {
   }
 
   test("SPARK-50593: hasSameReducedKeys tells nested transforms apart, like isSameFunction") {
-    // Both used to agree only in the flat case: identity collapsed a nested transform to an opaque
-    // slot, so bucket(4, years(c)) and bucket(4, days(c)) shared a reduced key space even though
-    // isSameFunction told them apart.
+    // A nested transform is part of the identity, so bucket(4, years(c)) and bucket(4, days(c))
+    // reduce onto different key spaces, just as isSameFunction tells them apart.
     val outer = new NamedFunction("test.bucket")
     val years = new NamedFunction("test.years")
     val days = new NamedFunction("test.days")

@@ -1103,9 +1103,7 @@ object KeyedPartitioning {
   }
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
-    // Exactly one column argument, and it must be a plain column reference; literal arguments are
-    // parameters. `columnSlots` is also what alias projection reads, so the two agree by
-    // construction on what "the column argument" is.
+    // Exactly one column argument, and it must be a plain column reference.
     def isSupportedTransform(transform: TransformExpression): Boolean =
       transform.columnSlots match {
         case Seq(col) => TransformExpression.isColumnRef(col)
@@ -2076,8 +2074,7 @@ case class KeyedShuffleSpec(
         case (left: TransformExpression, right: TransformExpression) =>
           if (allowReduce && canReduceKeys) left.isCompatible(right)
           else left.isSameFunction(right)
-        // Identity transform on one side, arbitrary transform on the other. The decision is
-        // `retargetForIdentity`'s, shared with the reducer `reducersBothWays` builds.
+        // Identity on one side, a transform on the other: see retargetForIdentity.
         case (col: AttributeReference, t: TransformExpression) =>
           allowReduce && canReduceKeys && retargetForIdentity(t, col).isDefined
         case (t: TransformExpression, col: AttributeReference) =>
@@ -2099,17 +2096,10 @@ case class KeyedShuffleSpec(
   }
 
   /**
-   * The transform `t` retargeted at the identity side's key `col`, if Spark can evaluate it on the
-   * raw identity values -- which is how an identity side is reduced onto a transform side
-   * ([[IdentityReducer]]). `None` when the retargeted transform's argument types do not match what
-   * its bound function declares, since evaluating it would throw at reduce time.
-   *
-   * This is the single source of the identity-vs-transform decision: `isExpressionCompatible`'s
-   * gate admits the pair exactly when this is defined, and `reducersBothWays` builds its reducer
-   * from the result. The two must agree -- `EnsureRequirements` cannot tell a mismatched-type pair
-   * from a matched one, since both keep the identity side's declared data type, so a gate that
-   * admitted what the reducer refused would keep raw keys and mis-join -- and sharing this one
-   * function is what keeps them agreeing.
+   * `t` retargeted at the identity side's key `col`, or None if its argument types do not match
+   * the bound function's declared types, since evaluating it would then fail. The compatibility
+   * gate and `reducersBothWays` must agree on this -- a gate admitting a pair the reducer refuses
+   * would pair raw keys and drop matches -- so both call it.
    */
   private def retargetForIdentity(
       t: TransformExpression,
@@ -2185,8 +2175,7 @@ case class KeyedShuffleSpec(
       // Identity transform on this side, arbitrary transform on the other side: create a reducer
       // that applies the other's transform to the raw identity values. Each partition expression
       // is guaranteed to have exactly one leaf child (asserted in keyPositions), which
-      // `IdentityReducer` binds to ordinal 0. Whether one exists is `retargetForIdentity`'s
-      // decision, shared with `isExpressionCompatible`'s gate.
+      // `IdentityReducer` binds to ordinal 0.
       case (a: AttributeReference, t: TransformExpression) =>
         (retargetForIdentity(t, a).map(r => KeyReducer(IdentityReducer(r), t)), None)
 
@@ -2232,8 +2221,7 @@ case class KeyedShuffleSpec(
 
     val newExpressions = partitioning.expressions.zip(keyPositions).map {
       case (te: TransformExpression, positionSet) =>
-        // Retarget the transform's column slot at the other side's clustering key. Literal
-        // parameters are preserved -- see `TransformExpression#rewriteColumnSlots`.
+        // Replace the column argument with the other side's key; literal parameters stay.
         te.rewriteColumnSlots(_ => clustering(positionSet.head))
       case (_, positionSet) => clustering(positionSet.head)
     }

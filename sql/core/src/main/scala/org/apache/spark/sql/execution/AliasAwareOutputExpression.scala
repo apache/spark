@@ -90,20 +90,14 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
   }
 
   /**
-   * Projects a partitioning expression through the output aliases.
-   *
-   * A [[TransformExpression]] has only its column argument projected, through
-   * `TransformExpression#rewriteColumnSlots`, which explains why its literal parameters must be
-   * left alone. What goes wrong here otherwise: `aliasMap` holds any aliased expression, so
-   * `SELECT data AS d, 2 AS w` over `truncate(data, 2)` would yield `truncate(d, w)`, and since a
-   * `Literal` has no children, `projectExpression`'s `containsChild.nonEmpty` fallback would not
-   * re-offer the original `2` either.
+   * Projects a partitioning expression through the output aliases. For a [[TransformExpression]]
+   * only the column argument is projected: `aliasMap` also maps aliased literals, so `2 AS w` would
+   * otherwise turn `truncate(data, 2)` into `truncate(d, w)`.
    */
   private def projectPartitionExpression(expr: Expression): LazyList[Expression] = expr match {
     case te: TransformExpression =>
       te.columnSlots match {
-        // `KeyedPartitioning.supportsExpressions` admits exactly one column slot. Anything else
-        // (no column, or a shape that bypassed the gate) is not projectable here.
+        // supportsExpressions admits exactly one column argument.
         case Seq(col) =>
           projectExpression(col).map(c => te.rewriteColumnSlots(_ => c))
         case _ => LazyList.empty

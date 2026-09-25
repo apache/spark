@@ -130,11 +130,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
         toCatalystOpt(child, query, funCatalogOpt).map { catalystChild =>
           SortOrder(catalystChild, toCatalyst(direction), toCatalyst(nullOrdering), Seq.empty)
         }
-      // Any NamedReference, not just Spark's FieldReference: `resolveRef` only reads
-      // `fieldNames`, and a connector may supply its own implementation. The dedicated
-      // BucketTransform case that used to resolve those directly is gone (see
-      // `toCatalystTransformOpt`), so a bucket column of a custom NamedReference type
-      // reaches here instead, and matching FieldReference alone would throw on it.
+      // Any NamedReference, not only FieldReference: resolveRef reads only fieldNames.
       case ref: NamedReference =>
         Some(resolveRef[NamedExpression](ref, query))
       case _ =>
@@ -150,16 +146,8 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = trans match {
     case IdentityTransform(ref) =>
       Some(resolveRef[NamedExpression](ref, query))
-    // Bucket transforms reach this case too: the dedicated `BucketTransform` arm was removed
-    // so that the bucket count arrives as a `Literal` child like every other transform
-    // parameter, rather than in a `numBucketsOpt` field. One behaviour change comes with
-    // that. The removed arm was guarded on `sorted.isEmpty`, so a `SortedBucketTransform`
-    // carrying no sort columns (its `sortedColumns` defaults to empty) matched it and
-    // resolved the function `bucket`; it now resolves its own name, `sorted_bucket`. A
-    // connector that does not register that name gets no function, so the scan reports
-    // `UnknownPartitioning` and the join shuffles -- correct results, no SPJ. That shape is
-    // degenerate (the type exists to carry sort columns) and `SortedBucketTransform` is
-    // `private[sql]`, so it is accepted rather than special-cased.
+    // Bucket resolves here too, so its count is a Literal child like any other parameter. A
+    // SortedBucketTransform without sort columns therefore resolves `sorted_bucket`, not `bucket`.
     case NamedTransform(name, args) =>
       val catalystArgs = args.map(toCatalyst(_, query, funCatalogOpt))
       funCatalogOpt.flatMap { catalog =>
