@@ -198,13 +198,20 @@ class ParquetFileFormat
   }
 
   /**
+   * The conf that turns this on is read here rather than in the planner, the way `supportBatch`
+   * reads its own confs, so a Parquet-named conf does not decide for a format that is not Parquet.
+   *
    * Subclasses answer false on purpose, even though they inherit this reader: a subclass may
    * customize reading by overriding `buildReaderWithPartitionValues`, and a scan with storage
    * filters routes through `buildReaderWithStorageFilters` instead, which would silently bypass
    * whatever the subclass does.
    */
+  override def supportsStorageFilterPushdown(sparkSession: SparkSession): Boolean =
+    getSqlConf(sparkSession).parquetStorageFilterPushdownEnabled &&
+      getClass == classOf[ParquetFileFormat]
+
   override def supportsStorageFilter(expr: Expression): Boolean =
-    getClass == classOf[ParquetFileFormat] && ParquetStorageFilter.isSupportedStorageFilter(expr)
+    ParquetStorageFilter.isSupportedStorageFilter(expr)
 
   override def buildReaderWithStorageFilters(
       sparkSession: SparkSession,
@@ -215,15 +222,13 @@ class ParquetFileFormat
       storageFilters: Seq[Expression],
       options: Map[String, String],
       hadoopConf: Configuration,
-      storageFilterMetrics: Map[String, SQLMetric]): PartitionedFile => Iterator[InternalRow] = {
-    buildParquetReader(sparkSession, dataSchema, partitionSchema, requiredSchema, filters,
-      storageFilters, options, hadoopConf, storageFilterMetrics)
+      storageFilterMetrics: Map[String, SQLMetric])
+    : Option[PartitionedFile => Iterator[InternalRow]] = {
+    Some(buildParquetReader(sparkSession, dataSchema, partitionSchema, requiredSchema, filters,
+      storageFilters, options, hadoopConf, storageFilterMetrics))
   }
 
-  /**
-   * The implementation behind both public entry points above, which is why neither of them calls
-   * the other. See the warning on `FileFormat.buildReaderWithStorageFilters`.
-   */
+  /** The implementation behind both public entry points above. */
   private def buildParquetReader(
       sparkSession: SparkSession,
       dataSchema: StructType,
@@ -296,7 +301,7 @@ class ParquetFileFormat
           FileSourceScanLike.STORAGE_FILTER_BYTES_AVOIDED_BY_ROW_GROUP, null),
         bytesAvoidedByPageFiltering = storageFilterMetrics.getOrElse(
           FileSourceScanLike.STORAGE_FILTER_BYTES_AVOIDED_BY_PAGE_FILTERING, null))
-      // `create` requires every condition extractStorageFilters already pre-checked, so a violation
+      // `create` requires every condition storageFiltersFor already pre-checked, so a violation
       // is a planner bug rather than something to work around here.
       Some(ParquetStorageFilter.create(storageFilters, requiredSchema, metrics,
         sqlConf.parquetStorageFilterPushdownMaxSplicedRowGroupBytes))

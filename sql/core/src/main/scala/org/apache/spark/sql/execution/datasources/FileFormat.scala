@@ -173,15 +173,17 @@ trait FileFormat {
    *
    * Honoring them is optional, here and in a reader that does implement them: the planner leaves
    * every one of them in the post-scan `Filter` as well, so ignoring one is a missed optimization
-   * rather than a wrong answer. That is why this default can simply delegate to
-   * [[buildReaderWithPartitionValues]].
+   * rather than a wrong answer.
    *
-   * A format that supports storage-filter pushdown overrides this, and must not let the two
-   * builders call each other. This default delegates one way, and it delegates on `this`, so an
-   * override of [[buildReaderWithPartitionValues]] that delegates back here closes the loop and
-   * recurses until the driver's stack runs out. Calling this default through `super` is part of
-   * that loop, not an escape from it. Route both to a private implementation instead, the way
-   * `ParquetFileFormat` does.
+   * Being optional is also an obligation. A storage filter is evaluated out of the plan's order,
+   * without the conjuncts that precede it, so it can raise an error on a row those conjuncts would
+   * have rejected, which is an error a plain scan never raises. A reader must not fail the query
+   * for that: it gives the filter up for as much of the read as it needs to and lets the post-scan
+   * `Filter` decide, in its own order.
+   *
+   * A format that does not apply storage filters returns `None`, which is the default, and the
+   * caller then builds an ordinary reader. Returning an `Option` rather than delegating from here
+   * is what keeps the two builders from being able to call each other.
    *
    * Scalar subqueries inside `storageFilters` are expected to have been materialized before this
    * method is called, so that the returned reader can be safely serialized to executors.
@@ -200,10 +202,14 @@ trait FileFormat {
       options: Map[String, String],
       hadoopConf: Configuration,
       storageFilterMetrics: Map[String, SQLMetric] = Map.empty
-    ): PartitionedFile => Iterator[InternalRow] = {
-    buildReaderWithPartitionValues(
-      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
-  }
+    ): Option[PartitionedFile => Iterator[InternalRow]] = None
+
+  /**
+   * Whether this format applies storage filters in this session at all, which is also where the
+   * conf that enables them belongs: a format's own conf should not decide for another format. Asked
+   * once per scan, before anything per conjunct, so a format that answers false costs one call.
+   */
+  def supportsStorageFilterPushdown(sparkSession: SparkSession): Boolean = false
 
   /**
    * Whether this format's reader can evaluate `expr` as a storage filter, i.e. whether the planner

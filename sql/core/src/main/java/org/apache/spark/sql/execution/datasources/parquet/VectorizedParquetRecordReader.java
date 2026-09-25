@@ -210,23 +210,34 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private int keyFixedBytesPerRow;
   /** Which key columns hold their values out of line, so a length has to be measured per row. */
   private boolean[] keyVariableLength;
-  /** Key-value bytes buffered for the row group currently loading. */
-  private long splicedBytes;
-  /** Ranges the surviving rows of the row group currently loading fall into. */
-  private long survivorRangeCount;
   /** Whether the row group currently loading is read without the filter applied at all. */
   private boolean filterGivenUp;
   /**
-   * Whether this file has no Parquet offset index for some projected column, which parquet only
-   * reports by throwing when a read asks for part of a block. It is a property of the file, so it
-   * is learned once: later row groups skip phase 1 rather than evaluate a filter they cannot use.
+   * The pages phase 2 read for the row group being emitted. Held because the column readers draw
+   * from it for the whole row group, and closed when the next one is loaded: `readFilteredRowGroup`
+   * hands out a store the file reader does not track, unlike `readNextRowGroup`.
+   */
+  private PageReadStore dataPages;
+
+  /** Whether the filter has already been reported as failing to evaluate on this file. */
+  private boolean loggedFilterEvaluationError;
+
+  /** Whether the byte metric has already been reported as undercounting on this file. */
+  private boolean loggedMissingStoreEntry;
+
+  /**
+   * Whether this file lacks a Parquet offset index for some column phase 2 needs, which is what it
+   * needs to read part of a row group. Learned from the read that fails, once, and then used to
+   * stop the reader from buffering key values phase 2 will have to read again. Phase 1 still runs
+   * on such a file: a row group the filter empties is skipped whole, which needs no index at all.
    */
   private boolean fileHasNoOffsetIndex;
+
   /**
-   * Whether the row group currently loaded is spliced. It starts true unless the file is already
-   * known to have no offset index, and turns false in phase 1 once the survivors buffered pass the
-   * cap. False means phase 2 read every projected column, key columns included, so the emit path
-   * takes them straight from the persistent batch.
+   * Whether the row group currently loaded is spliced. It starts true unless phase 2 will have to
+   * read every projected column anyway, and turns false in phase 1 once the survivors buffered pass
+   * the cap. False means phase 2 read every projected column, key columns included, so the emit
+   * path takes them straight from the persistent batch.
    */
   private boolean spliceCurrentRowGroup;
   private int nextBlockIndex;
@@ -379,9 +390,13 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         keyScratchVectors = null;
         keyScratchBatch = null;
       } finally {
-        // lateMatReader aliases the base-class reader; super.close() owns it.
-        lateMatReader = null;
-        super.close();
+        try {
+          closeDataPages();
+        } finally {
+          // lateMatReader aliases the base-class reader; super.close() owns it.
+          lateMatReader = null;
+          super.close();
+        }
       }
     }
   }
@@ -649,15 +664,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       }
     }
     keyVectorsPublished = true;
-    // Key slots are filled in ascending slot order while `keyIdx` walks the queues in key-list
-    // order, so the pairing is the identity only because `ParquetStorageFilter.create` sorts
-    // `keyColumnIndices` ascending. `isKeyTopLevel` says which slots are keys, not where each
-    // sits in that list, so this loop cannot re-derive the pairing: an unsorted list would swap
-    // key columns in the output batch. Only key slots are touched, since a non-key slot never
-    // holds anything but its persistent vector.
-    int keyIdx = 0;
-    for (int i = 0; i < isKeyTopLevel.length; i++) {
-      if (isKeyTopLevel[i]) spliceBatchColumns[i] = keyVectorQueues[keyIdx++].peekFirst();
+    // Queue k holds the survivors of key column k, and `keyColumnIndices[k]` is the batch slot that
+    // key column sits in, so the pairing is read off rather than re-derived from slot order. Only
+    // key slots are touched, since a non-key slot never holds anything but its persistent vector.
+    int[] keyIndices = storageFilter.keyColumnIndices();
+    for (int k = 0; k < keyIndices.length; k++) {
+      spliceBatchColumns[keyIndices[k]] = keyVectorQueues[k].peekFirst();
     }
   }
 
@@ -760,11 +772,14 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       storageFilter = storageFilter.rewriteForMissingKeys(missing, missingValues);
 
       if (presentKeyColumns.isEmpty()) {
-        // Every key column is missing, so the rewritten predicate is constant for this file.
-        boolean keepAll = storageFilter.evalAllMissing();
-        if (!keepAll) recordFileSkipped();
+        // Every key column is missing, so the rewritten predicate is constant for this file. An
+        // empty answer means evaluating it raised an error, and then the file is read the way a
+        // plain scan would read it rather than skipped.
+        Option<Object> keepAll = storageFilter.evalAllMissing();
+        boolean skipFile = keepAll.isDefined() && !((boolean) keepAll.get());
+        if (skipFile) recordFileSkipped();
         storageFilter = null;
-        hitEndOfData = !keepAll;
+        hitEndOfData = skipFile;
         return;
       }
     }
@@ -843,15 +858,14 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   /**
-   * What phase 2 of the current row group will hold for its row ranges. Every column reader it
-   * drives materializes the row group's range list of its own ({@code ParquetReadState}), and a
-   * filter whose survivors are scattered makes one range per surviving row.
+   * What the surviving rows of the current row group cost to hold as row ranges. A filter whose
+   * survivors are scattered makes one range per surviving row, and phase 2 needs the whole set to
+   * select its pages. One set is held, not one per column reader, because
+   * {@code ParquetReadState} coalesces the ranges it walks lazily.
    */
-  private long rowRangeStateBytes(long rangeCount) {
-    int leaves = spliceCurrentRowGroup
-        ? (nonKeyColumns == null ? 0 : nonKeyColumns.size())
-        : requestedColumns.size();
-    return rangeCount * ParquetReadState.ESTIMATED_ROW_RANGE_BYTES * leaves;
+  private static long rowRangeStateBytes(long rangeCount) {
+    // Parquet's own `RowRanges.Range`: two longs, their object header, and the list slot for it.
+    return rangeCount * 40L;
   }
 
   /** Whether a key value lives in the vector's byte child rather than in its fixed-width array. */
@@ -947,6 +961,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * Sets {@link #hitEndOfData} when all row groups have been processed.
    */
   private void loadNextRowGroupWithLateMaterialization() throws IOException {
+    // The previous row group is fully emitted by the time this is called, so its pages are done
+    // with. Released here rather than at the next assignment, so an all-keys row group, which reads
+    // no data pages at all, does not keep the one before it alive.
+    closeDataPages();
     while (nextBlockIndex < totalBlockCount) {
       int blockIdx = nextBlockIndex++;
       long blockRowCount = lateMatReader.getRowGroups().get(blockIdx).getRowCount();
@@ -959,24 +977,17 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       // the first batch, and that buffer is outside any MemoryConsumer, so phase 1 counts what it
       // holds against `maxSplicedRowGroupBytes` together with the row ranges phase 2 will hold.
       // Past that it gives splicing up, and past it again the filter itself, which is what
-      // `filterGivenUp` says. A file already known to have no offset index starts there.
-      filterGivenUp = fileHasNoOffsetIndex;
-      spliceCurrentRowGroup = !filterGivenUp;
-      splicedBytes = 0L;
+      // `filterGivenUp` says.
+      filterGivenUp = false;
+      // Nothing is buffered for a file phase 2 cannot read in part: it will read the key columns
+      // again along with everything else.
+      spliceCurrentRowGroup = !fileHasNoOffsetIndex;
 
       // Phase 0: rows allowed by the pushed data filter, at column-index granularity. The full
       // requestedSchema goes back on first, because phases 1 and 2 narrow it and
       // ParquetFileReader.getRowRanges computes ranges against the reader's current paths.
       lateMatReader.setRequestedSchema(requestedColumns);
-      // getRowRanges checks only whether a filter is pushed, not options.useColumnIndexFilter(),
-      // so calling it unconditionally would keep applying column-index filtering after a user
-      // turned it off, which is the escape hatch for a file whose column index is wrong. Every
-      // phase below reads within these ranges, so a wrong column index would cost rows the plain
-      // path would have returned. Phase 2 is unaffected: it selects pages through the offset index,
-      // a separate structure this conf says nothing about.
-      RowRanges pushedFilterRanges = useColumnIndexFilter
-          ? lateMatReader.getRowRanges(blockIdx)
-          : RowRanges.createSingle(blockRowCount);
+      RowRanges pushedFilterRanges = pushedFilterRangesFor(blockIdx, blockRowCount);
       // RowRanges.rowCount() walks every range, so resolve each range set's count once.
       long baselineRows = pushedFilterRanges.rowCount();
       if (baselineRows == 0) {
@@ -990,53 +1001,57 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       // a plain read of this projection would transfer for every row the pushed filter kept. The
       // null checks only skip work for a caller that drives this reader without a scan's metrics;
       // FileSourceScanLike creates all five whenever storageFilters is non-empty.
-      // compressedBytesForRowRanges never does IO of its own. A row group whose filter is already
-      // given up reports nothing either way, so it does not pay for the baseline at all.
+      // compressedBytesForRowRanges never does IO of its own.
       StorageFilterMetrics m = storageFilter.metrics();
       SQLMetric bytesAvoidedRg = m.bytesAvoidedByRowGroup();
       SQLMetric bytesAvoidedPf = m.bytesAvoidedByPageFiltering();
-      boolean needBytes = (bytesAvoidedRg != null || bytesAvoidedPf != null) && !filterGivenUp;
+      boolean needBytes = bytesAvoidedRg != null || bytesAvoidedPf != null;
       Map<ColumnPath, ColumnChunkMetaData> blockChunks =
           needBytes ? chunksByPath(lateMatReader, blockIdx) : null;
       long nonKeyBaselineBytes = needBytes
-          ? compressedBytesForRowRanges(lateMatReader, blockIdx, blockChunks, nonKeyColumns,
+          ? compressedBytesForRowRanges(blockIdx, blockChunks, nonKeyColumns,
               pushedFilterRanges, baselineRows)
           : 0L;
 
       // Phase 1: switch to key-only schema, read key columns under pushedFilterRanges, evaluate the
-      // storage filter per row. Skipped for a row group the filter is already given up for, which
-      // leaves every row of `pushedFilterRanges` to emit, exactly what a plain read would.
+      // storage filter per row. The defaults below are what a row group whose filter is given up
+      // emits, which is every row of `pushedFilterRanges`, exactly what a plain read would.
       RowRanges finalRanges = pushedFilterRanges;
       long finalRowCount = baselineRows;
-      if (!filterGivenUp) {
-        lateMatReader.setRequestedSchema(keyOnlyColumns);
-        PageReadStore keyPages = lateMatReader.readFilteredRowGroup(blockIdx, pushedFilterRanges);
+      lateMatReader.setRequestedSchema(keyOnlyColumns);
+      // Closed at the end of the phase that reads it. `readFilteredRowGroup` hands out a store
+      // the file reader does not track, unlike `readNextRowGroup`, so nothing else would.
+      RowRanges survivors;
+      try (PageReadStore keyPages =
+               lateMatReader.readFilteredRowGroup(blockIdx, pushedFilterRanges)) {
         if (keyPages == null) {
-          // Unreachable: readFilteredRowGroup returns null only for an empty block, and we already
-          // know pushedFilterRanges selects at least one row. Skipping the block here would drop
-          // its surviving rows from the output, so assert rather than `continue`.
+          // Unreachable: readFilteredRowGroup returns null only for an empty block, and we know
+          // pushedFilterRanges selects at least one row. Skipping the block here would drop its
+          // surviving rows from the output, so assert rather than `continue`.
           throw new IllegalStateException(
               "No key pages for row group " + blockIdx + " despite " + baselineRows
                   + " rows selected by the pushed filter");
         }
-        RowRanges survivors = evaluateStorageFilter(keyPages, pushedFilterRanges);
-        if (!filterGivenUp
-            && rowRangeStateBytes(survivorRangeCount) > storageFilter.maxSplicedRowGroupBytes()) {
-          // Phase 1 weighs the budget once per accumulator, so a row group whose survivors fit in
-          // a single one is only caught here, with its survivors buffered. Those are released,
-          // since the ranges they were spliced against are about to be thrown away.
-          giveUpFilter();
+        survivors = evaluateStorageFilter(keyPages, pushedFilterRanges);
+      }
+      if (survivors != null) {
+        finalRanges = survivors;
+        finalRowCount = survivors.rowCount();
+        if (finalRowCount == 0) {
+          // Every surviving row was rejected by the storage filter; skip the block entirely,
+          // which avoids the whole non-key baseline. Phase 1 still paid to read the key columns,
+          // and that cost is not part of the baseline, so nothing is subtracted from it here.
+          recordRowGroupSkipped(m, baselineRows, nonKeyBaselineBytes);
+          continue;
         }
-        if (!filterGivenUp) {
-          finalRanges = survivors;
-          finalRowCount = survivors.rowCount();
-          if (finalRowCount == 0) {
-            // Every surviving row was rejected by the storage filter; skip the block entirely,
-            // which avoids the whole non-key baseline. Phase 1 still paid to read the key columns,
-            // and that cost is not part of the baseline, so nothing is subtracted from it here.
-            recordRowGroupSkipped(m, baselineRows, nonKeyBaselineBytes);
-            continue;
-          }
+        // Reading part of a row group needs the offset index, so on a file without one phase 2
+        // reads the whole row group instead. The rows the filter rejected are then emitted and
+        // the post-scan Filter drops them. What the filter still saves on such a file is the row
+        // groups it empties, which is decided above and needs no index at all.
+        if (fileHasNoOffsetIndex && finalRowCount < baselineRows) {
+          giveUpFilter();
+          finalRanges = pushedFilterRanges;
+          finalRowCount = baselineRows;
         }
       }
 
@@ -1045,11 +1060,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       // projection is all keys and their values were buffered, since emit then builds every batch
       // from the key queues alone.
       long keptRows;
-      long phase2Bytes;
-      PageReadStore dataPages = null;
       if (nonKeyColumns == null && spliceCurrentRowGroup) {
         keptRows = finalRowCount;
-        phase2Bytes = 0L;
       } else {
         lateMatReader.setRequestedSchema(
             spliceCurrentRowGroup ? nonKeyColumns : requestedColumns);
@@ -1063,19 +1075,32 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         // wall: a store missing one column's offset index reports no column index either, so
         // `getRowRanges` could not have narrowed anything and the ranges cover the whole block.
         //
-        // Nothing is checked up front, so a file with no page index still reads with the filter
-        // applied wherever the filter keeps a row group whole (`readFilteredRowGroup` degrades to a
-        // plain read when the ranges cover the block) or rejects one whole.
+        // Asked this way rather than up front, from the footer. Parquet resolves the index over the
+        // paths current at its first lookup for the block, which without a pushed data filter is
+        // the non-key columns alone, so a footer walk over the projection is both stricter than the
+        // read and blind to an index that is claimed but unreadable. It is also where the throw
+        // costs least: it lands before any data page is read.
         try {
           dataPages = lateMatReader.readFilteredRowGroup(blockIdx, finalRanges);
         } catch (MissingOffsetIndexException e) {
-          LOG.warn("Not applying the storage filter to {}: reading part of a row group needs a "
-              + "Parquet offset index, and this file was written without a page index for at least "
-              + "one projected column", e, MDC.of(LogKeys.PATH, lateMatReader.getFile()));
+          LOG.warn("Reading {} without page-level storage filtering: reading part of a row group "
+              + "needs a Parquet offset index, and this file has none for at least one column the "
+              + "read needs. Row groups the filter empties are still skipped whole", e,
+              MDC.of(LogKeys.PATH, lateMatReader.getFile()));
           fileHasNoOffsetIndex = true;
           giveUpFilter();
           finalRanges = pushedFilterRanges;
           finalRowCount = baselineRows;
+          // The retry only avoids the same wall because a store missing one column's offset index
+          // reports no column index either, so these ranges cover the whole block and parquet reads
+          // it without consulting an index. That is three parquet internals deep, so it is checked:
+          // a release that changes any of them should fail here rather than throw from the read.
+          if (baselineRows != blockRowCount) {
+            throw new IllegalStateException(String.format(
+                "Cannot read row group %d of %s without an offset index: the pushed filter selects "
+                    + "%d of %d rows, so a plain read of the block is not what it asks for",
+                blockIdx, lateMatReader.getFile(), baselineRows, blockRowCount));
+          }
           lateMatReader.setRequestedSchema(requestedColumns);
           dataPages = lateMatReader.readFilteredRowGroup(blockIdx, finalRanges);
         }
@@ -1087,30 +1112,25 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
                   + " rows to read");
         }
         keptRows = dataPages.getRowCount();
-        // Nothing is computed for a row group whose filter was given up: it read what a plain scan
-        // reads, so the answer is a certain zero. `needBytes`, not just `bytesAvoidedPf != null`,
-        // because that is what built `blockChunks`.
-        if (needBytes && bytesAvoidedPf != null && !filterGivenUp) {
-          phase2Bytes = compressedBytesForRowRanges(lateMatReader, blockIdx, blockChunks,
+        // Nothing is reported for a row group whose filter was given up: it read what a plain scan
+        // reads, so the saving is a certain zero.
+        if (bytesAvoidedPf != null && !filterGivenUp) {
+          long phase2Bytes = compressedBytesForRowRanges(blockIdx, blockChunks,
               nonKeyColumns, finalRanges, finalRowCount);
           if (!spliceCurrentRowGroup) {
             // This row group gave splicing up, so phase 2 read the key columns a second time. The
             // baseline counts them once, in phase 1, so the extra read is a cost against it.
-            phase2Bytes += compressedBytesForRowRanges(lateMatReader, blockIdx, blockChunks,
+            phase2Bytes += compressedBytesForRowRanges(blockIdx, blockChunks,
                 keyOnlyColumns, finalRanges, finalRowCount);
           }
-        } else {
-          phase2Bytes = 0L;
+          // `SQLMetric.add` ignores a negative value, so a row group that read more than the
+          // baseline after giving splicing up contributes nothing rather than subtracting.
+          bytesAvoidedPf.add(nonKeyBaselineBytes - phase2Bytes);
         }
       }
       long filteredRows = baselineRows - keptRows;
       SQLMetric rowsExcludedWithinRg = m.rowsExcludedWithinRowGroup();
       if (rowsExcludedWithinRg != null && filteredRows > 0) rowsExcludedWithinRg.add(filteredRows);
-      if (bytesAvoidedPf != null && !filterGivenUp) {
-        // `SQLMetric.add` ignores a negative value, so a row group that read more than the baseline
-        // after giving splicing up contributes nothing rather than subtracting.
-        bytesAvoidedPf.add(nonKeyBaselineBytes - phase2Bytes);
-      }
 
       if (dataPages != null) {
         if (rowIndexGenerator != null) {
@@ -1157,25 +1177,36 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     for (int blockIdx = 0; blockIdx < blocks.size(); blockIdx++) {
       // Measured against the rows the pushed data filter kept, which is the baseline every other
       // skip path uses: the rows its column index already excluded were never this filter's to
-      // save. `getRowRanges` is a cache hit whenever the two can differ, because
-      // `getFilteredRecordCount()` at initialize resolved every block's ranges then. It has to be
-      // guarded the same way phase 0 guards it, since it consults the pushed filter but not the
-      // conf that turns column-index filtering off.
+      // save. Resolving them again is a cache hit whenever the two can differ, because
+      // `getFilteredRecordCount()` at initialize resolved every block's ranges then.
       long blockRowCount = blocks.get(blockIdx).getRowCount();
       if (blockRowCount == 0) continue;
-      RowRanges blockRanges = useColumnIndexFilter
-          ? lateMatReader.getRowRanges(blockIdx)
-          : RowRanges.createSingle(blockRowCount);
+      RowRanges blockRanges = pushedFilterRangesFor(blockIdx, blockRowCount);
       long survivingRows = blockRanges.rowCount();
       if (survivingRows == 0) continue;
       // The key columns are missing from this file, so they contribute nothing to the walk, and the
       // whole projection is what a plain read would have transferred.
       long avoidedBytes = needBytes
-          ? compressedBytesForRowRanges(lateMatReader, blockIdx,
+          ? compressedBytesForRowRanges(blockIdx,
               chunksByPath(lateMatReader, blockIdx), projected, blockRanges, survivingRows)
           : 0L;
       recordRowGroupSkipped(m, survivingRows, avoidedBytes);
     }
+  }
+
+  /**
+   * The rows of a block the pushed data filter allows, at column-index granularity.
+   *
+   * {@code getRowRanges} checks only whether a filter is pushed, not
+   * {@code options.useColumnIndexFilter()}, so calling it unconditionally would keep applying
+   * column-index filtering after a user turned it off, which is the escape hatch for a file whose
+   * column index is wrong. Every phase reads within these ranges, so a wrong column index would
+   * cost rows a plain read would have returned.
+   */
+  private RowRanges pushedFilterRangesFor(int blockIdx, long blockRowCount) {
+    return useColumnIndexFilter
+        ? lateMatReader.getRowRanges(blockIdx)
+        : RowRanges.createSingle(blockRowCount);
   }
 
   /**
@@ -1214,8 +1245,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * <p>Columns absent from this physical file (schema evolution) contribute nothing, which is
    * correct: the reader transfers nothing for them.
    */
-  private static long compressedBytesForRowRanges(
-      ParquetFileReader reader,
+  private long compressedBytesForRowRanges(
       int blockIndex,
       Map<ColumnPath, ColumnChunkMetaData> chunks,
       List<ColumnDescriptor> columns,
@@ -1224,9 +1254,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     if (columns == null || columns.isEmpty() || rowRangeCount == 0) {
       return 0L;
     }
-    long blockRowCount = reader.getRowGroups().get(blockIndex).getRowCount();
+    long blockRowCount = lateMatReader.getRowGroups().get(blockIndex).getRowCount();
     boolean wholeBlock = rowRangeCount == blockRowCount;
-    ColumnIndexStore ciStore = wholeBlock ? null : reader.getColumnIndexStore(blockIndex);
+    ColumnIndexStore ciStore =
+        wholeBlock ? null : lateMatReader.getColumnIndexStore(blockIndex);
     long total = 0L;
     for (ColumnDescriptor column : columns) {
       ColumnPath path = ColumnPath.get(column.getPath());
@@ -1246,6 +1277,19 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         continue;
       }
       if (offsetIndex == null) {
+        // The store answers null, rather than throwing, for a path it was not built with. That can
+        // only mean the block's store was built while a narrower schema was requested than this
+        // walk asks about, an ordering bug rather than a property of the file, and the footer tells
+        // the two apart. It is reported rather than thrown: this walk only produces a counter, and
+        // `ignoreCorruptFiles` turns any exception from a reader into a silently truncated file, so
+        // a byte metric must not be able to change the answer.
+        if (chunk.getOffsetIndexReference() != null && !loggedMissingStoreEntry) {
+          loggedMissingStoreEntry = true;
+          LOG.warn("Undercounting the storage filter's avoided bytes for {}: column "
+              + path.toDotString() + " of row group " + blockIndex + " has an offset index the "
+              + "block's column index store was not built with",
+              MDC.of(LogKeys.PATH, lateMatReader.getFile()));
+        }
         continue;
       }
       // The dictionary page is read whenever any data page of the chunk is, so count it here the
@@ -1298,16 +1342,19 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
           keyDescriptors[i], keyRequired[i], keyPages, convertTz, datetimeRebaseMode,
           datetimeRebaseTz, int96RebaseMode, int96RebaseTz, writerVersion);
     }
-    ensureCurrentKeyAccumulatorsAllocated();
+    if (spliceCurrentRowGroup) ensureCurrentKeyAccumulatorsAllocated();
 
     PrimitiveIterator.OfLong rowIndexIter = pushedFilterRanges.iterator();
     RowRanges.Builder finalRangesBuilder = RowRanges.builder();
-    survivorRangeCount = 0L;
+    // What this row group retains, weighed against the budget below: the bytes buffered for
+    // splicing, and the ranges the surviving rows fall into.
+    long splicedBytes = 0L;
+    long survivorRangeCount = 0L;
     long previousSurvivor = -2L;
     // Recomputed rather than taken from the caller: a count that disagreed with this iterator would
     // silently drop surviving rows, and no post-scan Filter is left to catch that.
     long remaining = pushedFilterRanges.rowCount();
-    boolean accumulate = true;
+    long cap = storageFilter.maxSplicedRowGroupBytes();
     while (remaining > 0) {
       int num = (int) Math.min((long) capacity, remaining);
       for (int i = 0; i < keyScratchVectors.length; i++) {
@@ -1317,21 +1364,48 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       keyScratchBatch.setNumRows(num);
       for (int r = 0; r < num; r++) {
         long blockRow = rowIndexIter.nextLong();
-        if (storageFilter.test(keyScratchBatch.getRow(r))) {
+        boolean survives;
+        try {
+          survives = storageFilter.test(keyScratchBatch.getRow(r));
+        } catch (RuntimeException e) {
+          if (!storageFilter.isEvaluationError(e)) throw e;
+          // Fail open. The predicate ran on a row that, in the plan, an earlier conjunct would
+          // have rejected before it, so a plain scan never evaluates it there. Giving the filter up
+          // for this row group puts every row the pushed filter kept back in the output, and the
+          // post-scan Filter then evaluates the conjuncts in their own order. Either an earlier one
+          // drops the row before this expression runs, or it does not and the query fails the way
+          // it would have without this feature.
+          logFilterGivenUpOnError(e);
+          giveUpFilter();
+          return null;
+        }
+        if (survives) {
           finalRangesBuilder.addSelectedRow(blockRow);
           if (blockRow != previousSurvivor + 1) survivorRangeCount++;
           previousSurvivor = blockRow;
-          if (accumulate) {
-            accumulate = appendSurvivorRowToAccumulators(r);
-            // The ranges being built are about to be thrown away, so stop evaluating the rest.
-            if (filterGivenUp) return null;
+          if (spliceCurrentRowGroup) splicedBytes += appendSurvivorRowToAccumulators(r);
+          // Both halves of what this row group retains grow per survivor, and either can cross
+          // the budget on its own, so they are weighed together here and nowhere else. The cheaper
+          // concession comes first: release the buffer, and give the filter up as well if the
+          // ranges alone still do not fit.
+          long rangeBytes = rowRangeStateBytes(survivorRangeCount);
+          if (splicedBytes + rangeBytes > cap) {
+            if (spliceCurrentRowGroup) {
+              abandonSplicing();
+              splicedBytes = 0L;
+            }
+            if (rangeBytes > cap) {
+              // The ranges being built are about to be thrown away, so stop evaluating the rest.
+              giveUpFilter();
+              return null;
+            }
           }
         }
       }
       remaining -= num;
     }
 
-    if (accumulate) {
+    if (spliceCurrentRowGroup) {
       finalizePartialAccumulators();
     }
 
@@ -1375,13 +1449,9 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   /**
    * Appends row {@code srcRow} of every key column to the accumulators, pushing them onto their
    * queues once full. All key columns advance in lockstep, which is what keeps the queues aligned.
-   *
-   * <p>Returns false when the buffered survivors have passed
-   * {@code spark.sql.parquet.storageFilterPushdown.maxSplicedRowGroupBytes} and this row group has
-   * given splicing up, in which case it has already released what it held and the caller must stop
-   * calling this.
+   * Returns the bytes the row added, which the caller weighs against its budget.
    */
-  private boolean appendSurvivorRowToAccumulators(int srcRow) {
+  private long appendSurvivorRowToAccumulators(int srcRow) {
     final int dstRow = currentKeyAccumulatorRowCount;
     final WritableColumnVector[] accs = currentKeyAccumulators;
     final WritableColumnVector[] srcs = keyScratchVectors;
@@ -1399,32 +1469,42 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         if (keyVariableLength[i]) valueBytes += dst.getArrayLength(dstRow);
       }
     }
-    splicedBytes += keyFixedBytesPerRow + valueBytes;
     currentKeyAccumulatorRowCount = dstRow + 1;
     if (currentKeyAccumulatorRowCount == capacity) {
-      for (int i = 0; i < currentKeyAccumulators.length; i++) {
-        keyVectorQueues[i].addLast(currentKeyAccumulators[i]);
-        currentKeyAccumulators[i] = null;
-      }
-      // Checked only here, so the cost is one comparison per capacity-sized vector rather than per
-      // row. A row group whose survivors fit in a single accumulator is never checked at all: it
-      // then holds one capacity-sized vector per key column, which is what a plain read holds.
-      //
-      // Two allocations share the budget, and giving splicing up releases only the first, so the
-      // cheaper concession comes first: drop the buffer, and give the filter up as well if the row
-      // ranges alone still do not fit. The second measurement is taken after that concession, so it
-      // counts the leaves phase 2 will now drive, which is every projected column rather than the
-      // non-key ones. Either way this row group stops accumulating.
-      long cap = storageFilter.maxSplicedRowGroupBytes();
-      if (splicedBytes + rowRangeStateBytes(survivorRangeCount) > cap) {
-        abandonSplicing();
-        // Splicing is already gone, so the flag is all that is left to set.
-        if (rowRangeStateBytes(survivorRangeCount) > cap) filterGivenUp = true;
-        return false;
-      }
+      pushAccumulatorsToQueues();
       ensureCurrentKeyAccumulatorsAllocated();
     }
-    return true;
+    return keyFixedBytesPerRow + valueBytes;
+  }
+
+  /** Hands every accumulator to its queue, which is what the emit path dequeues from. */
+  private void pushAccumulatorsToQueues() {
+    for (int i = 0; i < currentKeyAccumulators.length; i++) {
+      keyVectorQueues[i].addLast(currentKeyAccumulators[i]);
+      currentKeyAccumulators[i] = null;
+    }
+  }
+
+  /** Releases the pages phase 2 read for the row group just emitted, if any. */
+  private void closeDataPages() {
+    if (dataPages != null) {
+      dataPages.close();
+      dataPages = null;
+    }
+  }
+
+  /**
+   * Reports the first row group of this file whose filter could not be evaluated. Once per file,
+   * because a file whose values do that tends to do it again, and the row groups that follow are
+   * still filtered normally.
+   */
+  private void logFilterGivenUpOnError(RuntimeException e) {
+    if (loggedFilterEvaluationError) return;
+    loggedFilterEvaluationError = true;
+    LOG.warn("Reading a row group of {} without the storage filter: evaluating it on a row raised "
+        + "an error. The filter is still applied above the scan, so the answer is unchanged, and "
+        + "the remaining row groups are filtered as usual", e,
+        MDC.of(LogKeys.PATH, lateMatReader.getFile()));
   }
 
   /**
@@ -1444,6 +1524,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private void abandonSplicing() {
     for (java.util.ArrayDeque<WritableColumnVector> q : keyVectorQueues) {
+      // A queue can be null if an allocation failed part way through `initializeSplicingState`.
+      if (q == null) continue;
       for (WritableColumnVector v : q) v.close();
       q.clear();
     }
@@ -1459,10 +1541,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private void finalizePartialAccumulators() {
     if (currentKeyAccumulatorRowCount == 0) return;
-    for (int i = 0; i < currentKeyAccumulators.length; i++) {
-      keyVectorQueues[i].addLast(currentKeyAccumulators[i]);
-      currentKeyAccumulators[i] = null;
-    }
+    pushAccumulatorsToQueues();
     currentKeyAccumulatorRowCount = 0;
   }
 
@@ -1472,16 +1551,13 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private void closeSplicingState() {
     keyVectorsPublished = false;
+    // Releasing everything the splicing path holds is what `abandonSplicing` does, and both arrays
+    // are set together by `initializeSplicingState`, so one null check covers the state.
     if (keyVectorQueues != null) {
-      for (java.util.ArrayDeque<WritableColumnVector> q : keyVectorQueues) {
-        if (q != null) {
-          for (WritableColumnVector v : q) v.close();
-          q.clear();
-        }
-      }
+      abandonSplicing();
+      currentKeyAccumulators = null;
+      keyVectorQueues = null;
     }
-    closeAll(currentKeyAccumulators);
-    currentKeyAccumulators = null;
   }
 
   /** Closes every non-null vector of {@code vectors}; tolerates a null array. */

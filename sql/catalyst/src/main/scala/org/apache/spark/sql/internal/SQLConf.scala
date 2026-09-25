@@ -1956,11 +1956,12 @@ object SQLConf {
         "false, no storage filter is attached to a scan in the first place and the filter is " +
         "applied as an ordinary post-scan filter alone. A pushed filter stays in the post-scan " +
         "filter as well, the way a pushed data filter does, so honoring it is optional: a reader " +
-        "that meets a file it cannot prune, one written without a Parquet page index say, reads " +
-        "it the way a plain scan would. That costs the filter's own evaluation, plus one " +
-        "key-column read of the first row group the reader tries it on, since a missing page " +
-        "index is only reported by attempting the read. Note that the surviving key values of a " +
-        "whole row group are buffered before the " +
+        "that meets a row group it cannot prune reads it the way a plain scan would, plus one " +
+        "more read of the key columns, since the phase that evaluated the filter already read " +
+        "them. A file written with no Parquet page index is read with the filter applied only " +
+        "where it empties a whole row group, since narrowing to part of one needs that index, so " +
+        "every row group of it that keeps a row pays that. Note that " +
+        "the surviving key values of a whole row group are buffered before the " +
         "first batch of that row group is produced, so a task holds up to one extra copy of the " +
         "key columns for one row group.")
       .version("5.0.0")
@@ -1971,19 +1972,18 @@ object SQLConf {
   val PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES =
     buildConf("spark.sql.parquet.storageFilterPushdown.maxSplicedRowGroupBytes")
       .internal()
-      .doc("Largest key-column buffer, in bytes, that the vectorized Parquet reader will hold to " +
-        "splice surviving key values into its output batches. Splicing buffers one key value per " +
-        "surviving row of a row group, so the reader counts what it has buffered and gives that " +
-        "row group up once the count passes this, reading every projected column of the " +
-        "surviving rows in one go instead, which costs one extra read of the key columns. What " +
-        "is counted is the buffered values and their per-row overhead, not the backing arrays, " +
-        "which a column vector may grow beyond that. The count is examined whenever a batch " +
-        "worth of survivors per key column has been buffered, so a row group whose survivors fit " +
-        "in a single batch is never weighed at all: it holds no more than the plain read path " +
-        "does. The same limit covers the row ranges the surviving rows fall into, which every " +
-        "column reader of the second phase holds a copy of, so the two share one budget. A row " +
-        "group whose ranges alone pass it is read without the filter applied at all, which is " +
-        "correct but as slow as not pushing the filter.")
+      .doc("Most memory, in bytes, that the vectorized Parquet reader holds for one row group " +
+        "while it applies a storage filter. Two things count against it, they sit in different " +
+        "pools, and both grow with the number of surviving rows: the key values buffered to " +
+        "splice into the output batches, which follow the reader's memory mode and so can be off " +
+        "heap, and the row ranges those rows fall into, always on heap, which the second phase " +
+        "needs to select its pages. The count is examined after every surviving row. Past the " +
+        "limit the reader releases the buffer and reads every projected column of the surviving " +
+        "rows instead, " +
+        "which costs one extra read of the key columns, and past it again it reads the row group " +
+        "with no filter applied at all, which is correct but as slow as not pushing the filter. " +
+        "What is counted is the buffered values and their per-row overhead, not the backing " +
+        "arrays, which a column vector may grow beyond that.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)

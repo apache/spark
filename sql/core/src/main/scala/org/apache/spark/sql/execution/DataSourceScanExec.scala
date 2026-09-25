@@ -797,12 +797,26 @@ case class FileSourceScanExec(
   lazy val inputRDD: RDD[InternalRow] = {
     val options = relation.options +
       (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
-    // Only route through the storage-filter entry point when there is something to push, so that a
+    // The storage-filter entry point is only asked when there is something to push, so a
     // `FileFormat` subclass which customizes reading by overriding `buildReaderWithPartitionValues`
-    // keeps being used on every other query: `ParquetFileFormat` answers
-    // `buildReaderWithStorageFilters` with a full reader the subclass knows nothing about.
+    // keeps being used on every other query. A format that declines, which is the default, falls
+    // back to that builder here rather than inside itself.
+    val storageFilterReader = if (preparedStorageFilters.isEmpty) {
+      None
+    } else {
+      relation.fileFormat.buildReaderWithStorageFilters(
+        sparkSession = relation.sparkSession,
+        dataSchema = relation.dataSchema,
+        partitionSchema = relation.partitionSchema,
+        requiredSchema = requiredSchema,
+        filters = pushedDownFilters,
+        storageFilters = preparedStorageFilters,
+        options = options,
+        hadoopConf = getHadoopConf(relation.sparkSession, relation.options),
+        storageFilterMetrics = storageFilterMetrics)
+    }
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
-      if (preparedStorageFilters.isEmpty) {
+      storageFilterReader.getOrElse {
         relation.fileFormat.buildReaderWithPartitionValues(
           sparkSession = relation.sparkSession,
           dataSchema = relation.dataSchema,
@@ -811,17 +825,6 @@ case class FileSourceScanExec(
           filters = pushedDownFilters,
           options = options,
           hadoopConf = getHadoopConf(relation.sparkSession, relation.options))
-      } else {
-        relation.fileFormat.buildReaderWithStorageFilters(
-          sparkSession = relation.sparkSession,
-          dataSchema = relation.dataSchema,
-          partitionSchema = relation.partitionSchema,
-          requiredSchema = requiredSchema,
-          filters = pushedDownFilters,
-          storageFilters = preparedStorageFilters,
-          options = options,
-          hadoopConf = getHadoopConf(relation.sparkSession, relation.options),
-          storageFilterMetrics = storageFilterMetrics)
       }
 
     val readRDD = if (bucketedScan) {

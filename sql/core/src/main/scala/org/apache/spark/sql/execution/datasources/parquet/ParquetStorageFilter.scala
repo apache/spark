@@ -19,8 +19,10 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.util.concurrent.ConcurrentHashMap
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{And, BasePredicate, BloomFilterMightContain, BoundReference, Expression, ExprUtils, Literal, Predicate, XxHash64}
+import org.apache.spark.sql.catalyst.expressions.{And, BasePredicate, BloomFilterMightContain, BoundReference, Expression, Literal, Predicate, XxHash64}
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, TimeType, YearMonthIntervalType}
 
@@ -133,9 +135,28 @@ class ParquetStorageFilter private (
    * `true` iff the predicate is literally true; a null or false result is interpreted as "drop
    * every row" by the reader.
    */
-  def evalAllMissing(): Boolean = {
+  def evalAllMissing(): Option[Boolean] = {
     require(keyColumnIndices.isEmpty, "evalAllMissing only valid when all key columns are missing")
-    boundExpression.eval(InternalRow.empty) == true
+    // The substituted constant can be one this expression throws on, the same way a row's value can
+    // be, so the same rule applies: fail open. None means the reader must not decide from this
+    // filter at all and has to read the file the way a plain scan would.
+    try {
+      Some(boundExpression.eval(InternalRow.empty) == true)
+    } catch {
+      case e: RuntimeException if isEvaluationError(e) => None
+    }
+  }
+
+  /**
+   * Whether `e` is an error from evaluating the predicate rather than a defect in the reader. Only
+   * the first kind may be swallowed, and the error class is what tells them apart: a value produces
+   * one (an invalid cast under ANSI, an overflow, a division by zero), while a null dereference or
+   * a failed assertion produces none, and an internal error says so in the class itself. Asked of
+   * an instance rather than of the companion, so the Java reader can call it plainly.
+   */
+  private[parquet] def isEvaluationError(e: RuntimeException): Boolean = e match {
+    case t: SparkThrowable => !t.isInternalError
+    case _ => false
   }
 }
 
@@ -147,7 +168,7 @@ object ParquetStorageFilter {
    * `[0, requestedSchema.length)`). Multiple filters are combined with logical AND, so a row must
    * satisfy all of them to survive.
    *
-   * Every condition below is asserted rather than handled: `extractStorageFilters` pre-checks all
+   * Every condition below is asserted rather than handled: `storageFiltersFor` pre-checks all
    * of them, so a violation here is a planner bug. A reader giving a filter up at read time is a
    * different matter. These conditions are about the filter being well formed at all.
    *
@@ -231,29 +252,28 @@ object ParquetStorageFilter {
       // NOT: the reader evaluates the expression it is given and treats a false as "drop this row".
       // Every reference is checked, not just the ones on the value side, because [[create]] binds
       // and type-checks all of them.
-      bloom.references.forall(a => isSupportedKeyType(a.dataType)) && canEvaluateOnEveryRow(bloom)
+      bloom.references.forall(a => isSupportedKeyType(a.dataType)) && canEvaluateInTheReader(bloom)
     case _ => false
   }
 
   /**
-   * Whether the reader may evaluate `bloom`'s value side on any row of the files it reads.
+   * Whether the reader can evaluate this bloom's value side at all.
    *
-   * It has to ask, because the reader evaluates the predicate on every row the pushed data filter
-   * left, while in the plan the conjunct ran after the ones ahead of it and was skipped for the
-   * rows they rejected. A `CAST(s AS BIGINT)` key, which `InjectRuntimeFilter` builds for a
-   * string-to-long join, then throws in ANSI mode on a row an earlier conjunct would have dropped,
-   * a query that succeeds without this feature.
+   * It does not have to be an expression that is safe to evaluate on every row. The reader
+   * evaluates the predicate without the conjuncts that precede it in the plan, so an expression
+   * that throws on a row an earlier conjunct would have rejected throws where a plain scan does
+   * not. That is
+   * handled where it arises rather than here: the reader gives the filter up for the row group and
+   * reads it plainly, and the post-scan `Filter` then evaluates every conjunct in its own order.
    *
-   * So the value side must be a hash of expressions that cannot fail on any input, which
-   * [[ExprUtils.canEvaluateUnconditionally]] decides. `XxHash64` and the membership test itself are
-   * total for every type they accept at analysis time.
-   *
-   * This is a question about the conjunct as the planner holds it, with attribute references for
-   * leaves. It is not one to ask of a bound expression, which that whitelist does not admit.
+   * What is left is what the reader cannot evaluate at all. A subquery has no plan to run on an
+   * executor, and a non-deterministic expression needs the `initialize(partitionIndex)` that
+   * `GeneratePredicate` emits for it and the reader never calls.
    */
-  private def canEvaluateOnEveryRow(bloom: BloomFilterMightContain): Boolean =
+  private def canEvaluateInTheReader(bloom: BloomFilterMightContain): Boolean =
     bloom.valueExpression match {
-      case hash: XxHash64 => hash.children.forall(ExprUtils.canEvaluateUnconditionally)
+      case hash: XxHash64 =>
+        hash.children.forall(c => c.deterministic && !c.containsPattern(PLAN_EXPRESSION))
       case _ => false
     }
 }
