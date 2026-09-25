@@ -220,9 +220,11 @@ private[sql] object JDBCRelation extends Logging {
       timeZoneId: String,
       dialect: JdbcDialect): String = {
     def compileDateTimeValue(): String = {
+      // Use java.time values regardless of the external Row API's datetimeJava8ApiEnabled flag.
+      // Timestamp bounds must use the explicit timeZoneId, not the JVM or SQLConf time zone.
       val dateTimeValue = columnType match {
         case DateType =>
-          java.sql.Date.valueOf(DateTimeUtils.daysToLocalDate(value.toInt))
+          DateTimeUtils.daysToLocalDate(value.toInt)
         case TimestampType =>
           DateTimeUtils.microsToInstant(value).atZone(getZoneId(timeZoneId)).toLocalDateTime
         case TimestampNTZType =>
