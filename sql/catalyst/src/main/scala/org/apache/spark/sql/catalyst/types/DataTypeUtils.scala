@@ -201,9 +201,8 @@ object DataTypeUtils {
 
       case (_: NullType, _) if storeAssignmentPolicy == ANSI => true
 
-      case (w: AtomicType, r: AtomicType)
-          if storeAssignmentPolicy == ANSI && ansiStoreAssignmentCastCheck == AT_ANALYSIS =>
-        if (!Cast.canANSIStoreAssign(w, r)) {
+      case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == ANSI =>
+        if (!Cast.canANSIStoreAssign(w, r) && ansiStoreAssignmentCastCheck == AT_ANALYSIS) {
           throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
             tableName, context, w.catalogString, r.catalogString
           )
@@ -227,15 +226,16 @@ object DataTypeUtils {
       // AT_RUNTIME defers to the inserted ANSI cast, which fails on malformed or overflowing
       // values at runtime. Clearly invalid conversion are still rejected either in an earlier
       // branch of this match clause, or in checkAnalysis.
-      case (w, r)
-          if storeAssignmentPolicy == ANSI && ansiStoreAssignmentCastCheck == AT_RUNTIME =>
+      case (w, r) if storeAssignmentPolicy == ANSI && ansiStoreAssignmentCastCheck == AT_RUNTIME =>
         (w, r) match {
+          // Long/decimal -> timestamp can silently overflow, and variant -> complex types doesn't
+          // enforce nested field non-nullability. Keep rejecting them for now.
           case (LongType | _: DecimalType, TimestampType) |
                (VariantType, _: StructType | _: ArrayType | _: MapType) =>
             throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
               tableName, context, w.catalogString, r.catalogString)
           case _ => true
-}
+        }
       case (w, r) =>
         throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
           tableName, context, w.catalogString, r.catalogString
