@@ -2051,6 +2051,17 @@ class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
                     self.assertEqual(df.first(), Row(c="a", v="abcd"))
                     self.assertEqual(df.toArrow().to_pylist(), [{"c": "a", "v": "abcd"}])
 
+    def test_arrow_c_stream_char_varchar_is_unsupported(self):
+        schema = StructType([StructField("value", ArrayType(CharType(2)))])
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            df = self.spark.createDataFrame([(["a"],)], schema)
+
+        with self.assertRaisesRegex(
+            PySparkNotImplementedError,
+            "CHAR/VARCHAR in DataFrame.__arrow_c_stream__ schema",
+        ):
+            df.__arrow_c_stream__()
+
     def test_to_arrow_char_varchar_udt_storage_is_unsupported(self):
         class CharStorageUDT(UserDefinedType):
             @classmethod
@@ -2080,6 +2091,11 @@ class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
             "CHAR/VARCHAR inside toArrow UDT schema",
         ):
             df.toArrow()
+        with self.assertRaisesRegex(
+            PySparkNotImplementedError,
+            "CHAR/VARCHAR in DataFrame.__arrow_c_stream__ schema",
+        ):
+            df.__arrow_c_stream__()
 
 
 @unittest.skipIf(

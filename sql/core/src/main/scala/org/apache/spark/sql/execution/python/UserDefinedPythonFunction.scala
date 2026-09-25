@@ -87,6 +87,10 @@ case class UserDefinedPythonFunction(
     val optionInputTypes: List[List[String]] =
       transpiledInputTypes.asScala.map(_.asScala.toList).toList
 
+    if (CharVarcharUtils.hasCharVarcharInUDT(dataType)) {
+      throw QueryCompilationErrors.invalidPythonUDFReturnType(dataType)
+    }
+
     val udfExpr = if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF

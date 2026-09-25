@@ -961,7 +961,7 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
             return np.dtype("timedelta64[ns]")
         else:
             return np.dtype("timedelta64[us]")
-    elif isinstance(dt, (StringType, CharType, VarcharType)):
+    elif isinstance(dt, StringType):
         if LooseVersion(pd.__version__) < "3.0.0":
             return None
         else:
@@ -990,7 +990,7 @@ def _to_corrected_pandas_ext_type(dt: DataType) -> Optional[Any]:
         return pd.Float64Dtype()
     elif isinstance(dt, BooleanType):
         return pd.BooleanDtype()
-    elif isinstance(dt, (StringType, CharType, VarcharType)):
+    elif isinstance(dt, StringType):
         return pd.StringDtype()
     else:
         return None

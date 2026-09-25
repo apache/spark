@@ -9256,6 +9256,11 @@
           "Python state does not support CHAR/VARCHAR in <schemaKind> schema <dataType>."
         ]
       },
+      "PYTHON_UDF_CHAR_VARCHAR_RETURN_TYPE" : {
+        "message" : [
+          "Python UDFs do not support CHAR/VARCHAR inside UDT return type <dataType>."
+        ]
+      },
       "PYTHON_UDF_IN_ON_CLAUSE" : {
         "message" : [
           "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."

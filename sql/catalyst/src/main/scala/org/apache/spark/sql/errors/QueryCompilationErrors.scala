@@ -3037,6 +3037,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("dataType" -> toSQLType(dataType)))
   }
 
+  def invalidPythonUDFReturnType(dataType: DataType): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.PYTHON_UDF_CHAR_VARCHAR_RETURN_TYPE",
+      messageParameters = Map("dataType" -> toSQLType(dataType)))
+  }
+
   def invalidPythonStateSchema(
       dataType: DataType,
       schemaKind: String): SparkUnsupportedOperationException = {

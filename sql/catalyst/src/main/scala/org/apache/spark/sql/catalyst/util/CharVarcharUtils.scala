@@ -48,6 +48,18 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
+   * Returns whether a type contains a UDT whose storage type contains CHAR/VARCHAR.
+   */
+  private[sql] def hasCharVarcharInUDT(dt: DataType): Boolean = dt match {
+    case ArrayType(elementType, _) => hasCharVarcharInUDT(elementType)
+    case MapType(keyType, valueType, _) =>
+      hasCharVarcharInUDT(keyType) || hasCharVarcharInUDT(valueType)
+    case StructType(fields) => fields.exists(f => hasCharVarcharInUDT(f.dataType))
+    case udt: UserDefinedType[_] => physicalTypeHasCharVarchar(udt.sqlType)
+    case _ => false
+  }
+
+  /**
    * Replaces logical CHAR/VARCHAR with their unconstrained string representation regardless of
    * session configuration. Use this only at physical boundaries, such as Arrow, that encode all
    * character string types as UTF-8. UDTs are unwrapped without normalizing their storage types,

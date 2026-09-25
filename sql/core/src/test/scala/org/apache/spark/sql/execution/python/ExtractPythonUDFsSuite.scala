@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{ArrowEvalPython, BatchEvalPython, Limit, LocalLimit}
@@ -26,7 +27,13 @@ import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{CharType, DataType, StringType}
+import org.apache.spark.sql.types.{
+  CharType,
+  DataType,
+  StringType,
+  StructField,
+  StructType,
+  UserDefinedType}
 
 class ExtractPythonUDFsSuite extends SharedSparkSession {
   import testImplicits._
@@ -49,6 +56,21 @@ class ExtractPythonUDFsSuite extends SharedSparkSession {
 
   private def collectArrowExec(plan: SparkPlan): Seq[ArrowEvalPythonExec] = plan.collect {
     case b: ArrowEvalPythonExec => b
+  }
+
+  test("CHAR/VARCHAR in UDT storage is rejected by the JVM UDF builder") {
+    class CharStorageUDT extends UserDefinedType[String] {
+      override def sqlType: DataType = CharType(3)
+      override def serialize(value: String): Any = value
+      override def deserialize(value: Any): String = value.toString
+      override def userClass: Class[String] = classOf[String]
+    }
+
+    val returnType = StructType(Seq(StructField("value", new CharStorageUDT)))
+    val error = intercept[SparkUnsupportedOperationException] {
+      typedPythonUDF(returnType, PythonEvalType.SQL_BATCHED_UDF)(col("a"))
+    }
+    assert(error.getCondition === "UNSUPPORTED_FEATURE.PYTHON_UDF_CHAR_VARCHAR_RETURN_TYPE")
   }
 
   test("Chained Batched Python UDFs should be combined to a single physical node") {
