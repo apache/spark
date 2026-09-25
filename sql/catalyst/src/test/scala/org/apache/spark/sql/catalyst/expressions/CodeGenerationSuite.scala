@@ -622,7 +622,6 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(logged(stage, "processNext", 9600).map(_._1) == Seq(Level.INFO))
   }
 
-
   test("SPARK-51527: spark.sql.codegen.logLevel") {
     withSQLConf(SQLConf.CODEGEN_LOG_LEVEL.key -> "INFO") {
       val appender = new LogAppender("codegen log level")
