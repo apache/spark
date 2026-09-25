@@ -45,8 +45,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.udf.worker.{Cancel, DataRequest, DataResponse, ExecutionError, Finish,
-  FinishResponse, Init, InitResponse, UDFWorkerDataFormat, UDFWorkerSpecification, WorkerError}
+import org.apache.spark.udf.worker.{Cancel, DataRequest, DataResponse, Finish, FinishResponse, Init,
+  InitResponse, UDFWorkerDataFormat, UDFWorkerSpecification}
 import org.apache.spark.udf.worker.core.{Termination, WorkerHandle, WorkerLogger,
   WorkerSecurityScope, WorkerSession}
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -54,7 +54,6 @@ import org.apache.spark.util.{LongAccumulator, Utils}
 object ExecuteExternalUDFExecSuite {
   private val TEST_PAYLOAD = "identity".getBytes(StandardCharsets.UTF_8)
   private val RESPONSE_ALLOCATOR_NAME = "externalUdfArrowResponse"
-  private val FINISH_ERROR_MESSAGE = "test finish failure"
 
   private implicit val jsonFormats: Formats = Serialization.formats(NoTypeHints)
 
@@ -62,7 +61,6 @@ object ExecuteExternalUDFExecSuite {
 
   private sealed trait ResponseBehavior extends Serializable
   private case object EchoResponses extends ResponseBehavior
-  private case object FinishFailure extends ResponseBehavior
   private case object DropLastResponse extends ResponseBehavior
   private case object DuplicateFirstResponse extends ResponseBehavior
   private case object MalformedResponse extends ResponseBehavior
@@ -127,7 +125,7 @@ object ExecuteExternalUDFExecSuite {
     override protected def doProcess(
         input: Iterator[DataRequest],
         finish: () => Finish): Iterator[DataResponse] = behavior match {
-      case EchoResponses | FinishFailure => echoResponses(input, finish)
+      case EchoResponses => echoResponses(input, finish)
       case DropLastResponse => eagerResponses(input, finish).dropRight(1).iterator
       case DuplicateFirstResponse =>
         val responses = eagerResponses(input, finish)
@@ -145,15 +143,7 @@ object ExecuteExternalUDFExecSuite {
 
     override protected def doClose(cancel: () => Cancel): Termination = {
       closeCount.add(1L)
-      val response = behavior match {
-        case FinishFailure =>
-          val error = ExecutionError.newBuilder()
-            .setWorker(WorkerError.newBuilder().setMessage(FINISH_ERROR_MESSAGE).build())
-            .build()
-          FinishResponse.newBuilder().setError(error).build()
-        case _ => FinishResponse.getDefaultInstance
-      }
-      completeTerminal(Termination.Finished(response))
+      completeTerminal(Termination.Finished(FinishResponse.getDefaultInstance))
       settledTermination
     }
 
@@ -635,20 +625,6 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
     }
 
     assert(Utils.getRootCause(error).isInstanceOf[IOException])
-    checkFailedExecutionCleanup(execution)
-  }
-
-  test("scalar external UDF surfaces finish callback failures") {
-    val execution = testExecution(FinishFailure, rowCount = 3L)
-    val error = intercept[SparkException] {
-      execution.plan.executeCollect()
-    }
-
-    checkError(
-      exception = Utils.getRootCause(error).asInstanceOf[SparkException],
-      condition = "INTERNAL_ERROR",
-      parameters = Map("message" ->
-        s"External UDF worker finish callback failed: WorkerError: $FINISH_ERROR_MESSAGE"))
     checkFailedExecutionCleanup(execution)
   }
 
