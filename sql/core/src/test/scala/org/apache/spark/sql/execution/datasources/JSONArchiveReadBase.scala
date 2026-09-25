@@ -174,6 +174,13 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
           "a.json" -> jsonBytes("""[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]"""),
           "b.json" -> jsonBytes("""[{"id":3,"name":"Carol"}]""")),
         extraOptions = Map("multiLine" -> "true"))
+      // Jackson auto-detects UTF-16/32, so only a non-UTF charset shows `encoding` is applied.
+      // scalastyle:off nonascii
+      assertArchiveMatchesDir(
+        Seq("a.json" -> "[{\"id\":1,\"name\":\"Jos\u00e9\"},{\"id\":2,\"name\":\"Bob\"}]"
+          .getBytes(StandardCharsets.ISO_8859_1)),
+        extraOptions = Map("multiLine" -> "true", "encoding" -> "ISO-8859-1"))
+      // scalastyle:on nonascii
     }
   }
 

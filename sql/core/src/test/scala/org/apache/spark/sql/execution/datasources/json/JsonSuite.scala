@@ -2921,27 +2921,30 @@ abstract class JsonSuite
     checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
   }
 
-  test("SPARK-23723: specified encoding is not matched to actual encoding") {
-    val fileName = "test-data/utf16LE.json"
-    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
-    val inputFile = testFile(fileName)
-    val exception = intercept[SparkException] {
-      spark.read.schema(schema)
-        .option("mode", "FAILFAST")
-        .option("multiline", "true")
-        .options(Map("encoding" -> "UTF-16BE"))
-        .json(inputFile)
-        .count()
+  gridTest("SPARK-23723: specified encoding is not matched to actual encoding")(
+      Seq(false, true)) { enabled =>
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> enabled.toString) {
+      val fileName = "test-data/utf16LE.json"
+      val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+      val inputFile = testFile(fileName)
+      val exception = intercept[SparkException] {
+        spark.read.schema(schema)
+          .option("mode", "FAILFAST")
+          .option("multiline", "true")
+          .options(Map("encoding" -> "UTF-16BE"))
+          .json(inputFile)
+          .count()
+      }
+      checkErrorMatchPVals(
+        exception = exception,
+        condition = "FAILED_READ_FILE.NO_HINT",
+        parameters = Map("path" -> s".*$fileName.*"))
+      checkError(
+        exception = exception.getCause.asInstanceOf[SparkException],
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> "[empty row]", "failFastMode" -> "FAILFAST")
+      )
     }
-    checkErrorMatchPVals(
-      exception = exception,
-      condition = "FAILED_READ_FILE.NO_HINT",
-      parameters = Map("path" -> s".*$fileName.*"))
-    checkError(
-      exception = exception.getCause.asInstanceOf[SparkException],
-      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-      parameters = Map("badRecord" -> "[empty row]", "failFastMode" -> "FAILFAST")
-    )
   }
 
   def checkEncoding(expectedEncoding: String, pathToJsonFiles: String,
