@@ -63,11 +63,18 @@ class MasterWebUI(
     attachPage(masterPage)
     addStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)
     addRenderLogHandler(this, master.conf)
+    // These endpoints change state, so they require the per-UI CSRF token that MasterPage
+    // embeds in the forms it renders. /workers/kill is deliberately not guarded this way:
+    // it has no form, it is a documented endpoint operators call directly, and a caller
+    // with no token could not send one. It stays gated by POST, modify ACLs and
+    // spark.master.ui.decommission.allow.mode.
     if (killEnabled) {
       attachHandler(createRedirectHandler(
-        "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST")))
+        "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST"),
+        csrfToken = Some(csrfToken)))
       attachHandler(createRedirectHandler(
-        "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethods = Set("POST")))
+        "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethods = Set("POST"),
+        csrfToken = Some(csrfToken)))
     }
     if (decommissionEnabled) {
       attachHandler(createServletHandler("/workers/kill", new HttpServlet {

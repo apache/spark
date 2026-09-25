@@ -260,7 +260,9 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         UIUtils.prependBaseUri(request, parent.basePath),
         "jobs", // subPath
         killEnabled,
-        jobIdTitle
+        jobIdTitle,
+        parent.actionsViaGetEnabled,
+        parent.csrfToken
       ).table(jobPage)
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
@@ -499,7 +501,9 @@ private[ui] class JobPagedTable(
     basePath: String,
     subPath: String,
     killEnabled: Boolean,
-    jobIdTitle: String
+    jobIdTitle: String,
+    actionsViaGetEnabled: Boolean,
+    csrfToken: String
   ) extends PagedTable[JobTableRowData] {
 
   private val (sortColumn, desc, pageSize) = getTableParameters(request, jobTag, jobIdTitle)
@@ -558,11 +562,18 @@ private[ui] class JobPagedTable(
     val job = jobTableRow.jobData
 
     val killLink = if (killEnabled) {
-      // SPARK-6846 this should be POST-only but YARN AM won't proxy POST
-      val killLinkUri = s"$basePath/jobs/job/kill/?id=${job.jobId}"
-      <a href={killLinkUri}
-         data-kill-message={s"Are you sure you want to kill job ${job.jobId} ?"}
-         class="kill-link float-end">(kill)</a>
+      val killMessage = s"Are you sure you want to kill job ${job.jobId} ?"
+      // The same form-wrapped link the master UI uses for killing applications and
+      // drivers, which webui.js submits through the enclosing form after the
+      // confirmation dialog; only the method follows spark.ui.actionsViaGetEnabled,
+      // see UIUtils.actionFormMethod.
+      <form action={s"$basePath/jobs/job/kill/"}
+            method={UIUtils.actionFormMethod(actionsViaGetEnabled)}
+            class="d-inline float-end">
+        <input type="hidden" name="id" value={job.jobId.toString}/>
+        <input type="hidden" name="csrfToken" value={csrfToken}/>
+        <a href="#" data-kill-message={killMessage} class="kill-link">(kill)</a>
+      </form>
     } else {
       Seq.empty
     }
