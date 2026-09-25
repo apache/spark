@@ -246,12 +246,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private boolean[] keyRequired;
   private WritableColumnVector[] keyScratchVectors;
   private ColumnarBatch keyScratchBatch;
-  /**
-   * Mirrors parquet's {@code ParquetReadOptions.useColumnIndexFilter()}. Phase 0 consults it
-   * because {@link ParquetFileReader#getRowRanges(int)} does not: it checks only whether a filter
-   * is pushed, so it would keep narrowing by column index after a user disabled that filtering.
-   */
-  private boolean useColumnIndexFilter = true;
 
   /**
    * Splicing state. Phase 1 keeps the surviving key values it has already decoded, and the emit
@@ -715,6 +709,15 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   private void initializeLateMaterialization() throws IOException {
+    if (!configuration.getBoolean(ParquetInputFormat.COLUMN_INDEX_FILTERING_ENABLED, true)) {
+      // That conf is the escape hatch for a file whose page index is wrong, so it has to turn this
+      // feature off whole rather than only its filtering. Phase 2 reads part of a row group through
+      // the offset index, which parquet consults whatever the conf says, and a wrong one there
+      // pairs a row's key with another row's values. The post-scan filter cannot catch that: the
+      // key it sees is the right one.
+      storageFilter = null;
+      return;
+    }
     lateMatReader = reader.getUnderlyingReader();
     if (lateMatReader == null) {
       // Late materialization drives a ParquetFileReader directly, so without one the filter is
@@ -723,8 +726,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       storageFilter = null;
       return;
     }
-    useColumnIndexFilter = configuration.getBoolean(
-        ParquetInputFormat.COLUMN_INDEX_FILTERING_ENABLED, true);
     // Resolve each key column's top-level ParquetColumn. Partition into present and missing (the
     // latter can happen under schema evolution: a column is in the requested schema but not in this
     // physical parquet file). For any non-primitive key we still bail; phase-1 reads only primitive
@@ -969,8 +970,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       int blockIdx = nextBlockIndex++;
       long blockRowCount = lateMatReader.getRowGroups().get(blockIdx).getRowCount();
       if (blockRowCount == 0) {
-        // parquet-mr never writes these, but RowRanges.createSingle(0) would build Range(0, -1) and
-        // trip parquet's own `from <= to` assertion. The plain read path skips them too.
+        // parquet-mr never writes these, but an empty block makes parquet's own getRowRanges build
+        // Range(0, -1) and trip its `from <= to` assertion. The plain read path skips them too.
         continue;
       }
       // Splicing buffers one key value per surviving row of the whole row group before it can emit
@@ -987,7 +988,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       // requestedSchema goes back on first, because phases 1 and 2 narrow it and
       // ParquetFileReader.getRowRanges computes ranges against the reader's current paths.
       lateMatReader.setRequestedSchema(requestedColumns);
-      RowRanges pushedFilterRanges = pushedFilterRangesFor(blockIdx, blockRowCount);
+      RowRanges pushedFilterRanges = lateMatReader.getRowRanges(blockIdx);
       // RowRanges.rowCount() walks every range, so resolve each range set's count once.
       long baselineRows = pushedFilterRanges.rowCount();
       if (baselineRows == 0) {
@@ -1181,7 +1182,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       // `getFilteredRecordCount()` at initialize resolved every block's ranges then.
       long blockRowCount = blocks.get(blockIdx).getRowCount();
       if (blockRowCount == 0) continue;
-      RowRanges blockRanges = pushedFilterRangesFor(blockIdx, blockRowCount);
+      RowRanges blockRanges = lateMatReader.getRowRanges(blockIdx);
       long survivingRows = blockRanges.rowCount();
       if (survivingRows == 0) continue;
       // The key columns are missing from this file, so they contribute nothing to the walk, and the
@@ -1192,21 +1193,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
           : 0L;
       recordRowGroupSkipped(m, survivingRows, avoidedBytes);
     }
-  }
-
-  /**
-   * The rows of a block the pushed data filter allows, at column-index granularity.
-   *
-   * {@code getRowRanges} checks only whether a filter is pushed, not
-   * {@code options.useColumnIndexFilter()}, so calling it unconditionally would keep applying
-   * column-index filtering after a user turned it off, which is the escape hatch for a file whose
-   * column index is wrong. Every phase reads within these ranges, so a wrong column index would
-   * cost rows a plain read would have returned.
-   */
-  private RowRanges pushedFilterRangesFor(int blockIdx, long blockRowCount) {
-    return useColumnIndexFilter
-        ? lateMatReader.getRowRanges(blockIdx)
-        : RowRanges.createSingle(blockRowCount);
   }
 
   /**

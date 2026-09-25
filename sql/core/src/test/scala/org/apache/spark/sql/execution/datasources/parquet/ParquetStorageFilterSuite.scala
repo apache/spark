@@ -2139,23 +2139,22 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("column-index filtering off: phase 0 takes the whole row group") {
-    // Phase 0 asks parquet for row ranges only when column-index filtering is on, because
-    // ParquetFileReader.getRowRanges checks whether a filter is pushed and NOT whether the user
-    // enabled the column index. That branch is the escape hatch for a file whose column index is
-    // wrong, and nothing exercised it. Trusting a wrong one drops rows for good: every phase reads
-    // within phase 0's ranges, and no filter above the scan can bring back a row it never read.
+  test("column-index filtering off: the reader does not apply the filter at all") {
+    // `parquet.filter.columnindex.enabled=false` is the escape hatch for a file whose page index
+    // is wrong, and it has to cover this feature whole. Phase 0 could honour it on its own, but
+    // phase 2 reads part of a row group through the offset index, which parquet consults whatever
+    // that conf says, so a wrong index there would pair a row's key with another row's values. The
+    // post-scan filter cannot catch that, since the key it sees is the right one.
     //
-    // The row accounting is what tells the two arms apart. Everything is scoped to the rows the
-    // pushed data filter left, so with the column index on, the rows it prunes at page level never
-    // reach phase 1 and are never counted. With it off, every row of the block does, so emitted
-    // plus excluded covers the whole file. One row group with many pages keeps statistics-level
-    // row-group filtering out of it, which happens either way.
+    // The rows and the metrics together tell the two arms apart. This test executes the scan on
+    // its own, so nothing re-applies the conjunct above it: with the conf off the scan hands back
+    // every row of the file and reports nothing at all, not merely fewer skips. One row group with
+    // many pages keeps statistics-level row-group filtering out of it, which happens either way.
     withTempDir { dir =>
       val rows = (1L to 400L).map(i => (i, f"v_$i%04d"))
       val path = writeParquetFile(dir, rows, rowGroupSize = 64 * 1024L, pageSize = Some(512L))
 
-      def run(columnIndex: Boolean): (Set[(Long, String)], Long) = withSQLConf(
+      def run(columnIndex: Boolean): (Set[(Long, String)], Seq[Long]) = withSQLConf(
           SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "true",
           ParquetInputFormat.COLUMN_INDEX_FILTERING_ENABLED -> columnIndex.toString) {
         val df = spark.read.parquet(path).select("k", "v").filter("k >= 350")
@@ -2167,25 +2166,28 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         val keyAttr = scan.output.find(_.name == "k").get
         val withSF = scan.copy(storageFilters = Seq(GreaterThanOrEqual(keyAttr, Literal(350L))))
         val collected = executePlanCollect(withSF).toSet
-        val accounted = collected.size +
-          withSF.metrics(FileSourceScanLike.STORAGE_FILTER_ROWS_EXCLUDED_BY_ROW_GROUP).value +
-          withSF.metrics(FileSourceScanLike.STORAGE_FILTER_ROWS_EXCLUDED_WITHIN_ROW_GROUP).value
-        (collected, accounted)
+        val reported = Seq(
+          FileSourceScanLike.STORAGE_FILTER_ROW_GROUPS_SKIPPED,
+          FileSourceScanLike.STORAGE_FILTER_ROWS_EXCLUDED_BY_ROW_GROUP,
+          FileSourceScanLike.STORAGE_FILTER_ROWS_EXCLUDED_WITHIN_ROW_GROUP,
+          FileSourceScanLike.STORAGE_FILTER_BYTES_AVOIDED_BY_ROW_GROUP,
+          FileSourceScanLike.STORAGE_FILTER_BYTES_AVOIDED_BY_PAGE_FILTERING)
+          .map(withSF.metrics(_).value)
+        (collected, reported)
       }
 
       val expected = rows.filter(_._1 >= 350L).toSet
-      val (rowsOff, accountedOff) = run(columnIndex = false)
-      val (rowsOn, accountedOn) = run(columnIndex = true)
-      assert(rowsOff == expected,
-        s"with the column index off, got ${rowsOff.size} rows; expected ${expected.size}")
+      val (rowsOff, reportedOff) = run(columnIndex = false)
+      val (rowsOn, reportedOn) = run(columnIndex = true)
+      assert(rowsOff == rows.toSet,
+        s"with the column index off nothing must be filtered; got ${rowsOff.size} rows " +
+          s"of ${rows.size}")
       assert(rowsOn == expected,
         s"with the column index on, got ${rowsOn.size} rows; expected ${expected.size}")
-      assert(accountedOff == rows.size,
-        s"with the column index off every row of the file must be emitted or excluded; " +
-          s"accounted $accountedOff of ${rows.size}")
-      assert(accountedOn < rows.size,
-        s"with the column index on the pruned pages must not reach phase 1; " +
-          s"accounted $accountedOn of ${rows.size}")
+      assert(reportedOff.forall(_ == 0L),
+        s"with the column index off the filter must not run: $reportedOff")
+      assert(reportedOn.exists(_ > 0L),
+        s"with the column index on the filter must run, or this test proves nothing: $reportedOn")
     }
   }
 
