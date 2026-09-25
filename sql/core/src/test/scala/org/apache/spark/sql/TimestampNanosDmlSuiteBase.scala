@@ -110,14 +110,19 @@ abstract class TimestampNanosDmlSuiteBase extends SharedSparkSession {
     }
   }
 
-  test("cross-precision write widens a p=7 source into a p=9 target") {
-    withV2Table("c timestamp_ntz(9), n int") {
-      spark.sql(s"INSERT INTO $t SELECT '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7), 1")
-      assert(spark.sql(s"SELECT c FROM $t").schema.head.dataType === TimestampNTZNanosType(9))
-      // .0000001 at p=7 (100 ns) stores as .000000100 at p=9.
-      checkAnswer(spark.sql(s"SELECT c, n FROM $t"),
-        rows("SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100', 1"))
-    }
+  // Cross-precision writes floor the source onto its grid, then widen to the p=9 target:
+  // p=7 (100 ns) .0000001 -> .000000100; p=8 (10 ns) .00000012 -> .000000120.
+  Seq((ntz, "timestamp_ntz", ""), (ltz, "timestamp_ltz", " UTC")).foreach {
+    case (fam, typ, zone) =>
+      test(s"${fam.label}: cross-precision writes widen p=7 and p=8 sources into a p=9 target") {
+        withV2Table(s"c ${fam.typ}, n int") {
+          spark.sql(s"INSERT INTO $t SELECT '2020-01-01 00:00:00.0000001$zone' :: $typ(7), 1")
+          spark.sql(s"INSERT INTO $t SELECT '2020-01-01 00:00:00.00000012$zone' :: $typ(8), 2")
+          assert(spark.sql(s"SELECT c FROM $t").schema.head.dataType === fam.nanosType)
+          checkAnswer(spark.sql(s"SELECT c, n FROM $t"),
+            pair(fam, "000000100", 1, "000000120", 2))
+        }
+      }
   }
 }
 
