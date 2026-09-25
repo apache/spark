@@ -67,6 +67,8 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     assert(!caller.isAlive)
     assert(first eq second)
     assert(first ne Thread.currentThread())
+    assert(first.isDaemon)
+    assert(first.getName == "inprocess-python")
     runtime.shutdown()
     intercept[IllegalStateException] {
       runtime.onInterpreterThread { fail("stopped sessions must not restart") }

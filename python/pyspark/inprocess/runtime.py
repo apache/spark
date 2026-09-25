@@ -23,7 +23,6 @@ pass only a handle and CDI addresses, so large closures are not copied per batch
 """
 
 import sys
-import traceback as _traceback
 from typing import Any, Callable, Iterable, Optional, Sequence
 
 import pyarrow as pa
@@ -32,36 +31,22 @@ import pyarrow.compute as pc
 from pyspark import cloudpickle
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.types import _parse_datatype_json_string
-from pyspark.util import try_simplify_traceback
+from pyspark.util import _format_exception
 
 _UDF_TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
 NullChecker = Callable[[pa.Array], None]
-_udfs: dict[str, tuple[Callable[..., pa.Array], pa.DataType, NullChecker, bool, bool]] = {}
-
-
-def _format_exception(hide: bool, simplified: bool) -> str:
-    kind, error, tb = sys.exc_info()
-    if hide:
-        return "".join(_traceback.format_exception_only(kind, error))
-    if simplified and tb is not None:
-        simple_tb = try_simplify_traceback(tb)
-        if simple_tb is not None:
-            tb = simple_tb
-            if error is not None:
-                error.__cause__ = None
-    return "".join(_traceback.format_exception(kind, error, tb))
+_udfs: dict[str, tuple[Callable[..., pa.Array], pa.DataType, NullChecker, bool, bool, bool]] = {}
 
 
 def _inprocess_register(
     handle: str,
     serialized_udf: Any,
-    return_type_json: str,
     timezone: str,
     python_version: str,
     large_var_types: bool = False,
     hide_traceback: bool = False,
     simplified_traceback: bool = False,
+    traceback_with_locals: bool = False,
 ) -> None:
     try:
         embedded_version = "%d.%d" % sys.version_info[:2]
@@ -75,19 +60,30 @@ def _inprocess_register(
             )
         # JEP exposes direct ByteBuffers through the buffer protocol. Unpickle a separate
         # function per task without iterating over a PyJArray one JNI call per byte.
-        func = cloudpickle.loads(memoryview(serialized_udf))
+        # Carry the type with the closure so driver-defined UDTs need no module import.
+        func, return_type = cloudpickle.loads(memoryview(serialized_udf))
         expected_type = to_arrow_type(
-            _parse_datatype_json_string(return_type_json),
+            return_type,
             timezone=timezone,
             prefers_large_types=large_var_types,
             error_on_duplicated_field_names_in_struct=True,
         )
+        if large_var_types:
+            expected_type = _large_binary_type(expected_type)
         checker = _null_checker(expected_type) or (lambda array: None)
-        _udfs[handle] = (func, expected_type, checker, hide_traceback, simplified_traceback)
-    except BaseException:
+        _udfs[handle] = (
+            func,
+            expected_type,
+            checker,
+            hide_traceback,
+            simplified_traceback,
+            traceback_with_locals,
+        )
+    except BaseException as error:
         # In JEP, an uncaught SystemExit can terminate the entire executor JVM.
         raise RuntimeError(
-            _UDF_TRACEBACK_SENTINEL + _format_exception(hide_traceback, simplified_traceback)
+            _UDF_TRACEBACK_SENTINEL
+            + _format_exception(error, hide_traceback, simplified_traceback, traceback_with_locals)
         ) from None
 
 
@@ -115,13 +111,38 @@ def _nullable_type(data_type: pa.DataType) -> pa.DataType:
     return data_type
 
 
-def _null_checker(expected_type: pa.DataType) -> Optional[NullChecker]:
-    """Compile checks only for required fields and their ancestors, once per registration."""
+def _large_binary_type(data_type: pa.DataType) -> pa.DataType:
+    # The shared conversion keeps binary children for Variant and spatial types. Widen
+    # them only for CDI, where the layout must match the JVM, including nested occurrences.
+    if pa.types.is_binary(data_type):
+        return pa.large_binary()
+    if pa.types.is_struct(data_type):
+        return pa.struct([f.with_type(_large_binary_type(f.type)) for f in data_type])
+    if pa.types.is_list(data_type):
+        field = data_type.value_field
+        return pa.list_(field.with_type(_large_binary_type(field.type)))
+    if pa.types.is_map(data_type):
+        return pa.map_(
+            data_type.key_field.with_type(_large_binary_type(data_type.key_type)),
+            data_type.item_field.with_type(_large_binary_type(data_type.item_type)),
+            keys_sorted=data_type.keys_sorted,
+        )
+    return data_type
 
-    def field_checker(field: pa.Field) -> Optional[NullChecker]:
-        nested = _null_checker(field.type)
+
+# The predicate is deliberately conservative: hidden nulls may request a check, but a
+# null-free superset proves that all visible values satisfy the required-field contract.
+NullCheckPlan = tuple[Callable[[pa.Array], bool], NullChecker]
+
+
+def _null_check_plan(expected_type: pa.DataType) -> Optional[NullCheckPlan]:
+    def field_plan(field: pa.Field) -> Optional[NullCheckPlan]:
+        nested = _null_check_plan(field.type)
         if field.nullable:
             return nested
+
+        def needs_check(values: pa.Array) -> bool:
+            return bool(values.null_count) or (nested is not None and nested[0](values))
 
         def check(values: pa.Array) -> None:
             if values.null_count:
@@ -129,42 +150,74 @@ def _null_checker(expected_type: pa.DataType) -> Optional[NullChecker]:
                     f"In-process UDF returned nulls in non-nullable field {field.name}"
                 )
             if nested is not None:
-                nested(values)
+                nested[1](values)
 
-        return check
+        return needs_check, check
 
     if pa.types.is_struct(expected_type):
-        fields = [(i, field_checker(f)) for i, f in enumerate(expected_type)]
-        checks = [(i, check) for i, check in fields if check is not None]
+        fields = [(i, field_plan(f)) for i, f in enumerate(expected_type)]
+        checks = [(i, plan) for i, plan in fields if plan is not None]
         if not checks:
             return None
 
-        def check_struct(array: pa.Array) -> None:
-            # Only children of valid parents are logically visible.
-            visible = pc.filter(array, pc.is_valid(array)) if array.null_count else array
-            for i, check in checks:
-                check(visible.field(i))
+        def needs_struct(array: pa.Array) -> bool:
+            return any(plan[0](array.field(i)) for i, plan in checks)
 
-        return check_struct
+        def check_struct(array: pa.Array) -> None:
+            valid = None
+            for i, (needs, check) in checks:
+                values = array.field(i)
+                if needs(values):
+                    if array.null_count:
+                        if valid is None:
+                            valid = pc.is_valid(array)
+                        # Filter only the child requiring a check, not its sibling payloads.
+                        values = pc.filter(values, valid)
+                    check(values)
+
+        return needs_struct, check_struct
     if pa.types.is_list(expected_type) or pa.types.is_large_list(expected_type):
-        check = field_checker(expected_type.value_field)
-        if check is not None:
-            return lambda array: check(pc.list_flatten(array))
+        plan = field_plan(expected_type.value_field)
+        if plan is not None:
+
+            def check_list(array: pa.Array) -> None:
+                if plan[0](array.values):
+                    plan[1](pc.list_flatten(array))
+
+            return lambda array: plan[0](array.values), check_list
     if pa.types.is_map(expected_type):
-        key_check = field_checker(expected_type.key_field)
-        item_check = field_checker(expected_type.item_field)
+        key_plan = _null_check_plan(expected_type.key_type)
+        item_plan = field_plan(expected_type.item_field)
+        # Arrow validation rejects null keys already; only their descendants need checks.
+        checks = [(i, p) for i, p in enumerate((key_plan, item_plan)) if p is not None]
+        if not checks:
+            return None
+
+        def entries(array: pa.Array) -> pa.Array:
+            start = array.offsets[0].as_py()
+            length = array.offsets[-1].as_py() - start
+            # values.field honors the entries struct's offset; keys/items do not.
+            return array.values.slice(start, length)
+
+        def needs_map(array: pa.Array) -> bool:
+            values = entries(array)
+            return any(plan[0](values.field(i)) for i, plan in checks)
 
         def check_map(array: pa.Array) -> None:
-            visible = pc.filter(array, pc.is_valid(array)) if array.null_count else array
-            start = visible.offsets[0].as_py()
-            length = visible.offsets[-1].as_py() - start
-            if key_check is not None:
-                key_check(visible.keys.slice(start, length))
-            if item_check is not None:
-                item_check(visible.items.slice(start, length))
+            if needs_map(array):
+                visible = pc.filter(array, pc.is_valid(array)) if array.null_count else array
+                values = entries(visible)
+                for i, (needs, check) in checks:
+                    if needs(values.field(i)):
+                        check(values.field(i))
 
-        return check_map
+        return needs_map, check_map
     return None
+
+
+def _null_checker(expected_type: pa.DataType) -> Optional[NullChecker]:
+    plan = _null_check_plan(expected_type)
+    return plan[1] if plan is not None else None
 
 
 def _has_offset(array: pa.Array) -> bool:
@@ -237,9 +290,16 @@ def _inprocess_invoke(
     The caller owns the struct memory and releases unconsumed exports on failure.
     Each batch owns its buffers; retained Python inputs are never overwritten.
     """
-    hide_traceback = simplified_traceback = False
+    hide_traceback = simplified_traceback = traceback_with_locals = False
     try:
-        udf_func, expected_type, checker, hide_traceback, simplified_traceback = _udfs[handle]
+        (
+            udf_func,
+            expected_type,
+            checker,
+            hide_traceback,
+            simplified_traceback,
+            traceback_with_locals,
+        ) = _udfs[handle]
         if len(input_array_ptrs) != len(input_schema_ptrs):
             raise ValueError("Mismatched input ArrowArray and ArrowSchema pointer counts")
         input_arrays = [
@@ -255,7 +315,8 @@ def _inprocess_invoke(
             udf_func(*args, **kwargs), int(expected_rows), expected_type, checker
         )
         result._export_to_c(int(output_array_ptr), int(output_schema_ptr))
-    except BaseException:
+    except BaseException as error:
         raise RuntimeError(
-            _UDF_TRACEBACK_SENTINEL + _format_exception(hide_traceback, simplified_traceback)
+            _UDF_TRACEBACK_SENTINEL
+            + _format_exception(error, hide_traceback, simplified_traceback, traceback_with_locals)
         ) from None

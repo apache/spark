@@ -71,11 +71,11 @@ class InProcessRuntimeTests(unittest.TestCase):
             for value, array, schema in zip(inputs, arrays, schemas):
                 value._export_to_c(address(array), address(schema))
             serialized = (
-                func._serialize() if hasattr(func, "_serialize") else cloudpickle.dumps(func)
+                func._serialize()
+                if hasattr(func, "_serialize")
+                else cloudpickle.dumps((func, return_type))
             )
-            _inprocess_register(
-                "test", serialized, return_type.json(), timezone, "%d.%d" % sys.version_info[:2]
-            )
+            _inprocess_register("test", serialized, timezone, "%d.%d" % sys.version_info[:2])
             _inprocess_invoke(
                 "test",
                 [address(a) for a in arrays],
@@ -201,7 +201,6 @@ class InProcessRuntimeTests(unittest.TestCase):
             _inprocess_register(
                 "bad",
                 cloudpickle.dumps(FailingLoad()),
-                LongType().json(),
                 "UTC",
                 "%d.%d" % sys.version_info[:2],
             )
@@ -209,7 +208,7 @@ class InProcessRuntimeTests(unittest.TestCase):
 
     def test_python_version_is_checked_before_deserialization(self):
         with self.assertRaisesRegex(RuntimeError, "PYTHON_VERSION_MISMATCH"):
-            _inprocess_register("bad", b"invalid pickle", LongType().json(), "UTC", "0.0")
+            _inprocess_register("bad", b"invalid pickle", "UTC", "0.0")
         self.assertNotIn("bad", _udfs)
 
     def test_registration_is_task_scoped(self):
@@ -219,11 +218,9 @@ class InProcessRuntimeTests(unittest.TestCase):
             state.append(x)
             return len(state)
 
-        command = cloudpickle.dumps(remember)
+        command = cloudpickle.dumps((remember, LongType()))
         for handle in ("first", "second"):
-            _inprocess_register(
-                handle, command, LongType().json(), "UTC", "%d.%d" % sys.version_info[:2]
-            )
+            _inprocess_register(handle, command, "UTC", "%d.%d" % sys.version_info[:2])
         self.assertEqual(_udfs["first"][0](1), 1)
         self.assertEqual(_udfs["first"][0](2), 2)
         self.assertEqual(_udfs["second"][0](3), 1)
@@ -339,15 +336,117 @@ class InProcessRuntimeTests(unittest.TestCase):
         hidden = pa.array([{"x": None}, None], type=required)
         self.assertEqual(_validate_result(hidden, 2, required), hidden)
 
+    def test_map_entries_offset_respects_required_values(self):
+        source = pa.map_(pa.string(), pa.int64())
+        expected = pa.map_(pa.string(), pa.field("value", pa.int64(), False))
+        for data in ([0, 1, 2, None], [None, 1, 2, 3]):
+            entries = pa.StructArray.from_arrays(
+                [pa.array(["hidden", "a", "b", "c"]), pa.array(data)],
+                fields=[source.key_field, source.item_field],
+            )
+            offsets = pa.array([0, 1, 3], pa.int32()).buffers()[1]
+            value = pa.Array.from_buffers(source, 2, [None, offsets], children=[entries.slice(1)])
+            with self.subTest(data=data):
+                if data[-1] is None:
+                    with self.assertRaisesRegex(ValueError, "non-nullable"):
+                        _validate_result(value, 2, expected)
+                else:
+                    result = _validate_result(value, 2, expected)
+                    self.assertEqual(result.to_pylist(), [[("a", 1)], [("b", 2), ("c", 3)]])
+
+    def test_null_parents_do_not_copy_null_free_children(self):
+        struct = pa.StructArray.from_arrays(
+            [pa.array([b"payload", b"value"])],
+            fields=[pa.field("value", pa.binary(), False)],
+            mask=pa.array([True, False]),
+        )
+        mapping = pa.MapArray.from_arrays(
+            pa.array([0, 1, 2]),
+            pa.array(["a", "b"]),
+            pa.array([1, 2]),
+            type=pa.map_(pa.string(), pa.field("value", pa.int64(), False)),
+            mask=pa.array([True, False]),
+        )
+        for value in (struct, mapping):
+            with (
+                self.subTest(type=value.type),
+                patch("pyspark.inprocess.runtime.pc.filter") as filtered,
+                patch("pyspark.inprocess.runtime.pa.concat_arrays") as concat,
+            ):
+                result = _validate_result(value, 2, value.type)
+                self.assertEqual(result, value)
+                filtered.assert_not_called()
+                concat.assert_not_called()
+
+    def test_null_check_does_not_copy_unchecked_siblings(self):
+        import pyarrow.compute as pc
+
+        value = pa.StructArray.from_arrays(
+            [pa.array([None, 1]), pa.array([b"a" * 4096, b"b" * 4096])],
+            fields=[pa.field("required", pa.int64(), False), pa.field("payload", pa.binary())],
+            mask=pa.array([True, False]),
+        )
+        with patch("pyspark.inprocess.runtime.pc.filter", wraps=pc.filter) as filtered:
+            result = _validate_result(value, 2, value.type)
+            self.assertEqual(result, value)
+            filtered.assert_called_once()
+            self.assertEqual(filtered.call_args.args[0].type, pa.int64())
+            self.assertEqual(
+                result.field(1).buffers()[2].address, value.field(1).buffers()[2].address
+            )
+
+    def test_unsupported_types_fail_before_serialization(self):
+        from pyspark.errors import PySparkNotImplementedError
+        from pyspark.sql.types import (
+            CalendarIntervalType,
+            CharType,
+            VarcharType,
+            YearMonthIntervalType,
+        )
+
+        for declared in (
+            CalendarIntervalType(),
+            CharType(5),
+            VarcharType(5),
+            YearMonthIntervalType(),
+            ArrayType(YearMonthIntervalType()),
+            StructType([StructField("x", CalendarIntervalType())]),
+        ):
+            with self.subTest(declared=declared):
+                wrapper = inprocess_udf(declared)(lambda x: x)
+                with self.assertRaises(PySparkNotImplementedError) as error:
+                    wrapper._serialize()
+                self.assertEqual(error.exception.getCondition(), "NOT_IMPLEMENTED")
+                self.assertIsNone(wrapper._serialized)
+
     def test_large_binary_logical_types(self):
+        from pyspark.inprocess.runtime import _large_binary_type
         from pyspark.sql.pandas.types import to_arrow_type
-        from pyspark.sql.types import GeographyType, GeometryType, VariantType
+        from pyspark.sql.types import GeographyType, GeometryType, MapType, VariantType
 
         for data_type in [VariantType(), GeometryType(0), GeographyType(4326)]:
             for large in [False, True]:
                 arrow_type = to_arrow_type(data_type, prefers_large_types=large)
-                binary_field = arrow_type[-1]
-                self.assertEqual(binary_field.type, pa.large_binary() if large else pa.binary())
+                # Shared worker/toArrow conversion keeps its existing small-binary contract.
+                self.assertEqual(arrow_type[-1].type, pa.binary())
+                for nested in (
+                    data_type,
+                    ArrayType(data_type),
+                    MapType(StringType(), data_type),
+                    StructType([StructField("x", data_type)]),
+                ):
+                    raw = to_arrow_type(nested, prefers_large_types=large)
+                    expected = _large_binary_type(raw) if large else raw
+                    handle = "large"
+                    _inprocess_register(
+                        handle,
+                        cloudpickle.dumps((lambda x: x, nested)),
+                        "UTC",
+                        "%d.%d" % sys.version_info[:2],
+                        large,
+                    )
+                    self.assertEqual(_udfs[handle][1], expected)
+                self.assertEqual(_large_binary_type(arrow_type)[-1].type, pa.large_binary())
 
     def test_wrapper_metadata_and_return_type_validation(self):
         from pyspark.errors import PySparkTypeError
@@ -374,7 +473,7 @@ class InProcessRuntimeTests(unittest.TestCase):
     def test_registration_traceback_policy(self):
         for hide in [False, True]:
             with self.assertRaises(RuntimeError) as error:
-                _inprocess_register("bad", b"", LongType().json(), "UTC", "0.0", False, hide)
+                _inprocess_register("bad", b"", "UTC", "0.0", False, hide)
             self.assertEqual("Traceback" in str(error.exception), not hide)
             self.assertIn("PYTHON_VERSION_MISMATCH", str(error.exception))
 

@@ -103,12 +103,11 @@ case class ArrowEvalPythonExec(
   // The Arrow FieldVectors are extracted directly from ArrowColumnVector and
   // serialized to IPC, bypassing the row-based ArrowWriter conversion.
   override def supportsColumnar: Boolean =
-    evalType != PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF &&
-      child.supportsColumnar && conf.arrowPySparkUDFColumnarInputEnabled
+    child.supportsColumnar && conf.arrowPySparkUDFColumnarInputEnabled
   override def supportsRowBased: Boolean = true
 
   override protected def doExecute(): RDD[InternalRow] = {
-    if (child.supportsColumnar && evalType != PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) {
+    if (child.supportsColumnar) {
       // Columnar path: delegate to doExecuteColumnar, flatten to
       // UnsafeRow. ColumnarBatchRow from rowIterator() is NOT
       // UnsafeRow, and downstream operators (e.g., outer
@@ -150,12 +149,6 @@ case class ArrowEvalPythonExec(
       sessionUUID)
 
   override protected def evaluatorFactory: EvalPythonEvaluatorFactory = {
-    if (evalType == PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) {
-      return new InProcessArrowEvalPythonEvaluatorFactory(
-        child.output, udfs, output, conf.arrowMaxRecordsPerBatch, conf.arrowMaxBytesPerBatch,
-        conf.sessionLocalTimeZone, conf.arrowUseLargeVarTypes,
-        conf.pysparkHideTraceback, conf.pysparkSimplifiedTraceback, pythonMetrics)
-    }
     new ArrowEvalPythonEvaluatorFactory(
       child.output,
       udfs,
@@ -175,7 +168,6 @@ case class ArrowEvalPythonExec(
 
   private def supportedPythonEvalTypes: Array[Int] =
     Array(
-      PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF,
       PythonEvalType.SQL_ARROW_BATCHED_UDF,
       PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
       PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,

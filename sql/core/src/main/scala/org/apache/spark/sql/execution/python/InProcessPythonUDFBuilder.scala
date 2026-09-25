@@ -24,7 +24,9 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
+import org.apache.spark.sql.catalyst.plans.logical.NamedParametersSupport
 import org.apache.spark.sql.classic.{ColumnNodeExpression, ExpressionUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -55,8 +57,10 @@ object InProcessPythonUDFBuilder {
       jColumns: JList[Column],
       deterministic: Boolean,
       pythonVersion: String): Column = {
+    checkWorkerEnvironment(SQLConf.get)
     val returnType = DataType.fromJson(returnTypeJson)
     val inputExprs = jColumns.asScala.map(col => ColumnNodeExpression(col.node)).toSeq
+    NamedParametersSupport.splitAndCheckNamedArguments(inputExprs, name, SQLConf.get.resolver)
     val function = new SimplePythonFunction(
       serializedFunc,
       Collections.emptyMap[String, String](),
@@ -69,4 +73,11 @@ object InProcessPythonUDFBuilder {
       name, function, returnType, inputExprs,
       PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF, deterministic))
   }
+
+  private[python] def checkWorkerEnvironment(conf: SQLConf): Unit = {
+    require(PythonWorkerEnvironment.read(conf).isEmpty,
+      "In-process Python UDFs do not support spark.pythonWorkerEnv.*; " +
+        "configure the executor process environment before startup instead")
+  }
+
 }

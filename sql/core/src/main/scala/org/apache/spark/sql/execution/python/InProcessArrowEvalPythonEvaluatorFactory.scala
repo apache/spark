@@ -53,10 +53,9 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     largeVarTypes: Boolean,
     hideTraceback: Boolean,
     simplifiedTraceback: Boolean,
+    tracebackWithLocals: Boolean,
     metrics: Map[String, SQLMetric])
   extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
-
-  private val returnTypes = udfs.map(_.dataType.json)
 
   override protected def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
@@ -135,8 +134,9 @@ class InProcessArrowEvalPythonEvaluatorFactory(
               val start = System.nanoTime()
               functions.indices.foreach { i =>
                 val func = functions(i)
-                runtime.register(handles(i), func.command.toArray, returnTypes(i),
-                  timeZoneId, func.pythonVer, largeVarTypes, hideTraceback, simplifiedTraceback)
+                runtime.register(handles(i), func.command.toArray,
+                  timeZoneId, func.pythonVer, largeVarTypes, hideTraceback, simplifiedTraceback,
+                  tracebackWithLocals)
               }
               initTime.add(System.nanoTime() - start)
             }

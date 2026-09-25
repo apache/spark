@@ -52,9 +52,9 @@ class _InProcessPickler(cloudpickle.CloudPickler):
         return super().reducer_override(obj)
 
 
-def _serialize_udf(func: Callable) -> bytes:
+def _serialize_udf(func: Callable, return_type: DataType) -> bytes:
     buffer = io.BytesIO()
-    _InProcessPickler(buffer).dump(func)
+    _InProcessPickler(buffer).dump((func, return_type))
     return buffer.getvalue()
 
 
@@ -102,11 +102,15 @@ class InProcessUDFWrapper:
     @property
     def returnType(self) -> DataType:
         if self._parsed_return_type is None:
-            self._parsed_return_type = (
+            parsed = (
                 _parse_datatype_string(self._return_type)
                 if isinstance(self._return_type, str)
                 else self._return_type
             )
+            from pyspark.sql.udf import UserDefinedFunction
+
+            UserDefinedFunction._check_return_type(parsed, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+            self._parsed_return_type = parsed
         return self._parsed_return_type
 
     @property
@@ -119,7 +123,7 @@ class InProcessUDFWrapper:
 
     def _serialize(self) -> bytes:
         if self._serialized is None:
-            self._serialized = _serialize_udf(self._func)
+            self._serialized = _serialize_udf(self._func, self.returnType)
         return self._serialized
 
     def __call__(self, *cols: Union[Column, str], **kwargs: Union[Column, str]) -> Column:

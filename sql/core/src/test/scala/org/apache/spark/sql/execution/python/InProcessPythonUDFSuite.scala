@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.python
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.{Column, QueryTest}
+import org.apache.spark.sql.{AnalysisException, Column, QueryTest}
+import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ArrowEvalPython, Filter, LocalLimit}
 import org.apache.spark.sql.execution.{GlobalLimitExec, ProjectExec, SortExec}
@@ -56,12 +57,21 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
     assert(eval.size == 1)
     assert(eval.head.evalType == PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF)
     val physical = query.queryExecution.executedPlan.collect {
-      case p: ArrowEvalPythonExec => p
+      case p: InProcessArrowEvalPythonExec => p
     }
     assert(physical.size == 1)
     assert(physical.head.producedAttributes ==
       (physical.head.outputSet -- physical.head.child.outputSet))
     assert(physical.head.missingInput.isEmpty)
+  }
+
+  test("positional arguments after named arguments are rejected by the builder") {
+    val named = PythonSQLUtils.namedArgumentExpression("x", col("id"))
+    val error = intercept[AnalysisException] {
+      InProcessPythonUDFBuilder.build(
+        "f", Array[Byte](1), LongType.json, Seq(named, col("id")).asJava, true, "3.11")
+    }
+    assert(error.getCondition == "UNEXPECTED_POSITIONAL_ARGUMENT")
   }
 
   test("parallel calls fuse and deterministic duplicate calls are shared") {
@@ -157,7 +167,7 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
       assert(!plan.exists(_.missingInput.nonEmpty))
     }
   }
-  test("non-root limit and offset propagate ordering through the shared physical node") {
+  test("non-root limit and offset propagate ordering through the in-process physical node") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "1") {
       val df = spark.range(0, 100, 1, 4).orderBy("id")
@@ -169,7 +179,7 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
           case GlobalLimitExec(_, ProjectExec(_, sort: SortExec), _) => !sort.global
           case _ => false
         })
-        assert(plan.exists(_.isInstanceOf[ArrowEvalPythonExec]))
+        assert(plan.exists(_.isInstanceOf[InProcessArrowEvalPythonExec]))
       }
     }
   }

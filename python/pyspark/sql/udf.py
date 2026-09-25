@@ -856,14 +856,6 @@ class UDFRegistration:
             [Row(sum_udf(v1)=1), Row(sum_udf(v1)=5)]
         """
 
-        # Avoid importing the optional PyArrow-backed module for ordinary UDF registration.
-        inprocess_module = sys.modules.get("pyspark.inprocess.udf")
-        if inprocess_module is not None and isinstance(f, inprocess_module.InProcessUDFWrapper):
-            raise PySparkTypeError(
-                errorClass="INVALID_UDF_EVAL_TYPE",
-                messageParameters={"eval_type": "a UDF supporting SQL registration"},
-            )
-
         # This is to check whether the input function is from a user-defined function or
         # Python function.
         if hasattr(f, "asNondeterministic"):

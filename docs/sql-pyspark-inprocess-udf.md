@@ -26,7 +26,9 @@ license: |
 
 Each executor owns a dedicated interpreter thread. The plugin initializes the
 interpreter on that thread, and task calls and shutdown are dispatched to the
-same thread. Calls from concurrent tasks are queued on the interpreter thread.
+same thread. The JVM is asked to allocate an 8 MiB stack for this thread; the
+actual size is platform-dependent. Calls from concurrent tasks are queued on the
+interpreter thread.
 One task per executor is recommended for throughput, but is not a correctness requirement.
 Application-level Python parallelism comes from multiple executor JVMs.
 The plugin configures JEP's process-wide interpreter with hash seed `0`, matching
@@ -55,8 +57,8 @@ read. Compatible results retain zero-copy transfer.
 
 The API produces a regular `PythonUDF` expression with an in-process evaluation
 type. Spark's existing `ArrowEvalPython` planning rules handle aggregation,
-nested calls, nondeterminism, and filter/limit pushdown. `ArrowEvalPythonExec` selects
-an in-process evaluator factory for this evaluation type, reusing the projection,
+nested calls, nondeterminism, and filter/limit pushdown. A dedicated
+`InProcessArrowEvalPythonExec` extends `EvalPythonExec`, reusing its projection,
 row queue, result join, and partition-evaluator path. Ordinary Python UDFs continue
 to use Python workers.
 
@@ -75,17 +77,22 @@ vectors are released on task completion, early termination and failure.
 UDF deserialization uses PySpark's bundled cloudpickle. Each task registers its
 own function instance once and passes a small handle for subsequent batches.
 Task completion queues release of the registered function and its closure state. Imported
-Python modules still share executor-wide state. Extra site-packages paths are
-processed with `site.addsitedir` before loading the runtime bridge, including `.pth`
-files. Configured directories and newly discovered `.pth` paths precede system
-paths. Already imported modules cannot be replaced by changing the search path.
+Python modules still share executor-wide state. Configured site-packages paths
+are supplied to JEP before its first construction, so JEP itself can be found in
+an archived venv. They are then processed with `site.addsitedir`, including `.pth`
+files. Spark's own PySpark and Py4J distribution paths come first, followed by
+configured directories, newly discovered `.pth` paths, and existing system paths.
+Already imported modules cannot be replaced by changing the search path.
 
 Spark broadcasts, accumulators, `SparkContext.addPyFile`, and Python `TaskContext`
 are not supported by this embedded runtime. Captured broadcast and accumulator
 objects are rejected during serialization; functions must not access them through
 imported modules either. Install modules on executors before startup, optionally
-using `spark.inprocess.python.sitePackages`. SQL registration through
-`spark.udf.register` is not supported and is rejected at registration time.
+using `spark.inprocess.python.sitePackages`. Session-scoped `spark.pythonWorkerEnv.*`
+settings are rejected: the shared interpreter cannot apply per-session process
+environments. Configure environment variables before the executor starts, for example
+with `spark.executorEnv.NAME` (or the launching environment in local mode).
+SQL registration through `spark.udf.register` is not supported and is rejected at registration time.
 Spark Connect does not support this execution mode; both client SQL registration and
 server planning reject it. The decorator accepts a `DataType` or a DDL string; DDL
 strings are parsed lazily with the active Spark session. It exposes `func`, `returnType`,
@@ -98,8 +105,9 @@ and before that first call. The driver's Python major.minor
 version must match the embedded interpreter; registration checks this before
 unpickling. Python exceptions, including `SystemExit` during deserialization or
 execution, are converted into task failures. Tracebacks honor the query's
-`spark.sql.execution.pyspark.udf.hideTraceback.enabled` and
-`spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled` settings. Native process
+`spark.sql.execution.pyspark.udf.hideTraceback.enabled`,
+`spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled`, and
+`spark.sql.execution.pyspark.udf.tracebackWithLocals.enabled` settings. Native process
 termination remains outside this exception handling.
 
 ## Overview
@@ -217,7 +225,9 @@ df.select(weighted_sum(df["x"], df["y"])).show()
 ### Closure capture
 
 Free variables are captured by cloudpickle and frozen into the serialized UDF. The captured
-value is evaluated once at UDF definition time and shipped with the function to every executor:
+value is captured at first use and shipped with the function to every executor.
+Rebinding a global before the first call is reflected in the serialized function;
+subsequent calls reuse the cached serialization:
 
 ```python
 import pyarrow.compute as pc
@@ -281,11 +291,13 @@ Arrow UDFs under the same total CPU and memory budget.
 
 For local development (e.g. `SparkSession.builder.master("local[*]")`), install jep and the
 required Python packages into the virtual environment you run PySpark from. The venv's
-site-packages are already on `sys.path`, so no extra configuration is needed.
+site-packages must be supplied explicitly to the embedded interpreter. Use the
+PySpark distribution from the same Spark build; a separately pip-installed PySpark
+version may not contain this API or match the JVM classes.
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install "jep>=4.3.2" pyarrow cloudpickle pyspark
+.venv/bin/pip install "jep>=4.3.2" pyarrow
 source .venv/bin/activate
 ```
 
@@ -295,11 +307,11 @@ JAR must match the Arrow Java version in the Spark build. For example:
 
 ```bash
 JEP_DIR="$(python3 -c 'import importlib.util, pathlib; print(pathlib.Path(importlib.util.find_spec("jep").origin).parent)')"
-export PYTHONPATH="$(dirname "$JEP_DIR")${PYTHONPATH:+:$PYTHONPATH}"
 ARROW_C_DATA_JAR=/absolute/path/to/arrow-c-data.jar
 spark-submit --master 'local[1]' \
   --driver-class-path "$JEP_DIR/*:$ARROW_C_DATA_JAR" \
   --conf "spark.driver.extraLibraryPath=$JEP_DIR" \
+  --conf "spark.inprocess.python.sitePackages=$(dirname "$JEP_DIR")" \
   --conf spark.plugins=org.apache.spark.sql.execution.python.InProcessPythonPlugin \
   my_app.py
 ```
@@ -352,23 +364,25 @@ settings from the local example. A client-mode driver does not execute executor 
 
 #### Option A: Custom Docker image (recommended)
 
-Pre-installing jep into the executor image is the simplest approach — no `--archives` or
-`sitePackages` config required because jep is already on the system Python path.
+Build an executor image from the same Spark distribution used by the driver. The
+image must contain Python 3.11 or newer, a matching Python shared library, and a
+JDK compatible with that Spark build. Do not assume `apache/spark:latest` has these
+versions or includes JEP's build dependencies.
 
-**Dockerfile:**
+Install JEP and PyArrow into a known environment, such as `/opt/venv`, while
+building the image. Building JEP from its source distribution additionally requires
+a C compiler, the matching Python development headers, and a JDK (`JAVA_HOME` set).
+Then prepare the image with:
 
-```dockerfile
-FROM apache/spark:latest
-USER root
-RUN pip install "jep>=4.3.2" pyarrow cloudpickle my-custom-lib
-# Resolve the location at image build time without importing the embedded-only jep module.
-RUN ln -s "$(python3 -c 'import importlib.util, pathlib; print(pathlib.Path(importlib.util.find_spec("jep").origin).parent)')" /opt/jep
-# Supply the CDI JAR matching the Arrow version of this Spark image.
-COPY arrow-c-data.jar /opt/spark/jars/arrow-c-data.jar
-RUN cp /opt/jep/jep-*.jar /opt/spark/jars/
-ENV JAVA_TOOL_OPTIONS="-Djava.library.path=/opt/jep"
-USER spark
-```
+- the JEP JAR and matching Arrow CDI JAR in `/opt/spark/jars`;
+- JEP's native library directory on the JVM library path before startup;
+- `spark.inprocess.python.sitePackages` pointing to `/opt/venv`'s site-packages;
+- Spark's matching `python/lib/pyspark.zip` and Py4J zip in the Spark distribution.
+
+The plugin adds Spark's Python distribution paths itself, ahead of any PySpark
+package installed in the venv. The submission example below assumes Python 3.11
+and `/opt/venv/lib/python3.11/site-packages/jep` for the native library directory;
+adjust both paths to the Python version used to build JEP.
 
 **Submit:**
 
@@ -376,7 +390,9 @@ USER spark
 spark-submit \
   --master k8s://https://<k8s-api-server>:<port> \
   --deploy-mode cluster \
-  --conf spark.kubernetes.container.image=my-registry/spark-inprocess:latest \
+  --conf spark.kubernetes.container.image=my-registry/spark-inprocess:tested-build \
+  --conf spark.inprocess.python.sitePackages=/opt/venv/lib/python3.11/site-packages \
+  --conf spark.executor.extraLibraryPath=/opt/venv/lib/python3.11/site-packages/jep \
   --conf spark.plugins=org.apache.spark.sql.execution.python.InProcessPythonPlugin \
   --conf spark.executor.cores=1 \
   --conf spark.task.cpus=1 \
@@ -389,15 +405,16 @@ If you cannot build a custom image, Spark on Kubernetes can distribute archives 
 staging area (e.g. S3 or GCS). Set `spark.kubernetes.file.upload.path` to an object storage
 path that both the driver and executors can access. Provision JEP and Arrow CDI JARs
 in `/opt/inprocess/jars` on every executor using an image layer or a mounted volume
-before the JVM starts. Use the same JEP version as the archived venv. A classpath
-wildcard pointing inside the archive is insufficient here: the JVM expands wildcards
+before the JVM starts. The image must also have Python 3.11+ and the shared
+library matching the archived JEP build. Use the same JEP version as the archived
+venv. A classpath wildcard pointing inside the archive is insufficient here: the JVM expands wildcards
 before Spark downloads and extracts the archive.
 
 ```bash
 spark-submit \
   --master k8s://https://<k8s-api-server>:<port> \
   --deploy-mode cluster \
-  --conf spark.kubernetes.container.image=apache/spark:latest \
+  --conf spark.kubernetes.container.image=my-registry/spark-python311:tested-build \
   --conf spark.kubernetes.file.upload.path=s3a://my-bucket/spark-uploads \
   --archives myvenv.zip#myvenv \
   --conf 'spark.executor.extraClassPath=/opt/inprocess/jars/*' \
@@ -432,9 +449,12 @@ initialization error. Task calls and cleanup never create or restart an interpre
 |---|---|
 | **Type** | Comma-separated list of absolute or relative directory paths |
 
-Site-package directories to process inside the JEP interpreter at executor startup.
-Paths are made absolute and processed with `site.addsitedir`, including `.pth` files.
-Configured paths take precedence over system paths for modules not yet imported.
+Site-package directories supplied to JEP before interpreter construction, so the
+`jep` package must be directly importable from these directories. After construction,
+paths are made absolute and processed with `site.addsitedir`, including `.pth` files.
+Spark distribution paths take precedence over these directories; configured paths
+then take precedence over system paths for modules not yet imported. `.pth` files
+are processed too late to locate JEP itself during construction.
 
 **When you need this:** When you distribute a Python virtual environment via `--archives` and
 need packages from that venv to be importable inside UDFs. The problem is that the jep
@@ -458,8 +478,6 @@ spark.inprocess.python.sitePackages = ./venv/lib/python3.11/site-packages,/opt/c
 ```
 
 **When you do NOT need this:**
-- Local development: running PySpark from inside the venv already puts site-packages on
-  `sys.path` via `PYTHONPATH`.
 - Executors where all required packages are pre-installed on the system Python path.
 
 ---
@@ -508,7 +526,8 @@ Common supported Spark SQL input/output types include:
 
 Nested values must satisfy the declared nullability. Map keys cannot be null.
 Only types representable by Spark's Arrow conversion and JVM Arrow accessors are
-supported; this is not a guarantee for every Spark SQL type.
+supported; this is not a guarantee for every Spark SQL type. Unsupported return
+types are rejected on the driver before the function is serialized or tasks start.
 
 ---
 

@@ -833,7 +833,9 @@ Apart from these, the following properties are also available, and may be useful
     cogrouped-map, grouped-aggregate and window functions; Python UDTFs, both row and Arrow;
     <code>applyInPandasWithState</code> and <code>transformWithState</code>;
     <code>writeStream.foreach</code>; and Python data sources, including the workers that plan them
-    and read a streaming source.
+    and read a streaming source. In-process Python UDFs share the executor process and reject
+    this configuration; set their environment before executor startup instead, using
+    <code>spark.executorEnv.[EnvironmentVariableName]</code>.
     <br /><br />
     A running streaming query holds a configuration snapshot, because its batches run on a cloned
     session whose configurations are copied when the query starts. A change made while a query is

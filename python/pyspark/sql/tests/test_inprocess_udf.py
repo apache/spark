@@ -67,7 +67,10 @@ class InProcessUDFTests(ReusedSQLTestCase):
             .set("spark.task.cpus", "0.5")
             .set("spark.driver.extraClassPath", os.pathsep.join([str(cls.jep_jar), cls.cdi_jar]))
             .set("spark.driver.extraLibraryPath", str(cls.jep_dir))
-            .set("spark.inprocess.python.sitePackages", cls.site_packages)
+            .set(
+                "spark.inprocess.python.sitePackages",
+                ",".join([cls.site_packages, str(cls.jep_dir.parent)]),
+            )
             .set("spark.plugins", "org.apache.spark.sql.execution.python.InProcessPythonPlugin")
         )
 
@@ -95,12 +98,13 @@ class InProcessUDFTests(ReusedSQLTestCase):
             f.write("MAGIC = 99\n")
         with open(os.path.join(cls.site_packages, "helper.pth"), "w") as f:
             f.write("extra\n")
+        shadow = os.path.join(cls.site_packages, "pyspark")
+        os.mkdir(shadow)
+        with open(os.path.join(shadow, "__init__.py"), "w") as f:
+            f.write("raise RuntimeError('site-packages must not shadow Spark PySpark')\n")
         try:
-            # Embedded CPython needs the selected environment before JEP initializes.
-            python_path = os.pathsep.join(
-                [system_dir, str(cls.jep_dir.parent), os.environ.get("PYTHONPATH", "")]
-            )
-            with patch.dict(os.environ, {"PYTHONPATH": python_path}):
+            # No JEP or PySpark on PYTHONPATH: bootstrap must supply both before use.
+            with patch.dict(os.environ, {"PYTHONPATH": system_dir}):
                 super().setUpClass()
         except Exception:
             shutil.rmtree(cls.site_packages)
@@ -112,6 +116,77 @@ class InProcessUDFTests(ReusedSQLTestCase):
             super().tearDownClass()
         finally:
             shutil.rmtree(cls.site_packages)
+
+    def test_driver_defined_udt_return_type(self):
+        import sys
+
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.types import LongType, UserDefinedType
+
+        class DriverUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return LongType()
+
+            @classmethod
+            def module(cls):
+                return "__main__"
+
+            def serialize(self, value):
+                return value
+
+            def deserialize(self, value):
+                return value
+
+        DriverUDT.__module__ = "__main__"
+        with patch.object(sys.modules["__main__"], "DriverUDT", DriverUDT, create=True):
+            identity = inprocess_udf(DriverUDT())(lambda x: x)
+            result = self.spark.range(3).select(identity("id"))
+            self.assertEqual([r[0] for r in result.collect()], [0, 1, 2])
+
+    def test_unsupported_ddl_return_type_fails_on_driver(self):
+        from pyspark.errors import PySparkNotImplementedError
+        from pyspark.inprocess import inprocess_udf
+
+        wrapper = inprocess_udf("interval year to month")(lambda x: x)
+        with self.assertRaises(PySparkNotImplementedError):
+            wrapper("id")
+        self.assertIsNone(wrapper._serialized)
+
+    def test_worker_environment_is_rejected(self):
+        from pyspark.inprocess import inprocess_udf
+
+        identity = inprocess_udf("long")(lambda x: x)
+        column = identity("id")
+        with self.sql_conf({"spark.pythonWorkerEnv.INPROCESS_TEST_VALUE": "value"}):
+            with self.assertRaisesRegex(Exception, "do not support spark.pythonWorkerEnv"):
+                identity("id")
+            with self.assertRaisesRegex(Exception, "do not support spark.pythonWorkerEnv"):
+                self.spark.range(1).select(column).collect()
+
+    def test_named_argument_resolver(self):
+        from pyspark.inprocess import inprocess_udf
+
+        identity = inprocess_udf("long")(lambda x, **kw: x)
+        with self.sql_conf({"spark.sql.caseSensitive": "false"}):
+            with self.assertRaisesRegex(Exception, "DOUBLE_NAMED_ARGUMENT_REFERENCE"):
+                identity(x="id", X="id")
+        with self.sql_conf({"spark.sql.caseSensitive": "true"}):
+            result = self.spark.range(2).select(identity(x="id", X="id"))
+            self.assertEqual([r[0] for r in result.collect()], [0, 1])
+
+    def test_spark_python_distribution_precedes_site_packages(self):
+        import pyarrow as pa
+
+        from pyspark.inprocess import inprocess_udf
+
+        def location(x):
+            import pyspark
+
+            return pa.array([pyspark.__file__] * len(x))
+
+        path = self.spark.range(1).select(inprocess_udf("string")(location)("id")).first()[0]
+        self.assertIn("pyspark.zip/pyspark/__init__.py", path)
 
     def test_declared_struct_metadata(self):
         from pyspark.inprocess import inprocess_udf
@@ -179,12 +254,26 @@ class InProcessUDFTests(ReusedSQLTestCase):
 
         # User frames must be outside the pyspark package for the worker's simplifier.
         namespace = {}
-        exec("def probe(x):\n    raise ValueError('traceback policy probe')", namespace)
+        exec(
+            "def probe(x):\n    probe_local = 8675309\n"
+            "    raise ValueError('traceback policy probe')",
+            namespace,
+        )
         traceback_probe = inprocess_udf("long")(namespace["probe"])
 
-        for hide, simplified in [(True, False), (False, True), (False, False), (True, True)]:
+        for hide, simplified, locals_enabled in [
+            (True, False, False),
+            (False, True, False),
+            (False, False, False),
+            (True, True, True),
+            (False, True, True),
+            (False, False, True),
+        ]:
             with self.sql_conf(
                 {
+                    "spark.sql.execution.pyspark.udf.tracebackWithLocals.enabled": str(
+                        locals_enabled
+                    ).lower(),
                     "spark.sql.execution.pyspark.udf.hideTraceback.enabled": str(hide).lower(),
                     "spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled": str(
                         simplified
@@ -196,6 +285,7 @@ class InProcessUDFTests(ReusedSQLTestCase):
                 message = str(error.exception)
                 self.assertIn("ValueError: traceback policy probe", message)
                 self.assertEqual('File "' in message, not hide)
+                self.assertEqual("probe_local = 8675309" in message, locals_enabled and not hide)
                 if not hide:
                     self.assertEqual("inprocess/runtime.py" in message, not simplified)
 
@@ -1085,12 +1175,12 @@ class InProcessUDFTests(ReusedSQLTestCase):
                     query = df.select(subtract(y="id", x="other"))
                     self.assertEqual([r[0] for r in query.collect()], [1] * 8)
                     plan = query._jdf.queryExecution().executedPlan().toString()
-                    self.assertIn("ArrowEvalPython", plan)
+                    self.assertIn("InProcessArrowEvalPython", plan)
                     nodes = [query._jdf.queryExecution().executedPlan()]
                     metrics = None
                     while nodes:
                         node = nodes.pop()
-                        if node.nodeName() == "ArrowEvalPython":
+                        if node.nodeName() == "InProcessArrowEvalPython":
                             # A dual-mode cache scan can execute rows directly without a transition.
                             self.assertTrue(node.child().supportsColumnar())
                             self.assertFalse(node.supportsColumnar())

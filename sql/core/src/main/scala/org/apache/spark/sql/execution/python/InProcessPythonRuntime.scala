@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.execution.python
 
+import java.io.File
 import java.nio.ByteBuffer
-import java.util.concurrent.{Callable, ExecutionException, TimeoutException, TimeUnit}
+import java.util.concurrent.{Callable, ExecutionException, Executors, ThreadFactory, TimeoutException, TimeUnit}
 
 import scala.jdk.CollectionConverters._
 
-import jep.{JepException, MainInterpreter, PyConfig, SharedInterpreter}
+import jep.{JepConfig, JepException, MainInterpreter, PyConfig, SharedInterpreter}
 
 import org.apache.spark.{TaskContext, TaskKilledException}
-import org.apache.spark.api.python.PythonException
+import org.apache.spark.api.python.{PythonException, PythonUtils}
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.Utils
 
 /** Owns one interpreter generation per executor plugin lifecycle. */
 private[python] object InProcessPythonRuntime extends Logging {
@@ -38,11 +39,13 @@ private[python] object InProcessPythonRuntime extends Logging {
 
   private[python] class LifecycleException(message: String) extends IllegalStateException(message)
 
-  private def configureInterpreter(): Unit = {
+  private def configureInterpreter(sitePackages: Seq[String]): Unit = {
     if (!configured) {
       // Like Python workers, use a stable default hash seed on every executor. This must
       // happen before JEP creates its process-wide main interpreter, including on restarts.
       MainInterpreter.setInitParams(new PyConfig().setHashSeed(0).setUseHashSeed(true))
+      // JEP imports its Python package during construction, before our bootstrap runs.
+      SharedInterpreter.setConfig(new JepConfig().addIncludePaths(sitePackages: _*))
       configured = true
     }
   }
@@ -58,7 +61,7 @@ private[python] object InProcessPythonRuntime extends Logging {
     if (active != null && !active.isTerminated) {
       active.requireCompatible(sitePackages)
     } else {
-      configureInterpreter()
+      configureInterpreter(sitePackages)
       val candidate = new InterpreterSession(sitePackages)
       try {
         candidate.initialize()
@@ -92,7 +95,15 @@ private[python] object InProcessPythonRuntime extends Logging {
    * Lifecycle operations only hold the monitor while enqueueing work, never while running Python.
    */
   private[python] class InterpreterSession(val sitePackages: Seq[String] = Seq.empty) {
-    private val executor = ThreadUtils.newDaemonSingleThreadExecutor("inprocess-python")
+    // CPython native calls need more stack than the usual JVM thread default. This is a
+    // platform-dependent size request, not protection against arbitrary native crashes.
+    private val executor = Executors.newSingleThreadExecutor(new ThreadFactory {
+      override def newThread(runnable: Runnable): Thread = {
+        val thread = new Thread(null, runnable, "inprocess-python", 8L * 1024 * 1024)
+        thread.setDaemon(true)
+        thread
+      }
+    })
     @volatile private var running = true
     // Accessed only on the owning thread.
     private var interp: SharedInterpreter = _
@@ -168,6 +179,8 @@ private[python] object InProcessPythonRuntime extends Logging {
       val candidate = new SharedInterpreter()
       try {
         candidate.set("_site_packages", sitePackages.asJava)
+        val sparkPaths = PythonUtils.sparkPythonPath.split(File.pathSeparator).filter(_.nonEmpty)
+        candidate.set("_spark_paths", sparkPaths.toSeq.asJava)
         candidate.exec(bootstrapScript(
           """import os, site, sys
             |_configured = [os.path.abspath(p) for p in _site_packages]
@@ -175,9 +188,9 @@ private[python] object InProcessPythonRuntime extends Logging {
             |for _path in _configured:
             |    site.addsitedir(_path)
             |_added = [p for p in sys.path if p not in _before and p not in _configured]
-            |_preferred = list(dict.fromkeys(_configured + _added))
+            |_preferred = list(dict.fromkeys(list(_spark_paths) + _configured + _added))
             |sys.path[:] = _preferred + [p for p in sys.path if p not in _preferred]
-            |del _site_packages, _configured, _before, _added, _preferred
+            |del _site_packages, _spark_paths, _configured, _before, _added, _preferred
             |""".stripMargin))
         candidate.exec(bootstrapScript("from pyspark.inprocess.runtime import " +
           "_inprocess_invoke, _inprocess_register, _inprocess_release, _udfs"))
@@ -231,21 +244,22 @@ private[python] object InProcessPythonRuntime extends Logging {
     def register(
         handle: String,
         serializedUdf: Array[Byte],
-        returnTypeJson: String,
         timeZoneId: String,
         pythonVersion: String,
         largeVarTypes: Boolean,
         hideTraceback: Boolean,
-        simplifiedTraceback: Boolean): Unit = {
+        simplifiedTraceback: Boolean,
+        tracebackWithLocals: Boolean): Unit = {
       // Bulk-copy on the task thread. JEP's PyJBuffer supports memoryview without per-byte JNI.
       val command = ByteBuffer.allocateDirect(serializedUdf.length)
       command.put(serializedUdf).flip()
       onInterpreterThread {
         withPythonException {
-          interp.invoke("_inprocess_register", handle, command, returnTypeJson, timeZoneId,
+          interp.invoke("_inprocess_register", handle, command, timeZoneId,
             pythonVersion, java.lang.Boolean.valueOf(largeVarTypes),
             java.lang.Boolean.valueOf(hideTraceback),
-            java.lang.Boolean.valueOf(simplifiedTraceback))
+            java.lang.Boolean.valueOf(simplifiedTraceback),
+            java.lang.Boolean.valueOf(tracebackWithLocals))
         }
       }
     }

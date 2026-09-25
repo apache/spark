@@ -27,6 +27,7 @@ from pyspark.testing.connectutils import (
     connect_requirement_message,
     should_test_connect,
 )
+from pyspark.util import is_remote_only
 
 if should_test_connect:
     import pyspark.sql.connect.proto as proto
@@ -76,6 +77,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
 
+    @unittest.skipIf(is_remote_only(), "Requires the classic-only in-process UDF API")
     def test_inprocess_udf_registration_is_rejected(self):
         from pyspark.errors import PySparkTypeError
         from pyspark.inprocess import inprocess_udf
