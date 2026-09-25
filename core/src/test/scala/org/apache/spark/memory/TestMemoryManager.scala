@@ -18,7 +18,6 @@
 package org.apache.spark.memory
 
 import java.util.concurrent.atomic.AtomicReference
-
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
