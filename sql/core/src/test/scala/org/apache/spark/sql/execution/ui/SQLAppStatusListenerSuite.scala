@@ -570,7 +570,6 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 
   test("driver side SQL metrics") {
     val statusStore = spark.sharedState.statusStore
-    val oldCount = statusStore.executionsList().size
 
     val expectedAccumValue = 12345L
     val expectedAccumValue2 = 54321L
@@ -580,22 +579,18 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       override lazy val executedPlan = physicalPlan
     }
 
-    SQLExecution.withNewExecutionId(dummyQueryExecution) {
+    val execId = SQLExecution.withNewExecutionId(dummyQueryExecution) {
       physicalPlan.execute().collect()
+      spark.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY).toLong
     }
 
-    // Wait until the new execution is started and being tracked.
-    while (statusStore.executionsCount() < oldCount) {
-      Thread.sleep(100)
+    // The listener processes events asynchronously, so wait until it has finished computing
+    // the metrics for this execution. Looking up the latest execution in the store instead is
+    // racy: it can still be one left over from a previous test.
+    eventually(timeout(10.seconds), interval(10.milliseconds)) {
+      assert(statusStore.execution(execId).exists(_.metricValues != null))
     }
 
-    // Wait for listener to finish computing the metrics for the execution.
-    while (statusStore.executionsList().isEmpty ||
-        statusStore.executionsList().last.metricValues == null) {
-      Thread.sleep(100)
-    }
-
-    val execId = statusStore.executionsList().last.executionId
     val metrics = statusStore.executionMetrics(execId)
     val driverMetric = physicalPlan.metrics("dummy")
     val driverMetric2 = physicalPlan.metrics("dummy2")
