@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.execution.externalUDF
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.udf.worker.UDFWorkerSpecification
-import org.apache.spark.udf.worker.core.{WorkerSecurityScope, WorkerSession}
+import org.apache.spark.udf.worker.{ExecutionError, UDFWorkerSpecification}
+import org.apache.spark.udf.worker.core.{Termination, WorkerSecurityScope, WorkerSession}
 
 /**
  * :: Experimental ::
@@ -84,7 +84,7 @@ trait ExternalUDFExec extends UnaryExecNode {
     //    sent Finish (input exhausted) and the data drained. close() then
     //    typically returns the Finished termination -- but a failure during the
     //    finish/cleanup phase (raised after the data drained, so it reached no one
-    //    through the iterator) is surfaced here too, as Failed / TransportFailed.
+    //    through the iterator) is surfaced from the completion listener below.
     //  - Task failed, was killed, or stopped before draining (e.g. a downstream
     //    LIMIT or exception): the stream has not finished, so close() sends a
     //    Cancel, the worker runs its cleanup, and its CancelResponse is returned
@@ -96,13 +96,58 @@ trait ExternalUDFExec extends UnaryExecNode {
     //    raising it (a thread interrupt may still propagate); the underlying
     //    failure has already surfaced through the result iterator.
     //
-    // The returned Termination (per-execution metrics, finish/cancel callback
-    // result) is not consumed yet -- TODO [SPARK-57324] surface it once metrics
-    // wiring lands.
-    taskContext.addTaskCompletionListener[Unit] { _ =>
-      session.close()
-    }
+    registerWorkerSessionCompletionListener(taskContext, session)
 
     f(session)
+  }
+
+  /** Registers the single session finalizer and surfaces close-only worker failures. */
+  protected final def registerWorkerSessionCompletionListener(
+      taskContext: TaskContext,
+      session: WorkerSession): Unit = {
+    taskContext.addTaskCompletionListener[Unit] { context =>
+      val termination = session.close()
+      // Preserve an existing task failure as the primary error. A data-phase worker failure is
+      // already surfaced by the result iterator; only a close-only failure needs to fail an
+      // otherwise successful task here. SPARK-57324 tracks consuming the remaining termination
+      // data, including metrics and callback payloads.
+      if (context.getTaskFailure.isEmpty) {
+        throwOnFailedTermination(termination)
+      }
+    }
+  }
+
+  private def throwOnFailedTermination(termination: Termination): Unit = termination match {
+    case Termination.Finished(response) if response.hasError =>
+      throw executionError("finish callback", response.getError)
+    case Termination.Cancelled(response) if response.hasError =>
+      throw executionError("cancel callback", response.getError)
+    case Termination.Failed(error) =>
+      throw executionError("session finalization", error)
+    case Termination.TransportFailed(cause) =>
+      throw SparkException.internalError(
+        "External UDF worker transport failed during session finalization.", cause)
+    case Termination.Interrupted(cause) =>
+      throw SparkException.internalError(
+        "External UDF worker session finalization was interrupted.", cause)
+    case _ =>
+  }
+
+  private def executionError(phase: String, error: ExecutionError): SparkException = {
+    SparkException.internalError(
+      s"External UDF worker $phase failed: ${describeExecutionError(error)}")
+  }
+
+  private def describeExecutionError(error: ExecutionError): String = error.getKindCase match {
+    case ExecutionError.KindCase.USER =>
+      val userError = error.getUser
+      val errorClass = if (userError.hasErrorClass) s"[${userError.getErrorClass}] " else ""
+      s"$errorClass${userError.getMessage}"
+    case ExecutionError.KindCase.WORKER =>
+      s"WorkerError: ${error.getWorker.getMessage}"
+    case ExecutionError.KindCase.PROTOCOL =>
+      s"ProtocolError: ${error.getProtocol.getMessage}"
+    case ExecutionError.KindCase.KIND_NOT_SET =>
+      "ExecutionError without kind"
   }
 }

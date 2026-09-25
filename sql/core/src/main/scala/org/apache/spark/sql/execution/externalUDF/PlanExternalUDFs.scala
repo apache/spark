@@ -235,6 +235,11 @@ private[sql] object PlanExternalUDFs
     collectEvaluableUDF(plan) match {
       case None => plan
       case Some(udf) =>
+        // TODO(SPARK-59745): Preserve named argument metadata in unified Python UDF execution.
+        if (udf.children.exists(_.isInstanceOf[NamedArgumentExpression])) {
+          throw QueryCompilationErrors.namedArgumentsNotSupported(
+            udf.name.getOrElse(udf.prettyName))
+        }
         val childIndex = plan.children.indexWhere { child =>
           udf.references.subsetOf(child.outputSet)
         }

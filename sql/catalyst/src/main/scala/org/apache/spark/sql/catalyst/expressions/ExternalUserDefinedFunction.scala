@@ -47,7 +47,8 @@ import org.apache.spark.udf.worker.UDFWorkerSpecification
  * @param children         Input argument expressions.
  * @param inputTypes       Optional declared input types for validation.
  * @param udfDeterministic Whether this UDF is deterministic.
- * @param udfNullable      Whether this UDF can return null.
+ * @param udfNullable      Declared return nullability. Scalar external UDF planning currently
+ *                         retains this metadata but treats every result as nullable.
  * @param resultId         Unique expression ID for this invocation.
  */
 @Experimental

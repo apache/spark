@@ -40,7 +40,7 @@ import org.apache.spark.udf.worker.{Init, UdfPayload, UDFWorkerDataFormat, UDFWo
  * until SPARK-59364 replaces it with language-agnostic initialization.
  */
 private[externalUDF] object PythonInitAdapter {
-  private val PYSPARK_UDF_PAYLOAD_FORMAT = "experimental"
+  private val PYSPARK_UDF_PAYLOAD_FORMAT = "pyspark-udf-experimental"
   private val INPUT_TYPE_CONF = "input_type"
 
   private implicit val jsonFormats: Formats = Serialization.formats(NoTypeHints)

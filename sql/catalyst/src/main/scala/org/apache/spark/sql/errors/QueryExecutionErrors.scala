@@ -655,6 +655,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("methodName" -> methodName))
   }
 
+  def externalUDFInBarrierTaskUnsupportedError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.EXTERNAL_UDF_IN_BARRIER_TASK",
+      messageParameters = Map.empty)
+  }
+
   def binaryArithmeticCauseOverflowError(
       eval1: Short,
       symbol: String,

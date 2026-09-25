@@ -101,6 +101,7 @@ private[sql] object ArrowConverters extends Logging {
       SQLConf.get.arrowCompressionCodec, SQLConf.get.arrowZstdCompressionLevel)
     protected val unloader = new VectorUnloader(root, true, codec, true)
     protected val arrowWriter = ArrowWriter.create(root)
+    protected def maxBytesPerBatch: Long = -1L
 
     Option(context).foreach {_.addTaskCompletionListener[Unit] { _ =>
       close()
@@ -116,15 +117,21 @@ private[sql] object ArrowConverters extends Logging {
 
       Utils.tryWithSafeFinally {
         var rowCount = 0L
-        while (rowIter.hasNext && (maxRecordsPerBatch <= 0 || rowCount < maxRecordsPerBatch)) {
+        while (rowIter.hasNext &&
+            (maxRecordsPerBatch <= 0 || rowCount < maxRecordsPerBatch) &&
+            (maxBytesPerBatch <= 0 || rowCount == 0 ||
+              arrowWriter.sizeInBytes() < maxBytesPerBatch)) {
           val row = rowIter.next()
           arrowWriter.write(row)
           rowCount += 1
         }
         arrowWriter.finish()
         val batch = unloader.getRecordBatch()
-        bytes = serializeBatch(batch)
-        batch.close()
+        try {
+          bytes = serializeBatch(batch)
+        } finally {
+          batch.close()
+        }
       } {
         arrowWriter.reset()
       }
@@ -142,7 +149,7 @@ private[sql] object ArrowConverters extends Logging {
       rows: Iterator[InternalRow],
       schema: StructType,
       maxRecordsPerBatch: Long,
-      maxBytesPerBatch: Int,
+      override protected val maxBytesPerBatch: Long,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean,
@@ -154,34 +161,7 @@ private[sql] object ArrowConverters extends Logging {
       timeZoneId,
       errorOnDuplicatedFieldNames,
       largeVarTypes,
-      context) {
-
-    override def next(): Array[Byte] = {
-      var bytes: Array[Byte] = null
-
-      Utils.tryWithSafeFinally {
-        var rowCount = 0L
-        while (rows.hasNext &&
-            (maxRecordsPerBatch <= 0 || rowCount < maxRecordsPerBatch) &&
-            (maxBytesPerBatch <= 0 || rowCount == 0 ||
-              arrowWriter.sizeInBytes() < maxBytesPerBatch)) {
-          arrowWriter.write(rows.next())
-          rowCount += 1
-        }
-        arrowWriter.finish()
-        val batch = unloader.getRecordBatch()
-        try {
-          bytes = serializeBatch(batch)
-        } finally {
-          batch.close()
-        }
-      } {
-        arrowWriter.reset()
-      }
-
-      bytes
-    }
-  }
+      context)
 
   private[sql] class ArrowBatchWithSchemaIterator(
       rowIter: Iterator[InternalRow],
@@ -286,7 +266,7 @@ private[sql] object ArrowConverters extends Logging {
       rowIter: Iterator[InternalRow],
       schema: StructType,
       maxRecordsPerBatch: Long,
-      maxBytesPerBatch: Int,
+      maxBytesPerBatch: Long,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean,

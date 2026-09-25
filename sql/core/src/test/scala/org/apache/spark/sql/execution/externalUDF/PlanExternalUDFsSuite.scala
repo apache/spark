@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, And, ArrayTransform, Attribute,
   AttributeReference, AttributeSet, CreateArray, EqualTo, Expression,
   ExternalUserDefinedFunction, GreaterThan, IsNull, Lag, LambdaFunction, Literal,
-  NamedLambdaVariable, UnspecifiedFrame, WindowExpression, WindowSpecDefinition}
+  NamedArgumentExpression, NamedLambdaVariable, UnspecifiedFrame, WindowExpression,
+  WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, BinaryNode, ExecuteExternalUDF,
@@ -246,6 +247,21 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
 
     val optimized = optimize(extracted)
     assert(optimized.exists(_.expressions.exists(_.exists(_.isInstanceOf[IsNull]))))
+  }
+
+  test("named arguments are rejected during logical planning") {
+    val function = udf(
+      "named-arguments",
+      workerSpec("named-arguments"),
+      Seq(NamedArgumentExpression("value", input)))
+
+    val error = intercept[AnalysisException] {
+      extract(function)
+    }
+    checkError(
+      exception = error,
+      condition = "NAMED_PARAMETERS_NOT_SUPPORTED",
+      parameters = Map("functionName" -> "`named-arguments`"))
   }
 
   test("UDFs with different worker specifications use separate nodes") {

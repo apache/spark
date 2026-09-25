@@ -28,15 +28,15 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.MessageSerializer
+import org.apache.arrow.vector.util.ValueVectorUtility
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{BarrierTaskContext, SparkException, TaskContext}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression,
-  ExternalUserDefinedFunction, JoinedRow, MutableProjection, NamedArgumentExpression,
-  UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+  ExternalUserDefinedFunction, JoinedRow, MutableProjection, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.externalUDF.ExecuteExternalUDFExec._
@@ -54,8 +54,15 @@ import org.apache.spark.udf.worker.{DataRequest, DataResponse, UDFWorkerSpecific
  * It sends projected Arrow batches through an external-UDF dispatcher session instead of the
  * legacy PySpark runner.
  *
+ * Each response must contain one Arrow record batch matching the output schema sent in `Init`.
+ * Record batches do not carry a schema, so the engine validates their physical buffer layout but
+ * cannot distinguish logical types with identical Arrow layouts. Arrow record-batch compression
+ * is self-describing, so responses may use any codec available from Arrow's compression factory.
+ *
  * The dispatcher is intentionally not configured until a worker implementation is added, so
- * worker creation currently fails before any process is started.
+ * worker creation currently fails before any process is started. Before enabling a production
+ * dispatcher, its transport must also add application-level flow control so a slow worker cannot
+ * buffer an entire partition in the request stream and [[HybridRowQueue]].
  *
  * @param udf UDF expression evaluated by the worker session.
  * @param resultAttr Output attribute for the UDF expression.
@@ -70,19 +77,11 @@ case class ExecuteExternalUDFExec(
 
   override def workerSpec: UDFWorkerSpecification = udf.workerSpec
 
-  // External worker outputs are always nullable.
-  assert(resultAttr.nullable, "The external UDF result attribute must be nullable")
-
   override def output: Seq[Attribute] = child.output :+ resultAttr
 
   override def producedAttributes: AttributeSet = AttributeSet(Seq(resultAttr))
 
   override protected def doExecute(): RDD[InternalRow] = {
-    // TODO(SPARK-59745): Preserve named argument metadata in unified Python UDF execution.
-    if (udf.children.exists(_.isInstanceOf[NamedArgumentExpression])) {
-      throw QueryCompilationErrors.namedArgumentsNotSupported(
-        udf.name.getOrElse(udf.prettyName))
-    }
     val argumentExpressions: Seq[Expression] = udf.children
     val inputSchema = StructType(
       argumentExpressions.zipWithIndex.map { case (expression, index) =>
@@ -92,11 +91,12 @@ case class ExecuteExternalUDFExec(
     val timeZoneId = conf.sessionLocalTimeZone
     val largeVarTypes = conf.arrowUseLargeVarTypes
     val maxRecordsPerBatch = conf.arrowMaxRecordsPerBatch
-    val maxBytesPerBatch = conf.arrowMaxBytesPerBatch.toInt
+    val maxBytesPerBatch = conf.arrowMaxBytesPerBatch
     val preparedInit = prepareInit(inputSchema, outputSchema, timeZoneId, largeVarTypes)
 
     child.execute().mapPartitionsInternal { rows =>
       val context = TaskContext.get()
+      ensureTaskContextSupported(context)
       val projection = MutableProjection.create(argumentExpressions, child.output)
       projection.initialize(context.partitionId())
 
@@ -188,6 +188,12 @@ case class ExecuteExternalUDFExec(
 }
 
 object ExecuteExternalUDFExec {
+  private[externalUDF] def ensureTaskContextSupported(context: TaskContext): Unit = {
+    if (context.isInstanceOf[BarrierTaskContext]) {
+      throw QueryExecutionErrors.externalUDFInBarrierTaskUnsupportedError()
+    }
+  }
+
   private def serializeArrowSchema(
       schema: StructType,
       timeZoneId: String,
@@ -250,6 +256,7 @@ object ExecuteExternalUDFExec {
               activeAllocator)
             try {
               new VectorLoader(activeRoot).load(batch)
+              ValueVectorUtility.validate(activeRoot)
             } finally {
               batch.close()
             }

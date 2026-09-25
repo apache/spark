@@ -9069,6 +9069,11 @@
           "External UDF expressions are disabled. Set <config> to true to enable planning."
         ]
       },
+      "EXTERNAL_UDF_IN_BARRIER_TASK" : {
+        "message" : [
+          "External UDF execution in a barrier task without callback transport."
+        ]
+      },
       "EXTERNAL_UDF_IN_ON_CLAUSE" : {
         "message" : [
           "External UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
