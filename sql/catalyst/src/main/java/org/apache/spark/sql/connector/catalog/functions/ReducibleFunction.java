@@ -81,12 +81,12 @@ public interface ReducibleFunction<I, O> {
    * <p>
    * Returning {@code null} means "not reducible for these parameters" and is authoritative:
    * Spark consults no other overload. Dispatch order: Spark tries this generalized overload
-   * first; only if it is not implemented (throws {@link UnsupportedOperationException}) and each
-   * side has a single non-null integer parameter does Spark fall back to the deprecated
-   * {@code reducer(int, ReducibleFunction, int)} overload. If every eligible overload throws
-   * {@link UnsupportedOperationException}, Spark logs an "implements no reducer" warning; any
-   * other exception is logged and the pair is treated as not reducible (the join falls back to a
-   * shuffle).
+   * first; only if it is not implemented (throws {@link UnsupportedOperationException}), both
+   * sides are the same function, and each side has a single non-null integer parameter does Spark
+   * fall back to the deprecated {@code reducer(int, ReducibleFunction, int)} overload. If every
+   * eligible overload throws {@link UnsupportedOperationException}, Spark logs an "implements no
+   * reducer" warning; any other exception is logged and the pair is treated as not reducible (the
+   * join falls back to a shuffle).
    * <p>
    * Examples:
    * <ul>
