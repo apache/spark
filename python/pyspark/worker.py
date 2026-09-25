@@ -4383,6 +4383,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         # Initialization
         init_message = message_receiver.get_init_message()
         init_info = WorkerInitInfo.from_stream(init_message)
+        del init_message
 
         start_faulthandler_periodic_traceback()
         check_python_version(init_info.python_version)
@@ -4426,7 +4427,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             deserializer = serializer
 
         split_index = init_info.split_index
-        del init_info, init_message
+        del init_info
 
         init_time = time.time()
 
