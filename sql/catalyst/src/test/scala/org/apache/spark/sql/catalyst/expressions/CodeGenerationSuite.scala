@@ -21,7 +21,7 @@ import java.sql.Timestamp
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, TaskContext}
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.LA
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Additional tests for code generation.
@@ -580,16 +580,9 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(lines.nonEmpty && lines.forall(_.getLevel == Level.INFO))
   }
 
-  private def hotSpotSkipsHugeMethods: Boolean = try {
-    java.lang.management.ManagementFactory
-      .getPlatformMXBean(classOf[com.sun.management.HotSpotDiagnosticMXBean])
-      .getVMOption("DontCompileHugeMethods").getValue.toBoolean
-  } catch {
-    case scala.util.control.NonFatal(_) => false
-  }
-
   test("SPARK-59774: a huge whole-stage method warns once, with the remedy, where it applies") {
-    assume(hotSpotSkipsHugeMethods, "the JVM compiles huge methods, so nothing is interpreted")
+    assume(Utils.getVMOptionValue("DontCompileHugeMethods").contains("true"),
+      "the JVM compiles huge methods, so nothing is interpreted")
     val stage = "org.apache.spark.sql.catalyst.expressions.GeneratedClass$" +
       "GeneratedIteratorForCodegenStage1"
     def logged(className: String, method: String, size: Int): Seq[(Level, String)] = {
@@ -612,8 +605,15 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Outside whole-stage codegen the setting does not apply: INFO.
     assert(logged("org.apache.spark.sql.catalyst.expressions.GeneratedClass$" +
       "SpecificUnsafeProjection", "apply", 9513).map(_._1) == Seq(Level.INFO))
-    // The per-row method of a stage that keeps whole-stage codegen: a warning naming the
-    // setting and the value, the first time in the JVM...
+    // An executor compiles the stage after the driver has reported it: INFO.
+    TaskContext.setTaskContext(TaskContext.empty())
+    try {
+      assert(logged(stage, "processNext", 9513).map(_._1) == Seq(Level.INFO))
+    } finally {
+      TaskContext.unset()
+    }
+    // The per-row method of a stage that keeps whole-stage codegen, on the driver: a warning
+    // naming the setting and the value, the first time...
     val warned = logged(stage, "processNext", 9513)
     assert(warned.size == 1 && warned.head._1 == Level.WARN)
     assert(warned.head._2.contains(s"${SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key} to " +
