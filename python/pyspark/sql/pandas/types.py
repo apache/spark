@@ -253,10 +253,17 @@ def to_arrow_type(
         )
     elif isinstance(dt, VariantType):
         fields = [
-            pa.field("value", pa.binary(), nullable=False),
+            pa.field(
+                "value", pa.large_binary() if prefers_large_types else pa.binary(), nullable=False
+            ),
             # The metadata field is tagged so we can identify that the arrow struct actually
             # represents a variant.
-            pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
+            pa.field(
+                "metadata",
+                pa.large_binary() if prefers_large_types else pa.binary(),
+                nullable=False,
+                metadata={b"variant": b"true"},
+            ),
         ]
         arrow_type = pa.struct(fields)
     elif isinstance(dt, GeometryType):
@@ -264,7 +271,7 @@ def to_arrow_type(
             pa.field("srid", pa.int32(), nullable=False),
             pa.field(
                 "wkb",
-                pa.binary(),
+                pa.large_binary() if prefers_large_types else pa.binary(),
                 nullable=False,
                 metadata={b"geometry": b"true", b"srid": str(dt.srid)},
             ),
@@ -275,7 +282,7 @@ def to_arrow_type(
             pa.field("srid", pa.int32(), nullable=False),
             pa.field(
                 "wkb",
-                pa.binary(),
+                pa.large_binary() if prefers_large_types else pa.binary(),
                 nullable=False,
                 metadata={b"geography": b"true", b"srid": str(dt.srid)},
             ),

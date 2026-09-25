@@ -58,6 +58,9 @@ private[python] class InProcessPythonExecutorPlugin extends ExecutorPlugin with 
       InProcessPythonRuntime.initialize(sitePackages)
       logInfo("In-process Python runtime initialized successfully.")
     } catch {
+      case e: InProcessPythonRuntime.LifecycleException =>
+        logError("Cannot start the in-process Python runtime: " + e.getMessage, e)
+        throw e
       case e if NonFatal(e) || e.isInstanceOf[LinkageError] =>
         logError(
           "Failed to initialize in-process Python runtime. " +

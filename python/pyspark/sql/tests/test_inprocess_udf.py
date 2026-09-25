@@ -113,6 +113,112 @@ class InProcessUDFTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(cls.site_packages)
 
+    def test_declared_struct_metadata(self):
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.types import LongType, StructField, StructType
+
+        declared = StructType([StructField("x", LongType(), metadata={"comment": "c"})])
+        identity = inprocess_udf(declared)(lambda x: x)
+        df = self.spark.sql("SELECT named_struct('x', 7L) AS value")
+        result = df.select(identity("value").alias("value"))
+        self.assertEqual(result.collect(), df.collect())
+        self.assertEqual(result.schema[0].dataType, declared)
+
+    def test_temporal_precision_metadata(self):
+        from pyspark.inprocess import inprocess_udf
+
+        for declared in ["time(3)", "timestamp_ntz(7)", "timestamp_ltz(8)"]:
+            literal = "12:34:56.123" if declared.startswith("time(") else "2024-01-02 12:34:56.123"
+            for nested in [False, True]:
+                with self.subTest(declared=declared, nested=nested):
+                    df = self.spark.sql(f"SELECT CAST('{literal}' AS {declared}) AS value")
+                    if nested:
+                        df = df.selectExpr("named_struct('t', value) AS value")
+                    identity = inprocess_udf(df.schema[0].dataType)(lambda x: x)
+                    result = df.select(identity("value").alias("value"))
+                    self.assertEqual(result.schema[0].dataType, df.schema[0].dataType)
+                    self.assertEqual(
+                        result.selectExpr("CAST(value AS STRING)").collect(),
+                        df.selectExpr("CAST(value AS STRING)").collect(),
+                    )
+
+    def test_large_types_variant_and_spatial_identity(self):
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.types import Geography, GeographyType, Geometry, GeometryType
+
+        wkb = bytes.fromhex("010100000000000000000031400000000000001c40")
+        frames = [
+            self.spark.sql("SELECT parse_json('{\"a\":1}') AS value"),
+            self.spark.createDataFrame([(Geometry(wkb, 0),)], "value geometry(0)"),
+            self.spark.createDataFrame([(Geography(wkb, 4326),)], "value geography(4326)"),
+        ]
+        for large in ["false", "true"]:
+            with self.sql_conf({"spark.sql.execution.arrow.useLargeVarTypes": large}):
+                for df in frames:
+                    with self.subTest(large=large, data_type=df.schema[0].dataType):
+                        identity = inprocess_udf(df.schema[0].dataType)(lambda x: x)
+                        result = df.select(identity("value").alias("value"))
+                        if isinstance(df.schema[0].dataType, (GeometryType, GeographyType)):
+                            self.assertEqual(result.collect(), df.collect())
+                        else:
+                            self.assertEqual(
+                                result.selectExpr("CAST(value AS STRING)").collect(),
+                                df.selectExpr("CAST(value AS STRING)").collect(),
+                            )
+
+    def test_ddl_return_type_and_nondeterminism(self):
+        from pyspark.inprocess import inprocess_udf
+
+        identity = inprocess_udf("long")(lambda x: x).asNondeterministic()
+        self.assertEqual(self.spark.range(2).select(identity("id")).first()[0], 0)
+        plan = self.spark.range(1).select(identity("id"))._jdf.queryExecution().analyzed()
+        self.assertFalse(plan.expressions().apply(0).deterministic())
+
+    def test_traceback_settings_are_per_registration(self):
+        from pyspark.inprocess import inprocess_udf
+
+        # User frames must be outside the pyspark package for the worker's simplifier.
+        namespace = {}
+        exec("def probe(x):\n    raise ValueError('traceback policy probe')", namespace)
+        traceback_probe = inprocess_udf("long")(namespace["probe"])
+
+        for hide, simplified in [(True, False), (False, True), (False, False), (True, True)]:
+            with self.sql_conf(
+                {
+                    "spark.sql.execution.pyspark.udf.hideTraceback.enabled": str(hide).lower(),
+                    "spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled": str(
+                        simplified
+                    ).lower(),
+                }
+            ):
+                with self.assertRaises(Exception) as error:
+                    self.spark.range(1).select(traceback_probe("id")).collect()
+                message = str(error.exception)
+                self.assertIn("ValueError: traceback policy probe", message)
+                self.assertEqual('File "' in message, not hide)
+                if not hide:
+                    self.assertEqual("inprocess/runtime.py" in message, not simplified)
+
+    def test_embedded_hash_seed_matches_default_worker_seed(self):
+        import subprocess
+        import sys
+
+        import pyarrow as pa
+
+        from pyspark.inprocess import inprocess_udf
+
+        expected = int(
+            subprocess.check_output(
+                [sys.executable, "-c", "print(hash('spark'))"],
+                env={**os.environ, "PYTHONHASHSEED": "0"},
+            )
+        )
+        hash_udf = inprocess_udf("long")(
+            lambda x: pa.array([hash("spark")] * len(x), type=pa.int64())
+        )
+        rows = self.spark.range(4, numPartitions=2).select(hash_udf("id")).collect()
+        self.assertEqual([row[0] for row in rows], [expected] * 4)
+
     def test_expression_arguments_and_multiple_batches(self):
         import pyarrow.compute as pc
 
@@ -656,6 +762,39 @@ class InProcessUDFTests(ReusedSQLTestCase):
 
         df = self.spark.range(1)
         self.assertEqual(df.select(read_magic(df.id)).first()[0], 99)
+
+    def test_bootstrap_converts_base_exceptions_and_can_retry(self):
+        jvm = self.spark.sparkContext._jvm
+        runtime = jvm.org.apache.spark.sql.execution.python.InProcessPythonRuntime
+        runtime_module = getattr(
+            getattr(jvm.org.apache.spark.sql.execution.python, "InProcessPythonRuntime$"), "MODULE$"
+        )
+
+        def initialize(path):
+            paths = jvm.java.util.ArrayList()
+            paths.add(path)
+            runtime.initialize(jvm.PythonUtils.toSeq(paths))
+
+        # Check the shared guard independently of CPython/JEP exception handling.
+        for script in [
+            "raise KeyboardInterrupt('bootstrap probe')",
+            "import missing_bootstrap_probe",
+        ]:
+            with self.assertRaisesRegex(RuntimeError, "bootstrap failed"):
+                exec(runtime_module.bootstrapScript(script), {})
+        runtime.shutdown()
+        try:
+            with tempfile.TemporaryDirectory() as path:
+                with open(os.path.join(path, "probe.pth"), "w") as f:
+                    f.write("import sys; raise KeyboardInterrupt('bootstrap probe')\n")
+                with self.assertRaisesRegex(Exception, "bootstrap failed.*bootstrap probe"):
+                    initialize(path)
+        finally:
+            initialize(self.site_packages)
+        from pyspark.inprocess import inprocess_udf
+
+        identity = inprocess_udf("long")(lambda x: x)
+        self.assertEqual(self.spark.range(1).select(identity("id")).first()[0], 0)
 
     def test_runtime_restart_from_driver_thread(self):
         from pyspark.inprocess import inprocess_udf

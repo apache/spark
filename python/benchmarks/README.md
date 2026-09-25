@@ -132,6 +132,10 @@ results from the existing environment. The quick run is a smoke check, not a
 performance result. An absent JEP package skips in-process cases;
 JEP loading errors fail the benchmark rather than silently falling back.
 
+The benchmark registers `InProcessPythonPlugin` when constructing the in-process
+session, before any warmup query. Run each mode in a fresh JVM, as ASV does, to avoid
+reusing a SparkContext created with another mode's plugin configuration.
+
 All three modes use `local[1]`, one input partition, worker reuse, and a 128 MiB Arrow
 byte limit. Row limits are 10K for narrow integers, 1M for wide integers, and 100K
 for strings. Thus the long-string workload permits about 95 MiB of string payload

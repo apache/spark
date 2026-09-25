@@ -33,9 +33,24 @@ from pyspark import cloudpickle
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import _parse_datatype_json_string
+from pyspark.util import try_simplify_traceback
 
 _UDF_TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
-_udfs: dict[str, tuple[Callable[..., pa.Array], pa.DataType]] = {}
+NullChecker = Callable[[pa.Array], None]
+_udfs: dict[str, tuple[Callable[..., pa.Array], pa.DataType, NullChecker, bool, bool]] = {}
+
+
+def _format_exception(hide: bool, simplified: bool) -> str:
+    kind, error, tb = sys.exc_info()
+    if hide:
+        return "".join(_traceback.format_exception_only(kind, error))
+    if simplified and tb is not None:
+        simple_tb = try_simplify_traceback(tb)
+        if simple_tb is not None:
+            tb = simple_tb
+            if error is not None:
+                error.__cause__ = None
+    return "".join(_traceback.format_exception(kind, error, tb))
 
 
 def _inprocess_register(
@@ -45,6 +60,8 @@ def _inprocess_register(
     timezone: str,
     python_version: str,
     large_var_types: bool = False,
+    hide_traceback: bool = False,
+    simplified_traceback: bool = False,
 ) -> None:
     try:
         embedded_version = "%d.%d" % sys.version_info[:2]
@@ -65,10 +82,13 @@ def _inprocess_register(
             prefers_large_types=large_var_types,
             error_on_duplicated_field_names_in_struct=True,
         )
-        _udfs[handle] = (func, expected_type)
+        checker = _null_checker(expected_type) or (lambda array: None)
+        _udfs[handle] = (func, expected_type, checker, hide_traceback, simplified_traceback)
     except BaseException:
         # In JEP, an uncaught SystemExit can terminate the entire executor JVM.
-        raise RuntimeError(_UDF_TRACEBACK_SENTINEL + _traceback.format_exc()) from None
+        raise RuntimeError(
+            _UDF_TRACEBACK_SENTINEL + _format_exception(hide_traceback, simplified_traceback)
+        ) from None
 
 
 def _inprocess_release(handles: Iterable[str]) -> None:
@@ -95,23 +115,56 @@ def _nullable_type(data_type: pa.DataType) -> pa.DataType:
     return data_type
 
 
-def _check_nested_nulls(array: pa.Array, expected_type: pa.DataType) -> None:
-    def check_field(values: pa.Array, field: pa.Field) -> None:
-        if not field.nullable and values.null_count:
-            raise ValueError(f"In-process UDF returned nulls in non-nullable field {field.name}")
-        _check_nested_nulls(values, field.type)
+def _null_checker(expected_type: pa.DataType) -> Optional[NullChecker]:
+    """Compile checks only for required fields and their ancestors, once per registration."""
+
+    def field_checker(field: pa.Field) -> Optional[NullChecker]:
+        nested = _null_checker(field.type)
+        if field.nullable:
+            return nested
+
+        def check(values: pa.Array) -> None:
+            if values.null_count:
+                raise ValueError(
+                    f"In-process UDF returned nulls in non-nullable field {field.name}"
+                )
+            if nested is not None:
+                nested(values)
+
+        return check
 
     if pa.types.is_struct(expected_type):
-        # Children under a null parent do not contribute values to the result.
-        visible = pc.filter(array, pc.is_valid(array))
-        for i, field in enumerate(expected_type):
-            check_field(visible.field(i), field)
-    elif pa.types.is_list(expected_type) or pa.types.is_large_list(expected_type):
-        check_field(pc.list_flatten(array), expected_type.value_field)
-    elif pa.types.is_map(expected_type):
-        visible = pa.concat_arrays([pc.filter(array, pc.is_valid(array))])
-        check_field(visible.keys, expected_type.key_field)
-        check_field(visible.items, expected_type.item_field)
+        fields = [(i, field_checker(f)) for i, f in enumerate(expected_type)]
+        checks = [(i, check) for i, check in fields if check is not None]
+        if not checks:
+            return None
+
+        def check_struct(array: pa.Array) -> None:
+            # Only children of valid parents are logically visible.
+            visible = pc.filter(array, pc.is_valid(array)) if array.null_count else array
+            for i, check in checks:
+                check(visible.field(i))
+
+        return check_struct
+    if pa.types.is_list(expected_type) or pa.types.is_large_list(expected_type):
+        check = field_checker(expected_type.value_field)
+        if check is not None:
+            return lambda array: check(pc.list_flatten(array))
+    if pa.types.is_map(expected_type):
+        key_check = field_checker(expected_type.key_field)
+        item_check = field_checker(expected_type.item_field)
+
+        def check_map(array: pa.Array) -> None:
+            visible = pc.filter(array, pc.is_valid(array)) if array.null_count else array
+            start = visible.offsets[0].as_py()
+            length = visible.offsets[-1].as_py() - start
+            if key_check is not None:
+                key_check(visible.keys.slice(start, length))
+            if item_check is not None:
+                item_check(visible.items.slice(start, length))
+
+        return check_map
+    return None
 
 
 def _has_offset(array: pa.Array) -> bool:
@@ -147,7 +200,12 @@ def _with_schema(array: pa.Array, expected_type: pa.DataType) -> pa.Array:
     )
 
 
-def _validate_result(result: pa.Array, expected_rows: int, expected_type: pa.DataType) -> pa.Array:
+def _validate_result(
+    result: pa.Array,
+    expected_rows: int,
+    expected_type: pa.DataType,
+    null_checker: Optional[NullChecker] = None,
+) -> pa.Array:
     if not isinstance(result, pa.Array):
         raise TypeError(f"In-process UDF must return a pyarrow.Array, got {type(result).__name__}")
     if len(result) != expected_rows:
@@ -155,7 +213,9 @@ def _validate_result(result: pa.Array, expected_rows: int, expected_type: pa.Dat
     if _nullable_type(result.type) != _nullable_type(expected_type):
         raise TypeError(f"In-process UDF returned {result.type}; expected {expected_type}")
     result.validate()
-    _check_nested_nulls(result, expected_type)
+    checker = null_checker if null_checker is not None else _null_checker(expected_type)
+    if checker is not None:
+        checker(result)
     # Arrow Java's CDI importer does not honor ArrowArray.offset, including child offsets.
     # Concatenation materializes the logical slice, preserving validity and nested values.
     if _has_offset(result):
@@ -177,8 +237,9 @@ def _inprocess_invoke(
     The caller owns the struct memory and releases unconsumed exports on failure.
     Each batch owns its buffers; retained Python inputs are never overwritten.
     """
+    hide_traceback = simplified_traceback = False
     try:
-        udf_func, expected_type = _udfs[handle]
+        udf_func, expected_type, checker, hide_traceback, simplified_traceback = _udfs[handle]
         if len(input_array_ptrs) != len(input_schema_ptrs):
             raise ValueError("Mismatched input ArrowArray and ArrowSchema pointer counts")
         input_arrays = [
@@ -190,7 +251,11 @@ def _inprocess_invoke(
             raise ValueError("Mismatched input argument names")
         args = [value for name, value in zip(names, input_arrays) if not name]
         kwargs = {str(name): value for name, value in zip(names, input_arrays) if name}
-        result = _validate_result(udf_func(*args, **kwargs), int(expected_rows), expected_type)
+        result = _validate_result(
+            udf_func(*args, **kwargs), int(expected_rows), expected_type, checker
+        )
         result._export_to_c(int(output_array_ptr), int(output_schema_ptr))
     except BaseException:
-        raise RuntimeError(_UDF_TRACEBACK_SENTINEL + _traceback.format_exc()) from None
+        raise RuntimeError(
+            _UDF_TRACEBACK_SENTINEL + _format_exception(hide_traceback, simplified_traceback)
+        ) from None

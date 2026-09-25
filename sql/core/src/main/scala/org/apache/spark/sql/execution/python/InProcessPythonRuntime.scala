@@ -22,7 +22,7 @@ import java.util.concurrent.{Callable, ExecutionException, TimeoutException, Tim
 
 import scala.jdk.CollectionConverters._
 
-import jep.{JepException, SharedInterpreter}
+import jep.{JepException, MainInterpreter, PyConfig, SharedInterpreter}
 
 import org.apache.spark.{TaskContext, TaskKilledException}
 import org.apache.spark.api.python.PythonException
@@ -34,12 +34,31 @@ private[python] object InProcessPythonRuntime extends Logging {
   val SITE_PACKAGES_CONFIG = "spark.inprocess.python.sitePackages"
   private val TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
   private var active: InterpreterSession = _
+  private var configured = false
+
+  private[python] class LifecycleException(message: String) extends IllegalStateException(message)
+
+  private def configureInterpreter(): Unit = {
+    if (!configured) {
+      // Like Python workers, use a stable default hash seed on every executor. This must
+      // happen before JEP creates its process-wide main interpreter, including on restarts.
+      MainInterpreter.setInitParams(new PyConfig().setHashSeed(0).setUseHashSeed(true))
+      configured = true
+    }
+  }
+
+  private[python] def bootstrapScript(script: String): String = {
+    "try:\n" + script.linesIterator.map("    " + _).mkString("\n") +
+      "\nexcept BaseException as _bootstrap_error:\n" +
+      "    raise RuntimeError('In-process Python bootstrap failed: ' + " +
+      "repr(_bootstrap_error)) from None\n"
+  }
 
   def initialize(sitePackages: Seq[String] = Seq.empty): Unit = synchronized {
     if (active != null && !active.isTerminated) {
-      require(active.isRunning && active.sitePackages == sitePackages,
-        "In-process Python is stopping or already initialized with different sitePackages")
+      active.requireCompatible(sitePackages)
     } else {
+      configureInterpreter()
       val candidate = new InterpreterSession(sitePackages)
       try {
         candidate.initialize()
@@ -80,6 +99,17 @@ private[python] object InProcessPythonRuntime extends Logging {
 
     def isRunning: Boolean = running
     def isTerminated: Boolean = executor.isTerminated
+
+    def requireCompatible(paths: Seq[String]): Unit = {
+      if (!isRunning) {
+        throw new LifecycleException("In-process Python is still stopping. Wait for outstanding " +
+          "native work to finish or replace the executor process before starting a new context.")
+      }
+      if (sitePackages != paths) {
+        throw new LifecycleException("In-process Python is already running with different " +
+          "sitePackages. Stop the existing context before changing interpreter configuration.")
+      }
+    }
 
     private[python] def onInterpreterThread[T](body: => T): T = {
       val context = Option(TaskContext.get())
@@ -138,7 +168,7 @@ private[python] object InProcessPythonRuntime extends Logging {
       val candidate = new SharedInterpreter()
       try {
         candidate.set("_site_packages", sitePackages.asJava)
-        candidate.exec(
+        candidate.exec(bootstrapScript(
           """import os, site, sys
             |_configured = [os.path.abspath(p) for p in _site_packages]
             |_before = set(sys.path)
@@ -148,9 +178,9 @@ private[python] object InProcessPythonRuntime extends Logging {
             |_preferred = list(dict.fromkeys(_configured + _added))
             |sys.path[:] = _preferred + [p for p in sys.path if p not in _preferred]
             |del _site_packages, _configured, _before, _added, _preferred
-            |""".stripMargin)
-        candidate.exec("from pyspark.inprocess.runtime import " +
-          "_inprocess_invoke, _inprocess_register, _inprocess_release, _udfs")
+            |""".stripMargin))
+        candidate.exec(bootstrapScript("from pyspark.inprocess.runtime import " +
+          "_inprocess_invoke, _inprocess_register, _inprocess_release, _udfs"))
         interp = candidate
       } catch {
         case t: Throwable => Utils.tryWithSafeFinally { throw t } { candidate.close() }
@@ -204,14 +234,18 @@ private[python] object InProcessPythonRuntime extends Logging {
         returnTypeJson: String,
         timeZoneId: String,
         pythonVersion: String,
-        largeVarTypes: Boolean): Unit = {
+        largeVarTypes: Boolean,
+        hideTraceback: Boolean,
+        simplifiedTraceback: Boolean): Unit = {
       // Bulk-copy on the task thread. JEP's PyJBuffer supports memoryview without per-byte JNI.
       val command = ByteBuffer.allocateDirect(serializedUdf.length)
       command.put(serializedUdf).flip()
       onInterpreterThread {
         withPythonException {
           interp.invoke("_inprocess_register", handle, command, returnTypeJson, timeZoneId,
-            pythonVersion, java.lang.Boolean.valueOf(largeVarTypes))
+            pythonVersion, java.lang.Boolean.valueOf(largeVarTypes),
+            java.lang.Boolean.valueOf(hideTraceback),
+            java.lang.Boolean.valueOf(simplifiedTraceback))
         }
       }
     }
@@ -232,7 +266,7 @@ private[python] object InProcessPythonRuntime extends Logging {
           java.lang.Long.valueOf(outputArrayAddr), java.lang.Long.valueOf(outputSchemaAddr),
           java.lang.Integer.valueOf(expectedRows), argumentNames.toSeq.asJava)
       }
-      (System.nanoTime() - start) / 1000000
+      System.nanoTime() - start
     }
   }
 
@@ -249,7 +283,9 @@ private[python] object InProcessPythonRuntime extends Logging {
             messageParameters = Map(
               "msg" -> "An exception was thrown from the in-process Python UDF",
               "traceback" -> msg.substring(sentinelIdx + TRACEBACK_SENTINEL.length)),
-            cause = e)
+            // The formatted Python message already applies the query's traceback policy.
+            // Do not retain JEP's separate Python traceback through a nested cause.
+            cause = null)
         } else {
           throw new RuntimeException(s"In-process Python infrastructure error: $msg", e)
         }

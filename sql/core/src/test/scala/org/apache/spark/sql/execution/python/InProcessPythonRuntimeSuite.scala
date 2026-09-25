@@ -21,6 +21,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{SparkFunSuite, TaskContext, TaskKilledException}
+import org.apache.spark.sql.execution.metric.SQLMetric
 
 class InProcessPythonRuntimeSuite extends SparkFunSuite {
   private var runtime: InProcessPythonRuntime.InterpreterSession = _
@@ -32,6 +33,27 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
 
   override def afterEach(): Unit = {
     try { runtime.shutdown() } finally { super.afterEach() }
+  }
+
+  test("lifecycle errors distinguish configuration mismatch from stopping") {
+    val mismatch = intercept[InProcessPythonRuntime.LifecycleException] {
+      runtime.requireCompatible(Seq("different"))
+    }
+    assert(mismatch.getMessage.contains("different sitePackages"))
+    runtime.shutdown()
+    val stopping = intercept[InProcessPythonRuntime.LifecycleException] {
+      runtime.requireCompatible(Seq.empty)
+    }
+    assert(stopping.getMessage.contains("still stopping"))
+  }
+
+  test("sub-millisecond invocations accumulate in processing metrics") {
+    val metric = new SQLMetric("timing", 0L)
+    val timer = new InProcessArrowEvalPythonEvaluatorFactory.NanosecondTimer(metric)
+    (1 to 25).foreach(_ => timer.add(100000L))
+    assert(metric.value == 2L)
+    timer.add(500000L)
+    assert(metric.value == 3L)
   }
 
   test("calls from different threads use the same interpreter owner thread") {

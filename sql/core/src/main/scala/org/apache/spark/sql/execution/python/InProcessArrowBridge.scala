@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.python
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.arrow.c.{ArrowArray, ArrowSchema, Data}
 import org.apache.arrow.memory.util.MemoryUtil
 import org.apache.arrow.vector.FieldVector
@@ -91,6 +93,14 @@ private[python] object InProcessArrowBridge {
     if (snapshot.dictionary != 0L) checkOffsets(ArrowArray.wrap(snapshot.dictionary))
   }
 
+  private def sameLayout(actual: Field, expected: Field): Boolean = {
+    actual.getType == expected.getType && actual.getDictionary == expected.getDictionary &&
+      actual.getChildren.size == expected.getChildren.size &&
+      actual.getChildren.asScala.zip(expected.getChildren.asScala).forall { case (a, e) =>
+        a.getName == e.getName && a.isNullable == e.isNullable && sameLayout(a, e)
+      }
+  }
+
   def cdiToColumn(
       arrowArray: ArrowArray,
       arrowSchema: ArrowSchema,
@@ -99,11 +109,13 @@ private[python] object InProcessArrowBridge {
     val field = Data.importField(
       ArrowUtils.rootAllocator, ArrowSchema.wrap(arrowSchema.memoryAddress()), null)
     expected.foreach { declared =>
-      require(field.getType == declared.getType && field.getChildren == declared.getChildren &&
-        field.getMetadata == declared.getMetadata,
+      require(sameLayout(field, declared),
         s"In-process UDF returned Arrow field $field; expected $declared")
     }
-    val vector = field.createVector(ArrowUtils.rootAllocator)
+    // Array CDI has no top-level field metadata. Nested JSON metadata can also differ in
+    // whitespace. After checking the physical layout, use the declared field to retain Spark
+    // precision and logical type metadata; Python has already validated logical nullability.
+    val vector = expected.getOrElse(field).createVector(ArrowUtils.rootAllocator)
     try {
       Data.importIntoVector(
         ArrowUtils.rootAllocator, ArrowArray.wrap(arrowArray.memoryAddress()), vector, null)

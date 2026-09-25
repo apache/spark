@@ -153,7 +153,8 @@ case class ArrowEvalPythonExec(
     if (evalType == PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) {
       return new InProcessArrowEvalPythonEvaluatorFactory(
         child.output, udfs, output, conf.arrowMaxRecordsPerBatch, conf.arrowMaxBytesPerBatch,
-        conf.sessionLocalTimeZone, conf.arrowUseLargeVarTypes, pythonMetrics)
+        conf.sessionLocalTimeZone, conf.arrowUseLargeVarTypes,
+        conf.pysparkHideTraceback, conf.pysparkSimplifiedTraceback, pythonMetrics)
     }
     new ArrowEvalPythonEvaluatorFactory(
       child.output,

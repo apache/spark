@@ -69,9 +69,13 @@ class InProcessUDFTimeBench:
         scenario, n_rows = workload
         n_cols = 10 if scenario == "wide" else 1
         batch_size = {"narrow": 10_000, "wide": 1_000_000}.get(scenario, 100_000)
+        builder = SparkSession.builder.master("local[1]")
+        if udf_type == "inprocess":
+            builder = builder.config(
+                "spark.plugins", "org.apache.spark.sql.execution.python.InProcessPythonPlugin"
+            )
         self.spark = (
-            SparkSession.builder.master("local[1]")
-            .appName("InProcessUDFTimeBench")
+            builder.appName("InProcessUDFTimeBench")
             .config("spark.ui.enabled", "false")
             .config("spark.python.worker.reuse", "true")
             .config("spark.sql.shuffle.partitions", "1")

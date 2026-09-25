@@ -76,6 +76,16 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
 
+    def test_inprocess_udf_registration_is_rejected(self):
+        from pyspark.errors import PySparkTypeError
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.connect.udf import UDFRegistration
+
+        udf = inprocess_udf("long")(lambda x: x)
+        with self.assertRaises(PySparkTypeError) as error:
+            UDFRegistration(self.connect).register("inprocess", udf)
+        self.assertEqual(error.exception.getCondition(), "INVALID_UDF_EVAL_TYPE")
+
     def test_sql_project(self):
         plan = self.connect.sql("SELECT 1")._plan.to_proto(self.connect)
         self.assertEqual(plan.root.sql.query, "SELECT 1")

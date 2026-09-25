@@ -21,6 +21,7 @@
 import sys
 import unittest
 from importlib.util import find_spec
+from unittest.mock import patch
 
 from pyspark import cloudpickle
 from pyspark.sql.types import (
@@ -313,6 +314,69 @@ class InProcessRuntimeTests(unittest.TestCase):
         self.assertEqual(result.to_pylist(), [[("a", 1)], None])
         with self.assertRaisesRegex(ValueError, "non-nullable"):
             _validate_result(pa.array([[("a", None)]], type=nullable), 1, required)
+
+    def test_null_checks_skip_nullable_subtrees_and_null_free_parents(self):
+        arrays = [
+            pa.array([{"x": [1, None]}, {"x": None}, None]),
+            pa.array([{"x": 1}, {"x": 2}], type=pa.struct([pa.field("x", pa.int64(), False)])),
+            pa.array([[("a", 1)], [("b", 2)]], type=pa.map_(pa.string(), pa.int64())),
+        ]
+        for array in arrays:
+            with (
+                self.subTest(type=array.type),
+                patch("pyspark.inprocess.runtime.pc.filter") as filtered,
+                patch("pyspark.inprocess.runtime.pa.concat_arrays") as concat,
+            ):
+                result = _validate_result(array, len(array), array.type)
+                self.assertEqual(result, array)
+                filtered.assert_not_called()
+                concat.assert_not_called()
+
+    def test_null_checks_still_validate_required_descendants(self):
+        required = pa.struct([pa.field("x", pa.list_(pa.field("element", pa.int64(), False)))])
+        with self.assertRaisesRegex(ValueError, "non-nullable"):
+            _validate_result(pa.array([{"x": [None]}, None], type=required), 2, required)
+        hidden = pa.array([{"x": None}, None], type=required)
+        self.assertEqual(_validate_result(hidden, 2, required), hidden)
+
+    def test_large_binary_logical_types(self):
+        from pyspark.sql.pandas.types import to_arrow_type
+        from pyspark.sql.types import GeographyType, GeometryType, VariantType
+
+        for data_type in [VariantType(), GeometryType(0), GeographyType(4326)]:
+            for large in [False, True]:
+                arrow_type = to_arrow_type(data_type, prefers_large_types=large)
+                binary_field = arrow_type[-1]
+                self.assertEqual(binary_field.type, pa.large_binary() if large else pa.binary())
+
+    def test_wrapper_metadata_and_return_type_validation(self):
+        from pyspark.errors import PySparkTypeError
+        from pyspark.util import PythonEvalType
+
+        def identity(x):
+            """Identity documentation."""
+            return x
+
+        udf = inprocess_udf(LongType())(identity)
+        self.assertEqual(udf.__name__, identity.__name__)
+        self.assertEqual(udf.__doc__, identity.__doc__)
+        self.assertIs(udf.func, identity)
+        self.assertEqual(udf.returnType, LongType())
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF)
+        self.assertTrue(udf.deterministic)
+        self.assertIs(udf.asNondeterministic(), udf)
+        self.assertFalse(udf.deterministic)
+        with self.assertRaises(PySparkTypeError):
+            inprocess_udf(42)(identity)
+        # DDL decoration does not require a live Spark session.
+        self.assertIsNone(inprocess_udf("long")(identity)._parsed_return_type)
+
+    def test_registration_traceback_policy(self):
+        for hide in [False, True]:
+            with self.assertRaises(RuntimeError) as error:
+                _inprocess_register("bad", b"", LongType().json(), "UTC", "0.0", False, hide)
+            self.assertEqual("Traceback" in str(error.exception), not hide)
+            self.assertIn("PYTHON_VERSION_MISMATCH", str(error.exception))
 
 
 if __name__ == "__main__":

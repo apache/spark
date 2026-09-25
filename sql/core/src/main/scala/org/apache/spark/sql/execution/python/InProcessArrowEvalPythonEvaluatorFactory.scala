@@ -51,6 +51,8 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     maxBytes: Long,
     timeZoneId: String,
     largeVarTypes: Boolean,
+    hideTraceback: Boolean,
+    simplifiedTraceback: Boolean,
     metrics: Map[String, SQLMetric])
   extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
 
@@ -70,6 +72,13 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     val inputOrdinals = argMetas.map(_.map(_.offset))
     def checkCancellation(): Unit = context.killTaskIfInterrupted()
 
+    val expectedFields = udfs.map { udf =>
+      ArrowUtils.toArrowField("result", udf.dataType, true, timeZoneId, largeVarTypes)
+    }
+    val processingTime = new InProcessArrowEvalPythonEvaluatorFactory.NanosecondTimer(
+      metrics("pythonProcessingTime"))
+    val initTime = new InProcessArrowEvalPythonEvaluatorFactory.NanosecondTimer(
+      metrics("pythonInitTime"))
     val arrowSchema = ArrowUtils.toArrowSchema(inputSchema, timeZoneId, largeVarTypes)
     var runtime: InProcessPythonRuntime.InterpreterSession = null
     val handles = functions.map(_ => UUID.randomUUID().toString)
@@ -127,9 +136,9 @@ class InProcessArrowEvalPythonEvaluatorFactory(
               functions.indices.foreach { i =>
                 val func = functions(i)
                 runtime.register(handles(i), func.command.toArray, returnTypes(i),
-                  timeZoneId, func.pythonVer, largeVarTypes)
+                  timeZoneId, func.pythonVer, largeVarTypes, hideTraceback, simplifiedTraceback)
               }
-              metrics("pythonInitTime") += (System.nanoTime() - start) / 1000000
+              initTime.add(System.nanoTime() - start)
             }
             val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
             writer = try {
@@ -183,15 +192,14 @@ class InProcessArrowEvalPythonEvaluatorFactory(
                   InProcessArrowBridge.exportColumn(
                     writer.root.getVector(ordinals(i)), inArrays(i), inSchemas(i))
                 }
-                metrics("pythonProcessingTime") += runtime.invoke(
+                processingTime.add(runtime.invoke(
                   handle,
                   inArrays.map(_.memoryAddress()).toArray,
                   inSchemas.map(_.memoryAddress()).toArray,
                   outArray.memoryAddress(), outSchema.memoryAddress(),
-                  count, argMetas(udfIndex).map(_.name.getOrElse("")))
-                val expected = ArrowUtils.toArrowField(
-                  "result", udfs(udfIndex).dataType, true, timeZoneId, largeVarTypes)
-                results += InProcessArrowBridge.cdiToColumn(outArray, outSchema, Some(expected))
+                  count, argMetas(udfIndex).map(_.name.getOrElse(""))))
+                results += InProcessArrowBridge.cdiToColumn(
+                  outArray, outSchema, Some(expectedFields(udfIndex)))
                 metrics("pythonDataReceived") += results.last.getValueVector.getBufferSize
               } {
                 AutoCloseables.close(structs.asJava)
@@ -207,6 +215,19 @@ class InProcessArrowEvalPythonEvaluatorFactory(
           case t: Throwable => Utils.tryWithSafeFinally { throw t } { close() }
         }
       }
+    }
+  }
+}
+
+private[python] object InProcessArrowEvalPythonEvaluatorFactory {
+  /** Carry sub-millisecond time between batches instead of dropping it on every invocation. */
+  class NanosecondTimer(metric: SQLMetric) {
+    private var remainder = 0L
+
+    def add(nanos: Long): Unit = {
+      val elapsed = remainder + nanos
+      metric += elapsed / 1000000L
+      remainder = elapsed % 1000000L
     }
   }
 }

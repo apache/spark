@@ -2229,6 +2229,10 @@ class SparkConnectPlanner(
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
+    // Connect Python commands require worker execution and session isolation.
+    if (fun.getEvalType == PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) {
+      throw InvalidInputErrors.functionEvalTypeNotSupported(fun.getEvalType)
+    }
     SimplePythonFunction(
       command = fun.getCommand.toByteArray.toImmutableArraySeq,
       // Empty environment variables
