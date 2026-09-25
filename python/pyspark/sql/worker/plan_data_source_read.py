@@ -60,9 +60,7 @@ def _json_type_has_char_varchar_in_udt(data_type: Any, inside_udt: bool = False)
     """Detect CHAR/VARCHAR in UDT storage without deserializing the UDT class."""
     if isinstance(data_type, str):
         normalized = data_type.lower()
-        return inside_udt and (
-            normalized.startswith("char(") or normalized.startswith("varchar(")
-        )
+        return inside_udt and (normalized.startswith("char(") or normalized.startswith("varchar("))
     if not isinstance(data_type, dict):
         return False
 
