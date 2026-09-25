@@ -75,6 +75,8 @@ abstract class InMemoryBaseTable(
   // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
 
+  private var tableDisplayProperties: util.Map[String, String] = null
+
   // Assign column IDs to columns that do not have one, including nested struct fields within
   // arrays and maps. This simulates connectors that support column identity tracking.
   private var tableColumns: Array[Column] = InMemoryBaseTable.assignMissingIds(initialColumns)
@@ -86,6 +88,14 @@ abstract class InMemoryBaseTable(
   }
 
   override def version(): String = tableVersion.toString
+
+  override def displayProperties(): util.Map[String, String] = {
+    Option(tableDisplayProperties).getOrElse(properties)
+  }
+
+  def setDisplayProperties(displayProperties: util.Map[String, String]): Unit = {
+    tableDisplayProperties = displayProperties
+  }
 
   def setVersion(version: String): Unit = {
     tableVersion = version.toInt

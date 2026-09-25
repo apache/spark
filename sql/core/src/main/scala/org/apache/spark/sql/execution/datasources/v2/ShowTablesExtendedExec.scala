@@ -82,7 +82,8 @@ case class ShowTablesExtendedExec(
     results.put("Catalog", catalogName)
     results.put("Namespace", identifier.namespace().quoted)
     results.put("Table", identifier.name())
-    val tableType = if (table.properties().containsKey(TableCatalog.PROP_EXTERNAL)) {
+    val displayProperties = table.displayProperties()
+    val tableType = if (displayProperties.containsKey(TableCatalog.PROP_EXTERNAL)) {
       CatalogTableType.EXTERNAL
     } else {
       CatalogTableType.MANAGED
@@ -92,12 +93,12 @@ case class ShowTablesExtendedExec(
     CatalogV2Util.TABLE_RESERVED_PROPERTIES
       .filterNot(_ == TableCatalog.PROP_EXTERNAL)
       .foreach(propKey => {
-        if (table.properties.containsKey(propKey)) {
-          results.put(propKey.capitalize, table.properties.get(propKey))
+        if (displayProperties.containsKey(propKey)) {
+          results.put(propKey.capitalize, displayProperties.get(propKey))
         }
       })
 
-    val displayedTableProperties = conf.redactOptions(table.properties.asScala.toMap).toList
+    val displayedTableProperties = conf.redactOptions(displayProperties.asScala.toMap).toList
       .filterNot { case (key, _) => CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key) }
       .sortBy(_._1)
       .map { case (key, value) => key + "=" + value }
