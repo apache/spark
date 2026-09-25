@@ -926,6 +926,20 @@ public abstract class AbstractBytesToBytesMapSuite {
   }
 
   @Test
+  public void resetAfterDestructiveIterationFails() {
+    memoryManager.limit(PAGE_SIZE_BYTES);
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
+    try {
+      map.destructiveIterator();
+      assertThrows(IllegalStateException.class, map::reset);
+      assertEquals(0L, taskMemoryManager.getMemoryConsumptionForThisTask());
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
   public void arrayAccessorsRecoverAfterFailedReset() {
     memoryManager.limit(5000);
     BytesToBytesMap map =

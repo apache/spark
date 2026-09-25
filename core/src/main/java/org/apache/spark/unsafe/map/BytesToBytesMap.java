@@ -141,6 +141,16 @@ public final class BytesToBytesMap extends MemoryConsumer {
    */
   @Nullable private LongArray longArray;
 
+  // TODO: we're wasting 32 bits of space here; we can probably store fewer bits of the hashcode
+  // and exploit word-alignment to use fewer bits to hold the address.  This might let us store
+  // only one long per map entry, increasing the chance that this array will fit in cache at the
+  // expense of maybe performing more lookups if we have hash collisions.  Say that we stored only
+  // 27 bits of the hashcode and 37 bits of the address.  37 bits is enough to address 1 terabyte
+  // of RAM given word-alignment.  If we use 13 bits of this for our page table, that gives us a
+  // maximum page size of 2^24 * 8 = ~134 megabytes per page. This change will require us to store
+  // full base addresses in the page table for off-heap mode so that we can reconstruct the full
+  // absolute memory addresses.
+
   /**
    * Whether a completed reset needs to restore longArray after its allocation failed.
    *
@@ -151,16 +161,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   /** Whether {@link #free()} has permanently released this map. */
   private volatile boolean freed = false;
-
-  // TODO: we're wasting 32 bits of space here; we can probably store fewer bits of the hashcode
-  // and exploit word-alignment to use fewer bits to hold the address.  This might let us store
-  // only one long per map entry, increasing the chance that this array will fit in cache at the
-  // expense of maybe performing more lookups if we have hash collisions.  Say that we stored only
-  // 27 bits of the hashcode and 37 bits of the address.  37 bits is enough to address 1 terabyte
-  // of RAM given word-alignment.  If we use 13 bits of this for our page table, that gives us a
-  // maximum page size of 2^24 * 8 = ~134 megabytes per page. This change will require us to store
-  // full base addresses in the page table for off-heap mode so that we can reconstruct the full
-  // absolute memory addresses.
 
   /**
    * Whether or not the longArray can grow. We will not insert more elements if it's false.
@@ -643,8 +643,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This is a thread-safe version of `lookup`, provided that each thread supplies its own
    * {@link Location}. This guarantee excludes probe statistics, which may be inaccurate under
-   * concurrent lookup. Concurrent calls may also safely retry a pointer-array allocation that
-   * failed during {@link #reset()}; the map must not otherwise be modified concurrently.
+   * concurrent lookup. After {@link #reset()} has completed exceptionally because its pointer-array
+   * allocation failed, concurrent calls may safely retry that allocation. The map must not
+   * otherwise be modified concurrently.
    *
    * @throws SparkOutOfMemoryError if a pointer-array allocation retried after reset still fails
    */
@@ -667,8 +668,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * The provided hash is ignored when this map has configured key operations. Each thread must
    * supply its own {@link Location}. Probe statistics may be inaccurate under concurrent lookup,
-   * and the map must not otherwise be modified concurrently. Concurrent calls may safely retry a
-   * pointer-array allocation that failed during {@link #reset()}.
+   * and the map must not otherwise be modified concurrently. After {@link #reset()} has completed
+   * exceptionally because its pointer-array allocation failed, concurrent calls may safely retry
+   * that allocation.
    *
    * @throws SparkOutOfMemoryError if a pointer-array allocation retried after reset still fails
    */
@@ -1189,10 +1191,15 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * {@link #maxNumKeysIndex()} retries the allocation.
    *
    * @throws SparkOutOfMemoryError if the replacement pointer array cannot be allocated
+   * @throws IllegalStateException if destructive iteration has begun
    */
   public synchronized void reset() {
     if (freed) {
       return;
+    }
+    if (destructiveIterator != null) {
+      throw new IllegalStateException(
+        "BytesToBytesMap cannot be used after destructiveIterator() has been called");
     }
     updatePeakMemoryUsed();
     // Put the map into its empty state up front so that if the allocate() below fails with an OOM,
