@@ -17,15 +17,22 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{Literal, NonFoldableLiteral}
+import java.util.Locale
+
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.expressions.{GroupFrame, Literal,
+  NonFoldableLiteral, RangeFrame, SpecifiedWindowFrame, WindowExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateWindowPartitions
 import org.apache.spark.sql.catalyst.plans.logical.{Window => WindowNode}
 import org.apache.spark.sql.classic.ExpressionColumnNode
+import org.apache.spark.sql.execution.{ExtendedMode, SortExec}
+import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.CalendarIntervalType
+import org.apache.spark.sql.types.{CalendarIntervalType, DayTimeIntervalType, IntegerType}
 
 /**
  * Window frame testing for DataFrame API.
@@ -648,5 +655,819 @@ class DataFrameWindowFramesSuite extends SharedSparkSession {
         Row("a", 0, "x", null),
         Row("a", 1, "x", "x"),
         Row("b", 0, null, null)))
+  }
+
+  test("GROUPS frame requires an ORDER BY") {
+    withTempView("t") {
+      Seq((1, 1), (2, 2)).toDF("key", "value").createOrReplaceTempView("t")
+      checkError(
+        exception = intercept[AnalysisException](
+          spark.sql(
+            "select sum(value) over (partition by key groups between " +
+              "unbounded preceding and current row) from t").collect()),
+        condition = "DATATYPE_MISMATCH.GROUPS_FRAME_WITHOUT_ORDER",
+        parameters = Map(
+          "sqlExpr" ->
+            "\"(PARTITION BY key GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "(partition by key groups between " +
+              "unbounded preceding and current row)",
+            start = 23,
+            stop = 91)))
+    }
+  }
+
+  test("GROUPS frame rejects a non-integral offset (decimal)") {
+    withTempView("t") {
+      Seq((1, 1), (2, 2)).toDF("key", "value").createOrReplaceTempView("t")
+      checkError(
+        exception = intercept[AnalysisException](
+          spark.sql(
+            "select sum(value) over (order by key groups between " +
+              "1.5 preceding and current row) from t").collect()),
+        condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+        parameters = Map(
+          "sqlExpr" -> "\"GROUPS BETWEEN 1.5 PRECEDING AND CURRENT ROW\"",
+          "location" -> "lower",
+          "exprType" -> "\"DECIMAL(2,1)\"",
+          "expectedType" -> "\"INT\""),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "(order by key groups between " +
+              "1.5 preceding and current row)",
+            start = 23,
+            stop = 81)))
+    }
+  }
+
+  test("GROUPS frame rejects a non-integral offset (interval)") {
+    withTempView("t") {
+      Seq((1, 1), (2, 2)).toDF("key", "value").createOrReplaceTempView("t")
+      checkError(
+        exception = intercept[AnalysisException](
+          spark.sql(
+            "select sum(value) over (order by key groups between " +
+              "interval 1 day preceding and current row) from t").collect()),
+        condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+        parameters = Map(
+          "sqlExpr" -> "\"GROUPS BETWEEN INTERVAL '1' DAY PRECEDING AND CURRENT ROW\"",
+          "location" -> "lower",
+          "exprType" -> "\"INTERVAL DAY\"",
+          "expectedType" -> "\"INT\""),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "(order by key groups between " +
+              "interval 1 day preceding and current row)",
+            start = 23,
+            stop = 92)))
+    }
+  }
+
+  test("GROUPS frame rejects a null offset") {
+    withTempView("t") {
+      Seq((1, 1), (2, 2)).toDF("key", "value").createOrReplaceTempView("t")
+      checkError(
+        exception = intercept[AnalysisException](
+          spark.sql(
+            "select sum(value) over (order by key groups between " +
+              "cast(null as int) preceding and current row) from t").collect()),
+        condition = "DATATYPE_MISMATCH.GROUPS_FRAME_NULL_OFFSET",
+        parameters = Map(
+          "sqlExpr" -> "\"GROUPS BETWEEN CAST(NULL AS INT) PRECEDING AND CURRENT ROW\"",
+          "location" -> "lower"),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "(order by key groups between " +
+              "cast(null as int) preceding and current row)",
+            start = 23,
+            stop = 95)))
+    }
+  }
+
+  // Use VALUES because the single-pass resolver does not support CreateViewCommand.
+  test("GROUPS frame rejects a null offset with single-pass resolver") {
+    withSQLConf(
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException](
+          spark.sql(
+            "select sum(value) over (order by key groups between " +
+              "cast(null as int) following and unbounded following) " +
+              "from values (1, 1), (2, 2) as t(key, value)").collect()),
+        condition = "DATATYPE_MISMATCH.GROUPS_FRAME_NULL_OFFSET",
+        parameters = Map(
+          "sqlExpr" -> ("\"GROUPS BETWEEN CAST(NULL AS INT) FOLLOWING AND " +
+            "UNBOUNDED FOLLOWING\""),
+          "location" -> "lower"),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "(order by key groups between " +
+              "cast(null as int) following and unbounded following)",
+            start = 23,
+            stop = 103)))
+    }
+  }
+
+  test("GROUPS rejects negative literal, expression and parameter offsets") {
+    for (singlePass <- Seq(false, true)) {
+      withSQLConf(
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString) {
+        for (offset <- Seq("-1", "-2147483648", "1 - 2", ":offset");
+            boundary <- Seq(
+              s"$offset preceding and current row",
+              s"$offset following and unbounded following",
+              s"unbounded preceding and $offset preceding",
+              s"current row and $offset following")) {
+          val error = intercept[AnalysisException] {
+            spark.sql(
+              s"select sum(v) over (order by k groups between $boundary) " +
+                "from values (1, 10), (2, 20) as t(k, v)",
+              Map("offset" -> -1)).collect()
+          }
+          assert(error.getCondition == "DATATYPE_MISMATCH.GROUPS_FRAME_NEGATIVE_OFFSET")
+        }
+      }
+    }
+  }
+
+  test("GROUPS accepts zero and positive parameter offsets") {
+    for (offset <- Seq(0, 1, Int.MaxValue)) {
+      val query =
+        "select sum(v) over (order by k groups between :offset preceding and " +
+          "current row) from values (1, 10), (1, 20), (2, 30) as t(k, v)"
+      checkAnswer(spark.sql(query, Map("offset" -> offset)),
+        Seq(Row(30L), Row(30L), Row(if (offset == 0) 30L else 60L)))
+    }
+  }
+
+  // Returns the Sort, Exchange, and WindowExec counts in the executed plan.
+  private def planShape(df: DataFrame): (Int, Int, Int) = {
+    val plan = df.queryExecution.executedPlan
+    (plan.collect { case s: SortExec => s }.size,
+      plan.collect { case e: Exchange => e }.size,
+      plan.collect { case w: WindowExec => w }.size)
+  }
+
+  // No-offset GROUPS frames have the same results and plan shape as RANGE frames.
+  private def checkGroupsFrameMatchesRange(frameBoundary: String): Unit = {
+    withTempView("t") {
+      // Include ties to exercise peer-group semantics.
+      Seq((1, 10), (1, 15), (2, 20), (3, 25), (3, 30), (9, 40))
+        .toDF("batch_id", "amount").createOrReplaceTempView("t")
+      val groupsDf = spark.sql(
+        s"select sum(amount) over (partition by batch_id % 2 order by batch_id " +
+          s"groups $frameBoundary) as total from t")
+      val rangeDf = spark.sql(
+        s"select sum(amount) over (partition by batch_id % 2 order by batch_id " +
+          s"range $frameBoundary) as total from t")
+      checkAnswer(groupsDf, rangeDf)
+
+      // Disable AQE to inspect operators directly. Build fresh DataFrames because executedPlan
+      // is cached and the frames above were created with AQE enabled.
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val groupsShape = planShape(spark.sql(
+          s"select sum(amount) over (partition by batch_id % 2 order by batch_id " +
+            s"groups $frameBoundary) as total from t"))
+        val rangeShape = planShape(spark.sql(
+          s"select sum(amount) over (partition by batch_id % 2 order by batch_id " +
+            s"range $frameBoundary) as total from t"))
+        assert(groupsShape._1 > 0 && groupsShape._2 > 0 && groupsShape._3 > 0,
+          s"expected non-zero Sort/Exchange/WindowExec counts, got $groupsShape")
+        assert(groupsShape == rangeShape,
+          s"GROUPS plan shape differs from RANGE plan shape for '$frameBoundary'")
+      }
+
+      // Physical RANGE execution must not change the logical frame representation.
+      val frameSqls = groupsDf.queryExecution.analyzed.collect { case w: WindowNode =>
+        w.windowExpressions.flatMap(_.collect { case e: WindowExpression =>
+          e.windowSpec.frameSpecification.sql
+        })
+      }.flatten
+      assert(frameSqls.nonEmpty, "expected at least one window frame in the analyzed plan")
+      frameSqls.foreach { sql =>
+        assert(sql.contains("GROUPS"), s"expected GROUPS in frame sql: $sql")
+      }
+
+      val explainText = groupsDf.queryExecution.explainString(ExtendedMode)
+      assert(explainText.contains("GroupFrame"),
+        s"expected GroupFrame in explain output:\n$explainText")
+      assert(!explainText.contains("RangeFrame"),
+        s"did not expect RangeFrame in explain output:\n$explainText")
+    }
+  }
+
+  test("GROUPS between unbounded preceding and unbounded following " +
+    "matches RANGE") {
+    checkGroupsFrameMatchesRange("between unbounded preceding and unbounded following")
+  }
+
+  test("GROUPS between unbounded preceding and current row matches RANGE") {
+    checkGroupsFrameMatchesRange("between unbounded preceding and current row")
+  }
+
+  test("GROUPS between current row and unbounded following matches RANGE") {
+    checkGroupsFrameMatchesRange("between current row and unbounded following")
+  }
+
+  // Case 2: CURRENT ROW means the current row's entire peer group.
+  test("GROUPS between current row and current row (test matrix case 2)") {
+    withTempView("t") {
+      Seq((1, 10), (1, 15), (2, 20), (3, 25), (3, 30), (9, 40))
+        .toDF("batch_id", "amount").createOrReplaceTempView("t")
+      checkAnswer(
+        spark.sql(
+          "select sum(amount) over (order by batch_id " +
+            "groups between current row and current row) as total from t"),
+        Seq(Row(25), Row(25), Row(20), Row(55), Row(55), Row(40)))
+    }
+  }
+
+  // Case 6: NULLs form one peer group.
+  test("GROUPS with NULL peer group (test matrix case 6)") {
+    withTempView("t") {
+      Seq((Some(1), 10), (Some(1), 15), (Some(2), 20), (None, 30))
+        .toDF("batch_id", "amount").createOrReplaceTempView("t")
+      checkAnswer(
+        spark.sql(
+          "select sum(amount) over (order by batch_id nulls first " +
+            "groups between current row and current row) as total from t"),
+        Seq(Row(25), Row(25), Row(20), Row(30)))
+    }
+  }
+
+  // Exercise an offset GroupBoundOrdering with multiple NULL keys in one peer group.
+  test("GROUPS offset frame with NULLS FIRST peer group") {
+    withTempView("t") {
+      Seq(
+        (None, 1), (None, 2), (Some(1), 10), (Some(1), 15), (Some(2), 20),
+        (Some(3), 25), (Some(3), 30), (Some(9), 40))
+        .toDF("batch_id", "amount").createOrReplaceTempView("t")
+      val groupsDf = spark.sql(
+        "select batch_id, sum(amount) over (order by batch_id nulls first " +
+          "groups between 1 preceding and current row) as total from t")
+      // Peer groups are {null, null}, {1, 1}, {2}, {3, 3}, {9}.
+      checkAnswer(
+        groupsDf,
+        Seq(
+          Row(null, 3), Row(null, 3), Row(1, 28), Row(1, 28), Row(2, 45),
+          Row(3, 75), Row(3, 75), Row(9, 95)))
+      // RANGE over DENSE_RANK provides an equivalent peer-group oracle.
+      checkAnswer(
+        groupsDf,
+        spark.sql(
+          """
+            |select batch_id, total from (
+            |  select batch_id, amount, sum(amount) over (
+            |    order by dense_rank() over (order by batch_id nulls first)
+            |    range between 1 preceding and current row) as total
+            |  from t
+            |)
+            |""".stripMargin))
+    }
+  }
+
+  test("GROUPS offset frame with NULLS LAST peer group") {
+    withTempView("t") {
+      Seq(
+        (Some(1), 10), (Some(1), 15), (Some(2), 20), (Some(3), 25), (Some(3), 30),
+        (Some(9), 40), (None, 1), (None, 2))
+        .toDF("batch_id", "amount").createOrReplaceTempView("t")
+      val groupsDf = spark.sql(
+        "select batch_id, sum(amount) over (order by batch_id nulls last " +
+          "groups between 1 preceding and current row) as total from t")
+      // Peer groups are {1, 1}, {2}, {3, 3}, {9}, {null, null}.
+      checkAnswer(
+        groupsDf,
+        Seq(
+          Row(1, 25), Row(1, 25), Row(2, 45), Row(3, 75),
+          Row(3, 75), Row(9, 95), Row(null, 43), Row(null, 43)))
+      checkAnswer(
+        groupsDf,
+        spark.sql(
+          """
+            |select batch_id, total from (
+            |  select batch_id, amount, sum(amount) over (
+            |    order by dense_rank() over (order by batch_id nulls last)
+            |    range between 1 preceding and current row) as total
+            |  from t
+            |)
+            |""".stripMargin))
+    }
+  }
+
+  // Case 1: `n PRECEDING` counts peer groups, not rows or key distance.
+  test("GROUPS between 1 preceding and current row (test matrix case 1)") {
+    withTempView("t") {
+      Seq((1, 10), (1, 15), (2, 20), (3, 25), (3, 30), (9, 40))
+        .toDF("batch_id", "amount").createOrReplaceTempView("t")
+      // Include batch_id to verify each total is assigned to the correct rows.
+      checkAnswer(
+        spark.sql(
+          "select batch_id, sum(amount) over (order by batch_id " +
+            "groups between 1 preceding and current row) as total from t"),
+        Seq(
+          Row(1, 25), Row(1, 25), Row(2, 45), Row(3, 75), Row(3, 75), Row(9, 95)))
+    }
+  }
+
+  // GROUPS offsets remain integral and are not coerced to the ORDER BY type.
+  private def specifiedFrame(df: DataFrame): SpecifiedWindowFrame = {
+    val frames = df.queryExecution.analyzed.collect { case w: WindowNode =>
+      w.windowExpressions.flatMap(_.collect {
+        case e: WindowExpression => e.windowSpec.frameSpecification
+      })
+    }.flatten
+    assert(frames.size === 1, s"expected exactly one window frame, got $frames")
+    frames.head.asInstanceOf[SpecifiedWindowFrame]
+  }
+
+  test("GROUPS offset over a DATE order key is not coerced to an interval") {
+    withTempView("t") {
+      Seq(("2020-01-01", 10), ("2020-01-01", 15), ("2020-01-02", 20),
+        ("2020-01-03", 25), ("2020-01-03", 30), ("2020-01-09", 40))
+        .toDF("d", "amount")
+        .selectExpr("CAST(d AS DATE) AS d", "amount")
+        .createOrReplaceTempView("t")
+
+      val groupsDf = spark.sql(
+        "select amount, sum(amount) over (order by d " +
+          "groups between 1 preceding and current row) as total from t")
+      val groupsFrame = specifiedFrame(groupsDf)
+      assert(groupsFrame.frameType === GroupFrame,
+        s"expected GroupFrame, got ${groupsFrame.frameType}")
+      assert(groupsFrame.lower.dataType == IntegerType,
+        s"GROUPS offset must stay an integer, not be cast to the DATE order-key type " +
+          s"or an interval, got ${groupsFrame.lower} : ${groupsFrame.lower.dataType}")
+      val analyzedText = groupsDf.queryExecution.analyzed.toString
+      assert(!analyzedText.toLowerCase(Locale.ROOT).contains("interval"),
+        s"GROUPS offset must not be cast to an interval:\n$analyzedText")
+      val optimizedText = groupsDf.queryExecution.optimizedPlan.toString
+      assert(optimizedText.contains("GroupFrame"),
+        s"expected GroupFrame to survive optimization:\n$optimizedText")
+      assert(!optimizedText.toLowerCase(Locale.ROOT).contains("interval"),
+        s"GROUPS offset must not be cast to an interval after optimization:\n$optimizedText")
+      checkAnswer(groupsDf.select("total"),
+        Seq(Row(25), Row(25), Row(45), Row(75), Row(75), Row(95)))
+
+      // RANGE over a DATE key uses an interval boundary.
+      val rangeDf = spark.sql(
+        "select amount, sum(amount) over (order by d " +
+          "range between interval 1 day preceding and current row) as total from t")
+      val rangeFrame = specifiedFrame(rangeDf)
+      assert(rangeFrame.frameType === RangeFrame,
+        s"expected RangeFrame, got ${rangeFrame.frameType}")
+      assert(rangeFrame.lower.dataType.isInstanceOf[DayTimeIntervalType],
+        s"RANGE offset over a DATE order key should be an interval, " +
+          s"got ${rangeFrame.lower} : ${rangeFrame.lower.dataType}")
+    }
+  }
+
+  // With one row per peer group, offset GROUPS and ROWS plans are equivalent.
+  test("GROUPS offset frame plan shape has no extra Sort/Exchange/WindowExec") {
+    withTempView("t") {
+      Seq((1, 10), (2, 15), (3, 20), (4, 25), (5, 30))
+        .toDF("batch_id", "amount").createOrReplaceTempView("t")
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val groupsShape = planShape(spark.sql(
+          "select sum(amount) over (order by batch_id " +
+            "groups between 1 preceding and current row) as total from t"))
+        val rowsShape = planShape(spark.sql(
+          "select sum(amount) over (order by batch_id " +
+            "rows between 1 preceding and current row) as total from t"))
+        assert(groupsShape._1 == 1 && groupsShape._3 == 1,
+          s"expected exactly one Sort and one WindowExec, got $groupsShape")
+        assert(groupsShape == rowsShape,
+          s"GROUPS offset plan shape differs from the equivalent ROWS plan shape: " +
+            s"groups=$groupsShape rows=$rowsShape")
+      }
+    }
+  }
+
+  // GROUPS uses the generic aggregate path for offset window functions.
+  test("first_value/nth_value over a GROUPS frame use peer-group semantics") {
+    withTempView("t") {
+      Seq((1, 10), (1, 15), (2, 20), (3, 25), (3, 30), (9, 40))
+        .toDF("batch_id", "amount").createOrReplaceTempView("t")
+      checkAnswer(
+        spark.sql(
+          "select batch_id, " +
+            "first_value(amount) over (order by batch_id " +
+            "  groups between 1 preceding and 1 following) as first_amt, " +
+            "nth_value(amount, 2) over (order by batch_id " +
+            "  groups between 1 preceding and 1 following) as second_amt " +
+            "from t"),
+        Seq(
+          Row(1, 10, 15), Row(1, 10, 15), Row(2, 10, 15),
+          Row(3, 20, 25), Row(3, 20, 25), Row(9, 25, 30)))
+    }
+  }
+
+  // Case 3: `n FOLLOWING` advances one peer group.
+  test("GROUPS between current row and 1 following (test matrix case 3)") {
+    withTempView("t") {
+      Seq((1, 10), (1, 15), (2, 20), (3, 25), (3, 30), (9, 40))
+        .toDF("batch_id", "amount").createOrReplaceTempView("t")
+      // Include batch_id to verify each total is assigned to the correct rows.
+      checkAnswer(
+        spark.sql(
+          "select batch_id, sum(amount) over (order by batch_id " +
+            "groups between current row and 1 following) as total from t"),
+        Seq(
+          Row(1, 45), Row(1, 45), Row(2, 75), Row(3, 95), Row(3, 95), Row(9, 40)))
+    }
+  }
+
+  // Case 4: GROUPS offsets support multi-column ordering.
+  test("GROUPS with multi-column ORDER BY and an offset (test matrix case 4)") {
+    withTempView("t") {
+      Seq(
+        ("2024-01-01", 1, 10),
+        ("2024-01-01", 1, 20),
+        ("2024-01-02", 2, 30),
+        ("2024-01-03", 3, 45),
+        ("2024-01-03", 3, 45))
+        .toDF("trade_date", "batch_id", "amount").createOrReplaceTempView("t")
+      checkAnswer(
+        spark.sql(
+          "select sum(amount) over (order by trade_date, batch_id " +
+            "groups between 1 preceding and current row) as total from t"),
+        // Peer groups are {10, 20}, {30}, and {45, 45}.
+        Seq(Row(30), Row(30), Row(60), Row(120), Row(120)))
+    }
+  }
+
+  // Case 5: offsets count in window-ordering direction, not key-value direction.
+  test("GROUPS with DESC order counts in window order (test matrix case 5)") {
+    withTempView("t") {
+      Seq((1, 10), (1, 15), (2, 20), (3, 25), (3, 30), (9, 40))
+        .toDF("batch_id", "amount").createOrReplaceTempView("t")
+      // Include batch_id to verify totals follow descending window order.
+      checkAnswer(
+        spark.sql(
+          "select batch_id, sum(amount) over (order by batch_id desc " +
+            "groups between 1 preceding and current row) as total from t"),
+        Seq(
+          Row(9, 40), Row(3, 95), Row(3, 95), Row(2, 75), Row(1, 45), Row(1, 45)))
+    }
+  }
+
+  // 0 PRECEDING / 0 FOLLOWING must equal CURRENT ROW.
+  test("GROUPS 0 PRECEDING / 0 FOLLOWING equal CURRENT ROW") {
+    withTempView("t") {
+      Seq((1, 10), (1, 15), (2, 20), (3, 25), (3, 30), (9, 40))
+        .toDF("batch_id", "amount").createOrReplaceTempView("t")
+      val current = spark.sql(
+        "select sum(amount) over (order by batch_id " +
+          "groups between current row and current row) as total from t")
+      val zeroPreceding = spark.sql(
+        "select sum(amount) over (order by batch_id " +
+          "groups between 0 preceding and current row) as total from t")
+      val zeroFollowing = spark.sql(
+        "select sum(amount) over (order by batch_id " +
+          "groups between current row and 0 following) as total from t")
+      val bothZero = spark.sql(
+        "select sum(amount) over (order by batch_id " +
+          "groups between 0 preceding and 0 following) as total from t")
+      checkAnswer(zeroPreceding, current)
+      checkAnswer(zeroFollowing, current)
+      checkAnswer(bothZero, current)
+    }
+  }
+
+  // RANGE over DENSE_RANK is equivalent to GROUPS over the original ordering.
+  private def denseRankRangeOracle(lower: String, upper: String): DataFrame = {
+    spark.sql(
+      s"""
+         |select total from (
+         |  select amount, sum(amount) over (
+         |    order by dense_rank() over (order by batch_id)
+         |    range between $lower and $upper) as total
+         |  from t
+         |)
+         |""".stripMargin)
+  }
+
+  private def checkGroupsAgainstDenseRankOracle(lower: String, upper: String): Unit = {
+    val groupsDf = spark.sql(
+      s"select sum(amount) over (order by batch_id groups between $lower and $upper) " +
+        "as total from t")
+    checkAnswer(groupsDf, denseRankRangeOracle(lower, upper))
+  }
+
+  test("GROUPS boundary matrix matches the DENSE_RANK + RANGE oracle") {
+    withTempView("t") {
+      Seq((1, 10), (1, 15), (2, 20), (3, 25), (3, 30), (9, 40))
+        .toDF("batch_id", "amount").createOrReplaceTempView("t")
+      val lowers = Seq("unbounded preceding", "1 preceding", "current row", "1 following")
+      val uppers = Seq("1 preceding", "current row", "1 following", "unbounded following")
+      for (lower <- lowers; upper <- uppers) {
+        // Only this combination is rejected statically; other reversed bounds yield empty frames.
+        val invalid = (lower, upper) match {
+          case ("1 following", "1 preceding") => true
+          case _ => false
+        }
+        if (!invalid) {
+          withClue(s"lower='$lower' upper='$upper'") {
+            checkGroupsAgainstDenseRankOracle(lower, upper)
+          }
+        } else {
+          withClue(s"lower='$lower' upper='$upper'") {
+            checkError(
+              exception = intercept[AnalysisException] {
+                spark.sql(
+                  "select sum(amount) over (order by batch_id groups between " +
+                    "1 following and 1 preceding) as total from t").collect()
+              },
+              condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON",
+              parameters = Map(
+                "sqlExpr" -> "\"GROUPS BETWEEN 1 FOLLOWING AND 1 PRECEDING\"",
+                "comparison" -> "less than or equal"),
+              queryContext = Array(
+                ExpectedContext(
+                  fragment = "(order by batch_id groups between " +
+                    "1 following and 1 preceding)",
+                  start = 24,
+                  stop = 85)))
+          }
+        }
+      }
+    }
+  }
+
+  // Peer-shape edges.
+  test("GROUPS peer-shape edge - one group for the whole partition") {
+    withTempView("t") {
+      Seq((1, 10), (1, 15), (1, 20)).toDF("batch_id", "amount").createOrReplaceTempView("t")
+      checkAnswer(
+        spark.sql(
+          "select sum(amount) over (order by batch_id " +
+            "groups between 1 preceding and 1 following) as total from t"),
+        Seq(Row(45), Row(45), Row(45)))
+    }
+  }
+
+  // One group per row: GROUPS must then equal ROWS.
+  test("GROUPS peer-shape edge - one group per row equals ROWS") {
+    withTempView("t") {
+      Seq((1, 10), (2, 15), (3, 20), (4, 25), (5, 30))
+        .toDF("batch_id", "amount").createOrReplaceTempView("t")
+      val groupsDf = spark.sql(
+        "select sum(amount) over (order by batch_id " +
+          "groups between 1 preceding and 1 following) as total from t")
+      val rowsDf = spark.sql(
+        "select sum(amount) over (order by batch_id " +
+          "rows between 1 preceding and 1 following) as total from t")
+      checkAnswer(groupsDf, rowsDf)
+    }
+  }
+
+  test("GROUPS peer-shape edge - a single row") {
+    withTempView("t") {
+      Seq((1, 10)).toDF("batch_id", "amount").createOrReplaceTempView("t")
+      checkAnswer(
+        spark.sql(
+          "select sum(amount) over (order by batch_id " +
+            "groups between 1 preceding and 1 following) as total from t"),
+        Seq(Row(10)))
+    }
+  }
+
+  test("GROUPS peer-shape edge - an empty partition") {
+    withTempView("t") {
+      Seq.empty[(Int, Int)].toDF("batch_id", "amount").createOrReplaceTempView("t")
+      checkAnswer(
+        spark.sql(
+          "select sum(amount) over (order by batch_id " +
+            "groups between 1 preceding and 1 following) as total from t"),
+        Seq.empty[Row])
+    }
+  }
+
+  // A frame entirely outside the partition is an empty frame, not an error: aggregates return
+  // their empty-input value (SUM -> NULL, COUNT -> 0).
+  test("GROUPS frame entirely outside the partition returns empty-input value") {
+    withTempView("t") {
+      Seq((1, 10), (2, 20), (3, 30)).toDF("batch_id", "amount").createOrReplaceTempView("t")
+      checkAnswer(
+        spark.sql(
+          "select sum(amount) over (order by batch_id " +
+            "groups between 5 following and 6 following) as sum_total, " +
+            "count(amount) over (order by batch_id " +
+            "groups between 5 following and 6 following) as count_total from t"),
+        Seq(Row(null, 0), Row(null, 0), Row(null, 0)))
+      checkAnswer(
+        spark.sql(
+          "select sum(amount) over (order by batch_id " +
+            "groups between 6 preceding and 5 preceding) as sum_total, " +
+            "count(amount) over (order by batch_id " +
+            "groups between 6 preceding and 5 preceding) as count_total from t"),
+        Seq(Row(null, 0), Row(null, 0), Row(null, 0)))
+    }
+  }
+
+  // Compare random inputs, including NULL keys, with the DENSE_RANK plus RANGE oracle.
+  test("GROUPS randomised differential oracle vs DENSE_RANK + RANGE") {
+    val rand = new scala.util.Random(58980L)
+    withTempView("t") {
+      val rows = (1 to 200).map { _ =>
+        val batchId = if (rand.nextInt(10) == 0) None else Some(rand.nextInt(5))
+        (batchId, rand.nextInt(30))
+      }
+      rows.toDF("batch_id", "amount").createOrReplaceTempView("t")
+      val boundaries = Seq(
+        ("unbounded preceding", "current row"),
+        ("2 preceding", "current row"),
+        ("current row", "2 following"),
+        ("1 preceding", "1 following"),
+        ("current row", "unbounded following"))
+      boundaries.foreach { case (lower, upper) =>
+        withClue(s"lower='$lower' upper='$upper'") {
+          checkGroupsAgainstDenseRankOracle(lower, upper)
+        }
+      }
+    }
+  }
+
+  // Frames, and the peer-group cursors in their bound orderings, are reused across a task's
+  // partitions. Every other GROUPS test runs on one partition, or on partitions of identical
+  // group shape, so none would notice group structure carried over from the previous one.
+  test("GROUPS over partitions with differing peer-group structure") {
+    withTempView("t") {
+      // pk=0: every row its own peer group. pk=1: one peer group covering the partition.
+      // pk=2: mixed group sizes. pk=3: a single row.
+      val rows =
+        (0 until 12).map(i => (0, i, i + 1)) ++
+          (0 until 12).map(i => (1, 7, i + 1)) ++
+          Seq((2, 0, 1), (2, 0, 2), (2, 0, 3), (2, 1, 4), (2, 2, 5), (2, 2, 6), (2, 3, 7)) ++
+          Seq((3, 0, 1))
+      rows.toDF("pk", "batch_id", "amount").createOrReplaceTempView("t")
+      val boundaries = Seq(
+        ("unbounded preceding", "current row"),
+        ("2 preceding", "current row"),
+        ("current row", "2 following"),
+        ("1 preceding", "1 following"),
+        ("2 preceding", "1 preceding"),
+        ("current row", "unbounded following"))
+      // One shuffle partition puts all four window partitions through one frame instance.
+      // `minPartitionRows = 8` also splits them across execution paths: the 12-row partitions
+      // take the segment tree, the 7- and 1-row ones its fallback frame, which shares its
+      // bound orderings.
+      val configs = Seq(
+        Seq(SQLConf.SHUFFLE_PARTITIONS.key -> "1"),
+        Seq(SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+          SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
+          SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "8"))
+      for (config <- configs; (lower, upper) <- boundaries) {
+        withSQLConf(config: _*) {
+          withClue(s"config=$config lower='$lower' upper='$upper'") {
+            checkAnswer(
+              spark.sql(
+                s"select pk, sum(amount) over (partition by pk order by batch_id " +
+                  s"groups between $lower and $upper) as total from t"),
+              spark.sql(
+                s"""
+                   |select pk, total from (
+                   |  select pk, sum(amount) over (
+                   |    partition by pk
+                   |    order by dense_rank() over (partition by pk order by batch_id)
+                   |    range between $lower and $upper) as total
+                   |  from t
+                   |)
+                   |""".stripMargin))
+          }
+        }
+      }
+    }
+  }
+
+  // Force multiple spills and compare with in-memory execution.
+  test("GROUPS results are unaffected by partition spilling") {
+    withTempView("t") {
+      val rows = (1 to 500).map(i => (i % 40, i))
+      rows.toDF("batch_id", "amount").createOrReplaceTempView("t")
+      val query =
+        "select sum(amount) over (order by batch_id " +
+          "groups between 2 preceding and 2 following) as total from t"
+      val noSpill = spark.sql(query).collect()
+      val spilled = withSQLConf(
+        SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "25",
+        SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1") {
+        spark.sql(query).collect()
+      }
+      assert(spilled.sameElements(noSpill),
+        s"spilled results differ from non-spilling results:\n" +
+          s"no-spill: ${noSpill.mkString(",")}\nspilled: ${spilled.mkString(",")}")
+    }
+  }
+
+  // Verify that GROUPS and RANGE use the same peer equality for special order-key values.
+  test("GROUPS peer groups for float special values match RANGE CURRENT ROW") {
+    withTempView("t") {
+      Seq(0.0, -0.0, Double.NaN, Double.NaN, 1.0)
+        .zipWithIndex.map { case (v, i) => (v, i) }
+        .toDF("value", "amount").createOrReplaceTempView("t")
+      // Signed zeros are peers, as are NaN values.
+      checkAnswer(
+        spark.sql(
+          "select sum(amount) over (order by value " +
+            "groups between current row and current row) as total from t"),
+        spark.sql(
+          "select sum(amount) over (order by value " +
+            "range between current row and current row) as total from t"))
+      // Check offset behavior against the DENSE_RANK plus RANGE oracle.
+      checkAnswer(
+        spark.sql(
+          "select sum(amount) over (order by value " +
+            "groups between 1 preceding and current row) as total from t"),
+        spark.sql(
+          """
+            |select total from (
+            |  select amount, sum(amount) over (
+            |    order by dense_rank() over (order by value)
+            |    range between 1 preceding and current row) as total
+            |  from t
+            |)
+            |""".stripMargin))
+    }
+  }
+
+  test("GROUPS peer groups for collated strings match RANGE CURRENT ROW") {
+    withTempView("t") {
+      Seq(("abc", 1), ("ABC", 2), ("abd", 3))
+        .toDF("value", "amount").createOrReplaceTempView("t")
+      spark.sql(
+        "select value collate UTF8_LCASE as value, amount from t").createOrReplaceTempView("tc")
+      checkAnswer(
+        spark.sql(
+          "select sum(amount) over (order by value " +
+            "groups between current row and current row) as total from tc"),
+        spark.sql(
+          "select sum(amount) over (order by value " +
+            "range between current row and current row) as total from tc"))
+      checkAnswer(
+        spark.sql(
+          "select sum(amount) over (order by value " +
+            "groups between 1 preceding and current row) as total from tc"),
+        spark.sql(
+          """
+            |select total from (
+            |  select amount, sum(amount) over (
+            |    order by dense_rank() over (order by value)
+            |    range between 1 preceding and current row) as total
+            |  from tc
+            |)
+            |""".stripMargin))
+    }
+  }
+
+  test("CREATE VIEW over a no-offset GROUPS query round-trips") {
+    // Persistent views cannot reference temporary views.
+    withTable("t") {
+      withView("v") {
+        Seq((1, 10), (1, 15), (2, 20), (3, 25), (3, 30), (9, 40))
+          .toDF("batch_id", "amount").write.saveAsTable("t")
+        spark.sql(
+          "create view v as select batch_id, sum(amount) over (order by batch_id " +
+            "groups between current row and current row) as total from t")
+        val storedText =
+          spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(
+            TableIdentifier("v")).viewText.get
+        // View text preserves the keyword's original case.
+        assert(storedText.toUpperCase(Locale.ROOT).contains("GROUPS"), storedText)
+        // Re-create the view to verify that its stored text parses.
+        withView("v2") {
+          spark.sql(s"create view v2 as $storedText")
+          checkAnswer(spark.table("v2"), spark.table("v"))
+        }
+        checkAnswer(
+          spark.table("v").orderBy("batch_id", "total"),
+          Seq(
+            Row(1, 25), Row(1, 25), Row(2, 20), Row(3, 55), Row(3, 55), Row(9, 40)))
+      }
+    }
+  }
+
+  test("no regression in existing ROWS and RANGE frame results") {
+    withTempView("t") {
+      Seq((1, 10, 10), (2, 20, 20), (3, 30, 10))
+        .toDF("key", "row_amount", "range_amount")
+        .createOrReplaceTempView("t")
+      checkAnswer(
+        spark.sql(
+          """
+            |select
+            |  sum(row_amount) over (
+            |    order by key rows between unbounded preceding and current row) as rows_total,
+            |  sum(range_amount) over (
+            |    order by key range between unbounded preceding and current row) as range_total
+            |from t
+            |""".stripMargin),
+        Row(10, 10) :: Row(30, 30) :: Row(60, 40) :: Nil)
+    }
   }
 }
