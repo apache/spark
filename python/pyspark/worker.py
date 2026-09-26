@@ -19,6 +19,7 @@
 Worker that receives input from Piped RDD.
 """
 
+import copy
 import dataclasses
 import inspect
 import itertools
@@ -74,6 +75,7 @@ from pyspark.serializers import (
     SpecialLengths,
     write_int,
     write_long,
+    write_with_length,
 )
 from pyspark.sql.conversion import (
     ArrowBatchTransformer,
@@ -128,12 +130,105 @@ from pyspark.worker_util import (
 )
 
 
+class WorkerMetrics:
+    """Metric definitions and recorded values for one worker task.
+
+    Register units once, then update values with set(). Build the wire entries
+    only when reporting. Registered metrics without a recorded value are omitted from the report.
+    """
+
+    def __init__(self) -> None:
+        self._definitions: dict[str, str] = {}
+        self._values: dict[str, Any] = {}
+
+    def register(self, name: str, *, unit: str) -> None:
+        """Declare a new metric without assigning a value."""
+        for field, text in (("name", name), ("unit", unit)):
+            if not isinstance(text, str) or not text:
+                raise ValueError(f"Python worker metric {field} must be a nonempty string")
+        if name in self._definitions:
+            raise ValueError(f"Python worker metric {name} is already registered")
+        self._definitions[name] = unit
+
+    def set(self, name: str, value: Any) -> None:
+        """Record an independent copy of a value; the writer checks JSON encoding at report time."""
+        if name not in self._definitions:
+            raise ValueError(f"Python worker metric {name} is not registered")
+        # Capture the value now; the caller may later mutate its nested lists or dictionaries.
+        self._values[name] = copy.deepcopy(value)
+
+    def to_report(self) -> dict[str, dict[str, Any]]:
+        """Return a snapshot of named value/unit dictionaries for the JSON writer."""
+        report: dict[str, dict[str, Any]] = {}
+        # Copy nested values too, so editing the report cannot change stored metrics.
+        for name, value in self._values.items():
+            report[name] = {
+                "value": copy.deepcopy(value),
+                "unit": self._definitions[name],
+            }
+        return report
+
+
 def report_times(outfile, boot, init, finish, processing_time_ms):
+    """Write timing data using the legacy TIMING_DATA protocol.
+
+    report_worker_metrics uses this writer when the JVM has not advertised JSON metrics v1.
+    The marker is followed by four positional int64 values: boot/init/finish epoch milliseconds
+    and processing duration in milliseconds. The caller writes the spill counters afterward.
+    """
     write_int(SpecialLengths.TIMING_DATA, outfile)
     write_long(int(1000 * boot), outfile)
     write_long(int(1000 * init), outfile)
     write_long(int(1000 * finish), outfile)
     write_long(processing_time_ms, outfile)
+
+
+def report_metrics(outfile: BinaryIO, metrics: dict[str, dict[str, Any]]) -> None:
+    """Validate and send JSON metrics to the JVM.
+
+    Each name maps to a value/unit dictionary; the message includes a marker and byte length.
+    """
+    # Validate and encode the complete report before starting a frame on the socket.
+    for name, metric in metrics.items():
+        if not isinstance(name, str) or not name:
+            raise ValueError("Python worker metric name must be a nonempty string")
+        if not isinstance(metric, dict) or "value" not in metric:
+            raise ValueError(f"Python worker metric {name} must have a value")
+        unit = metric.get("unit")
+        if not isinstance(unit, str) or not unit:
+            raise ValueError(f"Python worker metric {name} must have a nonempty unit")
+
+    # Let JSON encoding validate values, including rejecting non-finite floats, before any writes.
+    payload = json.dumps(
+        {"kind": "spark.python.worker.metrics", "version": 1, "metrics": metrics},
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    if len(payload) > 64 * 1024:
+        raise ValueError("Python worker metrics payload exceeds 64 KiB")
+    write_int(SpecialLengths.METRICS_DATA, outfile)
+    write_with_length(payload, outfile)
+
+
+def report_worker_metrics(outfile, boot, init, finish, processing_time_ms, runner_conf):
+    """Build the current timing entries and select the format supported by this task's JVM."""
+    if runner_conf.get("spark.python.worker.metrics.protocol.version") != "1":
+        report_times(outfile, boot, init, finish, processing_time_ms)
+        return
+
+    # The JVM derives boot/init/total durations from these timestamps. Processing is already a
+    # duration. Keep this timing-specific construction separate from the generic JSON writer.
+    metrics = WorkerMetrics()
+    for name, timestamp in (
+        ("bootTimestampMs", boot),
+        ("initTimestampMs", init),
+        ("finishTimestampMs", finish),
+    ):
+        metrics.register(name, unit="timestampMillis")
+        metrics.set(name, int(1000 * timestamp))
+    metrics.register("processingDurationMs", unit="milliseconds")
+    metrics.set("processingDurationMs", processing_time_ms)
+    report_metrics(outfile, metrics.to_report())
 
 
 def chain(f, g):
@@ -4553,7 +4648,10 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         handle_worker_exception(e, outfile)
         sys.exit(-1)
     finish_time = time.time()
-    report_times(outfile, boot_time, init_time, finish_time, processing_time_ms)
+    report_worker_metrics(
+        outfile, boot_time, init_time, finish_time, processing_time_ms, runner_conf
+    )
+    # Spill counts are the existing binary trailer, outside either timing payload format.
     write_long(shuffle.MemoryBytesSpilled, outfile)
     write_long(shuffle.DiskBytesSpilled, outfile)
 
@@ -4561,7 +4659,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
     send_accumulator_updates(outfile)
 
-    # Check end of stream — raises if the finish signal is not received correctly.
+    # Check end of stream - raises if the finish signal is not received correctly.
     # Note: this call might fail due to other reasons (e.g. channel broke)
     # which will terminate the worker process.
     try:

@@ -210,6 +210,39 @@ private[spark] object BasePythonRunner extends Logging {
     }
   }
 
+  // Inputs used to derive the four existing Python SQL timing metrics.
+  private[python] case class WorkerTimingData(
+      bootTimestampMs: Long,
+      initTimestampMs: Long,
+      finishTimestampMs: Long,
+      processingDurationMs: Long)
+
+  /**
+   * Extract the task timings from a generic report. Keep timing names and expected metadata here
+   * so the JSON codec can carry additional metrics without knowing how they will be consumed.
+   */
+  private[python] def workerTimingData(
+      report: Map[String, PythonWorkerMetricsDecoder.Metric]): WorkerTimingData = {
+    def timingValue(name: String, unit: String): Long = {
+      val metric = report.getOrElse(name,
+        throw new SparkException(s"Missing Python worker timing metric: $name"))
+      if (metric.unit != unit) {
+        throw new SparkException(s"Invalid unit for Python worker timing metric: $name")
+      }
+      val value = metric.value
+      if (!value.isIntegralNumber || !value.canConvertToLong) {
+        throw new SparkException(s"Invalid int64 value for Python worker timing metric: $name")
+      }
+      value.longValue()
+    }
+
+    WorkerTimingData(
+      timingValue("bootTimestampMs", "timestampMillis"),
+      timingValue("initTimestampMs", "timestampMillis"),
+      timingValue("finishTimestampMs", "timestampMillis"),
+      timingValue("processingDurationMs", "milliseconds"))
+  }
+
   /**
    * Creates a task identifier string for logging following Spark's standard format.
    * Format: "task <partition>.<attempt> in stage <stageId> (TID <taskAttemptId>)"
@@ -744,7 +777,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         PythonWorkerUtils.writeBroadcasts(broadcastVars, worker, env, dataOut)
 
         dataOut.writeInt(evalType)
-        PythonWorkerUtils.writeConf(runnerConf, dataOut)
+        // Advertise support per task, including when a Python worker is reused.
+        PythonWorkerUtils.writeConf(
+          runnerConf + (PythonWorkerMetricsDecoder.protocolVersionConfKey ->
+            PythonWorkerMetricsDecoder.protocolVersion), dataOut)
         PythonWorkerUtils.writeConf(evalConf, dataOut)
         writeCommand(dataOut)
 
@@ -863,6 +899,24 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       val initTime = stream.readLong()
       val finishTime = stream.readLong()
       val processingTimeMs = stream.readLong()
+      recordTimingAndSpills(bootTime, initTime, finishTime, processingTimeMs)
+    }
+
+    protected def handleMetricsData(): Unit = {
+      // Check all required timing entries before updating any of the SQL metrics.
+      val timing = workerTimingData(PythonWorkerMetricsDecoder.read(stream))
+      recordTimingAndSpills(
+        timing.bootTimestampMs,
+        timing.initTimestampMs,
+        timing.finishTimestampMs,
+        timing.processingDurationMs)
+    }
+
+    private def recordTimingAndSpills(
+        bootTime: Long,
+        initTime: Long,
+        finishTime: Long,
+        processingTimeMs: Long): Unit = {
       val boot = bootTime - startTime
       val init = initTime - bootTime
       val finish = finishTime - initTime
@@ -886,6 +940,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       metrics.get("pythonInitTime").foreach(_.add(init))
       metrics.get("pythonTotalTime").foreach(_.add(total))
       metrics.get("pythonProcessingTime").foreach(_.add(processingTimeMs))
+      // Both timing formats are followed by the original pair of binary spill counters.
       val memoryBytesSpilled = stream.readLong()
       val diskBytesSpilled = stream.readLong()
       context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
@@ -1398,6 +1453,9 @@ private[spark] class PythonRunner(
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()
               read()
+            case SpecialLengths.METRICS_DATA =>
+              handleMetricsData()
+              read()
             case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
               throw handlePythonException()
             case SpecialLengths.END_OF_DATA_SECTION =>
@@ -1425,6 +1483,7 @@ private[spark] object SpecialLengths {
   val START_ARROW_STREAM = -6
   val END_OF_MICRO_BATCH = -7
   val START_OF_INIT_MESSAGE = -8
+  val METRICS_DATA = -9
 }
 
 private[spark] object BarrierTaskContextMessageProtocol {
