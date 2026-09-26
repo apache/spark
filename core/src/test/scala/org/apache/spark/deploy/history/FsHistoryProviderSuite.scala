@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
+import java.nio.file.{Files, StandardOpenOption}
 import java.util.{Date, Locale}
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
@@ -40,7 +40,7 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.{JobExecutionStatus, SecurityManager, SPARK_VERSION, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogTestHelper._
-import org.apache.spark.internal.config.DRIVER_LOG_DFS_DIR
+import org.apache.spark.internal.config.{DRIVER_LOG_DFS_DIR, EVENT_LOG_COMPRESS}
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, UI_VIEW_ACLS, UI_VIEW_ACLS_GROUPS, USER_GROUPS_MAPPING}
 import org.apache.spark.io._
@@ -1624,6 +1624,59 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         val job2 = appStore.job(2)
         assert(job2.status === JobExecutionStatus.SUCCEEDED)
       }
+    }
+  }
+
+  test("SPARK-59747: don't retry compaction of event log files with malformed input") {
+    withTempDir { dir =>
+      val conf = createTestConf()
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN, 1)
+      conf.set(EVENT_LOG_COMPACTION_SCORE_THRESHOLD, 0.0d)
+      // Keep the event log files uncompressed so that the bytes appended below are decoded as-is.
+      conf.set(EVENT_LOG_COMPRESS, false)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+
+      val provider = new FsHistoryProvider(conf)
+
+      val writer = new RollingEventLogFilesWriter("app", None, dir.toURI, conf, hadoopConf)
+      writer.start()
+
+      // The listing replay halts once it has seen the environment update, so pad the first file
+      // with enough events that the malformed bytes appended below are never decoded while
+      // listing, but are when the file is replayed in full for compaction.
+      writeEventsToRollingWriter(writer, Seq(
+        SparkListenerApplicationStart("app", Some("app"), 0, "user", None),
+        SparkListenerEnvironmentUpdate(Map(
+          "Spark Properties" -> Seq.empty,
+          "Hadoop Properties" -> Seq.empty,
+          "JVM Information" -> Seq.empty,
+          "System Properties" -> Seq.empty,
+          "Metrics Properties" -> Seq.empty,
+          "Classpath Entries" -> Seq.empty))) ++
+        (1 to 1000).map(SparkListenerJobStart(_, 0, Seq.empty)), rollFile = true)
+
+      val firstFile = EventLogFileReader(fs, new Path(writer.logPath)).get.listEventLogFiles.head
+      Files.write(new File(firstFile.getPath.toUri).toPath,
+        Array[Byte](0xC3.toByte, 0x28.toByte, '\n'.toByte), StandardOpenOption.APPEND)
+
+      writeEventsToRollingWriter(writer, Seq(SparkListenerJobEnd(1, 1, JobSucceeded)),
+        rollFile = false)
+
+      updateAndCheck(provider) { list =>
+        assert(list.map(_.id) === Seq("app"))
+        val logFiles = EventLogFileReader(fs, new Path(writer.logPath)).get.listEventLogFiles
+        assert(!logFiles.exists(file => EventLogFileWriter.isCompacted(file.getPath)))
+        assert(logFiles.map { file =>
+          RollingEventLogFilesWriter.getEventLogFileIndex(file.getPath.getName)
+        } === Seq(1, 2))
+        val info = provider.listing.read(classOf[LogInfo], writer.logPath)
+        assert(info.lastEvaluatedForCompaction === Some(2))
+      }
+
+      writer.stop()
+      provider.stop()
     }
   }
 
