@@ -59,6 +59,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveInsertInto" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveNaturalAndUsingJoin" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveNewInstance" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveOverlaps" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveOrdinalInOrderByAndGroupBy" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveOutputRelation" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolvePivot" ::
