@@ -7130,6 +7130,26 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY =
+    buildConf("spark.sql.json.enableStreamingTopLevelArray")
+      .doc("When true, multiline JSON file reads stream the elements of a top-level array one at " +
+        "a time instead of materializing the entire array before returning rows. This applies " +
+        "only to reads into a struct schema that take top-level arrays as structs, and has no " +
+        "effect on reads using the `singleVariantColumn` or `explodeEmbeddedArray` option. " +
+        "Streaming also makes an array element, rather than the whole document, the record " +
+        "that a parse mode applies to, since rows already emitted cannot be withdrawn: " +
+        "PERMISSIVE fills the corrupt record column for the malformed element only, leaving " +
+        "it null on the valid rows of the same document, and DROPMALFORMED drops that " +
+        "element rather than the whole document. An element whose failure leaves the parser " +
+        "at an unknown position, such as a nested value of the wrong shape, still ends the " +
+        "document, as does a failure outside any element, such as a syntax error between two " +
+        "elements or a missing closing bracket. It can be overwritten by the JSON option " +
+        "`enableStreamingTopLevelArray`.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val JSON_USE_UNSAFE_ROW =
     buildConf("spark.sql.json.useUnsafeRow")
       .doc("When set to true, use UnsafeRow to represent struct result in the JSON parser. It " +
