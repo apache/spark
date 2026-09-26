@@ -265,6 +265,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def sqlAsOfJoinMatchConditionMissing(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "ASOF_JOIN_MATCH_CONDITION_MISSING",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
   def sqlAsOfJoinMatchConditionInvalidOperator(
       operator: String,
       ctx: ParserRuleContext): Throwable = {

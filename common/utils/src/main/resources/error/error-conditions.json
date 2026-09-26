@@ -174,6 +174,12 @@
     ],
     "sqlState" : "42K09"
   },
+  "ASOF_JOIN_MATCH_CONDITION_MISSING" : {
+    "message" : [
+      "ASOF JOIN requires a MATCH_CONDITION clause, for example MATCH_CONDITION (left.timestamp >= right.timestamp)."
+    ],
+    "sqlState" : "42601"
+  },
   "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE" : {
     "message" : [
       "Each operand of the MATCH_CONDITION comparison must reference exactly one join input, and the two operands must reference different inputs. Got: <operand1> and <operand2>."
