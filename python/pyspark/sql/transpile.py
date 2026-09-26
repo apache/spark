@@ -856,8 +856,8 @@ class CatalystTranspiler(AbstractTranspiler):
             case ast.Compare(left, ops, comps):
                 # `in` / `not in` are container membership, not a chainable value
                 # comparison, and need their own NULL analysis: Python's `in` is
-                # equality-based and never raises on a `None` probe. Deferred to
-                # SPARK-56925, so refuse them and fall back.
+                # equality-based and never raises on a `None` probe. Not lowered
+                # yet, so refuse them and fall back.
                 if any(isinstance(o, (ast.In, ast.NotIn)) for o in ops):
                     raise UnsupportedOperationException(
                         "`in` / `not in` is not supported by the transpiler; the "
@@ -872,22 +872,15 @@ class CatalystTranspiler(AbstractTranspiler):
                 # Python evaluates `a OP1 b OP2 c` as `(a OP1 b) and (b OP2 c)`
                 # with `b` evaluated once, so the fold below re-lowers each
                 # interior operand once per adjacent pair. Safe for the operand
-                # grammar we accept, all of it deterministic and side-effect free
-                # -- but NOT for the call-site arguments the JVM's
-                # `resolveUDFParams` substitutes into `_udf_param_N`, where a
-                # non-deterministic argument becomes several independent
-                # expressions that desynchronize (`50 < x < 60` over
-                # `rand(7) * 100` is ~30% true where Python is ~10%). That has to
-                # be fixed in the analyzer, which is the first place a resolved
-                # argument exists.
-                #
-                # Be precise about the blast radius. `and` / `or` were already
-                # wrong this way, their operands being separate subtrees. A SINGLE
-                # comparison is not: its duplicate operand appears only inside an
-                # `IS NULL` test, whose outcome does not depend on the value drawn,
-                # so `50 < x` over `rand()` samples correctly. Chains previously
-                # fell back to interpreted Python, so lowering them is what newly
-                # exposes them to this.
+                # grammar we accept, all of it deterministic and side-effect free.
+                # It does mean the body READS a parameter once per adjacent pair,
+                # which SPARK-58626 is what makes safe: `_udf_param_N` is a
+                # reference, and `ConvertToCatalyst` gives an argument read more
+                # than once one column per row -- or declines to lower the call
+                # where no column fits -- so a non-deterministic argument is drawn
+                # once and every read agrees. While each read still carried its own
+                # copy of the argument, `50 < x < 60` over `rand(7) * 100` was ~30%
+                # true where Python is ~10%.
                 #
                 # Folding into nested CASE WHENs instead -- atomic to predicate
                 # splitting -- was rejected: it costs pushdown for every

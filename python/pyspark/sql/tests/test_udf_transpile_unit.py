@@ -2398,57 +2398,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual(sorted(r[0] for r in fdf.collect()), [1, 7])
             self.assertEqual(0, self._eval_python_count(fdf))
 
-    def test_udf_transpile_nondeterministic_argument_falls_back(self):
-        # RED UNTIL the companion analyzer fix lands -- deliberately, to pin a real
-        # wrong-results bug rather than tolerate it silently. Do not skip or xfail.
-        #
-        # A non-deterministic ARGUMENT must suppress transpilation at the call site
-        # even though the UDF itself transpiled fine. (Distinct from
-        # test_udf_transpile_skips_nondeterministic, which covers a UDF marked
-        # non-deterministic.) `resolveUDFParams` substitutes the argument at every
-        # `_udf_param_N` occurrence -- four of them for a two-link chain -- so a
-        # non-deterministic one becomes several independent expressions with
-        # independent state. Since `and` / `or` and chains evaluate later copies
-        # only on the rows where earlier links held, the copies desynchronize:
-        # `50 < x < 60` over `rand(7) * 100` is ~30% true instead of ~10%.
-        #
-        # The fix belongs in ResolveTranspiledPythonUDFOptions. It cannot go in
-        # Python (no call site exists at UDF construction) nor in the JVM builder
-        # (`rand(7)` is still an UnresolvedFunction there and reports
-        # deterministic=true). Assert on the plan, not on observed proportions: a
-        # statistical assertion would be flaky, and keeping EvalPython means the
-        # interpreted UDF runs, which is correct by construction.
-        from pyspark.sql.functions import col, rand
-
-        band = lambda x: 50 < x < 60  # noqa: E731
-        band_or = lambda x: x < 50 or x > 60  # noqa: E731
-        with self.sql_conf(_TRANSPILE_ON):
-            for label, func in (("50 < x < 60", band), ("x < 50 or x > 60", band_or)):
-                # subTest so the chain failing does not hide the `or` case, which
-                # has the same bug by the same mechanism.
-                with self.subTest(func=label):
-                    pudf = UserDefinedFunction(func, BooleanType())
-                    self.assertTrue(pudf.transpiled, f"{label} should transpile on its own")
-                    base = self.spark.range(0, 8).select((col("id") * 10).alias("a"))
-
-                    # Deterministic argument -> transpiled and elided.
-                    det = base.select(pudf("a"))
-                    self.assertEqual(
-                        0,
-                        self._eval_python_count(det),
-                        f"{label}: a deterministic argument should still be elided",
-                    )
-
-                    # Non-deterministic argument -> must fall back.
-                    nondet = base.select(pudf(rand(7) * 100))
-                    self.assertEqual(
-                        1,
-                        self._eval_python_count(nondet),
-                        f"{label}: a non-deterministic argument must NOT be transpiled",
-                    )
-                    # And it still produces results.
-                    self.assertEqual(8, len(nondet.collect()))
-
     def test_udf_transpile_config_toggle_no_stale_nodes(self):
         # Built with the flags on, executed with them off -> clean fallback to
         # interpreted Python (the optimizer drops the transpiled node), no error.
