@@ -181,18 +181,18 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with Eventually {
         val locationStatusForLocalHost =
           sc.env.blockManager.master.getLocationsAndStatus(blockId, Utils.localHostName())
         assert(locationStatusForLocalHost.isDefined)
-        assert(locationStatusForLocalHost.get.localDirs.isDefined)
-        assert(locationStatusForLocalHost.get.locations.head.executorId == "0")
-        assert(locationStatusForLocalHost.get.locations.head.host == Utils.localHostName())
+        assert(locationStatusForLocalHost.get.locations.head.localDirs.isDefined)
+        assert(locationStatusForLocalHost.get.locations.head.blockManagerId.executorId == "0")
+        assert(locationStatusForLocalHost.get.locations.head.blockManagerId.host == Utils.localHostName())
       }
 
       eventually(timeout(2.seconds), interval(100.milliseconds)) {
         val locationStatusForRemoteHost =
           sc.env.blockManager.master.getLocationsAndStatus(blockId, "<invalid-host>")
         assert(locationStatusForRemoteHost.isDefined)
-        assert(locationStatusForRemoteHost.get.localDirs.isEmpty)
-        assert(locationStatusForRemoteHost.get.locations.head.executorId == "0")
-        assert(locationStatusForRemoteHost.get.locations.head.host == Utils.localHostName())
+        assert(locationStatusForRemoteHost.get.locations.head.localDirs.isEmpty)
+        assert(locationStatusForRemoteHost.get.locations.head.blockManagerId.executorId == "0")
+        assert(locationStatusForRemoteHost.get.locations.head.blockManagerId.host == Utils.localHostName())
       }
 
       assert(sc.env.blockManager.getRemoteValues(blockId).isDefined)
@@ -202,9 +202,9 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with Eventually {
         val locStatusForMemBroadcast =
           sc.env.blockManager.master.getLocationsAndStatus(broadcastBlockId, Utils.localHostName())
         assert(locStatusForMemBroadcast.isDefined)
-        assert(locStatusForMemBroadcast.get.localDirs.isEmpty)
-        assert(locStatusForMemBroadcast.get.locations.head.executorId == "driver")
-        assert(locStatusForMemBroadcast.get.locations.head.host == Utils.localHostName())
+        assert(locStatusForMemBroadcast.get.locations.head.localDirs.isEmpty)
+        assert(locStatusForMemBroadcast.get.locations.head.blockManagerId.executorId == "driver")
+        assert(locStatusForMemBroadcast.get.locations.head.blockManagerId.host == Utils.localHostName())
       }
 
       val byteBuffer = ByteBuffer.wrap(Array[Byte](7))
@@ -216,18 +216,19 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with Eventually {
         val locStatusForDiskBroadcast =
           sc.env.blockManager.master.getLocationsAndStatus(diskBroadcastId, Utils.localHostName())
         assert(locStatusForDiskBroadcast.isDefined)
-        assert(locStatusForDiskBroadcast.get.localDirs.isDefined)
-        assert(locStatusForDiskBroadcast.get.locations.head.executorId == "driver")
-        assert(locStatusForDiskBroadcast.get.locations.head.host == Utils.localHostName())
+        assert(locStatusForDiskBroadcast.get.locations.head.localDirs.isDefined)
+        assert(locStatusForDiskBroadcast.get.locations.head.blockManagerId.executorId == "driver")
+        assert(locStatusForDiskBroadcast.get.locations.head.blockManagerId.host == Utils.localHostName())
       }
 
       eventually(timeout(2.seconds), interval(100.milliseconds)) {
         val locStatusForDiskBroadcastForFetch =
           sc.env.blockManager.master.getLocationsAndStatus(diskBroadcastId, "<invalid-host>")
         assert(locStatusForDiskBroadcastForFetch.isDefined)
-        assert(locStatusForDiskBroadcastForFetch.get.localDirs.isEmpty)
-        assert(locStatusForDiskBroadcastForFetch.get.locations.head.executorId == "driver")
-        assert(locStatusForDiskBroadcastForFetch.get.locations.head.host == Utils.localHostName())
+        assert(locStatusForDiskBroadcastForFetch.get.locations.head.localDirs.isEmpty)
+        assert(locStatusForDiskBroadcastForFetch.get.locations.head.blockManagerId.executorId == "driver")
+        assert(locStatusForDiskBroadcastForFetch.get.locations.head.blockManagerId.host ==
+          Utils.localHostName())
       }
 
       // test unpersist: as executors are killed the blocks will be removed via the shuffle service
