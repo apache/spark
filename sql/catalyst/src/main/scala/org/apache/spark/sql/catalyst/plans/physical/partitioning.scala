@@ -564,8 +564,8 @@ case class KeyLayout(
  *
  * == Distribution Satisfaction and Grouping ==
  * Besides the default `satisfies()`, `KeyedPartitioning` answers a family of questions. They differ
- * in what they let happen to the data before the distribution counts as met. Only
- * `keysMaySatisfy()` is asked from outside the class. The rest build it and `satisfies()` up.
+ * in what they let happen to the data before the distribution counts as met. `keysMaySatisfy()` and
+ * `mayServeUngrouped()` are asked from outside the class. The rest build them and `satisfies()` up.
  *
  * - `keysSatisfy()`: do the keys as they stand co-locate every cluster key, with nothing left for
  *   a node to project away? This is the strict question, and `satisfies()` is it plus `isGrouped`.
@@ -578,6 +578,9 @@ case class KeyLayout(
  *   distribution? It is asked of non-grouped partitionings only, where such a node coalesces the
  *   duplicate keys. So the answer is `keysCanSatisfy()`, plus whether that coalescing is allowed.
  *   "Key Collapse" below says when it is not.
+ * - `mayServeUngrouped()`: the same question for a partitioning a finished plan reports ungrouped,
+ *   where nobody is left to insert that node. So the answer is `keysSatisfy()`, plus the same
+ *   coalescing permission, and the projection half of `keysCanSatisfy()` is out.
  * - `keysMaySatisfy()`: the same question for a partitioning that may already be grouped, which is
  *   what `EnsureRequirements` asks. It is `mayGroupToSatisfy()` for a non-grouped one, and
  *   `keysCanSatisfy()` for a grouped one, which has no duplicate keys left for the node to
@@ -937,6 +940,10 @@ case class KeyedPartitioning(
    * side whose keys run the wrong way still answers `true` here. `EnsureRequirements.resolveChild`
    * is what compares the keys against the required ordering and builds the sorting node, and it has
    * to stay: nothing below tells it the keys are already in order.
+   *
+   * `mayServeUngrouped` is the caller that asks this outside the class: a member a finished plan
+   * reports ungrouped has nothing left to group it, so what it holds is what the question is about.
+   * See there for the permission it adds on top.
    */
   private def keysSatisfy(required: Distribution): Boolean = {
     required match {
@@ -991,13 +998,29 @@ case class KeyedPartitioning(
   }
 
   /**
+   * The `Key Collapse` permission: whether a collapsed layout may be grouped at all. Read wherever
+   * a grouping node or its absence has to be judged. See the class doc's `Key Collapse` section for
+   * what the flag records.
+   */
+  private def collapsedLayoutMayBeGrouped: Boolean =
+    !isCollapsed || SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys
+
+  /**
+   * Whether this partitioning, reported ungrouped, may still serve `required` as it stands: the
+   * keys it holds co-locate every cluster key, and the collapse a grouping node would settle is
+   * permitted. `mayGroupToSatisfy` is the planner's question, which also admits a member such a
+   * node would serve; a finished plan has nobody left to insert one, and this is what it leaves.
+   */
+  private[sql] def mayServeUngrouped(required: ClusteredDistribution): Boolean =
+    collapsedLayoutMayBeGrouped && keysSatisfy(required)
+
+  /**
    * Ask this only of a partitioning that is not grouped, since a grouped one has nothing to
    * coalesce and `keysMaySatisfy` covers both. See the class doc.
    */
   private[sql] def mayGroupToSatisfy(required: Distribution): Boolean = {
     val mayCoalesce = required match {
-      case _: ClusteredDistribution =>
-        !isCollapsed || SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys
+      case _: ClusteredDistribution => collapsedLayoutMayBeGrouped
       case _ => true
     }
     // The permission is the cheap half, so it is asked first.
@@ -1371,8 +1394,9 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
     // operation's still can, through the projection a `GroupPartitionsExec` performs. That is the
     // admission set this filter had before `satisfies` became strict, up to one shape it now also
     // keeps, a partition expression that *is* a cluster key, which `areKeysCompatible` turns away
-    // anyway. The set matters because `ValidateRequirements` builds a spec from a finished plan
-    // through here.
+    // anyway. The set matters because the planner's `shuffleToCoPartition` reads it through here to
+    // pick the layout the other children are laid out on, and a member this filter drops is one the
+    // collection cannot offer as that layout.
     //
     // Every admitted member stays, because `isCompatibleWith` answers for any of them and the
     // collection cannot know which one the other side matched. The cost is that
@@ -1420,10 +1444,13 @@ object PartitioningCollection {
    * stands, and only a keyed partitioning answers the two differently.
    *
    * A partitioning that is not grouped is not admitted, even though a node would also group it.
-   * This is the admission set `satisfies` gave the one caller before it became strict, and the
-   * caller feeds `ValidateRequirements` as well as the planner, so it does not widen what a
-   * finished plan is checked against. `EnsureRequirements.createKeyedShuffleSpecs` is where the
-   * planner asks the wider question, for a child it is about to group itself.
+   * This is the admission set `satisfies` gave the caller before it became strict, and it is what
+   * `PartitioningCollection.createShuffleSpec` answers with, which the planner's
+   * `shuffleToCoPartition` reads to lay the other children out on what this one reports.
+   * `ValidateRequirements` does not read it: `specsForPairing` is its admission, and it admits an
+   * ungrouped member only where partially clustered distribution reports one.
+   * `EnsureRequirements.createKeyedShuffleSpecs` is where the planner asks the wider question, for
+   * a child it is about to group itself.
    *
    * The partition count clause is here for consistency with the strict question. A node changes the
    * count, so the pre-grouping one is no prediction of it.
@@ -1435,6 +1462,74 @@ object PartitioningCollection {
       k.isGrouped && required.requiredNumPartitions.forall(_ == k.numPartitions) &&
         k.keysMaySatisfy(required)
     case other => other.satisfies(required)
+  }
+
+  /**
+   * The specs `p` offers for `distribution`, one per member that may serve it, each of them the
+   * layout that member reports (`reportedSpecOf`): the partitions it has, in the order it reports
+   * them, with the partition expressions that carry no cluster key left out. Leaving those out is
+   * what lets two members pair when the operation clusters on part of what they are partitioned
+   * on, and it invents nothing: a kept key is that partition's own, the count is the member's own,
+   * and the order is the member's own.
+   *
+   * A keyed member is admitted on `satisfies`, the as-it-stands question, count included; a member
+   * that is not keyed is asked on `satisfies` as well and has no projection to make. The one member
+   * whose layout a finished plan may report without satisfying the distribution is an ungrouped
+   * keyed one: that is the shape partially clustered distribution spreads. It is admitted only
+   * where the caller says so, through `mayBeUngrouped`, which carries both halves of that
+   * admission: the configuration that builds such a shape, and the operator whose producer spreads
+   * it. `mayServeUngrouped` is the as-it-stands question for it, since `satisfies`
+   * adds `isGrouped` on top.
+   *
+   * This is the planner's admission of a member (`EnsureRequirements.createKeyedShuffleSpecs`) less
+   * the coverage of every operation key it requires there
+   * (`spark.sql.requireAllClusterKeysForCoPartition`), which is a skew heuristic: a member whose
+   * partitioning keys cover only a subset of the operation's keys is a sound pairing.
+   *
+   * @param mayBeUngrouped whether an ungrouped keyed member of `p` may serve `distribution` here.
+   *                      Only the caller knows both halves of that; see above.
+   */
+  private[sql] def specsForPairing(
+      p: Partitioning,
+      distribution: ClusteredDistribution,
+      mayBeUngrouped: Boolean): Seq[ShuffleSpec] =
+    flatten(p).flatMap {
+      case k: KeyedPartitioning =>
+        val pairsAsIs = k.satisfies(distribution) ||
+          (mayBeUngrouped &&
+            distribution.requiredNumPartitions.forall(_ == k.numPartitions) &&
+            k.mayServeUngrouped(distribution))
+        Option.when(pairsAsIs)(reportedSpecOf(k, distribution))
+      case other =>
+        Option.when(other.satisfies(distribution))(other.createShuffleSpec(distribution))
+    }
+
+  /**
+   * The spec for a member a finished plan reports: its own layout with the partition expressions
+   * that carry no cluster key left out. No key is deduped and no key is re-sorted, so a side offers
+   * a view of the partitions the plan has rather than the layout
+   * `KeyedPartitioning.createShuffleSpec` builds for a node a planner would insert: that one dedups
+   * and sorts, and its count is the grouped one, which the plan does not hold.
+   *
+   * A projection here is a relabelling of the member's partitions, and this leans on the caller for
+   * that: only `keysSatisfy`'s projecting half admits such a member, and it holds the projection to
+   * one that merges no partition, handing the positions it checked to this method.
+   *
+   * A marked layout is not projected: its claim routes the rows of an undeclared key by a hash over
+   * these keys in this order, and dropping one breaks the claim. The clause cannot fire as the
+   * admission stands, and it is kept because the causality is not local: an admitted marked member
+   * has its keys covering the clustering structurally, since the projecting half of `keysSatisfy`
+   * excludes a marked one, so it leaves here unprojected either way.
+   */
+  private def reportedSpecOf(
+      k: KeyedPartitioning,
+      distribution: ClusteredDistribution): KeyedShuffleSpec = {
+    val positions = k.positionsCoveringClusterKeys(distribution).toSeq
+    if (positions.size == k.expressions.length || k.mayContainUnknownPartitionKeys) {
+      KeyedShuffleSpec(k, distribution)
+    } else {
+      KeyedShuffleSpec(k.project(positions), distribution, Some(positions))
+    }
   }
 
   /**
@@ -1639,12 +1734,14 @@ case object SinglePartitionShuffleSpec extends LeafShuffleSpec {
     // disagree when the subset config projects them onto different key sets.
     //
     // `EnsureRequirements` never reaches this: a spec whose `canCreatePartitioning` is false is
-    // never the best one. The one production caller that can put a collection on the `other` side
-    // is `ValidateRequirements`' `specs.tail.forall(_.isCompatibleWith(specs.head))`, and there the
-    // stricter answer is the safer one. It does leave this direction stricter than the collection's
-    // own `exists`, against the symmetry this trait's doc assumes, but nothing observable follows:
-    // only `KeyedShuffleSpec` can make members disagree on `numPartitions`, and it has no
-    // `SinglePartitionShuffleSpec` case, so that direction is already false.
+    // never the best one. Nor does any other production caller put a collection on the `other`
+    // side: `pickCoPartitionTarget` flattens before it pairs a member, and `ValidateRequirements`
+    // offers leaf specs and pairs those, where it used to compare every child against the first
+    // one's whole spec. So what is left is the answer `ShuffleSpecSuite` pins. It stays `forall`
+    // rather than the `exists` a collection answers with, against the symmetry the trait doc
+    // assumes, but nothing observable follows: only `KeyedShuffleSpec` can make members disagree on
+    // `numPartitions`, and it has no `SinglePartitionShuffleSpec` case, so that direction is
+    // already false.
     case ShuffleSpecCollection(specs) => specs.forall(isCompatibleWith)
   }
 

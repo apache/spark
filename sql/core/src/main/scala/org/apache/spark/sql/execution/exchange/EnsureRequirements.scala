@@ -591,13 +591,8 @@ case class EnsureRequirements(
       leftRequired: ClusteredDistribution,
       right: SparkPlan,
       rightRequired: ClusteredDistribution): Option[Seq[SparkPlan]] = {
-    parent match {
-      case smj: SortMergeJoinExec =>
-        checkKeyGroupCompatible(left, leftRequired, right, rightRequired, smj.joinType)
-      case sj: ShuffledHashJoinExec =>
-        checkKeyGroupCompatible(left, leftRequired, right, rightRequired, sj.joinType)
-      case _ =>
-        None
+    ShuffledJoin.partiallyClusteredJoinType(parent).flatMap { joinType =>
+      checkKeyGroupCompatible(left, leftRequired, right, rightRequired, joinType)
     }
   }
 
@@ -904,6 +899,15 @@ case class EnsureRequirements(
       }
 
       // Now we need to push-down the common partition information to the `GroupPartitionsExec`s.
+      //
+      // The two arguments below say which side does what, and exactly one of them is true:
+      // `replicateRightSide` is the negation of `replicateLeftSide`, and the branch above is taken
+      // only when the side it picked may replicate, so `applyPartialClustering` holds with one flag
+      // set. That split is what makes an aligned pair of these layouts sound, and it is the whole
+      // of it: for a key, a partition holding part of it on the spread side holds all of it on the
+      // side that repeats the group, so pairing the two index by index loses no match.
+      // `ValidateRequirements` reads such a pair as aligned and cannot tell it from two sides that
+      // split the key between them, so the decision has to be right here.
       (
         GroupPartitionsExec(rawLeft, leftSpec.joinKeyPositions,
           Some(mergedPartitionKeys), leftReducers,

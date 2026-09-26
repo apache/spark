@@ -93,9 +93,8 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
   test("SPARK-59289: createShuffleSpec drops a keyed member that is not grouped") {
     val a = AttributeReference("a", IntegerType)()
     val clustered = ClusteredDistribution(Seq(a))
-    // A node would group this one too, but the admission set here is what a finished plan is
-    // checked against by `ValidateRequirements`, so it stays what the strict question admitted
-    // before a projection was allowed to answer it.
+    // A node would group this one too, but a collection is a layout the plan holds, so it stays
+    // what the strict question admitted before a projection was allowed to answer it.
     val ungrouped = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
     val grouped = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
     assert(!ungrouped.isGrouped && grouped.isGrouped, "test setup")
@@ -112,6 +111,75 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     val specs = mixed.createShuffleSpec(clustered).asInstanceOf[ShuffleSpecCollection].specs
     assert(specs.size == 1, s"only the hash member survives the filter, got $specs")
     assert(specs.head.isInstanceOf[HashShuffleSpec], s"and it is the hash one, got $specs")
+  }
+
+  test("SPARK-59671: the specs a side offers are the layouts it reports") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val cd = ClusteredDistribution(Seq(a))
+    // An ungrouped keyed member is the layout partially clustered distribution spreads, and it is
+    // offered as the layout it holds: nobody is left to group it. Only a caller that knows both
+    // halves of that admission, the configuration and the operator whose producer spreads one, says
+    // so; the helper takes the answer rather than reading a configuration for itself.
+    val spread = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
+    val specs = PartitioningCollection.specsForPairing(spread, cd, mayBeUngrouped = true)
+    assert(specs.size == 1, s"one member, one spec, got $specs")
+    val spec = specs.head.asInstanceOf[KeyedShuffleSpec]
+    assert((spec.partitioning eq spread) && spec.joinKeyPositions.isEmpty,
+      s"its own layout, no projection to make, got $specs")
+
+    // Everywhere else a member that only a grouping node would serve is not offered at all.
+    assert(PartitioningCollection.specsForPairing(spread, cd, mayBeUngrouped = false).isEmpty,
+      "an ungrouped member is a plan only where something builds one and produces it")
+
+    // The permission for a collapse is the planner's, and it survives into this admission: a
+    // collapsed member is not offered ungrouped where the planner would refuse to group it either.
+    val collapsed = spread.withLayout(_.copy(isCollapsed = true))
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false") {
+      assert(PartitioningCollection
+        .specsForPairing(collapsed, cd, mayBeUngrouped = true).isEmpty,
+        "a collapsed member the planner would not group is not offered ungrouped")
+    }
+
+    // The subset permission applies where the operation's keys are a subset of the member's
+    // partitioning keys, so a member may carry an expression the operation does not cluster on. It
+    // is offered as its own partitions under the key the operation clusters on: that expression is
+    // left out, and no key is deduped or re-sorted for it.
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val source = KeyedPartitioning(Seq(a, b), Seq(InternalRow(1, 1), InternalRow(2, 2)))
+      val offered = PartitioningCollection.specsForPairing(source, cd, mayBeUngrouped = false)
+        .head.asInstanceOf[KeyedShuffleSpec]
+      assert(offered.partitioning.expressions === Seq(a) &&
+        offered.partitioning.numPartitions === source.numPartitions &&
+        offered.joinKeyPositions === Some(Seq(0)),
+        s"the member's own partitions under the operation's key, got $offered")
+
+      // A marked layout is never offered through a projection: the projecting half of `keysSatisfy`
+      // excludes a marked member, so the keys an offered marked one carries are the keys its claim
+      // is over.
+      val marked = source.withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      assert(PartitioningCollection.specsForPairing(marked, cd, mayBeUngrouped = false).isEmpty,
+        "a marked member is not offered through a projection")
+    }
+
+    // A member whose keys do not cover the clustering is not offered, and a member that is not
+    // keyed is asked for its own spec.
+    val elsewhere = KeyedPartitioning(Seq(b), Seq(InternalRow(1), InternalRow(2)))
+    assert(PartitioningCollection.specsForPairing(elsewhere, cd, mayBeUngrouped = false).isEmpty)
+    assert(PartitioningCollection
+      .specsForPairing(HashPartitioning(Seq(a), 2), cd, mayBeUngrouped = false).head
+      .isInstanceOf[HashShuffleSpec])
+
+    // A count the operation pinned is asked as it stands: a member of another size is not offered
+    // even where its keys cover the clustering.
+    val four = KeyedPartitioning(Seq(a), (1 to 4).map(InternalRow(_)))
+    def pairingFour(pinned: Int): Seq[ShuffleSpec] =
+      PartitioningCollection.specsForPairing(
+        four, ClusteredDistribution(Seq(a), requiredNumPartitions = Some(pinned)),
+        mayBeUngrouped = false)
+    assert(pairingFour(4).size == 1,
+      "the size the operation asks for is the one the member reports")
+    assert(pairingFour(3).isEmpty, "a member of another size does not serve the distribution")
   }
 
   protected def checkCompatible(

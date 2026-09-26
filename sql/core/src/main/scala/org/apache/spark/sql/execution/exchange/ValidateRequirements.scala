@@ -21,6 +21,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.joins.ShuffledJoin
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Validates that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
@@ -45,29 +47,91 @@ object ValidateRequirements extends Logging {
     assert(requiredChildDistributions.length == children.length)
     assert(requiredChildOrderings.length == children.length)
 
+    // A `ClusteredDistribution` is the one distribution an operator can owe its children together
+    // rather than one by one, so an operator whose children all owe one is judged on their mutual
+    // layout below, and every other child, an operator with a single clustered child included,
+    // answers for itself. That is every such operator, not only a join: one that zips corresponding
+    // partitions, a cogroup for instance, reads a layout both children have to hold together.
+    val clusteredMultiChild = children.length > 1 &&
+      requiredChildDistributions.forall(_.isInstanceOf[ClusteredDistribution])
+
+    // The one member a finished plan may report without satisfying the distribution is the shape
+    // partially clustered distribution spreads ungrouped, and one producer builds it:
+    // `EnsureRequirements.checkKeyGroupCompatible`. Both halves of that admission are asked here,
+    // and the answer is passed down to the pairing below so the waiver cannot be read one way here
+    // and the other way there. Neither half is a second copy: the operator kinds come from the
+    // producer, and so does the join type's capability, the second gate it applies before spreading
+    // a side (`canDuplicateLeftSide` / `canDuplicateRightSide`; a `FullOuter` join may duplicate
+    // neither side, so nothing spreads such a pair). That gate is asked here rather than through
+    // `partiallyClusteredJoinType`, which is the producer's entry to key-group checking at all: a
+    // kind turned away there would lose the storage-partitioned join it can still plan without
+    // spreading. What is left to the member, its count and the permission for the collapse it went
+    // through, is asked in the spec.
+    val mayBeUngrouped = clusteredMultiChild &&
+      SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
+      ShuffledJoin.partiallyClusteredJoinType(plan).exists { joinType =>
+        ShuffledJoin.canDuplicateLeftSide(joinType) ||
+          ShuffledJoin.canDuplicateRightSide(joinType)
+      }
+
     val satisfied = children.zip(requiredChildDistributions.zip(requiredChildOrderings)).forall {
       case (child, (distribution, ordering))
-          if !child.outputPartitioning.satisfies(distribution)
+          if (!child.outputPartitioning.satisfies(distribution) &&
+              !(mayBeUngrouped &&
+                PartitioningCollection.representativeOf(child.outputPartitioning).isDefined))
             || !SortOrder.orderingSatisfies(child.outputOrdering, ordering) =>
         logDebug(s"ValidateRequirements failed: $distribution, $ordering\n$plan")
         false
       case _ => true
     }
 
-    if (satisfied && children.length > 1 &&
-      requiredChildDistributions.forall(_.isInstanceOf[ClusteredDistribution])) {
-      // Check the co-partitioning requirement.
-      val specs = children.map(_.outputPartitioning).zip(requiredChildDistributions).map {
-        case (p, d) => p.createShuffleSpec(d.asInstanceOf[ClusteredDistribution])
-      }
-      if (specs.tail.forall(_.isCompatibleWith(specs.head))) {
-        true
-      } else {
+    // What a multi-child clustered operator reads is the pairing: a pair aligned without grouping,
+    // which partially clustered distribution builds on purpose, is one the sides agree on while
+    // neither is grouped. The pairing cannot tell how the two sides hold a key's rows, since a
+    // spread side and one that repeats the whole group report the same keys as two sides that
+    // split the key, so that rests on the producer, which is why the ungrouped shape alone is
+    // waived above.
+    if (!satisfied) {
+      false
+    } else if (clusteredMultiChild) {
+      val paired = satisfiesForPairing(children, requiredChildDistributions, mayBeUngrouped)
+      if (!paired) {
         logDebug(s"ValidateRequirements failed: children not co-partitioned in\n$plan")
-        false
       }
+      paired
     } else {
-      satisfied
+      true
+    }
+  }
+
+  /**
+   * Whether the sides of a multi-child clustered operator line up: every side offers the layouts it
+   * reports ([[PartitioningCollection.specsForPairing]]), and one member of the first side pairs
+   * with every other side. A plan holds what its members report, so no key is deduped and none is
+   * re-sorted to make a pair: a side is judged on the partitions it has, under the key the
+   * operation clusters on.
+   *
+   * That is the question `EnsureRequirements` asks of a pair it takes as it stands, though not by
+   * the same predicate: its `compatibleAsIs` path reads two unprojected specs, while a member here
+   * may be relabelled onto the key the operation clusters on (see `reportedSpecOf`). Its other path
+   * commits on the sides it builds rather than on the pair it
+   * picked: `agreeingPairs` admits a pair a reduce would reconcile (`areKeysCompatible` with the
+   * reduce allowed), and `committed` then compares the declared layouts of the two sides that
+   * reduce ran on. A finished plan is asked the strict question alone, which is sound because the
+   * reduced pair answers it: `isExpressionCompatible` reads its two sides through
+   * `hasSameReducedKeys`. The coverage of every operation key a member is additionally asked for
+   * (`spark.sql.requireAllClusterKeysForCoPartition`) is a skew heuristic, and is not part of it.
+   */
+  private def satisfiesForPairing(
+      children: Seq[SparkPlan],
+      distributions: Seq[Distribution],
+      mayBeUngrouped: Boolean): Boolean = {
+    val specs = children.zip(distributions).map { case (child, distribution) =>
+      PartitioningCollection.specsForPairing(
+        child.outputPartitioning, distribution.asInstanceOf[ClusteredDistribution], mayBeUngrouped)
+    }
+    specs.headOption.exists { firstSide =>
+      firstSide.exists(head => specs.tail.forall(side => side.exists(_.isCompatibleWith(head))))
     }
   }
 }
