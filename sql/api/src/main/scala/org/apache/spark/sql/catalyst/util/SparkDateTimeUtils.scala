@@ -22,7 +22,6 @@ import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime, Z
 import java.time.temporal.ChronoField.NANO_OF_DAY
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit.{MICROSECONDS, NANOSECONDS}
-import java.util.regex.Pattern
 
 import scala.util.control.NonFatal
 
@@ -38,20 +37,59 @@ trait SparkDateTimeUtils {
 
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
 
-  final val singleHourTz = Pattern.compile("(\\+|\\-)(\\d):")
-  final val singleMinuteTz = Pattern.compile("(\\+|\\-)(\\d\\d):(\\d)$")
-
   def getZoneId(timeZoneId: String): ZoneId = {
     try {
-      // To support the (+|-)h:mm format because it was supported before Spark 3.0.
-      var formattedZoneId = singleHourTz.matcher(timeZoneId).replaceFirst("$10$2:")
-      // To support the (+|-)hh:m format because it was supported before Spark 3.0.
-      formattedZoneId = singleMinuteTz.matcher(formattedZoneId).replaceFirst("$1$2:0$3")
-      ZoneId.of(formattedZoneId, ZoneId.SHORT_IDS)
+      ZoneId.of(normalizeLegacyZoneOffset(timeZoneId), ZoneId.SHORT_IDS)
     } catch {
       case e: java.time.DateTimeException =>
         throw ExecutionErrors.zoneOffsetError(timeZoneId, e)
     }
+  }
+
+  /**
+   * Zero-pads the single-digit UTC-offset forms that `ZoneId.of` does not accept:
+   *
+   *   - a single-digit hour, e.g. `+7:30` becomes `+07:30` (first occurrence only);
+   *   - a single-digit trailing minute, e.g. `+07:3` becomes `+07:03` (only at the end of the
+   *     string).
+   *
+   * The two rules are applied in order, so the minute rule operates on the hour-padded value.
+   * Inputs that need no padding -- well-formed offsets, named zones and `Z` -- are returned
+   * unchanged (the same instance), so the method allocates only when it rewrites a value. Digit
+   * positions are tested with `Character.isDigit`; validating the resulting zone is left to
+   * `ZoneId.of`.
+   *
+   * @param zoneId
+   *   the time-zone string to normalize
+   * @return
+   *   the zero-padded string, or `zoneId` itself when no padding is needed
+   */
+  private def normalizeLegacyZoneOffset(zoneId: String): String = {
+    // Pad a single-digit hour, e.g. "+7:30" -> "+07:30"; only the first occurrence.
+    val len = zoneId.length
+    var afterHour = zoneId
+    var i = 0
+    while (i <= len - 3) {
+      val c = zoneId.charAt(i)
+      if ((c == '+' || c == '-') && Character.isDigit(zoneId.charAt(i + 1)) &&
+        zoneId.charAt(i + 2) == ':') {
+        afterHour = zoneId.substring(0, i + 1) + "0" + zoneId.substring(i + 1)
+        i = len // done after the first match
+      }
+      i += 1
+    }
+
+    // Pad a single-digit trailing minute, e.g. "+07:3" -> "+07:03".
+    val n = afterHour.length
+    if (n >= 5) {
+      val c = afterHour.charAt(n - 5)
+      if ((c == '+' || c == '-') && Character.isDigit(afterHour.charAt(n - 4)) &&
+        Character.isDigit(afterHour.charAt(n - 3)) && afterHour.charAt(n - 2) == ':' &&
+        Character.isDigit(afterHour.charAt(n - 1))) {
+        return afterHour.substring(0, n - 1) + "0" + afterHour.substring(n - 1)
+      }
+    }
+    afterHour
   }
 
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
