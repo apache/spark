@@ -28,12 +28,9 @@ import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{
   AsOfTimestamp, AsOfVersion, TableCacheKey, TimeTravelSpec, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions.{CurrentDate, Expression, Literal}
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
-import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DateType, IntegerType, MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CatalogV2UtilSuite extends SparkFunSuite {
@@ -54,33 +51,6 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     when(testCatalog.loadTable(
       any[Identifier], any[TableContext], any[CaseInsensitiveStringMap])).thenCallRealMethod()
     testCatalog
-  }
-
-  test("schema conversion preserves current default expressions and existence defaults") {
-    val metadata = new MetadataBuilder()
-      .putExpression(CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42", Some(Literal(42)))
-      .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, "7")
-      .build()
-    val schema = StructType(Seq(StructField("i", IntegerType, metadata = metadata)))
-
-    val defaultValue = CatalogV2Util.structTypeToV2Columns(schema).head.defaultValue()
-    assert(defaultValue.getSql == "42")
-    assert(defaultValue.getExpression == LiteralValue(42, IntegerType))
-    assert(defaultValue.getValue == LiteralValue(7, IntegerType))
-  }
-
-  test("schema conversion preserves SQL fallback for current defaults") {
-    Seq(None, Some(CurrentDate())).foreach { expr: Option[Expression] =>
-      val metadata = new MetadataBuilder()
-        .putExpression(CURRENT_DEFAULT_COLUMN_METADATA_KEY, "current_date()", expr)
-        .build()
-      val schema = StructType(Seq(StructField("d", DateType, metadata = metadata)))
-
-      val defaultValue = CatalogV2Util.structTypeToV2Columns(schema).head.defaultValue()
-      assert(defaultValue.getSql == "current_date()")
-      assert(defaultValue.getExpression == null)
-      assert(defaultValue.getValue == null)
-    }
   }
 
   test("Load relation should encode the identifiers for V2Relations") {

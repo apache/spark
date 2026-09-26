@@ -32,15 +32,16 @@ import org.apache.spark.sql.catalyst.{InternalRow, QualifiedTableName, TableIden
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, GetStructField}
+import org.apache.spark.sql.catalyst.expressions.{CurrentDate, DynamicPruning, GetStructField, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
-import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, GeneralScalarExpression, LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -51,7 +52,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{ArrayType, CharType, IntegerType, LongType, StringType, StructField, StructType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, CharType, DateType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
@@ -935,32 +936,90 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("CTAS and RTAS preserve column default SQL and expressions") {
-    Seq("testcat", "testcat_atomic").foreach { catalogName =>
-      val source = s"$catalogName.default_source"
-      val target = s"$catalogName.default_target"
-      val testCatalog = catalog(catalogName).asTableCatalog
-      withTable(source, target) {
-        sql(s"""CREATE TABLE $source (
-               |  id INT,
-               |  literal_default INT DEFAULT 42,
-               |  folded_default BIGINT DEFAULT (40 + 2),
-               |  sql_only_default DATE DEFAULT current_date()
-               |) USING foo""".stripMargin)
-        sql(s"INSERT INTO $source (id) VALUES (1)")
+  gridTest("CTAS and RTAS preserve column default SQL and expressions")(
+      Seq(true, false)) { foldExpressions =>
+    withSQLConf("spark.sql.optimizer.datasourceV2ExprFolding" -> foldExpressions.toString) {
+      val arithmeticDefault = if (foldExpressions) {
+        LiteralValue(42L, LongType)
+      } else {
+        new V2Cast(
+          new GeneralScalarExpression("+", Array(
+            LiteralValue(40, IntegerType), LiteralValue(2, IntegerType))),
+          IntegerType, LongType)
+      }
+      val functionDefault = if (foldExpressions) {
+        LiteralValue(42, IntegerType)
+      } else {
+        new GeneralScalarExpression("ABS", Array(LiteralValue(-42, IntegerType)))
+      }
+      Seq("testcat", "testcat_atomic").foreach { catalogName =>
+        val source = s"$catalogName.default_source"
+        val target = s"$catalogName.default_target"
+        val testCatalog = catalog(catalogName).asTableCatalog
+        withTable(source, target) {
+          sql(s"""CREATE TABLE $source (
+                 |  id INT,
+                 |  literal_default INT DEFAULT 42,
+                 |  arithmetic_default BIGINT DEFAULT (40 + 2),
+                 |  function_default INT DEFAULT abs(-42),
+                 |  sql_only_default DATE DEFAULT current_date()
+                 |) USING foo""".stripMargin)
+          val sourceDefaults = testCatalog.loadTable(
+            Identifier.of(Array.empty[String], "default_source")).columns().map(_.defaultValue())
+          assert(sourceDefaults(1).getExpression == LiteralValue(42, IntegerType))
+          assert(sourceDefaults(2) == new ColumnDefaultValue(
+            "(40 + 2)", arithmeticDefault, LiteralValue(42L, LongType)))
+          assert(sourceDefaults(3) == new ColumnDefaultValue(
+            "abs(-42)", functionDefault, LiteralValue(42, IntegerType)))
+          assert(sourceDefaults(4).getExpression == null)
 
-        val sourceDefaults = testCatalog.loadTable(
-          Identifier.of(Array.empty[String], "default_source")).columns().map(_.defaultValue())
-        assert(sourceDefaults(1).getExpression == LiteralValue(42, IntegerType))
-        assert(sourceDefaults(2).getExpression == LiteralValue(42L, LongType))
-        assert(sourceDefaults(3).getExpression == null)
+          Seq("CREATE", "REPLACE", "CREATE OR REPLACE").foreach { command =>
+            sql(s"$command TABLE $target USING foo AS SELECT * FROM $source")
+            val targetDefaults = testCatalog.loadTable(
+              Identifier.of(Array.empty[String], "default_target"))
+              .asInstanceOf[InMemoryBaseTable].initialColumns.map(_.defaultValue())
+            assert(targetDefaults.toSeq == sourceDefaults.toSeq)
+            checkAnswer(spark.table(target), spark.table(source))
+          }
+        }
+      }
+    }
+  }
 
-        Seq("CREATE", "REPLACE", "CREATE OR REPLACE").foreach { command =>
-          sql(s"$command TABLE $target USING foo AS SELECT * FROM $source")
-          val targetDefaults = testCatalog.loadTable(
-            Identifier.of(Array.empty[String], "default_target")).columns().map(_.defaultValue())
-          assert(targetDefaults.toSeq == sourceDefaults.toSeq)
-          checkAnswer(spark.table(target), spark.table(source))
+  test("CTAS and RTAS preserve distinct existence defaults and SQL fallback") {
+    val literalMetadata = new MetadataBuilder()
+      .putExpression(CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42", Some(Literal(42)))
+      .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, "7")
+      .build()
+    val unsupportedMetadata = new MetadataBuilder()
+      .putExpression(CURRENT_DEFAULT_COLUMN_METADATA_KEY, "current_date()", Some(CurrentDate()))
+      .build()
+    val schema = StructType(Seq(
+      StructField("literal_default", IntegerType, metadata = literalMetadata),
+      StructField("unsupported_default", DateType, metadata = unsupportedMetadata),
+      StructField("sql_only_default", IntegerType)
+        .withCurrentDefaultValue("43")
+        .withExistenceDefaultValue("9")))
+    val source = "default_source_metadata"
+    withTempView(source) {
+      spark.createDataFrame(util.Collections.singletonList(Row(42, null, 43)), schema)
+        .createOrReplaceTempView(source)
+      Seq("testcat", "testcat_atomic").foreach { catalogName =>
+        val target = s"$catalogName.default_target"
+        val testCatalog = catalog(catalogName).asTableCatalog
+        withTable(target) {
+          Seq("CREATE", "REPLACE", "CREATE OR REPLACE").foreach { command =>
+            sql(s"$command TABLE $target USING foo AS SELECT * FROM $source")
+            val defaults = testCatalog.loadTable(
+              Identifier.of(Array.empty[String], "default_target"))
+              .asInstanceOf[InMemoryBaseTable].initialColumns.map(_.defaultValue())
+            assert(defaults.map(_.getSql).toSeq == Seq("42", "current_date()", "43"))
+            assert(defaults.map(_.getExpression).toSeq ==
+              Seq(LiteralValue(42, IntegerType), null, null))
+            assert(defaults.map(_.getValue).toSeq ==
+              Seq(LiteralValue(7, IntegerType), null, LiteralValue(9, IntegerType)))
+            checkAnswer(spark.table(target), Row(42, null, 43))
+          }
         }
       }
     }

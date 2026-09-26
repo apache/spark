@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, Named
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
-import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn}
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.TableChange._
@@ -882,9 +882,7 @@ private[sql] object CatalogV2Util {
       } else {
         null
       }
-      val (sql, expr) = f.metadata.getExpression[Expression](CURRENT_DEFAULT_COLUMN_METADATA_KEY)
-      val currentDefault = expr.flatMap(new V2ExpressionBuilder(_).build())
-      val defaultValue = new ColumnDefaultValue(sql, currentDefault.orNull, existsDefault)
+      val defaultValue = new ColumnDefaultValue(f.getCurrentDefaultValue().get, existsDefault)
       val removedMetaKeys = COMMON_COL_METADATA_KEYS ++ DEFAULT_COL_METADATA_KEYS
       Column.builderFor(f.name, dataType)
         .nullable(f.nullable)
