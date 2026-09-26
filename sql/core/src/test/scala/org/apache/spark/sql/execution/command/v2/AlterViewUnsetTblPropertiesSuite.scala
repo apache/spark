@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.SparkException
+import org.apache.spark.sql.connector.catalog.ViewChange
 import org.apache.spark.sql.execution.command
 
 class AlterViewUnsetTblPropertiesSuite
@@ -28,5 +30,22 @@ class AlterViewUnsetTblPropertiesSuite
     sql(s"ALTER VIEW $view UNSET TBLPROPERTIES ('k')")
     val stored = viewCatalog.getStoredView(Array(namespace), "v2_unset_view_info")
     assert(!stored.properties.containsKey("k"))
+    assert(viewCatalog.getLastViewChanges === Seq(ViewChange.removeProperty("k")))
+  }
+
+  test("V2: catalog IllegalArgumentException is converted to a structured error") {
+    val view = s"$catalog.$namespace.v2_unset_view_rejected"
+    createViewWithProps(view, "k" -> "v")
+    viewCatalog.failAlterViewWith(new IllegalArgumentException("unset rejected"))
+    try {
+      checkError(
+        exception = intercept[SparkException] {
+          sql(s"ALTER VIEW $view UNSET TBLPROPERTIES ('k')")
+        },
+        condition = "UNSUPPORTED_VIEW_CHANGE",
+        parameters = Map("message" -> "unset rejected"))
+    } finally {
+      viewCatalog.clearAlterViewFailure()
+    }
   }
 }
