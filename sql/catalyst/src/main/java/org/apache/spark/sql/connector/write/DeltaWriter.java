@@ -40,6 +40,11 @@ public interface DeltaWriter<T> extends DataWriter<T> {
 
   /**
    * Updates a row.
+   * <p>
+   * When {@link LogicalWriteInfo#updateSchema()} is present, the {@code row} follows the narrow
+   * layout it declares rather than the full table schema from {@link LogicalWriteInfo#schema()}.
+   * It is present only for UPDATE on an operation that mixes in {@link SupportsColumnUpdates};
+   * otherwise {@code row} follows the full table schema.
    *
    * @param metadata values for metadata columns that were projected but are not part of the row ID
    * @param id a row ID to update
@@ -52,6 +57,11 @@ public interface DeltaWriter<T> extends DataWriter<T> {
    * Reinserts a row with metadata.
    * <p>
    * This method handles the insert portion of updated rows split into deletes and inserts.
+   * <p>
+   * When {@link LogicalWriteInfo#updateSchema()} is present, the {@code row} follows the narrow
+   * layout it declares rather than the full table schema from {@link LogicalWriteInfo#schema()}.
+   * It is present only for UPDATE on an operation that mixes in {@link SupportsColumnUpdates};
+   * otherwise {@code row} follows the full table schema.
    *
    * @param metadata values for metadata columns
    * @param row a row to reinsert

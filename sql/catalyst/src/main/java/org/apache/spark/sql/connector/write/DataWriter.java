@@ -20,7 +20,9 @@ package org.apache.spark.sql.connector.write;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.Map;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 
@@ -80,6 +82,54 @@ public interface DataWriter<T> extends Closeable {
    */
   default void write(T metadata, T record) throws IOException {
     write(record);
+  }
+
+  /**
+   * Writes one updated, copied, or reinserted record with metadata.
+   * <p>
+   * Connectors that mix in {@link SupportsColumnUpdates} without also mixing in
+   * {@link SupportsDelta} (i.e. group-based operations) receive records here in the schema
+   * declared by {@link LogicalWriteInfo#updateSchema()}. An operation that mixes in both
+   * instead delivers narrow rows through {@link DeltaWriter#update} / {@link DeltaWriter#reinsert}
+   * and never calls this method. By default, delegates to {@link #writeUpdate(Object)} for
+   * connectors that do not need metadata; implementations that do need it should override this
+   * method directly.
+   * <p>
+   * If this method fails (by throwing an exception), {@link #abort()} will be called and this
+   * data writer is considered to have been failed.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
+   * @throws SparkUnsupportedOperationException if the connector mixes in
+   *         {@link SupportsColumnUpdates} but overrides neither {@code writeUpdate} overload.
+   *
+   * @since 4.3.0
+   */
+  default void writeUpdate(T metadata, T record) throws IOException {
+    writeUpdate(record);
+  }
+
+  /**
+   * Writes one updated, copied, or reinserted record without metadata.
+   * <p>
+   * Connectors that mix in {@link SupportsColumnUpdates} without also mixing in
+   * {@link SupportsDelta} (i.e. group-based operations) receive records here in the schema
+   * declared by {@link LogicalWriteInfo#updateSchema()}. Implementations must override this method,
+   * or {@link #writeUpdate(Object, Object)}, when mixing in {@link SupportsColumnUpdates} without
+   * {@link SupportsDelta}.
+   * <p>
+   * If this method fails (by throwing an exception), {@link #abort()} will be called and this
+   * data writer is considered to have been failed.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
+   * @throws SparkUnsupportedOperationException if the connector mixes in
+   *         {@link SupportsColumnUpdates} but overrides neither {@code writeUpdate} overload.
+   *
+   * @since 4.3.0
+   */
+  default void writeUpdate(T record) throws IOException {
+    throw new SparkUnsupportedOperationException(
+      "DATA_SOURCE_WRITE_UPDATE_NOT_IMPLEMENTED",
+      Map.of("class", getClass().getName()));
   }
 
   /**
