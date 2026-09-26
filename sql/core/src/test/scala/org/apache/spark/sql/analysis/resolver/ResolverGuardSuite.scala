@@ -149,6 +149,11 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     checkResolverGuard("""SELECT JSON_QUERY('{"a":[1]}', '$.a' WITH ARRAY WRAPPER)""")
     checkResolverGuard("""SELECT JSON_EXISTS('{"a":1}', '$.a')""")
     checkResolverGuard("""SELECT JSON_EXISTS('{"a":1}', '$.a' TRUE ON ERROR)""")
+    // A flat, clause-free JSON_OBJECT routes through function resolution as an UnresolvedFunction,
+    // but a clause-bearing or raw-value call is built directly as a JsonObjectExpr; assert the
+    // guard admits that direct form (removing its allowlist arm would fail here).
+    checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE 1 RETURNING STRING)""")
+    checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE '[1]' FORMAT JSON)""")
   }
 
   test("Conditional expressions") {
