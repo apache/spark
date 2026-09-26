@@ -935,6 +935,37 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("CTAS and RTAS preserve column default SQL and expressions") {
+    Seq("testcat", "testcat_atomic").foreach { catalogName =>
+      val source = s"$catalogName.default_source"
+      val target = s"$catalogName.default_target"
+      val testCatalog = catalog(catalogName).asTableCatalog
+      withTable(source, target) {
+        sql(s"""CREATE TABLE $source (
+               |  id INT,
+               |  literal_default INT DEFAULT 42,
+               |  folded_default BIGINT DEFAULT (40 + 2),
+               |  sql_only_default DATE DEFAULT current_date()
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO $source (id) VALUES (1)")
+
+        val sourceDefaults = testCatalog.loadTable(
+          Identifier.of(Array.empty[String], "default_source")).columns().map(_.defaultValue())
+        assert(sourceDefaults(1).getExpression == LiteralValue(42, IntegerType))
+        assert(sourceDefaults(2).getExpression == LiteralValue(42L, LongType))
+        assert(sourceDefaults(3).getExpression == null)
+
+        Seq("CREATE", "REPLACE", "CREATE OR REPLACE").foreach { command =>
+          sql(s"$command TABLE $target USING foo AS SELECT * FROM $source")
+          val targetDefaults = testCatalog.loadTable(
+            Identifier.of(Array.empty[String], "default_target")).columns().map(_.defaultValue())
+          assert(targetDefaults.toSeq == sourceDefaults.toSeq)
+          checkAnswer(spark.table(target), spark.table(source))
+        }
+      }
+    }
+  }
+
   test("ReplaceTableAsSelect: REPLACE TABLE throws exception if table does not exist.") {
     Seq("testcat", "testcat_atomic").foreach { catalog =>
       spark.sql(s"CREATE TABLE $catalog.created USING $v2Source AS SELECT id, data FROM source")
