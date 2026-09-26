@@ -257,6 +257,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = getSummary(context))
   }
 
+  def bitmapInputTooLargeError(inputNumBytes: Int, maxNumBytes: Int): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "BITMAP_INPUT_TOO_LARGE",
+      messageParameters = Map(
+        "inputNumBytes" -> inputNumBytes.toString,
+        "maxNumBytes" -> maxNumBytes.toString),
+      cause = null)
+  }
+
   def invalidBitmapPositionError(bitPosition: Long,
                                  bitmapNumBytes: Long): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
@@ -267,15 +276,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "bitmapNumBits" -> s"${bitmapNumBytes * 8}"),
       context = Array.empty,
       summary = "")
-  }
-
-  def bitmapInputTooLargeError(inputNumBytes: Int, maxNumBytes: Int): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "BITMAP_INPUT_TOO_LARGE",
-      messageParameters = Map(
-        "inputNumBytes" -> inputNumBytes.toString,
-        "maxNumBytes" -> maxNumBytes.toString),
-      cause = null)
   }
 
   def invalidFractionOfSecondError(secAndMicros: Double): DateTimeException = {
