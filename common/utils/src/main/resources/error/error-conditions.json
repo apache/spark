@@ -4841,6 +4841,11 @@
       "Invalid options:"
     ],
     "subClass" : {
+      "NON_FOLDABLE" : {
+        "message" : [
+          "Must use a foldable `map()` function for options."
+        ]
+      },
       "NON_MAP_FUNCTION" : {
         "message" : [
           "Must use the `map()` function for options."
