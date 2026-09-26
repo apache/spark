@@ -36,6 +36,8 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck.AT_ANALYSIS
 import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralType, MapType, StructType, UserDefinedType}
 
 object TableOutputResolver extends SQLConfHelper with Logging {
@@ -94,9 +96,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       query: LogicalPlan,
       byName: Boolean,
       conf: SQLConf,
-      defaultValueFillMode: DefaultValueFillMode.Value = NONE): LogicalPlan = {
+      defaultValueFillMode: DefaultValueFillMode.Value = NONE,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = AT_ANALYSIS): LogicalPlan = {
     resolveOutputColumnsInternal(
-      tableName, expected, query, byName, conf, defaultValueFillMode)._1
+      tableName, expected, query, byName, conf, defaultValueFillMode,
+      ansiStoreAssignmentCastCheck)._1
   }
 
   /**
@@ -111,10 +115,12 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       query: LogicalPlan,
       byName: Boolean,
       conf: SQLConf,
-      defaultValueFillMode: DefaultValueFillMode.Value = NONE
+      defaultValueFillMode: DefaultValueFillMode.Value = NONE,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = AT_ANALYSIS
   ): (LogicalPlan, Set[String]) = {
     resolveOutputColumnsInternal(
-      tableName, expected, query, byName, conf, defaultValueFillMode)
+      tableName, expected, query, byName, conf, defaultValueFillMode,
+      ansiStoreAssignmentCastCheck)
   }
 
   private def resolveOutputColumnsInternal(
@@ -123,7 +129,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       query: LogicalPlan,
       byName: Boolean,
       conf: SQLConf,
-      defaultValueFillMode: DefaultValueFillMode.Value
+      defaultValueFillMode: DefaultValueFillMode.Value,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck
   ): (LogicalPlan, Set[String]) = {
 
     if (expected.size < query.output.size) {
@@ -149,7 +156,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         errors += _,
         Nil,
         defaultValueFillMode,
-        enforceFullOutput = true)
+        enforceFullOutput = true,
+        ansiStoreAssignmentCastCheck)
     } else {
       if (expected.size > query.output.size && !fillDefaultValue) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
@@ -157,7 +165,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       }
       resolveColumnsByPosition(
         tableName, query.output, expected, conf, errors += _,
-        fillDefaultValue = fillDefaultValue)
+        fillDefaultValue = fillDefaultValue,
+        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
     }
 
     if (errors.nonEmpty) {
@@ -180,14 +189,16 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String],
-      defaultValueFillMode: DefaultValueFillMode.Value): Expression = {
+      defaultValueFillMode: DefaultValueFillMode.Value,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = AT_ANALYSIS): Expression = {
 
     val fillChildDefaultValue = defaultValueFillMode == RECURSE
     (value.dataType, col.dataType) match {
       // no need to reorder inner fields or cast if types are already compatible
       case (valueType, colType) if DataType.equalsIgnoreCompatibleNullability(valueType, colType) =>
         val canWriteExpr = canWrite(
-          tableName, valueType, colType, byName = true, conf, addError, colPath)
+          tableName, valueType, colType, byName = true, conf, addError, colPath,
+          ansiStoreAssignmentCastCheck)
         if (canWriteExpr) {
           val nullsHandled = checkNullability(value, col, conf, colPath)
           applyColumnMetadata(nullsHandled, col)
@@ -196,21 +207,22 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         }
       case (valueType: StructType, colType: StructType) =>
         val resolvedValue = resolveStructType(
-          tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, fillChildDefaultValue, enforceFullOutput = false)
+          tableName, value, valueType, col, colType, byName = true, conf, addError, colPath,
+          fillChildDefaultValue, enforceFullOutput = false, ansiStoreAssignmentCastCheck)
         resolvedValue.getOrElse(value)
       case (valueType: ArrayType, colType: ArrayType) =>
         val resolvedValue = resolveArrayType(
-          tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, fillChildDefaultValue, enforceFullOutput = false)
+          tableName, value, valueType, col, colType, byName = true, conf, addError, colPath,
+          fillChildDefaultValue, enforceFullOutput = false, ansiStoreAssignmentCastCheck)
         resolvedValue.getOrElse(value)
       case (valueType: MapType, colType: MapType) =>
         val resolvedValue = resolveMapType(
-          tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, fillChildDefaultValue, enforceFullOutput = false)
+          tableName, value, valueType, col, colType, byName = true, conf, addError, colPath,
+          fillChildDefaultValue, enforceFullOutput = false, ansiStoreAssignmentCastCheck)
         resolvedValue.getOrElse(value)
       case _ =>
-        checkUpdate(tableName, value, col, conf, addError, colPath)
+        checkUpdate(
+          tableName, value, col, conf, addError, colPath, ansiStoreAssignmentCastCheck)
     }
   }
 
@@ -220,7 +232,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       attr: Attribute,
       conf: SQLConf,
       addError: String => Unit,
-      colPath: Seq[String]): Expression = {
+      colPath: Seq[String],
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Expression = {
 
     val attrTypeHasCharVarchar = CharVarcharUtils.hasCharVarchar(attr.dataType)
     val attrTypeWithoutCharVarchar = if (attrTypeHasCharVarchar) {
@@ -231,7 +244,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
     val canWriteValue = canWrite(
       tableName, value.dataType, attrTypeWithoutCharVarchar,
-      byName = true, conf, addError, colPath)
+      byName = true, conf, addError, colPath, ansiStoreAssignmentCastCheck)
 
     if (canWriteValue) {
       val nullCheckedValue = checkNullability(value, attr, conf, colPath)
@@ -354,12 +367,13 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       byName: Boolean,
       conf: SQLConf,
       addError: String => Unit,
-      colPath: Seq[String]): Boolean = {
+      colPath: Seq[String],
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Boolean = {
     conf.storeAssignmentPolicy match {
       case StoreAssignmentPolicy.STRICT | StoreAssignmentPolicy.ANSI =>
         DataTypeUtils.canWrite(
           tableName, valueType, expectedType, byName, conf.resolver, colPath.quoted,
-          conf.storeAssignmentPolicy, addError)
+          conf.storeAssignmentPolicy, addError, ansiStoreAssignmentCastCheck)
       case _ =>
         true
     }
@@ -373,7 +387,9 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       addError: String => Unit,
       colPath: Seq[String] = Nil,
       defaultValueFillMode: DefaultValueFillMode.Value,
-      enforceFullOutput: Boolean = false): (Seq[NamedExpression], Set[String]) = {
+      enforceFullOutput: Boolean = false,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck
+  ): (Seq[NamedExpression], Set[String]) = {
     // Names of generated columns that were auto-filled (not provided by the user). Only populated
     // for top-level columns, since generated columns cannot be nested.
     val autoFilledGenCols = mutable.Set.empty[String]
@@ -423,18 +439,22 @@ object TableOutputResolver extends SQLConfHelper with Logging {
           case (matchedType: StructType, expectedType: StructType) =>
             resolveStructType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath, childFillDefaultValue, enforceFullOutput)
+              byName = true, conf, addError, newColPath, childFillDefaultValue, enforceFullOutput,
+              ansiStoreAssignmentCastCheck)
           case (matchedType: ArrayType, expectedType: ArrayType) =>
             resolveArrayType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath, childFillDefaultValue, enforceFullOutput)
+              byName = true, conf, addError, newColPath, childFillDefaultValue, enforceFullOutput,
+              ansiStoreAssignmentCastCheck)
           case (matchedType: MapType, expectedType: MapType) =>
             resolveMapType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath, childFillDefaultValue, enforceFullOutput)
+              byName = true, conf, addError, newColPath, childFillDefaultValue, enforceFullOutput,
+              ansiStoreAssignmentCastCheck)
           case _ =>
             checkField(
-              tableName, actualExpectedCol, matchedCol, byName = true, conf, addError, newColPath)
+              tableName, actualExpectedCol, matchedCol, byName = true, conf, addError, newColPath,
+              ansiStoreAssignmentCastCheck)
         }
       }
     }
@@ -488,7 +508,9 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String] = Nil,
-      fillDefaultValue: Boolean = false): (Seq[NamedExpression], Set[String]) = {
+      fillDefaultValue: Boolean = false,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck
+  ): (Seq[NamedExpression], Set[String]) = {
     // Names of generated columns that were auto-filled (not provided by the user). Only populated
     // for top-level columns, since generated columns cannot be nested.
     val autoFilledGenCols = mutable.Set.empty[String]
@@ -528,17 +550,21 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         case (inputType: StructType, expectedType: StructType) =>
           resolveStructType(
             tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath, fillDefaultValue, enforceFullOutput = true)
+            byName = false, conf, addError, newColPath, fillDefaultValue, enforceFullOutput = true,
+            ansiStoreAssignmentCastCheck)
         case (inputType: ArrayType, expectedType: ArrayType) =>
           resolveArrayType(
             tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath, fillDefaultValue, enforceFullOutput = true)
+            byName = false, conf, addError, newColPath, fillDefaultValue, enforceFullOutput = true,
+            ansiStoreAssignmentCastCheck)
         case (inputType: MapType, expectedType: MapType) =>
           resolveMapType(
             tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath, fillDefaultValue, enforceFullOutput = true)
+            byName = false, conf, addError, newColPath, fillDefaultValue, enforceFullOutput = true,
+            ansiStoreAssignmentCastCheck)
         case _ =>
-          checkField(tableName, expectedCol, inputCol, byName = false, conf, addError, newColPath)
+          checkField(tableName, expectedCol, inputCol, byName = false, conf, addError, newColPath,
+            ansiStoreAssignmentCastCheck)
       }
     }
 
@@ -622,7 +648,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       addError: String => Unit,
       colPath: Seq[String],
       fillDefaultValue: Boolean,
-      enforceFullOutput: Boolean): Option[NamedExpression] = {
+      enforceFullOutput: Boolean,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Option[NamedExpression] = {
     val nullCheckedInput = checkNullability(input, expected, conf, colPath)
     val fields = inputType.zipWithIndex.map { case (f, i) =>
       Alias(GetStructField(nullCheckedInput, i, Some(f.name)), f.name)()
@@ -631,10 +658,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     // Generated columns cannot be nested, so the auto-filled set is always empty here.
     val (resolved, _) = if (byName) {
       reorderColumnsByName(tableName, fields, toAttributes(expectedType), conf, addError, colPath,
-        defaultValueMode, enforceFullOutput)
+        defaultValueMode, enforceFullOutput, ansiStoreAssignmentCastCheck)
     } else {
       resolveColumnsByPosition(
-        tableName, fields, toAttributes(expectedType), conf, addError, colPath, fillDefaultValue)
+        tableName, fields, toAttributes(expectedType), conf, addError, colPath, fillDefaultValue,
+        ansiStoreAssignmentCastCheck)
     }
     if (resolved.length == expectedType.length) {
       val struct = CreateStruct(resolved)
@@ -665,7 +693,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       addError: String => Unit,
       colPath: Seq[String],
       fillDefaultValue: Boolean,
-      enforceFullOutput: Boolean): Option[NamedExpression] = {
+      enforceFullOutput: Boolean,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Option[NamedExpression] = {
     val nullCheckedInput = checkNullability(input, expected, conf, colPath)
     val param = NamedLambdaVariable("element", inputType.elementType, inputType.containsNull)
     val fakeAttr =
@@ -674,10 +703,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     val (res, _) = if (byName) {
       val defaultValueMode = if (fillDefaultValue) RECURSE else NONE
       reorderColumnsByName(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath,
-        defaultValueMode, enforceFullOutput)
+        defaultValueMode, enforceFullOutput, ansiStoreAssignmentCastCheck)
     } else {
       resolveColumnsByPosition(
-        tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath, fillDefaultValue)
+        tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath, fillDefaultValue,
+        ansiStoreAssignmentCastCheck)
     }
     if (res.length == 1) {
       val castedArray =
@@ -708,7 +738,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       addError: String => Unit,
       colPath: Seq[String],
       fillDefaultValue: Boolean,
-      enforceFullOutput: Boolean): Option[NamedExpression] = {
+      enforceFullOutput: Boolean,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Option[NamedExpression] = {
     val nullCheckedInput = checkNullability(input, expected, conf, colPath)
 
     val keyParam = NamedLambdaVariable("key", inputType.keyType, nullable = false)
@@ -717,10 +748,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     // Generated columns cannot be nested, so the auto-filled set is always empty here.
     val (resKey, _) = if (byName) {
       reorderColumnsByName(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath,
-        defaultValueFillMode, enforceFullOutput)
+        defaultValueFillMode, enforceFullOutput, ansiStoreAssignmentCastCheck)
     } else {
       resolveColumnsByPosition(
-        tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath, fillDefaultValue)
+        tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath, fillDefaultValue,
+        ansiStoreAssignmentCastCheck)
     }
 
     val valueParam =
@@ -730,10 +762,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     // Generated columns cannot be nested, so the auto-filled set is always empty here.
     val (resValue, _) = if (byName) {
       reorderColumnsByName(tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath,
-        defaultValueFillMode, enforceFullOutput)
+        defaultValueFillMode, enforceFullOutput, ansiStoreAssignmentCastCheck)
     } else {
       resolveColumnsByPosition(
-        tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath, fillDefaultValue)
+        tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath, fillDefaultValue,
+        ansiStoreAssignmentCastCheck)
     }
 
     if (resKey.length == 1 && resValue.length == 1) {
@@ -833,7 +866,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       byName: Boolean,
       conf: SQLConf,
       addError: String => Unit,
-      colPath: Seq[String]): Option[NamedExpression] = {
+      colPath: Seq[String],
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Option[NamedExpression] = {
 
     val attrTypeHasCharVarchar = CharVarcharUtils.hasCharVarchar(tableAttr.dataType)
     val attrTypeWithoutCharVarchar = if (attrTypeHasCharVarchar) {
@@ -844,7 +878,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
     val canWriteExpr = canWrite(
       tableName, queryExpr.dataType, attrTypeWithoutCharVarchar,
-      byName, conf, addError, colPath)
+      byName, conf, addError, colPath, ansiStoreAssignmentCastCheck)
 
     if (canWriteExpr) {
       val prepared =

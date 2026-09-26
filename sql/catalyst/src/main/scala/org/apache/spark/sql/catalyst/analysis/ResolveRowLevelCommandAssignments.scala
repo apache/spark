@@ -25,8 +25,10 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
+import org.apache.spark.sql.internal.connector.ConfigurableSchemaAlignment
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
 
 /**
  * A rule that resolves assignments in row-level commands.
@@ -43,7 +45,8 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
       validateStoreAssignmentPolicy()
       val newTable = cleanAttrMetadata(u.table)
       val newAssignments = AssignmentUtils.alignUpdateAssignments(u.table.output, u.assignments,
-        fromStar = false, coerceNestedTypes = false)
+        fromStar = false, coerceNestedTypes = false,
+        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck(u.table))
       u.copy(table = newTable, assignments = newAssignments)
 
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved && !u.aligned =>
@@ -52,20 +55,24 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     case m: MergeIntoTable if m.rewritable && shouldAlignAssignments(m) && containsFinalSchema(m) =>
       validateStoreAssignmentPolicy()
       val coerceNestedTypes = conf.coerceMergeNestedTypes && m.withSchemaEvolution
+      val castCheck = ansiStoreAssignmentCastCheck(m.targetTable)
       m.copy(
         targetTable = cleanAttrMetadata(m.targetTable),
         matchedActions = alignActions(
           m.targetTable.output,
           m.matchedActions,
-          coerceNestedTypes),
+          coerceNestedTypes,
+          castCheck),
         notMatchedActions = alignActions(
           m.targetTable.output,
           m.notMatchedActions,
-          coerceNestedTypes),
+          coerceNestedTypes,
+          castCheck),
         notMatchedBySourceActions = alignActions(
           m.targetTable.output,
           m.notMatchedBySourceActions,
-          coerceNestedTypes))
+          coerceNestedTypes,
+          castCheck))
 
     case m: MergeIntoTable if shouldAlignAssignments(m) && containsFinalSchema(m) =>
       resolveAssignments(m)
@@ -77,6 +84,13 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
 
   private def containsFinalSchema(m: MergeIntoTable): Boolean = {
     !m.schemaEvolutionEnabled || (m.schemaEvolutionReady && m.pendingSchemaChanges.isEmpty)
+  }
+
+  private def ansiStoreAssignmentCastCheck(target: LogicalPlan): AnsiStoreAssignmentCastCheck = {
+    target.collectFirst {
+      case ExtractV2Table(table: ConfigurableSchemaAlignment) =>
+        table.schemaAlignmentConfig().ansiStoreAssignmentCastCheck()
+    }.getOrElse(AnsiStoreAssignmentCastCheck.AT_ANALYSIS)
   }
 
   private def validateStoreAssignmentPolicy(): Unit = {
@@ -127,16 +141,17 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
   private def alignActions(
       attrs: Seq[Attribute],
       actions: Seq[MergeAction],
-      coerceNestedTypes: Boolean): Seq[MergeAction] = {
+      coerceNestedTypes: Boolean,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Seq[MergeAction] = {
     actions.map {
       case u @ UpdateAction(_, assignments, fromStar) =>
         u.copy(assignments = AssignmentUtils.alignUpdateAssignments(attrs, assignments,
-          fromStar, coerceNestedTypes))
+          fromStar, coerceNestedTypes, ansiStoreAssignmentCastCheck))
       case d: DeleteAction =>
         d
       case i @ InsertAction(_, assignments) =>
         i.copy(assignments = AssignmentUtils.alignInsertAssignments(attrs, assignments,
-          coerceNestedTypes))
+          coerceNestedTypes, ansiStoreAssignmentCastCheck))
       case other =>
         throw new AnalysisException(
           errorClass = "_LEGACY_ERROR_TEMP_3052",

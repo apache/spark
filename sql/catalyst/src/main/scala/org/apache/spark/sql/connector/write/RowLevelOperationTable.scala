@@ -23,6 +23,7 @@ import org.apache.spark.sql.connector.catalog.{Column, SupportsRead, SupportsRow
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
+import org.apache.spark.sql.internal.connector.{ConfigurableSchemaAlignment, SchemaAlignmentConfig}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -35,7 +36,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 private[sql] case class RowLevelOperationTable(
     table: Table with SupportsRowLevelOperations,
-    operation: RowLevelOperation) extends Table with SupportsRead with SupportsWrite {
+    operation: RowLevelOperation)
+  extends Table with SupportsRead with SupportsWrite with ConfigurableSchemaAlignment {
 
   override def name: String = table.name
   override def columns: Array[Column] = table.columns()
@@ -43,6 +45,11 @@ private[sql] case class RowLevelOperationTable(
   override def constraints(): Array[Constraint] = table.constraints()
   override def partitioning(): Array[Transform] = table.partitioning()
   override def toString: String = table.toString
+
+  override def schemaAlignmentConfig(): SchemaAlignmentConfig = table match {
+    case t: ConfigurableSchemaAlignment => t.schemaAlignmentConfig()
+    case _ => SchemaAlignmentConfig.DEFAULT
+  }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     operation.newScanBuilder(options)

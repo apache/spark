@@ -44,7 +44,7 @@ import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{ColumnImpl, SupportsRuntimeCatalystFiltering, SupportsStreamingUpdateAsAppend}
+import org.apache.spark.sql.internal.connector.{ColumnImpl, ConfigurableSchemaAlignment, SchemaAlignmentConfig, SupportsRuntimeCatalystFiltering, SupportsStreamingUpdateAsAppend}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -65,9 +65,10 @@ abstract class InMemoryBaseTable(
     val numPartitions: Option[Int] = None,
     val advisoryPartitionSize: Option[Long] = None,
     val isDistributionStrictlyRequired: Boolean = true,
-    val numRowsPerSplit: Int = Int.MaxValue)
+    val numRowsPerSplit: Int = Int.MaxValue,
+    override val schemaAlignmentConfig: SchemaAlignmentConfig = SchemaAlignmentConfig.DEFAULT)
   extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns
-    with SupportsSchemaEvolution {
+    with SupportsSchemaEvolution with ConfigurableSchemaAlignment {
 
   // Tracks the current version number of the table.
   protected var tableVersion: Int = 0

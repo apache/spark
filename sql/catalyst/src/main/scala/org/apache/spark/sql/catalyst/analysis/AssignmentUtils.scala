@@ -30,6 +30,8 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueE
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck.AT_ANALYSIS
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -57,13 +59,17 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    *                 (preserving existing fields).
    * @param coerceNestedTypes whether to coerce nested types to match the target type
    *                         for complex types
+   * @param ansiStoreAssignmentCastCheck when the ANSI store-assignment cast check runs:
+   *                                     AT_ANALYSIS (default) rejects an unsafe cast at analysis
+   *                                     time; AT_RUNTIME rejects invalid values at execution time.
    * @return aligned update assignments that match table attributes
    */
   def alignUpdateAssignments(
       attrs: Seq[Attribute],
       assignments: Seq[Assignment],
       fromStar: Boolean,
-      coerceNestedTypes: Boolean): Seq[Assignment] = {
+      coerceNestedTypes: Boolean,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = AT_ANALYSIS): Seq[Assignment] = {
 
     val errors = new mutable.ArrayBuffer[String]()
 
@@ -75,7 +81,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         addError = err => errors += err,
         colPath = Seq(attr.name),
         coerceNestedTypes,
-        fromStar)
+        fromStar,
+        ansiStoreAssignmentCastCheck)
     }
 
     if (errors.nonEmpty) {
@@ -98,12 +105,16 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    * @param assignments insert assignments to align
    * @param coerceNestedTypes whether to coerce nested types to match the target type
    *                          for complex types
+   * @param ansiStoreAssignmentCastCheck when the ANSI store-assignment cast check runs:
+   *                                     AT_ANALYSIS (default) rejects an unsafe cast at analysis
+   *                                     time; AT_RUNTIME rejects invalid values at execution time.
    * @return aligned insert assignments that match table attributes
    */
   def alignInsertAssignments(
       attrs: Seq[Attribute],
       assignments: Seq[Assignment],
-      coerceNestedTypes: Boolean = false): Seq[Assignment] = {
+      coerceNestedTypes: Boolean = false,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = AT_ANALYSIS): Seq[Assignment] = {
 
     val errors = new mutable.ArrayBuffer[String]()
 
@@ -137,7 +148,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         val value = matchingAssignments.head.value
         val coerceMode = if (coerceNestedTypes) RECURSE else NONE
         TableOutputResolver.resolveUpdate(
-          "", value, actualAttr, conf, err => errors += err, colPath, coerceMode)
+          "", value, actualAttr, conf, err => errors += err, colPath, coerceMode,
+          ansiStoreAssignmentCastCheck)
       }
       Assignment(attr, resolvedValue)
     }
@@ -160,7 +172,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       addError: String => Unit,
       colPath: Seq[String],
       coerceNestedTypes: Boolean = false,
-      updateStar: Boolean = false): Expression = {
+      updateStar: Boolean = false,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Expression = {
 
     val (exactAssignments, otherAssignments) = assignments.partition { assignment =>
       assignment.key.semanticEquals(colExpr)
@@ -188,21 +201,22 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
           case _: StructType =>
             // Expand assignments to leaf fields (fixNullExpansion is applied inside)
             applyNestedFieldAssignments(col, colExpr, value, addError, colPath,
-              coerceNestedTypes)
+              coerceNestedTypes, ansiStoreAssignmentCastCheck)
           case _ =>
             // For non-struct types, resolve directly
             val coerceMode = if (coerceNestedTypes) RECURSE else NONE
             TableOutputResolver.resolveUpdate("", value, col, conf, addError, colPath,
-              coerceMode)
+              coerceMode, ansiStoreAssignmentCastCheck)
         }
       } else {
         val value = exactAssignments.head.value
         val coerceMode = if (coerceNestedTypes) RECURSE else NONE
         TableOutputResolver.resolveUpdate("", value, col, conf, addError,
-          colPath, coerceMode)
+          colPath, coerceMode, ansiStoreAssignmentCastCheck)
       }
     } else {
-      applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath, coerceNestedTypes)
+      applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath, coerceNestedTypes,
+        ansiStoreAssignmentCastCheck)
     }
   }
 
@@ -212,7 +226,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       assignments: Seq[Assignment],
       addError: String => Unit,
       colPath: Seq[String],
-      coerceNestedTypes: Boolean): Expression = {
+      coerceNestedTypes: Boolean,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Expression = {
 
     col.dataType match {
       case structType: StructType =>
@@ -222,7 +237,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         }
         val updatedFieldExprs = fieldAttrs.zip(fieldExprs).map { case (fieldAttr, fieldExpr) =>
           applyAssignments(fieldAttr, fieldExpr, assignments, addError, colPath :+ fieldAttr.name,
-            coerceNestedTypes)
+            coerceNestedTypes, ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
         }
         toNamedStruct(structType, updatedFieldExprs)
 
@@ -240,7 +255,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       value: Expression,
       addError: String => Unit,
       colPath: Seq[String],
-      coerceNestedTypes: Boolean): Expression = {
+      coerceNestedTypes: Boolean,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Expression = {
 
     col.dataType match {
       case structType: StructType =>
@@ -273,12 +289,13 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
             case _: StructType =>
               // Field is a struct, recurse
               applyNestedFieldAssignments(fieldAttr, targetFieldExpr,
-                sourceFieldValue, addError, fieldPath, coerceNestedTypes)
+                sourceFieldValue, addError, fieldPath, coerceNestedTypes,
+                ansiStoreAssignmentCastCheck)
             case _ =>
               // Field is not a struct, resolve with TableOutputResolver
               val coerceMode = if (coerceNestedTypes) RECURSE else NONE
               TableOutputResolver.resolveUpdate("", sourceFieldValue, fieldAttr, conf, addError,
-                fieldPath, coerceMode)
+                fieldPath, coerceMode, ansiStoreAssignmentCastCheck)
           }
         }
         val namedStruct = toNamedStruct(structType, updatedFieldExprs)
