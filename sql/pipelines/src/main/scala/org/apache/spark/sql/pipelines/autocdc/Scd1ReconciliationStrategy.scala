@@ -74,6 +74,7 @@ private[pipelines] trait Scd1ReconciliationStrategy {
       Scd1BatchProcessor.constructCdcMetadataCol(
         deleteSequence = rowDeleteSequence,
         upsertSequence = rowUpsertSequence,
+        versionMap = F.lit(null),
         sequencingType = resolvedSequencingType
       )
     )
@@ -206,4 +207,81 @@ private[pipelines] object Scd1RowLevelReconciliation extends Scd1ReconciliationS
       joinType = "left_anti"
     )
   }
+}
+
+/** Leaf-level SCD1 reconciliation. */
+private[pipelines] object Scd1LeafLevelReconciliation extends Scd1ReconciliationStrategy {
+
+  override def reconcileMicrobatch(
+      changeArgs: ChangeArgs,
+      resolvedSequencingType: DataType,
+      batchDf: DataFrame,
+      auxiliaryTableDf: DataFrame): DataFrame =
+    throw new NotImplementedError("SCD1 leaf-level reconciliation is not implemented")
+
+  /**
+   * Aligns microbatch rows with the persisted target schema without adding target rows.
+   *
+   * Matching fields use the target's order and spelling. Target fields missing from the microbatch,
+   * including nested fields, are filled with nulls. Microbatch-only fields are retained after the
+   * target fields.
+   *
+   * @param microbatchDf The microbatch rows to align.
+   * @param targetTableDf A target-table snapshot whose schema provides the canonical field order
+   *                      and spelling. Its rows are ignored.
+   * @return The microbatch rows aligned with the target schema, with microbatch-only fields
+   *         retained and no rows added from the target.
+   */
+  private[autocdc] def alignMicrobatchToTargetSchema(
+      microbatchDf: DataFrame,
+      targetTableDf: DataFrame): DataFrame =
+    targetTableDf.limit(0).unionByName(microbatchDf, allowMissingColumns = true)
+
+  /**
+   * Populates the version map for upsert rows, if ignore-null is being used.
+   *
+   * The caller must supply rows whose schema already reflects target column selection and
+   * target-schema alignment.
+   *
+   * @param changeArgs The CDC configuration providing keys and the ignore-null selection.
+   * @param resolvedSequencingType The resolved type of the sequencing expression and version-map
+   *                               values.
+   * @param alignedDf Microbatch rows already target-selected and target-schema-aligned, with the
+   *                  canonical CDC metadata column populated.
+   * @return `alignedDf` unchanged when ignore-null is disabled; otherwise, the same rows but with
+   *         version maps populated for upsert rows.
+   */
+  private[autocdc] def extendMicrobatchRowsWithVersionMap(
+      changeArgs: ChangeArgs,
+      resolvedSequencingType: DataType,
+      alignedDf: DataFrame): DataFrame =
+    changeArgs.ignoreNullSelection match {
+      case None => alignedDf
+      case Some(ignoreNullSelection) =>
+        val resolver = alignedDf.sparkSession.sessionState.conf.resolver
+        val cdcMetadataCol = F.col(AutoCdcReservedNames.cdcMetadataColName)
+        val upsertSequence = Scd1BatchProcessor.upsertSequenceOf(cdcMetadataCol)
+        val versionMap = F.when(
+          upsertSequence.isNotNull,
+          Scd1VersionMap.buildVersionMap(
+            schema = AutoCdcSchemaUtils.excludeColumns(
+              schema = alignedDf.schema,
+              // Keys and CDC metadata columns are not eligible for optional authorship. Drop them
+              // from the user schema that the version map will be constructed from.
+              columnNamesToExclude =
+                changeArgs.keys.map(_.name) :+ AutoCdcReservedNames.cdcMetadataColName,
+              resolver = resolver
+            ),
+            ignoreNullSelection = ignoreNullSelection,
+            upsertSequence = upsertSequence,
+            sequencingType = resolvedSequencingType,
+            resolver = resolver
+          )
+        )
+
+        alignedDf.withColumn(
+          AutoCdcReservedNames.cdcMetadataColName,
+          cdcMetadataCol.withField(Scd1BatchProcessor.versionMapFieldName, versionMap)
+        )
+    }
 }
