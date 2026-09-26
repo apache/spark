@@ -2000,6 +2000,36 @@ class ArrowTestsMixin:
                     self.assertEqual(df.first(), Row(c="a", v="abcd"))
                     self.assertEqual(df.toArrow().to_pylist(), [{"c": "a", "v": "abcd"}])
 
+    def test_to_arrow_char_varchar_udt_storage_is_unsupported(self):
+        class CharStorageUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return CharType(2)
+
+            @classmethod
+            def module(cls):
+                return __name__
+
+            @classmethod
+            def scalaUDT(cls):
+                return ""
+
+            def serialize(self, obj):
+                return obj
+
+            def deserialize(self, datum):
+                return datum
+
+        df = self.spark.createDataFrame([("a",)], "value string")
+        # Override the cached schema to exercise the Python toArrow preflight. The DataFrame
+        # cannot carry a UDT backed by CHAR because createDataFrame and JVM boundaries reject it.
+        df.__dict__["schema"] = StructType([StructField("value", CharStorageUDT())])
+        with self.assertRaisesRegex(
+            PySparkNotImplementedError,
+            "CHAR/VARCHAR inside toArrow UDT schema",
+        ):
+            df.toArrow()
+
     def test_toPandas_array_of_map_empty_outer(self):
         schema = StructType([StructField("data", ArrayType(MapType(StringType(), StringType())))])
         df = self.spark.createDataFrame([Row(data=[])], schema=schema)
@@ -2035,9 +2065,8 @@ class ArrowTestsMixin:
 )
 class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
     # These CHAR/VARCHAR cases are Classic-only: they force the RDD createDataFrame path via
-    # localRelationThreshold=0, exercise DataFrame.__arrow_c_stream__, and override Classic's
-    # cached `schema` attribute with a UDT-backed schema. They live here rather than in
-    # `ArrowTestsMixin` so the Connect parity suite does not inherit them.
+    # localRelationThreshold=0 and exercise DataFrame.__arrow_c_stream__. They live here rather
+    # than in `ArrowTestsMixin` so the Connect parity suite does not inherit them.
     def test_char_varchar_arrow_rdd_threshold(self):
         with self.sql_conf(
             {
@@ -2090,7 +2119,7 @@ class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
         ):
             df.__arrow_c_stream__()
 
-    def test_to_arrow_char_varchar_udt_storage_is_unsupported(self):
+    def test_arrow_c_stream_char_varchar_udt_storage_is_unsupported(self):
         class CharStorageUDT(UserDefinedType):
             @classmethod
             def sqlType(cls):
@@ -2111,14 +2140,9 @@ class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
                 return datum
 
         df = self.spark.createDataFrame([("a",)], "value string")
-        # Override the cached schema to exercise the Python toArrow preflight. The JVM DataFrame
+        # Override the cached schema to exercise the Python C-stream preflight. The JVM DataFrame
         # cannot carry a UDT backed by CHAR because JVM-side boundaries reject it first.
         df.__dict__["schema"] = StructType([StructField("value", CharStorageUDT())])
-        with self.assertRaisesRegex(
-            PySparkNotImplementedError,
-            "CHAR/VARCHAR inside toArrow UDT schema",
-        ):
-            df.toArrow()
         with self.assertRaisesRegex(
             PySparkNotImplementedError,
             "CHAR/VARCHAR in DataFrame.__arrow_c_stream__ schema",

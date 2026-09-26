@@ -20,9 +20,10 @@ import datetime
 import random
 import string
 
-from pyspark.errors import PySparkValueError
+from pyspark.errors import PySparkNotImplementedError, PySparkValueError
 from pyspark.sql.types import (
     ArrayType,
+    CharType,
     IntegerType,
     LongType,
     MapType,
@@ -30,6 +31,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    UserDefinedType,
 )
 from pyspark.testing.connectutils import ReusedMixedTestCase, should_test_connect
 from pyspark.testing.objects import MyObject, PythonOnlyPoint, PythonOnlyUDT
@@ -772,6 +774,57 @@ class SparkConnectDataFrameCreationTests(ReusedMixedTestCase, PandasOnSparkTestU
                 sdf = self.spark.createDataFrame(data, schema)
                 self.assertEqual(cdf.schema, sdf.schema)
                 self.assertEqual(cdf.collect(), sdf.collect())
+
+    def test_char_varchar_inside_udt_schema_is_unsupported(self):
+        class CharStorageUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return CharType(3)
+
+            @classmethod
+            def module(cls):
+                return __name__
+
+            @classmethod
+            def scalaUDT(cls):
+                return ""
+
+            def serialize(self, obj):
+                return obj
+
+            def deserialize(self, datum):
+                return datum
+
+        class CharValue:
+            __UDT__ = CharStorageUDT()
+
+            def __init__(self, value):
+                self.value = value
+
+        schema = StructType([StructField("value", CharStorageUDT())])
+        for data, declared_schema in [
+            ([("a",)], schema),
+            ([(CharValue("a"),)], None),
+        ]:
+            with self.subTest(schema=declared_schema):
+                with self.assertRaisesRegex(
+                    PySparkNotImplementedError,
+                    "CHAR/VARCHAR inside createDataFrame UDT schema",
+                ):
+                    self.connect.createDataFrame(data, declared_schema)
+                with self.assertRaisesRegex(
+                    PySparkNotImplementedError,
+                    "CHAR/VARCHAR inside createDataFrame UDT schema",
+                ):
+                    self.spark.createDataFrame(data, declared_schema)
+
+        df = self.connect.createDataFrame([("a",)], "value string")
+        df.__dict__["schema"] = schema
+        with self.assertRaisesRegex(
+            PySparkNotImplementedError,
+            "CHAR/VARCHAR inside toArrow UDT schema",
+        ):
+            df.toArrow()
 
 
 if __name__ == "__main__":

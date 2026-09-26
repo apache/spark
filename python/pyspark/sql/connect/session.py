@@ -540,6 +540,7 @@ class SparkSession:
                 _num_cols = len(schema.fields)
             else:
                 _num_cols = 1
+            PySparkSession._validate_char_varchar_udt_schema(_schema)
 
         elif isinstance(schema, (list, tuple)):
             # Must re-encode any unicode strings to be consistent with StructField names
@@ -563,6 +564,7 @@ class SparkSession:
             )
         elif isinstance(data, Sized) and len(data) == 0:
             if _schema is not None:
+                PySparkSession._validate_char_varchar_udt_schema(_schema)
                 return DataFrame(LocalRelation(table=None, schema=_schema.json()), self)
             else:
                 raise PySparkValueError(
@@ -775,6 +777,8 @@ class SparkSession:
                     raise PySparkValueError(
                         errorClass="CANNOT_DETERMINE_TYPE", messageParameters={}
                     )
+
+            PySparkSession._validate_char_varchar_udt_schema(_schema)
 
             from pyspark.sql.conversion import (
                 LocalDataToArrowConversion,

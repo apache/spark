@@ -457,9 +457,9 @@ case class PythonUDF(
     // lambda (e.g. `transform(arr, i -> transform(i, x -> f(x)))` lifts `f` to depth 2). Ignored
     // for every non-element-wise eval type, where it stays at its default of 1.
     elementwiseNestingDepth: Int = 1,
-    // The original CHAR/VARCHAR result type when write-side checks apply. Generated equality
-    // includes this field, and canonicalized copies retain it, so checked and unchecked UDFs
-    // remain distinct.
+    // This field contains the original CHAR/VARCHAR result type when write-side checks apply.
+    // Generated equality includes this field, and canonicalized copies retain it, so checked and
+    // unchecked UDFs remain distinct.
     charVarcharCheckedResultType: Option[DataType] = None)
   extends Expression with PythonFuncExpression with Unevaluable {
 
