@@ -73,7 +73,7 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
    * All window expressions should use the same expanding window and do not contains
    * `SizeBasedWindowFunction`, so that we can safely do the early stop.
    */
-  private def isExpandingWindow(
+  private[optimizer] def isExpandingWindow(
       windowExpression: NamedExpression): Boolean = windowExpression match {
     case Alias(WindowExpression(windowFunction, WindowSpecDefinition(_, _,
     SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _)
@@ -81,9 +81,47 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
-  private def support(windowFunction: Expression): Boolean = windowFunction match {
+  private[optimizer] def support(windowFunction: Expression): Boolean = windowFunction match {
     case _: Rank | _: DenseRank | _: RowNumber => true
     case _ => false
+  }
+
+  /**
+   * The rank-like candidate `apply` would rewrite for `condition` over `windowExpressions`:
+   * collects the limits of supported rank-like functions, prefers `RowNumber` (cheaper to
+   * evaluate) and the smallest limit, and returns `None` when the rule is disabled, the
+   * selected limit exceeds `windowGroupLimitThreshold`, or the known `child` cardinality
+   * makes the rewrite unnecessary. Shared with `TransposeWindow`, which must pin the top
+   * Window of a chain if and only if this returns a candidate (see `isRankFilterOnTopWindow`).
+   */
+  private[optimizer] def selectRankCandidate(
+      condition: Expression,
+      windowExpressions: Seq[NamedExpression],
+      child: LogicalPlan): Option[(Int, Expression)] = {
+
+    // The rule is disabled.
+    if (conf.windowGroupLimitThreshold == -1) return None
+
+    // Collect the limit of every rank-like expression the condition constrains.
+    val limits = windowExpressions.collect {
+      case alias @ Alias(WindowExpression(rankLikeFunction, _), _)
+        if support(rankLikeFunction) =>
+        extractLimits(condition, alias.toAttribute).map((_, rankLikeFunction))
+    }.flatten
+    if (limits.isEmpty) return None
+
+    // Prefer RowNumber first as it's cheaper to evaluate.
+    val (rowNumberLimits, otherLimits) = limits.partition(_._2.isInstanceOf[RowNumber])
+    val selectedLimits = if (rowNumberLimits.isEmpty) otherLimits else rowNumberLimits
+
+    // The candidate is the smallest selected limit, gated by the threshold and the known
+    // child cardinality.
+    selectedLimits.minBy(_._1) match {
+      case (limit, rankLikeFunction) if limit <= conf.windowGroupLimitThreshold &&
+        child.maxRows.forall(_ > limit) =>
+        Some((limit, rankLikeFunction))
+      case _ => None
+    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -94,44 +132,25 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
         window @ Window(windowExpressions, partitionSpec, orderSpec, child, _))
         if !child.isInstanceOf[WindowGroupLimit] && windowExpressions.forall(isExpandingWindow) &&
           orderSpec.nonEmpty =>
-        val limits = windowExpressions.collect {
-          case alias @ Alias(WindowExpression(rankLikeFunction, _), _)
-            if support(rankLikeFunction) =>
-            extractLimits(condition, alias.toAttribute).map((_, rankLikeFunction))
-        }.flatten
-
-        if (limits.isEmpty) {
-          filter
-        } else {
-          val (rowNumberLimits, otherLimits) = limits.partition(_._2.isInstanceOf[RowNumber])
-          // Pick RowNumber first as it's cheaper to evaluate.
-          val selectedLimits = if (rowNumberLimits.isEmpty) {
-            otherLimits
-          } else {
-            rowNumberLimits
-          }
-          // Pick a rank-like function with the smallest limit
-          selectedLimits.minBy(_._1) match {
-            case (limit, rankLikeFunction) if limit <= conf.windowGroupLimitThreshold &&
-              child.maxRows.forall(_ > limit) =>
-              if (limit > 0) {
-                val newFilterChild = if (rankLikeFunction.isInstanceOf[RowNumber] &&
-                  partitionSpec.isEmpty && limit < conf.topKSortFallbackThreshold) {
-                  // Top n (Limit + Sort) have better performance than WindowGroupLimit if the
-                  // window function is RowNumber and Window partitionSpec is empty.
-                  Limit(Literal(limit), window)
-                } else {
-                  val windowGroupLimit =
-                    WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child)
-                  window.withNewChildren(Seq(windowGroupLimit))
-                }
-                filter.withNewChildren(Seq(newFilterChild))
+        selectRankCandidate(condition, windowExpressions, child) match {
+          case Some((limit, rankLikeFunction)) =>
+            if (limit > 0) {
+              val newFilterChild = if (rankLikeFunction.isInstanceOf[RowNumber] &&
+                partitionSpec.isEmpty && limit < conf.topKSortFallbackThreshold) {
+                // Top n (Limit + Sort) have better performance than WindowGroupLimit if the
+                // window function is RowNumber and Window partitionSpec is empty.
+                Limit(Literal(limit), window)
               } else {
-                LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
+                val windowGroupLimit =
+                  WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child)
+                window.withNewChildren(Seq(windowGroupLimit))
               }
-            case _ =>
-              filter
-          }
+              filter.withNewChildren(Seq(newFilterChild))
+            } else {
+              LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
+            }
+          case None =>
+            filter
         }
     }
   }
