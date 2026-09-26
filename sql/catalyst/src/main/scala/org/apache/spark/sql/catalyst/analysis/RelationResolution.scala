@@ -344,7 +344,10 @@ class RelationResolution(
                 writePrivileges == null && !u.isStreaming
               cached <- lookupSharedRelationCache(catalog, ident, t, tableKey.stateOptions)
             } yield {
-              val updatedRelation = cached.copy(options = finalOptions)
+              // A shared cache entry may have been analyzed under another session's CHAR/VARCHAR
+              // policy. Rebind it in this analysis instead of inheriting that session's scan mode.
+              val updatedRelation =
+                cached.copy(options = finalOptions, charVarcharScanMode = None)
               updatedRelation.copyTagsFrom(cached)
               val nameParts = ident.toQualifiedNameParts(catalog)
               val aliasedRelation = SubqueryAlias(nameParts, updatedRelation)
@@ -591,7 +594,10 @@ class RelationResolution(
     cached transform {
       case r: DataSourceV2Relation if matchesReference(r, ref) =>
         V2TableReferenceUtils.validateLoadedTable(r.table, ref)
-        r.copy(output = ref.output, options = ref.options)
+        r.copy(
+          output = ref.output,
+          options = ref.options,
+          charVarcharScanMode = None)
     }
   }
 

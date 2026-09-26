@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources.Filter
@@ -166,6 +167,26 @@ trait FileFormat {
   }
 
   /**
+   * Behaves like [[buildReaderWithPartitionValues]], but uses the CHAR/VARCHAR mode bound during
+   * analysis. The mode is encoded only while crossing the legacy seven-argument virtual method
+   * boundary.
+   */
+  private[sql] def buildReaderWithPartitionValues(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration,
+      charVarcharScanMode: CharVarcharScanMode): PartitionedFile => Iterator[InternalRow] = {
+    val taggedConf = new Configuration(hadoopConf)
+    FileFormat.setCharVarcharScanMode(taggedConf, charVarcharScanMode)
+    buildReaderWithPartitionValues(
+      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, taggedConf)
+  }
+
+  /**
    * Create a file metadata struct column containing fields supported by the given file format.
    */
   def createFileMetadataCol(): AttributeReference = {
@@ -265,6 +286,23 @@ object FileFormat {
    * by calling supportBatch.
    */
   val OPTION_RETURNING_BATCH = "returning_batch"
+
+  /**
+   * This engine-private Hadoop configuration key is used only at the legacy seven-argument reader
+   * boundary.
+   */
+  private[sql] val CHAR_VARCHAR_SCAN_MODE = "__spark_sql_char_varchar_scan_mode"
+
+  /** Writes the CHAR/VARCHAR scan mode into `conf` under [[CHAR_VARCHAR_SCAN_MODE]]. */
+  private[sql] def setCharVarcharScanMode(
+      conf: Configuration, mode: CharVarcharScanMode): Unit = {
+    conf.set(CHAR_VARCHAR_SCAN_MODE, mode.toString)
+  }
+
+  /** Reads the CHAR/VARCHAR scan mode from `conf`, or `None` if no mode was bridged in. */
+  private[sql] def charVarcharScanMode(conf: Configuration): Option[CharVarcharScanMode] = {
+    Option(conf.get(CHAR_VARCHAR_SCAN_MODE)).map(CharVarcharScanMode.fromName)
+  }
 
   /**
    * Schema of metadata struct that can be produced by every file format,

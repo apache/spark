@@ -30,7 +30,10 @@ import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapabi
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, ScanBuilder}
 import org.apache.spark.sql.connector.write._
+import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
+import org.apache.spark.sql.types.{StructType, VarcharType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -146,6 +149,101 @@ class SimpleWritableDataSource extends TestingV2Source {
   }
 }
 
+class CharVarcharWritableDataSource extends SimpleWritableDataSource {
+  private val charVarcharSchema = new StructType()
+    .add("c", VarcharType(4))
+    .add("v", VarcharType(4))
+
+  class CharVarcharScanBuilder(path: String, conf: Configuration)
+    extends MyScanBuilder(path, conf) {
+    override def readSchema(): StructType = charVarcharSchema
+
+    override def createReaderFactory(): PartitionReaderFactory = {
+      new CharVarcharCSVReaderFactory(new SerializableConfiguration(conf))
+    }
+  }
+
+  class CharVarcharBatchWrite(queryId: String, path: String, conf: Configuration)
+    extends MyBatchWrite(queryId, path, conf) {
+    override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
+      new CharVarcharCSVDataWriterFactory(
+        path, queryId, new SerializableConfiguration(conf))
+    }
+  }
+
+  class CharVarcharStreamingWrite(queryId: String, path: String, conf: Configuration)
+    extends StreamingWrite {
+
+    override def createStreamingWriterFactory(
+        info: PhysicalWriteInfo): StreamingDataWriterFactory = {
+      new CharVarcharStreamingDataWriterFactory(
+        path, queryId, new SerializableConfiguration(conf))
+    }
+
+    override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+      val finalPath = new Path(path)
+      val jobPath = new Path(new Path(finalPath, "_temporary"), s"$queryId-$epochId")
+      val fs = jobPath.getFileSystem(conf)
+      try {
+        for (file <- fs.listStatus(jobPath).map(_.getPath)) {
+          val dest = new Path(finalPath, file.getName)
+          if (!fs.rename(file, dest)) {
+            throw new IOException(s"failed to rename($file, $dest)")
+          }
+        }
+      } finally {
+        fs.delete(jobPath, true)
+      }
+    }
+
+    override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+      val jobPath = new Path(new Path(path, "_temporary"), s"$queryId-$epochId")
+      jobPath.getFileSystem(conf).delete(jobPath, true)
+    }
+  }
+
+  class CharVarcharTable(options: CaseInsensitiveStringMap) extends MyTable(options) {
+    override def schema(): StructType = charVarcharSchema
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new CharVarcharScanBuilder(new Path(path).toUri.toString, conf)
+    }
+
+    override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+      new MyWriteBuilder(path, info) {
+        override def build(): Write = {
+          new Write {
+            override def toBatch: BatchWrite = {
+              val hadoopPath = new Path(path)
+              val hadoopConf = SparkContext.getActive.get.hadoopConfiguration
+              val fs = hadoopPath.getFileSystem(hadoopConf)
+              if (needTruncate) {
+                fs.delete(hadoopPath, true)
+              }
+              new CharVarcharBatchWrite(queryId, hadoopPath.toUri.toString, hadoopConf)
+            }
+
+            override def toStreaming: StreamingWrite = {
+              val hadoopPath = new Path(path)
+              val hadoopConf = SparkContext.getActive.get.hadoopConfiguration
+              new CharVarcharStreamingWrite(queryId, hadoopPath.toUri.toString, hadoopConf)
+            }
+          }
+        }
+      }
+    }
+
+    override def capabilities(): java.util.Set[TableCapability] =
+      java.util.EnumSet.of(BATCH_READ, BATCH_WRITE, STREAMING_WRITE, TRUNCATE)
+  }
+
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = charVarcharSchema
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new CharVarcharTable(options)
+  }
+}
+
 case class CSVInputPartitionReader(path: String) extends InputPartition
 
 class CSVReaderFactory(conf: SerializableConfiguration)
@@ -179,6 +277,38 @@ class CSVReaderFactory(conf: SerializableConfiguration)
       override def close(): Unit = {
         inputStream.close()
       }
+    }
+  }
+}
+
+class CharVarcharCSVReaderFactory(conf: SerializableConfiguration)
+  extends PartitionReaderFactory {
+
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    val filePath = new Path(partition.asInstanceOf[CSVInputPartitionReader].path)
+    val fs = filePath.getFileSystem(conf.value)
+
+    new PartitionReader[InternalRow] {
+      private val inputStream = fs.open(filePath)
+      private val lines = new BufferedReader(new InputStreamReader(inputStream))
+        .lines().iterator().asScala
+      private var currentLine: String = _
+
+      override def next(): Boolean = {
+        if (lines.hasNext) {
+          currentLine = lines.next()
+          true
+        } else {
+          false
+        }
+      }
+
+      override def get(): InternalRow = {
+        val values = currentLine.split(",", -1)
+        InternalRow(UTF8String.fromString(values(0)), UTF8String.fromString(values(1)))
+      }
+
+      override def close(): Unit = inputStream.close()
     }
   }
 }
@@ -218,6 +348,60 @@ class CSVDataWriter(fs: FileSystem, file: Path) extends DataWriter[InternalRow] 
 
   override def write(record: InternalRow): Unit = {
     out.writeBytes(s"${record.getInt(0)},${record.getInt(1)}\n")
+  }
+
+  override def commit(): WriterCommitMessage = {
+    out.close()
+    null
+  }
+
+  override def abort(): Unit = {
+    try {
+      out.close()
+    } finally {
+      fs.delete(file, false)
+    }
+  }
+
+  override def close(): Unit = {}
+}
+
+class CharVarcharCSVDataWriterFactory(
+    path: String,
+    jobId: String,
+    conf: SerializableConfiguration) extends DataWriterFactory {
+
+  override def createWriter(
+      partitionId: Int,
+      taskId: Long): DataWriter[InternalRow] = {
+    val jobPath = new Path(new Path(path, "_temporary"), jobId)
+    val filePath = new Path(jobPath, s"$jobId-$partitionId-$taskId")
+    val fs = filePath.getFileSystem(conf.value)
+    new CharVarcharCSVDataWriter(fs, filePath)
+  }
+}
+
+class CharVarcharStreamingDataWriterFactory(
+    path: String,
+    queryId: String,
+    conf: SerializableConfiguration) extends StreamingDataWriterFactory {
+
+  override def createWriter(
+      partitionId: Int,
+      taskId: Long,
+      epochId: Long): DataWriter[InternalRow] = {
+    val jobPath = new Path(new Path(path, "_temporary"), s"$queryId-$epochId")
+    val filePath = new Path(jobPath, s"$queryId-$epochId-$partitionId-$taskId")
+    val fs = filePath.getFileSystem(conf.value)
+    new CharVarcharCSVDataWriter(fs, filePath)
+  }
+}
+
+class CharVarcharCSVDataWriter(fs: FileSystem, file: Path) extends DataWriter[InternalRow] {
+  private val out = fs.create(file)
+
+  override def write(record: InternalRow): Unit = {
+    out.writeBytes(s"${record.getUTF8String(0)},${record.getUTF8String(1)}\n")
   }
 
   override def commit(): WriterCommitMessage = {

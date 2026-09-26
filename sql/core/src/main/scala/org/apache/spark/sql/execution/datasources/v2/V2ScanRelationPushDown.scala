@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.SupportsCharVarcharScanMode
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -98,7 +99,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
     case r: DataSourceV2Relation =>
-      ScanBuilderHolder(r.output, r, r.table.asReadable.newScanBuilder(r.options))
+      val builder = r.table.asReadable.newScanBuilder(r.options)
+      (r.charVarcharScanMode, builder) match {
+        case (Some(mode), supports: SupportsCharVarcharScanMode) =>
+          supports.bindCharVarcharScanMode(mode)
+        case _ =>
+      }
+      ScanBuilderHolder(r.output, r, builder)
   }
 
   private def pushDownFilters(plan: LogicalPlan) = plan.transform {
@@ -701,9 +708,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // Use group_col_0, agg_func_0, agg_func_1 as output for ScanBuilderHolder.
       // We want to have the following logical plan:
       // == Optimized Logical Plan ==
-      // Aggregate [group_col_0#10], [min(agg_func_0#21) AS min(c1)#17, max(agg_func_1#22) AS max(c1)#18]
+      // Aggregate [group_col_0#10],
+      //   [min(agg_func_0#21) AS min(c1)#17, max(agg_func_1#22) AS max(c1)#18]
       // +- ScanBuilderHolder[group_col_0#10, agg_func_0#21, agg_func_1#22]
-      // Later, we build the `Scan` instance and convert ScanBuilderHolder to DataSourceV2ScanRelation.
+      // Later, build the `Scan` and convert the holder to DataSourceV2ScanRelation.
       // scalastyle:on
       val groupOutputMap = normalizedGroupingExpr.zipWithIndex.map { case (e, i) =>
         AttributeReference(s"group_col_$i", e.dataType)() -> e

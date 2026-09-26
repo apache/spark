@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2.orc
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.util.{CharVarcharScanMode, SupportsCharVarcharScanMode}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.SupportsPushDownAggregates
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
@@ -38,7 +39,8 @@ case class OrcScanBuilder(
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema)
-  with SupportsPushDownAggregates {
+  with SupportsPushDownAggregates
+  with SupportsCharVarcharScanMode {
 
   lazy val hadoopConf = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
@@ -49,6 +51,11 @@ case class OrcScanBuilder(
   private var finalSchema = new StructType()
 
   private var pushedAggregations = Option.empty[Aggregation]
+  private var charVarcharScanMode = Option.empty[CharVarcharScanMode]
+
+  override def bindCharVarcharScanMode(mode: CharVarcharScanMode): Unit = {
+    charVarcharScanMode = Some(mode)
+  }
 
   override protected val supportsNestedSchemaPruning: Boolean = true
 
@@ -61,7 +68,7 @@ case class OrcScanBuilder(
     }
     OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema, finalSchema,
       readPartitionSchema(), options, pushedAggregations, pushedDataFilters, partitionFilters,
-      dataFilters)
+      dataFilters, charVarcharScanMode)
   }
 
   override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {

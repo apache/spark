@@ -1171,12 +1171,32 @@ class Analyzer(
 
     // Resolve V2TableReference nodes inside temp view plans. These are created by
     // V2TableReference.createForTempView. We only need to resolve it when returning
-    // the plan of temp views (in resolveViews and unwrapRelationPlan).
+    // the plan of temp views (in resolveViews and unwrapRelationPlan). Discard a
+    // stored CHAR/VARCHAR policy Project so ApplyCharTypePadding can rebind both
+    // the scan mode and the generated expressions under the current SQLConf.
     private def resolveTableReferencesInTempView(plan: LogicalPlan): LogicalPlan = {
-      plan.resolveOperatorsUp {
-        case r: V2TableReference if r.context.isInstanceOf[V2TableReference.TemporaryViewContext] =>
+      plan.transformDown {
+        case project @ Project(_, ref: V2TableReference)
+            if isTempViewReadSidePaddingProject(project, ref) =>
+          // The policy Project's output retains the raw CHAR/VARCHAR metadata and is referenced
+          // by any parent operators in the stored view plan. Resolve the replacement relation
+          // with those attributes so ApplyCharTypePadding can generate the current policy while
+          // keeping parent references valid.
+          val reboundRef = ref.copy(
+            output = project.output.map(_.asInstanceOf[AttributeReference]))
+          reboundRef.copyTagsFrom(ref)
+          relationResolution.resolveReference(reboundRef)
+        case r: V2TableReference
+            if r.context.isInstanceOf[V2TableReference.TemporaryViewContext] =>
           relationResolution.resolveReference(r)
       }
+    }
+
+    private def isTempViewReadSidePaddingProject(
+        project: Project,
+        ref: V2TableReference): Boolean = {
+      ref.context.isInstanceOf[V2TableReference.TemporaryViewContext] &&
+        ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, ref)
     }
 
     def apply(plan: LogicalPlan)

@@ -27,6 +27,7 @@ import org.apache.orc.mapreduce.OrcInputFormat
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
@@ -49,6 +50,9 @@ import org.apache.spark.util.ArrayImplicits._
  * @param readDataSchema Required data schema in the batch scan.
  * @param partitionSchema Schema of partitions.
  * @param options Options for parsing ORC files.
+ * @param charVarcharScanMode This mode is bound during analysis. `SparkStandard` requests physical
+ *                            ORC STRING for Spark-side checks; `PreserveNative` and the unbound
+ *                            default retain native constrained decoding.
  */
 case class OrcPartitionReaderFactory(
     sqlConf: SQLConf,
@@ -59,7 +63,8 @@ case class OrcPartitionReaderFactory(
     filters: Array[Filter],
     aggregation: Option[Aggregation],
     options: OrcOptions,
-    memoryMode: MemoryMode) extends FilePartitionReaderFactory {
+    memoryMode: MemoryMode,
+    charVarcharScanMode: Option[CharVarcharScanMode] = None) extends FilePartitionReaderFactory {
   private val resultSchema = StructType(readDataSchema.fields ++ partitionSchema.fields)
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
@@ -97,7 +102,13 @@ case class OrcPartitionReaderFactory(
       new EmptyPartitionReader[InternalRow]
     } else {
       val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
-      OrcUtils.orcResultSchemaString(canPruneCols, dataSchema, resultSchema, partitionSchema, conf)
+      OrcUtils.orcResultSchemaString(
+        canPruneCols,
+        dataSchema,
+        resultSchema,
+        partitionSchema,
+        conf,
+        charVarcharScanMode)
       assert(requestedColIds.length == readDataSchema.length,
         "[BUG] requested column IDs do not match required schema")
 
@@ -138,7 +149,7 @@ case class OrcPartitionReaderFactory(
     } else {
       val (requestedDataColIds, canPruneCols) = resultedColPruneInfo.get
       val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
-        dataSchema, resultSchema, partitionSchema, conf)
+        dataSchema, resultSchema, partitionSchema, conf, charVarcharScanMode)
       val requestedColIds = requestedDataColIds ++ Array.fill(partitionSchema.length)(-1)
       assert(requestedColIds.length == resultSchema.length,
         "[BUG] requested column IDs do not match required schema")

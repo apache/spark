@@ -3886,6 +3886,37 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("SPARK-58814: V2 temp view rebinds CHAR/VARCHAR policy on lookup") {
+    val t = "testcat.ns1.ns2.tbl"
+    val preserveConf = Seq(
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
+    val standardConf = Seq(
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
+    withTable(t) {
+      withTempView("v") {
+        withSQLConf(preserveConf: _*) {
+          sql(s"CREATE TABLE $t (v VARCHAR(4)) USING foo")
+        }
+        withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+          sql(s"INSERT INTO $t VALUES ('abcdef')")
+        }
+        withSQLConf(preserveConf: _*) {
+          spark.table(t).select("v").createOrReplaceTempView("v")
+        }
+        withSQLConf(standardConf: _*) {
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              spark.table("v").collect()
+            },
+            condition = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "4"))
+        }
+      }
+    }
+  }
+
   test("SPARK-53924: temp view on DSv2 table detects VARCHAR/CHAR type changes") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {

@@ -20,26 +20,28 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
+import org.apache.spark.sql.execution.TableCacheDescriptor
 import org.apache.spark.storage.StorageLevel
 
 /**
  * Physical plan node for renaming a table.
  */
-case class RenameTableExec(
+private[sql] case class RenameTableExec(
     catalog: TableCatalog,
     oldIdent: Identifier,
     newIdent: Identifier,
-    invalidateCache: () => Option[StorageLevel],
+    invalidateCache: () => Seq[TableCacheDescriptor],
     cacheTable: (SparkSession, LogicalPlan, Option[String], StorageLevel) => Unit)
   extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val optOldStorageLevel = invalidateCache()
+    val oldCaches = invalidateCache()
     catalog.invalidateTable(oldIdent)
 
     // If new identifier consists of a table name only, the table should be renamed in place.
@@ -49,14 +51,37 @@ case class RenameTableExec(
     } else newIdent
     catalog.renameTable(oldIdent, qualifiedNewIdent)
 
-    optOldStorageLevel.foreach { oldStorageLevel =>
-      val tbl = catalog.loadTable(qualifiedNewIdent)
-      val newRelation = DataSourceV2Relation.create(tbl, Some(catalog), Some(qualifiedNewIdent))
+    val table = if (oldCaches.nonEmpty) {
+      Some(catalog.loadTable(qualifiedNewIdent))
+    } else {
+      None
+    }
+    oldCaches.foreach { cache =>
+      val rewritten = cache.plan.transformUp {
+        case relation: DataSourceV2Relation
+            if relation.catalog.contains(catalog) && relation.identifier.contains(oldIdent) =>
+          val restored = relation.copy(
+            table = table.get,
+            catalog = Some(catalog),
+            identifier = Some(qualifiedNewIdent))
+          restored.copyTagsFrom(relation)
+          restored.setAnalyzed()
+          restored
+      }
       cacheTable(
-        session,
-        newRelation,
-        Some(qualifiedNewIdent.quoted), oldStorageLevel)
+        sessionForCharVarcharScanMode(cache.charVarcharScanMode),
+        rewritten,
+        Some(qualifiedNewIdent.quoted),
+        cache.storageLevel)
     }
     Seq.empty
+  }
+
+  // Re-cache under the mode that produced the original plan without changing the caller session.
+  private def sessionForCharVarcharScanMode(
+      mode: Option[CharVarcharScanMode]): SparkSession = {
+    val restoreSession = session.cloneSession()
+    mode.foreach(CharVarcharScanMode.configure(restoreSession.sessionState.conf, _))
+    restoreSession
   }
 }

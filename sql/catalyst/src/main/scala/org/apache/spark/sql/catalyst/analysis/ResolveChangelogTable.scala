@@ -121,7 +121,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case rel @ DataSourceV2Relation(table: ChangelogTable, _, _, _, _, _) if !table.resolved =>
+    case rel @ DataSourceV2Relation(table: ChangelogTable, _, _, _, _, _, _) if !table.resolved =>
       val changelog = table.changelog
       val req = evaluateRequirements(changelog, table.changelogContext)
 

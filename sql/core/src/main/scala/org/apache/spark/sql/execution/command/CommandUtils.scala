@@ -29,7 +29,8 @@ import org.apache.spark.internal.LogKeys.{COUNT, DATABASE_NAME, ERROR, TABLE_NAM
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.analysis.ResolvedIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, ExternalCatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable,
+  CatalogTablePartition, ExternalCatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -39,7 +40,8 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{QueryExecution, RemoveShuffleFiles}
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex,
+  LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.ExtractV2CatalogAndIdentifier
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
@@ -522,6 +524,18 @@ object CommandUtils extends Logging {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
         val nameParts = ident.toQualifiedNameParts(catalog)
         sparkSession.sharedState.cacheManager.recacheTableOrView(sparkSession, nameParts)
+      case LogicalRelationWithTable(baseRelation, catalogTable) =>
+        catalogTable match {
+          case Some(table) =>
+            sparkSession.sharedState.cacheManager.recacheTableOrView(
+              sparkSession, table.identifier.nameParts)
+          case None =>
+            sparkSession.sharedState.cacheManager.recacheByV1Relation(
+              sparkSession, baseRelation)
+        }
+      case HiveTableRelation(catalogTable, _, _, _, _, _) =>
+        sparkSession.sharedState.cacheManager.recacheTableOrView(
+          sparkSession, catalogTable.identifier.nameParts)
       case _ =>
         sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relation)
     }

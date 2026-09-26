@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.classic.Dataset
@@ -26,6 +27,7 @@ import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.storage.StorageLevel.{DISK_ONLY, MEMORY_ONLY}
@@ -34,6 +36,7 @@ import org.apache.spark.util.Utils
 
 class CachedTableSuite extends QueryTest with TestHiveSingleton {
   import hiveContext._
+  import testImplicits._
 
   def rddIdOf(tableName: String): Int = {
     val plan = table(tableName).queryExecution.sparkPlan
@@ -86,6 +89,76 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
       table("src").collect().toSeq ++ table("src").collect().toSeq)
 
     sql("DROP TABLE cachedTable")
+  }
+
+  test("SPARK-58814: Hive ORC caches do not cross CHAR/VARCHAR scan modes") {
+    val tableName = "hive_char_cache"
+    withTempPath { path =>
+      Seq(true, false).foreach { convertMetastoreOrc =>
+        withClue(s"convertMetastoreOrc=$convertMetastoreOrc") {
+          Seq("abcdef").toDF("v").write.mode("overwrite").orc(path.getCanonicalPath)
+          withTable(tableName) {
+            sql(
+              s"""CREATE EXTERNAL TABLE $tableName (v CHAR(4))
+                 |STORED AS ORC LOCATION '${path.toURI}'""".stripMargin)
+
+            val preserveRead = withSQLConf(
+                HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString,
+                SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+              val read = table(tableName).cache()
+              checkAnswer(read, Row("abcd"))
+              assertCached(read)
+              read
+            }
+            withSQLConf(
+                HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString,
+                SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+              val standardRead = table(tableName)
+              assertCached(standardRead, 0)
+              if (convertMetastoreOrc) {
+                checkError(
+                  exception = intercept[SparkRuntimeException] {
+                    standardRead.collect()
+                  },
+                  condition = "EXCEED_LIMIT_LENGTH",
+                  parameters = Map("limit" -> "4"))
+              } else {
+                checkAnswer(standardRead, Row("abcd"))
+              }
+            }
+
+            Seq("ab").toDF("v").write.mode("overwrite").orc(path.getCanonicalPath)
+            withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString) {
+              sql(s"REFRESH TABLE $tableName")
+            }
+            withSQLConf(
+                HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString,
+                SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+              assertCached(preserveRead)
+              if (convertMetastoreOrc) {
+                checkAnswer(sql(s"SELECT * FROM $tableName"), Row("ab  "))
+              }
+            }
+            withSQLConf(
+                HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString,
+                SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+              val standardRead = table(tableName)
+              assertCached(standardRead, 0)
+              if (convertMetastoreOrc) {
+                checkAnswer(standardRead, Row("ab  "))
+              }
+            }
+          }
+          spark.catalog.clearCache()
+        }
+      }
+    }
   }
 
   test("Drop cached table") {

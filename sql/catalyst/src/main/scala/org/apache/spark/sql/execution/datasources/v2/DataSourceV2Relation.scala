@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUti
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, DATA_SOURCE_V2_SCAN_RELATION, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.{fromAttributes, toAttributes}
-import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedString, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedString, CharVarcharScanMode, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
@@ -116,7 +116,10 @@ case class DataSourceV2Relation(
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
     options: CaseInsensitiveStringMap,
-    timeTravelSpec: Option[TimeTravelSpec] = None)
+    timeTravelSpec: Option[TimeTravelSpec] = None,
+    // Analysis binds this mode so that sameResult comparisons and cache reuse distinguish
+    // preserve-only from standard CHAR/VARCHAR scans. None means no scan mode was bound.
+    charVarcharScanMode: Option[CharVarcharScanMode] = None)
   extends DataSourceV2RelationBase(table, output, catalog, identifier, options, timeTravelSpec)
   with ExposesMetadataColumns {
 
@@ -145,6 +148,33 @@ case class DataSourceV2Relation(
 
   def autoSchemaEvolution: Boolean =
     table.capabilities.contains(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)
+
+  def hasCharVarchar: Boolean = output.exists { attr =>
+    CharVarcharUtils.hasCharVarchar(attr.dataType) ||
+      CharVarcharUtils.getRawType(attr.metadata).exists(CharVarcharUtils.hasCharVarchar)
+  }
+
+  def sameResultWithUnboundCharVarcharScanMode(other: DataSourceV2Relation): Boolean = {
+    // Mutation matching ignores scan mode, Table instance, and extra write options. Catalog
+    // tables match on catalog and identifier. Catalog-less tables match on table name and path,
+    // because getTable() plus write options would otherwise miss the cached read relation.
+    // If either side omits path (streaming write targets), table name is enough.
+    if (catalog.isDefined || identifier.isDefined ||
+        other.catalog.isDefined || other.identifier.isDefined) {
+      catalog == other.catalog &&
+        identifier == other.identifier &&
+        timeTravelSpec == other.timeTravelSpec
+    } else {
+      timeTravelSpec.isEmpty && other.timeTravelSpec.isEmpty &&
+        table.name() == other.table.name() && catalogLessPathsCompatible(other)
+    }
+  }
+
+  private def catalogLessPathsCompatible(other: DataSourceV2Relation): Boolean = {
+    val thisPath = Option(options.get("path")).filter(_.nonEmpty)
+    val otherPath = Option(other.options.get("path")).filter(_.nonEmpty)
+    thisPath.isEmpty || otherPath.isEmpty || thisPath == otherPath
+  }
 
   def isVersioned: Boolean = table.version != null
 
@@ -442,7 +472,7 @@ object ExtractV2Table {
 object ExtractV2CatalogAndIdentifier {
   def unapply(relation: DataSourceV2Relation): Option[(TableCatalog, Identifier)] = {
     relation match {
-      case DataSourceV2Relation(_, _, Some(catalog), Some(identifier), _, _) =>
+      case DataSourceV2Relation(_, _, Some(catalog), Some(identifier), _, _, _) =>
         Some((catalog.asTableCatalog, identifier))
       case _ =>
         None

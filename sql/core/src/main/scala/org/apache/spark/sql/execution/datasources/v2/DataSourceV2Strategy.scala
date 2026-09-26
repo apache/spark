@@ -44,7 +44,7 @@ import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, SupportsRealTimeMode}
 import org.apache.spark.sql.connector.write.{V1Write, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan, SparkStrategy => Strategy}
+import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan, SparkStrategy => Strategy, TableCacheDescriptor}
 import org.apache.spark.sql.execution.command.{CommandUtils, MetricViewHelper}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -52,7 +52,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkStringUtils
 
@@ -73,7 +72,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val nameParts = ident.toQualifiedNameParts(catalog)
       cacheManager.recacheTableOrView(session, nameParts, includeTimeTravel = false)
     case _ =>
-      cacheManager.recacheByPlan(session, r)
+      cacheManager.recacheByV2Relation(session, r)
+  }
+
+  private def invalidateWriteCache(r: DataSourceV2Relation)(): Unit = r match {
+    case ExtractV2CatalogAndIdentifier(catalog, ident) =>
+      val nameParts = ident.toQualifiedNameParts(catalog)
+      cacheManager.uncacheTableOrView(session, nameParts, cascade = true)
+    case _ =>
+      cacheManager.uncacheByV2Relation(session, r, cascade = true)
   }
 
   private def recacheTable(r: ResolvedTable, includeTimeTravel: Boolean)(): Unit = {
@@ -82,17 +89,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   // Invalidates the cache associated with the given table. If the invalidated cache matches the
-  // given table, the cache's storage level is returned.
-  private def invalidateTableCache(r: ResolvedTable)(): Option[StorageLevel] = {
+  // given table, each direct named cache's logical plan and storage level are returned.
+  private def invalidateTableCache(
+      r: ResolvedTable)(): Seq[TableCacheDescriptor] = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
-    val cache = cacheManager.lookupCachedData(session, v2Relation)
+    val caches = cacheManager.lookupCacheDescriptorsByV2Relation(
+      v2Relation, directNamedCacheOnly = true)
     invalidateCache(r.catalog, r.identifier)
-    if (cache.isDefined) {
-      val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
-      Some(cacheLevel)
-    } else {
-      None
-    }
+    caches
   }
 
   private def invalidateCache(catalog: TableCatalog, ident: Identifier): Unit = {
@@ -246,10 +250,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       DataSourceV2Strategy.withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
 
     case WriteToDataSourceV2(relationOpt, writer, query, customMetrics) =>
-      val invalidateCacheFunc: () => Unit = () => relationOpt match {
-        case Some(r) => session.sharedState.cacheManager.uncacheQuery(session, r, cascade = true)
-        case None => ()
-      }
+      // Micro-batch V2Writes forwards an unbound target. Invalidate by catalog name or by
+      // mutation-specific relation identity so every bound scan-mode variant is removed.
+      val invalidateCacheFunc: () => Unit =
+        () => relationOpt.foreach(r => invalidateWriteCache(r)())
       WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
 
     case c @ CreateTable(ResolvedIdentifier(catalog, ident), columns, partitioning,
