@@ -2248,6 +2248,16 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 is_variant_null.__doc__ = pysparkfuncs.is_variant_null.__doc__
 
 
+def variant_array_length(v: "ColumnOrName", path: Optional[Union[Column, str]] = None) -> Column:
+    if path is None:
+        return _invoke_function("variant_array_length", _to_col(v))
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function("variant_array_length", _to_col(v), path_col)
+
+
+variant_array_length.__doc__ = pysparkfuncs.variant_array_length.__doc__
+
+
 def is_valid_variant(v: "ColumnOrName") -> Column:
     return _invoke_function("is_valid_variant", _to_col(v))
 

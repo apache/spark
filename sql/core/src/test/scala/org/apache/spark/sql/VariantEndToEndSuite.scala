@@ -342,6 +342,33 @@ class VariantEndToEndSuite extends SharedSparkSession {
     check("{ \"a\": null, \"b\": {\"c\": null, \"d\": [13, null]} }", "$.b.d[2]", expected = false)
   }
 
+  test("variant_array_length") {
+    val df = Seq("[1, 2, 3]", "[]", """{"a": 1}""", "null", null).toDF("j")
+    val expected = Seq(Row(3), Row(0), Row(null), Row(null), Row(null))
+
+    checkAnswer(df.selectExpr("variant_array_length(parse_json(j))"), expected)
+    checkAnswer(df.select(variant_array_length(parse_json($"j"))), expected)
+
+    val nested = Seq(
+      ("""{"a": [1, 2, 3]}""", "$.a"),
+      ("""{"a": []}""", "$.a"),
+      ("""{"a": 1}""", "$.a"),
+      ("{}", "$.a"),
+      ("""{"a": [1]}""", null)).toDF("j", "path")
+    val dynamicExpected = Seq(Row(3), Row(0), Row(null), Row(null), Row(null))
+    val literalExpected = Seq(Row(3), Row(0), Row(null), Row(null), Row(1))
+
+    checkAnswer(
+      nested.selectExpr("variant_array_length(parse_json(j), path)"),
+      dynamicExpected)
+    checkAnswer(
+      nested.select(variant_array_length(parse_json($"j"), $"path")),
+      dynamicExpected)
+    checkAnswer(
+      nested.select(variant_array_length(parse_json($"j"), "$.a")),
+      literalExpected)
+  }
+
   test("schema_of_variant_agg") {
     // Literal input.
     checkAnswer(
