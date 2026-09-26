@@ -2731,6 +2731,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def timestampDiffOverflowError(unit: String): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> s"get the number of $unit between the two timestamps"),
+      context = Array.empty,
+      summary = "")
+  }
+
   def calendarIntervalArrowNanosOverflowError(
       interval: CalendarInterval): SparkArithmeticException = {
     new SparkArithmeticException(

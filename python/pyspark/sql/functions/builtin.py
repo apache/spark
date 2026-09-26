@@ -14185,9 +14185,11 @@ def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Col
     unit : literal string
         This indicates the units of the difference between the given timestamps.
         Supported options are (case insensitive): "YEAR", "QUARTER", "MONTH", "WEEK",
-        "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND" and "MICROSECOND".
+        "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND", "MICROSECOND" and "NANOSECOND".
     start : :class:`~pyspark.sql.Column` or column name
         A timestamp which the expression subtracts from `endTimestamp`.
+        Nanosecond-precision timestamps (TIMESTAMP_NTZ/LTZ(p), p in [7, 9]) are accepted, and
+        their sub-microsecond fraction participates in the truncated difference for every unit.
     end : :class:`~pyspark.sql.Column` or column name
         A timestamp from which the expression subtracts `startTimestamp`.
 
