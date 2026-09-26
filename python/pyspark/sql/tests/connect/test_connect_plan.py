@@ -27,6 +27,7 @@ from pyspark.testing.connectutils import (
     connect_requirement_message,
     should_test_connect,
 )
+from pyspark.util import is_remote_only
 
 if should_test_connect:
     import pyspark.sql.connect.proto as proto
@@ -77,6 +78,17 @@ if should_test_connect:
 class SparkConnectPlanTests(PlanOnlyTestFixture):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
+
+    @unittest.skipIf(is_remote_only(), "Requires the classic-only in-process UDF API")
+    def test_inprocess_udf_registration_is_rejected(self):
+        from pyspark.errors import PySparkTypeError
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.connect.udf import UDFRegistration
+
+        udf = inprocess_udf("long")(lambda x: x)
+        with self.assertRaises(PySparkTypeError) as error:
+            UDFRegistration(self.connect).register("inprocess", udf)
+        self.assertEqual(error.exception.getCondition(), "INVALID_UDF_EVAL_TYPE")
 
     def test_char_varchar_collation_type_round_trip(self):
         data_types = [

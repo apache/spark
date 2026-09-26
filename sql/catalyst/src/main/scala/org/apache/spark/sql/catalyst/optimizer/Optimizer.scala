@@ -21,6 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkException
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
@@ -1794,6 +1795,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
           lazy val containsUDF = a.child.exists {
             case udf: PythonUDF =>
               isScalarPythonUDF(udf) &&
+                udf.evalType != PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF &&
                 pythonUDFEvalTypesInUpperProjects.contains(
                   correctEvalType(udf, pythonUDFArrowFallbackOnUDT))
             case _ => false

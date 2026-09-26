@@ -5235,6 +5235,11 @@
         "message" : [
           "The environment variable name <name>, set under <prefix>, is reserved for Spark. Names beginning with <reservedPrefixes>, and the names <reservedNames>, are set by Spark for its own Python workers and cannot be set by a session."
         ]
+      },
+      "UNSUPPORTED_IN_PROCESS_PYTHON_UDF" : {
+        "message" : [
+          "In-process Python UDFs do not support <config>. Unset this configuration or use Python worker UDFs."
+        ]
       }
     },
     "sqlState" : "42616"
