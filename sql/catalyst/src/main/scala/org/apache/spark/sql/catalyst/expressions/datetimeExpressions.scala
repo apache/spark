@@ -3344,7 +3344,10 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
       orderReversed: Boolean = false)(
       truncFunc: (String, String) => String)
     : ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    // Call through the module instance rather than the class's static forwarders: Scala emits no
+    // forwarder for private[sql] members, and the cache-taking truncTimestamp overloads are
+    // module-visible only.
+    val dtu = DateTimeUtils.getClass.getName + ".MODULE$"
 
     val javaType = CodeGenerator.javaType(dataType)
     if (format.foldable) {
@@ -3532,11 +3535,15 @@ case class TruncTimestamp(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
+    // Per-task offset cache so the hot path avoids a transition-array binary search per row.
+    val cacheClass = classOf[org.apache.spark.sql.catalyst.util.ZoneOffsetCache].getName
+    val cache = ctx.addMutableState(cacheClass, "zoneOffsetCache",
+      v => s"$v = new $cacheClass($zid);", forceInline = true)
     codeGenHelper(ctx, ev, minLevel = MIN_LEVEL_OF_TIMESTAMP_TRUNC, true) {
       (date: String, fmt: String) =>
         timestamp.dataType match {
-          case _: AnyTimestampNanoType => s"truncTimestampNanos($date, $fmt, $zid);"
-          case _ => s"truncTimestamp($date, $fmt, $zid);"
+          case _: AnyTimestampNanoType => s"truncTimestampNanos($date, $fmt, $cache);"
+          case _ => s"truncTimestamp($date, $fmt, $cache);"
         }
     }
   }
