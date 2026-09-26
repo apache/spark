@@ -152,6 +152,9 @@ object SQLExecution extends Logging {
               // MapOutputTracker so that stage retries would be triggered. Blocking is
               // Utils.isTesting to deflake unit tests.
               sc.shuffleDriverComponents.removeShuffle(shuffleId, Utils.isTesting)
+              // Let listeners such as the dynamic allocation ExecutorMonitor stop tracking the
+              // shuffle, as ContextCleaner will not report it cleaned while it stays registered.
+              sc.cleaner.foreach(_.notifyShuffleFilesRemoved(shuffleId))
             } catch {
               case NonFatal(e) =>
                 logWarning(log"Failed to remove shuffle ${MDC(SHUFFLE_ID, shuffleId)} for " +
