@@ -361,6 +361,92 @@ values (0), (1) lhs(a)
 |> limit 2
 |> select lhs.a, rhs.a, z2;
 
+-- A table alias still refers to the original row value of a column affected by SET.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select t.a;
+
+-- The unqualified name refers to the assigned value and the qualified name to the original one.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select a, t.a, t.b;
+
+-- The retained source column stays out of the output schema unless it is named explicitly.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select *;
+
+-- Qualified access to a column affected by SET, through an alias added by the AS operator.
+table t
+|> as u
+|> set x = x + 1
+|> select x, u.x;
+
+-- The alias keeps pointing at the original source value across a sequence of SET operators.
+values (1) as t(a)
+|> set a = a + 1
+|> set a = a + 1
+|> select a, t.a;
+
+-- A qualified star returns the original row in its original column order.
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> select t.*;
+
+-- The order is preserved across SET operators on different columns, in either order.
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> set a = 10
+|> select t.*;
+
+values (1, 2, 3) as t(a, b, c)
+|> set a = 10
+|> set c = 30
+|> select a, b, c, t.*;
+
+-- Assigning several columns in one SET operator.
+values (1, 2, 3) as t(a, b, c)
+|> set c = 30, a = 10
+|> select t.*;
+
+-- Repeated source columns keep every position in the qualified star.
+values (1, 2) as s(a, b)
+|> select a, a, b
+|> as t
+|> set b = 3
+|> select t.*;
+
+-- The retained source column survives the rules that rebuild the projection above SET:
+-- a filter, a sort, an aggregate, a join, a union and an enclosing subquery or CTE.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> where t.a = 1
+|> select a, t.a;
+
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> order by t.a
+|> select a, t.a;
+
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> aggregate sum(t.a) as original_sum group by a;
+
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> join (values (1, 20) as u(c, d)) on t.a = c
+|> select a, t.a, c;
+
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select a, t.a
+|> union all (values (1, 10) as t(a, b) |> set a = a + 1 |> select a, t.a);
+
+select * from (values (1, 10) as t(a, b) |> set a = a + 1 |> select a, t.a);
+
+with cte as (values (1, 10) as t(a, b) |> set a = a + 1 |> select a, t.a)
+select * from cte;
+
 -- SET operators: negative tests.
 ---------------------------------
 
