@@ -64,6 +64,7 @@ from pyspark.sql.types import (
     VarcharType,
     VariantType,
 )
+from pyspark.sql.utils import is_remote
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
@@ -1924,23 +1925,26 @@ class ArrowTestsMixin:
             pa.Table.from_pylist(values),
         ]
 
-        with self.sql_conf(
-            {
-                "spark.sql.legacy.charVarcharAsString": "false",
-                "spark.sql.preserveCharVarcharTypeInfo": "false",
-                "spark.sql.charVarchar.standardSemantics.enabled": "false",
-                "spark.sql.execution.arrow.pyspark.enabled": "true",
-            }
-        ):
-            for data in inputs:
-                with self.subTest(input_type=type(data).__name__):
-                    default_df = self.spark.createDataFrame(data, schema)
-                    self.assertEqual(default_df.schema["c"].dataType, StringType())
-                    self.assertEqual(
-                        default_df.first(),
-                        Row(c="ab  ", s=Row(v="xyz"), a=["z "]),
-                    )
-                    self.assertEqual(default_df.toArrow().schema.field("c").type, pa.string())
+        # Connect intentionally rejects CHAR/VARCHAR in this default policy. Its positive support
+        # is covered by the standard and legacy policy cases below.
+        if not is_remote():
+            with self.sql_conf(
+                {
+                    "spark.sql.legacy.charVarcharAsString": "false",
+                    "spark.sql.preserveCharVarcharTypeInfo": "false",
+                    "spark.sql.charVarchar.standardSemantics.enabled": "false",
+                    "spark.sql.execution.arrow.pyspark.enabled": "true",
+                }
+            ):
+                for data in inputs:
+                    with self.subTest(input_type=type(data).__name__):
+                        default_df = self.spark.createDataFrame(data, schema)
+                        self.assertEqual(default_df.schema["c"].dataType, StringType())
+                        self.assertEqual(
+                            default_df.first(),
+                            Row(c="ab  ", s=Row(v="xyz"), a=["z "]),
+                        )
+                        self.assertEqual(default_df.toArrow().schema.field("c").type, pa.string())
 
         with self.sql_conf(
             {
@@ -2023,7 +2027,12 @@ class ArrowTestsMixin:
         df = self.spark.createDataFrame([("a",)], "value string")
         # Override the cached schema to exercise the Python toArrow preflight. The DataFrame
         # cannot carry a UDT backed by CHAR because createDataFrame and JVM boundaries reject it.
-        df.__dict__["schema"] = StructType([StructField("value", CharStorageUDT())])
+        overridden_schema = StructType([StructField("value", CharStorageUDT())])
+        if is_remote():
+            df.__dict__["_cached_schema"] = overridden_schema
+            df.__dict__["_cached_schema_serialized"] = None
+        else:
+            df.__dict__["schema"] = overridden_schema
         with self.assertRaisesRegex(
             PySparkNotImplementedError,
             "CHAR/VARCHAR inside toArrow UDT schema",
