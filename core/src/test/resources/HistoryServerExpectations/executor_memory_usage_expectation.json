@@ -16,7 +16,7 @@
   "maxMemory" : 908381388,
   "maxTasks" : 0,
   "memoryMetrics" : {
-    "totalOffHeapStorageMemory" : 524288000,
+    "totalOffHeapStorageMemory" : 0,
     "totalOnHeapStorageMemory" : 384093388,
     "usedOffHeapStorageMemory" : 0,
     "usedOnHeapStorageMemory" : 0
