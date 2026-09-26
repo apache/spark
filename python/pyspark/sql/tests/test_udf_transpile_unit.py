@@ -791,9 +791,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             return _ast.parse(src, mode="eval").body
 
         def lower(src):
-            # `_transpile_from_ast` is what normally zeroes the budget; reset it
-            # here so each case is charged on its own.
+            # `_transpile_from_ast` is what normally zeroes the per-lowering state;
+            # reset it here so each case is charged on its own. The category cache
+            # has to go too: it keys on `id(node)`, and CPython reuses the id of a
+            # collected node for one of a different type, so a cache kept across
+            # separately parsed sources hands back a stale category.
             transpiler._lowered_comparisons = 0
+            transpiler._category_cache = {}
             return transpiler._convert_chunk(["x"], compare_node(src))
 
         def chain_src(n):
