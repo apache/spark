@@ -2054,13 +2054,17 @@ object OptimizeRepartition extends Rule[LogicalPlan] {
 
 /**
  * Replaces first(col) to nth_value(col, 1) for better performance.
+ *
+ * A FILTER clause is not rewritten. It lives on the AggregateExpression wrapping `first`, and
+ * NthValue is a window function that has nowhere to carry it, so rewriting a filtered `first`
+ * would silently drop the filter and return the first unfiltered value of the frame.
  */
 object OptimizeWindowFunctions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
     _.containsPattern(WINDOW_EXPRESSION), ruleId) {
-    case we @ WindowExpression(AggregateExpression(first: First, _, _, _, _),
+    case we @ WindowExpression(AggregateExpression(first: First, _, _, filter, _),
         WindowSpecDefinition(_, orderSpec, frameSpecification: SpecifiedWindowFrame))
-        if orderSpec.nonEmpty && frameSpecification.frameType == RowFrame &&
+        if filter.isEmpty && orderSpec.nonEmpty && frameSpecification.frameType == RowFrame &&
           frameSpecification.lower == UnboundedPreceding &&
           (frameSpecification.upper == UnboundedFollowing ||
             frameSpecification.upper == CurrentRow) =>
