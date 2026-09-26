@@ -107,6 +107,7 @@ from pyspark.sql.functions import (
     coalesce,
     col,
     concat,
+    length,
     lit,
     pmod,
     raise_error,
@@ -208,6 +209,26 @@ def _is_definitely_boolean(node: ast.AST) -> bool:
             return False
 
 
+def _truthiness_col(cat: Optional[str], c: Column) -> Optional[Column]:
+    """Return a boolean Column expressing Python's ``bool(c)`` for the given category.
+
+    Returns ``None`` for unsupported or unknown categories (caller falls back).
+
+    Semantics (NULL-as-False throughout, matching Python's ``None`` is falsy):
+      "bool"    -> coalesce(c, False)
+      "string"  -> coalesce(length(c) > 0, False)  -- empty string is falsy
+      "numeric" -> coalesce(c != 0, False)           -- zero is falsy
+                   NaN != 0 is True in Spark so float NaN is truthy, matching Python.
+    """
+    if cat == "bool":
+        return coalesce(c, lit(False))
+    if cat == "string":
+        return coalesce(length(c) > lit(0), lit(False))
+    if cat == "numeric":
+        return coalesce(c != lit(0), lit(False))
+    return None
+
+
 class CatalystTranspiler(AbstractTranspiler):
     """Transpiler that attempts to convert a Python UDF into native Spark SQL expressions."""
 
@@ -280,22 +301,27 @@ class CatalystTranspiler(AbstractTranspiler):
         body_node: Optional[ast.AST],
         else_node: Optional[ast.AST],
     ) -> Column:
-        # We cannot soundly lower a generic Python truthiness test here.
-        # Python truthiness depends on the runtime input type and value:
-        # for example, 0, 0.0, "", empty collections, and None are all
-        # falsy, while most other values are truthy. The transpiler does
-        # not have enough input type information at this point to decide
-        # whether ``test_col`` is a boolean expression or a bare value
-        # whose truthiness would need Python-specific handling. Emitting
-        # ``when(coalesce(test_col, false), ...)`` is therefore unsound:
-        # it can either fail Spark analysis for non-boolean columns or
-        # silently diverge from Python semantics. Fail closed so the UDF
-        # falls back to interpreted Python execution instead.
-        if not _is_definitely_boolean(test_node):
-            raise UnsupportedOperationException(
-                f"bare truthiness tests ({ast.dump(test_node)}) in if-expressions are "
-                " not currently supported by the transpiler"
-            )
+        # Determine the boolean guard for the CASE WHEN.
+        # Two paths:
+        # 1. The test is statically known to be a boolean expression
+        #    (comparison, `not`, boolean op, literal True/False/None):
+        #    wrap with coalesce so NULL is treated as False.
+        # 2. The test is a bare value (parameter name, numeric/string
+        #    constant): lower using Python's type-specific truthiness
+        #    rules (0/""/None are falsy, everything else truthy) based on
+        #    the operand's inferred category.
+        if _is_definitely_boolean(test_node):
+            safe_test = coalesce(test_col, lit(False))
+        else:
+            cat = self._safe_category(params, test_node)
+            _maybe_test = _truthiness_col(cat, test_col)
+            if _maybe_test is None:
+                raise UnsupportedOperationException(
+                    f"bare truthiness test ({ast.dump(test_node)}) in if/ternary: "
+                    "the operand's category is unknown or unsupported, so the "
+                    "transpiler falls back to interpreted Python"
+                )
+            safe_test = _maybe_test
         # When the two branches resolve to concrete but different categories
         # (e.g. numeric vs string), the lowered ``when(...).otherwise(...)`` is a
         # CASE WHEN whose branch values share no common type under ANSI. That node
@@ -312,7 +338,6 @@ class CatalystTranspiler(AbstractTranspiler):
                 f"{else_cat}); the lowered CASE WHEN has no common type under ANSI, "
                 "so the transpiler falls back to interpreted Python"
             )
-        safe_test = coalesce(test_col, lit(False))
         return when(safe_test, body_col).otherwise(else_col)
 
     def _lower_eq(
