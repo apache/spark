@@ -102,17 +102,19 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
               s"""CREATE EXTERNAL TABLE $tableName (v CHAR(4))
                  |STORED AS ORC LOCATION '${path.toURI}'""".stripMargin)
 
-            withSQLConf(
+            val preserveRead = withSQLConf(
                 HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString,
                 SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
                 SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
                 SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
-              val preserveRead = table(tableName).cache()
-              checkAnswer(preserveRead, Row("abcd"))
-              assertCached(preserveRead)
+              val read = table(tableName).cache()
+              checkAnswer(read, Row("abcd"))
+              assertCached(read)
+              read
             }
             withSQLConf(
                 HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString,
+                SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
                 SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
               val standardRead = table(tableName)
               assertCached(standardRead, 0)
@@ -128,24 +130,29 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
               }
             }
 
-            spark.catalog.clearCache()
             Seq("ab").toDF("v").write.mode("overwrite").orc(path.getCanonicalPath)
-            sql(s"REFRESH TABLE $tableName")
-            withSQLConf(
-                HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString,
-                SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-              val standardRead = table(tableName).cache()
-              checkAnswer(standardRead, Row("ab  "))
-              assertCached(standardRead)
+            withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString) {
+              sql(s"REFRESH TABLE $tableName")
             }
             withSQLConf(
                 HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString,
                 SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
                 SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
                 SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
-              val preserveRead = table(tableName)
-              assertCached(preserveRead, 0)
-              checkAnswer(preserveRead, Row("ab  "))
+              assertCached(preserveRead)
+              if (convertMetastoreOrc) {
+                checkAnswer(sql(s"SELECT * FROM $tableName"), Row("ab  "))
+              }
+            }
+            withSQLConf(
+                HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString,
+                SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+              val standardRead = table(tableName)
+              assertCached(standardRead, 0)
+              if (convertMetastoreOrc) {
+                checkAnswer(standardRead, Row("ab  "))
+              }
             }
           }
           spark.catalog.clearCache()

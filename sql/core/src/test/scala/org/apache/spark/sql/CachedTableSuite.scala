@@ -2359,7 +2359,9 @@ class CachedTableSuite extends SharedSparkSession
         SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
         SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
         MEMORY_ONLY, "MEMORY_ONLY", CharVarcharScanMode.PreserveNative),
-      (Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"),
+      (Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"),
         DISK_ONLY, "DISK_ONLY", CharVarcharScanMode.SparkStandard))
     withTable(t, tRenamed, "cached_tt1", "cached_tt2") {
       sql(s"CREATE TABLE $t (id int, data varchar(4)) USING foo")
