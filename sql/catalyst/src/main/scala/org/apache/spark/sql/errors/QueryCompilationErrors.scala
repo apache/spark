@@ -1447,7 +1447,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def resourceTypeNotSupportedError(resourceType: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1079",
+      errorClass = "UNSUPPORTED_RESOURCE_TYPE_FOR_FUNCTION",
       messageParameters = Map("resourceType" -> resourceType))
   }
 
