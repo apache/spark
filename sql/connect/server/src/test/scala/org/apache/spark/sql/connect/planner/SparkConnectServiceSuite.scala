@@ -68,6 +68,8 @@ class SparkConnectServiceSuite
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+    // This suite invokes SparkConnectService directly without SparkConnectService.start().
+    SparkConnectService.executionManager.start()
     SparkConnectService.sessionManager.invalidateAllSessions()
     SparkConnectService.sessionManager.initializeBaseSession(() => spark.newSession())
   }
