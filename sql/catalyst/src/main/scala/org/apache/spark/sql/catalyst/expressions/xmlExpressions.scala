@@ -105,8 +105,10 @@ case class XmlToStructs(
     val rawParser = new StaxXmlParser(schema, parsedOptions)
     val xsdSchema = Option(parsedOptions.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
+    // A fresh Validator per row: expression instances can be shared between threads,
+    // and Validators must not be shared between threads.
     new FailureSafeParser[String](
-      input => rawParser.doParseColumn(input, mode, xsdSchema),
+      input => rawParser.doParseColumn(input, mode, xsdSchema.map(ValidatorUtil.newValidator)),
       mode,
       nullableSchema,
       parsedOptions.columnNameOfCorruptRecord)

@@ -23,7 +23,7 @@ import java.util.Locale
 import javax.xml.stream.{XMLEventReader, XMLStreamException}
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
-import javax.xml.validation.Schema
+import javax.xml.validation.Validator
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -84,8 +84,11 @@ class StaxXmlParser(
     if (schema.isEmpty) {
       (_: String) => Some(InternalRow.empty)
     } else {
-      val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-      (input: String) => doParseColumn(input, options.parseMode, xsdSchema)
+      // Reuse one Validator across records; each StaxXmlParser instance is used by a
+      // single thread, and Validators must not be shared between threads.
+      val xsdValidator = Option(options.rowValidationXSDPath)
+        .map(path => ValidatorUtil.newValidator(ValidatorUtil.getSchema(path)))
+      (input: String) => doParseColumn(input, options.parseMode, xsdValidator)
     }
   }
 
@@ -100,9 +103,12 @@ class StaxXmlParser(
   def parseStream(
       inputStream: InputStream,
       schema: StructType): Iterator[InternalRow] = {
-    val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
+    // Reuse one Validator across records; each StaxXmlParser instance is used by a
+    // single thread, and Validators must not be shared between threads.
+    val xsdValidator = Option(options.rowValidationXSDPath)
+      .map(path => ValidatorUtil.newValidator(ValidatorUtil.getSchema(path)))
     val safeParser = new FailureSafeParser[String](
-      input => doParseColumn(input, options.parseMode, xsdSchema),
+      input => doParseColumn(input, options.parseMode, xsdValidator),
       options.parseMode,
       schema,
       options.columnNameOfCorruptRecord)
@@ -126,17 +132,21 @@ class StaxXmlParser(
     } else {
       options.parseMode
     }
-    val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-    doParseColumn(xml, parseMode, xsdSchema).orNull
+    val xsdValidator = Option(options.rowValidationXSDPath)
+      .map(path => ValidatorUtil.newValidator(ValidatorUtil.getSchema(path)))
+    doParseColumn(xml, parseMode, xsdValidator).orNull
   }
 
   def doParseColumn(xml: String,
       parseMode: ParseMode,
-      xsdSchema: Option[Schema]): Option[InternalRow] = {
+      xsdValidator: Option[Validator]): Option[InternalRow] = {
     lazy val xmlRecord = UTF8String.fromString(xml)
     try {
-      xsdSchema.foreach { schema =>
-        ValidatorUtil.newValidator(schema).validate(new StreamSource(new StringReader(xml)))
+      xsdValidator.foreach { validator =>
+        // Validator.reset() drops the secure-processing configuration applied at
+        // construction, so re-apply it on every record.
+        ValidatorUtil.reset(validator)
+        validator.validate(new StreamSource(new StringReader(xml)))
       }
       val parser = StaxXmlParserUtils.filteredReader(xml)
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
@@ -145,8 +155,9 @@ class StaxXmlParser(
       result
     } catch {
       case e: SparkUpgradeException => throw e
-      // ValidatorUtil.newValidator throws this when the JAXP implementation cannot
-      // disable external access; that is an environment error, not a bad record.
+      // ValidatorUtil.newValidator and ValidatorUtil.reset throw this when the JAXP
+      // implementation cannot disable external access; an environment error, not a
+      // bad record.
       case e: UnsupportedOperationException => throw e
       case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
               | _: SAXException) =>
