@@ -4430,15 +4430,26 @@ class AstBuilder extends DataTypeAstBuilder
     }
     val rawJson = formatArgs.map(_._1)
     val needsValidation = formatArgs.map(_._2)
-    // Route a flat, clause-free call through routine resolution so it can be shadowed, mirroring
-    // JSON_ARRAY. A raw value (nested constructor or explicit FORMAT JSON) stays direct so its
-    // splice stays frozen.
+    // Route a clause-free call through routine resolution so a same-named routine can shadow it,
+    // mirroring JSON_ARRAY. The comma form (the pre-existing MySQL-style spelling a user routine
+    // may match) routes even with a nested JSON producer value, so argument shape no longer removes
+    // routine candidates; the unshadowed built-in still splices it raw via the carrier attached
+    // below. Explicit FORMAT JSON and the dedicated VALUE form keep a raw value on the direct path
+    // (its lexical splice must stay frozen; VALUE syntax has no pre-existing routine call anyway).
+    val isCommaForm = standardMembers.isEmpty
     val routeThroughResolution =
       ctx.returning == null && ctx.nullBehavior == null &&
-        !isDirectJsonConstructorArgument(ctx) && !rawJson.contains(true)
+        !isDirectJsonConstructorArgument(ctx) &&
+        (isCommaForm || !rawJson.contains(true))
     if (routeThroughResolution) {
-      UnresolvedFunction("json_object", members.flatMap { case (k, v) => Seq(k, v) },
-        isDistinct = false)
+      // Carry a nested producer's lexical raw eligibility to the built-in; transparent, so a
+      // shadowing routine and qualified/generic calls are unaffected.
+      val routedArgs = members.flatMap { case (k, v) =>
+        val carried =
+          if (JsonObjectExpr.rawJsonValue(v).isDefined) JsonImplicitFormatCarrier(v) else v
+        Seq(k, carried)
+      }
+      UnresolvedFunction("json_object", routedArgs, isDistinct = false)
     } else {
       // Default RETURNING is STRING (the result is JSON text). A CHAR/VARCHAR RETURNING is
       // normalized to STRING: JSON_OBJECT serializes the fragment itself and never advertises a

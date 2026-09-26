@@ -1746,6 +1746,21 @@ object JsonArrayExpressionBuilder extends ExpressionBuilder {
   }
 }
 
+/**
+ * Marks a routed comma-form `JSON_OBJECT(...)` value as a lexically nested JSON producer (implicit
+ * `FORMAT JSON`). Transparent (keeps its child's type, value, foldability), so it does not perturb
+ * a shadowing routine's overload selection; the unshadowed built-in unwraps it and splices raw.
+ * Attached only by direct `JSON_OBJECT(...)` syntax, so qualified/generic calls keep quoting
+ * pending SPARK-59243.
+ */
+case class JsonImplicitFormatCarrier(child: Expression) extends TaggingExpression {
+  // Render as the bare child so generated SQL for a carrier that survives into a routine's plan
+  // stays reparseable (the built-in unwraps it before rendering its own SQL).
+  override def sql: String = child.sql
+  override protected def withNewChildInternal(newChild: Expression): JsonImplicitFormatCarrier =
+    copy(child = newChild)
+}
+
 @ExpressionDescription(
   usage =
     "_FUNC_([key, value [, key, value ...]]) - Returns a JSON object string built from the " +
@@ -1772,11 +1787,17 @@ object JsonObjectExpressionBuilder extends ExpressionBuilder {
       throw QueryCompilationErrors.wrongNumArgsError(
         funcName, Seq("2n (n >= 0)"), expressions.length)
     }
-    // A routed call carries no lexical FORMAT JSON, so every value is plain (quoted); splicing a
-    // nested constructor is preserved only via `JSON_OBJECT(...)` syntax.
-    // TODO(SPARK-59243): splice JSON-producing arguments reached through routed/qualified calls.
-    val members = expressions.grouped(2).map { case Seq(k, v) => (k, v) }.toSeq
-    JsonObjectExpr(members, members.map(_ => false), members.map(_ => false))
+    // A `JsonImplicitFormatCarrier` marks a lexically nested JSON producer, spliced raw (unwrapped
+    // here) and trusted (no validation). Every other value is quoted, including nested producers
+    // reached through a qualified/generic call (no carrier). Routed calls carry no explicit
+    // FORMAT JSON, so nothing needs validation.
+    // TODO(SPARK-59243): splice JSON-producing arguments reached through qualified/generic calls.
+    val taggedMembers = expressions.grouped(2).map {
+      case Seq(k, JsonImplicitFormatCarrier(v)) => ((k, v), true)
+      case Seq(k, v) => ((k, v), false)
+    }.toSeq
+    val members = taggedMembers.map(_._1)
+    JsonObjectExpr(members, taggedMembers.map(_._2), members.map(_ => false))
   }
 }
 
@@ -2438,7 +2459,9 @@ case class JsonObjectExpr(
                 errorSubClass = "INVALID_JSON_FORMAT_JSON_INPUT",
                 messageParameters = Map(
                   "functionName" -> toSQLId(prettyName),
-                  "position" -> (valueIndex + 1).toString,
+                  // Flattened 1-based arg position, not the member ordinal (value of member i is
+                  // arg 2i+2), matching the key check's `ordinalNumber(keyIndex*2)`.
+                  "position" -> (valueIndex * 2 + 2).toString,
                   "inputType" -> toSQLType(v.dataType)))
             case (_, (v, _)) =>
               val elemCheck = JacksonUtils.verifyType(prettyName, v.dataType)
@@ -2526,7 +2549,9 @@ case class JsonObjectExpr(
         case _: JsonProcessingException => false
       }
     if (!valid) {
-      throw QueryExecutionErrors.invalidJsonFormatJsonValueError(prettyName, idx + 1, text)
+      // Flattened 1-based value-arg position (member `idx` is arg `2*idx+2`), matching the
+      // analysis-time INVALID_JSON_FORMAT_JSON_INPUT check.
+      throw QueryExecutionErrors.invalidJsonFormatJsonValueError(prettyName, idx * 2 + 2, text)
     }
   }
 
