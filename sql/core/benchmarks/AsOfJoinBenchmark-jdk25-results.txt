@@ -2,18 +2,25 @@
 AS-OF Join Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
 AMD EPYC 7763 64-Core Processor
 AS-OF Join (left=10000, right=10000, groups=100):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------
-Correlated subquery (baseline)                            38155          38179          34          0.0     3815461.0       1.0X
-Sort-merge AS-OF join                                        78            102          15          0.1        7764.3     491.4X
+Correlated subquery (baseline)                            39527          39582          77          0.0     3952677.7       1.0X
+Sort-merge AS-OF join                                        53             66          12          0.2        5296.1     746.3X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+AS-OF Join (left=10000, right=10000, groups=10):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+Correlated subquery (baseline)                           38087          38181         132          0.0     3808724.6       1.0X
+Sort-merge AS-OF join                                      122            134          10          0.1       12168.4     313.0X
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
 AMD EPYC 7763 64-Core Processor
 AS-OF Join no equi-key (left=10000, right=10000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------
-Correlated subquery (baseline)                            22766          22788          32          0.0     2276587.7       1.0X
-Sort-merge AS-OF join                                      1486           1502          22          0.0      148621.6      15.3X
+Correlated subquery (baseline)                            26714          26883         239          0.0     2671359.5       1.0X
+Sort-merge AS-OF join                                       942            959          15          0.0       94248.7      28.3X
 
 

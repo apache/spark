@@ -909,7 +909,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Regex to decide which parts of strings produced by Spark contain sensitive information.
     When this regex matches a string part, that string part is replaced by a dummy value.
-    This is currently used to redact the output of SQL explain commands.
+    This is currently used to redact the output of SQL explain commands and the exit exception annotation on Kubernetes.
   </td>
   <td>2.2.0</td>
 </tr>
@@ -1686,6 +1686,30 @@ Apart from these, the following properties are also available, and may be useful
     Allows jobs and stages to be killed from the web UI.
   </td>
   <td>1.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.actionsViaGetEnabled</code></td>
+  <td><code>true</code> on YARN, <code>false</code> otherwise</td>
+  <td>
+    Whether the state-changing endpoints of the web UI (job/stage kill, application hold
+    and resume) accept HTTP GET requests in addition to POST. Left unset, this follows
+    the cluster manager: GET is accepted when <code>spark.master</code> is
+    <code>yarn</code>, because the YARN ResourceManager/AM proxy does not forward POST
+    requests, and refused everywhere else.
+    Either way the state-changing endpoints require the random per-UI CSRF token embedded
+    in the forms the UI renders, and reject prefetch requests (identified by
+    the Purpose, Sec-Purpose, or X-Moz headers) and HEAD requests, so forged cross-site
+    requests and incidental fetches cannot trigger them. Scripted clients can read
+    the token from the jobs page before calling the endpoint. The kill controls on the
+    jobs and stages pages and the hold/resume control on the jobs page are the same forms
+    in both modes; only their method follows this setting. In GET mode the browser
+    submits the token in the URL's query string, so it can be recorded in browser history
+    and server or proxy access logs; it is random per UI instance and grants nothing
+    beyond the UI's own state-changing endpoints. Prefetch rejection relies on the
+    prefetcher identifying itself via those headers; one that sends none of them is not
+    detected.
+  </td>
+  <td>4.3.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.holdEnabled</code></td>
@@ -3050,6 +3074,24 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.1.0</td>
 </tr>
 <tr>
+  <td><code>spark.standalone.submit.filterEnvironment</code></td>
+  <td><code>true</code></td>
+  <td>
+    In standalone cluster mode, controls whether the client forwards only Spark-related environment
+    variables to the driver, i.e. variables whose name starts with <code>SPARK_</code>, excluding
+    <code>SPARK_ENV_LOADED</code>, <code>SPARK_HOME</code>, <code>SPARK_CONF_DIR</code>,
+    <code>SPARK_LOCAL_IP</code>, and <code>SPARK_LOCAL_HOSTNAME</code>, matching the REST submission
+    gateway. If set to <code>false</code>, the full environment of the submitting process is
+    forwarded to the driver, except <code>SPARK_LOCAL_IP</code> and
+    <code>SPARK_LOCAL_HOSTNAME</code>, which are never forwarded since they describe the
+    submitting host rather than the worker the driver runs on. This governs the RPC submission
+    gateway, which is what <code>spark-submit</code> uses unless
+    <code>spark.master.rest.enabled</code> is set to <code>true</code>; REST submissions filter
+    regardless of this setting.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.excludeOnFailure.enabled</code></td>
   <td>
     false
@@ -3644,7 +3686,7 @@ They are typically set via the config file and command-line options with `--conf
   <td>
     (none)
   </td>
-  <td>Comma separated list of class names that must implement the <code>io.grpc.ServerInterceptor</code> interface</td>
+  <td>Comma separated list of class names that must implement the <code>io.grpc.ServerInterceptor</code> interface. When authentication is enabled these interceptors run after it, so they only see calls that have already been authenticated and cannot supply the <code>Authorization</code> header themselves.</td>
   <td>3.4.0</td>
 </tr>
 <tr>
@@ -3786,6 +3828,10 @@ Command types in proto.</td>
 
 Please refer to the [Security](security.html) page for available options on how to secure different
 Spark subsystems.
+
+For OIDC credential propagation (obtaining and distributing short-lived, identity-derived
+credentials to executors), the `spark.security.oidc.*` configuration keys are documented under
+[OIDC Credential Propagation](security.html#oidc-credential-propagation).
 
 
 ### Spark SQL

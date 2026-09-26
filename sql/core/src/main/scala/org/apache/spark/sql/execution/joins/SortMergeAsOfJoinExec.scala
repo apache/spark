@@ -377,6 +377,18 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   /**
+   * Retains `rightRow` as the best match found so far.
+   *
+   * While the right-side buffer is held in memory, its iterator yields the distinct rows stored
+   * in the buffer and a match can be retained as is. Once the buffer is spill-backed the
+   * iterator re-points a single [[UnsafeRow]] on every `next()`, so the match has to be copied
+   * out before the scan advances. `needsCopy` is read once per scan by the callers.
+   */
+  private def retainMatch(rightRow: UnsafeRow, needsCopy: Boolean): UnsafeRow = {
+    if (needsCopy) rightRow.copy() else rightRow
+  }
+
+  /**
    * Forward scan for Backward joins: last-match-wins.
    * Buffer is sorted ascending by as-of key. For left.t >= right.t,
    * as-of condition is monotone: true for right.t <= left.t, then false.
@@ -385,10 +397,12 @@ private[joins] class SortMergeAsOfJoinScanner(
   private def findBestBackwardForward(leftRow: InternalRow): InternalRow = {
     var bestMatch: InternalRow = null
     val iter = rightGroupBuffer.generateIterator()
+    val needsCopy = rightGroupBuffer.isSpillBacked
 
+    joinedRow.withLeft(leftRow)
     while (iter.hasNext) {
       val rightRow = iter.next()
-      joinedRow.withLeft(leftRow).withRight(rightRow)
+      joinedRow.withRight(rightRow)
 
       val asOfSatisfied = boundAsOfCond.eval(joinedRow)
       if (asOfSatisfied != null && asOfSatisfied.asInstanceOf[Boolean]) {
@@ -398,7 +412,7 @@ private[joins] class SortMergeAsOfJoinScanner(
         }
         if (residualSatisfied) {
           // Last match wins (closest right.t to left.t)
-          bestMatch = rightRow.copy()
+          bestMatch = retainMatch(rightRow, needsCopy)
         }
       } else if (bestMatch != null) {
         // as-of condition transitioned true -> false (monotone for Backward).
@@ -417,10 +431,12 @@ private[joins] class SortMergeAsOfJoinScanner(
     var bestMatch: InternalRow = null
     var bestDistance: Any = null
     val iter = rightGroupBuffer.generateIterator()
+    val needsCopy = rightGroupBuffer.isSpillBacked
 
+    joinedRow.withLeft(leftRow)
     while (iter.hasNext) {
       val rightRow = iter.next()
-      joinedRow.withLeft(leftRow).withRight(rightRow)
+      joinedRow.withRight(rightRow)
 
       val asOfSatisfied = boundAsOfCond.eval(joinedRow)
       if (asOfSatisfied != null && asOfSatisfied.asInstanceOf[Boolean]) {
@@ -432,7 +448,7 @@ private[joins] class SortMergeAsOfJoinScanner(
           val distance = boundOrderExpr.eval(joinedRow)
           if (distance != null) {
             if (bestMatch == null || distanceOrdering.lt(distance, bestDistance)) {
-              bestMatch = rightRow.copy()
+              bestMatch = retainMatch(rightRow, needsCopy)
               bestDistance = distance
             } else {
               // Distance is increasing past the minimum. For Forward,

@@ -22,11 +22,12 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, DirectShufflePartitionID, Expression, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.connector.catalog.functions.{Reducer, ReducibleFunction, ScalarFunction}
+import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
 
 class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
+
   private val passThrough_a_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"a"), 10)
   private val passThrough_b_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"b"), 10)
   private val passThrough_c_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"c"), 10)
@@ -37,6 +38,80 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     override def resultType(): DataType = IntegerType
     override def name(): String = "bucket"
     override def canonicalName(): String = "test.bucket"
+  }
+
+  /**
+   * A bucket-like reducible function: like the built-in `bucket`, a pair of the same function with
+   * coarser/finer bucket counts is compatible (a reducer exists) but not the same function. Local
+   * to the suite because catalyst has no BucketFunction.
+   */
+  private class FakeBucket extends ScalarFunction[java.lang.Long]
+      with ReducibleFunction[java.lang.Long, java.lang.Long] {
+    override def inputTypes(): Array[DataType] = Array(LongType)
+    override def resultType(): DataType = LongType
+    override def name(): String = "test.fakeBucket"
+    override def canonicalName(): String = name()
+    override def produceResult(input: InternalRow): java.lang.Long = input.getLong(0)
+    override def reducer(
+        thisNumBuckets: Int,
+        other: ReducibleFunction[_, _],
+        otherNumBuckets: Int): Reducer[java.lang.Long, java.lang.Long] =
+      if (other.isInstanceOf[FakeBucket] && thisNumBuckets != otherNumBuckets &&
+          thisNumBuckets % otherNumBuckets == 0) {
+        new Reducer[java.lang.Long, java.lang.Long] {
+          override def reduce(v: java.lang.Long): java.lang.Long = v % otherNumBuckets
+          override def resultType(): DataType = LongType
+        }
+      } else {
+        null
+      }
+  }
+
+  test("SPARK-59289: createShuffleSpec keeps a member that only satisfies after a projection") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val clustered = ClusteredDistribution(Seq(a))
+    // Grouped, but `a = 1` sits on two partitions, so projecting the keys onto [a] merges them and
+    // the member satisfies only once a `GroupPartitionsExec` has. Filtering the members on the
+    // strict `satisfies` would drop it and leave an empty collection, which its own `require`
+    // rejects.
+    val merging = KeyedPartitioning(
+      Seq(a, b), Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1)))
+    assert(merging.isGrouped, "test setup: the member is grouped on its own keys")
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      assert(!merging.satisfies(clustered), "test setup: it does not serve as it stands")
+      val collection = PartitioningCollection(Seq(merging, merging))
+      val spec = collection.createShuffleSpec(clustered)
+      assert(spec.asInstanceOf[ShuffleSpecCollection].specs.size == 2)
+      // Each member's spec describes the projected layout the node would emit, one partition per
+      // distinct `a`.
+      assert(spec.flatten.map(_.numPartitions) == Seq(2, 2))
+    }
+  }
+
+  test("SPARK-59289: createShuffleSpec drops a keyed member that is not grouped") {
+    val a = AttributeReference("a", IntegerType)()
+    val clustered = ClusteredDistribution(Seq(a))
+    // A node would group this one too, but the admission set here is what a finished plan is
+    // checked against by `ValidateRequirements`, so it stays what the strict question admitted
+    // before a projection was allowed to answer it.
+    val ungrouped = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
+    val grouped = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
+    assert(!ungrouped.isGrouped && grouped.isGrouped, "test setup")
+
+    assert(!PartitioningCollection.maySatisfyAfterProjection(ungrouped, clustered))
+    assert(PartitioningCollection.maySatisfyAfterProjection(grouped, clustered))
+
+    // And through the filter itself, which is the predicate's one caller. The keyed member goes and
+    // the hash member stays, so the collection keeps a spec and its `require` is not tripped. The
+    // pairing is asked of a mixed collection rather than of two keyed members, because
+    // `checkKeyedPartitioningInvariant` forces one `KeyLayout` on all keyed members and `isGrouped`
+    // is therefore uniform across them: a collection cannot hold one of each.
+    val mixed = PartitioningCollection(Seq(ungrouped, HashPartitioning(Seq(a), 3)))
+    val specs = mixed.createShuffleSpec(clustered).asInstanceOf[ShuffleSpecCollection].specs
+    assert(specs.size == 1, s"only the hash member survives the filter, got $specs")
+    assert(specs.head.isInstanceOf[HashShuffleSpec], s"and it is the hash one, got $specs")
   }
 
   protected def checkCompatible(
@@ -555,16 +630,19 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     val unknown12 = keyedSpec(Seq(1, 2), hasUnknown = true)
     // hasUnknown=true is still compatible with a subset (or equal) partner: every such key is
     // co-located on both sides.
-    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1))), "subset keys must be compatible")
-    assert(unknown12.areKeysCompatible(keyedSpec(Seq(2))), "another subset key must be compatible")
-    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1, 2))), "equal keys must be compatible")
-    assert(keyedSpec(Seq(1)).areKeysCompatible(unknown12),
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1)), allowReduce = true),
+      "subset keys must be compatible")
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(2)), allowReduce = true),
+      "another subset key must be compatible")
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1, 2)), allowReduce = true),
+      "equal keys must be compatible")
+    assert(keyedSpec(Seq(1)).areKeysCompatible(unknown12, allowReduce = true),
       "compatibility must be symmetric for a subset partner")
 
     // A larger partner's keys are not all covered by the declared keys.
-    assert(!unknown12.areKeysCompatible(keyedSpec(Seq(1, 2, 3))),
+    assert(!unknown12.areKeysCompatible(keyedSpec(Seq(1, 2, 3)), allowReduce = true),
       "a larger key set must not be compatible with an unknown-keyed partitioning")
-    assert(!keyedSpec(Seq(1, 2, 3)).areKeysCompatible(unknown12),
+    assert(!keyedSpec(Seq(1, 2, 3)).areKeysCompatible(unknown12, allowReduce = true),
       "an unknown-keyed partitioning cannot cover a larger partner's keys")
 
     // Both sides unknown with the same declared keys: `KeyGroupedPartitioner`'s out-of-set-key
@@ -572,15 +650,17 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // partition and stay compatible, but only when the declared key order also agrees, since a
     // GroupPartitionsExec regrouping re-labels partitions by each side's declared order. Different
     // declared keys or a different order are rejected.
-    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1, 2), hasUnknown = true)),
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1, 2), hasUnknown = true), allowReduce = true),
       "two unknown-keyed partitionings with the same declared keys must be compatible")
-    assert(!unknown12.areKeysCompatible(keyedSpec(Seq(2, 1), hasUnknown = true)),
+    assert(!unknown12.areKeysCompatible(
+        keyedSpec(Seq(2, 1), hasUnknown = true), allowReduce = true),
       "two unknown-keyed partitionings must agree on the declared key order")
-    assert(!unknown12.areKeysCompatible(keyedSpec(Seq(1, 2, 3), hasUnknown = true)),
+    assert(!unknown12.areKeysCompatible(
+        keyedSpec(Seq(1, 2, 3), hasUnknown = true), allowReduce = true),
       "two unknown-keyed partitionings with different declared keys must not be compatible")
 
     // Without the marker, key sets are not compared, only the partition expressions are.
-    assert(keyedSpec(Seq(1, 2)).areKeysCompatible(keyedSpec(Seq(1, 2, 3))),
+    assert(keyedSpec(Seq(1, 2)).areKeysCompatible(keyedSpec(Seq(1, 2, 3)), allowReduce = true),
       "without unknown keys, different key sets remain expression-compatible")
   }
 
@@ -618,17 +698,66 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-      assert(!keyedSpec(Seq(1), hasUnknown = true).areKeysCompatible(bucketSpec(Seq(0, 1))),
+      assert(!keyedSpec(Seq(1), hasUnknown = true).areKeysCompatible(
+          bucketSpec(Seq(0, 1)), allowReduce = true),
         "an unknown-keyed identity partitioning must not pair with a transform partitioning")
-      assert(!bucketSpec(Seq(0, 1)).areKeysCompatible(keyedSpec(Seq(1), hasUnknown = true)),
+      assert(!bucketSpec(Seq(0, 1)).areKeysCompatible(
+          keyedSpec(Seq(1), hasUnknown = true), allowReduce = true),
         "the incompatibility must be symmetric")
       assert(!keyedSpec(Seq(1), hasUnknown = true).areKeysCompatible(
-          bucketSpec(Seq(0, 1), hasUnknown = true)),
+          bucketSpec(Seq(0, 1), hasUnknown = true), allowReduce = true),
         "the identity-vs-transform pair must not pair even when both sides are unknown-keyed")
       // Two unmarked sides keep the pre-existing behavior: the pair stays admissible, and
       // `EnsureRequirements` computes reducers to reconcile the two key domains.
-      assert(keyedSpec(Seq(1)).areKeysCompatible(bucketSpec(Seq(0, 1))),
+      assert(keyedSpec(Seq(1)).areKeysCompatible(bucketSpec(Seq(0, 1)), allowReduce = true),
         "unmarked identity-vs-transform pairs remain admissible")
+    }
+  }
+
+  test("isCompatibleWith: a pair whose keys a join would reduce is not compatible as it stands") {
+    // `flip_low_bit` permutes its key space and keeps its argument's type, so the two sides can
+    // report the same key list while a key stands for different rows on each, the identity side
+    // holding raw values and this one its outputs. The same fixture the end-to-end test uses.
+    val a = $"a".long
+    val distribution = ClusteredDistribution(Seq(a))
+    def spec(expression: Expression): KeyedShuffleSpec =
+      KeyedShuffleSpec(
+        KeyedPartitioning(Seq(expression), Seq(InternalRow(0L), InternalRow(1L))), distribution)
+    val identity = spec(a)
+    val flip = spec(TransformExpression(FlipLowBitFunction, Seq(a)))
+    assert(identity.partitioning.layout.describesSameKeys(flip.partitioning.layout),
+      "test setup: both sides report the same key rows at the same type, so a refusal below can " +
+        "only come from the key spaces differing")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      assert(identity.areKeysCompatible(flip, allowReduce = true),
+        "the pair stays admissible, since `EnsureRequirements` reduces the identity side onto it")
+      assert(!identity.isCompatibleWith(flip),
+        "equal key rows in two key spaces are not compatible before that reduce runs")
+      assert(!flip.isCompatibleWith(identity), "the refusal must be symmetric")
+
+      // The same for two reducible transforms that differ in their bucket count: a reducer exists,
+      // so the pair is admitted for the reduce path, and the two key lists can still coincide.
+      val bucketFn = new FakeBucket
+      val bucket8 = TransformExpression(bucketFn, Seq(a), Some(8))
+      val bucket4 = TransformExpression(bucketFn, Seq(a), Some(4))
+      assert(spec(bucket8).areKeysCompatible(spec(bucket4), allowReduce = true),
+        "a reducer reconciles the two bucket counts, so the pair stays admissible")
+      assert(!spec(bucket8).isCompatibleWith(spec(bucket4)),
+        "two bucket counts are not lined up until that reducer has run")
+      // Positive control: the same function is lined up as it stands, so the refusals above are the
+      // key spaces' doing rather than this path always answering false.
+      assert(spec(bucket8).isCompatibleWith(spec(bucket8)),
+        "one function over one key list is compatible with itself")
+
+      // A pair an earlier join reduced together is in one key space already, so it stays
+      // compatible. This is what keeps a chained storage-partitioned join from shuffling.
+      assert(spec(bucket8.reducedTogetherWith(bucket4))
+        .isCompatibleWith(spec(bucket4.reducedTogetherWith(bucket8))),
+        "two sides reduced together share one key space")
     }
   }
 
@@ -674,30 +803,6 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("areKeysCompatible: unknown keys require the same function, not just a compatible one") {
-    // A bucket-like reducible function: like the built-in `bucket`, a pair of the same function
-    // with coarser/finer bucket counts is compatible (a reducer exists) but not the same
-    // function. Local to the suite because catalyst has no BucketFunction.
-    class FakeBucket extends ScalarFunction[java.lang.Long]
-        with ReducibleFunction[java.lang.Long, java.lang.Long] {
-      override def inputTypes(): Array[DataType] = Array(LongType)
-      override def resultType(): DataType = LongType
-      override def name(): String = "test.fakeBucket"
-      override def canonicalName(): String = name()
-      override def produceResult(input: InternalRow): java.lang.Long = input.getLong(0)
-      override def reducer(
-          thisNumBuckets: Int,
-          other: ReducibleFunction[_, _],
-          otherNumBuckets: Int): Reducer[java.lang.Long, java.lang.Long] =
-        if (other.isInstanceOf[FakeBucket] && thisNumBuckets != otherNumBuckets &&
-            thisNumBuckets % otherNumBuckets == 0) {
-          new Reducer[java.lang.Long, java.lang.Long] {
-            override def reduce(v: java.lang.Long): java.lang.Long = v % otherNumBuckets
-            override def resultType(): DataType = LongType
-          }
-        } else {
-          null
-        }
-    }
     val fn = new FakeBucket
     val a = $"a".long
     def bucketSpec(numBuckets: Int, hasUnknown: Boolean): KeyedShuffleSpec =
@@ -715,18 +820,18 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-      assert(!bucketSpec(4, true).areKeysCompatible(bucketSpec(8, true)),
+      assert(!bucketSpec(4, true).areKeysCompatible(bucketSpec(8, true), allowReduce = true),
         "two marked sides must agree on the exact function, not just a compatible one")
-      assert(!bucketSpec(4, true).areKeysCompatible(bucketSpec(8, false)),
+      assert(!bucketSpec(4, true).areKeysCompatible(bucketSpec(8, false), allowReduce = true),
         "a marked side must not pair across bucket counts")
-      assert(!bucketSpec(8, false).areKeysCompatible(bucketSpec(4, true)),
+      assert(!bucketSpec(8, false).areKeysCompatible(bucketSpec(4, true), allowReduce = true),
         "the refusal must be symmetric")
       // Unmarked, the compatible-transform relaxation still pairs them (pre-existing behavior).
-      assert(bucketSpec(4, false).areKeysCompatible(bucketSpec(8, false)),
+      assert(bucketSpec(4, false).areKeysCompatible(bucketSpec(8, false), allowReduce = true),
         "unmarked compatible transforms remain admissible")
       // Positive control: the same marked function with the same keys must stay compatible, so
       // the refusals above are the function difference's doing, not the marker path always false.
-      assert(bucketSpec(4, true).areKeysCompatible(bucketSpec(4, true)),
+      assert(bucketSpec(4, true).areKeysCompatible(bucketSpec(4, true), allowReduce = true),
         "identical marked functions remain compatible")
     }
   }

@@ -32,6 +32,112 @@ class JsonValueSuite extends QueryTest with SharedSparkSession {
   private val doc =
     """{"id":7,"name":"Ada","tags":["x","y"],"addr":{"city":"NYC"},"score":null,"f":"3.14"}"""
 
+  test("plain call goes through routine resolution and can be shadowed via SET PATH") {
+    // `json_value` is now a registered built-in, so `withUserDefinedFunction`'s cleanup assertion
+    // does not fit; drop the temporary routine explicitly instead.
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_value(a STRING, b STRING) RETURNS STRING " +
+          "RETURN 'shadowed'")
+        sql("SET PATH = system.session, system.builtin")
+        // A plain call is an ordinary function call, so the temporary routine shadows the
+        // built-in scalar function.
+        checkAnswer(sql(s"SELECT json_value('$doc', '$$.name')"), Row("shadowed"))
+        checkAnswer(sql(s"SELECT json_value(*, '$$.name') FROM VALUES ('$doc') AS t(j)"),
+          Row("shadowed"))
+        // The clause-bearing form is not a function call, so it stays the built-in function.
+        checkAnswer(sql(s"SELECT json_value('$doc', '$$.name' RETURNING STRING)"), Row("Ada"))
+        assert(sql(s"SELECT json_value('$doc', '$$.name' RETURNING STRING)")
+          .queryExecution.analyzed.expressions.exists(_.exists(_.isInstanceOf[JsonValue])))
+        // A constructor source is still a clause-free outer call, so the temporary routine shadows
+        // it instead of letting the built-in scalar function run.
+        checkAnswer(sql(s"SELECT json_value(json_array(1, 2, 3), '$$[0]')"), Row("shadowed"))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_value")
+      }
+    }
+  }
+
+  test("SPARK-59685: default-clause JSON_VALUE canonical SQL reparses to the built-in under a " +
+      "shadowing PATH") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_value(a STRING, b STRING) RETURNS STRING " +
+          "RETURN 'shadowed'")
+        sql("SET PATH = system.session, system.builtin")
+        // A built-in JSON_VALUE whose only clause is the default RETURNING STRING: the clause makes
+        // it the built-in even under the shadow, but its canonical `sql` would drop the default.
+        val jsonValue = sql(s"SELECT json_value('$doc', '$$.name' RETURNING STRING)")
+          .queryExecution.analyzed.expressions
+          .flatMap(_.collect { case jv: JsonValue => jv }).head
+        // The rendering must reparse back to the built-in, not the same-named routine on the PATH.
+        val reparsed = sql(s"SELECT ${jsonValue.sql}")
+        assert(reparsed.queryExecution.analyzed.expressions
+          .exists(_.exists(_.isInstanceOf[JsonValue])),
+          s"canonical SQL bound the shadow instead of the built-in: ${jsonValue.sql}")
+        checkAnswer(reparsed, Row("Ada"))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_value")
+      }
+    }
+  }
+
+  test("SPARK-59685: explicit-clause JSON_VALUE canonical SQL keeps its clause and appends no " +
+      "default ownership clause") {
+    // The ownership clause (RETURNING STRING) is appended only to an otherwise clause-free render,
+    // gated independently on RETURNING, ON EMPTY, and ON ERROR. Exercise one explicit clause at a
+    // time so a regression appending a duplicate or conflicting RETURNING STRING fails here.
+    Seq(
+      s"json_value('$doc', '$$.id' RETURNING INT)" -> Row(7),
+      s"json_value('$doc', '$$.missing' DEFAULT -1 ON EMPTY)" -> Row("-1"),
+      s"json_value('$doc', '$$.name' ERROR ON ERROR)" -> Row("Ada")).foreach {
+      case (query, expected) =>
+        val jsonValue = sql(s"SELECT $query")
+          .queryExecution.analyzed.expressions
+          .flatMap(_.collect { case jv: JsonValue => jv }).head
+        val rendered = jsonValue.sql
+        assert(!rendered.contains("RETURNING STRING"),
+          s"canonical SQL appended a duplicate default clause: $rendered")
+        val reparsed = sql(s"SELECT $rendered")
+        assert(reparsed.queryExecution.analyzed.expressions
+          .exists(_.exists(_.isInstanceOf[JsonValue])),
+          s"canonical SQL did not reparse to the built-in: $rendered")
+        checkAnswer(reparsed, expected)
+    }
+  }
+
+  test("SPARK-59685: a default JSON_VALUE keeps a clean auto-generated column name") {
+    // The canonical `sql` forces the default RETURNING STRING so it stays bound to the built-in on
+    // reparse, but the display (column) name is never reparsed and must not leak that clause.
+    val name = sql(s"SELECT json_value('$doc', '$$.name')").schema.head.name
+    assert(!name.contains("RETURNING"), s"column name leaked the ownership clause: $name")
+  }
+
+  test("SPARK-59685: a nested SQL/JSON source keeps a clean auto-generated column name") {
+    // The JSON source is itself a routed built-in constructor; it is rendered in place, so its
+    // clause-free display form must not leak the round-trip RETURNING clause into the name.
+    val name = sql("SELECT json_value(json_array(1), '$[0]')").schema.head.name
+    assert(!name.contains("RETURNING"), s"nested source leaked the ownership clause: $name")
+    assert(name.contains("JSON_ARRAY(1)"), s"unexpected name: $name")
+  }
+
+  test("SPARK-59685: a nested SQL/JSON DEFAULT keeps a clean auto-generated column name") {
+    // A routed built-in constructor in the DEFAULT ... ON EMPTY / ON ERROR position is rendered in
+    // place too, so its clause-free display form must not leak the round-trip RETURNING clause.
+    Seq("ON EMPTY", "ON ERROR").foreach { position =>
+      val name = sql(s"SELECT json_value('$doc', '$$.name' DEFAULT json_array(1) $position)")
+        .schema.head.name
+      assert(!name.contains("RETURNING"), s"nested DEFAULT leaked the ownership clause: $name")
+      assert(name.contains("JSON_ARRAY(1)"), s"unexpected name: $name")
+    }
+  }
+
   test("extract a scalar value as STRING by default") {
     checkAnswer(sql(s"SELECT json_value('$doc', '$$.name')"), Row("Ada"))
     // Numbers and booleans come back as their JSON text under the default STRING RETURNING.
@@ -51,6 +157,11 @@ class JsonValueSuite extends QueryTest with SharedSparkSession {
 
   test("default RETURNING type is STRING") {
     assert(sql(s"SELECT json_value('$doc', '$$.name')").schema.head.dataType === StringType)
+  }
+
+  test("qualified plain JSON_VALUE resolves to the built-in scalar function") {
+    checkAnswer(sql(s"SELECT builtin.json_value('$doc', '$$.name')"), Row("Ada"))
+    checkAnswer(sql(s"SELECT system.builtin.json_value('$doc', '$$.name')"), Row("Ada"))
   }
 
   test("a raw JSON number keeps its exact source digits (no double rounding)") {
@@ -186,6 +297,149 @@ class JsonValueSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         sql("SELECT k, json_value(j, '$.a' RETURNING INT) AS a FROM docs ORDER BY k"),
         Seq(Row(1, 10), Row(2, 20), Row(3, null), Row(4, null)))
+    }
+  }
+
+  test("foldable string expression path is accepted by plain SQL/JSON path functions") {
+    checkAnswer(sql("""SELECT json_value('{"a":1}', concat('$', '.a'))"""), Row("1"))
+    checkAnswer(sql("""SELECT json_query('{"a":[1]}', concat('$', '.a'))"""), Row("[1]"))
+    checkAnswer(sql("""SELECT json_exists('{"a":1}', concat('$', '.a'))"""), Row(true))
+  }
+
+  test("invalid: a non-foldable path is rejected as a non-foldable argument") {
+    // A column path does not match the dedicated SQL/JSON function grammar and is parsed as a
+    // plain function call; the registered built-in requires a foldable string path.
+    Seq("json_value", "json_query", "json_exists").foreach { func =>
+      val e = intercept[AnalysisException] {
+        sql(s"SELECT $func(a, b) FROM VALUES ('{}', '$$.x') AS t(a, b)").collect()
+      }
+      assert(e.getCondition == "NON_FOLDABLE_ARGUMENT", s"for $func")
+    }
+  }
+
+  test("invalid: star source in plain SQL/JSON path functions is not expanded") {
+    val functions = for {
+      prefix <- Seq("", "builtin.", "system.builtin.")
+      functionName <- Seq("json_value", "json_query", "json_exists")
+    } yield s"$prefix$functionName"
+
+    functions.foreach { func =>
+      val e = intercept[AnalysisException] {
+        sql(s"""SELECT $func(*, '$$.a') FROM VALUES ('{"a":1}') AS t(j)""").collect()
+      }
+      assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX", s"for $func(*)")
+    }
+  }
+
+  test("invalid: star source in clause-bearing SQL/JSON path functions is not expanded") {
+    Seq(
+      "json_value(*, '$.a' RETURNING STRING)",
+      "json_query(*, '$' WITH ARRAY WRAPPER)",
+      "json_exists(*, '$.a' TRUE ON ERROR)"
+    ).foreach { expr =>
+      val e = intercept[AnalysisException] {
+        sql(s"""SELECT $expr FROM VALUES ('{"a":1}') AS t(j)""").collect()
+      }
+      assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX", s"for $expr")
+    }
+  }
+
+  test("single-pass rejects stars in plain and clause-bearing SQL/JSON path functions") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      Seq(
+        "json_value(*, '$.a')",
+        "json_value(*, '$.a' RETURNING STRING)",
+        "json_query(*, '$' WITH ARRAY WRAPPER)",
+        "json_exists(*, '$.a' TRUE ON ERROR)"
+      ).foreach { expr =>
+        val e = intercept[AnalysisException] {
+          spark.sql(s"""SELECT $expr FROM VALUES ('{"a":1}') AS t(j)""")
+            .queryExecution.analyzed
+        }
+        assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX", s"for $expr")
+      }
+    }
+  }
+
+  test("invalid: plain SQL/JSON path functions reject non-string and null path arguments") {
+    Seq("json_value", "json_query", "json_exists").foreach { func =>
+      val nonStringPath = intercept[AnalysisException] {
+        sql(s"SELECT $func('{}', 1)").collect()
+      }
+      assert(nonStringPath.getCondition == "UNEXPECTED_INPUT_TYPE", s"for $func")
+
+      val nonFoldableNonStringPath = intercept[AnalysisException] {
+        sql(s"SELECT $func(a, i) FROM VALUES ('{}', 1) AS t(a, i)").collect()
+      }
+      assert(nonFoldableNonStringPath.getCondition == "UNEXPECTED_INPUT_TYPE", s"for $func")
+
+      val nullPath = intercept[AnalysisException] {
+        sql(s"SELECT $func('{}', CAST(NULL AS STRING))").collect()
+      }
+      assert(nullPath.getCondition == "DATATYPE_MISMATCH.UNEXPECTED_NULL", s"for $func")
+    }
+  }
+
+  test("invalid: plain SQL/JSON path functions require exactly two arguments") {
+    // A call that does not match the SQL/JSON grammar (wrong arity) is parsed as a plain function
+    // call and reaches the registered built-in, which requires exactly the (jsonStr, path) pair.
+    Seq("json_value", "json_query", "json_exists").foreach { func =>
+      Seq(s"$func('{}')", s"$func('{}', '$$.a', '$$.b')").foreach { call =>
+        val e = intercept[AnalysisException](sql(s"SELECT $call").collect())
+        assert(e.getCondition == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION", s"for $call")
+      }
+    }
+  }
+
+  // (func, RETURNS type, body, expected shadowed result) for the routed path functions. The
+  // shadow gate is shared across all routed built-ins; JsonArraySuite covers `json_array`.
+  private val pathFunctionShadows = Seq(
+    ("json_value", "STRING", "'persistent'", Row("persistent")),
+    ("json_query", "STRING", "'persistent'", Row("persistent")),
+    ("json_exists", "BOOLEAN", "false", Row(false)))
+
+  test("plain SQL/JSON path function with star can be shadowed by a persistent function in PATH") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      pathFunctionShadows.foreach { case (func, retType, body, expected) =>
+        withDatabase("path_json_fn") {
+          sql("CREATE DATABASE path_json_fn")
+          sql(s"CREATE FUNCTION path_json_fn.$func(a STRING, b STRING) RETURNS $retType " +
+            s"RETURN $body")
+          try {
+            sql("SET PATH = spark_catalog.path_json_fn, system.builtin")
+            checkAnswer(
+              sql(s"""SELECT $func(*, '$$.a') FROM VALUES ('{"a":1}') AS t(j)"""),
+              expected)
+          } finally {
+            sql("SET PATH = DEFAULT_PATH")
+            sql(s"DROP FUNCTION IF EXISTS path_json_fn.$func")
+          }
+        }
+      }
+    }
+  }
+
+  test("two-part builtin SQL/JSON path function respects persistentCatalogFirst before " +
+      "rejecting star") {
+    pathFunctionShadows.foreach { case (func, retType, body, expected) =>
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        sql(s"CREATE FUNCTION builtin.$func(a STRING, b STRING) RETURNS $retType RETURN $body")
+        try {
+          val query = s"""SELECT builtin.$func(*, '$$.a') FROM VALUES ('{"a":1}') AS t(j)"""
+          withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "false") {
+            val e = intercept[AnalysisException] {
+              sql(query).collect()
+            }
+            assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX", s"for $func")
+          }
+          withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+            checkAnswer(sql(query), expected)
+          }
+        } finally {
+          sql(s"DROP FUNCTION IF EXISTS builtin.$func")
+        }
+      }
     }
   }
 

@@ -3340,8 +3340,11 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     // is duplicated *inside* operand 2 (not split across operands 2 and 3) so the failure shape
     // does not depend on how many operands the one-level peel happened to drop, and operand 3 is
     // non-foldable to keep it in the plan. skipForShortcutExpr must peel every leading AND/OR
-    // operand, not just one, to make this hold for three or more operands.
+    // operand, not just one, to make this hold for three or more operands. ANSI mode is pinned
+    // because that is what turns the extra evaluation into a failure: with it off the division
+    // returns null and both answers hold either way.
     withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
       SQLConf.SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR.key -> "true") {
       val andQuery =
@@ -3351,6 +3354,29 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       val orQuery =
         "select id == 0 or (1 / id + 1 / id) > 0 or id < 0 from range(0, 1, 1, 1)"
       checkAnswer(sql(orQuery), Row(true))
+    }
+  }
+
+  test("SPARK-59579: subexpression elimination respects a conditional the shortcut peel reaches") {
+    // The peel walks the leading AND operands to reach the CASE WHEN / IF, which is the one operand
+    // that is always evaluated. `1 / id` is repeated inside a single branch body, so it is shared
+    // with no other branch and runs only when that branch does. For id = 0 the other branch runs,
+    // so `1 / id` should never be computed. Recursing into every child of the expression the peel
+    // lands on hoisted it out of the branch, computing it for id = 0 and raising [DIVIDE_BY_ZERO].
+    // ANSI mode is pinned on because that is what turns the extra evaluation into a failure: with
+    // it off the division returns null, the branch still yields false, and the test would pass
+    // either way in the scheduled non-ANSI build.
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR.key -> "true") {
+      val caseWhenQuery = "select (case when id = 0 then false " +
+        "else (1 / id + 1 / id) > 0 end) and id >= 0 from range(0, 1, 1, 1)"
+      checkAnswer(sql(caseWhenQuery), Row(false))
+
+      val ifQuery =
+        "select if(id = 0, false, (1 / id + 1 / id) > 0) and id >= 0 from range(0, 1, 1, 1)"
+      checkAnswer(sql(ifQuery), Row(false))
     }
   }
 

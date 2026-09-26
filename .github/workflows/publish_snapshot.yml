@@ -42,7 +42,7 @@ jobs:
         branch: ${{ fromJSON( inputs.branch || '["master", "branch-4.x", "branch-4.3", "branch-4.2", "branch-4.1", "branch-4.0", "branch-3.5"]' ) }}
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         ref: ${{ matrix.branch }}
     - name: Cache Maven local repository
