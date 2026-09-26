@@ -31,7 +31,6 @@ import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.GeographyType;
 import org.apache.spark.sql.types.GeometryType;
-import org.apache.spark.util.ByteBufferOutputStream;
 
 /**
  * An implementation of the Parquet PLAIN decoder that supports the vectorized interface.
@@ -592,29 +591,17 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   private void readGeoData(int total, WritableColumnVector v, int rowId, int srid,
      WKBConverterStrategy converter) throws IOException {
-    // Go through the input stream and convert the WKB to the internal representation
-    // writing it to the output buffer and putting the (offset, length) in the vector.
-    // Finally, append all data from the output buffer in a single operation.
-    int base = v.arrayData().getElementsAppended();
-    int dataLen = 0;
-    final int intSize = 4;
-    ByteBuffer lenBuffer = ByteBuffer.allocate(intSize);
-    ByteBufferOutputStream out = new ByteBufferOutputStream();
-
+    // Convert each WKB value to its physical representation and append it directly to the
+    // vector's array data, recording the (offset, length) of each element.
+    WritableColumnVector arrayData = v.arrayData();
     for (int i = 0; i < total; i++) {
       int len = readInteger();
 
       // Converts WKB into a physical representation of geometry/geography.
       byte[] physicalValue = converter.convert(in.readNBytes(len), srid);
-      v.putArray(rowId + i, base + dataLen + intSize, physicalValue.length);
-
-      lenBuffer.putInt(0, physicalValue.length);
-      out.write(lenBuffer.array());
-      out.write(physicalValue);
-
-      dataLen += intSize + physicalValue.length;
+      int offset = arrayData.getElementsAppended();
+      arrayData.appendBytes(physicalValue.length, physicalValue, 0);
+      v.putArray(rowId + i, offset, physicalValue.length);
     }
-    out.close();
-    v.arrayData().appendBytes(dataLen, out.toByteArray(), 0);
   }
 }
