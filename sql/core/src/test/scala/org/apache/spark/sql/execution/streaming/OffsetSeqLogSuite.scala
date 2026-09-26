@@ -23,7 +23,8 @@ import org.scalatest.Tag
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.stringToFile
-import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{
+  OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2}
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, SerializedOffset}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryException
@@ -45,6 +46,18 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     val metadata = OffsetSeqMetadata(
       batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
     assert(metadata.conf.get(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key).contains("false"))
+  }
+
+  test("v1 and v2 metadata persist rebound stateful shuffle partitions") {
+    withSQLConf(
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+      SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL.key -> "3") {
+      val v1 = OffsetSeqMetadata(0, 0, spark.conf)
+      val v2 = OffsetSeqMetadataV2(0, 0, spark.conf)
+
+      assert(v1.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).contains("3"))
+      assert(v2.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).contains("3"))
+    }
   }
 
   /** test string offset type */
