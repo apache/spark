@@ -147,6 +147,23 @@ object StaticSQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS =
+    buildStaticConf("spark.sql.hive.thriftServer.allowIneffectiveDoAs")
+      .doc("With hive.server2.enable.doAs=true the Spark Thrift Server impersonates the " +
+        "connecting user on the driver, but executor-side data access still runs as the " +
+        "server's own service identity (SPARK-5159), so storage-level permissions are " +
+        "checked against the privileged service principal instead of the impersonated " +
+        "user. Because that can silently grant users access to data they could not read " +
+        "with their own credentials, the server warns at startup when " +
+        "hive.server2.enable.doAs=true and hive.server2.authentication verifies user " +
+        "identities (any recognized type other than NONE/NOSASL), unless this option is " +
+        "set to true to acknowledge the limitation. Spark 5.0 is expected to refuse to " +
+        "start on that configuration unless this option is set.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
     .doc("A comma-separated list of classes that implement " +
       "Function1[SparkSessionExtensions, Unit] used to configure Spark Session extensions. The " +

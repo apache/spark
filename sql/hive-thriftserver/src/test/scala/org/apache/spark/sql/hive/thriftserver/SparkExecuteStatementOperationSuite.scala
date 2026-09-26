@@ -23,9 +23,11 @@ import java.util.concurrent.Semaphore
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.OperationState
 import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl}
 import org.apache.hive.service.rpc.thrift.{TProtocolVersion, TTypeId}
+import org.apache.logging.log4j.Level
 import org.mockito.Mockito.{doReturn, mock, spy, when, RETURNS_DEEP_STUBS}
 import org.mockito.invocation.InvocationOnMock
 
@@ -133,6 +135,28 @@ class SparkExecuteStatementOperationSuite extends SharedSparkSession {
       run.join()
       assert(executeStatementOperation.getStatus.getState === finalState)
     }
+  }
+
+  test("SPARK-59118 HiveThriftServer2.init warns when doAs is not enforced") {
+    // The warning is only worth anything if init() actually calls it.
+    val hiveConf = new HiveConf()
+    hiveConf.setVar(ConfVars.HIVE_SERVER2_AUTHENTICATION, "KERBEROS")
+    hiveConf.setBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS, true)
+    // init() boots Hive's service graph; operation logging attaches an appender to the root
+    // logger that nothing ever removes, so keep it off rather than leak it into this JVM.
+    hiveConf.setBoolVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED, false)
+    // Attach to the root logger, not the HiveThriftServer2 logger by name: withLogAppender on
+    // a named logger leaves behind a non-additive LoggerConfig (log4j2 copies root's additivity)
+    // that swallows that logger's output for every later suite in this JVM.
+    val appender = new LogAppender("doAs impersonation warning")
+    withLogAppender(appender, level = Some(Level.WARN)) {
+      new HiveThriftServer2(spark).init(hiveConf)
+    }
+    val warnings = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(warnings.exists { warning =>
+      warning.contains(ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname) &&
+        warning.contains("SPARK-5159")
+    })
   }
 
   private class MySparkExecuteStatementOperation(
