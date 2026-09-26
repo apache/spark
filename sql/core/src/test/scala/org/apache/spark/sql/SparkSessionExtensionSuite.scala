@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql
 
+import java.io.File
 import java.util.{Locale, UUID}
 
 import scala.collection.mutable.ListBuffer
@@ -27,13 +28,14 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.resolver.ExplicitlyUnsupportedResolverFeature
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, Max, Partial}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface, SqlStatementSplitResult}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Project, Range, Sort, SortHint, Statistics, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Deduplicate, Limit, LocalRelation, LogicalPlan, Project, Range, Sort, SortHint, Statistics, UnresolvedHint}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -54,6 +56,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
 import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, Metadata, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarBatch, ColumnarMap, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
  * Test cases for the [[SparkSessionExtensions]].
@@ -241,12 +244,229 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
     }
   }
 
+  private val REDIRECT_SUFFIX = "-redirected"
+
+  /**
+   * Rewrites `parquet`.`<path>` to `parquet`.`<path>-redirected`, standing in for an extension
+   * that has to adjust path-based relations before their metadata is resolved.
+   */
+  case class RedirectPathRelation(spark: SparkSession) extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan =
+      plan.resolveOperators {
+        case u: UnresolvedRelation
+            if u.multipartIdentifier.size == 2 &&
+              u.multipartIdentifier.head.equalsIgnoreCase("parquet") &&
+              !u.multipartIdentifier.last.endsWith(REDIRECT_SUFFIX) =>
+          u.copy(multipartIdentifier =
+            Seq(u.multipartIdentifier.head, u.multipartIdentifier.last + REDIRECT_SUFFIX))
+      }
+  }
+
   test("inject custom hint rule") {
     withSession(Seq(_.injectHintResolutionRule(MyHintRule))) { session =>
       assert(
         session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
         "plan is expected to be a local relation"
       )
+    }
+  }
+
+  test("SPARK-59574: inject custom hint rule with single-pass resolver") {
+    withSession(Seq(_.injectHintResolutionRule(MyHintRule))) { session =>
+      session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, "true")
+      session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+      assert(
+        session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
+        "plan is expected to be a local relation"
+      )
+    }
+  }
+
+  /**
+   * [[Deduplicate]] is not among the operators the single-pass Resolver can resolve, and it is not
+   * listed in `ExplicitlyUnsupportedResolverFeature.OPERATORS` either, so a rule that introduces
+   * it makes the single-pass resolution fail rather than fall back.
+   */
+  case class DeduplicatingRule(spark: SparkSession) extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan match {
+      case _: Deduplicate => plan
+      case _ => Deduplicate(Nil, plan)
+    }
+  }
+
+  test("SPARK-59574: rule introducing an operator unsupported by single-pass fails resolution") {
+    withSession(Seq(_.injectHintResolutionRule(DeduplicatingRule))) { session =>
+      session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, "true")
+      session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          session.sql("SELECT id FROM VALUES (1), (2) AS t(id)").queryExecution.analyzed
+        },
+        condition = "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE",
+        parameters = Map(
+          "feature" ->
+            ("class org.apache.spark.sql.catalyst.plans.logical.Deduplicate operator resolution")
+        )
+      )
+    }
+
+    // In dual-run the failure is reported against the fixed-point result rather than falling
+    // back, because the plan only becomes unsupported after the guard has already accepted it.
+    // Before this change the same query failed too, with LOGICAL_PLAN_COMPARISON_MISMATCH, as
+    // only the fixed-point half applied the rule.
+    withSession(Seq(_.injectHintResolutionRule(DeduplicatingRule))) { session =>
+      session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, "false")
+      session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "true")
+
+      val error = intercept[AnalysisException] {
+        session.sql("SELECT id FROM VALUES (1), (2) AS t(id)").queryExecution.analyzed
+      }
+      assert(
+        error.getCondition ===
+        "HYBRID_ANALYZER_EXCEPTION.SINGLE_PASS_FAILED_FIXED_POINT_SUCCEEDED"
+      )
+    }
+  }
+
+  test("SPARK-59574: injected hint rules are bound by spark.sql.analyzer.maxIterations") {
+    val maxIterations = 5
+    Seq(false, true).foreach { singlePass =>
+      withSession(Seq(_.injectHintResolutionRule(_ => AddLimitAlways))) { session =>
+        session.conf.set(SQLConf.ANALYZER_MAX_ITERATIONS.key, maxIterations.toString)
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+        session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+
+        // The rule never reaches a fixed point, so both analyzers are expected to stop at
+        // spark.sql.analyzer.maxIterations and to report that exact bound in the error.
+        val error = intercept[RuntimeException] {
+          session.range(1).logicalPlan
+        }
+        val message = error.getMessage
+        assert(
+          message.contains(s"Max iterations ($maxIterations) reached for batch Hints"),
+          s"unexpected error for singlePass=$singlePass: $message"
+        )
+        assert(
+          message.contains(SQLConf.ANALYZER_MAX_ITERATIONS.key),
+          s"unexpected error for singlePass=$singlePass: $message"
+        )
+      }
+    }
+  }
+
+  test("SPARK-59574: injected hint rules honour spark.sql.optimizer.disableHints") {
+    Seq(false, true).foreach { singlePass =>
+      withSession(Seq(_.injectHintResolutionRule(MyHintRule))) { session =>
+        session.conf.set(SQLConf.DISABLE_HINTS.key, "true")
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+        session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+
+        // The "Disable Hints" batch removes the hint before the "Hints" batch runs, so the
+        // injected rule never sees it and the plan keeps its original shape.
+        assert(
+          !session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
+          s"the hint should have been removed before the rule ran (singlePass=$singlePass)"
+        )
+      }
+    }
+  }
+
+  test("SPARK-59574: hint rule rewrites path relations") {
+    checkHintRuleRewritesPathRelations(singlePass = false, dualRun = false)
+  }
+
+  test("SPARK-59574: hint rule rewrites path relations with single-pass resolver") {
+    checkHintRuleRewritesPathRelations(singlePass = true, dualRun = false)
+  }
+
+  test("SPARK-59574: hint rule rewrites path relations in dual-run") {
+    checkHintRuleRewritesPathRelations(singlePass = false, dualRun = true)
+  }
+
+  test("SPARK-59574: hint rule rewrites path relations with the resolver enabled tentatively") {
+    checkHintRuleRewritesPathRelations(singlePass = false, dualRun = false, tentative = true)
+  }
+
+  test("SPARK-59574: hint rule rewrites path relations in a view body") {
+    withSession(Seq(_.injectHintResolutionRule(RedirectPathRelation))) { session =>
+      val dir = Utils.createTempDir()
+      try {
+        val path = new File(dir, "data").getCanonicalPath
+        session.range(1).write.parquet(path)
+        session.range(3).write.parquet(path + REDIRECT_SUFFIX)
+        session.sql(s"CREATE VIEW v AS SELECT * FROM parquet.`$path`")
+
+        // The fixed-point Analyzer applies the rules to a view body, because it resolves the body
+        // by re-entering the whole Analyzer. Dual-run agrees with it: the single-pass half bails
+        // out on the view (see below) and the result is taken from the fixed-point half.
+        Seq(false, true).foreach { dualRun =>
+          session.conf.set(
+            SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key,
+            dualRun.toString)
+
+          assert(
+            session.sql("SELECT count(*) FROM v").head().getLong(0) === 3,
+            s"unexpected result for the view body with dualRun=$dualRun"
+          )
+        }
+
+        // The single-pass Resolver does not support resolving a view body that holds a relation
+        // yet, independently of this change, so with the single-pass resolver forced there is no
+        // result to compare against. The check is kept to document that this is an unsupported
+        // feature and not a wrong answer.
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, "true")
+        session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+
+        intercept[ExplicitlyUnsupportedResolverFeature] {
+          session.sql("SELECT count(*) FROM v").head()
+        }
+      } finally {
+        session.conf.unset(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key)
+        session.conf.unset(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key)
+        session.sql("DROP VIEW IF EXISTS v")
+        Utils.deleteRecursively(dir)
+      }
+    }
+  }
+
+  /**
+   * Hint resolution rules run before relation metadata is resolved, which is what allows an
+   * extension to rewrite a path-based relation - for example to attach storage credentials to it
+   * before the files are listed. Redirecting the relation to another directory makes that
+   * rewrite observable in the query result.
+   */
+  private def checkHintRuleRewritesPathRelations(
+      singlePass: Boolean,
+      dualRun: Boolean,
+      tentative: Boolean = false): Unit = {
+    withSession(Seq(_.injectHintResolutionRule(RedirectPathRelation))) { session =>
+      val dir = Utils.createTempDir()
+      try {
+        val path = new File(dir, "data").getCanonicalPath
+        session.range(1).write.parquet(path)
+        session.range(3).write.parquet(path + REDIRECT_SUFFIX)
+
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+        session.conf.set(
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key,
+          dualRun.toString)
+        session.conf.set(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key,
+          tentative.toString)
+
+        // The rule is expected to have redirected every relation to the directory holding three
+        // rows, so a count of one means the original path was listed instead.
+        Seq(
+          s"SELECT count(*) FROM parquet.`$path`",
+          s"WITH cte AS (SELECT * FROM parquet.`$path`) SELECT count(*) FROM cte",
+          s"SELECT (SELECT count(*) FROM parquet.`$path`)"
+        ).foreach { query =>
+          assert(session.sql(query).head().getLong(0) === 3, s"unexpected result for: $query")
+        }
+      } finally {
+        Utils.deleteRecursively(dir)
+      }
     }
   }
 
@@ -1381,6 +1601,11 @@ class YourExtensions extends SparkSessionExtensionsProvider {
   override def apply(v1: SparkSessionExtensions): Unit = {
     v1.injectFunction(getAppName)
   }
+}
+
+// Never reaches a fixed point, used to check the iteration limit of the "Hints" batch.
+object AddLimitAlways extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = Limit(Literal(1), plan)
 }
 
 object AddLimit extends Rule[LogicalPlan] {
