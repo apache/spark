@@ -1716,12 +1716,15 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             # unresolved and ResolveRandomSeed then gives each spliced copy its OWN seed. Both have
             # to end up sharing one evaluation, or `x == x` compares two independent draws.
             #
-            # The NaN guard for the untyped (numeric) parameter keeps one `isnan` reference to the
-            # shared arg, so one draw remains in the plan after SimplifyBinaryComparison folds
-            # `col == col` to true. Two independent draws would leave both.
+            # Sharing leaves both sides reading one column, and on a double that lowers to
+            # `NOT isnan(col)` rather than `col = col` -- Python's `x == x` is False for NaN, so
+            # the NaN guard is the parity-correct answer here. It still depends on the column, so
+            # unlike a `col = col` that folds to true it cannot be pruned away: the one shared
+            # draw stays in the plan. That count IS the proof -- two independent draws would be 2.
             for arg in (rand(), expr("rand()")):
                 eq_df = rows.select(eq_udf(arg).alias("v"))
                 self.assertEqual(1, self._draw_count(eq_df))
+                self.assertTrue(self._shares_an_argument(eq_df))
                 self.assertTrue(all(r[0] for r in eq_df.collect()))
 
             clamped = rows.select(clamp_udf(rand()).alias("v"))
