@@ -634,6 +634,8 @@ replaced with one of the above namespaces.
     <td>
       Path to the trust store file. The path can be absolute or relative to the directory in which
       the process is started.
+      <br />
+      If not provided, the JVM default trust store is used. <strong>Note:</strong> Starting in Spark 4.0, the insecure "trust-all" fallback behavior when a trust store is missing has been removed. Deployments relying on self-signed or internal-CA certificates must explicitly configure a trust store or add their CA to the JVM default trust store to prevent RPC connections from failing.
     </td>
     <td>ui,standalone,historyServer,rpc</td>
   </tr>
