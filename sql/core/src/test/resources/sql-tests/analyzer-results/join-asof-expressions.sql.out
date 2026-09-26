@@ -118,7 +118,8 @@ Project [symbol#x, bid_price#x]
 CREATE OR REPLACE FUNCTION shift_ts(ts TIMESTAMP) RETURNS TIMESTAMP
 RETURN ts - INTERVAL 1 HOUR
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.shift_ts, ts TIMESTAMP, TIMESTAMP, ts - INTERVAL 1 HOUR, false, false, false, true
+CreateSQLFunctionCommand ts TIMESTAMP, TIMESTAMP, ts - INTERVAL 1 HOUR, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.shift_ts
 
 
 -- !query
@@ -169,7 +170,8 @@ Aggregate [count(1) AS cnt#xL]
 CREATE OR REPLACE FUNCTION jitter_ts(ts TIMESTAMP) RETURNS TIMESTAMP NOT DETERMINISTIC
 RETURN ts + INTERVAL 1 SECOND
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.jitter_ts, ts TIMESTAMP, TIMESTAMP, ts + INTERVAL 1 SECOND, false, false, false, false, true
+CreateSQLFunctionCommand ts TIMESTAMP, TIMESTAMP, ts + INTERVAL 1 SECOND, false, false, false, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.jitter_ts
 
 
 -- !query

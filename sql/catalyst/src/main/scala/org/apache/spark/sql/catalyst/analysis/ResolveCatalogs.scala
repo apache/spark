@@ -92,7 +92,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         "CREATE", nameParts.last)
 
     case CreateUserDefinedFunction(UnresolvedIdentifier(nameParts, _),
-        _, _, _, _, _, _, _, _, _, _, _, _)
+        _, _, _, _, _, _, _, _, _, _, _, _, _)
         if isSystemBuiltinName(nameParts) =>
       throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
         "CREATE", nameParts.last)
