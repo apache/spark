@@ -9624,6 +9624,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_RESOURCE_TYPE_FOR_FUNCTION" : {
+    "message" : [
+      "Unsupported resource type '<resourceType>' for a function."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_SAVE_MODE" : {
     "message" : [
       "The save mode <saveMode> is not supported for:"
@@ -10369,11 +10375,6 @@
   "_LEGACY_ERROR_TEMP_1072" : {
     "message" : [
       "Only the tables/views belong to the same database can be retrieved. Querying tables/views are <qualifiedTableNames>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1079" : {
-    "message" : [
-      "Resource Type '<resourceType>' is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_1080" : {
