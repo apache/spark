@@ -680,6 +680,19 @@ object SQLConf {
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
+  val OPTIMIZER_INSET_BINARY_SEARCH_ENABLED =
+    buildConf("spark.sql.optimizer.inSetBinarySearch.enabled")
+      .internal()
+      .doc("When true, InSet probes a sorted array with binary search in generated code for " +
+        "integral, date/time, and decimal types, avoiding the per-row autoboxing (integral/" +
+        "date-time) or Decimal.hashCode allocation (decimal) of the generic Set path. This does " +
+        "not apply to the switch path (bytes/shorts/ints/dates below inSetSwitchThreshold) or to " +
+        "float/double/string. Set to false to fall back to the generic Set path.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   private val VALID_LOG_LEVELS: Array[String] = Level.values.map(_.toString)
 
   val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
@@ -8822,6 +8835,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
+
+  def optimizerInSetBinarySearchEnabled: Boolean = getConf(OPTIMIZER_INSET_BINARY_SEARCH_ENABLED)
 
   def planChangeLogLevel: Level = getConf(PLAN_CHANGE_LOG_LEVEL)
 
