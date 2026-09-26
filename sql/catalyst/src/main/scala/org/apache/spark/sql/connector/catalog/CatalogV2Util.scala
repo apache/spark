@@ -505,7 +505,23 @@ private[sql] object CatalogV2Util {
   def extractTableStateOptions(
       catalog: CatalogPlugin,
       options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
-    val stateKeys = catalog.asTableCatalog.tableStateOptionKeys.asScala
+    extractStateOptions(catalog.asTableCatalog.tableStateOptionKeys, options)
+  }
+
+  /**
+   * Extracts the options that may select changelog state from a complete option map. These are the
+   * only options passed to `loadChangelog` and used to identify a pinned changelog state.
+   */
+  def extractChangelogStateOptions(
+      catalog: CatalogPlugin,
+      options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    extractStateOptions(catalog.asTableCatalog.changelogStateOptionKeys, options)
+  }
+
+  private def extractStateOptions(
+      stateOptionKeys: util.Set[String],
+      options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    val stateKeys = stateOptionKeys.asScala
       .map(_.toLowerCase(Locale.ROOT))
       .toSet
     val projected = options.asCaseSensitiveMap().asScala.collect {

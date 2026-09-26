@@ -120,7 +120,7 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
     }
   }
 
-  test("nested view analysis shares both query-scoped caches") {
+  test("nested view analysis shares all query-scoped caches") {
     AnalysisContext.withNewAnalysisContext {
       val outer = AnalysisContext.get
       val viewDesc = CatalogTable(
@@ -133,6 +133,7 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
       AnalysisContext.withAnalysisContext(viewDesc) {
         assert(AnalysisContext.get.relationCache eq outer.relationCache)
         assert(AnalysisContext.get.tableCache eq outer.tableCache)
+        assert(AnalysisContext.get.changelogCache eq outer.changelogCache)
       }
     }
   }
