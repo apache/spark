@@ -206,8 +206,11 @@ object ParquetUtils extends Logging {
   /**
    * Whether columnar read is supported for the input `schema`.
    */
-  def isBatchReadSupportedForSchema(sqlConf: SQLConf, schema: StructType): Boolean =
-    sqlConf.parquetVectorizedReaderEnabled &&
+  def isBatchReadSupportedForSchema(
+      sqlConf: SQLConf,
+      schema: StructType,
+      strictlyColumnar: Boolean): Boolean =
+    (sqlConf.parquetVectorizedReaderEnabled || strictlyColumnar) &&
       schema.forall(f => isBatchReadSupported(sqlConf, f.dataType))
 
   def isBatchReadSupported(sqlConf: SQLConf, dt: DataType): Boolean =
