@@ -361,6 +361,99 @@ values (0), (1) lhs(a)
 |> limit 2
 |> select lhs.a, rhs.a, z2;
 
+-- A table alias refers to the original value of a column affected by SET.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select t.a;
+
+-- Unqualified names expose assigned values while qualified names expose the original row.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select a, t.a, t.b;
+
+-- A trailing alias does not expose the retained input row in the visible schema.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> as u;
+
+-- A qualified column takes precedence over a visible struct field with the same multipart name.
+select 1 as x, named_struct('x', 2) as col
+|> as col
+|> set x = x + 1
+|> select x, col.x;
+
+-- Retaining the original row does not change the visible SET schema or unqualified star.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select *;
+
+-- A qualified star returns the original row in its original column order.
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> select t.*;
+
+-- The alias continues to refer to the input row across sequential assignments.
+values (1, 10) as t(a, b)
+|> set a = a + 1, b = b + 1
+|> select a, b, t.*;
+
+-- Repeated source attributes retain every position in a qualified star.
+values (1, 2) as s(a, b)
+|> select a, a, b
+|> as t
+|> set b = 3
+|> select t.*;
+
+-- Qualified source values remain available through intervening pipe operators.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> where t.a = 1
+|> select a, t.a;
+
+-- Qualified source values do not cross a DISTINCT boundary.
+values (1), (2) as t(a)
+|> set a = 0
+|> select distinct a
+|> select t.a;
+
+-- An explicitly selected source value becomes part of the DISTINCT key.
+values (1), (2) as t(a)
+|> set a = 0
+|> select distinct a, t.a
+|> select t.a
+|> order by t.a;
+
+-- A one-row SET input remains eligible for a nondeterministic lateral subquery.
+values (0) as t(x)
+|> set x = x + 1
+|> join lateral (select x + rand(0) as y)
+|> select x, y >= x as y_at_least_x;
+
+-- Both sides of a USING join retain qualified access to an assigned key.
+values (1, 10) as lhs(k, l)
+|> inner join values (1, 20) as rhs(k, r) using (k)
+|> set k = k + 1
+|> select k, lhs.k, rhs.k, l, r;
+
+-- A qualified star in COUNT remains invalid when SET replaces every visible qualified column.
+values (1) as t(a)
+|> set a = a + 1
+|> aggregate count(t.*);
+
+-- An unselected metadata column remains available after SET.
+table t
+|> set x = x + 1
+|> select x, _metadata.file_name is not null as has_file_name
+|> order by x;
+
+-- A selected metadata column remains qualified-accessible after SET replaces it.
+table t
+|> select *, _metadata
+|> set _metadata = 1
+|> select x, _metadata,
+     t._metadata.file_name is not null as original_metadata_available
+|> order by x;
+
 -- SET operators: negative tests.
 ---------------------------------
 

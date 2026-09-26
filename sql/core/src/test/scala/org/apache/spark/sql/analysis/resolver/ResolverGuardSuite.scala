@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
   ExplicitlyUnsupportedResolverFeature,
   Resolver,
   ResolverGuard
 }
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Literal, PipeSetInput}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -107,6 +109,129 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
 
   test("Star target") {
     checkResolverGuard("SELECT table.* FROM VALUES(1) as table")
+  }
+
+  test("SPARK-59146: pipe SET retains qualified source columns") {
+    checkResolverGuard(
+      "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 |> SELECT a, t.a, t.b")
+    checkResolverGuard(
+      "VALUES (1, 2, 3) AS t(a, b, c) |> SET b = 20 |> SELECT t.*")
+    val repeatedSourceQuery =
+      "VALUES (1, 2) AS s(a, b) |> SELECT a, a, b " +
+        "|> AS t |> SET b = 3 |> SELECT t.*"
+    checkResolverGuard(repeatedSourceQuery)
+    checkResolverGuard(
+      "SELECT 1 AS x, NAMED_STRUCT('x', 2) AS col " +
+        "|> AS col |> SET x = x + 1 |> SELECT x, col.x")
+
+    withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      // Dataset collection analyzes a DeserializeToObject, which is not supported by the
+      // single-pass resolver, so execute the already-resolved physical plan directly.
+      val qualifiedColumnRows = sql(
+        "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 |> SELECT a, t.a, t.b"
+      ).queryExecution.executedPlan.executeCollectPublic()
+      assert(qualifiedColumnRows.toSeq === Seq(Row(2, 1, 10)))
+
+      val qualifiedStarRows = sql(
+        "VALUES (1, 2, 3) AS t(a, b, c) |> SET b = 20 |> SELECT t.*"
+      ).queryExecution.executedPlan.executeCollectPublic()
+      assert(qualifiedStarRows.toSeq === Seq(Row(1, 2, 3)))
+
+      val repeatedSource = sql(repeatedSourceQuery)
+      assert(repeatedSource.schema.fieldNames === Array("a", "a", "b"))
+      val repeatedSourceRows = repeatedSource.queryExecution.executedPlan.executeCollectPublic()
+      assert(repeatedSourceRows.toSeq === Seq(Row(1, 1, 2)))
+    }
+
+    val aliasQuery = "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 |> AS u"
+    checkResolverGuard(aliasQuery)
+    withSQLConf(
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
+      assert(sql(aliasQuery).schema.fieldNames === Array("a", "b"))
+    }
+  }
+
+  test("SPARK-59146: missing attributes cross pipe SET input in dual-run analysis") {
+    withSQLConf(
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
+      val dataFrame = sql(
+        "SELECT x FROM VALUES (1, 2), (3, 0) AS t(x, y) |> SET x = x + 1")
+      assert(dataFrame.orderBy("y").collect().map(_.getInt(0)) === Array(4, 2))
+    }
+  }
+
+  test("SPARK-59146: pipe SET metadata does not cross Dataset boundaries") {
+    Seq(false, true).foreach { singlePassEnabled =>
+      withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePassEnabled.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        val dataFrame = sql("VALUES (1, 10) AS t(a, b) |> SET a = a + 1")
+        assert(!dataFrame.queryExecution.analyzed.exists(_.isInstanceOf[PipeSetInput]))
+
+        val error = intercept[SparkThrowable] {
+          dataFrame("t.a")
+        }
+        assert(error.getCondition === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+
+        val joinedDataFrame = sql(
+          "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 " +
+            "|> INNER JOIN VALUES (2, 20) AS u(a, c) USING (a)")
+        val analyzedJoin = joinedDataFrame.queryExecution.analyzed
+        assert(!analyzedJoin.exists(_.isInstanceOf[PipeSetInput]))
+        assert(!analyzedJoin.exists {
+          case project: Project =>
+            project.getTagValue(Project.hiddenOutputTag).exists(_.exists(_.pipeSetRetained))
+          case _ => false
+        })
+
+        val joinError = intercept[SparkThrowable] {
+          joinedDataFrame.select("t.a").queryExecution.analyzed
+        }
+        assert(joinError.getCondition === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+        assert(analyzedJoin.metadataOutput.exists { attribute =>
+          attribute.name == "a" && attribute.qualifier == Seq("u") && !attribute.pipeSetRetained
+        })
+      }
+    }
+  }
+
+  test("SPARK-59146: clean pipe SET input before finalizing analysis-only commands") {
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      "CREATE TEMPORARY VIEW pipe_set_view AS " +
+        "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 " +
+        "|> INNER JOIN VALUES (2, 20) AS u(a, c) USING (a)")
+    val analyzedCommand = spark.sessionState.analyzer.execute(parsedPlan)
+
+    assert(analyzedCommand.children.isEmpty)
+    assert(analyzedCommand.innerChildren.length === 1)
+    val analyzedViewPlan = analyzedCommand.innerChildren.head.asInstanceOf[LogicalPlan]
+    assert(!analyzedViewPlan.exists(_.isInstanceOf[PipeSetInput]))
+    assert(!analyzedViewPlan.exists {
+      case project: Project =>
+        project.getTagValue(Project.hiddenOutputTag).exists(_.exists(_.pipeSetRetained))
+      case _ => false
+    })
+  }
+
+  test("SPARK-59146: dropDuplicates discards hidden pipe SET values") {
+    val dataFrame = sql("VALUES (1), (2) AS t(a) |> SET a = 0")
+    val error = intercept[SparkThrowable] {
+      dataFrame.dropDuplicates().select("t.a").queryExecution.analyzed
+    }
+    assert(error.getCondition === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+
+    val selectedSource = sql(
+      "VALUES (1), (2) AS t(a) |> SET a = 0 |> SELECT a, t.a AS source_a")
+    assert(selectedSource.dropDuplicates().select("source_a").collect().map(_.getInt(0)).sorted ===
+      Array(1, 2))
   }
 
   test("Binary arithmetic") {

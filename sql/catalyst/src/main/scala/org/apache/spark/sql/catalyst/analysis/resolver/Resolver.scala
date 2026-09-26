@@ -45,9 +45,12 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Attribute,
+  AttributeSeq,
   AttributeSet,
+  EliminateResolvedPipeSetInputs,
   Expression,
-  ExprId
+  ExprId,
+  PipeSetInput
 }
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -134,7 +137,9 @@ class Resolver(
    * `planRewriter` is used to rewrite the plan and the subqueries inside by applying
    * `planRewriteRules`.
    */
-  private val planRewriter = new PlanRewriter(planRewriteRules, extendedRewriteRules)
+  private val planRewriter = new PlanRewriter(
+    planRewriteRules,
+    extendedRewriteRules :+ EliminateResolvedPipeSetInputs)
 
   /**
    * [[relationMetadataProvider]] is used to resolve metadata for relations. It's initialized with
@@ -273,6 +278,8 @@ class Resolver(
             handleResolvedWithCte(withCte)
           case unresolvedProject: Project =>
             projectResolver.resolve(unresolvedProject)
+          case unresolvedPipeSetInput: PipeSetInput =>
+            resolvePipeSetInput(unresolvedPipeSetInput)
           case unresolvedAggregate: Aggregate =>
             aggregateResolver.resolve(unresolvedAggregate)
           case unresolvedFilter: Filter =>
@@ -346,6 +353,22 @@ class Resolver(
       operatorResolutionContextStack.pop()
       CurrentOrigin.set(previousOrigin)
     }
+  }
+
+  /**
+   * Resolves the input marker of a pipe SET assignment and exposes its original qualified row as
+   * hidden output. The visible output remains unchanged so unqualified references continue to see
+   * the values produced by earlier assignments.
+   */
+  private def resolvePipeSetInput(unresolvedPipeSetInput: PipeSetInput): LogicalPlan = {
+    val resolvedPipeSetInput =
+      unresolvedPipeSetInput.copy(child = resolve(unresolvedPipeSetInput.child))
+    val hiddenOutput = AttributeSeq.mergeHiddenAndVisibleOutput(
+      scopes.current.hiddenOutput,
+      resolvedPipeSetInput.metadataOutput
+    )
+    scopes.overwriteCurrent(hiddenOutput = Some(hiddenOutput))
+    resolvedPipeSetInput
   }
 
   /**

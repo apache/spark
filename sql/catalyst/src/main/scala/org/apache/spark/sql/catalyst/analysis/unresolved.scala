@@ -590,7 +590,8 @@ trait UnresolvedStarBase extends Star with Unevaluable {
       // keep any restrictions that may break column resolution for normal attributes.
       // See SPARK-42084 for more details.
       .map(_.markAsAllowAnyAccess())
-    val expandedAttributes = (hiddenOutput ++ parameters.childOperatorOutput)
+    val expandedAttributes = AttributeSeq
+      .mergeHiddenAndVisibleOutput(hiddenOutput, parameters.childOperatorOutput)
       .filter(matchedQualifier(_, target.get, parameters.resolver))
 
     if (expandedAttributes.nonEmpty) return expandedAttributes

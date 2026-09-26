@@ -8237,7 +8237,8 @@ class AstBuilder extends DataTypeAstBuilder
         // Add a projection to implement the SET operator using the UnresolvedStarExceptOrReplace
         // expression. We do this once per SET assignment to allow for multiple SET assignments with
         // optional lateral references to previous ones.
-        plan = Project(projectList, plan)
+        // PipeSetInput retains qualified access to the row before the assignment.
+        plan = Project(projectList, PipeSetInput(plan))
     }
     plan
   }
