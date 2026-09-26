@@ -25,7 +25,6 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.execution.TableCacheDescriptor
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -82,14 +81,7 @@ private[sql] case class RenameTableExec(
   private def sessionForCharVarcharScanMode(
       mode: Option[CharVarcharScanMode]): SparkSession = {
     val restoreSession = session.cloneSession()
-    mode match {
-      case Some(CharVarcharScanMode.SparkStandard) =>
-        restoreSession.conf.set(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key, "true")
-      case Some(CharVarcharScanMode.PreserveNative) =>
-        restoreSession.conf.set(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key, "true")
-        restoreSession.conf.set(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key, "false")
-      case None =>
-    }
+    mode.foreach(CharVarcharScanMode.configure(restoreSession.sessionState.conf, _))
     restoreSession
   }
 }

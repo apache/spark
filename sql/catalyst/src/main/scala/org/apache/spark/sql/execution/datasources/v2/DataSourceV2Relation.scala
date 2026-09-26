@@ -154,8 +154,25 @@ case class DataSourceV2Relation(
   }
 
   def sameResultWithUnboundCharVarcharScanMode(other: DataSourceV2Relation): Boolean = {
-    copy(output = other.output, charVarcharScanMode = None)
-      .sameResult(other.copy(charVarcharScanMode = None))
+    // Mutation matching ignores scan mode, Table instance, and extra write options. Catalog
+    // tables match on catalog and identifier. Catalog-less tables match on table name and path,
+    // because getTable() plus write options would otherwise miss the cached read relation.
+    // If either side omits path (streaming write targets), table name is enough.
+    if (catalog.isDefined || identifier.isDefined ||
+        other.catalog.isDefined || other.identifier.isDefined) {
+      catalog == other.catalog &&
+        identifier == other.identifier &&
+        timeTravelSpec == other.timeTravelSpec
+    } else {
+      timeTravelSpec.isEmpty && other.timeTravelSpec.isEmpty &&
+        table.name() == other.table.name() && catalogLessPathsCompatible(other)
+    }
+  }
+
+  private def catalogLessPathsCompatible(other: DataSourceV2Relation): Boolean = {
+    val thisPath = Option(options.get("path")).filter(_.nonEmpty)
+    val otherPath = Option(other.options.get("path")).filter(_.nonEmpty)
+    thisPath.isEmpty || otherPath.isEmpty || thisPath == otherPath
   }
 
   def isVersioned: Boolean = table.version != null

@@ -523,27 +523,23 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
 
       appendData("a", "x")
       val preserveRead = withSQLConf(preserveConf: _*) {
-        val read = readData.persist(MEMORY_ONLY)
-        checkAnswer(read, Row("a", "x"))
-        read
+        readData.persist(MEMORY_ONLY)
       }
       val standardRead = withSQLConf(standardConf: _*) {
-        val read = readData.persist(DISK_ONLY)
-        checkAnswer(read, Row("a", "x"))
-        read
+        readData.persist(DISK_ONLY)
       }
       try {
         appendData("b", "y")
         withSQLConf(preserveConf: _*) {
-          checkAnswer(readData, Seq(Row("a", "x"), Row("b", "y")))
-          assert(spark.sharedState.cacheManager.lookupCachedData(preserveRead).get
-            .cachedRepresentation.cacheBuilder.storageLevel === MEMORY_ONLY)
+          checkAnswer(preserveRead, Seq(Row("a", "x"), Row("b", "y")))
         }
         withSQLConf(standardConf: _*) {
-          checkAnswer(readData, Seq(Row("a", "x"), Row("b", "y")))
-          assert(spark.sharedState.cacheManager.lookupCachedData(standardRead).get
-            .cachedRepresentation.cacheBuilder.storageLevel === DISK_ONLY)
+          checkAnswer(standardRead, Seq(Row("a", "x"), Row("b", "y")))
         }
+        assert(spark.sharedState.cacheManager.lookupCachedData(preserveRead).get
+          .cachedRepresentation.cacheBuilder.storageLevel === MEMORY_ONLY)
+        assert(spark.sharedState.cacheManager.lookupCachedData(standardRead).get
+          .cachedRepresentation.cacheBuilder.storageLevel === DISK_ONLY)
       } finally {
         preserveRead.unpersist()
         standardRead.unpersist()

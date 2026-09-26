@@ -23,7 +23,7 @@ import java.util.Collections
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SessionQueryTest, SparkSession}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
@@ -3350,6 +3350,37 @@ class DataSourceV2DataFrameSuite
         // insert data to verify view still works correctly
         sql(s"INSERT INTO $t VALUES (1, 'a', 25)")
         checkAnswer(spark.table("v"), Seq(Row(1, "a")))
+      }
+    }
+  }
+
+  test("SPARK-58814: V2 temp view rebinds CHAR/VARCHAR policy on lookup") {
+    val t = "testcat.ns1.ns2.tbl"
+    val preserveConf = Seq(
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
+    val standardConf = Seq(
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
+    withTable(t) {
+      withTempView("v") {
+        withSQLConf(preserveConf: _*) {
+          sql(s"CREATE TABLE $t (v VARCHAR(4)) USING foo")
+        }
+        withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+          sql(s"INSERT INTO $t VALUES ('abcdef')")
+        }
+        withSQLConf(preserveConf: _*) {
+          spark.table(t).createOrReplaceTempView("v")
+        }
+        withSQLConf(standardConf: _*) {
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              spark.table("v").collect()
+            },
+            condition = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "4"))
+        }
       }
     }
   }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.sql.internal.SQLConf
+
 /**
  * The CHAR/VARCHAR scan mode bound to a relation (and its scan) during analysis.
  *
@@ -44,8 +46,10 @@ private[sql] object CharVarcharScanMode {
   case object PreserveNative extends CharVarcharScanMode
 
   /**
-   * Request physical STRING from the source so Spark observes the original value and applies
-   * standard CHAR/VARCHAR length checks. Corresponds to standard semantics.
+   * Request physical STRING from readers that honor this mode so Spark observes the original
+   * value and applies standard CHAR/VARCHAR length checks. Corresponds to standard semantics.
+   * Native Hive ORC with CONVERT_METASTORE_ORC=false does not implement this contract and still
+   * applies native CHAR/VARCHAR truncation.
    */
   case object SparkStandard extends CharVarcharScanMode
 
@@ -54,6 +58,17 @@ private[sql] object CharVarcharScanMode {
    */
   def apply(standardSemantics: Boolean): CharVarcharScanMode =
     if (standardSemantics) SparkStandard else PreserveNative
+
+  /**
+   * Configures `conf` so analysis binds `mode` and generates the matching read-side Project.
+   */
+  def configure(conf: SQLConf, mode: CharVarcharScanMode): Unit = mode match {
+    case SparkStandard =>
+      conf.setConfString(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key, "true")
+    case PreserveNative =>
+      conf.setConfString(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key, "true")
+      conf.setConfString(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key, "false")
+  }
 
   /** Parses a mode from its `toString` name; the inverse of [[CharVarcharScanMode.toString]]. */
   def fromName(name: String): CharVarcharScanMode = name match {
