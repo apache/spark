@@ -24,12 +24,13 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, TableSpec, UnaryNode}
 import org.apache.spark.sql.catalyst.transactions.TransactionUtils
-import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, ReplaceDataProjections, WriteDeltaProjections}
+import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, ReplaceDataProjections, V2ExpressionBuilder, WriteDeltaProjections}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, ColumnDefaultValue, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
@@ -976,7 +977,20 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
   protected def getV2Columns(schema: StructType, forceNullable: Boolean): Array[Column] = {
     val rawSchema = CharVarcharUtils.getRawSchema(removeInternalMetadata(schema), conf)
     val tableSchema = if (forceNullable) rawSchema.asNullable else rawSchema
-    CatalogV2Util.structTypeToV2Columns(tableSchema, keepIds = false)
+    val columns = CatalogV2Util.structTypeToV2Columns(tableSchema, keepIds = false)
+    columns.zip(tableSchema.fields).map {
+      case (column, field) if column.defaultValue() != null =>
+        val defaultValue = column.defaultValue()
+        val (_, expr) =
+          field.metadata.getExpression[Expression](CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+        expr.flatMap(new V2ExpressionBuilder(_).build()).map { currentDefault =>
+          Column.builderFrom(column)
+            .defaultValue(new ColumnDefaultValue(
+              defaultValue.getSql, currentDefault, defaultValue.getValue))
+            .build()
+        }.getOrElse(column)
+      case (column, _) => column
+    }
   }
 
   protected def writeToTable(
