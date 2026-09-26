@@ -197,22 +197,22 @@ class LiveEntitySuite extends SparkFunSuite {
   }
 
   test("SPARK-59711: LiveExecutorStageSummary only stores primitives, String, or " +
-      "ExecutorMetrics") {
+      "ExecutorMetrics, and addTaskMetrics increments every declared task-metric field") {
+    val fields = classOf[LiveExecutorStageSummary].getDeclaredFields
+
     val allowedTypes = Set[Class[_]](
       classOf[Long], classOf[Int], classOf[Boolean], classOf[String], classOf[ExecutorMetrics])
-    val fieldTypes = classOf[LiveExecutorStageSummary].getDeclaredFields.map(_.getType)
-    val disallowed = fieldTypes.filterNot(allowedTypes.contains)
+    val disallowed = fields.map(_.getType).filterNot(allowedTypes.contains)
     assert(disallowed.isEmpty,
       s"LiveExecutorStageSummary holds unexpected field type(s): ${disallowed.mkString(", ")}")
-  }
 
-  test("SPARK-59711: addTaskMetrics increments every task-metric field it declares") {
     val summary = new LiveExecutorStageSummary(1, 0, "1")
     val delta = LiveEntityHelpers.createMetrics(default = 1L)
     summary.addTaskMetrics(delta)
+
     // taskTime is updated elsewhere (onTaskEnd), not by addTaskMetrics.
     val exempt = Set("taskTime")
-    val untouched = classOf[LiveExecutorStageSummary].getDeclaredFields
+    val untouched = fields
       .filter(_.getType == classOf[Long])
       .filterNot(f => exempt.contains(f.getName))
       .filter { f =>
