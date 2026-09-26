@@ -779,9 +779,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         from pyspark.errors import UnsupportedOperationException
         from pyspark.sql.transpile import (
-            CatalystTranspiler,
             _MAX_COMPARISON_OPS,
             _MAX_LOWERED_COMPARISONS,
+            CatalystTranspiler,
         )
 
         transpiler = CatalystTranspiler()
