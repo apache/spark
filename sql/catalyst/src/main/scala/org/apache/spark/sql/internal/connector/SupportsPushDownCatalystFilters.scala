@@ -39,4 +39,12 @@ trait SupportsPushDownCatalystFilters extends ScanBuilder {
    * {@link #pushFilters(Seq[Expression])}.
    */
   def pushedFilters: Array[Predicate]
+
+  /**
+   * Whether Spark should derive additional partition filters from filters on the base columns of
+   * generated partition columns and push them through {@link #pushFilters(Seq[Expression])}. Each
+   * derived filter is implied by an original filter, so enabling this never changes query results;
+   * it only lets the data source prune data more easily via explicit partition pruning.
+   */
+  def inferGeneratedColumnPartitionFilters: Boolean = false
 }
