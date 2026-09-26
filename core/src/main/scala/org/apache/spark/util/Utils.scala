@@ -60,7 +60,7 @@ import org.apache.hadoop.util.RunJar
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.LoggerContext
-import org.apache.logging.log4j.core.config.LoggerConfig
+import org.apache.logging.log4j.core.config.{Configurator, LoggerConfig}
 import org.slf4j.Logger
 
 import org.apache.spark.{SPARK_VERSION, _}
@@ -2358,6 +2358,23 @@ private[spark] object Utils
   def setLogLevelIfNeeded(newLogLevel: String): Unit = {
     if (newLogLevel != Utils.getLogLevel) {
       Utils.setLogLevel(Level.toLevel(newLogLevel))
+    }
+  }
+
+  /**
+   * Set the level of the loggers named by the `spark.log.level.<logger>` configs. Applied after the
+   * root level from `spark.log.level`, so it wins for those loggers.
+   */
+  def setLoggerLevels(conf: SparkConf): Unit = {
+    val levels = conf.getAllWithPrefix(SPARK_LOG_LEVEL_PREFIX).map { case (logger, level) =>
+      val upperCased = level.toUpperCase(Locale.ROOT)
+      require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
+        s"Invalid value for '$SPARK_LOG_LEVEL_PREFIX$logger'. Valid values are " +
+          SparkContext.VALID_LOG_LEVELS.mkString(","))
+      logger -> Level.toLevel(upperCased)
+    }.toMap
+    if (levels.nonEmpty) {
+      Configurator.setLevel(levels.asJava)
     }
   }
 
