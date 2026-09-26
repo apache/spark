@@ -657,17 +657,40 @@ object WatermarkSupport {
     val watermarkAttribute = optionalWatermarkExpression.get
     // If we are evicting based on a window, use the end of the window. Otherwise just
     // use the attribute itself.
+    val watermarkMicros = Literal(millisToMicrosSaturating(optionalWatermarkMs.get))
     val evictionExpression =
       if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
-        LessThanOrEqual(
-          GetStructField(watermarkAttribute, 1),
-          Literal(optionalWatermarkMs.get * 1000))
+        LessThanOrEqual(GetStructField(watermarkAttribute, 1), watermarkMicros)
       } else {
-        LessThanOrEqual(
-          watermarkAttribute,
-          Literal(optionalWatermarkMs.get * 1000))
+        LessThanOrEqual(watermarkAttribute, watermarkMicros)
       }
     Some(evictionExpression)
+  }
+
+  /**
+   * Convert a millisecond watermark/timestamp to microseconds, saturating to the Long range instead
+   * of overflowing. A join range condition can produce a state watermark beyond the representable
+   * timestamp range (e.g. an astronomical interval), and multiplying that by 1000 would wrap; the
+   * saturated bound (evict all / evict none) is the correct limit at the timestamp boundary.
+   */
+  def millisToMicrosSaturating(millis: Long): Long = {
+    if (millis > Long.MaxValue / 1000L) Long.MaxValue
+    else if (millis < Long.MinValue / 1000L) Long.MinValue
+    else millis * 1000L
+  }
+
+  /**
+   * Saturating microsecond addition for the range-scan bound `eventTime + offset`, where a
+   * saturated offset can push the sum past the Long range; clamping keeps the scan window at the
+   * timestamp boundary (a full scan) rather than wrapping into a wrong, too-narrow window.
+   */
+  def addMicrosSaturating(a: Long, b: Long): Long = {
+    val sum = a + b
+    if (((a ^ sum) & (b ^ sum)) < 0) {
+      if (a >= 0) Long.MaxValue else Long.MinValue
+    } else {
+      sum
+    }
   }
 
   /**
