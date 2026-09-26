@@ -877,16 +877,19 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void operationsAfterFreeFail() {
-    memoryManager.limit(PAGE_SIZE_BYTES);
     BytesToBytesMap map =
       new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
     final long[] key = new long[]{1L};
     try {
+      BytesToBytesMap.Location loc = map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8);
       map.free();
       assertThrows(IllegalStateException.class, map::reset);
       assertThrows(
         IllegalStateException.class,
         () -> map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8));
+      assertThrows(
+        IllegalStateException.class,
+        () -> loc.append(key, Platform.LONG_ARRAY_OFFSET, 8, key, Platform.LONG_ARRAY_OFFSET, 8));
       assertThrows(IllegalStateException.class, map::getArray);
       assertThrows(IllegalStateException.class, map::maxNumKeysIndex);
       assertEquals(0L, taskMemoryManager.getMemoryConsumptionForThisTask());
@@ -940,6 +943,10 @@ public abstract class AbstractBytesToBytesMapSuite {
       assertThrows(
         IllegalStateException.class,
         () -> map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8));
+      assertThrows(
+        IllegalStateException.class,
+        () -> loc.append(
+          key, Platform.LONG_ARRAY_OFFSET, 8, value, Platform.LONG_ARRAY_OFFSET, 8));
       assertThrows(IllegalStateException.class, map::getArray);
       assertThrows(IllegalStateException.class, map::maxNumKeysIndex);
       assertThrows(IllegalStateException.class, map::iterator);

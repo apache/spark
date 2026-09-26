@@ -580,7 +580,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * The value of allowed keys index is in the range of [0, maxNumKeysIndex - 1].
    *
-   * @throws IllegalStateException if the map is not ready for use
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public int maxNumKeysIndex() {
     ensureReady();
@@ -594,7 +595,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * This function always returns the same {@link Location} instance to avoid object allocation.
    * This function is not thread-safe.
    *
-   * @throws IllegalStateException if the map is not ready for use
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength) {
     safeLookup(keyBase, keyOffset, keyLength, loc);
@@ -610,7 +612,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * This function always returns the same {@link Location} instance to avoid object allocation.
    * This function is not thread-safe.
    *
-   * @throws IllegalStateException if the map is not ready for use
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength, int hash) {
     safeLookup(keyBase, keyOffset, keyLength, loc, hash);
@@ -630,7 +633,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * {@link Location}. This guarantee excludes probe statistics, which may be inaccurate under
    * concurrent lookup. The map must not be modified concurrently.
    *
-   * @throws IllegalStateException if the map is not ready for use
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc) {
     if (keyOperationsFactory == null) {
@@ -653,7 +657,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * supply its own {@link Location}. Probe statistics may be inaccurate under concurrent lookup,
    * and the map must not be modified concurrently.
    *
-   * @throws IllegalStateException if the map is not ready for use
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
     ensureReady();
@@ -945,8 +950,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
      *
      * @return true if the put() was successful and false if the map reached its capacity or memory
      *         could not be acquired.
+     * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+     * has been freed
      */
     public boolean append(Object kbase, long koff, int klen, Object vbase, long voff, int vlen) {
+      ensureReady();
       assert (klen % 8 == 0);
       assert (vlen % 8 == 0);
       assert (longArray != null);
@@ -1155,7 +1163,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
   /**
    * Returns the underlying long array.
    *
-   * @throws IllegalStateException if the map is not ready for use
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public LongArray getArray() {
     ensureReady();
@@ -1165,7 +1174,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   /**
    * Resets this map to initialized state. If the replacement pointer array cannot be allocated,
-   * the map remains empty but cannot be used until a later call to this method succeeds.
+   * the map remains empty but cannot be used until a later call to this method succeeds. A
+   * successful retry only restores the map itself; callers are responsible for ensuring that any
+   * state kept outside the map, such as spilled data, remains valid.
    *
    * @throws SparkOutOfMemoryError if the replacement pointer array cannot be allocated
    * @throws IllegalStateException if the map has been freed or destructive iteration has begun
