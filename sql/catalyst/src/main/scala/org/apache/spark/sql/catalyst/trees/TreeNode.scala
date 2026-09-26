@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.trees
 
+import java.lang.invoke.MethodHandles
 import java.util.{IdentityHashMap, UUID}
 
 import scala.annotation.nowarn
@@ -49,12 +50,29 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{BestEffortLazyVal, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.BitSet
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
+
+private object TreeNode {
+  // Volatile fields provide safe publication but need compare-and-set to ensure concurrent readers
+  // return the same cached instance. VarHandles avoid allocating an atomic wrapper for every node.
+  private val lookup = MethodHandles.privateLookupIn(classOf[TreeNode[_]], MethodHandles.lookup())
+
+  val treePatternBitsCache =
+    lookup.findVarHandle(classOf[TreeNode[_]], "treePatternBitsCacheValue", classOf[BitSet])
+  val containsChildCache =
+    lookup.findVarHandle(classOf[TreeNode[_]], "containsChildCacheValue", classOf[Set[_]])
+  val heightCache =
+    lookup.findVarHandle(classOf[TreeNode[_]], "heightCacheValue", classOf[Integer])
+  val hashCodeCache =
+    lookup.findVarHandle(classOf[TreeNode[_]], "hashCodeCacheValue", classOf[Integer])
+  val allChildrenCache = lookup.findVarHandle(
+    classOf[TreeNode[_]], "allChildrenCacheValue", classOf[IdentityHashMap[_, _]])
+}
 
 // A tag of a `TreeNode`, which defines name and type
 // Note: In general, if developers only care about its tagging capabilities,
@@ -118,8 +136,19 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    * A BitSet of tree patterns for this TreeNode and its subtree. If this TreeNode and its
    * subtree contains a pattern `P`, the corresponding bit for `P.id` is set in this BitSet.
    */
-  private val _treePatternBits = new BestEffortLazyVal[BitSet](() => getDefaultTreePatternBits)
-  override def treePatternBits: BitSet = _treePatternBits()
+  @volatile private var treePatternBitsCacheValue: BitSet = _
+  override def treePatternBits: BitSet = {
+    var value = treePatternBitsCacheValue
+    if (value eq null) {
+      val computed = getDefaultTreePatternBits
+      if (TreeNode.treePatternBitsCache.compareAndSet(this, null, computed)) {
+        value = computed
+      } else {
+        value = treePatternBitsCacheValue
+      }
+    }
+    value
+  }
 
   /**
    * A BitSet of rule ids to record ineffective rules for this TreeNode and its subtree.
@@ -220,15 +249,47 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    */
   def children: Seq[BaseType]
 
-  private val _containsChild = new BestEffortLazyVal[Set[TreeNode[_]]](() => children.toSet)
-  def containsChild: Set[TreeNode[_]] = _containsChild()
+  @volatile private var containsChildCacheValue: Set[TreeNode[_]] = _
+  def containsChild: Set[TreeNode[_]] = {
+    var value = containsChildCacheValue
+    if (value eq null) {
+      val computed = children.iterator.map(child => child: TreeNode[_]).toSet
+      if (TreeNode.containsChildCache.compareAndSet(this, null, computed)) {
+        value = computed
+      } else {
+        value = containsChildCacheValue
+      }
+    }
+    value
+  }
 
-  private val _height = new BestEffortLazyVal[Integer](() =>
-    children.map(_.height).reduceOption(_ max _).getOrElse(0) + 1)
-  def height: Int = _height()
+  @volatile private var heightCacheValue: Integer = _
+  def height: Int = {
+    var value = heightCacheValue
+    if (value eq null) {
+      val computed = Integer.valueOf(children.map(_.height).reduceOption(_ max _).getOrElse(0) + 1)
+      if (TreeNode.heightCache.compareAndSet(this, null, computed)) {
+        value = computed
+      } else {
+        value = heightCacheValue
+      }
+    }
+    value
+  }
 
-  private val _hashCode = new BestEffortLazyVal[Integer](() => MurmurHash3.caseClassHash(this))
-  override def hashCode(): Int = _hashCode()
+  @volatile private var hashCodeCacheValue: Integer = _
+  override def hashCode(): Int = {
+    var value = hashCodeCacheValue
+    if (value eq null) {
+      val computed = Integer.valueOf(MurmurHash3.caseClassHash(this))
+      if (TreeNode.hashCodeCache.compareAndSet(this, null, computed)) {
+        value = computed
+      } else {
+        value = hashCodeCacheValue
+      }
+    }
+    value
+  }
 
   /**
    * Faster version of equality which short-circuits when two treeNodes are the same instance.
@@ -898,14 +959,22 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    */
   protected def stringArgs: Iterator[Any] = productIterator
 
-  private val _allChildren = new BestEffortLazyVal[IdentityHashMap[TreeNode[_], Any]](() => {
-    val set = new IdentityHashMap[TreeNode[_], Any]()
-    (children ++ innerChildren).foreach {
-      set.put(_, null)
+  @volatile private var allChildrenCacheValue: IdentityHashMap[TreeNode[_], Any] = _
+  private def allChildren: IdentityHashMap[TreeNode[_], Any] = {
+    var value = allChildrenCacheValue
+    if (value eq null) {
+      val computed = new IdentityHashMap[TreeNode[_], Any]()
+      (children ++ innerChildren).foreach {
+        computed.put(_, null)
+      }
+      if (TreeNode.allChildrenCache.compareAndSet(this, null, computed)) {
+        value = computed
+      } else {
+        value = allChildrenCacheValue
+      }
     }
-    set
-  })
-  private def allChildren = _allChildren()
+    value
+  }
 
   private def redactMapString[K, V](map: Map[K, V], maxFields: Int): List[String] = {
     // For security reason, redact the map value if the key is in certain patterns
