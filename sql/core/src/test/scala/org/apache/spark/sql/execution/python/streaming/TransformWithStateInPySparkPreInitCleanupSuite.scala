@@ -20,12 +20,18 @@ import java.io.{DataInputStream, DataOutputStream}
 import java.util.{ArrayList, HashMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
-import org.apache.spark.SparkException
-import org.apache.spark.api.python.{PythonFunction, SimplePythonFunction}
-import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.DriverStatefulProcessorHandleImpl
+import org.mockito.Mockito.mock
+
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.api.python.{
+  ChainedPythonFunctions,
+  PythonEvalType,
+  PythonFunction,
+  SimplePythonFunction}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{DriverStatefulProcessorHandleImpl, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ArrayType, CharType, StructField, StructType}
 
 class TransformWithStateInPySparkPreInitCleanupSuite extends SharedSparkSession {
 
@@ -151,6 +157,46 @@ class TransformWithStateInPySparkPreInitCleanupSuite extends SharedSparkSession 
     assert(runner.processCount.get() === 1)
     assert(runner.stopCount.get() === 1)
     assert(!runner.workerAlive.get())
+  }
+
+  test("grouping key schema is rejected before driver worker initialization") {
+    val unsupportedSchema =
+      StructType(StructField("key", ArrayType(CharType(3))) :: Nil)
+    val runner = new TransformWithStateInPySparkPythonPreInitRunner(
+      newPythonFunction(),
+      "pyspark.sql.streaming.transform_with_state_driver_worker",
+      unsupportedSchema,
+      newDriverHandle())
+
+    val error = intercept[SparkUnsupportedOperationException] {
+      runner.init()
+    }
+    assert(error.getCondition === "UNSUPPORTED_FEATURE.PYTHON_STATE_CHAR_VARCHAR_SCHEMA")
+    assert(error.getMessageParameters.get("schemaKind") === "grouping key")
+  }
+
+  test("grouping key schema is rejected before executor state server initialization") {
+    val unsupportedSchema =
+      StructType(StructField("key", ArrayType(CharType(3))) :: Nil)
+    val runner = new TransformWithStateInPySparkPythonRunner(
+      funcs = Seq((ChainedPythonFunctions(Seq(newPythonFunction())), 0L)),
+      evalType = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+      argOffsets = Array(Array(0)),
+      schema = StructType(Nil),
+      processorHandle = mock(classOf[StatefulProcessorHandleImpl]),
+      timeZoneId = "UTC",
+      initialRunnerConf = Map.empty,
+      pythonMetrics = Map.empty,
+      jobArtifactUUID = None,
+      groupingKeySchema = unsupportedSchema,
+      batchTimestampMs = None,
+      eventTimeWatermarkForEviction = None)
+
+    val error = intercept[SparkUnsupportedOperationException] {
+      runner.compute(Iterator.empty, 0, mock(classOf[TaskContext]))
+    }
+    assert(error.getCondition === "UNSUPPORTED_FEATURE.PYTHON_STATE_CHAR_VARCHAR_SCHEMA")
+    assert(error.getMessageParameters.get("schemaKind") === "grouping key")
   }
 
   test("stop before startStateServer ran does not throw NPE") {

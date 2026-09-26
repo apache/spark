@@ -30,6 +30,7 @@ from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
     PySparkAttributeError,
+    PySparkNotImplementedError,
     PySparkPicklingError,
     PySparkTypeError,
     PythonException,
@@ -53,6 +54,7 @@ from pyspark.sql.functions import (
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
+    CharType,
     DataType,
     IntegerType,
     LongType,
@@ -62,6 +64,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    UserDefinedType,
     VariantVal,
 )
 from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
@@ -77,6 +80,87 @@ from pyspark.util import PythonEvalType, is_remote_only
 
 
 class BaseUDTFTestsMixin:
+    def test_char_varchar_return_types_unsupported(self):
+        class CharStorageUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return StructType([StructField("value", CharType(3))])
+
+            @classmethod
+            def module(cls):
+                return __name__
+
+            @classmethod
+            def scalaUDT(cls):
+                return ""
+
+            def serialize(self, obj):
+                return obj
+
+            def deserialize(self, datum):
+                return datum
+
+        nested_type = StructType([StructField("nested", ArrayType(CharType(3)))])
+
+        @udtf(returnType=nested_type, useArrow=False)
+        class NestedCharUDTF:
+            def eval(self):
+                yield (["a"],)
+
+        class UDTBackedCharUDTF:
+            def eval(self):
+                yield ({"value": "a"},)
+
+        with self.assertRaisesRegex(
+            PySparkNotImplementedError,
+            "CHAR/VARCHAR return type in Python UDTFs",
+        ):
+            NestedCharUDTF()
+
+        with self.assertRaisesRegex(
+            PySparkNotImplementedError,
+            "CHAR/VARCHAR return type in Python UDTFs",
+        ):
+            udtf(returnType=StructType([StructField("nested", CharStorageUDT())]))(
+                UDTBackedCharUDTF
+            )
+
+    def test_analyze_char_varchar_return_types_unsupported(self):
+        class CharStorageUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return StructType([StructField("value", CharType(3))])
+
+            @classmethod
+            def module(cls):
+                return __name__
+
+            @classmethod
+            def scalaUDT(cls):
+                return ""
+
+        @udtf(returnType=None, useArrow=False)
+        class DynamicNestedCharUDTF:
+            @staticmethod
+            def analyze() -> AnalyzeResult:
+                return AnalyzeResult(StructType([StructField("nested", ArrayType(CharType(3)))]))
+
+            def eval(self):
+                yield (["a"],)
+
+        @udtf(returnType=None, useArrow=False)
+        class DynamicUDTBackedCharUDTF:
+            @staticmethod
+            def analyze() -> AnalyzeResult:
+                return AnalyzeResult(StructType([StructField("nested", CharStorageUDT())]))
+
+            def eval(self):
+                yield ({"value": "a"},)
+
+        for function in (DynamicNestedCharUDTF, DynamicUDTBackedCharUDTF):
+            with self.assertRaisesRegex(Exception, "Python UDTFs do not support CHAR/VARCHAR"):
+                function().collect()
+
     def test_simple_udtf(self):
         class TestUDTF:
             def eval(self):

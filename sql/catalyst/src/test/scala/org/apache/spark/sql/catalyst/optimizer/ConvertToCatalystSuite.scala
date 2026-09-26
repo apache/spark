@@ -25,7 +25,13 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, DeleteFromTable, Filter, Join, JoinHint, LocalRelation, LogicalPlan, LogicalPlanIntegrity, Project, Sort}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, LongType}
+import org.apache.spark.sql.types.{
+  ArrayType,
+  BooleanType,
+  IntegerType,
+  LongType,
+  StringType,
+  VarcharType}
 
 /**
  * Unit tests for the ConvertToCatalyst optimizer rule, which rewrites
@@ -147,6 +153,23 @@ class ConvertToCatalystSuite extends PlanTest {
       val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
       assert(!result.isInstanceOf[TranspiledPythonUDF])
       assert(!result.isInstanceOf[PythonUDF])
+    }
+  }
+
+  test("preserves Python UDFs that own checked CHAR/VARCHAR semantics") {
+    transpileOn {
+      val input = $"s".string
+      val checkedUDF = PythonUDF(
+        "checked",
+        null,
+        StringType,
+        Seq(input),
+        PythonEvalType.SQL_BATCHED_UDF,
+        udfDeterministic = true,
+        charVarcharCheckedResultType = Some(VarcharType(3)))
+      val tpudf = makeTPUDF(checkedUDF, input)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
+      assert(result == checkedUDF)
     }
   }
 
@@ -380,6 +403,32 @@ class ConvertToCatalystSuite extends PlanTest {
         assert(converted.expressions.head.collect { case e if e == arg => e }.length == 1,
           s"Expected the one evaluation the Python UDF makes for $arg: $converted")
       }
+    }
+  }
+
+  test("keeps a nested call inside a checked CHAR/VARCHAR UDF in a lambda") {
+    transpileOn {
+      // The checked-result early return must use the same child walk as the other keepPython
+      // arms. The public applyExpr overload would drop inLambda and preEvaluate, so a nested
+      // call inside the lambda would be lowered to Catalyst.
+      val lambdaVar = NamedLambdaVariable("x", LongType, nullable = false)
+      val arr = AttributeReference("arr", ArrayType(LongType))()
+      val inner = makeTPUDF(makePyUDF(lambdaVar), Add(lambdaVar, Literal(4L)))
+      val checkedUDF = PythonUDF(
+        "checked",
+        null,
+        StringType,
+        Seq(inner),
+        PythonEvalType.SQL_BATCHED_UDF,
+        udfDeterministic = true,
+        charVarcharCheckedResultType = Some(VarcharType(3)))
+      val outer = makeTPUDF(checkedUDF, inner)
+      val body = ArrayTransform(arr, LambdaFunction(outer, Seq(lambdaVar)))
+      val converted = convert(Project(Seq(Alias(body, "v")()), LocalRelation(arr)))
+      assert(paramColumns(converted).isEmpty, s"Expected no column: $converted")
+      val pythonUdfs = converted.expressions.head.collect { case u: PythonUDF => u }
+      assert(pythonUdfs.length == 2, s"Expected both Python UDFs kept: $converted")
+      assert(pythonUdfs.exists(_.hasCharVarcharResult), s"Expected checked UDF kept: $converted")
     }
   }
 

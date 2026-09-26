@@ -24,7 +24,12 @@ import unittest
 from collections import namedtuple
 
 from pyspark import SparkConf
-from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
+from pyspark.errors import (
+    ArithmeticException,
+    PySparkNotImplementedError,
+    PySparkTypeError,
+    UnsupportedOperationException,
+)
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import assert_true, lit, rand, udf
 from pyspark.sql.pandas.types import (
@@ -38,6 +43,7 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     ByteType,
+    CharType,
     DateType,
     DayTimeIntervalType,
     DecimalType,
@@ -54,8 +60,11 @@ from pyspark.sql.types import (
     TimestampNTZType,
     TimestampType,
     TimeType,
+    UserDefinedType,
+    VarcharType,
     VariantType,
 )
+from pyspark.sql.utils import is_remote
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
@@ -1459,6 +1468,7 @@ class ArrowTestsMixin:
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
             df = self.spark.createDataFrame(pdf, schema)
 
+        self.assertEqual(df.schema, schema)
         self.assertEqual(df.collect(), data)
 
     def test_createDataFrame_arrow_duplicate_field_names(self):
@@ -1901,6 +1911,134 @@ class ArrowTestsMixin:
         self.assertEqual(len(pdf), 1)
         self.assertEqual(len(pdf["data"][0]), 0)
 
+    def test_char_varchar_explicit_schema_and_to_arrow(self):
+        schema = StructType(
+            [
+                StructField("c", CharType(4)),
+                StructField("s", StructType([StructField("v", VarcharType(3))])),
+                StructField("a", ArrayType(CharType(2))),
+            ]
+        )
+        values = [{"c": "ab", "s": {"v": "xyz"}, "a": ["z"]}]
+        inputs = [
+            pd.DataFrame(values),
+            pa.Table.from_pylist(values),
+        ]
+
+        # Connect intentionally rejects CHAR/VARCHAR in this default policy. Its positive support
+        # is covered by the standard and legacy policy cases below.
+        if not is_remote():
+            with self.sql_conf(
+                {
+                    "spark.sql.legacy.charVarcharAsString": "false",
+                    "spark.sql.preserveCharVarcharTypeInfo": "false",
+                    "spark.sql.charVarchar.standardSemantics.enabled": "false",
+                    "spark.sql.execution.arrow.pyspark.enabled": "true",
+                }
+            ):
+                for data in inputs:
+                    with self.subTest(input_type=type(data).__name__):
+                        default_df = self.spark.createDataFrame(data, schema)
+                        self.assertEqual(default_df.schema["c"].dataType, StringType())
+                        self.assertEqual(
+                            default_df.first(),
+                            Row(c="ab  ", s=Row(v="xyz"), a=["z "]),
+                        )
+                        self.assertEqual(default_df.toArrow().schema.field("c").type, pa.string())
+
+        with self.sql_conf(
+            {
+                "spark.sql.charVarchar.standardSemantics.enabled": "true",
+                "spark.sql.execution.arrow.pyspark.enabled": "true",
+            }
+        ):
+            for data in inputs:
+                with self.subTest(input_type=type(data).__name__):
+                    df = self.spark.createDataFrame(data, schema)
+                    self.assertEqual(df.schema, schema)
+                    self.assertEqual(
+                        df.first(),
+                        Row(c="ab  ", s=Row(v="xyz"), a=["z "]),
+                    )
+
+                    table = df.toArrow()
+                    self.assertEqual(table.schema.field("c").type, pa.string())
+                    self.assertEqual(table.schema.field("s").type.field("v").type, pa.string())
+                    self.assertEqual(table.schema.field("a").type.value_type, pa.string())
+                    self.assertEqual(
+                        table.to_pylist(),
+                        [{"c": "ab  ", "s": {"v": "xyz"}, "a": ["z "]}],
+                    )
+
+            invalid = pa.table({"c": ["abcd"]})
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                self.spark.createDataFrame(
+                    invalid, StructType([StructField("c", VarcharType(3))])
+                ).collect()
+
+        legacy_schema = StructType(
+            [
+                StructField("c", CharType(3)),
+                StructField("v", VarcharType(3)),
+            ]
+        )
+        legacy_inputs = [
+            pd.DataFrame({"c": ["a"], "v": ["abcd"]}),
+            pa.table({"c": ["a"], "v": ["abcd"]}),
+        ]
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+                "spark.sql.execution.arrow.pyspark.enabled": "true",
+            }
+        ):
+            for data in legacy_inputs:
+                with self.subTest(input_type=type(data).__name__):
+                    df = self.spark.createDataFrame(data, legacy_schema)
+                    self.assertEqual(
+                        df.schema,
+                        StructType().add("c", "string").add("v", "string"),
+                    )
+                    self.assertEqual(df.first(), Row(c="a", v="abcd"))
+                    self.assertEqual(df.toArrow().to_pylist(), [{"c": "a", "v": "abcd"}])
+
+    def test_to_arrow_char_varchar_udt_storage_is_unsupported(self):
+        class CharStorageUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return CharType(2)
+
+            @classmethod
+            def module(cls):
+                return __name__
+
+            @classmethod
+            def scalaUDT(cls):
+                return ""
+
+            def serialize(self, obj):
+                return obj
+
+            def deserialize(self, datum):
+                return datum
+
+        df = self.spark.createDataFrame([("a",)], "value string")
+        # Override the cached schema to exercise the Python toArrow preflight. The DataFrame
+        # cannot carry a UDT backed by CHAR because createDataFrame and JVM boundaries reject it.
+        overridden_schema = StructType([StructField("value", CharStorageUDT())])
+        if is_remote():
+            df.__dict__["_cached_schema"] = overridden_schema
+            df.__dict__["_cached_schema_serialized"] = None
+        else:
+            df.__dict__["schema"] = overridden_schema
+        with self.assertRaisesRegex(
+            PySparkNotImplementedError,
+            "CHAR/VARCHAR inside toArrow UDT schema",
+        ):
+            df.toArrow()
+
     def test_toPandas_array_of_map_empty_outer(self):
         schema = StructType([StructField("data", ArrayType(MapType(StringType(), StringType())))])
         df = self.spark.createDataFrame([Row(data=[])], schema=schema)
@@ -1935,7 +2073,90 @@ class ArrowTestsMixin:
     pandas_requirement_message or pyarrow_requirement_message,
 )
 class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
-    pass
+    # These CHAR/VARCHAR cases are Classic-only: they force the RDD createDataFrame path via
+    # localRelationThreshold=0 and exercise DataFrame.__arrow_c_stream__. They live here rather
+    # than in `ArrowTestsMixin` so the Connect parity suite does not inherit them.
+    def test_char_varchar_arrow_rdd_threshold(self):
+        with self.sql_conf(
+            {
+                "spark.sql.charVarchar.standardSemantics.enabled": "true",
+                "spark.sql.execution.arrow.pyspark.enabled": "true",
+                "spark.sql.execution.arrow.localRelationThreshold": "0",
+            }
+        ):
+            rdd_df = self.spark.createDataFrame(
+                pa.table({"c": ["a"]}),
+                StructType([StructField("c", CharType(3))]),
+            )
+            self.assertEqual(rdd_df.first(), Row(c="a  "))
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                self.spark.createDataFrame(
+                    pa.table({"v": ["abcd"]}),
+                    StructType([StructField("v", VarcharType(3))]),
+                ).collect()
+
+        legacy_schema = StructType(
+            [
+                StructField("c", CharType(3)),
+                StructField("v", VarcharType(3)),
+            ]
+        )
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+                "spark.sql.execution.arrow.pyspark.enabled": "true",
+                "spark.sql.execution.arrow.localRelationThreshold": "0",
+            }
+        ):
+            df = self.spark.createDataFrame(pa.table({"c": ["a"], "v": ["abcd"]}), legacy_schema)
+            self.assertEqual(
+                df.schema,
+                StructType().add("c", "string").add("v", "string"),
+            )
+            self.assertEqual(df.first(), Row(c="a", v="abcd"))
+
+    def test_arrow_c_stream_char_varchar_is_unsupported(self):
+        schema = StructType([StructField("value", ArrayType(CharType(2)))])
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            df = self.spark.createDataFrame([(["a"],)], schema)
+
+        with self.assertRaisesRegex(
+            PySparkNotImplementedError,
+            "CHAR/VARCHAR in DataFrame.__arrow_c_stream__ schema",
+        ):
+            df.__arrow_c_stream__()
+
+    def test_arrow_c_stream_char_varchar_udt_storage_is_unsupported(self):
+        class CharStorageUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return CharType(2)
+
+            @classmethod
+            def module(cls):
+                return __name__
+
+            @classmethod
+            def scalaUDT(cls):
+                return ""
+
+            def serialize(self, obj):
+                return obj
+
+            def deserialize(self, datum):
+                return datum
+
+        df = self.spark.createDataFrame([("a",)], "value string")
+        # Override the cached schema to exercise the Python C-stream preflight. The JVM DataFrame
+        # cannot carry a UDT backed by CHAR because JVM-side boundaries reject it first.
+        df.__dict__["schema"] = StructType([StructField("value", CharStorageUDT())])
+        with self.assertRaisesRegex(
+            PySparkNotImplementedError,
+            "CHAR/VARCHAR in DataFrame.__arrow_c_stream__ schema",
+        ):
+            df.__arrow_c_stream__()
 
 
 @unittest.skipIf(

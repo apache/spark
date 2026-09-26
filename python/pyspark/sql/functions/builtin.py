@@ -34199,6 +34199,27 @@ def udaf(agg: "Aggregator") -> "UserDefinedFunctionLike":
             messageParameters={"field_names": ", ".join(duplicates)},
         )
 
+    from pyspark.errors import PySparkNotImplementedError
+    from pyspark.sql.types import (
+        CharType,
+        VarcharType,
+        _has_char_varchar_in_udt,
+        _has_logical_type,
+    )
+
+    if _has_logical_type(agg.bufferSchema, (CharType, VarcharType)) or _has_char_varchar_in_udt(
+        agg.bufferSchema
+    ):
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={
+                "feature": (
+                    "CHAR/VARCHAR in incremental Python aggregator bufferSchema: "
+                    f"{agg.bufferSchema}"
+                )
+            },
+        )
+
     # ``bufferSchema`` is a first-class ``UserDefinedFunction`` field (threaded to the JVM in
     # ``_create_judf`` so ``PythonAggregate`` can plan the two-stage aggregation), so it survives
     # ``_wrapped()`` and ``spark.udf.register`` without being re-attached.

@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonAggregate, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, TranspiledPythonUDF, TranspiledUDFParameter, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.ColumnConversions
@@ -86,6 +87,9 @@ case class UserDefinedPythonFunction(
     val optionInputTypes: List[List[String]] =
       transpiledInputTypes.asScala.map(_.asScala.toList).toList
 
+    if (CharVarcharUtils.hasCharVarcharInUDT(dataType)) {
+      throw QueryCompilationErrors.invalidPythonUDFReturnType(dataType)
+    }
 
     val udfExpr = if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
@@ -106,9 +110,32 @@ case class UserDefinedPythonFunction(
           throw QueryCompilationErrors.invalidIncrementalPythonAggregatorBufferError(
             name, bufferType)
       }
+      if (CharVarcharUtils.physicalTypeHasCharVarchar(bufferStruct)) {
+        throw QueryCompilationErrors.invalidPythonAggregatorBufferType(bufferStruct)
+      }
       PythonAggregate(name, func, dataType, e, udfDeterministic, bufferStruct)
     } else {
-      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
+      val conf = SQLConf.get
+      val resolvedDataType = if (conf.charVarcharFirstClassTypes) {
+        dataType
+      } else {
+        CharVarcharUtils.replaceCharVarcharWithString(dataType)
+      }
+      val charVarcharCheckedResultType =
+        if (CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf) &&
+            CharVarcharUtils.hasCharVarchar(dataType)) {
+          Some(dataType)
+        } else {
+          None
+        }
+      PythonUDF(
+        name,
+        func,
+        resolvedDataType,
+        e,
+        pythonEvalType,
+        udfDeterministic,
+        charVarcharCheckedResultType = charVarcharCheckedResultType)
     }
     // The ``_udf_param_N`` substitution below is positional, so a UDF
     // call site that supplied named arguments (e.g. SQL ``name => val``
@@ -211,6 +238,12 @@ case class UserDefinedPythonTableFunction(
     pythonEvalType: Int,
     udfDeterministic: Boolean) {
 
+  private def validateReturnType(schema: StructType): Unit = {
+    if (CharVarcharUtils.physicalTypeHasCharVarchar(schema)) {
+      throw QueryCompilationErrors.invalidPythonUDTFReturnType(schema)
+    }
+  }
+
   def this(
       name: String,
       func: PythonFunction,
@@ -248,6 +281,7 @@ case class UserDefinedPythonTableFunction(
 
     val udtf = returnType match {
       case Some(rt) =>
+        validateReturnType(rt)
         PythonUDTF(
           name = name,
           func = func,
@@ -261,7 +295,9 @@ case class UserDefinedPythonTableFunction(
         val runAnalyzeInPython = (func: PythonFunction, exprs: Seq[Expression]) => {
           val runner =
             new UserDefinedPythonTableFunctionAnalyzeRunner(name, func, exprs, tableArgs, parser)
-          runner.runInPython()
+          val analyzeResult = runner.runInPython()
+          validateReturnType(analyzeResult.schema)
+          analyzeResult
         }
         UnresolvedPolymorphicPythonUDTF(
           name = name,

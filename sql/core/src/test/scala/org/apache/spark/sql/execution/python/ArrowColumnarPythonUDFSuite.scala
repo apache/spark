@@ -17,11 +17,23 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.SparkRuntimeException
+import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.functions.{array, col, transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types._
+
+private[python] object ArrowColumnarPythonUDFSuite {
+  class StringStorageUDT extends UserDefinedType[String] {
+    override def sqlType: DataType = StringType
+    override def serialize(value: String): Any = value
+    override def deserialize(value: Any): String = value.toString
+    override def userClass: Class[String] = classOf[String]
+  }
+}
 
 /**
  * End-to-end tests for the Arrow columnar Python UDF input path.
@@ -32,6 +44,7 @@ import org.apache.spark.sql.types.StringType
  */
 class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
 
+  import ArrowColumnarPythonUDFSuite.StringStorageUDT
   import IntegratedUDFTestUtils._
 
   private val arrowSource =
@@ -100,6 +113,236 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         assert(row.getString(1) == i.toString,
           s"UDF result mismatch at row $i")
       }
+    }
+  }
+
+  test("Arrow-backed source: CHAR/VARCHAR output checks") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charUDF = TestTypedScalarPandasUDF(
+        name = "arrow_char_udf", returnType = CharType(4))
+      val varcharUDF = TestTypedScalarPandasUDF(
+        name = "arrow_varchar_udf", returnType = VarcharType(3))
+      registerTestUDF(charUDF, spark)
+      registerTestUDF(varcharUDF, spark)
+
+      val df = readArrowSource(numRows = 10)
+      val padded = df.selectExpr(
+        "id", "name", "value", "data",
+        "arrow_char_udf(id) as udf_id")
+      val arrowExec = collectNodes[ArrowEvalPythonExec](
+        padded.queryExecution.executedPlan).head
+      assert(arrowExec.child.supportsColumnar,
+        "ArrowEvalPythonExec should retain its Arrow-backed columnar child")
+      assert(padded.collect().map(_.getString(4)).toSeq ===
+        (0 until 10).map(_.toString.padTo(4, ' ').mkString))
+
+      val exception = intercept[SparkRuntimeException] {
+        df.selectExpr(
+          "id", "name", "value", "data",
+          "arrow_varchar_udf(name) as udf_name").collect()
+      }
+      assert(exception.getMessage.contains("EXCEED_LIMIT_LENGTH"))
+    }
+  }
+
+  test("Arrow-backed source: row queue preserves ordinary UDT sibling") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charUDF = TestTypedScalarPandasUDF(
+        name = "row_queue_char_udf", returnType = CharType(4))
+      val udtUDF = TestTypedScalarPandasUDF(
+        name = "row_queue_udt_udf", returnType = new StringStorageUDT())
+      registerTestUDF(charUDF, spark)
+      registerTestUDF(udtUDF, spark)
+
+      val result = readArrowSource(numRows = 3).selectExpr(
+        "id", "name", "value", "data",
+        "row_queue_char_udf(id) as char_result",
+        "row_queue_udt_udf(id) as udt_result")
+      val arrowExec = collectNodes[ArrowEvalPythonExec](result.queryExecution.executedPlan).head
+
+      assert(!ColumnarArrowEvalPythonEvaluatorFactory.canUseArrowColumnar(
+        Some(Array(0, 0)), isArrow = true, arrowExec.udfs))
+      assert(result.schema("udt_result").dataType.isInstanceOf[StringStorageUDT])
+      assert(result.collect().map(row => (row.getString(4), row.getString(5))).toSeq ===
+        Seq(("0   ", "0"), ("1   ", "1"), ("2   ", "2")))
+    }
+  }
+
+  test("Arrow-backed source: default policy exposes checked CHAR/VARCHAR output as STRING") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val charUDF = TestTypedScalarPandasUDF(
+        name = "default_arrow_char_udf", returnType = CharType(4))
+      registerTestUDF(charUDF, spark)
+
+      val result = readArrowSource(numRows = 1)
+        .selectExpr("default_arrow_char_udf(id) as udf_id")
+
+      assert(result.schema.head.dataType === StringType)
+      assert(result.head().getString(0) === "0   ")
+    }
+  }
+
+  test("Arrow-backed source: higher-order CHAR/VARCHAR output checks") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charUDF = TestTypedScalarPandasUDF(
+        name = "arrow_hof_char_udf", returnType = CharType(4))
+      val varcharUDF = TestTypedScalarPandasUDF(
+        name = "arrow_hof_varchar_udf", returnType = VarcharType(3))
+      registerTestUDF(charUDF, spark)
+      registerTestUDF(varcharUDF, spark)
+
+      val df = readArrowSource(numRows = 10)
+      val padded = df.selectExpr(
+        "id", "name", "value", "data",
+        "transform(array(id), x -> arrow_hof_char_udf(x)) as udf_values")
+      val arrowExec = collectNodes[ArrowEvalPythonExec](
+        padded.queryExecution.executedPlan).head
+      assert(arrowExec.child.supportsColumnar,
+        "ArrowEvalPythonExec should retain its Arrow-backed columnar child")
+      assert(padded.collect().map(_.getSeq[String](4)).toSeq ===
+        (0 until 10).map(index => Seq(index.toString.padTo(4, ' ').mkString)))
+
+      val exception = intercept[SparkRuntimeException] {
+        df.selectExpr(
+          "id", "name", "value", "data",
+          "transform(array(name), x -> arrow_hof_varchar_udf(x)) as udf_values").collect()
+      }
+      assert(exception.getMessage.contains("EXCEED_LIMIT_LENGTH"))
+    }
+  }
+
+  test("Arrow-backed source: nested checked output keeps unchecked sibling ordinal") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charUDF = TestTypedScalarPandasUDF(
+        name = "mixed_nested_char_udf", returnType = CharType(4))
+      val varcharUDF = TestTypedScalarPandasUDF(
+        name = "mixed_unchecked_varchar_udf", returnType = VarcharType(3))
+      registerTestUDF(charUDF, spark)
+      registerTestUDF(varcharUDF, spark)
+
+      val checkedNested =
+        transform(array(col("id")), value => charUDF(value)).as("checked_nested")
+      val unchecked = withSQLConf(
+          SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        varcharUDF(col("name")).as("unchecked")
+      }
+      val result = readArrowSource(numRows = 2).select(
+        col("id"),
+        col("name"),
+        col("value"),
+        col("data"),
+        checkedNested,
+        unchecked,
+        varcharUDF(col("id")).as("checked"))
+      val arrowExec = collectNodes[ArrowEvalPythonExec](result.queryExecution.executedPlan).head
+
+      assert(arrowExec.child.supportsColumnar)
+      assert(result.schema("checked_nested").dataType === ArrayType(CharType(4)))
+      assert(result.schema("unchecked").dataType === StringType)
+      assert(result.schema("checked").dataType === VarcharType(3))
+      assert(result.collect()
+        .map(row => (row.getSeq[String](4), row.getString(5), row.getString(6))).toSeq ===
+        Seq((Seq("0   "), "row_0", "0"), (Seq("1   "), "row_1", "1")))
+
+      val exception = intercept[SparkRuntimeException] {
+        readArrowSource(numRows = 1).select(
+          col("id"),
+          col("name"),
+          col("value"),
+          col("data"),
+          checkedNested,
+          unchecked,
+          varcharUDF(col("name")).as("checked")).collect()
+      }
+      assert(exception.getMessage.contains("EXCEED_LIMIT_LENGTH"))
+    }
+  }
+
+  test("Arrow-backed source: legacy CHAR/VARCHAR output remains unchecked") {
+    assume(shouldTestPandasUDFs)
+    withSparkEnvConfs(PYTHON_UDF_PIPELINED_EXECUTION.key -> "true") {
+      withSQLConf(
+          SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+          SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true",
+          SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        val charUDF = TestTypedScalarPandasUDF(
+          name = "legacy_arrow_char_udf", returnType = CharType(4))
+        val varcharUDF = TestTypedScalarPandasUDF(
+          name = "legacy_arrow_varchar_udf", returnType = VarcharType(3))
+        registerTestUDF(charUDF, spark)
+        registerTestUDF(varcharUDF, spark)
+
+        val result = readArrowSource(numRows = 10).selectExpr(
+          "id", "name", "value", "data",
+          "legacy_arrow_char_udf(id) as udf_id",
+          "legacy_arrow_varchar_udf(name) as udf_name")
+        val arrowExec = collectNodes[ArrowEvalPythonExec](
+          result.queryExecution.executedPlan).head
+        assert(arrowExec.child.supportsColumnar,
+          "ArrowEvalPythonExec should retain its Arrow-backed columnar child")
+
+        val rows = result.collect()
+        rows.zipWithIndex.foreach { case (row, index) =>
+          assert(row.getString(4) === index.toString)
+          assert(row.getString(5) === s"row_$index")
+        }
+      }
+    }
+  }
+
+  test("Arrow-backed source: legacy CHAR/VARCHAR output keeps optimized route with UDT") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val charUDF = TestTypedScalarPandasUDF(
+        name = "optimized_char_udf", returnType = CharType(4))
+      val udtUDF = TestTypedScalarPandasUDF(
+        name = "optimized_udt_udf", returnType = new StringStorageUDT())
+      registerTestUDF(charUDF, spark)
+      registerTestUDF(udtUDF, spark)
+
+      val result = readArrowSource(numRows = 2).selectExpr(
+        "id", "name", "value", "data",
+        "optimized_char_udf(id) as char_result",
+        "optimized_udt_udf(id) as udt_result")
+      val arrowExec = collectNodes[ArrowEvalPythonExec](result.queryExecution.executedPlan).head
+
+      assert(ColumnarArrowEvalPythonEvaluatorFactory.canUseArrowColumnar(
+        Some(Array(0, 0)), isArrow = true, arrowExec.udfs))
+      assert(result.schema("char_result").dataType === StringType)
+      assert(result.schema("udt_result").dataType.isInstanceOf[StringStorageUDT])
+      assert(result.collect().map(row => (row.getString(4), row.getString(5))).toSeq ===
+        Seq(("0", "0"), ("1", "1")))
     }
   }
 

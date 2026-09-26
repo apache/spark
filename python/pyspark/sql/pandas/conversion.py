@@ -31,7 +31,7 @@ from typing import (
 )
 from warnings import warn
 
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkNotImplementedError, PySparkTypeError, PySparkValueError
 from pyspark.errors.exceptions.captured import unwrap_spark_exception
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.pandas.types import _dedup_names
@@ -43,6 +43,7 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
     _create_row,
+    _has_char_varchar_in_udt,
     _has_type,
 )
 from pyspark.traceback_utils import SCCallSiteSync
@@ -470,6 +471,13 @@ class PandasConversionMixin:
         from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
         require_minimum_pyarrow_version()
+        if _has_char_varchar_in_udt(self.schema):
+            raise PySparkNotImplementedError(
+                errorClass="NOT_IMPLEMENTED",
+                messageParameters={
+                    "feature": f"CHAR/VARCHAR inside toArrow UDT schema: {self.schema}"
+                },
+            )
 
         (
             arrowUseLargeVarTypes,

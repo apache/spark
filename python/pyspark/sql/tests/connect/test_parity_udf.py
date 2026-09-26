@@ -46,6 +46,10 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_same_accumulator_in_udfs(self):
         super().test_same_accumulator_in_udfs()
 
+    @unittest.skip("Spark Connect resolves both UDFs when the plan is submitted.")
+    def test_char_varchar_mixed_captured_policies_in_one_batch(self):
+        super().test_char_varchar_mixed_captured_policies_in_one_batch()
+
     @unittest.skip("Spark Connect does not support broadcast but the test depends on it.")
     def test_broadcast_in_udf(self):
         super().test_broadcast_in_udf()

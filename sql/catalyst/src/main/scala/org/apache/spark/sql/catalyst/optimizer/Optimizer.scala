@@ -1316,7 +1316,13 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         def keepPython: Expression = s.pythonUDFExpr.mapChildren(recurse(_, parentIsUdf = true))
         // We _shouldn't_ have these nodes if ANSI is not enabled or transpilation is disabled
         // but if someone changed it while running we'll want to strip the nodes out.
-        if (!conf.getConf(SQLConf.ANSI_ENABLED)) {
+        val hasCheckedCharVarcharResult = s.pythonUDFExpr match {
+          case udf: PythonUDF => udf.hasCharVarcharResult
+          case _ => false
+        }
+        if (hasCheckedCharVarcharResult) {
+          keepPython
+        } else if (!conf.getConf(SQLConf.ANSI_ENABLED)) {
           logWarning(log"Skipping Python UDF transpilation: " +
             log"${MDC(LogKeys.CONFIG, SQLConf.ANSI_ENABLED.key)} is disabled. The transpiler " +
             log"targets ANSI semantics and refuses to rewrite plans under non-ANSI mode. " +

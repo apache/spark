@@ -441,7 +441,10 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
         // `PythonUDF.liftedElementwiseEvalType`.
         PythonUDF.liftedElementwiseEvalType(udf.evalType),
         udf.udfDeterministic,
-        elementwiseNestingDepth = newDepth)
+        elementwiseNestingDepth = newDepth,
+        charVarcharCheckedResultType = udf.charVarcharCheckedResultType.map { checked =>
+          ArrayType(checked, containsNull = true)
+        })
       val signature: Expression = if (udf.udfDeterministic) lifted.canonicalized else lifted
       val ordinal = ordinalBySignature.getOrElseUpdate(signature, {
         val o = distinctLifted.length

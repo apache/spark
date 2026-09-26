@@ -19,8 +19,16 @@ from typing import Iterator, Optional
 import pyarrow as pa
 
 import pyspark.sql
+from pyspark.errors import PySparkNotImplementedError
 from pyspark.sql.pandas.types import to_arrow_schema
-from pyspark.sql.types import BinaryType, StructField, StructType
+from pyspark.sql.types import (
+    BinaryType,
+    CharType,
+    StructField,
+    StructType,
+    VarcharType,
+    _has_physical_type,
+)
 
 
 def _get_arrow_array_partition_stream(df: pyspark.sql.DataFrame) -> Iterator[pa.RecordBatch]:
@@ -76,6 +84,13 @@ class SparkArrowCStreamer:
     """
 
     def __init__(self, df: pyspark.sql.DataFrame):
+        if _has_physical_type(df.schema, (CharType, VarcharType)):
+            raise PySparkNotImplementedError(
+                errorClass="NOT_IMPLEMENTED",
+                messageParameters={
+                    "feature": f"CHAR/VARCHAR in DataFrame.__arrow_c_stream__ schema: {df.schema}"
+                },
+            )
         self._df = df
         self._schema = to_arrow_schema(df.schema)
 

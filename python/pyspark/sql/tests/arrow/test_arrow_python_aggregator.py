@@ -17,7 +17,7 @@
 import unittest
 from decimal import Decimal
 
-from pyspark.errors import AnalysisException, PySparkValueError
+from pyspark.errors import AnalysisException, PySparkNotImplementedError, PySparkValueError
 from pyspark.sql import functions as sf
 from pyspark.sql.types import (
     DecimalType,
@@ -25,6 +25,7 @@ from pyspark.sql.types import (
     LongType,
     StructField,
     StructType,
+    VarcharType,
 )
 from pyspark.sql.window import Window
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -129,6 +130,34 @@ class ArrowPythonAggregatorTestsMixin:
         got = {r["k"]: r["m"] for r in result}
         exp = {r["k"]: r["m"] for r in expected}
         self.assertEqual(got, exp)
+
+    def test_incremental_aggregator_char_varchar_buffer_is_unsupported(self):
+        class CharBuffer(Aggregator):
+            @property
+            def bufferSchema(self):
+                return StructType([StructField("value", VarcharType(3))])
+
+            @property
+            def outputType(self):
+                return DoubleType()
+
+            def zero(self):
+                return ("",)
+
+            def reduce(self, buffer, value):
+                return buffer
+
+            def merge(self, b1, b2):
+                return b1
+
+            def finish(self, buffer):
+                return 0.0
+
+        with self.assertRaisesRegex(
+            PySparkNotImplementedError,
+            "CHAR/VARCHAR in incremental Python aggregator bufferSchema",
+        ):
+            udaf(CharBuffer())
 
     def test_incremental_aggregator_no_group(self):
         df = self._data()

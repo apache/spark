@@ -88,7 +88,7 @@ from pyspark.sql.dataframe import (
 from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.table_arg import TableArg
-from pyspark.sql.types import Row, StructType, _create_row
+from pyspark.sql.types import Row, StructType, _create_row, _has_char_varchar_in_udt
 from pyspark.storagelevel import StorageLevel
 from pyspark.util import PythonEvalType, is_remote_only
 
@@ -2004,6 +2004,13 @@ class DataFrame(ParentDataFrame):
         return (table, schema)
 
     def toArrow(self) -> "pa.Table":
+        if _has_char_varchar_in_udt(self.schema):
+            raise PySparkNotImplementedError(
+                errorClass="NOT_IMPLEMENTED",
+                messageParameters={
+                    "feature": f"CHAR/VARCHAR inside toArrow UDT schema: {self.schema}"
+                },
+            )
         schema = to_arrow_schema(
             self.schema,
             error_on_duplicated_field_names_in_struct=True,
