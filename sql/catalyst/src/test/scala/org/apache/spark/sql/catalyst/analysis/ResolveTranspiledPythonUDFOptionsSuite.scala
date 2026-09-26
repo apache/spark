@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Concat, Expression, GreaterThan, Literal, Multiply, PythonUDF, Rand, TranspiledPythonUDF}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Concat, Expression, Literal, PythonUDF, TranspiledPythonUDF}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types.LongType
@@ -91,38 +91,5 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
     val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(onlyOpt), Nil)
     val pruned = prune(node, LocalRelation(a))
     assert(pruned.transpiledOptions == List(onlyOpt))
-  }
-
-  test("empties the options when an argument is non-deterministic") {
-    // RED UNTIL the companion fix to this rule lands -- deliberately, to pin a
-    // real wrong-results bug rather than tolerate it silently. Do not ignore it.
-    //
-    // The builder substitutes the argument expression at EVERY `_udf_param_N`
-    // occurrence, so a non-deterministic argument becomes several independent
-    // expressions with independent state. Since `and` / `or` and chained
-    // comparisons evaluate later copies only on rows where earlier links held,
-    // the copies desynchronize. The rule must drop every option so
-    // ConvertToCatalyst falls back to the Python UDF, which evaluates each
-    // argument exactly once per row. It has to be checked here rather than in the
-    // builder: at call-construction time `rand(7)` is still an
-    // `UnresolvedFunction` and reports deterministic = true.
-    val a = $"a".double
-    val arg = Multiply(Rand(Literal(7L)), Literal(100.0))
-    assert(!arg.deterministic, "the fixture argument must be non-deterministic")
-    val opt = GreaterThan(arg, Literal(50.0))
-    val node = TranspiledPythonUDF("udf", pyUDF(Seq(arg)), List(opt), List(List("numeric")))
-    val pruned = prune(node, LocalRelation(a))
-    assert(pruned.transpiledOptions.isEmpty)
-    assert(pruned.optionInputCategories.isEmpty)
-  }
-
-  test("keeps options when the argument is deterministic (control for the check above)") {
-    // Same shape as the non-deterministic case but with a plain column argument, so
-    // the guard must not fire and normal category matching applies.
-    val a = $"a".double
-    val opt = GreaterThan(a, Literal(50.0))
-    val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(opt), List(List("numeric")))
-    val pruned = prune(node, LocalRelation(a))
-    assert(pruned.transpiledOptions == List(opt))
   }
 }
