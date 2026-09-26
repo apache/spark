@@ -34,7 +34,7 @@ case class ShowTablePropertiesExec(
     import scala.jdk.CollectionConverters._
 
     // The reserved properties are accessible through DESCRIBE
-    val properties = conf.redactOptions(catalogTable.properties.asScala.toMap)
+    val properties = conf.redactOptions(catalogTable.displayProperties.asScala.toMap)
       .filter { case (k, _) => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(k) }
     propertyKey match {
       case Some(p) =>
