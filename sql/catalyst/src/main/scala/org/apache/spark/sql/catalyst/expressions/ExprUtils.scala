@@ -65,6 +65,9 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
         StringTypeWithCollation(supportsTrimCollation = true),
         StringTypeWithCollation(supportsTrimCollation = true))
         .acceptsType(m.dataType) =>
+      if (!m.foldable) {
+        throw QueryCompilationErrors.nonFoldableOptionError()
+      }
       val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
       ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
         if (key == null) {

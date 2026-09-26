@@ -439,6 +439,21 @@ class CsvFunctionsSuite extends SharedSparkSession {
     checkAnswer(df1.selectExpr("to_csv(a)"), Row("1") :: Nil)
   }
 
+  test("to_csv with non-foldable options") {
+    val df = Seq((Tuple1(1), ",")).toDF("a", "delimiter")
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("to_csv(a, map('delimiter', delimiter))")
+      },
+      condition = "INVALID_OPTIONS.NON_FOLDABLE",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "to_csv(a, map('delimiter', delimiter))",
+        start = 0,
+        stop = 37))
+  }
+
   test("parse timestamps with locale") {
     Seq("en-US", "ko-KR", "zh-CN", "ru-RU").foreach { langTag =>
       val locale = Locale.forLanguageTag(langTag)
