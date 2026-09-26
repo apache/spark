@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.Exists
+import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -181,6 +182,212 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
           Row(6, 0, "hr"))) // insert
 
       checkReplacedPartitions(Seq("hr"))
+    }
+  }
+
+  test("merge pushes conditional NOT MATCHED BY SOURCE predicates to target") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "finance" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 3, 6).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      // every NOT MATCHED BY SOURCE clause is conditional, so the ON condition and that clause's
+      // condition can be pushed to the target table as a disjunction; a target row satisfying
+      // neither is only carried over, so its group doesn't have to be read at all
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk AND t.dep IN ('hr', 'finance')
+             |WHEN MATCHED THEN
+             | UPDATE SET t.salary = t.salary + 1
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, 0, 'hr')
+             |WHEN NOT MATCHED BY SOURCE AND t.dep IN ('hr', 'finance') THEN
+             | DELETE
+             |""".stripMargin)
+      }
+
+      assert(cond.sql == "(t.dep IN ('hr', 'finance'))", s"unexpected pushable condition: $cond")
+      assert(groupFilterCond.isEmpty, "runtime group filtering must stay disabled")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 101, "hr"), // update
+          Row(2, 200, "software"), // unchanged, never read
+          Row(3, 301, "finance"), // update
+          Row(6, 0, "hr"))) // insert
+
+      // "software" can match neither the ON condition nor the NOT MATCHED BY SOURCE condition,
+      // so the pushed predicate keeps that group out of the scan and out of the rewrite
+      checkReplacedPartitions(Seq("hr", "finance"))
+    }
+  }
+
+  test("merge with unmatched ON condition pushes NOT MATCHED BY SOURCE predicates to target") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "finance" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(5, 6).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      // this mirrors a "replace where" command: the ON condition never matches, so all source
+      // rows are inserted and target rows are deleted only where the NOT MATCHED BY SOURCE
+      // condition holds, which is exactly the predicate that ends up pushed to the target
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON 1 = 0
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, 0, 'new')
+             |WHEN NOT MATCHED BY SOURCE AND t.dep IN ('hr', 'finance') THEN
+             | DELETE
+             |""".stripMargin)
+      }
+
+      assert(cond.sql == "(t.dep IN ('hr', 'finance'))", s"unexpected pushable condition: $cond")
+      assert(groupFilterCond.isEmpty, "runtime group filtering must stay disabled")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(2, 200, "software"), // unchanged, never read
+          Row(5, 0, "new"), // insert
+          Row(6, 0, "new"))) // insert
+
+      checkReplacedPartitions(Seq("hr", "finance"))
+    }
+  }
+
+  test("merge pushes only target predicates of the ON condition to target") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "finance" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 3, 6).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      // the ON condition mixes a join predicate with a target predicate, only the latter can be
+      // pushed as part of the disjunction, keeping the join predicate would make the whole
+      // disjunction reference the source and so unusable as a target filter
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk AND t.dep = 'hr'
+             |WHEN MATCHED THEN
+             | UPDATE SET t.salary = t.salary + 1
+             |WHEN NOT MATCHED BY SOURCE AND t.dep = 'finance' THEN
+             | DELETE
+             |""".stripMargin)
+      }
+
+      assert(
+        cond.sql == "((t.dep = 'hr') OR (t.dep = 'finance'))",
+        s"unexpected pushable condition: $cond")
+      assert(groupFilterCond.isEmpty, "runtime group filtering must stay disabled")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 101, "hr"), // update
+          Row(2, 200, "software"))) // unchanged
+    }
+  }
+
+  test("merge pushes predicates of all NOT MATCHED BY SOURCE clauses to target") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "finance" }
+          |{ "pk": 4, "salary": 400, "dep": "support" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 6).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      // a target row must be read if it can match any clause, so the conditions of all
+      // NOT MATCHED BY SOURCE clauses join the target part of the ON condition
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk AND t.dep = 'hr'
+             |WHEN MATCHED THEN
+             | UPDATE SET t.salary = t.salary + 1
+             |WHEN NOT MATCHED BY SOURCE AND t.dep = 'finance' THEN
+             | DELETE
+             |WHEN NOT MATCHED BY SOURCE AND t.dep = 'support' THEN
+             | UPDATE SET t.salary = 0
+             |""".stripMargin)
+      }
+
+      assert(
+        cond.sql == "(((t.dep = 'hr') OR (t.dep = 'finance')) OR (t.dep = 'support'))",
+        s"unexpected pushable condition: $cond")
+      assert(groupFilterCond.isEmpty, "runtime group filtering must stay disabled")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 101, "hr"), // update
+          Row(2, 200, "software"), // unchanged
+          Row(4, 0, "support"))) // update by NOT MATCHED BY SOURCE
+    }
+  }
+
+  test("merge does not push predicates with an unconditional NOT MATCHED BY SOURCE clause") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "finance" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 6).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      // an unconditional NOT MATCHED BY SOURCE clause matches every target row that the ON
+      // condition doesn't, so no row can be skipped and the whole table has to be read
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk AND t.dep = 'hr'
+             |WHEN MATCHED THEN
+             | UPDATE SET t.salary = t.salary + 1
+             |WHEN NOT MATCHED BY SOURCE AND t.dep = 'finance' THEN
+             | UPDATE SET t.salary = 0
+             |WHEN NOT MATCHED BY SOURCE THEN
+             | DELETE
+             |""".stripMargin)
+      }
+
+      assert(cond == TrueLiteral, s"unexpected pushable condition: $cond")
+      assert(groupFilterCond.isEmpty, "runtime group filtering must stay disabled")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 101, "hr"), // update
+          Row(3, 0, "finance"))) // update by NOT MATCHED BY SOURCE
+
+      checkReplacedPartitions(Seq("hr", "software", "finance"))
     }
   }
 
