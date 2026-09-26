@@ -875,4 +875,185 @@ public abstract class AbstractBytesToBytesMapSuite {
     }
   }
 
+  @Test
+  public void operationsAfterFreeFail() {
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
+    final long[] key = new long[]{1L};
+    try {
+      BytesToBytesMap.Location loc = map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8);
+      map.free();
+      assertThrows(IllegalStateException.class, map::reset);
+      assertThrows(
+        IllegalStateException.class,
+        () -> map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8));
+      assertThrows(
+        IllegalStateException.class,
+        () -> loc.append(key, Platform.LONG_ARRAY_OFFSET, 8, key, Platform.LONG_ARRAY_OFFSET, 8));
+      assertThrows(IllegalStateException.class, map::getArray);
+      assertThrows(IllegalStateException.class, map::maxNumKeysIndex);
+      assertEquals(0L, taskMemoryManager.getMemoryConsumptionForThisTask());
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
+  public void configuredKeyOperationsRejectLookupAfterFree() {
+    BytesToBytesMap.KeyOperationsFactory keyOperationsFactory =
+      () -> new BytesToBytesMap.KeyOperations() {
+        @Override
+        public int hash(Object base, long offset, int length) {
+          return 0;
+        }
+
+        @Override
+        public boolean equals(
+            Object leftBase,
+            long leftOffset,
+            int leftLength,
+            Object rightBase,
+            long rightOffset,
+            int rightLength) {
+          return false;
+        }
+      };
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, 64, PAGE_SIZE_BYTES, keyOperationsFactory);
+    final long[] key = new long[]{1L};
+    try {
+      map.free();
+      assertThrows(
+        IllegalStateException.class,
+        () -> map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8));
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
+  public void operationsAfterDestructiveIterationFail() {
+    memoryManager.limit(PAGE_SIZE_BYTES);
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
+    final long[] key = new long[]{1L};
+    try {
+      map.destructiveIterator();
+      assertThrows(IllegalStateException.class, map::reset);
+      assertThrows(
+        IllegalStateException.class,
+        () -> map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8));
+      assertThrows(
+        IllegalStateException.class,
+        () -> loc.append(
+          key, Platform.LONG_ARRAY_OFFSET, 8, value, Platform.LONG_ARRAY_OFFSET, 8));
+      assertThrows(IllegalStateException.class, map::getArray);
+      assertThrows(IllegalStateException.class, map::maxNumKeysIndex);
+      assertThrows(IllegalStateException.class, map::iterator);
+      assertThrows(IllegalStateException.class, map::iteratorWithKeyIndex);
+      assertThrows(IllegalStateException.class, map::destructiveIterator);
+      assertEquals(0L, taskMemoryManager.getMemoryConsumptionForThisTask());
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
+  public void failedResetRequiresSuccessfulReset() {
+    memoryManager.limit(5000);
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
+    try {
+      final long[] key = new long[]{1L};
+      final long[] value = new long[]{42L};
+      BytesToBytesMap.Location loc = map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8);
+      assertTrue(
+        loc.append(key, Platform.LONG_ARRAY_OFFSET, 8, value, Platform.LONG_ARRAY_OFFSET, 8));
+
+      // A failed reset must clear the old page state without making lookup allocate implicitly.
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
+      assertEquals(0, map.numKeys());
+      assertEquals(0, map.numValues());
+      assertEquals(0, map.getNumDataPages());
+      assertEquals(0L, taskMemoryManager.getMemoryConsumptionForThisTask());
+      assertThrows(
+        IllegalStateException.class,
+        () -> map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8));
+      assertThrows(IllegalStateException.class, map::getArray);
+      assertThrows(IllegalStateException.class, map::maxNumKeysIndex);
+      assertThrows(IllegalStateException.class, map::iterator);
+      assertThrows(IllegalStateException.class, map::iteratorWithKeyIndex);
+
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
+      memoryManager.limit(PAGE_SIZE_BYTES);
+      map.reset();
+      assertEquals(512L, map.getArray().size());
+      assertEquals(256, map.maxNumKeysIndex());
+
+      loc = map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8);
+      assertFalse(loc.isDefined());
+      assertTrue(
+        loc.append(key, Platform.LONG_ARRAY_OFFSET, 8, value, Platform.LONG_ARRAY_OFFSET, 8));
+      assertEquals(1, map.getNumDataPages());
+      loc = map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8);
+      assertTrue(loc.isDefined());
+      assertEquals(42L, Platform.getLong(loc.getValueBase(), loc.getValueOffset()));
+      assertEquals(1, map.numValues());
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
+  public void successfulResetAfterFailureRestoresGrowthState() {
+    memoryManager.limit(PAGE_SIZE_BYTES);
+    // A sub-one-key growth threshold makes canGrowArray observable through append(): after a
+    // failed grow, no new key is accepted until reset restores the flag.
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 64, 0.01, 4000);
+    try {
+      for (long i = 0; i < 2; i++) {
+        final long[] key = new long[]{i};
+        if (i == 1) {
+          // The data page already exists, so this OOM is consumed by growAndRehash().
+          memoryManager.markExecutionAsOutOfMemoryOnce();
+        }
+        assertTrue(map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8).append(
+          key, Platform.LONG_ARRAY_OFFSET, 8, key, Platform.LONG_ARRAY_OFFSET, 8));
+      }
+
+      final long[] blockedKey = new long[]{2L};
+      assertFalse(map.lookup(blockedKey, Platform.LONG_ARRAY_OFFSET, 8).append(
+        blockedKey,
+        Platform.LONG_ARRAY_OFFSET,
+        8,
+        blockedKey,
+        Platform.LONG_ARRAY_OFFSET,
+        8));
+
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
+
+      memoryManager.limit(PAGE_SIZE_BYTES);
+      map.reset();
+      for (long i = 10; i < 12; i++) {
+        final long[] key = new long[]{i};
+        final long[] value = new long[]{i * 10};
+        BytesToBytesMap.Location loc = map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8);
+        assertFalse(loc.isDefined());
+        assertTrue(loc.append(
+          key, Platform.LONG_ARRAY_OFFSET, 8, value, Platform.LONG_ARRAY_OFFSET, 8));
+        loc = map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8);
+        assertTrue(loc.isDefined());
+        assertEquals(i * 10, Platform.getLong(loc.getValueBase(), loc.getValueOffset()));
+      }
+      assertEquals(2, map.numKeys());
+      assertEquals(2, map.numValues());
+    } finally {
+      map.free();
+    }
+  }
+
 }
