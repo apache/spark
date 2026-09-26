@@ -391,6 +391,71 @@ object VariantPathParser extends RegexParsers {
   }
 }
 
+sealed trait VariantPathArg
+
+case class ParsedVariantPath(segments: Array[VariantPathSegment], pathStr: String)
+    extends VariantPathArg {
+  // Java segments are not Serializable. Rebuild this cache once per executor task.
+  @transient lazy val javaSegments: Array[VariantBuilder.PathSegment] =
+    VariantExpressionEvalUtils.toJavaSegments(segments)
+}
+
+case class DynamicVariantPath(expr: Expression) extends VariantPathArg
+
+object VariantPathArg {
+  def fromExpression(
+      child: Expression,
+      functionName: String,
+      allowRoot: Boolean = false): Option[VariantPathArg] = {
+    if (child.foldable) {
+      val value = child.eval()
+      if (value == null) {
+        None
+      } else {
+        val pathStr = value.asInstanceOf[UTF8String].toString
+        Some(ParsedVariantPath(
+          VariantExpressionEvalUtils.parseVariantPath(pathStr, functionName, allowRoot), pathStr))
+      }
+    } else {
+      Some(DynamicVariantPath(child))
+    }
+  }
+}
+
+object VariantManipulationExpressionUtils extends QueryErrorsBase {
+  // Callers cache this result and force parsing before their NULL short-circuit.
+  // A dynamic path or constant NULL has no cached parsed path.
+  def foldablePath(
+      path: Expression,
+      functionName: String,
+      allowRoot: Boolean = false): Option[ParsedVariantPath] =
+    VariantPathArg.fromExpression(path, functionName, allowRoot).collect {
+      case parsed: ParsedVariantPath => parsed
+    }
+
+  def checkValueType(dataType: DataType): TypeCheckResult = {
+    if (dataType == NullType || VariantGet.checkDataType(dataType, allowStructsAndMaps = false)) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters =
+          Map("srcType" -> toSQLType(dataType), "targetType" -> toSQLType(VariantType)))
+    }
+  }
+
+  def assignResult(ev: ExprCode, call: String, failOnError: Boolean): String = {
+    if (failOnError) {
+      s"${ev.value} = $call;"
+    } else {
+      s"""
+         |${ev.value} = $call;
+         |${ev.isNull} = ${ev.value} == null;
+       """.stripMargin
+    }
+  }
+}
+
 /**
  * The implementation for `variant_get` and `try_variant_get` expressions. Extracts a sub-variant
  * value according to a path and cast it into a concrete data type.
@@ -912,8 +977,8 @@ case class VariantDelete(children: Seq[Expression])
   private def variantChild: Expression = children.head
   private def pathChildren: Seq[Expression] = children.tail
 
-  @transient private lazy val pathArgs: Seq[VariantDelete.DeletePathArg] =
-    pathChildren.flatMap(VariantDelete.toPathArg)
+  @transient private lazy val pathArgs: Seq[VariantPathArg] =
+    pathChildren.flatMap(VariantPathArg.fromExpression(_, prettyName))
 
   override def eval(input: InternalRow): Any = {
     val inputVariant = variantChild.eval(input).asInstanceOf[VariantVal]
@@ -923,9 +988,9 @@ case class VariantDelete(children: Seq[Expression])
     var i = 0
     while (i < args.length) {
       args(i) match {
-        case parsed: VariantDelete.ParsedDeletePath =>
+        case parsed: ParsedVariantPath =>
           current = VariantExpressionEvalUtils.deleteAtPath(current, parsed.javaSegments)
-        case VariantDelete.DynamicDeletePath(expr) =>
+        case DynamicVariantPath(expr) =>
           val pathVal = expr.eval(input).asInstanceOf[UTF8String]
           if (pathVal != null) {
             current = VariantExpressionEvalUtils.deleteAtPath(current, pathVal)
@@ -943,10 +1008,10 @@ case class VariantDelete(children: Seq[Expression])
     val current = ctx.freshName("vdCurrent")
 
     val perPath = pathArgs.map {
-      case parsed: VariantDelete.ParsedDeletePath =>
+      case parsed: ParsedVariantPath =>
         val parsedArg = ctx.addReferenceObj("vdParsed", parsed)
         s"$current = $cls.deleteAtPath($current, $parsedArg.javaSegments());"
-      case VariantDelete.DynamicDeletePath(expr) =>
+      case DynamicVariantPath(expr) =>
         val pCode = expr.genCode(ctx)
         s"""
            |${pCode.code}
@@ -973,31 +1038,6 @@ case class VariantDelete(children: Seq[Expression])
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): VariantDelete = copy(children = newChildren)
-}
-
-object VariantDelete {
-  sealed trait DeletePathArg
-  case class ParsedDeletePath(segments: Array[VariantPathSegment]) extends DeletePathArg {
-    // `VariantBuilder.PathSegment` is not `Serializable`, so the cached Java form is
-    // `@transient` and re-initialized once per executor task after deserialization.
-    @transient lazy val javaSegments: Array[VariantBuilder.PathSegment] =
-      VariantExpressionEvalUtils.toJavaSegments(segments)
-  }
-  case class DynamicDeletePath(expr: Expression) extends DeletePathArg
-
-  private[variant] def toPathArg(child: Expression): Option[DeletePathArg] = {
-    if (child.foldable) {
-      val v = child.eval()
-      if (v == null) {
-        None
-      } else {
-        Some(ParsedDeletePath(VariantExpressionEvalUtils.parseVariantPath(
-          v.asInstanceOf[UTF8String].toString, "variant_delete")))
-      }
-    } else {
-      Some(DynamicDeletePath(child))
-    }
-  }
 }
 
 // scalastyle:off line.size.limit
@@ -1060,16 +1100,16 @@ case class VariantPick(children: Seq[Expression])
   private def variantChild: Expression = children.head
   private def pathChildren: Seq[Expression] = children.tail
 
-  @transient private lazy val pathArgs: Seq[VariantPick.PickPathArg] =
-    pathChildren.flatMap(VariantPick.toPathArg)
+  @transient private lazy val pathArgs: Seq[VariantPathArg] =
+    pathChildren.flatMap(VariantPathArg.fromExpression(_, prettyName, allowRoot = true))
 
   // When every path is constant, the keep-tree is the same for all rows, so build it once here and
   // reuse it rather than rebuilding it per row. `None` means at least one path is dynamic.
   @transient private lazy val foldableTree: Option[VariantBuilder.PickNode] = {
-    if (pathArgs.forall(_.isInstanceOf[VariantPick.ParsedPickPath])) {
+    if (pathArgs.forall(_.isInstanceOf[ParsedVariantPath])) {
       val paths = new java.util.ArrayList[Array[VariantBuilder.PathSegment]](pathArgs.length)
       pathArgs.foreach {
-        case parsed: VariantPick.ParsedPickPath => paths.add(parsed.javaSegments)
+        case parsed: ParsedVariantPath => paths.add(parsed.javaSegments)
         case _ =>
       }
       Some(VariantBuilder.buildPickTree(paths))
@@ -1085,9 +1125,9 @@ case class VariantPick(children: Seq[Expression])
     var i = 0
     while (i < pathArgs.length) {
       pathArgs(i) match {
-        case parsed: VariantPick.ParsedPickPath =>
+        case parsed: ParsedVariantPath =>
           paths.add(parsed.javaSegments)
-        case VariantPick.DynamicPickPath(expr) =>
+        case DynamicVariantPath(expr) =>
           val pathVal = expr.eval(input).asInstanceOf[UTF8String]
           if (pathVal != null) {
             paths.add(VariantExpressionEvalUtils.parsePickPath(pathVal))
@@ -1125,10 +1165,10 @@ case class VariantPick(children: Seq[Expression])
         // At least one dynamic path: gather the paths per row, then project.
         val paths = ctx.freshName("vpPaths")
         val addPaths = pathArgs.map {
-          case parsed: VariantPick.ParsedPickPath =>
+          case parsed: ParsedVariantPath =>
             val parsedArg = ctx.addReferenceObj("vpParsed", parsed)
             s"$paths.add($parsedArg.javaSegments());"
-          case VariantPick.DynamicPickPath(expr) =>
+          case DynamicVariantPath(expr) =>
             val pCode = expr.genCode(ctx)
             s"""
                |${pCode.code}
@@ -1161,31 +1201,6 @@ case class VariantPick(children: Seq[Expression])
       newChildren: IndexedSeq[Expression]): VariantPick = copy(children = newChildren)
 }
 
-object VariantPick {
-  sealed trait PickPathArg
-  case class ParsedPickPath(segments: Array[VariantPathSegment]) extends PickPathArg {
-    // `VariantBuilder.PathSegment` is not `Serializable`, so the cached Java form is
-    // `@transient` and re-initialized once per executor task after deserialization.
-    @transient lazy val javaSegments: Array[VariantBuilder.PathSegment] =
-      VariantExpressionEvalUtils.toJavaSegments(segments)
-  }
-  case class DynamicPickPath(expr: Expression) extends PickPathArg
-
-  private[variant] def toPathArg(child: Expression): Option[PickPathArg] = {
-    if (child.foldable) {
-      val v = child.eval()
-      if (v == null) {
-        None
-      } else {
-        Some(ParsedPickPath(VariantExpressionEvalUtils.parseVariantPath(
-          v.asInstanceOf[UTF8String].toString, "variant_pick", allowRoot = true)))
-      }
-    } else {
-      Some(DynamicPickPath(child))
-    }
-  }
-}
-
 case class VariantInsert(
     input: Expression,
     path: Expression,
@@ -1210,36 +1225,13 @@ case class VariantInsert(
     val result = super.checkInputDataTypes()
     if (result.isFailure) {
       result
-    } else if (value.dataType == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else if (!VariantGet.checkDataType(value.dataType, allowStructsAndMaps = false)) {
-      DataTypeMismatch(
-        errorSubClass = "CAST_WITHOUT_SUGGESTION",
-        messageParameters =
-          Map("srcType" -> toSQLType(value.dataType), "targetType" -> toSQLType(VariantType)))
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      VariantManipulationExpressionUtils.checkValueType(value.dataType)
     }
   }
 
-  // When the path is a foldable expression, parse it once at planning time and cache it. The Java
-  // segments are derived once per task (see `ParsedInsertPath`), avoiding a per-row conversion.
-  // `None` means the path is dynamic (or a foldable NULL, which makes the whole expression NULL and
-  // is never evaluated).
-  @transient private lazy val foldablePath: Option[VariantInsert.ParsedInsertPath] = {
-    if (path.foldable) {
-      val p = path.eval()
-      if (p == null) {
-        None
-      } else {
-        val s = p.asInstanceOf[UTF8String].toString
-        Some(VariantInsert.ParsedInsertPath(
-          VariantExpressionEvalUtils.parseVariantPath(s, prettyName), s))
-      }
-    } else {
-      None
-    }
-  }
+  @transient private lazy val foldablePath: Option[ParsedVariantPath] =
+    VariantManipulationExpressionUtils.foldablePath(path, prettyName)
 
   override def eval(input: InternalRow): Any = {
     val _ = foldablePath
@@ -1272,22 +1264,8 @@ case class VariantInsert(
       case None =>
         s"""$cls.insertAtPath($vVal, $pVal, $valVal, $fromArg, "$prettyName", $failOnError)"""
     }
-    if (failOnError) {
-      nullSafeCodeGen(ctx, ev,
-        (vVal, pVal, valVal) => s"${ev.value} = ${call(vVal, pVal, valVal)};")
-    } else {
-      val resultType = CodeGenerator.javaType(VariantType)
-      val tmp = ctx.freshName("insertResult")
-      nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal) =>
-        s"""
-           |$resultType $tmp = ${call(vVal, pVal, valVal)};
-           |if ($tmp == null) {
-           |  ${ev.isNull} = true;
-           |} else {
-           |  ${ev.value} = $tmp;
-           |}
-         """.stripMargin)
-    }
+    nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal) =>
+      VariantManipulationExpressionUtils.assignResult(ev, call(vVal, pVal, valVal), failOnError))
   }
 
   override def prettyName: String = if (failOnError) "variant_insert" else "try_variant_insert"
@@ -1295,16 +1273,6 @@ case class VariantInsert(
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): VariantInsert =
     copy(input = newFirst, path = newSecond, value = newThird)
-}
-
-object VariantInsert {
-  // Caches a foldable path. `VariantBuilder.PathSegment` is not `Serializable`, so the Java form is
-  // `@transient` and re-derived once per executor task after deserialization. `pathStr` is the
-  // source string, retained for error messages.
-  case class ParsedInsertPath(segments: Array[VariantPathSegment], pathStr: String) {
-    @transient lazy val javaSegments: Array[VariantBuilder.PathSegment] =
-      VariantExpressionEvalUtils.toJavaSegments(segments)
-  }
 }
 
 abstract class VariantInsertExpressionBuilderBase(failOnError: Boolean) extends ExpressionBuilder {
@@ -1431,36 +1399,13 @@ case class VariantSet(
           "inputName" -> toSQLId("create_if_missing"),
           "inputType" -> toSQLType(createIfMissing.dataType),
           "inputExpr" -> toSQLExpr(createIfMissing)))
-    } else if (value.dataType == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else if (!VariantGet.checkDataType(value.dataType, allowStructsAndMaps = false)) {
-      DataTypeMismatch(
-        errorSubClass = "CAST_WITHOUT_SUGGESTION",
-        messageParameters =
-          Map("srcType" -> toSQLType(value.dataType), "targetType" -> toSQLType(VariantType)))
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      VariantManipulationExpressionUtils.checkValueType(value.dataType)
     }
   }
 
-  // When the path is a foldable expression, parse it once at planning time and cache it. The Java
-  // segments are derived once per task (see `ParsedSetPath`), avoiding a per-row conversion. `None`
-  // means the path is dynamic (or a foldable NULL, which makes the whole expression NULL and is
-  // never evaluated).
-  @transient private lazy val foldablePath: Option[VariantSet.ParsedSetPath] = {
-    if (path.foldable) {
-      val p = path.eval()
-      if (p == null) {
-        None
-      } else {
-        val s = p.asInstanceOf[UTF8String].toString
-        Some(VariantSet.ParsedSetPath(
-          VariantExpressionEvalUtils.parseVariantPath(s, prettyName), s))
-      }
-    } else {
-      None
-    }
-  }
+  @transient private lazy val foldablePath: Option[ParsedVariantPath] =
+    VariantManipulationExpressionUtils.foldablePath(path, prettyName)
 
   override def eval(input: InternalRow): Any = {
     val _ = foldablePath
@@ -1496,23 +1441,10 @@ case class VariantSet(
           s"""$cls.setAtPath(
              |  $vVal, $pVal, $valVal, $fromArg, $createVal, "$prettyName", $failOnError)"""
             .stripMargin
-      }
-    if (failOnError) {
-      nullSafeCodeGen(ctx, ev,
-        (vVal, pVal, valVal, createVal) => s"${ev.value} = ${call(vVal, pVal, valVal, createVal)};")
-    } else {
-      val resultType = CodeGenerator.javaType(VariantType)
-      val tmp = ctx.freshName("setResult")
-      nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal, createVal) =>
-        s"""
-           |$resultType $tmp = ${call(vVal, pVal, valVal, createVal)};
-           |if ($tmp == null) {
-           |  ${ev.isNull} = true;
-           |} else {
-           |  ${ev.value} = $tmp;
-           |}
-         """.stripMargin)
     }
+    nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal, createVal) =>
+      VariantManipulationExpressionUtils.assignResult(
+        ev, call(vVal, pVal, valVal, createVal), failOnError))
   }
 
   override def prettyName: String = if (failOnError) "variant_set" else "try_variant_set"
@@ -1523,16 +1455,6 @@ case class VariantSet(
       newThird: Expression,
       newFourth: Expression): VariantSet =
     copy(input = newFirst, path = newSecond, value = newThird, createIfMissing = newFourth)
-}
-
-object VariantSet {
-  // Caches a foldable path. `VariantBuilder.PathSegment` is not `Serializable`, so the Java form is
-  // `@transient` and re-derived once per executor task after deserialization. `pathStr` is the
-  // source string, retained for error messages.
-  case class ParsedSetPath(segments: Array[VariantPathSegment], pathStr: String) {
-    @transient lazy val javaSegments: Array[VariantBuilder.PathSegment] =
-      VariantExpressionEvalUtils.toJavaSegments(segments)
-  }
 }
 
 abstract class VariantSetExpressionBuilderBase(failOnError: Boolean) extends ExpressionBuilder {
@@ -1658,35 +1580,13 @@ case class VariantArrayAppend(
     val result = super.checkInputDataTypes()
     if (result.isFailure) {
       result
-    } else if (value.dataType == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else if (!VariantGet.checkDataType(value.dataType, allowStructsAndMaps = false)) {
-      DataTypeMismatch(
-        errorSubClass = "CAST_WITHOUT_SUGGESTION",
-        messageParameters =
-          Map("srcType" -> toSQLType(value.dataType), "targetType" -> toSQLType(VariantType)))
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      VariantManipulationExpressionUtils.checkValueType(value.dataType)
     }
   }
 
-  // When the path is a foldable expression, parse it once at planning time and cache it. `None`
-  // means the path is dynamic (or a foldable NULL, which makes the whole expression NULL
-  // and is never evaluated).
-  @transient private lazy val foldablePath: Option[VariantArrayAppend.ParsedAppendPath] = {
-    if (path.foldable) {
-      val p = path.eval()
-      if (p == null) {
-        None
-      } else {
-        val s = p.asInstanceOf[UTF8String].toString
-        Some(VariantArrayAppend.ParsedAppendPath(
-          VariantExpressionEvalUtils.parseVariantPath(s, prettyName, allowRoot = true), s))
-      }
-    } else {
-      None
-    }
-  }
+  @transient private lazy val foldablePath: Option[ParsedVariantPath] =
+    VariantManipulationExpressionUtils.foldablePath(path, prettyName, allowRoot = true)
 
   override def eval(input: InternalRow): Any = {
     val _ = foldablePath
@@ -1719,22 +1619,8 @@ case class VariantArrayAppend(
       case None =>
         s"""$cls.arrayAppendAtPath($vVal, $pVal, $valVal, $fromArg, "$prettyName", $failOnError)"""
     }
-    if (failOnError) {
-      nullSafeCodeGen(ctx, ev,
-        (vVal, pVal, valVal) => s"${ev.value} = ${call(vVal, pVal, valVal)};")
-    } else {
-      val resultType = CodeGenerator.javaType(VariantType)
-      val tmp = ctx.freshName("appendResult")
-      nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal) =>
-        s"""
-           |$resultType $tmp = ${call(vVal, pVal, valVal)};
-           |if ($tmp == null) {
-           |  ${ev.isNull} = true;
-           |} else {
-           |  ${ev.value} = $tmp;
-           |}
-         """.stripMargin)
-    }
+    nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal) =>
+      VariantManipulationExpressionUtils.assignResult(ev, call(vVal, pVal, valVal), failOnError))
   }
 
   override def prettyName: String =
@@ -1743,16 +1629,6 @@ case class VariantArrayAppend(
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): VariantArrayAppend =
     copy(input = newFirst, path = newSecond, value = newThird)
-}
-
-object VariantArrayAppend {
-  // Caches a foldable path. `VariantBuilder.PathSegment` is not `Serializable`, so the Java form is
-  // `@transient` and re-derived once per executor task after deserialization. `pathStr` is the
-  // source string, retained for error messages.
-  case class ParsedAppendPath(segments: Array[VariantPathSegment], pathStr: String) {
-    @transient lazy val javaSegments: Array[VariantBuilder.PathSegment] =
-      VariantExpressionEvalUtils.toJavaSegments(segments)
-  }
 }
 
 abstract class VariantArrayAppendExpressionBuilderBase(failOnError: Boolean)
