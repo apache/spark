@@ -412,7 +412,7 @@ private[spark] object SummaryBuilderImpl extends Logging {
       copy(featuresExpr = newLeft, weightExpr = newRight)
 
     override def update(state: SummarizerBuffer, row: InternalRow): SummarizerBuffer = {
-      val features = vectorUDT.deserialize(featuresExpr.eval(row))
+      val features = featuresExpr.eval(row).asInstanceOf[InternalRow]
       val weight = weightExpr.eval(row).asInstanceOf[Double]
       state.add(features, weight)
       state
@@ -571,6 +571,32 @@ private[spark] class SummarizerBuffer(
     weightSquareSum += weight * weight
     totalCnt += 1
     this
+  }
+
+  /**
+   * Add a vector in its internal SQL representation without materializing a [[Vector]].
+   */
+  def add(instance: InternalRow, weight: Double): this.type = {
+    require(instance.numFields == 4,
+      s"SummarizerBuffer.add given row with length ${instance.numFields} but requires length == 4")
+    instance.getByte(0) match {
+      case 0 => // Sparse vector
+        val values = instance.getArray(3)
+        add(arrayDataIterator(instance.getArray(2), values), instance.getInt(1), weight)
+      case 1 => // Dense vector
+        val values = instance.getArray(3)
+        add(arrayDataIterator(null, values), values.numElements(), weight)
+    }
+  }
+
+  private def arrayDataIterator(
+      indices: ArrayData,
+      values: ArrayData): Iterator[(Int, Double)] = {
+    if (requestedCompMetrics.isEmpty) {
+      Iterator.empty
+    } else {
+      new NonZeroArrayDataIterator(indices, values)
+    }
   }
 
   /**
@@ -794,5 +820,33 @@ private[spark] class SummarizerBuffer(
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     Vectors.dense(currL1)
+  }
+}
+
+private class NonZeroArrayDataIterator(indices: ArrayData, values: ArrayData)
+    extends Iterator[(Int, Double)] {
+
+  private val numValues = values.numElements()
+  private var position = 0
+  skipZeros()
+
+  override def hasNext: Boolean = position < numValues
+
+  override def next(): (Int, Double) = {
+    if (!hasNext) {
+      throw new NoSuchElementException("next on empty iterator")
+    }
+    val currentPosition = position
+    val value = values.getDouble(currentPosition)
+    position += 1
+    skipZeros()
+    val index = if (indices == null) currentPosition else indices.getInt(currentPosition)
+    (index, value)
+  }
+
+  private def skipZeros(): Unit = {
+    while (position < numValues && values.getDouble(position) == 0.0) {
+      position += 1
+    }
   }
 }
