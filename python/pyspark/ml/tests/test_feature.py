@@ -34,6 +34,8 @@ from pyspark.ml.feature import (
     CountVectorizerModel,
     ElementwiseProduct,
     FeatureHasher,
+    FrequencyEncoder,
+    FrequencyEncoderModel,
     HashingTF,
     IDFModel,
     Imputer,
@@ -1514,6 +1516,74 @@ class FeatureTestsMixin:
         self.assertEqual(model.getInputCols(), ["label1", "label2"])
         self.assertEqual(model.getOutputCols(), ["indexed1", "indexed2"])
         self.assertEqual(model.getHandleInvalid(), "keep")
+
+    def test_frequency_encoder(self):
+        df = self.spark.createDataFrame(
+            [
+                (0, 3, 5.0),
+                (1, 4, 5.0),
+                (2, 3, 5.0),
+                (0, 4, 6.0),
+                (1, 3, 6.0),
+                (2, 4, 6.0),
+                (0, 3, 7.0),
+                (1, 4, 8.0),
+                (2, 3, 9.0),
+            ],
+            schema="input1 short, input2 int, input3 double",
+        )
+        encoder = FrequencyEncoder(
+            inputCols=["input1", "input2", "input3"],
+            outputCols=["output", "output2", "output3"],
+        )
+        model = encoder.fit(df)
+        output = model.transform(df)
+        self.assertEqual(
+            output.columns,
+            ["input1", "input2", "input3", "output", "output2", "output3"],
+        )
+        self.assertEqual(output.count(), 9)
+
+        # input2 holds category 3 five times and category 4 four times, out of nine rows.
+        # Written as x / 9.0 to match the arithmetic fit performs, since 5.0 / 9.0 is not
+        # necessarily the same double as any reduced form of it.
+        self.assertEqual(
+            sorted({row.output2 for row in output.collect()}),
+            [4.0 / 9.0, 5.0 / 9.0],
+        )
+
+        # input1 gives all three categories the same count, so they share one encoding.
+        self.assertEqual(len({row.output for row in output.collect()}), 1)
+
+        # normalize=False keeps raw counts instead.
+        counts = FrequencyEncoder(
+            inputCols=["input2"], outputCols=["counted"], normalize=False
+        ).fit(df)
+        self.assertEqual(
+            sorted({row.counted for row in counts.transform(df).collect()}),
+            [4.0, 5.0],
+        )
+
+        # unseen categories were observed zero times. Fitted separately rather than by mutating
+        # the model above: setHandleInvalid returns the same instance, and mutating it before the
+        # round-trip below makes that assertion depend on mutation order.
+        keeper = FrequencyEncoder(
+            inputCols=["input1", "input2", "input3"],
+            outputCols=["output", "output2", "output3"],
+            handleInvalid="keep",
+        ).fit(df)
+        unseen = self.spark.createDataFrame([(9, 99, 99.0)], schema=df.schema)
+        self.assertEqual(keeper.transform(unseen).head().output2, 0.0)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="frequency_encoder") as d:
+            encoder.write().overwrite().save(d)
+            encoder2 = FrequencyEncoder.load(d)
+            self.assertEqual(str(encoder), str(encoder2))
+
+            model.write().overwrite().save(d)
+            model2 = FrequencyEncoderModel.load(d)
+            self.assertEqual(str(model), str(model2))
 
     def test_target_encoder_binary(self):
         df = self.spark.createDataFrame(
