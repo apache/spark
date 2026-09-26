@@ -34,7 +34,8 @@ import org.apache.spark.sql.catalyst.json.JsonInferSchema
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIANT_GET}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, QuotingUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils,
+  GenericArrayData, QuotingUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -711,16 +712,12 @@ case object VariantGet {
   // We mostly use the `Cast` expression to implement the cast, but we need some custom logic for
   // certain type combinations.
   //
-  // `castLongToTimestamp/castDecimalToTimestamp`: `Cast` silently ignores the overflow in the
-  // long/decimal -> timestamp cast, and we want to enforce strict overflow checks. They both throw
-  // an `ArithmeticException` when overflow happens.
+  // Variant casts require strict overflow checks. These helpers are also called directly by
+  // shredded Variant codegen, and throw an `ArithmeticException` when overflow happens.
   def castLongToTimestamp(input: Long): Long =
     Math.multiplyExact(input, MICROS_PER_SECOND)
 
-  def castDecimalToTimestamp(input: Decimal): Long = {
-    val multiplier = new java.math.BigDecimal(MICROS_PER_SECOND)
-    input.toJavaBigDecimal.multiply(multiplier).toBigInteger.longValueExact()
-  }
+  def castDecimalToTimestamp(input: Decimal): Long = DateTimeUtils.decimalToTimestamp(input)
 
   // Cast decimal to string, but strip any trailing zeros. We don't have to call it if the decimal
   // is returned by `Variant.getDecimal`, which already strips any trailing zeros. But we need it
