@@ -917,6 +917,24 @@ In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spa
     <td>When <code>spark.deploy.recoveryMode</code> is set to ZOOKEEPER, this configuration is used to set the zookeeper directory to store recovery state.</td>
     <td>0.8.1</td>
   </tr>
+  <tr>
+    <td><code>spark.deploy.recoverySerializationFilter</code></td>
+    <td>java.**;scala.**;org.apache.spark.**;!*</td>
+    <td>Serialization filter pattern applied when the master reads back recovery state that
+      the built-in JavaSerializer wrote, currently for the ZOOKEEPER recovery mode. The default
+      allows only JDK, Scala and Spark classes, which covers everything the master persists;
+      znodes containing any other class are skipped, without being deleted, during recovery
+      instead of being instantiated in the newly elected master.
+      This only hardens deserialization and is not a replacement for ZooKeeper ACLs, which
+      remain the access control for the recovery state.
+      The filter is applied in addition to any JVM-wide <code>jdk.serialFilter</code>; znodes
+      rejected only by <code>jdk.serialFilter</code> are deleted like other unreadable znodes.
+      Skipped znodes are never cleaned up by the master and are logged on every failover, so
+      operators should inspect and remove them manually.
+      Set to <code>*</code> to disable filtering.
+    </td>
+    <td>4.3.0</td>
+  </tr>
 </table>
 
 **Details**
