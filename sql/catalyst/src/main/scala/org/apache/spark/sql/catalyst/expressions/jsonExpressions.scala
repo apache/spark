@@ -1788,10 +1788,8 @@ object JsonObjectExpressionBuilder extends ExpressionBuilder {
         funcName, Seq("2n (n >= 0)"), expressions.length)
     }
     // A `JsonImplicitFormatCarrier` marks a lexically nested JSON producer, spliced raw (unwrapped
-    // here) and trusted (no validation). Every other value is quoted, including nested producers
-    // reached through a qualified/generic call (no carrier). Routed calls carry no explicit
-    // FORMAT JSON, so nothing needs validation.
-    // TODO(SPARK-59243): splice JSON-producing arguments reached through qualified/generic calls.
+    // here) and trusted; every other value is quoted. Routed calls carry no explicit FORMAT JSON,
+    // so nothing needs validation.
     val taggedMembers = expressions.grouped(2).map {
       case Seq(k, JsonImplicitFormatCarrier(v)) => ((k, v), true)
       case Seq(k, v) => ((k, v), false)
@@ -2349,14 +2347,14 @@ case class JsonTypeof(child: Expression)
  *   JSON_OBJECT('id': 7, 'v': NULL ABSENT ON NULL)     -> '{"id":7}'
  *   JSON_OBJECT()                                       -> '{}'
  *
- * A flat, clause-free call whose members carry no raw value routes through function resolution
- * and is rebuilt by `JsonObjectExpressionBuilder`, so a same-named routine can shadow the
- * built-in `json_object`. It is instead built directly from the grammar (see
- * `AstBuilder.visitJsonObject`) when it is clause-bearing, carries a raw value in any member (an
- * explicit `FORMAT JSON` or a nested JSON producer in the *value* position, i.e.
- * `rawJson.contains(true)`), or is itself lexically nested in the *value* position of an enclosing
- * JSON constructor; a nested call in *key* position instead stays eligible for routine resolution
- * and shadowing.
+ * A clause-free call that is not itself lexically nested in an enclosing constructor's *value*
+ * position routes through function resolution and is rebuilt by `JsonObjectExpressionBuilder`, so a
+ * same-named routine can shadow the built-in `json_object`: always for the comma form (a nested
+ * producer value routes too, carrying its raw-splice eligibility via `JsonImplicitFormatCarrier`),
+ * but for the `VALUE` / `:` forms only when no member carries a raw value (`rawJson.contains(true)`
+ * -- an explicit `FORMAT JSON` or a nested producer in *value* position -- keeps it direct).
+ * Otherwise it is built directly from the grammar (clause-bearing, or value-nested); a nested
+ * *key*-position call stays routable (see `AstBuilder.visitJsonObject`).
  * The user-facing reference lives in `docs/sql-ref-syntax-qry-select-json-object.md`.
  */
 case class JsonObjectExpr(
