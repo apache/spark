@@ -18,6 +18,7 @@
 import datetime
 import unittest
 
+from pyspark.errors import PySparkValueError
 from pyspark.sql.tests.test_types import TypesTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
@@ -116,6 +117,29 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_infer_schema_upcast_int_to_string(self):
         super().test_infer_schema_upcast_int_to_string()
+
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
+    def test_infer_schema_row_length_mismatch(self):
+        super().test_infer_schema_row_length_mismatch()
+
+    def test_create_dataframe_row_length_mismatch_without_verification(self):
+        # Spark Connect checks the row length before any conversion, so the same inputs raise
+        # AXIS_LENGTH_MISMATCH instead of FIELD_STRUCT_LENGTH_MISMATCH.
+        d = datetime.date(2026, 9, 23)
+        for data, schema, actual_length in [
+            ([("a", 1), ("b", 2, 3)], "x string, y long", "3"),
+            ([(1, d), (2, d, 3)], "y long, d date", "3"),
+            ([("a", 1), ("b",)], "x string, y long", "1"),
+        ]:
+            with self.subTest(data=data, schema=schema):
+                with self.assertRaises(PySparkValueError) as pe:
+                    self.spark.createDataFrame(data, schema, verifySchema=False)
+
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="AXIS_LENGTH_MISMATCH",
+                    messageParameters={"expected_length": "2", "actual_length": actual_length},
+                )
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_rdd_with_udt(self):
