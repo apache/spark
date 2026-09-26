@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Cast, Collate, JsonConstructorNullBehavior, JsonObjectExpr, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Collate, JsonConstructorNullBehavior, JsonImplicitFormatCarrier, JsonObjectExpr, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -689,6 +689,29 @@ world'))"""))
       sql("""SELECT json_object('a' VALUE '{"b":1}')"""), Row("""{"a":"{\"b\":1}"}"""))
   }
 
+  test("per-member rawJson and validation flags stay tied to their own member") {
+    // Ordered object mixing a quoted string (rawJson=false), a trusted nested producer
+    // (rawJson=true), and an explicit FORMAT JSON string (rawJson=true, validated). Each member
+    // must render from its own flag, not a neighbour's.
+    checkAnswer(
+      sql("""SELECT json_object(
+            |  'a' VALUE '{"x":1}',
+            |  'b' VALUE json_object('c' VALUE 1),
+            |  'd' VALUE '[1,2]' FORMAT JSON)""".stripMargin),
+      Row("""{"a":"{\"x\":1}","b":{"c":1},"d":[1,2]}"""))
+    // A later malformed explicit value: validation must fire for that member (flattened arg 8), not
+    // be masked by the trusted/quoted earlier members.
+    val e = intercept[SparkRuntimeException] {
+      sql("""SELECT json_object(
+            |  'a' VALUE '{"x":1}',
+            |  'b' VALUE json_object('c' VALUE 1),
+            |  'd' VALUE '[1,2]' FORMAT JSON,
+            |  'e' VALUE '{bad' FORMAT JSON)""".stripMargin).collect()
+    }
+    assert(e.getCondition == "INVALID_JSON_FORMAT_JSON_VALUE")
+    assert(e.getMessageParameters.get("position") == "8")
+  }
+
   test("a malformed FORMAT JSON value raises an error at runtime") {
     Seq("'{bad'", "'1,2'", "''").foreach { value =>
       val e = intercept[SparkRuntimeException] {
@@ -696,6 +719,13 @@ world'))"""))
       }
       assert(e.getCondition == "INVALID_JSON_FORMAT_JSON_VALUE", s"for $value")
     }
+    // The reported position is the flattened value-argument position, not the member ordinal: the
+    // bad value below is the 4th argument (`a`, 1, `b`, `{bad`), not the 2nd member.
+    val runtimeErr = intercept[SparkRuntimeException] {
+      sql("SELECT json_object('a' VALUE 1, 'b' VALUE '{bad' FORMAT JSON)").collect()
+    }
+    assert(runtimeErr.getCondition == "INVALID_JSON_FORMAT_JSON_VALUE")
+    assert(runtimeErr.getMessageParameters.get("position") == "4")
   }
 
   test("FORMAT JSON on a non-string value is rejected at analysis") {
@@ -703,6 +733,13 @@ world'))"""))
       sql("SELECT json_object('a' VALUE 123 FORMAT JSON)")
     }
     assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_JSON_FORMAT_JSON_INPUT")
+    // The reported position is the flattened value-argument position, not the member ordinal: the
+    // bad value below is the 4th argument (`a`, 1, `b`, 123), not the 2nd member.
+    val laterMemberErr = intercept[AnalysisException] {
+      sql("SELECT json_object('a' VALUE 1, 'b' VALUE 123 FORMAT JSON)")
+    }
+    assert(laterMemberErr.getCondition == "DATATYPE_MISMATCH.INVALID_JSON_FORMAT_JSON_INPUT")
+    assert(laterMemberErr.getMessageParameters.get("position") == "4")
   }
 
   test("a NULL FORMAT JSON value follows ON NULL like any other null") {
@@ -803,6 +840,52 @@ world'))"""))
     }
   }
 
+  test("a comma-form nested JSON producer is spliced raw when unshadowed") {
+    // The comma form routes through resolution, but the unshadowed built-in reconstruction still
+    // splices a lexically nested constructor raw (via JsonImplicitFormatCarrier), matching VALUE.
+    checkAnswer(sql("SELECT json_object('a', json_object('b', 1))"), Row("""{"a":{"b":1}}"""))
+    checkAnswer(sql("SELECT json_object('a', json_array(1, 2))"), Row("""{"a":[1,2]}"""))
+    checkAnswer(
+      sql("SELECT json_object('a', json_object('b', 1))"),
+      sql("SELECT json_object('a' VALUE json_object('b' VALUE 1))"))
+    // A pass-through COLLATE still splices raw; a plain string and an explicit CAST stay quoted.
+    checkAnswer(
+      sql("SELECT json_object('a', json_object('b', 1) COLLATE UTF8_LCASE)"),
+      Row("""{"a":{"b":1}}"""))
+    checkAnswer(sql("""SELECT json_object('a', '{"b":1}')"""), Row("""{"a":"{\"b\":1}"}"""))
+    checkAnswer(
+      sql("SELECT json_object('a', CAST(json_object('b', 1) AS STRING))"),
+      Row("""{"a":"{\"b\":1}"}"""))
+  }
+
+  test("a compatible routine shadows a comma-form call even with a nested producer value") {
+    // The finding: argument shape must not remove routine candidates. A (STRING, STRING) routine is
+    // compatible with the nested-producer call (the nested value is STRING), so the clause-free
+    // comma form resolves to the routine, not the built-in -- the carrier is transparent to
+    // overload selection.
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_object(a STRING, b STRING) RETURNS STRING " +
+          "RETURN 'shadowed'")
+        sql("SET PATH = system.session, system.builtin")
+        checkAnswer(sql("SELECT json_object('a', 'x')"), Row("shadowed"))
+        // Previously the nested-producer form bypassed the routine (built-in); now it is shadowed.
+        checkAnswer(sql("SELECT json_object('a', json_object('b', 1))"), Row("shadowed"))
+        checkAnswer(sql("SELECT json_object('a', json_array(1))"), Row("shadowed"))
+        // The dedicated VALUE form's nested value stays on the direct path, so it is not shadowed
+        // and its parse-time raw splice is preserved.
+        checkAnswer(
+          sql("SELECT json_object('a' VALUE json_object('b' VALUE 1))"),
+          Row("""{"a":{"b":1}}"""))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_object")
+      }
+    }
+  }
+
   test("a nested JSON_OBJECT in key position routes through resolution and can be shadowed") {
     // Keys are never spliced raw, so a nested constructor in key position stays routable (unlike a
     // value-position one) and a shadowing routine applies to it. A RETURNING clause keeps the outer
@@ -867,15 +950,21 @@ world'))"""))
     withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
       Seq(
         "SELECT json_object('id', 7)",
-        "SELECT json_object('vals', array(*)) FROM VALUES (1, 2) AS t(a, b)"
+        "SELECT json_object('vals', array(*)) FROM VALUES (1, 2) AS t(a, b)",
+        // A routed comma-form nested producer carries a JsonImplicitFormatCarrier (a
+        // TaggingExpression the ResolverGuard admits) that the built-in unwraps.
+        "SELECT json_object('a', json_object('b', 1))"
       ).foreach { query =>
         // Analyze only: the single-pass analyzer cannot yet run every operator the action path
-        // needs, so assert the routed call resolves (via the ResolverGuard allowlist) and no star
-        // survives, rather than executing it.
+        // needs, so assert the routed call resolves (via the ResolverGuard allowlist) and neither a
+        // star nor an un-unwrapped carrier survives, rather than executing it.
         val analyzed = sql(query).queryExecution.analyzed
         assert(analyzed.resolved, s"for $query")
         assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))),
           s"star should not survive analysis for $query")
+        assert(!analyzed.exists(_.expressions.exists(_.exists(
+          _.isInstanceOf[JsonImplicitFormatCarrier]))),
+          s"carrier should not survive analysis for $query")
       }
     }
   }

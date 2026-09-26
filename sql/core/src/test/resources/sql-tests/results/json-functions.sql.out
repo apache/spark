@@ -2268,7 +2268,7 @@ org.apache.spark.SparkRuntimeException
   "sqlState" : "22032",
   "messageParameters" : {
     "functionName" : "`json_object`",
-    "position" : "1",
+    "position" : "2",
     "value" : "'{bad'"
   }
 }
