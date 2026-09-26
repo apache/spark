@@ -5359,6 +5359,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ARROW_PYSPARK_UDTF_COLUMNAR_INPUT_ENABLED =
+    buildConf("spark.sql.execution.arrow.pythonUDTF.columnarInput.enabled")
+      .doc("When true, Arrow-optimized Python UDTFs can accept columnar input directly from " +
+        "upstream operators that produce Arrow-backed ColumnarBatch (e.g., DataSource V2 " +
+        "connectors), bypassing the ColumnarToRow and ArrowWriter conversion of the UDTF " +
+        "arguments. This applies when all the UDTF arguments are columns of its input.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val ARROW_CACHE_PREFETCH_ENABLED =
     buildConf("spark.sql.execution.arrow.cache.prefetch.enabled")
       .doc("When true, Arrow cache read path prefetches and decompresses the next batch " +
@@ -9653,6 +9664,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowPySparkUDFColumnarInputEnabled: Boolean =
     getConf(ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED)
+
+  def arrowPySparkUDTFColumnarInputEnabled: Boolean =
+    getConf(ARROW_PYSPARK_UDTF_COLUMNAR_INPUT_ENABLED)
 
   def arrowCachePrefetchEnabled: Boolean = getConf(ARROW_CACHE_PREFETCH_ENABLED)
 
