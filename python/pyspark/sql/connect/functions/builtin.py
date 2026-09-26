@@ -709,6 +709,20 @@ def factorial(col: "ColumnOrName") -> Column:
 factorial.__doc__ = pysparkfuncs.factorial.__doc__
 
 
+def gcd(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("gcd", col1, col2)
+
+
+gcd.__doc__ = pysparkfuncs.gcd.__doc__
+
+
+def lcm(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("lcm", col1, col2)
+
+
+lcm.__doc__ = pysparkfuncs.lcm.__doc__
+
+
 def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     if scale is None:
         return _invoke_function_over_columns("floor", col)
