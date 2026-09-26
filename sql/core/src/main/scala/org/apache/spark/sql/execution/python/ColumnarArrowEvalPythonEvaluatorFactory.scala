@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.python
 
 import java.io.File
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -216,25 +217,63 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
 
       val passThruQueue =
         new ConcurrentLinkedQueue[(Array[ColumnVector], Int)]()
-      context.addTaskCompletionListener[Unit] { _ =>
+      val passThruClosed = new AtomicBoolean(false)
+
+      def closeCols(cols: Array[ColumnVector]): Unit = {
+        var i = 0
+        while (i < cols.length) {
+          cols(i).close()
+          i += 1
+        }
+      }
+
+      def drainPassThru(): Unit = {
+        passThruClosed.set(true)
         var entry = passThruQueue.poll()
         while (entry != null) {
-          entry._1.foreach(_.close())
+          closeCols(entry._1)
           entry = passThruQueue.poll()
         }
+      }
+
+      context.addTaskCompletionListener[Unit] { _ =>
+        drainPassThru()
       }
 
       val bufferedIter = inputIter.map { batch =>
         // The input reader owns and may close its vectors as soon as the Python runner consumes
         // the input iterator. Create independent vector views whose buffers remain valid until
         // the corresponding output batch is closed.
-        val passThruCols = childOutput.indices.map { i =>
-          val vector = batch.column(i).asInstanceOf[ArrowColumnVector].getValueVector
-          val transferPair = vector.getTransferPair(ArrowUtils.rootAllocator)
-          transferPair.splitAndTransfer(0, batch.numRows())
-          new ArrowColumnVector(transferPair.getTo): ColumnVector
-        }.toArray
-        passThruQueue.add((passThruCols, batch.numRows()))
+        val cols = Array.ofDim[ColumnVector](childOutput.length)
+        var allocated = 0
+        try {
+          var i = 0
+          while (i < childOutput.length) {
+            val vector = batch.column(i).asInstanceOf[ArrowColumnVector].getValueVector
+            val transferPair = vector.getTransferPair(ArrowUtils.rootAllocator)
+            transferPair.splitAndTransfer(0, batch.numRows())
+            cols(i) = new ArrowColumnVector(transferPair.getTo)
+            allocated += 1
+            i += 1
+          }
+        } catch {
+          case e: Throwable =>
+            var j = 0
+            while (j < allocated) {
+              cols(j).close()
+              j += 1
+            }
+            throw e
+        }
+        if (passThruClosed.get()) {
+          closeCols(cols)
+        } else {
+          val entry = (cols, batch.numRows())
+          passThruQueue.add(entry)
+          if (passThruClosed.get() && passThruQueue.remove(entry)) {
+            closeCols(cols)
+          }
+        }
         batch
       }
 

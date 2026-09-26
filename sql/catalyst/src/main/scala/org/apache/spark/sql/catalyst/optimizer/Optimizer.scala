@@ -1321,7 +1321,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           case _ => false
         }
         if (hasCheckedCharVarcharResult) {
-          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+          keepPython
         } else if (!conf.getConf(SQLConf.ANSI_ENABLED)) {
           logWarning(log"Skipping Python UDF transpilation: " +
             log"${MDC(LogKeys.CONFIG, SQLConf.ANSI_ENABLED.key)} is disabled. The transpiler " +

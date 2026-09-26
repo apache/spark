@@ -30,10 +30,12 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{
   CharType,
   DataType,
+  DoubleType,
   StringType,
   StructField,
   StructType,
-  UserDefinedType}
+  UserDefinedType,
+  VarcharType}
 
 class ExtractPythonUDFsSuite extends SharedSparkSession {
   import testImplicits._
@@ -71,6 +73,22 @@ class ExtractPythonUDFsSuite extends SharedSparkSession {
       typedPythonUDF(returnType, PythonEvalType.SQL_BATCHED_UDF)(col("a"))
     }
     assert(error.getCondition === "UNSUPPORTED_FEATURE.PYTHON_UDF_CHAR_VARCHAR_RETURN_TYPE")
+  }
+
+  test("CHAR/VARCHAR in incremental aggregator buffer is rejected by the JVM builder") {
+    val buffer = StructType(Seq(StructField("value", VarcharType(3))))
+    val fn = UserDefinedPythonFunction(
+      name = "typedPythonUDF",
+      func = new DummyUDF,
+      dataType = DoubleType,
+      pythonEvalType = PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+      udfDeterministic = true,
+      bufferType = buffer)
+    val error = intercept[SparkUnsupportedOperationException] {
+      fn(col("a"))
+    }
+    assert(error.getCondition ===
+      "UNSUPPORTED_FEATURE.PYTHON_AGGREGATOR_CHAR_VARCHAR_BUFFER_SCHEMA")
   }
 
   test("Chained Batched Python UDFs should be combined to a single physical node") {

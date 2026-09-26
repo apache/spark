@@ -3043,6 +3043,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("dataType" -> toSQLType(dataType)))
   }
 
+  def invalidPythonAggregatorBufferType(
+      dataType: DataType): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.PYTHON_AGGREGATOR_CHAR_VARCHAR_BUFFER_SCHEMA",
+      messageParameters = Map("dataType" -> toSQLType(dataType)))
+  }
+
   def invalidPythonStateSchema(
       dataType: DataType,
       schemaKind: String): SparkUnsupportedOperationException = {

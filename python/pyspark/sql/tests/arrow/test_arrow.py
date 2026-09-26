@@ -1910,44 +1910,6 @@ class ArrowTestsMixin:
         self.assertEqual(len(pdf), 1)
         self.assertEqual(len(pdf["data"][0]), 0)
 
-    def test_toPandas_array_of_map_empty_outer(self):
-        schema = StructType([StructField("data", ArrayType(MapType(StringType(), StringType())))])
-        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
-        pdf = df.toPandas()
-        self.assertEqual(len(pdf), 1)
-        self.assertEqual(len(pdf["data"][0]), 0)
-
-    def test_toPandas_triple_nested_array_empty_outer(self):
-        # SPARK-55056: This used to trigger SIGSEGV before the upstream arrow-java fix.
-        # When the outer array is empty, the second-level ArrayWriter is never
-        # invoked, so its count stays 0. Arrow format requires ListArray offset
-        # buffer to have N+1 entries even when N=0, but getBufferSizeFor(0)
-        # returns 0 and the buffer is omitted in IPC serialization.
-        schema = StructType([StructField("data", ArrayType(ArrayType(ArrayType(StringType()))))])
-        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
-        pdf = df.toPandas()
-        self.assertEqual(len(pdf), 1)
-        self.assertEqual(len(pdf["data"][0]), 0)
-
-    def test_toPandas_nested_array_with_map_empty_outer(self):
-        schema = StructType(
-            [StructField("data", ArrayType(ArrayType(MapType(StringType(), StringType()))))]
-        )
-        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
-        pdf = df.toPandas()
-        self.assertEqual(len(pdf), 1)
-        self.assertEqual(len(pdf["data"][0]), 0)
-
-
-@unittest.skipIf(
-    not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message,
-)
-class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
-    # These CHAR/VARCHAR cases are Classic-only: they exercise standard-semantics
-    # createDataFrame/toArrow and override Classic's cached `schema` attribute with a UDT-backed
-    # schema, neither of which is supported by a Connect session. They live here rather than in
-    # `ArrowTestsMixin` so the Connect parity suite does not inherit them.
     def test_char_varchar_explicit_schema_and_to_arrow(self):
         schema = StructType(
             [
@@ -2010,18 +1972,6 @@ class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
                     invalid, StructType([StructField("c", VarcharType(3))])
                 ).collect()
 
-            with self.sql_conf({"spark.sql.execution.arrow.localRelationThreshold": "0"}):
-                rdd_df = self.spark.createDataFrame(
-                    pa.table({"c": ["a"]}),
-                    StructType([StructField("c", CharType(3))]),
-                )
-                self.assertEqual(rdd_df.first(), Row(c="a  "))
-                with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
-                    self.spark.createDataFrame(
-                        pa.table({"v": ["abcd"]}),
-                        StructType([StructField("v", VarcharType(3))]),
-                    ).collect()
-
         legacy_schema = StructType(
             [
                 StructField("c", CharType(3)),
@@ -2038,7 +1988,6 @@ class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
                 "spark.sql.preserveCharVarcharTypeInfo": "false",
                 "spark.sql.charVarchar.standardSemantics.enabled": "false",
                 "spark.sql.execution.arrow.pyspark.enabled": "true",
-                "spark.sql.execution.arrow.localRelationThreshold": "0",
             }
         ):
             for data in legacy_inputs:
@@ -2050,6 +1999,85 @@ class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
                     )
                     self.assertEqual(df.first(), Row(c="a", v="abcd"))
                     self.assertEqual(df.toArrow().to_pylist(), [{"c": "a", "v": "abcd"}])
+
+    def test_toPandas_array_of_map_empty_outer(self):
+        schema = StructType([StructField("data", ArrayType(MapType(StringType(), StringType())))])
+        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf), 1)
+        self.assertEqual(len(pdf["data"][0]), 0)
+
+    def test_toPandas_triple_nested_array_empty_outer(self):
+        # SPARK-55056: This used to trigger SIGSEGV before the upstream arrow-java fix.
+        # When the outer array is empty, the second-level ArrayWriter is never
+        # invoked, so its count stays 0. Arrow format requires ListArray offset
+        # buffer to have N+1 entries even when N=0, but getBufferSizeFor(0)
+        # returns 0 and the buffer is omitted in IPC serialization.
+        schema = StructType([StructField("data", ArrayType(ArrayType(ArrayType(StringType()))))])
+        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf), 1)
+        self.assertEqual(len(pdf["data"][0]), 0)
+
+    def test_toPandas_nested_array_with_map_empty_outer(self):
+        schema = StructType(
+            [StructField("data", ArrayType(ArrayType(MapType(StringType(), StringType()))))]
+        )
+        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf), 1)
+        self.assertEqual(len(pdf["data"][0]), 0)
+
+
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow,
+    pandas_requirement_message or pyarrow_requirement_message,
+)
+class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
+    # These CHAR/VARCHAR cases are Classic-only: they force the RDD createDataFrame path via
+    # localRelationThreshold=0, exercise DataFrame.__arrow_c_stream__, and override Classic's
+    # cached `schema` attribute with a UDT-backed schema. They live here rather than in
+    # `ArrowTestsMixin` so the Connect parity suite does not inherit them.
+    def test_char_varchar_arrow_rdd_threshold(self):
+        with self.sql_conf(
+            {
+                "spark.sql.charVarchar.standardSemantics.enabled": "true",
+                "spark.sql.execution.arrow.pyspark.enabled": "true",
+                "spark.sql.execution.arrow.localRelationThreshold": "0",
+            }
+        ):
+            rdd_df = self.spark.createDataFrame(
+                pa.table({"c": ["a"]}),
+                StructType([StructField("c", CharType(3))]),
+            )
+            self.assertEqual(rdd_df.first(), Row(c="a  "))
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                self.spark.createDataFrame(
+                    pa.table({"v": ["abcd"]}),
+                    StructType([StructField("v", VarcharType(3))]),
+                ).collect()
+
+        legacy_schema = StructType(
+            [
+                StructField("c", CharType(3)),
+                StructField("v", VarcharType(3)),
+            ]
+        )
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+                "spark.sql.execution.arrow.pyspark.enabled": "true",
+                "spark.sql.execution.arrow.localRelationThreshold": "0",
+            }
+        ):
+            df = self.spark.createDataFrame(pa.table({"c": ["a"], "v": ["abcd"]}), legacy_schema)
+            self.assertEqual(
+                df.schema,
+                StructType().add("c", "string").add("v", "string"),
+            )
+            self.assertEqual(df.first(), Row(c="a", v="abcd"))
 
     def test_arrow_c_stream_char_varchar_is_unsupported(self):
         schema = StructType([StructField("value", ArrayType(CharType(2)))])

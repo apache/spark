@@ -406,6 +406,32 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
+  test("keeps a nested call inside a checked CHAR/VARCHAR UDF in a lambda") {
+    transpileOn {
+      // The checked-result early return must use the same child walk as the other keepPython
+      // arms. The public applyExpr overload would drop inLambda and preEvaluate, so a nested
+      // call inside the lambda would be lowered to Catalyst.
+      val lambdaVar = NamedLambdaVariable("x", LongType, nullable = false)
+      val arr = AttributeReference("arr", ArrayType(LongType))()
+      val inner = makeTPUDF(makePyUDF(lambdaVar), Add(lambdaVar, Literal(4L)))
+      val checkedUDF = PythonUDF(
+        "checked",
+        null,
+        StringType,
+        Seq(inner),
+        PythonEvalType.SQL_BATCHED_UDF,
+        udfDeterministic = true,
+        charVarcharCheckedResultType = Some(VarcharType(3)))
+      val outer = makeTPUDF(checkedUDF, inner)
+      val body = ArrayTransform(arr, LambdaFunction(outer, Seq(lambdaVar)))
+      val converted = convert(Project(Seq(Alias(body, "v")()), LocalRelation(arr)))
+      assert(paramColumns(converted).isEmpty, s"Expected no column: $converted")
+      val pythonUdfs = converted.expressions.head.collect { case u: PythonUDF => u }
+      assert(pythonUdfs.length == 2, s"Expected both Python UDFs kept: $converted")
+      assert(pythonUdfs.exists(_.hasCharVarcharResult), s"Expected checked UDF kept: $converted")
+    }
+  }
+
   test("keeps the Python UDF when the option body builds a lambda") {
     transpileOn {
       // The other half of the same rule, which only a custom transpiler can reach: an option that

@@ -9251,6 +9251,11 @@
           "Purge table."
         ]
       },
+      "PYTHON_AGGREGATOR_CHAR_VARCHAR_BUFFER_SCHEMA" : {
+        "message" : [
+          "Python aggregators do not support CHAR/VARCHAR in buffer schema <dataType>."
+        ]
+      },
       "PYTHON_STATE_CHAR_VARCHAR_SCHEMA" : {
         "message" : [
           "Python state does not support CHAR/VARCHAR in <schemaKind> schema <dataType>."

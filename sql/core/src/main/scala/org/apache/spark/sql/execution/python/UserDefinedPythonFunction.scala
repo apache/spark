@@ -110,6 +110,9 @@ case class UserDefinedPythonFunction(
           throw QueryCompilationErrors.invalidIncrementalPythonAggregatorBufferError(
             name, bufferType)
       }
+      if (CharVarcharUtils.physicalTypeHasCharVarchar(bufferStruct)) {
+        throw QueryCompilationErrors.invalidPythonAggregatorBufferType(bufferStruct)
+      }
       PythonAggregate(name, func, dataType, e, udfDeterministic, bufferStruct)
     } else {
       val conf = SQLConf.get
