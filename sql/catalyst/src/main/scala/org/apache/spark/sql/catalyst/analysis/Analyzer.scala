@@ -1252,9 +1252,16 @@ class Analyzer(
     // the scan mode and the generated expressions under the current SQLConf.
     private def resolveTableReferencesInTempView(plan: LogicalPlan): LogicalPlan = {
       plan.transformDown {
-        case project @ Project(_, ref: V2Reference)
+        case project @ Project(_, ref: V2TableReference)
             if isTempViewReadSidePaddingProject(project, ref) =>
-          relationResolution.resolveReference(ref)
+          // The policy Project's output retains the raw CHAR/VARCHAR metadata and is referenced
+          // by any parent operators in the stored view plan. Resolve the replacement relation
+          // with those attributes so ApplyCharTypePadding can generate the current policy while
+          // keeping parent references valid.
+          val reboundRef = ref.copy(
+            output = project.output.map(_.asInstanceOf[AttributeReference]))
+          reboundRef.copyTagsFrom(ref)
+          relationResolution.resolveReference(reboundRef)
         case r: V2Reference if r.context.isInstanceOf[V2Reference.TemporaryViewContext] =>
           relationResolution.resolveReference(r)
       }

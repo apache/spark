@@ -42,8 +42,8 @@ case class LogicalRelation(
     catalogTable: Option[CatalogTable],
     override val isStreaming: Boolean,
     @transient stream: Option[SparkDataStream],
-    // Bound at analysis so sameResult / cache reuse distinguish preserve-only vs standard
-    // CHAR/VARCHAR scans. None means no scan mode was bound.
+    // Analysis binds this mode so that sameResult comparisons and cache reuse distinguish
+    // preserve-only from standard CHAR/VARCHAR scans. None means no scan mode was bound.
     charVarcharScanMode: Option[CharVarcharScanMode])
   extends LeafNode
   with StreamSourceAwareLogicalPlan

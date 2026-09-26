@@ -584,10 +584,14 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       Seq(("a", "x")).toDF("c", "v").write
         .format(format).option("path", path).mode("append").save()
       val preserveRead = withSQLConf(preserveConf: _*) {
-        readData.persist(MEMORY_ONLY)
+        val read = readData.persist(MEMORY_ONLY)
+        checkAnswer(read, Row("a", "x"))
+        read
       }
       val standardRead = withSQLConf(standardConf: _*) {
-        readData.persist(DISK_ONLY)
+        val read = readData.persist(DISK_ONLY)
+        checkAnswer(read, Row("a", "x"))
+        read
       }
 
       val stream = MemoryStream[(String, String)]
@@ -600,10 +604,10 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
         stream.addData(("b", "y"))
         sq.processAllAvailable()
         withSQLConf(preserveConf: _*) {
-          checkAnswer(preserveRead, Seq(Row("a", "x"), Row("b", "y")))
+          checkAnswer(readData, Seq(Row("a", "x"), Row("b", "y")))
         }
         withSQLConf(standardConf: _*) {
-          checkAnswer(standardRead, Seq(Row("a", "x"), Row("b", "y")))
+          checkAnswer(readData, Seq(Row("a", "x"), Row("b", "y")))
         }
         val currentRelation = readData.queryExecution.analyzed.collectFirst {
           case relation: DataSourceV2Relation => relation

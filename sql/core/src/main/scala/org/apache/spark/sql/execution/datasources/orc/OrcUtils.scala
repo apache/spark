@@ -542,7 +542,8 @@ object OrcUtils extends Logging {
    * @param resultSchema Result data schema created after pruning cols.
    * @param partitionSchema Schema of partitions.
    * @param conf Hadoop Configuration.
-   * @param charVarcharScanMode The mode bound during analysis, if first-class types are enabled.
+   * @param charVarcharScanMode This mode is bound during analysis when first-class types are
+   *                            enabled.
    * @return Returns the result schema as string.
    */
   def orcResultSchemaString(
