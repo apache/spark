@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPartitioning, Partitioning}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan, SQLExecution}
-import org.apache.spark.sql.execution.joins.{HashedRelation, HashedRelationBroadcastMode}
+import org.apache.spark.sql.execution.joins.{HashedRelation, HashedRelationBroadcastMode, RangeRelation}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.LongType
@@ -201,6 +201,8 @@ case class BroadcastExchangeExec(
                 map.estimatedSize
               case arr: Array[InternalRow] =>
                 arr.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
+              case relation: RangeRelation =>
+                relation.sizeInBytes()
               case _ =>
                 throw new SparkException("[BUG] BroadcastMode.transform returned unexpected " +
                   s"type: ${relation.getClass.getName}")
