@@ -52,8 +52,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     podAllocator: AbstractPodsAllocator,
     lifecycleManager: ExecutorPodsLifecycleManager,
-    watchEvents: ExecutorPodsWatchSnapshotSource,
-    pollEvents: ExecutorPodsPollingSnapshotSource)
+    snapshotSources: Seq[ExecutorPodsSnapshotSource])
     extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
 
   protected override val minRegisteredRatio =
@@ -121,8 +120,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     val initExecs = Map(defaultProfile -> initialExecutors)
     podAllocator.setTotalExpectedExecutors(initExecs)
     lifecycleManager.start(this)
-    watchEvents.start(applicationId())
-    pollEvents.start(applicationId())
+    snapshotSources.foreach(source => source.start(applicationId()))
   }
 
   override def stop(): Unit = {
@@ -136,12 +134,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
       snapshotsStore.stop()
     }
 
-    Utils.tryLogNonFatalError {
-      watchEvents.stop()
-    }
-
-    Utils.tryLogNonFatalError {
-      pollEvents.stop()
+    snapshotSources.foreach { source =>
+      Utils.tryLogNonFatalError {
+        source.stop()
+      }
     }
 
     if (conf.get(KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION)) {
