@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, ExpressionSet}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, ExpressionSet, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.{AliasAwareOutputExpression, AliasAwareQueryOutputOrdering}
 import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.trees.MultiTransform
@@ -90,6 +90,22 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
   }
 
   /**
+   * Projects a partitioning expression through the output aliases. For a [[TransformExpression]]
+   * only the column argument is projected: `aliasMap` also maps aliased literals, so `2 AS w` would
+   * otherwise turn `truncate(data, 2)` into `truncate(d, w)`.
+   */
+  private def projectPartitionExpression(expr: Expression): LazyList[Expression] = expr match {
+    case te: TransformExpression =>
+      te.columnSlots match {
+        // supportsExpressions admits exactly one column argument.
+        case Seq(col) =>
+          projectExpression(col).map(c => te.rewriteColumnSlots(_ => c))
+        case _ => LazyList.empty
+      }
+    case other => projectExpression(other)
+  }
+
+  /**
    * Projects all input [[KeyedPartitioning]]s through the current node's output expressions.
    *
    * For each expression position (0..N-1), collects the unique expressions at that position across
@@ -117,7 +133,7 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
         (0 until numPositions).map { i =>
           val seen = mutable.Set.empty[Expression]
           ExpressionSet(kps.map(_.expressions(i))).to(LazyList).flatMap { expr =>
-            projectExpression(expr).filter(e => seen.add(e.canonicalized))
+            projectPartitionExpression(expr).filter(e => seen.add(e.canonicalized))
           }
         }
       } else {
