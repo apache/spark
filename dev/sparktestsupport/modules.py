@@ -574,9 +574,19 @@ examples = Module(
     ],
 )
 
+# Shared Python test environment.
+pyspark_base = Module(
+    name="pyspark-base",
+    dependencies=[],
+    source_file_regexes=[
+        "dev/spark-test-image/python-.*/",
+        "pyproject.toml",
+    ],
+)
+
 pyspark_core = Module(
     name="pyspark-core",
-    dependencies=[core],
+    dependencies=[core, pyspark_base],
     source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"],
     python_test_goals=[
         # doctests
@@ -917,7 +927,7 @@ pyspark_ml = Module(
 
 pyspark_periodic = Module(
     name="pyspark-periodic",
-    dependencies=[],
+    dependencies=[pyspark_base],
     source_file_regexes=[
         # This module contains tests that are not sensitive to pyspark code changes.
         # We run these on scheduled CIs and pre-merge CIs, not post-merge CIs.
@@ -1715,7 +1725,7 @@ pyspark_errors = Module(
 
 pyspark_logger = Module(
     name="pyspark-logger",
-    dependencies=[],
+    dependencies=[pyspark_base],
     source_file_regexes=["python/pyspark/logger"],
     python_test_goals=[
         # doctests
@@ -1841,6 +1851,38 @@ root = Module(
     should_run_r_tests=True,
     should_run_build_tests=True,
 )
+
+
+def pyspark_modules_missing_base() -> list[str]:
+    """
+    Return PySpark modules that do not depend on `pyspark-base`.
+
+    Every `pyspark-*` module except `pyspark-base` itself must reach it,
+    directly or transitively. That is what makes a shared Python test-environment
+    change rerun the module. CI selects these modules by the same name prefix.
+
+    >>> pyspark_modules_missing_base()
+    []
+    """
+    missing = []
+    for module in all_modules:
+        if not module.name.startswith("pyspark-") or module is pyspark_base:
+            continue
+        seen = set()
+        pending = list(module.dependencies)
+        reaches_base = False
+        while pending:
+            dependency = pending.pop()
+            if dependency in seen:
+                continue
+            seen.add(dependency)
+            if dependency is pyspark_base:
+                reaches_base = True
+                break
+            pending.extend(dependency.dependencies)
+        if not reaches_base:
+            missing.append(module.name)
+    return missing
 
 
 def _test():
