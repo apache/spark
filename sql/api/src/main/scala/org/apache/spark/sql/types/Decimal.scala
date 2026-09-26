@@ -520,8 +520,21 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   // TypeCoercion will take care of the precision, scale of result
-  def *(that: Decimal): Decimal =
-    Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
+  def *(that: Decimal): Decimal = {
+    val a = longVal
+    val b = that.longVal
+    val product = a * b
+    // Multiply compactly when both operands are compact and the exact product fits the compact
+    // long range (<= 18 digits): there it is identical to the BigDecimal path, since the product
+    // has far fewer than MATH_CONTEXT's 39 significant digits so no rounding occurs.
+    if (decimalVal.eq(null) && that.decimalVal.eq(null) &&
+      Math.multiplyHigh(a, b) == (product >> 63) &&
+      product > -POW_10(MAX_LONG_DIGITS) && product < POW_10(MAX_LONG_DIGITS)) {
+      Decimal(product, precision + that.precision + 1, scale + that.scale)
+    } else {
+      Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
+    }
+  }
 
   def /(that: Decimal): Decimal =
     if (that.isZero) {
