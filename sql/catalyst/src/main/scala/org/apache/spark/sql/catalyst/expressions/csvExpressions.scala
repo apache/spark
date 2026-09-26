@@ -66,10 +66,10 @@ case class CsvToStructs(
     requiredSchema: Option[StructType] = None)
   extends UnaryExpression
   with TimeZoneAwareExpression
-  with ExpectsInputTypes {
+  with ExpectsInputTypes
+  with SupportTrimmedCharInput {
 
   override def nullable: Boolean = child.nullable
-
   override def nullIntolerant: Boolean = true
 
   // Used in `FunctionRegistry`
@@ -113,12 +113,12 @@ case class CsvToStructs(
   override def stateful: Boolean = true
 
   override def nullSafeEval(input: Any): Any = {
-    evaluator.evaluate(input.asInstanceOf[UTF8String])
+    evaluator.evaluate(trimStringInput(input.asInstanceOf[UTF8String]))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
-    val eval = child.genCode(ctx)
+    val eval = stringInput.genCode(ctx)
     val resultType = CodeGenerator.boxedType(dataType)
     val resultTerm = ctx.freshName("result")
     ev.copy(code =
@@ -161,7 +161,8 @@ case class SchemaOfCsv(
   extends UnaryExpression
   with RuntimeReplaceable
   with DefaultStringProducingExpression
-  with QueryErrorsBase {
+  with QueryErrorsBase
+  with SupportTrimmedCharInput {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -183,7 +184,7 @@ case class SchemaOfCsv(
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "csv"))
-    } else if (child.dataType != StringType) {
+    } else if (!child.dataType.isInstanceOf[StringType]) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
@@ -209,8 +210,8 @@ case class SchemaOfCsv(
     Literal.create(evaluator, ObjectType(classOf[SchemaOfCsvEvaluator])),
     "evaluate",
     dataType,
-    Seq(child),
-    Seq(child.dataType),
+    Seq(stringInput),
+    Seq(stringInput.dataType),
     returnNullable = false)
 }
 
