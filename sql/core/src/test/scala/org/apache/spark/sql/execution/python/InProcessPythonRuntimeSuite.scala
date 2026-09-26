@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{SparkFunSuite, TaskContext, TaskKilledException}
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.types.StructType
 
 class InProcessPythonRuntimeSuite extends SparkFunSuite {
   private var runtime: InProcessPythonRuntime.InterpreterSession = _
@@ -56,6 +57,22 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     assert(metric.value == 3L)
   }
 
+  test("unused evaluator iterators do not charge Python total time") {
+    val metrics = Seq("pythonInitTime", "pythonProcessingTime", "pythonTotalTime")
+      .map(_ -> new SQLMetric("timing", 0L)).toMap
+    val context = TaskContext.empty()
+    class TestEvaluator extends InProcessArrowEvalPythonEvaluatorFactory(
+        Seq.empty, Seq.empty, Seq.empty, 10, 0L, "UTC", false, false, false, false, metrics) {
+      def createUnusedIterator(): Unit = {
+        evaluate(Seq.empty, Array.empty, Iterator.empty, new StructType, context)
+      }
+    }
+    new TestEvaluator().createUnusedIterator()
+    Thread.sleep(20)
+    context.markTaskCompleted(None)
+    assert(metrics("pythonTotalTime").value == 0L)
+  }
+
   test("calls from different threads use the same interpreter owner thread") {
     val first = runtime.onInterpreterThread { Thread.currentThread() }
     @volatile var second: Thread = null
@@ -73,6 +90,36 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     intercept[IllegalStateException] {
       runtime.onInterpreterThread { fail("stopped sessions must not restart") }
     }
+  }
+
+  test("interpreter timing excludes time queued behind another task") {
+    val entered = new CountDownLatch(1)
+    val finish = new CountDownLatch(1)
+    val waiting = new CountDownLatch(1)
+    @volatile var elapsed = -1L
+    val owner = new Thread(() => runtime.onInterpreterThread {
+      entered.countDown()
+      assert(finish.await(10, TimeUnit.SECONDS))
+    })
+    val caller = new Thread(() => {
+      waiting.countDown()
+      elapsed = runtime.timedOnInterpreterThread { () }
+    })
+    owner.start()
+    try {
+      assert(entered.await(10, TimeUnit.SECONDS))
+      caller.start()
+      assert(waiting.await(10, TimeUnit.SECONDS))
+      // The measured call cannot execute until the preceding task releases the owner.
+      caller.join(500)
+      assert(caller.isAlive)
+    } finally {
+      finish.countDown()
+      owner.join(10000)
+      caller.join(10000)
+    }
+    assert(!owner.isAlive && !caller.isAlive)
+    assert(elapsed >= 0L && elapsed < TimeUnit.MILLISECONDS.toNanos(500))
   }
 
   test("interpreter exceptions retain their original cause") {

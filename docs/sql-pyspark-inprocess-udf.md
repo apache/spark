@@ -76,13 +76,23 @@ vectors are released on task completion, early termination and failure.
 
 UDF deserialization uses PySpark's bundled cloudpickle. Each task registers its
 own function instance once and passes a small handle for subsequent batches.
+Exception text escapes non-ASCII characters and NUL to preserve it across JEP's
+JNI exception transport.
 Task completion queues release of the registered function and its closure state. Imported
 Python modules still share executor-wide state. Configured site-packages paths
 are supplied to JEP before its first construction, so JEP itself can be found in
 an archived venv. They are then processed with `site.addsitedir`, including `.pth`
-files. Spark's own PySpark and Py4J distribution paths come first, followed by
-configured directories, newly discovered `.pth` paths, and existing system paths.
+files. Spark's own PySpark and Py4J distribution paths and the process `PYTHONPATH`
+come first, followed by configured directories, newly discovered `.pth` paths,
+and existing system paths.
 Already imported modules cannot be replaced by changing the search path.
+
+The embedded interpreter uses isolated Python initialization and ignores Python startup
+flags from the environment (including `PYTHONFAULTHANDLER` and `PYTHONDEVMODE`). Spark
+explicitly restores its Python distribution paths and the executor process `PYTHONPATH`
+before configured `sitePackages` paths. This also supports YARN's localized Python archives
+when `SPARK_HOME` is absent. Python modules must not install process-wide signal handlers
+that replace the JVM's handlers.
 
 Spark broadcasts, accumulators, `SparkContext.addPyFile`, and Python `TaskContext`
 are not supported by this embedded runtime. Captured broadcast and accumulator
@@ -92,6 +102,11 @@ using `spark.inprocess.python.sitePackages`. Session-scoped `spark.pythonWorkerE
 settings are rejected: the shared interpreter cannot apply per-session process
 environments. Configure environment variables before the executor starts, for example
 with `spark.executorEnv.NAME` (or the launching environment in local mode).
+In-process UDFs reject `spark.executor.pyspark.memory`, `spark.sql.pyspark.udf.profiler`,
+and `spark.pythonWorkerEnv.*`. Python runs inside the JVM, so a separate Python process
+memory limit cannot be applied. Use executor memory settings for sizing, and worker-based
+UDFs when these Python worker features are needed.
+
 SQL registration through `spark.udf.register` is not supported and is rejected at registration time.
 Spark Connect does not support this execution mode; both client SQL registration and
 server planning reject it. The decorator accepts a `DataType` or a DDL string; DDL
@@ -392,12 +407,15 @@ spark-submit \
   --deploy-mode cluster \
   --conf spark.kubernetes.container.image=my-registry/spark-inprocess:tested-build \
   --conf spark.inprocess.python.sitePackages=/opt/venv/lib/python3.11/site-packages \
-  --conf spark.executor.extraLibraryPath=/opt/venv/lib/python3.11/site-packages/jep \
+  --conf spark.executor.extraJavaOptions=-Djava.library.path=/opt/venv/lib/python3.11/site-packages/jep \
   --conf spark.plugins=org.apache.spark.sql.execution.python.InProcessPythonPlugin \
   --conf spark.executor.cores=1 \
   --conf spark.task.cpus=1 \
   my_app.py
 ```
+
+`spark.executor.extraJavaOptions=-Djava.library.path=...` locates JEP even on Kubernetes
+images whose entrypoint does not propagate `spark.executor.extraLibraryPath`.
 
 #### Option B: `--archives` with remote file upload
 
@@ -452,9 +470,9 @@ initialization error. Task calls and cleanup never create or restart an interpre
 Site-package directories supplied to JEP before interpreter construction, so the
 `jep` package must be directly importable from these directories. After construction,
 paths are made absolute and processed with `site.addsitedir`, including `.pth` files.
-Spark distribution paths take precedence over these directories; configured paths
-then take precedence over system paths for modules not yet imported. `.pth` files
-are processed too late to locate JEP itself during construction.
+Spark distribution paths and process `PYTHONPATH` take precedence over these directories;
+configured paths then take precedence over system paths for modules not yet imported.
+`.pth` files are processed too late to locate JEP itself during construction.
 
 **When you need this:** When you distribute a Python virtual environment via `--archives` and
 need packages from that venv to be importable inside UDFs. The problem is that the jep

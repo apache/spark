@@ -92,7 +92,7 @@ class InProcessUDFTests(ReusedSQLTestCase):
         system_dir = os.path.join(cls.site_packages, "system")
         os.mkdir(helper_dir)
         os.mkdir(system_dir)
-        with open(os.path.join(system_dir, "_inprocess_test_helper.py"), "w") as f:
+        with open(os.path.join(system_dir, "_inprocess_process_helper.py"), "w") as f:
             f.write("MAGIC = -1\n")
         with open(os.path.join(helper_dir, "_inprocess_test_helper.py"), "w") as f:
             f.write("MAGIC = 99\n")
@@ -159,10 +159,219 @@ class InProcessUDFTests(ReusedSQLTestCase):
         identity = inprocess_udf("long")(lambda x: x)
         column = identity("id")
         with self.sql_conf({"spark.pythonWorkerEnv.INPROCESS_TEST_VALUE": "value"}):
-            with self.assertRaisesRegex(Exception, "do not support spark.pythonWorkerEnv"):
+            with self.assertRaisesRegex(Exception, "UNSUPPORTED_IN_PROCESS_PYTHON_UDF"):
                 identity("id")
-            with self.assertRaisesRegex(Exception, "do not support spark.pythonWorkerEnv"):
+            with self.assertRaisesRegex(Exception, "UNSUPPORTED_IN_PROCESS_PYTHON_UDF"):
                 self.spark.range(1).select(column).collect()
+
+    def test_profiler_and_memory_settings_are_rejected(self):
+        from pyspark.inprocess import inprocess_udf
+
+        identity = inprocess_udf("long")(lambda x: x)
+        column = identity("id")
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            with self.assertRaisesRegex(Exception, "UNSUPPORTED_IN_PROCESS_PYTHON_UDF"):
+                identity("id")
+            with self.assertRaisesRegex(Exception, "UNSUPPORTED_IN_PROCESS_PYTHON_UDF"):
+                self.spark.range(1).select(column).collect()
+        conf = self.spark.sparkContext._jvm.org.apache.spark.SparkEnv.get().conf()
+        key = "spark.executor.pyspark.memory"
+        try:
+            conf.set(key, "128m")
+            with self.assertRaisesRegex(Exception, "UNSUPPORTED_IN_PROCESS_PYTHON_UDF"):
+                identity("id")
+            with self.assertRaisesRegex(Exception, "UNSUPPORTED_IN_PROCESS_PYTHON_UDF"):
+                self.spark.range(1).select(column).collect()
+        finally:
+            conf.remove(key)
+
+    def test_kwargs_only_function(self):
+        from pyspark.inprocess import inprocess_udf
+
+        identity = inprocess_udf("long")(lambda **cols: cols["x"])
+        self.assertEqual(
+            [row[0] for row in self.spark.range(2).select(identity(x="id")).collect()], [0, 1]
+        )
+
+    def test_isolated_interpreter_and_explicit_process_pythonpath(self):
+        from pyspark.inprocess import inprocess_udf
+
+        def flags(x):
+            import faulthandler
+            import sys
+
+            import _inprocess_process_helper
+            import pyarrow as pa
+
+            value = (
+                sys.flags.isolated == 1
+                and sys.flags.ignore_environment == 1
+                and not faulthandler.is_enabled()
+                and _inprocess_process_helper.MAGIC == -1
+            )
+            return pa.array([value] * len(x))
+
+        self.assertTrue(
+            self.spark.range(1).select(inprocess_udf("boolean")(flags)("id")).first()[0]
+        )
+
+    def test_missing_cdi_dependency_fails_plugin_startup(self):
+        import subprocess
+
+        jvm = self.spark.sparkContext._jvm
+        java_home = jvm.java.lang.System.getProperty("java.home")
+        classpath = os.pathsep.join(
+            p
+            for p in jvm.java.lang.System.getProperty("java.class.path").split(os.pathsep)
+            if p != self.cdi_jar
+        )
+        source = """
+import java.lang.reflect.Proxy;
+import java.util.Collections;
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.plugin.PluginContext;
+import org.apache.spark.sql.execution.python.InProcessPythonPlugin;
+
+class MissingCdiProbe {
+  public static void main(String[] args) {
+    PluginContext context = (PluginContext) Proxy.newProxyInstance(
+        PluginContext.class.getClassLoader(), new Class<?>[] {PluginContext.class},
+        (proxy, method, values) -> new SparkConf(false));
+    try {
+      new InProcessPythonPlugin().executorPlugin().init(context, Collections.emptyMap());
+      throw new AssertionError("Plugin accepted a missing CDI dependency");
+    } catch (IllegalStateException expected) {
+      if (!(expected.getCause() instanceof NoClassDefFoundError)) throw expected;
+      if (!expected.getMessage().contains("arrow-c-data.jar")) throw expected;
+      System.out.println("MISSING_CDI_REJECTED");
+    }
+  }
+}
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            source_file = Path(directory) / "MissingCdiProbe.java"
+            source_file.write_text(source)
+            result = subprocess.run(
+                [str(Path(java_home) / "bin" / "java"), "-cp", classpath, str(source_file)],
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("MISSING_CDI_REJECTED", result.stdout)
+
+    def test_fresh_jvm_retries_configuration_without_spark_home(self):
+        import subprocess
+        import venv
+
+        from pyspark import cloudpickle
+
+        jvm = self.spark.sparkContext._jvm
+        java_home = jvm.java.lang.System.getProperty("java.home")
+        classpath = jvm.java.lang.System.getProperty("java.class.path")
+        spark_home = jvm.java.lang.System.getenv("SPARK_HOME")
+        self.assertIsNotNone(spark_home)
+        python_lib = Path(spark_home) / "python" / "lib"
+        env = os.environ.copy()
+        env.pop("SPARK_HOME", None)
+        env.pop("VIRTUAL_ENV", None)
+        env["PATH"] = os.defpath
+        env["PYTHONPATH"] = os.pathsep.join(str(p) for p in python_lib.glob("*.zip"))
+        # These flags must be ignored by the embedded interpreter. No signals are raised.
+        env["PYTHONFAULTHANDLER"] = "1"
+        env["PYTHONDEVMODE"] = "1"
+
+        class BootstrapCheck:
+            def __reduce__(self):
+                return eval, (
+                    "(__import__('sys').flags.isolated == 1 and "
+                    "__import__('sys').flags.ignore_environment == 1 and "
+                    "not __import__('faulthandler').is_enabled() and "
+                    "'pyspark.zip' in __import__('pyspark').__file__ and (lambda x: x)) or "
+                    "(_ for _ in ()).throw(AssertionError('unexpected bootstrap state'))",
+                )
+
+        source = """
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
+import org.apache.arrow.vector.types.pojo.Field;
+import org.apache.spark.sql.execution.python.InProcessPythonRuntime;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.util.ArrowUtils;
+
+class BootstrapProbe {
+  public static void main(String[] args) throws Exception {
+    var bad = scala.jdk.javaapi.CollectionConverters.asScala(Arrays.asList(args[0])).toSeq();
+    boolean failed = false;
+    try {
+      InProcessPythonRuntime.initialize(bad);
+    } catch (jep.JepException expected) {
+      failed = true;
+    }
+    if (!failed) throw new AssertionError("Expected missing JEP package");
+    var good = scala.jdk.javaapi.CollectionConverters
+        .asScala(Arrays.asList(args[1], args[2])).toSeq();
+    try {
+      InProcessPythonRuntime.initialize(good);
+      Field field = ArrowUtils.toArrowField("result", DataTypes.LongType, true, "UTC",
+          false, org.apache.spark.sql.types.Metadata.empty(), false);
+      InProcessPythonRuntime.currentSession().register("probe",
+          Files.readAllBytes(Path.of(args[3])), field, args[4], false, false, false);
+      if (ArrowUtils.rootAllocator().getAllocatedMemory() != 0) {
+        throw new AssertionError("Unreleased registration schema");
+      }
+      System.out.println("BOOTSTRAP_OK");
+    } finally {
+      InProcessPythonRuntime.shutdown();
+    }
+  }
+}
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            # Keep JEP absent initially even when it is installed in the system Python.
+            clean_python = Path(directory) / "python"
+            venv.EnvBuilder(with_pip=False).create(clean_python)
+            env["PATH"] = str(clean_python / "bin") + os.pathsep + os.defpath
+            source_file = Path(directory) / "BootstrapProbe.java"
+            source_file.write_text(source)
+            command_file = Path(directory) / "command.pickle"
+            command_file.write_bytes(cloudpickle.dumps(BootstrapCheck()))
+            import sys
+
+            result = subprocess.run(
+                [
+                    str(Path(java_home) / "bin" / "java"),
+                    "--add-opens=java.base/java.nio=ALL-UNNAMED",
+                    "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+                    "-Dio.netty.tryReflectionSetAccessible=true",
+                    f"-Djava.library.path={self.jep_dir}",
+                    "--class-path",
+                    classpath,
+                    str(source_file),
+                    directory,
+                    self.site_packages,
+                    str(self.jep_dir.parent),
+                    str(command_file),
+                    "%d.%d" % sys.version_info[:2],
+                ],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("BOOTSTRAP_OK", result.stdout)
+
+    def test_exception_unicode_and_nul_survive_jep(self):
+        from pyspark.inprocess import inprocess_udf
+
+        def fail(x):
+            raise ValueError("failure: \U0001f600 \ud800 \0 tail")
+
+        with self.assertRaises(Exception) as error:
+            self.spark.range(1).select(inprocess_udf("long")(fail)("id")).collect()
+        self.assertIn(r"\U0001f600 \ud800 \x00 tail", str(error.exception))
 
     def test_named_argument_resolver(self):
         from pyspark.inprocess import inprocess_udf

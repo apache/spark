@@ -66,7 +66,6 @@ private[spark] class BatchIterator[T](iter: Iterator[T], batchSize: Int)
  * Following eval types are supported:
  *
  * <ul>
- *   <li> SQL_SCALAR_ARROW_INPROCESS_UDF for an embedded scalar Arrow UDF
  *   <li> SQL_ARROW_BATCHED_UDF for Arrow Optimized Python UDF
  *   <li> SQL_SCALAR_ARROW_UDF for Scalar Arrow UDF
  *   <li> SQL_SCALAR_ARROW_ITER_UDF for Scalar Iterator Arrow UDF

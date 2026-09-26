@@ -24,6 +24,8 @@ import org.apache.arrow.memory.util.MemoryUtil
 import org.apache.arrow.vector.FieldVector
 import org.apache.arrow.vector.types.pojo.Field
 
+import org.apache.spark.SparkException
+import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ArrowColumnVector
 import org.apache.spark.util.Utils
@@ -52,6 +54,20 @@ import org.apache.spark.util.Utils
  * The runtime validates the returned schema before ArrowColumnVector reads the buffers.
  */
 private[python] object InProcessArrowBridge {
+
+  /** Exercise the provided CDI JAR and its native library before accepting tasks. */
+  def verifyDependencies(): Unit = {
+    val schema = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
+    Utils.tryWithSafeFinally {
+      val field = ArrowUtils.toArrowField("probe", LongType, true, "UTC")
+      Data.exportField(ArrowUtils.rootAllocator, field, null, schema)
+      Data.importField(ArrowUtils.rootAllocator, ArrowSchema.wrap(schema.memoryAddress()), null)
+    } {
+      Utils.tryWithSafeFinally {
+        if (schema.snapshot().release != 0L) schema.release()
+      } { schema.close() }
+    }
+  }
 
   /**
    * Export a [[FieldVector]] to pre-allocated Arrow C Data Interface structs.
@@ -86,7 +102,9 @@ private[python] object InProcessArrowBridge {
    */
   private def checkOffsets(array: ArrowArray): Unit = {
     val snapshot = array.snapshot()
-    require(snapshot.offset == 0L, "In-process UDF returned an unsupported Arrow CDI offset")
+    if (snapshot.offset != 0L) {
+      throw SparkException.internalError("In-process UDF returned an unsupported Arrow CDI offset")
+    }
     (0L until snapshot.n_children).foreach { i =>
       checkOffsets(ArrowArray.wrap(MemoryUtil.getLong(snapshot.children + i * 8L)))
     }
@@ -109,8 +127,10 @@ private[python] object InProcessArrowBridge {
     val field = Data.importField(
       ArrowUtils.rootAllocator, ArrowSchema.wrap(arrowSchema.memoryAddress()), null)
     expected.foreach { declared =>
-      require(sameLayout(field, declared),
-        s"In-process UDF returned Arrow field $field; expected $declared")
+      if (!sameLayout(field, declared)) {
+        throw SparkException.internalError(
+          s"In-process UDF returned Arrow field $field; expected $declared")
+      }
     }
     // Array CDI has no top-level field metadata. Nested JSON metadata can also differ in
     // whitespace. After checking the physical layout, use the declared field to retain Spark

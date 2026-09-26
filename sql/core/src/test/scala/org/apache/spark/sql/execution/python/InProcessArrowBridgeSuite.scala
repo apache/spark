@@ -23,7 +23,7 @@ import org.apache.arrow.vector.IntVector
 import org.apache.arrow.vector.complex.StructVector
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ArrowColumnVector
 
@@ -78,7 +78,7 @@ class InProcessArrowBridgeSuite extends SparkFunSuite {
       val snapshot = target.snapshot()
       snapshot.offset = 1L
       target.save(snapshot)
-      val error = intercept[IllegalArgumentException] {
+      val error = intercept[SparkException] {
         InProcessArrowBridge.cdiToColumn(array, schema)
       }
       assert(error.getMessage.contains("offset"))
@@ -104,7 +104,7 @@ class InProcessArrowBridgeSuite extends SparkFunSuite {
       input.setValueCount(1)
       InProcessArrowBridge.exportColumn(input, array, schema)
       val expected = Field.nullable("result", ArrowType.Utf8.INSTANCE)
-      val error = intercept[IllegalArgumentException] {
+      val error = intercept[SparkException] {
         InProcessArrowBridge.cdiToColumn(array, schema, Some(expected))
       }
       assert(error.getMessage.contains("expected"))

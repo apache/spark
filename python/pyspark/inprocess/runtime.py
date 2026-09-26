@@ -30,7 +30,7 @@ import pyarrow.compute as pc
 
 from pyspark import cloudpickle
 from pyspark.errors import PySparkRuntimeError
-from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.util import _format_exception
 
 _UDF_TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
@@ -38,17 +38,23 @@ NullChecker = Callable[[pa.Array], None]
 _udfs: dict[str, tuple[Callable[..., pa.Array], pa.DataType, NullChecker, bool, bool, bool]] = {}
 
 
+def _jep_safe_message(message: str) -> str:
+    # JEP uses JNI modified UTF-8 for exception text. Keep the transport ASCII and
+    # escape NUL explicitly; ordinary UTF-8 and embedded NUL are not safe here.
+    return message.encode("ascii", "backslashreplace").decode("ascii").replace("\0", "\\x00")
+
+
 def _inprocess_register(
     handle: str,
     serialized_udf: Any,
-    timezone: str,
+    schema_ptr: int,
     python_version: str,
-    large_var_types: bool = False,
     hide_traceback: bool = False,
     simplified_traceback: bool = False,
     traceback_with_locals: bool = False,
 ) -> None:
     try:
+        require_minimum_pyarrow_version()
         embedded_version = "%d.%d" % sys.version_info[:2]
         if python_version != embedded_version:
             raise PySparkRuntimeError(
@@ -60,16 +66,9 @@ def _inprocess_register(
             )
         # JEP exposes direct ByteBuffers through the buffer protocol. Unpickle a separate
         # function per task without iterating over a PyJArray one JNI call per byte.
-        # Carry the type with the closure so driver-defined UDTs need no module import.
-        func, return_type = cloudpickle.loads(memoryview(serialized_udf))
-        expected_type = to_arrow_type(
-            return_type,
-            timezone=timezone,
-            prefers_large_types=large_var_types,
-            error_on_duplicated_field_names_in_struct=True,
-        )
-        if large_var_types:
-            expected_type = _large_binary_type(expected_type)
+        func = cloudpickle.loads(memoryview(serialized_udf))
+        # The JVM is the single source of truth for Arrow layout and logical metadata.
+        expected_type = pa.Field._import_from_c(schema_ptr).type
         checker = _null_checker(expected_type) or (lambda array: None)
         _udfs[handle] = (
             func,
@@ -83,7 +82,11 @@ def _inprocess_register(
         # In JEP, an uncaught SystemExit can terminate the entire executor JVM.
         raise RuntimeError(
             _UDF_TRACEBACK_SENTINEL
-            + _format_exception(error, hide_traceback, simplified_traceback, traceback_with_locals)
+            + _jep_safe_message(
+                _format_exception(
+                    error, hide_traceback, simplified_traceback, traceback_with_locals
+                )
+            )
         ) from None
 
 
@@ -106,25 +109,6 @@ def _nullable_type(data_type: pa.DataType) -> pa.DataType:
         return pa.map_(
             _nullable_type(data_type.key_type),
             nullable_field(data_type.item_field),
-            keys_sorted=data_type.keys_sorted,
-        )
-    return data_type
-
-
-def _large_binary_type(data_type: pa.DataType) -> pa.DataType:
-    # The shared conversion keeps binary children for Variant and spatial types. Widen
-    # them only for CDI, where the layout must match the JVM, including nested occurrences.
-    if pa.types.is_binary(data_type):
-        return pa.large_binary()
-    if pa.types.is_struct(data_type):
-        return pa.struct([f.with_type(_large_binary_type(f.type)) for f in data_type])
-    if pa.types.is_list(data_type):
-        field = data_type.value_field
-        return pa.list_(field.with_type(_large_binary_type(field.type)))
-    if pa.types.is_map(data_type):
-        return pa.map_(
-            data_type.key_field.with_type(_large_binary_type(data_type.key_type)),
-            data_type.item_field.with_type(_large_binary_type(data_type.item_type)),
             keys_sorted=data_type.keys_sorted,
         )
     return data_type
@@ -318,5 +302,9 @@ def _inprocess_invoke(
     except BaseException as error:
         raise RuntimeError(
             _UDF_TRACEBACK_SENTINEL
-            + _format_exception(error, hide_traceback, simplified_traceback, traceback_with_locals)
+            + _jep_safe_message(
+                _format_exception(
+                    error, hide_traceback, simplified_traceback, traceback_with_locals
+                )
+            )
         ) from None

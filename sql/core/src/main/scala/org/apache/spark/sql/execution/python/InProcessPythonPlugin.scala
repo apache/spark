@@ -55,6 +55,8 @@ private[python] class InProcessPythonExecutorPlugin extends ExecutorPlugin with 
         .getOption(InProcessPythonRuntime.SITE_PACKAGES_CONFIG)
         .map(_.split(",").map(_.trim).filter(_.nonEmpty).toSeq)
         .getOrElse(Seq.empty)
+      // Resolve CDI classes inside the guarded call, so even a missing JAR gets a useful error.
+      InProcessArrowBridge.verifyDependencies()
       InProcessPythonRuntime.initialize(sitePackages)
       logInfo("In-process Python runtime initialized successfully.")
     } catch {
@@ -62,12 +64,15 @@ private[python] class InProcessPythonExecutorPlugin extends ExecutorPlugin with 
         logError("Cannot start the in-process Python runtime: " + e.getMessage, e)
         throw e
       case e if NonFatal(e) || e.isInstanceOf[LinkageError] =>
-        logError(
+        val message =
           "Failed to initialize in-process Python runtime. " +
-          "Verify that: (1) libjep.so/libjep.dylib is on LD_LIBRARY_PATH/DYLD_LIBRARY_PATH, " +
-          "(2) jep.jar is on the executor classpath, " +
-          "(3) Python 3.11+, PyArrow 18+, and PySpark are installed.", e)
-        throw e
+          "Verify that: (1) libjep.so/libjep.dylib is on java.library.path or " +
+          "LD_LIBRARY_PATH/DYLD_LIBRARY_PATH, " +
+          "(2) jep.jar and arrow-c-data.jar are on the executor classpath, " +
+          "(3) the Arrow CDI native library can be loaded, " +
+          "(4) Python 3.11+, PyArrow 18+, and PySpark are installed."
+        logError(message, e)
+        throw new IllegalStateException(message, e)
     }
   }
 

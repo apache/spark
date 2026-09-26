@@ -26,7 +26,7 @@ import org.apache.arrow.c.{ArrowArray, ArrowSchema}
 import org.apache.arrow.util.AutoCloseables
 import org.apache.arrow.vector.VectorSchemaRoot
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, PythonUDF}
@@ -65,7 +65,10 @@ class InProcessArrowEvalPythonEvaluatorFactory(
       context: TaskContext): Iterator[InternalRow] = {
     ArrowUtils.failDuplicatedFieldNames(inputSchema)
     val functions = funcs.map { case (chain, _) =>
-      require(chain.funcs.size == 1, "In-process UDF chains must use separate evaluation nodes")
+      if (chain.funcs.size != 1) {
+        throw SparkException.internalError(
+          "In-process UDF chains must use separate evaluation nodes")
+      }
       chain.funcs.head
     }
     val inputOrdinals = argMetas.map(_.map(_.offset))
@@ -85,7 +88,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     var writer: ArrowWriter = null
     val results = ArrayBuffer.empty[ArrowColumnVector]
     var closed = false
-    val startedAt = System.nanoTime()
+    var startedAt = 0L
 
     def closeBatch(): Unit = {
       val resources = ArrayBuffer.empty[AutoCloseable]
@@ -101,7 +104,9 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     def close(): Unit = {
       if (!closed) {
         closed = true
-        metrics("pythonTotalTime") += (System.nanoTime() - startedAt) / 1000000
+        if (startedAt != 0L) {
+          metrics("pythonTotalTime") += (System.nanoTime() - startedAt) / 1000000
+        }
         Utils.tryWithSafeFinally {
           closeBatch()
         } {
@@ -116,6 +121,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
       private var batchIter: Iterator[InternalRow] = Iterator.empty
 
       override def hasNext: Boolean = {
+        if (!closed && startedAt == 0L) startedAt = System.nanoTime()
         checkCancellation()
         val available = !closed && (batchIter.hasNext || rows.hasNext)
         if (!available) close()
@@ -131,14 +137,12 @@ class InProcessArrowEvalPythonEvaluatorFactory(
               runtime = InProcessPythonRuntime.currentSession
               // Mark before registering so failure after any registration still cleans up.
               registered = true
-              val start = System.nanoTime()
               functions.indices.foreach { i =>
                 val func = functions(i)
-                runtime.register(handles(i), func.command.toArray,
-                  timeZoneId, func.pythonVer, largeVarTypes, hideTraceback, simplifiedTraceback,
-                  tracebackWithLocals)
+                initTime.add(runtime.register(handles(i), func.command.toArray,
+                  expectedFields(i), func.pythonVer, hideTraceback, simplifiedTraceback,
+                  tracebackWithLocals))
               }
-              initTime.add(System.nanoTime() - start)
             }
             val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
             writer = try {

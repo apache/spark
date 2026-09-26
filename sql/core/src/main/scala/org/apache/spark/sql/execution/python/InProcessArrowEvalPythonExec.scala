@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, PythonUDF}
 import org.apache.spark.sql.execution.SparkPlan
 
@@ -26,8 +28,12 @@ case class InProcessArrowEvalPythonExec(
     resultAttrs: Seq[Attribute],
     child: SparkPlan) extends EvalPythonExec with PythonSQLMetrics {
 
+  override protected def doExecute(): RDD[InternalRow] = {
+    InProcessPythonUDFBuilder.checkConfiguration(conf)
+    super.doExecute()
+  }
+
   override protected def evaluatorFactory: EvalPythonEvaluatorFactory = {
-    InProcessPythonUDFBuilder.checkWorkerEnvironment(conf)
     new InProcessArrowEvalPythonEvaluatorFactory(
       child.output, udfs, output, conf.arrowMaxRecordsPerBatch, conf.arrowMaxBytesPerBatch,
       conf.sessionLocalTimeZone, conf.arrowUseLargeVarTypes, conf.pysparkHideTraceback,

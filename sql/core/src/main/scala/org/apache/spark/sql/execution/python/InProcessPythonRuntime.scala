@@ -24,10 +24,13 @@ import java.util.concurrent.{Callable, ExecutionException, Executors, ThreadFact
 import scala.jdk.CollectionConverters._
 
 import jep.{JepConfig, JepException, MainInterpreter, PyConfig, SharedInterpreter}
+import org.apache.arrow.c.{ArrowSchema, Data}
+import org.apache.arrow.vector.types.pojo.Field
 
 import org.apache.spark.{TaskContext, TaskKilledException}
 import org.apache.spark.api.python.{PythonException, PythonUtils}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
 /** Owns one interpreter generation per executor plugin lifecycle. */
@@ -35,18 +38,35 @@ private[python] object InProcessPythonRuntime extends Logging {
   val SITE_PACKAGES_CONFIG = "spark.inprocess.python.sitePackages"
   private val TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
   private var active: InterpreterSession = _
-  private var configured = false
+  private var mainConfigured = false
+  @volatile private var sharedConfigured = false
 
   private[python] class LifecycleException(message: String) extends IllegalStateException(message)
 
   private def configureInterpreter(sitePackages: Seq[String]): Unit = {
-    if (!configured) {
+    if (!mainConfigured) {
       // Like Python workers, use a stable default hash seed on every executor. This must
       // happen before JEP creates its process-wide main interpreter, including on restarts.
-      MainInterpreter.setInitParams(new PyConfig().setHashSeed(0).setUseHashSeed(true))
+      MainInterpreter.setInitParams(
+        PyConfig.isolated().setUseEnvironment(false).setHashSeed(0).setUseHashSeed(true))
+      mainConfigured = true
+    }
+    if (!sharedConfigured) {
       // JEP imports its Python package during construction, before our bootstrap runs.
       SharedInterpreter.setConfig(new JepConfig().addIncludePaths(sitePackages: _*))
-      configured = true
+    }
+  }
+
+  private class ManagedSharedInterpreter extends SharedInterpreter {
+    override protected def configureInterpreter(config: JepConfig): Unit = {
+      // JEP invokes this hook after native initialization, from its constructor. Close
+      // here if configuration fails, before the caller can receive an interpreter handle.
+      try {
+        super.configureInterpreter(config)
+        sharedConfigured = true
+      } catch {
+        case t: Throwable => Utils.tryWithSafeFinally { throw t } { close() }
+      }
     }
   }
 
@@ -54,7 +74,7 @@ private[python] object InProcessPythonRuntime extends Logging {
     "try:\n" + script.linesIterator.map("    " + _).mkString("\n") +
       "\nexcept BaseException as _bootstrap_error:\n" +
       "    raise RuntimeError('In-process Python bootstrap failed: ' + " +
-      "repr(_bootstrap_error)) from None\n"
+      "ascii(_bootstrap_error)) from None\n"
   }
 
   def initialize(sitePackages: Seq[String] = Seq.empty): Unit = synchronized {
@@ -176,10 +196,12 @@ private[python] object InProcessPythonRuntime extends Logging {
     }
 
     def initialize(): Unit = onInterpreterThread {
-      val candidate = new SharedInterpreter()
+      val candidate = new ManagedSharedInterpreter()
       try {
         candidate.set("_site_packages", sitePackages.asJava)
-        val sparkPaths = PythonUtils.sparkPythonPath.split(File.pathSeparator).filter(_.nonEmpty)
+        val sparkPaths = PythonUtils.mergePythonPaths(
+          PythonUtils.sparkPythonPath, sys.env.getOrElse("PYTHONPATH", ""))
+          .split(File.pathSeparator).filter(_.nonEmpty)
         candidate.set("_spark_paths", sparkPaths.toSeq.asJava)
         candidate.exec(bootstrapScript(
           """import os, site, sys
@@ -192,7 +214,10 @@ private[python] object InProcessPythonRuntime extends Logging {
             |sys.path[:] = _preferred + [p for p in sys.path if p not in _preferred]
             |del _site_packages, _spark_paths, _configured, _before, _added, _preferred
             |""".stripMargin))
-        candidate.exec(bootstrapScript("from pyspark.inprocess.runtime import " +
+        candidate.exec(bootstrapScript(
+          "from pyspark.sql.pandas.utils import require_minimum_pyarrow_version\n" +
+          "require_minimum_pyarrow_version()\n" +
+          "from pyspark.inprocess.runtime import " +
           "_inprocess_invoke, _inprocess_register, _inprocess_release, _udfs"))
         interp = candidate
       } catch {
@@ -241,26 +266,39 @@ private[python] object InProcessPythonRuntime extends Logging {
       }
     }
 
+    private[python] def timedOnInterpreterThread(body: => Unit): Long = onInterpreterThread {
+      val start = System.nanoTime()
+      body
+      System.nanoTime() - start
+    }
+
     def register(
         handle: String,
         serializedUdf: Array[Byte],
-        timeZoneId: String,
+        expectedField: Field,
         pythonVersion: String,
-        largeVarTypes: Boolean,
         hideTraceback: Boolean,
         simplifiedTraceback: Boolean,
-        tracebackWithLocals: Boolean): Unit = {
+        tracebackWithLocals: Boolean): Long = {
       // Bulk-copy on the task thread. JEP's PyJBuffer supports memoryview without per-byte JNI.
       val command = ByteBuffer.allocateDirect(serializedUdf.length)
       command.put(serializedUdf).flip()
-      onInterpreterThread {
-        withPythonException {
-          interp.invoke("_inprocess_register", handle, command, timeZoneId,
-            pythonVersion, java.lang.Boolean.valueOf(largeVarTypes),
-            java.lang.Boolean.valueOf(hideTraceback),
-            java.lang.Boolean.valueOf(simplifiedTraceback),
-            java.lang.Boolean.valueOf(tracebackWithLocals))
+      val schema = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
+      Utils.tryWithSafeFinally {
+        Data.exportField(ArrowUtils.rootAllocator, expectedField, null, schema)
+        timedOnInterpreterThread {
+          withPythonException {
+            interp.invoke("_inprocess_register", handle, command,
+              java.lang.Long.valueOf(schema.memoryAddress()), pythonVersion,
+              java.lang.Boolean.valueOf(hideTraceback),
+              java.lang.Boolean.valueOf(simplifiedTraceback),
+              java.lang.Boolean.valueOf(tracebackWithLocals))
+          }
         }
+      } {
+        Utils.tryWithSafeFinally {
+          if (schema.snapshot().release != 0L) schema.release()
+        } { schema.close() }
       }
     }
 
@@ -271,8 +309,7 @@ private[python] object InProcessPythonRuntime extends Logging {
         outputArrayAddr: Long,
         outputSchemaAddr: Long,
         expectedRows: Int,
-        argumentNames: Array[String]): Long = onInterpreterThread {
-      val start = System.nanoTime()
+        argumentNames: Array[String]): Long = timedOnInterpreterThread {
       val arrayPtrs = inputArrayPtrs.map(java.lang.Long.valueOf).toSeq.asJava
       val schemaPtrs = inputSchemaPtrs.map(java.lang.Long.valueOf).toSeq.asJava
       withPythonException {
@@ -280,7 +317,6 @@ private[python] object InProcessPythonRuntime extends Logging {
           java.lang.Long.valueOf(outputArrayAddr), java.lang.Long.valueOf(outputSchemaAddr),
           java.lang.Integer.valueOf(expectedRows), argumentNames.toSeq.asJava)
       }
-      System.nanoTime() - start
     }
   }
 

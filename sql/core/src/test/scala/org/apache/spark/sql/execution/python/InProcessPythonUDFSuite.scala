@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{AnalysisException, Column, QueryTest}
 import org.apache.spark.sql.api.python.PythonSQLUtils
@@ -63,6 +64,25 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
     assert(physical.head.producedAttributes ==
       (physical.head.outputSet -- physical.head.child.outputSet))
     assert(physical.head.missingInput.isEmpty)
+  }
+
+  test("unsupported configuration added after column creation fails before task submission") {
+    val column = makeUDF("identity", col("id"))
+    for (partitionEvaluator <- Seq("true", "false")) {
+      withSQLConf(
+          SQLConf.USE_PARTITION_EVALUATOR.key -> partitionEvaluator,
+          SQLConf.PYTHON_UDF_PROFILER.key -> "perf") {
+        val plan = spark.range(1).select(column).queryExecution.executedPlan
+        val error = intercept[SparkException] {
+          // execute() builds the RDD without submitting a job or entering a task closure.
+          plan.execute()
+        }
+        checkError(
+          exception = error,
+          condition = "INVALID_SPARK_CONFIG.UNSUPPORTED_IN_PROCESS_PYTHON_UDF",
+          parameters = Map("config" -> SQLConf.PYTHON_UDF_PROFILER.key))
+      }
+    }
   }
 
   test("positional arguments after named arguments are rejected by the builder") {

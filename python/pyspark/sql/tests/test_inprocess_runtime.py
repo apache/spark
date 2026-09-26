@@ -58,6 +58,20 @@ class InProcessRuntimeTests(unittest.TestCase):
     def tearDown(self):
         _udfs.clear()
 
+    def register(self, handle, serialized, expected=None, version=None, **options):
+        schema = ffi.new("struct ArrowSchema*")
+        address = int(ffi.cast("uintptr_t", schema))
+        field = expected if expected is not None else pa.field("result", pa.int64())
+        field._export_to_c(address)
+        try:
+            _inprocess_register(
+                handle, serialized, address, version or "%d.%d" % sys.version_info[:2], **options
+            )
+            self.assertEqual(schema.release, ffi.NULL)
+        finally:
+            if schema.release != ffi.NULL:
+                schema.release(schema)
+
     def invoke(self, func, inputs, return_type, rows=None, timezone="UTC"):
         arrays = [ffi.new("struct ArrowArray*") for _ in inputs]
         schemas = [ffi.new("struct ArrowSchema*") for _ in inputs]
@@ -71,11 +85,15 @@ class InProcessRuntimeTests(unittest.TestCase):
             for value, array, schema in zip(inputs, arrays, schemas):
                 value._export_to_c(address(array), address(schema))
             serialized = (
-                func._serialize()
-                if hasattr(func, "_serialize")
-                else cloudpickle.dumps((func, return_type))
+                func._serialize() if hasattr(func, "_serialize") else cloudpickle.dumps(func)
             )
-            _inprocess_register("test", serialized, timezone, "%d.%d" % sys.version_info[:2])
+            from pyspark.sql.pandas.types import to_arrow_type
+
+            self.register(
+                "test",
+                serialized,
+                pa.field("result", to_arrow_type(return_type, timezone=timezone)),
+            )
             _inprocess_invoke(
                 "test",
                 [address(a) for a in arrays],
@@ -198,17 +216,12 @@ class InProcessRuntimeTests(unittest.TestCase):
                 return fail, ()
 
         with self.assertRaisesRegex(RuntimeError, "SystemExit"):
-            _inprocess_register(
-                "bad",
-                cloudpickle.dumps(FailingLoad()),
-                "UTC",
-                "%d.%d" % sys.version_info[:2],
-            )
+            self.register("bad", cloudpickle.dumps(FailingLoad()))
         self.assertNotIn("bad", _udfs)
 
     def test_python_version_is_checked_before_deserialization(self):
         with self.assertRaisesRegex(RuntimeError, "PYTHON_VERSION_MISMATCH"):
-            _inprocess_register("bad", b"invalid pickle", "UTC", "0.0")
+            self.register("bad", b"invalid pickle", version="0.0")
         self.assertNotIn("bad", _udfs)
 
     def test_registration_is_task_scoped(self):
@@ -218,9 +231,9 @@ class InProcessRuntimeTests(unittest.TestCase):
             state.append(x)
             return len(state)
 
-        command = cloudpickle.dumps((remember, LongType()))
+        command = cloudpickle.dumps(remember)
         for handle in ("first", "second"):
-            _inprocess_register(handle, command, "UTC", "%d.%d" % sys.version_info[:2])
+            self.register(handle, command)
         self.assertEqual(_udfs["first"][0](1), 1)
         self.assertEqual(_udfs["first"][0](2), 2)
         self.assertEqual(_udfs["second"][0](3), 1)
@@ -419,34 +432,62 @@ class InProcessRuntimeTests(unittest.TestCase):
                 self.assertEqual(error.exception.getCondition(), "NOT_IMPLEMENTED")
                 self.assertIsNone(wrapper._serialized)
 
-    def test_large_binary_logical_types(self):
-        from pyspark.inprocess.runtime import _large_binary_type
-        from pyspark.sql.pandas.types import to_arrow_type
-        from pyspark.sql.types import GeographyType, GeometryType, MapType, VariantType
+    def test_registration_consumes_declared_cdi_schema(self):
+        # An independently provided field is authoritative, including nested metadata,
+        # child names, large binary layout, and nullability.
+        expected = pa.field(
+            "result",
+            pa.struct(
+                [pa.field("payload", pa.large_binary(), nullable=False, metadata={"logical": "v"})]
+            ),
+        )
+        self.register("schema", cloudpickle.dumps(lambda x: x), expected)
+        self.assertTrue(_udfs["schema"][1].equals(expected.type, check_metadata=True))
+        with self.assertRaisesRegex(ValueError, "non-nullable"):
+            _udfs["schema"][2](pa.array([{"payload": None}], type=expected.type))
 
-        for data_type in [VariantType(), GeometryType(0), GeographyType(4326)]:
-            for large in [False, True]:
-                arrow_type = to_arrow_type(data_type, prefers_large_types=large)
-                # Shared worker/toArrow conversion keeps its existing small-binary contract.
-                self.assertEqual(arrow_type[-1].type, pa.binary())
-                for nested in (
-                    data_type,
-                    ArrayType(data_type),
-                    MapType(StringType(), data_type),
-                    StructType([StructField("x", data_type)]),
-                ):
-                    raw = to_arrow_type(nested, prefers_large_types=large)
-                    expected = _large_binary_type(raw) if large else raw
-                    handle = "large"
-                    _inprocess_register(
-                        handle,
-                        cloudpickle.dumps((lambda x: x, nested)),
-                        "UTC",
-                        "%d.%d" % sys.version_info[:2],
-                        large,
-                    )
-                    self.assertEqual(_udfs[handle][1], expected)
-                self.assertEqual(_large_binary_type(arrow_type)[-1].type, pa.large_binary())
+    def test_duplicate_return_fields_fail_before_serialization(self):
+        duplicate = StructType([StructField("x", LongType()), StructField("x", LongType())])
+        for declared in [
+            duplicate,
+            ArrayType(duplicate),
+            StructType([StructField("n", duplicate)]),
+        ]:
+            wrapper = inprocess_udf(declared)(lambda x: x)
+            with self.assertRaisesRegex(Exception, "DUPLICATED_FIELD_NAME"):
+                wrapper._serialize()
+            self.assertIsNone(wrapper._serialized)
+
+    def test_pyarrow_minimum_version_on_driver_and_registration(self):
+        with patch.object(pa, "__version__", "1.0.0"):
+            with self.assertRaisesRegex(ImportError, "PyArrow.*must be installed"):
+                inprocess_udf(LongType())(lambda x: x)
+            with self.assertRaisesRegex(RuntimeError, "PyArrow.*must be installed"):
+                self.register("old", b"invalid pickle")
+        self.assertNotIn("old", _udfs)
+
+    def test_callable_signatures(self):
+        class NoArgs:
+            def __call__(self):
+                return pa.array([1])
+
+        with self.assertRaisesRegex(ValueError, "0-arg"):
+            inprocess_udf(LongType())(NoArgs())
+        wrapper = inprocess_udf(LongType())(lambda **cols: cols["x"])
+        self.assertEqual(wrapper.func(x=pa.array([1])).to_pylist(), [1])
+
+    def test_exception_text_is_safe_for_jni(self):
+        message = "failure: \U0001f600 \ud800 \0 tail"
+
+        def fail(x):
+            raise ValueError(message)
+
+        with self.assertRaises(RuntimeError) as error:
+            self.invoke(fail, [pa.array([1])], LongType())
+        text = str(error.exception)
+        self.assertTrue(text.isascii())
+        self.assertNotIn("\0", text)
+        self.assertIn(r"\U0001f600 \ud800 \x00 tail", text)
 
     def test_wrapper_metadata_and_return_type_validation(self):
         from pyspark.errors import PySparkTypeError
@@ -473,7 +514,7 @@ class InProcessRuntimeTests(unittest.TestCase):
     def test_registration_traceback_policy(self):
         for hide in [False, True]:
             with self.assertRaises(RuntimeError) as error:
-                _inprocess_register("bad", b"", "UTC", "0.0", False, hide)
+                self.register("bad", b"", version="0.0", hide_traceback=hide)
             self.assertEqual("Traceback" in str(error.exception), not hide)
             self.assertIn("PYTHON_VERSION_MISMATCH", str(error.exception))
 

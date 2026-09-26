@@ -35,7 +35,7 @@ Usage::
 import io
 import sys
 from functools import update_wrapper
-from inspect import getfullargspec
+from inspect import signature
 from typing import Any, Callable, Optional, Union
 
 from pyspark import Accumulator, Broadcast, cloudpickle
@@ -52,9 +52,9 @@ class _InProcessPickler(cloudpickle.CloudPickler):
         return super().reducer_override(obj)
 
 
-def _serialize_udf(func: Callable, return_type: DataType) -> bytes:
+def _serialize_udf(func: Callable) -> bytes:
     buffer = io.BytesIO()
-    _InProcessPickler(buffer).dump((func, return_type))
+    _InProcessPickler(buffer).dump(func)
     return buffer.getvalue()
 
 
@@ -85,8 +85,10 @@ class InProcessUDFWrapper:
         self._deterministic: bool = deterministic
         self._name: str = getattr(func, "__name__", "inprocess_udf")
 
-        argspec = getfullargspec(func)
-        if not argspec.args and argspec.varargs is None and not argspec.kwonlyargs:
+        from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+        require_minimum_pyarrow_version()
+        if not signature(func).parameters:
             raise PySparkValueError(
                 errorClass="INVALID_PANDAS_UDF",
                 messageParameters={"detail": "0-arg inprocess_udfs are not supported."},
@@ -110,6 +112,9 @@ class InProcessUDFWrapper:
             from pyspark.sql.udf import UserDefinedFunction
 
             UserDefinedFunction._check_return_type(parsed, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+            from pyspark.sql.pandas.types import to_arrow_type
+
+            to_arrow_type(parsed, timezone="UTC", error_on_duplicated_field_names_in_struct=True)
             self._parsed_return_type = parsed
         return self._parsed_return_type
 
@@ -123,7 +128,9 @@ class InProcessUDFWrapper:
 
     def _serialize(self) -> bytes:
         if self._serialized is None:
-            self._serialized = _serialize_udf(self._func, self.returnType)
+            # Validate before caching the command, including driver-only UDT definitions.
+            self.returnType
+            self._serialized = _serialize_udf(self._func)
         return self._serialized
 
     def __call__(self, *cols: Union[Column, str], **kwargs: Union[Column, str]) -> Column:
