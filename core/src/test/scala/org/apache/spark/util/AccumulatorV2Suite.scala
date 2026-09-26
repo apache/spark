@@ -17,6 +17,9 @@
 
 package org.apache.spark.util
 
+import java.io.ObjectInputStream
+import java.util.concurrent.ConcurrentHashMap
+
 import org.apache.spark._
 
 class AccumulatorV2Suite extends SparkFunSuite {
@@ -127,6 +130,64 @@ class AccumulatorV2Suite extends SparkFunSuite {
     assert(acc3.value.isEmpty)
   }
 
+  test("SPARK-59451: accumulator is registered with the task only once fully deserialized") {
+    val acc = new HeartbeatProbeAccumulator
+    acc.metadata = AccumulatorMetadata(AccumulatorContext.newId(), None, countFailedValues = false)
+    AccumulatorContext.register(acc)
+    val bytes = Utils.serialize(acc)
+
+    // A task context makes the deserialized copy auto-register, as it does inside a task.
+    TaskContext.setTaskContext(TaskContext.empty())
+    try {
+      // The probe's readObject throws if this object is already registered, see its doc.
+      val deserialized = Utils.deserialize[HeartbeatProbeAccumulator](bytes)
+
+      assert(!deserialized.isAtDriverSide)
+      assert(TaskContext.get().taskMetrics().accumulators().contains(deserialized))
+      assert(deserialized.isZero)
+    } finally {
+      TaskContext.unset()
+      AccumulatorContext.clear()
+    }
+  }
+
 }
 
 class MyData(val i: Int) extends Serializable
+
+/**
+ * An accumulator whose state lives in a field of this class rather than of `AccumulatorV2`. Java
+ * deserializes a class hierarchy from the top down, so there is a window in which the
+ * `AccumulatorV2` slice of the object has been read but this slice has not and `values` is null.
+ * This class's `readObject` runs in exactly that window and mimics the executor heartbeater:
+ * it iterates the task's registered accumulators and calls `isZero` on each.
+ */
+class HeartbeatProbeAccumulator extends AccumulatorV2[Int, java.util.Set[Int]] {
+  private val values = ConcurrentHashMap.newKeySet[Int]()
+
+  override def isZero: Boolean = values.isEmpty
+
+  override def copy(): HeartbeatProbeAccumulator = {
+    val newAcc = new HeartbeatProbeAccumulator
+    newAcc.values.addAll(values)
+    newAcc
+  }
+
+  override def reset(): Unit = values.clear()
+
+  override def add(v: Int): Unit = values.add(v)
+
+  override def merge(other: AccumulatorV2[Int, java.util.Set[Int]]): Unit = other match {
+    case o: HeartbeatProbeAccumulator => values.addAll(o.values)
+    case _ => throw new UnsupportedOperationException(
+      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+  }
+
+  override def value: java.util.Set[Int] = values
+
+  private def readObject(in: ObjectInputStream): Unit = {
+    // Simulate a heartbeat arriving before this class's fields have been read.
+    TaskContext.get().taskMetrics().accumulators().foreach(_.isZero)
+    in.defaultReadObject()
+  }
+}
