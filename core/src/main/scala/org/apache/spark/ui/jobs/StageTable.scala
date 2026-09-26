@@ -39,7 +39,9 @@ private[ui] class StageTableBase(
     subPath: String,
     isFairScheduler: Boolean,
     killEnabled: Boolean,
-    isFailedStage: Boolean) {
+    isFailedStage: Boolean,
+    actionsViaGetEnabled: Boolean,
+    csrfToken: String) {
 
   val stagePage = Option(request.getParameter(stageTag + ".page")).map(_.toInt).getOrElse(1)
 
@@ -55,6 +57,8 @@ private[ui] class StageTableBase(
       subPath,
       isFairScheduler,
       killEnabled,
+      actionsViaGetEnabled,
+      csrfToken,
       currentTime,
       isFailedStage,
       request
@@ -107,6 +111,8 @@ private[ui] class StagePagedTable(
     subPath: String,
     isFairScheduler: Boolean,
     killEnabled: Boolean,
+    actionsViaGetEnabled: Boolean,
+    csrfToken: String,
     currentTime: Long,
     isFailedStage: Boolean,
     request: HttpServletRequest) extends PagedTable[StageTableRowData] {
@@ -230,16 +236,16 @@ private[ui] class StagePagedTable(
       val confirm =
         s"if (window.confirm('Are you sure you want to kill stage ${s.stageId} ?')) " +
         "{ this.parentNode.submit(); return true; } else { return false; }"
-      // SPARK-6846 this should be POST-only but YARN AM won't proxy POST
-      /*
-      val killLinkUri = s"$basePathUri/stages/stage/kill/"
-      <form action={killLinkUri} method="POST" style="display:inline">
+      // The form this file used to carry commented out, now live in both modes; only the
+      // method follows spark.ui.actionsViaGetEnabled, see UIUtils.actionFormMethod. The
+      // confirm handler submits the enclosing form.
+      <form action={s"$basePathUri/stages/stage/kill/"}
+            method={UIUtils.actionFormMethod(actionsViaGetEnabled)}
+            style="display:inline">
         <input type="hidden" name="id" value={s.stageId.toString}/>
+        <input type="hidden" name="csrfToken" value={csrfToken}/>
         <a href="#" onclick={confirm} class="kill-link">(kill)</a>
       </form>
-       */
-      val killLinkUri = s"$basePathUri/stages/stage/kill/?id=${s.stageId}"
-      <a href={killLinkUri} onclick={confirm} class="kill-link">(kill)</a>
     } else {
       Seq.empty
     }

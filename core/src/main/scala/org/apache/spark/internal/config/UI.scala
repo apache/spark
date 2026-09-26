@@ -94,6 +94,19 @@ private[spark] object UI {
     .booleanConf
     .createWithDefault(true)
 
+  val UI_ACTIONS_VIA_GET_ENABLED = ConfigBuilder("spark.ui.actionsViaGetEnabled")
+    .doc("Whether the job/stage kill endpoints of the web UI accept HTTP GET requests in " +
+      "addition to POST. Unset, this defaults to true when spark.master is yarn, because " +
+      "the YARN ResourceManager/AM proxy does not forward POST requests (SPARK-6846), and " +
+      "to false everywhere else. Either way the state-changing endpoints require the " +
+      "random per-UI CSRF token embedded in the forms the UI renders, and reject " +
+      "prefetch requests (Purpose/Sec-Purpose/X-Moz headers) and HEAD requests, so " +
+      "forged cross-site requests and incidental fetches cannot trigger them; " +
+      "prefetch rejection relies on the prefetcher identifying itself via those headers.")
+    .version("3.5.10")
+    .booleanConf
+    .createOptional
+
   val UI_THREAD_DUMPS_ENABLED = ConfigBuilder("spark.ui.threadDumpsEnabled")
     .version("1.2.0")
     .booleanConf

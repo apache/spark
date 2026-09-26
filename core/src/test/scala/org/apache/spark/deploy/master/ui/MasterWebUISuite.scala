@@ -21,10 +21,11 @@ import java.io.DataOutputStream
 import java.net.{HttpURLConnection, URL}
 import java.nio.charset.StandardCharsets
 import java.util.Date
+import javax.servlet.http.HttpServletResponse.SC_FORBIDDEN
 
 import scala.collection.mutable.HashMap
 
-import org.mockito.Mockito.{mock, times, verify, when}
+import org.mockito.Mockito.{mock, never, times, verify, when}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, KillDriverResponse, RequestKillDriver}
@@ -70,7 +71,8 @@ class MasterWebUISuite extends SparkFunSuite {
     when(master.idToApp).thenReturn(HashMap[String, ApplicationInfo]((activeApp.id, activeApp)))
 
     val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/app/kill/"
-    val body = convPostDataToString(Map(("id", activeApp.id), ("terminate", "true")))
+    val body = convPostDataToString(
+      Map(("id", activeApp.id), ("terminate", "true"), ("csrfToken", masterWebUI.csrfToken)))
     val conn = sendHttpRequest(url, "POST", body)
     conn.getResponseCode
 
@@ -81,12 +83,37 @@ class MasterWebUISuite extends SparkFunSuite {
   test("kill driver") {
     val activeDriverId = "driver-0"
     val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/driver/kill/"
-    val body = convPostDataToString(Map(("id", activeDriverId), ("terminate", "true")))
+    val body = convPostDataToString(
+      Map(("id", activeDriverId), ("terminate", "true"), ("csrfToken", masterWebUI.csrfToken)))
     val conn = sendHttpRequest(url, "POST", body)
     conn.getResponseCode
 
     // Verify that master was asked to kill driver with the correct id
     verify(masterEndpointRef, times(1)).ask[KillDriverResponse](RequestKillDriver(activeDriverId))
+  }
+
+  test("state-changing master UI endpoints reject a request without the CSRF token") {
+    val appDesc = createAppDesc()
+    val activeApp = new ApplicationInfo(
+      new Date().getTime, "app-notoken", appDesc, new Date(), null, Int.MaxValue)
+    when(master.idToApp).thenReturn(HashMap[String, ApplicationInfo]((activeApp.id, activeApp)))
+
+    // Without the token the request is refused before the handler runs, so the master is
+    // never asked to remove the application.
+    Seq("app/kill", "driver/kill").foreach { path =>
+      val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/$path/"
+      val body = convPostDataToString(Map(("id", activeApp.id), ("terminate", "true")))
+      assert(sendHttpRequest(url, "POST", body).getResponseCode === SC_FORBIDDEN,
+        s"$path accepted a request with no CSRF token")
+    }
+    verify(master, never()).removeApplication(activeApp, ApplicationState.KILLED)
+  }
+
+  test("state-changing master UI endpoints reject a wrong CSRF token") {
+    val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/app/kill/"
+    val body = convPostDataToString(
+      Map(("id", "app-wrongtoken"), ("terminate", "true"), ("csrfToken", "not-the-token")))
+    assert(sendHttpRequest(url, "POST", body).getResponseCode === SC_FORBIDDEN)
   }
 
   private def testKillWorkers(hostnames: Seq[String]): Unit = {

@@ -32,6 +32,8 @@ private[ui] class StagesTab(val parent: SparkUI, val store: AppStatusStore)
   val sc = parent.sc
   val conf = parent.conf
   val killEnabled = parent.killEnabled
+  val actionsViaGetEnabled = parent.actionsViaGetEnabled
+  val csrfToken = parent.csrfToken
 
   attachPage(new AllStagesPage(this))
   attachPage(new StagePage(this, store))
