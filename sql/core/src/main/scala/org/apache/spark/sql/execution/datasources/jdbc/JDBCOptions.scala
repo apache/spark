@@ -164,6 +164,24 @@ class JDBCOptions(
 
   val fetchSize = parameters.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
 
+  // Number of times to retry establishing a connection after a transient failure. The default of
+  // 0 retries preserves the historical behaviour of failing on the first connection error.
+  val connectionRetryAttempts = {
+    val attempts = parameters.getOrElse(JDBC_CONNECTION_RETRY_ATTEMPTS, "0").toInt
+    require(attempts >= 0,
+      s"Invalid value `${attempts.toString}` for parameter " +
+        s"`$JDBC_CONNECTION_RETRY_ATTEMPTS`. The minimum value is 0.")
+    attempts
+  }
+
+  val connectionRetryDelayMs = {
+    val delay = parameters.getOrElse(JDBC_CONNECTION_RETRY_DELAY_MS, "1000").toLong
+    require(delay >= 0,
+      s"Invalid value `${delay.toString}` for parameter " +
+        s"`$JDBC_CONNECTION_RETRY_DELAY_MS`. The minimum value is 0.")
+    delay
+  }
+
   // ------------------------------------------------------------
   // Optional parameters only for writing
   // ------------------------------------------------------------
@@ -379,4 +397,6 @@ object JDBCOptions {
   val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
   val JDBC_PREFER_TIMESTAMP_NANOS = newOption("preferTimestampNanos")
   val JDBC_HINT_STRING = newOption("hint")
+  val JDBC_CONNECTION_RETRY_ATTEMPTS = newOption("connectionRetryAttempts")
+  val JDBC_CONNECTION_RETRY_DELAY_MS = newOption("connectionRetryDelayMs")
 }
