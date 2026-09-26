@@ -20,21 +20,23 @@ import java.util.{Locale, OptionalLong}
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, REASON}
 import org.apache.spark.internal.config.IO_WARNING_LARGEFILETHRESHOLD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, ExpressionSet}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BoundReference, Expression, ExpressionSet, Predicate}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
-import org.apache.spark.sql.internal.connector.SupportsMetadata
+import org.apache.spark.sql.internal.connector.{SupportsMetadata, SupportsRuntimeCatalystFiltering}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -43,6 +45,7 @@ trait FileScan extends Scan
   with Batch
   with SupportsReportStatistics
   with SupportsMetadata
+  with SupportsRuntimeCatalystFiltering
   with SQLConfHelper
   with Logging {
   /**
@@ -182,8 +185,80 @@ trait FileScan extends Scan
     FilePartition.getFilePartitions(sparkSession, splitFiles, maxSplitBytes)
   }
 
+  /**
+   * The partitions `partitions` planned, computed once per scan instance. Both the plain read path
+   * and the runtime-filter path go through this, so a scan node that gets runtime filters lists the
+   * files once and filters that listing, rather than reading the index twice and risking two
+   * snapshots. A subclass still customizes `partitions`.
+   */
+  @transient private lazy val plannedPartitions: Seq[FilePartition] = partitions
+
   override def planInputPartitions(): Array[InputPartition] = {
-    partitions.toArray
+    plannedPartitions.toArray
+  }
+
+  /**
+   * The partition columns Spark can derive a runtime filter on (SPARK-30628), restricted to the
+   * ones `readSchema()` still exposes: a reference missing from the scan relation output fails to
+   * resolve, and a pushed-down aggregate keeps only the partition columns it groups by.
+   *
+   * A filter over one of them is evaluated against each file's partition values, so the scan
+   * evaluates it in full and Spark does not evaluate it again after the scan --
+   * `FileScanBuilder.pushFilters` already keeps compile-time partition filters out of the post-scan
+   * filters for the same reason.
+   */
+  override def filterAttributes(): Array[NamedReference] = {
+    val readFields = readSchema().fieldNames.map(normalizeName).toSet
+    readPartitionSchema.fieldNames
+      .filter(name => readFields.contains(normalizeName(name)))
+      .map(FieldReference.column)
+  }
+
+  override def fullyPushedFilterAttributes(): Array[NamedReference] = filterAttributes()
+
+  /**
+   * Plans the files whose partition values satisfy `expressions`, taken from what `partitions`
+   * planned and bin-packed again for the surviving set.
+   *
+   * Filtering what was planned rather than listing the files again keeps one listing per scan, and
+   * the files a subclass excluded in `partitions` stay excluded. How the survivors group into
+   * partitions is decided here again, for their own size. Where each file was cut into splits is
+   * not: `partitions` cut them for the whole set it listed, before these filters existed.
+   *
+   * A partition value is fixed within a file, so every row of every partition returned satisfies
+   * the expressions even though one partition can still hold files from several partition
+   * directories.
+   */
+  override def planInputPartitionsWithRuntimeFilters(
+      expressions: Array[Expression]): Array[InputPartition] = {
+    val fieldIndex = readPartitionSchema.fieldNames.zipWithIndex
+      .map { case (name, i) => normalizeName(name) -> i }.toMap
+    // Evaluating these is the scan's only chance to apply them, since the attributes are declared
+    // fully pushed and Spark drops the post-scan filter. A reference outside the read partition
+    // schema has no value to evaluate against, so fail loudly rather than return wrong rows. Spark
+    // screens against `filterAttributes()` before it gets here, which is a subset of that schema.
+    val notApplicable = expressions.filterNot(
+      _.references.forall(a => fieldIndex.contains(normalizeName(a.name))))
+    if (notApplicable.nonEmpty) {
+      throw SparkException.internalError("A file scan can only apply a runtime filter over its " +
+        s"read partition columns ${readPartitionSchema.fieldNames.mkString("[", ", ", "]")}, " +
+        s"got ${notApplicable.mkString(", ")}")
+    }
+    val bound = expressions.reduce(And).transform {
+      case a: Attribute => BoundReference(fieldIndex(normalizeName(a.name)), a.dataType, a.nullable)
+    }
+    val predicate = Predicate.createInterpreted(bound)
+    val keptFiles = plannedPartitions
+      .flatMap(_.files.filter(file => predicate.eval(file.partitionValues)))
+      .sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+    // Pack the survivors instead of handing back the planned partitions with files removed:
+    // `partitions` sized those bins for the whole file set, so a scan that pruned most of its files
+    // would run the same few tasks over a fraction of the data. V1 packs the pruned set the same
+    // way, from `dynamicallySelectedPartitions`.
+    val openCostInBytes = conf.filesOpenCostInBytes
+    val maxSplitBytes = FilePartition.maxSplitBytes(
+      sparkSession, keptFiles.map(_.length + openCostInBytes).sum)
+    FilePartition.getFilePartitions(sparkSession, keptFiles, maxSplitBytes).toArray
   }
 
   override def estimateStatistics(): Statistics = {
