@@ -4883,6 +4883,19 @@ object SQLConf {
         "The threshold of window group limit must be -1, 0 or positive integer.")
       .createWithDefault(1000)
 
+  val WINDOW_PREFIX_REWRITE_ENABLED =
+    buildConf("spark.sql.optimizer.windowPrefixRewrite.enabled")
+      .doc("When true, the optimizer rewrites groups of sliding `ROWS BETWEEN n PRECEDING " +
+        "AND CURRENT ROW` window frames of `sum` over integral columns as one running " +
+        "unbounded-preceding sum plus lag differences, when the total frame width of the " +
+        "group is large enough (an internal cost threshold). Only applies when " +
+        "`spark.sql.ansi.enabled` is false; floating-point and decimal sums are never " +
+        "rewritten.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val COLLAPSE_WINDOW_WITH_EMPTY_ORDER_SPEC_IN_CHILD =
     buildConf("spark.sql.optimizer.collapseWindowWithEmptyOrderSpecInChild")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
@@ -9090,6 +9103,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(ADAPTIVE_COST_EVALUATOR_COUNT_LOCAL_SORT_ENABLED)
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
+
+  def windowPrefixRewriteEnabled: Boolean = getConf(WINDOW_PREFIX_REWRITE_ENABLED)
 
   def collapseWindowWithEmptyOrderSpecInChild: Boolean =
     getConf(COLLAPSE_WINDOW_WITH_EMPTY_ORDER_SPEC_IN_CHILD)
