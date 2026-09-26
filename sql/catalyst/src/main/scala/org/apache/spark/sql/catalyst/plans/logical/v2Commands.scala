@@ -1908,14 +1908,17 @@ case class AlterViewAs(
     originalText: String,
     query: LogicalPlan,
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty)
+    referredTempFunctions: Seq[String] = Seq.empty,
+    referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
   extends Command with AnalysisOnlyCommand with CTEInChildren {
 
   override def childrenToAnalyze: Seq[LogicalPlan] = Seq(child, query)
 
   override def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan = copy(
     isAnalyzed = true,
-    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
+    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq,
+    referredTempVariablesUnderIdentifier =
+      analysisContext.referredTempVariableNamesUnderIdentifier.toSeq)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
@@ -1966,14 +1969,17 @@ case class CreateView(
     replace: Boolean,
     viewSchemaMode: ViewSchemaMode,
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty)
+    referredTempFunctions: Seq[String] = Seq.empty,
+    referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
   extends Command with AnalysisOnlyCommand with CTEInChildren {
 
   override def childrenToAnalyze: Seq[LogicalPlan] = Seq(child, query)
 
   override def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan = copy(
     isAnalyzed = true,
-    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
+    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq,
+    referredTempVariablesUnderIdentifier =
+      analysisContext.referredTempVariableNamesUnderIdentifier.toSeq)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
@@ -2063,7 +2069,8 @@ case class CacheTableAsSelect(
     isLazy: Boolean,
     options: Map[String, String],
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty)
+    referredTempFunctions: Seq[String] = Seq.empty,
+    referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
   extends AnalysisOnlyCommand with CTEInChildren {
 
   /**
@@ -2090,7 +2097,10 @@ case class CacheTableAsSelect(
     copy(
       isAnalyzed = true,
       // Collect the referred temporary functions from AnalysisContext
-      referredTempFunctions = ac.referredTempFunctionNames.toSeq)
+      referredTempFunctions = ac.referredTempFunctionNames.toSeq,
+      // Collect the temporary variables read via an IDENTIFIER clause in the SELECT body, so the
+      // text-backed temporary view stays resolvable when re-analyzed on read.
+      referredTempVariablesUnderIdentifier = ac.referredTempVariableNamesUnderIdentifier.toSeq)
   }
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {

@@ -567,21 +567,23 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         location) =>
       AlterTableSetLocationCommand(ident, Some(partitionSpec), location)
 
-    // The final `_, _` are AlterViewAs.isAnalyzed and referredTempFunctions. We drop both:
-    // AlterViewAsCommand is a separate AnalysisOnlyCommand and gets its own markAsAnalyzed pass
-    // from HandleSpecialCommand after this rewrite.
-    case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query, _, _) =>
+    // The final `_, _, _` are AlterViewAs.isAnalyzed, referredTempFunctions and
+    // referredTempVariablesUnderIdentifier. We drop them all: AlterViewAsCommand is a separate
+    // AnalysisOnlyCommand and gets its own markAsAnalyzed pass from HandleSpecialCommand after
+    // this rewrite.
+    case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query, _, _, _) =>
       AlterViewAsCommand(ident, originalText, query)
 
     case AlterViewSchemaBinding(ResolvedViewIdentifier(ident), viewSchemaMode) =>
       AlterViewSchemaBindingCommand(ident, viewSchemaMode)
 
-    // The final `_, _` are CreateView.isAnalyzed and referredTempFunctions. We drop both:
-    // CreateViewCommand is a separate AnalysisOnlyCommand and gets its own markAsAnalyzed pass
-    // from HandleSpecialCommand after this rewrite.
+    // The final `_, _, _` are CreateView.isAnalyzed, referredTempFunctions and
+    // referredTempVariablesUnderIdentifier. We drop them all: CreateViewCommand is a separate
+    // AnalysisOnlyCommand and gets its own markAsAnalyzed pass from HandleSpecialCommand after
+    // this rewrite.
     case CreateView(CreateViewInSessionCatalog(ident), userSpecifiedColumns, comment,
         collation, properties, originalText, query, allowExisting, replace, viewSchemaMode,
-        _, _) =>
+        _, _, _) =>
       CreateViewCommand(
         name = ident,
         userSpecifiedColumns = userSpecifiedColumns,
