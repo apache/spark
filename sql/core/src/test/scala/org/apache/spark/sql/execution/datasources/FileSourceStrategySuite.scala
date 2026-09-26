@@ -34,8 +34,12 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet}
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.classic.Dataset
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.connector.read.streaming.ContinuousPartitionReader
+import org.apache.spark.sql.connector.read.streaming.ContinuousPartitionReaderFactory
 import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDD, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.streaming.continuous.ContinuousDataSourceRDD
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -280,6 +284,76 @@ class FileSourceStrategySuite extends SharedSparkSession {
         assert(partitions(0).files.length == 3)
         assert(partitions(1).files.length == 0)
         assert(partitions(2).files.length == 1)
+      }
+    }
+  }
+
+  test("ignoreDataLocality skips FileScanRDD preferred locations") {
+    val partition = FilePartition(0, Array(
+      PartitionedFile(InternalRow.empty, sp("fakePath0"), 0, 10, Array("host0", "host1")),
+      PartitionedFile(InternalRow.empty, sp("fakePath1"), 0, 5, Array("host3"))
+    ))
+
+    withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "true") {
+      val fakeRDD = new FileScanRDD(
+        spark,
+        (file: PartitionedFile) => Iterator.empty,
+        Seq(partition),
+        StructType(Seq.empty)
+      )
+      withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "false") {
+        assert(fakeRDD.preferredLocations(partition).isEmpty)
+      }
+    }
+  }
+
+  test("ignoreDataLocality skips DataSourceRDD preferred locations") {
+    val inputPartition = new InputPartition {
+      override def preferredLocations(): Array[String] = Array("host0", "host1")
+    }
+    val factory = new PartitionReaderFactory {
+      override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+        throw new UnsupportedOperationException
+      }
+    }
+
+    withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "true") {
+      val rdd = new DataSourceRDD(
+        spark.sparkContext,
+        Seq(Some(inputPartition)),
+        factory,
+        columnarReads = false,
+        customMetrics = Map.empty,
+        ignoreDataLocality = spark.sessionState.conf.ignoreDataLocality)
+      withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "false") {
+        assert(rdd.preferredLocations(rdd.partitions.head).isEmpty)
+      }
+    }
+  }
+
+  test("ignoreDataLocality skips ContinuousDataSourceRDD preferred locations") {
+    val inputPartition = new InputPartition {
+      override def preferredLocations(): Array[String] = Array("host0", "host1")
+    }
+    val factory = new ContinuousPartitionReaderFactory {
+      override def createReader(
+          partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
+        throw new UnsupportedOperationException
+      }
+    }
+
+    withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "true") {
+      val rdd = new ContinuousDataSourceRDD(
+        spark.sparkContext,
+        dataQueueSize = 1,
+        epochPollIntervalMs = 10L,
+        inputPartitions = Seq(inputPartition),
+        schema = StructType(Seq.empty),
+        partitionReaderFactory = factory,
+        customMetrics = Map.empty,
+        ignoreDataLocality = spark.sessionState.conf.ignoreDataLocality)
+      withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "false") {
+        assert(rdd.preferredLocations(rdd.partitions.head).isEmpty)
       }
     }
   }
