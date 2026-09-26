@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReferen
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Union}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 class UnionEstimationSuite extends StatsEstimationTestBase {
 
@@ -60,7 +61,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
     val attrTimestampNTZ = AttributeReference("ctimestamp_ntz", TimestampNTZType)()
     val attrYMInterval = AttributeReference("cyminterval", YearMonthIntervalType())()
     val attrDTInterval = AttributeReference("cdtinterval", DayTimeIntervalType())()
-
+    val attrTsNanos = AttributeReference("ctsnanos", TimestampNTZNanosType(9))()
     val s1 = 1.toShort
     val s2 = 4.toShort
     val b1 = 1.toByte
@@ -90,7 +91,10 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
         attrTimestamp -> ColumnStat(min = Some(1L), max = Some(4L)),
         attrTimestampNTZ -> ColumnStat(min = Some(1L), max = Some(4L)),
         attrYMInterval -> ColumnStat(min = Some(2), max = Some(5)),
-        attrDTInterval -> ColumnStat(min = Some(2L), max = Some(5L))))
+        attrDTInterval -> ColumnStat(min = Some(2L), max = Some(5L)),
+        attrTsNanos -> ColumnStat(
+          min = Some(TimestampNanosVal.fromParts(1L, 0.toShort)),
+          max = Some(TimestampNanosVal.fromParts(4L, 0.toShort)))))
 
     val s3 = 2.toShort
     val s4 = 6.toShort
@@ -133,7 +137,10 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
           max = Some(8)),
         AttributeReference("cdttimestamp1", DayTimeIntervalType())() -> ColumnStat(
           min = Some(4L),
-          max = Some(8L))))
+          max = Some(8L)),
+        AttributeReference("ctsnanos1", TimestampNTZNanosType(9))() -> ColumnStat(
+          min = Some(TimestampNanosVal.fromParts(3L, 0.toShort)),
+          max = Some(TimestampNanosVal.fromParts(6L, 0.toShort)))))
 
     val child1 = StatsTestPlan(
       outputList = columnInfo.keys.toSeq.sortWith(_.exprId.id < _.exprId.id),
@@ -167,7 +174,10 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
           attrTimestamp -> ColumnStat(min = Some(1L), max = Some(6L)),
           attrTimestampNTZ -> ColumnStat(min = Some(1L), max = Some(6L)),
           attrYMInterval -> ColumnStat(min = Some(2), max = Some(8)),
-          attrDTInterval -> ColumnStat(min = Some(2L), max = Some(8L)))))
+          attrDTInterval -> ColumnStat(min = Some(2L), max = Some(8L)),
+          attrTsNanos -> ColumnStat(
+            min = Some(TimestampNanosVal.fromParts(1L, 0.toShort)),
+            max = Some(TimestampNanosVal.fromParts(6L, 0.toShort))))))
     assert(union.stats === expectedStats)
   }
 
