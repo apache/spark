@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
 import org.apache.spark.sql.execution.datasources.xml.XmlFileFormat
+import org.apache.spark.sql.execution.vectorized.VectorizedReaderCapacityOverflowException
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
@@ -270,6 +271,7 @@ object DataSourceUtils extends PredicateHelper {
   }
 
   def shouldIgnoreCorruptFileException(e: Throwable): Boolean = e match {
+    case _: VectorizedReaderCapacityOverflowException => false
     case _: RuntimeException | _: IOException | _: InternalError => true
     case _ => false
   }
