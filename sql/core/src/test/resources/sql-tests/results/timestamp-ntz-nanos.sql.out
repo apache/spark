@@ -1759,3 +1759,160 @@ SELECT timestampadd(NANOSECOND, 50, '2020-01-01 00:00:00.0000001' :: timestamp_n
 struct<timestampadd(NANOSECOND, 50, CAST(2020-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ(7))):timestamp_ntz(7)>
 -- !query output
 2020-01-01 00:00:00.0000001
+
+
+-- !query
+CREATE TEMPORARY VIEW nanos_l AS SELECT * FROM VALUES
+  (1, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (2, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (3, CAST(NULL AS TIMESTAMP_NTZ(9))) AS t(lid, c)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW nanos_r AS SELECT * FROM VALUES
+  (10, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (20, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500'),
+  (30, CAST(NULL AS TIMESTAMP_NTZ(9))) AS t(rid, c)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT lid, rid FROM nanos_l l JOIN nanos_r r ON l.c = r.c
+-- !query schema
+struct<lid:int,rid:int>
+-- !query output
+2	10
+
+
+-- !query
+SELECT lid, rid FROM nanos_l l LEFT JOIN nanos_r r ON l.c = r.c ORDER BY lid
+-- !query schema
+struct<lid:int,rid:int>
+-- !query output
+1	NULL
+2	10
+3	NULL
+
+
+-- !query
+SELECT lid, rid FROM nanos_l l RIGHT JOIN nanos_r r ON l.c = r.c ORDER BY rid
+-- !query schema
+struct<lid:int,rid:int>
+-- !query output
+2	10
+NULL	20
+NULL	30
+
+
+-- !query
+SELECT lid, rid FROM nanos_l l FULL JOIN nanos_r r ON l.c = r.c ORDER BY lid, rid
+-- !query schema
+struct<lid:int,rid:int>
+-- !query output
+NULL	20
+NULL	30
+1	NULL
+2	10
+3	NULL
+
+
+-- !query
+SELECT lid FROM nanos_l l LEFT SEMI JOIN nanos_r r ON l.c = r.c
+-- !query schema
+struct<lid:int>
+-- !query output
+2
+
+
+-- !query
+SELECT lid FROM nanos_l l LEFT ANTI JOIN nanos_r r ON l.c = r.c ORDER BY lid
+-- !query schema
+struct<lid:int>
+-- !query output
+1
+3
+
+
+-- !query
+SELECT lid, rid FROM nanos_l l CROSS JOIN nanos_r r WHERE l.c < r.c ORDER BY lid, rid
+-- !query schema
+struct<lid:int,rid:int>
+-- !query output
+1	10
+1	20
+
+
+-- !query
+SELECT * FROM nanos_l JOIN nanos_r USING (c)
+-- !query schema
+struct<c:timestamp_ntz(9),lid:int,rid:int>
+-- !query output
+2020-01-01 00:00:00.000000999	2	10
+
+
+-- !query
+SELECT * FROM nanos_l FULL JOIN nanos_r USING (c) ORDER BY lid, rid
+-- !query schema
+struct<c:timestamp_ntz(9),lid:int,rid:int>
+-- !query output
+2020-01-01 00:00:00.0000005	NULL	20
+NULL	NULL	30
+2020-01-01 00:00:00.000000001	1	NULL
+2020-01-01 00:00:00.000000999	2	10
+NULL	3	NULL
+
+
+-- !query
+SELECT a.c, b.c FROM VALUES (TIMESTAMP_NTZ '2020-01-01 00:00:00.0000009') AS a(c)
+  JOIN VALUES (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900'),
+              (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000901') AS b(c) ON a.c = b.c
+-- !query schema
+struct<c:timestamp_ntz(7),c:timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.0000009	2020-01-01 00:00:00.0000009
+
+
+-- !query
+SELECT * FROM VALUES
+  ('a', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  ('a', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  ('b', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500') AS t(g, c)
+PIVOT (max(c) FOR g IN ('a' AS a, 'b' AS b))
+-- !query schema
+struct<a:timestamp_ntz(9),b:timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.000000999	2020-01-01 00:00:00.0000005
+
+
+-- !query
+SELECT * FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 1),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 2),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 3) AS t(c, v)
+PIVOT (sum(v) FOR c IN (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001' AS x,
+                        TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999' AS y))
+-- !query schema
+struct<x:bigint,y:bigint>
+-- !query output
+1	5
+
+
+-- !query
+SELECT * FROM (
+  SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.1234567' AS c7,
+         TIMESTAMP_NTZ '2020-01-01 00:00:00.12345678' AS c8,
+         TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS c9)
+UNPIVOT (c FOR name IN (c7, c8, c9)) ORDER BY name
+-- !query schema
+struct<name:string,c:timestamp_ntz(9)>
+-- !query output
+c7	2020-01-01 00:00:00.1234567
+c8	2020-01-01 00:00:00.12345678
+c9	2020-01-01 00:00:00.123456789

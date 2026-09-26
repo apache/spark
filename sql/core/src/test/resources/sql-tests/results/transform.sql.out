@@ -848,3 +848,25 @@ FROM VALUES('apache', 'spark') t(a, b)
 struct<a:string,b:string>
 -- !query output
 apache	spark
+
+
+-- !query
+SELECT TRANSFORM (c7, c8, c9)
+  USING 'cat' AS (c7 STRING, c8 STRING, c9 STRING)
+FROM VALUES (TIMESTAMP_NTZ '2020-01-01 00:00:00.1234567',
+             TIMESTAMP_NTZ '2020-01-01 00:00:00.12345678',
+             TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789') t(c7, c8, c9)
+-- !query schema
+struct<c7:string,c8:string,c9:string>
+-- !query output
+2020-01-01 00:00:00.1234567	2020-01-01 00:00:00.12345678	2020-01-01 00:00:00.123456789
+
+
+-- !query
+SELECT TRANSFORM (c)
+  USING 'cat' AS (c STRING)
+FROM VALUES (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC') t(c)
+-- !query schema
+struct<c:string>
+-- !query output
+2019-12-31 16:00:00.000000999

@@ -1730,3 +1730,285 @@ Project [timestampadd(NANOSECOND, cast(900 as bigint), 2019-12-31 16:00:00.00000
 SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+CREATE TEMPORARY VIEW nanos_l AS SELECT * FROM VALUES
+  (1, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (2, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (3, CAST(NULL AS TIMESTAMP_LTZ(9))) AS t(lid, c)
+-- !query analysis
+CreateViewCommand `nanos_l`, SELECT * FROM VALUES
+  (1, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (2, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (3, CAST(NULL AS TIMESTAMP_LTZ(9))) AS t(lid, c), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [lid#x, c#x]
+      +- SubqueryAlias t
+         +- LocalRelation [lid#x, c#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW nanos_r AS SELECT * FROM VALUES
+  (10, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (20, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500 UTC'),
+  (30, CAST(NULL AS TIMESTAMP_LTZ(9))) AS t(rid, c)
+-- !query analysis
+CreateViewCommand `nanos_r`, SELECT * FROM VALUES
+  (10, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (20, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500 UTC'),
+  (30, CAST(NULL AS TIMESTAMP_LTZ(9))) AS t(rid, c), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [rid#x, c#x]
+      +- SubqueryAlias t
+         +- LocalRelation [rid#x, c#x]
+
+
+-- !query
+SELECT lid, rid FROM nanos_l l JOIN nanos_r r ON l.c = r.c
+-- !query analysis
+Project [lid#x, rid#x]
++- Join Inner, (c#x = c#x)
+   :- SubqueryAlias l
+   :  +- SubqueryAlias nanos_l
+   :     +- View (`nanos_l`, [lid#x, c#x])
+   :        +- Project [cast(lid#x as int) AS lid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+   :           +- Project [lid#x, c#x]
+   :              +- SubqueryAlias t
+   :                 +- LocalRelation [lid#x, c#x]
+   +- SubqueryAlias r
+      +- SubqueryAlias nanos_r
+         +- View (`nanos_r`, [rid#x, c#x])
+            +- Project [cast(rid#x as int) AS rid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+               +- Project [rid#x, c#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [rid#x, c#x]
+
+
+-- !query
+SELECT lid, rid FROM nanos_l l LEFT JOIN nanos_r r ON l.c = r.c ORDER BY lid
+-- !query analysis
+Sort [lid#x ASC NULLS FIRST], true
++- Project [lid#x, rid#x]
+   +- Join LeftOuter, (c#x = c#x)
+      :- SubqueryAlias l
+      :  +- SubqueryAlias nanos_l
+      :     +- View (`nanos_l`, [lid#x, c#x])
+      :        +- Project [cast(lid#x as int) AS lid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+      :           +- Project [lid#x, c#x]
+      :              +- SubqueryAlias t
+      :                 +- LocalRelation [lid#x, c#x]
+      +- SubqueryAlias r
+         +- SubqueryAlias nanos_r
+            +- View (`nanos_r`, [rid#x, c#x])
+               +- Project [cast(rid#x as int) AS rid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+                  +- Project [rid#x, c#x]
+                     +- SubqueryAlias t
+                        +- LocalRelation [rid#x, c#x]
+
+
+-- !query
+SELECT lid, rid FROM nanos_l l RIGHT JOIN nanos_r r ON l.c = r.c ORDER BY rid
+-- !query analysis
+Sort [rid#x ASC NULLS FIRST], true
++- Project [lid#x, rid#x]
+   +- Join RightOuter, (c#x = c#x)
+      :- SubqueryAlias l
+      :  +- SubqueryAlias nanos_l
+      :     +- View (`nanos_l`, [lid#x, c#x])
+      :        +- Project [cast(lid#x as int) AS lid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+      :           +- Project [lid#x, c#x]
+      :              +- SubqueryAlias t
+      :                 +- LocalRelation [lid#x, c#x]
+      +- SubqueryAlias r
+         +- SubqueryAlias nanos_r
+            +- View (`nanos_r`, [rid#x, c#x])
+               +- Project [cast(rid#x as int) AS rid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+                  +- Project [rid#x, c#x]
+                     +- SubqueryAlias t
+                        +- LocalRelation [rid#x, c#x]
+
+
+-- !query
+SELECT lid, rid FROM nanos_l l FULL JOIN nanos_r r ON l.c = r.c ORDER BY lid, rid
+-- !query analysis
+Sort [lid#x ASC NULLS FIRST, rid#x ASC NULLS FIRST], true
++- Project [lid#x, rid#x]
+   +- Join FullOuter, (c#x = c#x)
+      :- SubqueryAlias l
+      :  +- SubqueryAlias nanos_l
+      :     +- View (`nanos_l`, [lid#x, c#x])
+      :        +- Project [cast(lid#x as int) AS lid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+      :           +- Project [lid#x, c#x]
+      :              +- SubqueryAlias t
+      :                 +- LocalRelation [lid#x, c#x]
+      +- SubqueryAlias r
+         +- SubqueryAlias nanos_r
+            +- View (`nanos_r`, [rid#x, c#x])
+               +- Project [cast(rid#x as int) AS rid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+                  +- Project [rid#x, c#x]
+                     +- SubqueryAlias t
+                        +- LocalRelation [rid#x, c#x]
+
+
+-- !query
+SELECT lid FROM nanos_l l LEFT SEMI JOIN nanos_r r ON l.c = r.c
+-- !query analysis
+Project [lid#x]
++- Join LeftSemi, (c#x = c#x)
+   :- SubqueryAlias l
+   :  +- SubqueryAlias nanos_l
+   :     +- View (`nanos_l`, [lid#x, c#x])
+   :        +- Project [cast(lid#x as int) AS lid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+   :           +- Project [lid#x, c#x]
+   :              +- SubqueryAlias t
+   :                 +- LocalRelation [lid#x, c#x]
+   +- SubqueryAlias r
+      +- SubqueryAlias nanos_r
+         +- View (`nanos_r`, [rid#x, c#x])
+            +- Project [cast(rid#x as int) AS rid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+               +- Project [rid#x, c#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [rid#x, c#x]
+
+
+-- !query
+SELECT lid FROM nanos_l l LEFT ANTI JOIN nanos_r r ON l.c = r.c ORDER BY lid
+-- !query analysis
+Sort [lid#x ASC NULLS FIRST], true
++- Project [lid#x]
+   +- Join LeftAnti, (c#x = c#x)
+      :- SubqueryAlias l
+      :  +- SubqueryAlias nanos_l
+      :     +- View (`nanos_l`, [lid#x, c#x])
+      :        +- Project [cast(lid#x as int) AS lid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+      :           +- Project [lid#x, c#x]
+      :              +- SubqueryAlias t
+      :                 +- LocalRelation [lid#x, c#x]
+      +- SubqueryAlias r
+         +- SubqueryAlias nanos_r
+            +- View (`nanos_r`, [rid#x, c#x])
+               +- Project [cast(rid#x as int) AS rid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+                  +- Project [rid#x, c#x]
+                     +- SubqueryAlias t
+                        +- LocalRelation [rid#x, c#x]
+
+
+-- !query
+SELECT lid, rid FROM nanos_l l CROSS JOIN nanos_r r WHERE l.c < r.c ORDER BY lid, rid
+-- !query analysis
+Sort [lid#x ASC NULLS FIRST, rid#x ASC NULLS FIRST], true
++- Project [lid#x, rid#x]
+   +- Filter (c#x < c#x)
+      +- Join Cross
+         :- SubqueryAlias l
+         :  +- SubqueryAlias nanos_l
+         :     +- View (`nanos_l`, [lid#x, c#x])
+         :        +- Project [cast(lid#x as int) AS lid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+         :           +- Project [lid#x, c#x]
+         :              +- SubqueryAlias t
+         :                 +- LocalRelation [lid#x, c#x]
+         +- SubqueryAlias r
+            +- SubqueryAlias nanos_r
+               +- View (`nanos_r`, [rid#x, c#x])
+                  +- Project [cast(rid#x as int) AS rid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+                     +- Project [rid#x, c#x]
+                        +- SubqueryAlias t
+                           +- LocalRelation [rid#x, c#x]
+
+
+-- !query
+SELECT * FROM nanos_l JOIN nanos_r USING (c)
+-- !query analysis
+Project [c#x, lid#x, rid#x]
++- Project [c#x, lid#x, rid#x]
+   +- Join Inner, (c#x = c#x)
+      :- SubqueryAlias nanos_l
+      :  +- View (`nanos_l`, [lid#x, c#x])
+      :     +- Project [cast(lid#x as int) AS lid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+      :        +- Project [lid#x, c#x]
+      :           +- SubqueryAlias t
+      :              +- LocalRelation [lid#x, c#x]
+      +- SubqueryAlias nanos_r
+         +- View (`nanos_r`, [rid#x, c#x])
+            +- Project [cast(rid#x as int) AS rid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+               +- Project [rid#x, c#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [rid#x, c#x]
+
+
+-- !query
+SELECT * FROM nanos_l FULL JOIN nanos_r USING (c) ORDER BY lid, rid
+-- !query analysis
+Sort [lid#x ASC NULLS FIRST, rid#x ASC NULLS FIRST], true
++- Project [c#x, lid#x, rid#x]
+   +- Project [coalesce(c#x, c#x) AS c#x, lid#x, rid#x]
+      +- Join FullOuter, (c#x = c#x)
+         :- SubqueryAlias nanos_l
+         :  +- View (`nanos_l`, [lid#x, c#x])
+         :     +- Project [cast(lid#x as int) AS lid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+         :        +- Project [lid#x, c#x]
+         :           +- SubqueryAlias t
+         :              +- LocalRelation [lid#x, c#x]
+         +- SubqueryAlias nanos_r
+            +- View (`nanos_r`, [rid#x, c#x])
+               +- Project [cast(rid#x as int) AS rid#x, cast(c#x as timestamp_ltz(9)) AS c#x]
+                  +- Project [rid#x, c#x]
+                     +- SubqueryAlias t
+                        +- LocalRelation [rid#x, c#x]
+
+
+-- !query
+SELECT a.c, b.c FROM VALUES (TIMESTAMP_LTZ '2020-01-01 00:00:00.0000009 UTC') AS a(c)
+  JOIN VALUES (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000900 UTC'),
+              (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000901 UTC') AS b(c) ON a.c = b.c
+-- !query analysis
+Project [c#x, c#x]
++- Join Inner, (cast(c#x as timestamp_ltz(9)) = c#x)
+   :- SubqueryAlias a
+   :  +- LocalRelation [c#x]
+   +- SubqueryAlias b
+      +- LocalRelation [c#x]
+
+
+-- !query
+SELECT * FROM VALUES
+  ('a', TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  ('a', TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  ('b', TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500 UTC') AS t(g, c)
+PIVOT (max(c) FOR g IN ('a' AS a, 'b' AS b))
+-- !query analysis
+Project [a#x, b#x]
++- Aggregate [max(if ((g#x <=> cast(a as string))) c#x else cast(null as timestamp_ltz(9))) AS a#x, max(if ((g#x <=> cast(b as string))) c#x else cast(null as timestamp_ltz(9))) AS b#x]
+   +- SubqueryAlias t
+      +- LocalRelation [g#x, c#x]
+
+
+-- !query
+SELECT * FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 1),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 2),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 3) AS t(c, v)
+PIVOT (sum(v) FOR c IN (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' AS x,
+                        TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC' AS y))
+-- !query analysis
+Project [x#xL, y#xL]
++- Project [__pivot_sum(t.v) AS `sum(t.v)`#x[0] AS x#xL, __pivot_sum(t.v) AS `sum(t.v)`#x[1] AS y#xL]
+   +- Aggregate [pivotfirst(c#x, sum(t.v)#xL, TimestampNanosVal(1577836800000000, 1), TimestampNanosVal(1577836800000000, 999), 0, 0) AS __pivot_sum(t.v) AS `sum(t.v)`#x]
+      +- Aggregate [c#x], [c#x, sum(v#x) AS sum(t.v)#xL]
+         +- SubqueryAlias t
+            +- LocalRelation [c#x, v#x]
+
+
+-- !query
+SELECT * FROM (
+  SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.1234567 UTC' AS c7,
+         TIMESTAMP_LTZ '2020-01-01 00:00:00.12345678 UTC' AS c8,
+         TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' AS c9)
+UNPIVOT (c FOR name IN (c7, c8, c9)) ORDER BY name
+-- !query analysis
+Sort [name#x ASC NULLS FIRST], true
++- Project [name#x, c#x]
+   +- Filter isnotnull(coalesce(c#x))
+      +- Expand [[c7, cast(c7#x as timestamp_ltz(9))], [c8, cast(c8#x as timestamp_ltz(9))], [c9, c9#x]], [name#x, c#x]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [2019-12-31 16:00:00.1234567 AS c7#x, 2019-12-31 16:00:00.12345678 AS c8#x, 2019-12-31 16:00:00.123456789 AS c9#x]
+               +- OneRowRelation
