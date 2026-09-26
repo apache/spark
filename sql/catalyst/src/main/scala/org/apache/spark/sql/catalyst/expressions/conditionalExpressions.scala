@@ -26,7 +26,9 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CASE_WHEN, IF, TreePattern}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber, toSQLExpr, toSQLId, toSQLType}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -393,6 +395,111 @@ case class CaseWhen(
        """.stripMargin)
   }
 
+  /**
+   * If this CaseWhen is a "lookup" -- every branch is `key = literal THEN constant` on one
+   * deterministic, binary-collation string key -- a constant, driver-built key -> value probe that
+   * codegen can emit in O(1) code and O(1) time per row, replacing the O(N) if/else-if scan of
+   * [[multiBranchesCodegen]]. `None` (fall back to the scan) unless every gate below holds.
+   * Computed lazily and cached; only consulted from [[doGenCode]], never from [[eval]], so the
+   * interpreted path is unchanged.
+   */
+  @transient private lazy val lookupProbe: Option[CaseWhen.LookupProbe] = {
+    // Each branch must be `EqualTo(key, literal)` (either arg order); every branch value foldable.
+    val keyed = branches.map { case (cond, value) => CaseWhen.asKeyEquality(cond).map((_, value)) }
+    if (branches.length < CaseWhen.LookupThreshold || keyed.exists(_.isEmpty) ||
+        !branches.forall(_._2.foldable)) {
+      None
+    } else {
+      val pairs = keyed.map(_.get) // ((keyExpr, constExpr), valueExpr)
+      val key = pairs.head._1._1
+      val keyType = key.dataType
+      // Restricted to one shared, deterministic, binary-collation string key. Strings are where
+      // the probe pays off: a string compare is expensive, so replacing the chain's O(N) scan
+      // with a single hash probe wins (measured up to ~2.6x, and never regresses). Cheap-compare
+      // integral/temporal keys do NOT benefit -- the chain's compares are near-free and well
+      // branch-predicted (measured: no win, and a regression on the common all-miss case) -- and
+      // float/double/non-binary-collation strings have equality a hash bucket cannot honor.
+      val eligibleKey = key.deterministic &&
+        pairs.forall(_._1._1.semanticEquals(key)) &&
+        (keyType match {
+          case st: StringType => st.supportsBinaryEquality
+          case _ => false
+        })
+      if (!eligibleKey) {
+        None
+      } else {
+        // Precompute keys/values on the driver: drop null literal keys (`key = NULL` is never
+        // true) and keep the first value for each distinct key (first-wins, matching eval order).
+        // A foldable value/key that throws (e.g. an un-folded ANSI cast) makes us bail, so the
+        // error still surfaces only per-row when that branch matches -- today's behavior.
+        try {
+          val seen = scala.collection.mutable.LinkedHashMap.empty[Any, Any]
+          pairs.foreach { case ((_, constExpr), valueExpr) =>
+            val k = constExpr.eval(EmptyRow)
+            if (k != null && !seen.contains(k)) {
+              seen(k) = valueExpr.eval(EmptyRow)
+            }
+          }
+          if (seen.size < CaseWhen.LookupThreshold) {
+            None
+          } else {
+            val keysArray = new GenericArrayData(seen.keys.toArray)
+            val valuesArray = new GenericArrayData(seen.values.toArray)
+            val (buckets, hashMask) = PrebuiltHashProbe.buildBuckets(keysArray, keyType)
+            Some(CaseWhen.LookupProbe(key, keyType, buckets, hashMask, keysArray, valuesArray))
+          }
+        } catch {
+          case _: Exception => None
+        }
+      }
+    }
+  }
+
+  private def genLookupProbe(
+      ctx: CodegenContext, ev: ExprCode, probe: CaseWhen.LookupProbe): ExprCode = {
+    val keyEv = probe.keyExpr.genCode(ctx)
+    val bucketsRef = ctx.addReferenceObj("caseWhenBuckets", probe.buckets, "int[]")
+    val keysRef = ctx.addReferenceObj("caseWhenKeys", probe.keys, classOf[ArrayData].getName)
+    val valuesRef =
+      ctx.addReferenceObj("caseWhenValues", probe.values, classOf[ArrayData].getName)
+    val resultIdx = ctx.freshName("caseWhenIdx")
+    val javaType = CodeGenerator.javaType(dataType)
+
+    // Miss (or null key): fall to the else expression, generated lazily here and nowhere else so
+    // its side effects/errors keep CaseWhen's short-circuit semantics. No else => NULL on miss.
+    val missCode = elseValue match {
+      case Some(elseExpr) =>
+        val elseEv = elseExpr.genCode(ctx)
+        s"""
+           |${elseEv.code}
+           |${ev.isNull} = ${elseEv.isNull};
+           |${ev.value} = ${elseEv.value};
+         """.stripMargin
+      case None =>
+        s"${ev.isNull} = true;"
+    }
+
+    val probeLoop = PrebuiltHashProbe.genFindIndex(
+      ctx, probe.keyType, keyEv.value, bucketsRef, keysRef, probe.hashMask, resultIdx)
+
+    ev.copy(code = code"""
+       |${keyEv.code}
+       |boolean ${ev.isNull} = false;
+       |$javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+       |int $resultIdx = -1;
+       |if (!${keyEv.isNull}) {
+       |  $probeLoop
+       |}
+       |if ($resultIdx < 0) {
+       |  $missCode
+       |} else if ($valuesRef.isNullAt($resultIdx)) {
+       |  ${ev.isNull} = true;
+       |} else {
+       |  ${ev.value} = ${CodeGenerator.getValue(valuesRef, dataType, resultIdx)};
+       |}
+     """.stripMargin)
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (branches.length == 1) {
       // If we have only single branch we can use If expression and its codeGen
@@ -400,6 +507,8 @@ case class CaseWhen(
         branches(0)._1,
         branches(0)._2,
         elseValue.getOrElse(Literal.create(null, branches(0)._2.dataType))).doGenCode(ctx, ev)
+    } else if (SQLConf.get.caseWhenLookupEnabled && lookupProbe.isDefined) {
+      genLookupProbe(ctx, ev, lookupProbe.get)
     } else {
       multiBranchesCodegen(ctx, ev)
     }
@@ -430,6 +539,43 @@ object CaseWhen {
   val registryEntry: (String, (ExpressionInfo, FunctionBuilder)) = {
     ("when", (FunctionRegistryBase.expressionInfo[CaseWhen]("when", None), createFromParser))
   }
+
+  /**
+   * Minimum number of distinct lookup keys before a lookup-shaped CaseWhen (see
+   * [[CaseWhen.asKeyEquality]]) is compiled to a hash probe instead of the if/else-if chain.
+   * Below this the chain -- which short-circuits on an early match and needs no per-row hash or
+   * reference-array setup -- is at least as fast, so converting is not worthwhile. A fixed floor
+   * rather than a config: the exact crossover is workload-dependent, but a small floor is enough
+   * to avoid pessimizing tiny CASEs, and the `caseWhenLookup.enabled` flag remains as the
+   * back-out.
+   */
+  private[expressions] val LookupThreshold = 10
+
+  /**
+   * If `cond` is `EqualTo(key, const)` (either argument order) with exactly one foldable side,
+   * returns `(keyExpr, constExpr)`; otherwise None. Used by [[CaseWhen.lookupProbe]] to recognize
+   * lookup-shaped branches (`EqualNullSafe` and any other predicate deliberately do not match).
+   */
+  private[expressions] def asKeyEquality(cond: Expression): Option[(Expression, Expression)] =
+    cond match {
+      case EqualTo(l, r) if r.foldable && !l.foldable => Some((l, r))
+      case EqualTo(l, r) if l.foldable && !r.foldable => Some((r, l))
+      case _ => None
+    }
+
+  /**
+   * A constant, driver-built key -> value lookup for a lookup-shaped CaseWhen. `buckets` is a
+   * power-of-two open-addressed table (see [[PrebuiltHashProbe]]) over `keys`; `values` holds the
+   * parallel branch results (which may be null). All are embedded in generated code via
+   * `addReferenceObj` and probed with no autoboxing.
+   */
+  private[expressions] case class LookupProbe(
+      keyExpr: Expression,
+      keyType: DataType,
+      buckets: Array[Int],
+      hashMask: Int,
+      keys: ArrayData,
+      values: ArrayData)
 }
 
 /**

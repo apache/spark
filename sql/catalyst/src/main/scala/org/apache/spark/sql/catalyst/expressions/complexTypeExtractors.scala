@@ -533,7 +533,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
       left.eval(null) match {
         case map: MapData if map.numElements() >= hashLookupThreshold =>
           val index = buildHashIndex(map, keyType)
-          val (buckets, hashMask) = buildHashBuckets(map, keyType)
+          val (buckets, hashMask) = PrebuiltHashProbe.buildBuckets(map.keyArray(), keyType)
           new PrebuiltHashExecutor(
             index, buckets, hashMask, map.keyArray(), map.valueArray())
         case _ => LinearExecutor
@@ -553,62 +553,6 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
       i += 1
     }
     hm
-  }
-
-  /**
-   * Builds a power-of-two open-addressed bucket table mapping `hash(key) & hashMask` to the
-   * key's index in `map.keyArray()`. Used by the codegen hash path so primitive-keyed lookups
-   * avoid autoboxing. The hash function must match [[GetMapValueUtil.genHash]] for the same
-   * `keyType`.
-   */
-  private def buildHashBuckets(map: MapData, keyType: DataType): (Array[Int], Int) = {
-    val keys = map.keyArray()
-    val len = keys.numElements()
-    // Power-of-two capacity, load factor < 0.5, min 4. Clamped to 2^30 so (cap - 1) fits in int.
-    val target = math.min(math.max(len.toLong * 2L - 1L, 1L), (1L << 30) - 1L).toInt
-    val cap = math.max(java.lang.Integer.highestOneBit(target) << 1, 4)
-    val buckets = new Array[Int](cap)
-    java.util.Arrays.fill(buckets, -1)
-    val mask = cap - 1
-    var i = 0
-    while (i < len) {
-      var h = hashKeyOnDriver(keys.get(i, keyType), keyType) & mask
-      // Open addressing with linear probing; duplicates take the next free slot so that the
-      // lookup (which stops at the first match) returns the first-inserted index -- matches
-      // [[buildHashIndex]] / [[ArrayBasedMapData]] first-wins semantics.
-      while (buckets(h) != -1) h = (h + 1) & mask
-      buckets(h) = i
-      i += 1
-    }
-    (buckets, mask)
-  }
-
-  /** Scala-side hash for a Spark value; mirrors [[GetMapValueUtil.genHash]] per keyType. */
-  private def hashKeyOnDriver(v: Any, keyType: DataType): Int = keyType match {
-    case BooleanType => if (v.asInstanceOf[Boolean]) 1 else 0
-    case ByteType => v.asInstanceOf[Byte].toInt
-    case ShortType => v.asInstanceOf[Short].toInt
-    case IntegerType | DateType | _: YearMonthIntervalType => v.asInstanceOf[Int]
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
-      val l = v.asInstanceOf[Long]
-      (l ^ (l >>> 32)).toInt
-    case FloatType => java.lang.Float.floatToIntBits(v.asInstanceOf[Float])
-    case DoubleType =>
-      val l = java.lang.Double.doubleToLongBits(v.asInstanceOf[Double])
-      (l ^ (l >>> 32)).toInt
-    case _ => v.hashCode()
-  }
-
-  /** Java-side hash expression over the primitive/object `v`. Mirrors [[hashKeyOnDriver]]. */
-  private def genHash(v: String, keyType: DataType): String = keyType match {
-    case BooleanType => s"($v ? 1 : 0)"
-    case ByteType | ShortType | IntegerType | DateType | _: YearMonthIntervalType => s"$v"
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
-      s"(int)($v ^ ($v >>> 32))"
-    case FloatType => s"Float.floatToIntBits($v)"
-    case DoubleType =>
-      s"(int)(Double.doubleToLongBits($v) ^ (Double.doubleToLongBits($v) >>> 32))"
-    case _ => s"$v.hashCode()"
   }
 
   def getValueEval(
@@ -749,10 +693,6 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
       val bucketsRef = ctx.addReferenceObj("mapLookupBuckets", buckets, "int[]")
       val keysRef = ctx.addReferenceObj("mapLookupKeys", keys, "ArrayData")
       val valuesRef = ctx.addReferenceObj("mapLookupValues", values, "ArrayData")
-      val keyJavaType = CodeGenerator.javaType(keyType)
-      val h = ctx.freshName("h")
-      val idx = ctx.freshName("idx")
-      val candidate = ctx.freshName("candidate")
       val resultIdx = ctx.freshName("resultIdx")
 
       nullSafeCodeGen(ctx, ev, (_, eval2) => {
@@ -767,20 +707,12 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
         } else {
           s"${ev.value} = ${CodeGenerator.getValue(valuesRef, dataType, resultIdx)};"
         }
-        // Inline open-addressing probe. Hash must match what `buildHashBuckets` used on the
-        // driver; `hashMask` is a power-of-two minus one, embedded as a literal.
+        // Inline open-addressing probe shared with CaseWhen's lookup path.
+        val probe = PrebuiltHashProbe.genFindIndex(
+          ctx, keyType, eval2, bucketsRef, keysRef, hashMask, resultIdx)
         s"""
-           |int $h = (${genHash(eval2, keyType)}) & $hashMask;
            |int $resultIdx = -1;
-           |while ($bucketsRef[$h] != -1) {
-           |  int $idx = $bucketsRef[$h];
-           |  $keyJavaType $candidate = ${CodeGenerator.getValue(keysRef, keyType, idx)};
-           |  if (${ctx.genEqual(keyType, candidate, eval2)}) {
-           |    $resultIdx = $idx;
-           |    break;
-           |  }
-           |  $h = ($h + 1) & $hashMask;
-           |}
+           |$probe
            |if ($resultIdx < 0) {
            |  ${ev.isNull} = true;
            |} else {
