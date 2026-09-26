@@ -688,6 +688,44 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       assert(ce.getMessage.contains("no longer reports the partitioning it was planned over"))
     }
   }
+
+  test("SPARK-59564: the projected positions move into the new child's key space") {
+    // The node projects position 1 of its child's key space, `exprB`. The new child reports the
+    // same two expressions the other way round, so the position has to move to 0 rather than stay
+    // at 1, which names `exprA` there.
+    val keys = Seq(row(1, 2), row(2, 1))
+    val child = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA, exprB), keys))
+    val node = GroupPartitionsExec(child, joinKeyPositions = Some(Seq(1)))
+
+    // `exprB` first, and partitioned so that b=2 is still partition 0.
+    val swapped = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprB, exprA), Seq(row(2, 1), row(1, 2))))
+    val regrouped = node.withKeyPositionsFor(swapped).getOrElse(
+      fail("every expression is there, so the node can be re-parented"))
+
+    assert(regrouped.joinKeyPositions == Some(Seq(0)),
+      "the position has to name `exprB` where the new child holds it")
+    assert(regrouped.groupedPartitions == node.groupedPartitions,
+      "moving the positions moves where they are read, not the groups they select")
+    assert(regrouped.outputPartitioning.asInstanceOf[KeyedPartitioning].expressions == Seq(exprB),
+      "the node still reports the key it groups on")
+
+    // A new child holding none of the expressions is turned away.
+    val narrowed = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB), Seq(row(1))))
+    assert(node.withKeyPositionsFor(narrowed).isEmpty,
+      "a key space the child does not offer cannot be moved into")
+
+    // So is one that no longer reports the partitioning this node was decided for. The positions
+    // name keys in that space, and reading them against another one would group on the wrong key:
+    // position 1 of the child below is `exprA`, not the `exprB` this node projects.
+    val permuted = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprB, exprA), Seq(row(2, 1), row(1, 2))))
+    val diverged = node.withNewChildren(Seq(permuted)).asInstanceOf[GroupPartitionsExec]
+    assert(diverged.outputPartitioning === UnknownPartitioning(2),
+      "test setup: the claim goes when the child reports another partitioning")
+    assert(diverged.withKeyPositionsFor(swapped).isEmpty,
+      "there is nothing to move the positions into once the child reports another partitioning")
+  }
 }
 
 private case class DummyLeafSparkPlan(

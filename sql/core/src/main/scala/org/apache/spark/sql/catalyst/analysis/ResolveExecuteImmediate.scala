@@ -18,23 +18,33 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.catalog.{SqlScriptingContextManager => SqlScriptingContextManagerTrait}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CompoundBody, LogicalPlan, SetVariable}
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, ExecuteImmediateCommand, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.EXECUTE_IMMEDIATE
 import org.apache.spark.sql.classic.{SparkSession => ClassicSparkSession}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.v2.ParameterBindingUtils
 import org.apache.spark.sql.types.StringType
 
 /**
- * Analysis rule that resolves and executes EXECUTE IMMEDIATE statements during analysis,
- * replacing them with the results, similar to how CALL statements work.
- * This rule combines resolution and execution in a single pass.
+ * Analysis rule that resolves EXECUTE IMMEDIATE statements during analysis, parsing and analyzing
+ * the dynamic SQL and replacing the node with the resolved inner plan: a query is spliced, a
+ * command payload is wrapped in [[ExecuteImmediateCommand]] to run at the execution level, and an
+ * INTO clause becomes a [[SetVariable]]. Command payloads are not executed during analysis; nodes
+ * that execute during analysis, such as CALL, are an exception (see `resolveInnerStatement`).
+ *
+ * {{{
+ *   EXECUTE IMMEDIATE 'INSERT INTO t VALUES (?)' USING 1  =>  ExecuteImmediateCommand(...)
+ *   EXECUTE IMMEDIATE 'SELECT ?' USING 1  =>  analyzed query, spliced and run lazily
+ *   EXECUTE IMMEDIATE 'SELECT 1' INTO v  =>  SetVariable over the analyzed query
+ * }}}
  *
  * When sub-expressions are not yet resolved, the node is returned unchanged so that the
  * fixed-point analyzer re-applies this rule on the next iteration.
@@ -61,15 +71,16 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
 object ResolveExecuteImmediate {
 
   /**
-   * Resolves an [[UnresolvedExecuteImmediate]] node into an executable plan.
+   * Resolves an [[UnresolvedExecuteImmediate]] node into the plan for its dynamic SQL.
    *
    * All expressions (`sqlStmtStr`, `args`, `targetVariables`) must already be resolved
    * before calling this method.
    *
-   * When an `INTO` clause is present, the dynamic SQL is eagerly parsed and analyzed, and
-   * the analyzed plan is wrapped in a [[SetVariable]] plan that assigns output columns to
-   * the target variables. Without `INTO`, the resulting plan is returned directly
-   * (commands are executed eagerly; queries are returned analyzed but unexecuted).
+   * When an `INTO` clause is present, the dynamic SQL is parsed and analyzed, and the analyzed
+   * plan is wrapped in a [[SetVariable]] plan that assigns output columns to the target variables.
+   * Without `INTO`, a command payload is wrapped in [[ExecuteImmediateCommand]] to run at the
+   * execution level and a query is returned analyzed for lazy execution. Command payloads are not
+   * executed during analysis.
    */
   def resolveExecuteImmediate(
       sparkSession: SparkSession,
@@ -78,11 +89,11 @@ object ResolveExecuteImmediate {
       targetVariables: Seq[Expression]): LogicalPlan = {
     if (targetVariables.nonEmpty) {
       val finalTargetVars = extractTargetVariables(targetVariables)
-      val executedSource = executeImmediateQuery(
+      val analyzedSource = resolveInnerStatement(
         sparkSession, sqlStmtStr, args, hasIntoClause = true)
-      SetVariable(finalTargetVars, executedSource)
+      SetVariable(finalTargetVars, analyzedSource)
     } else {
-      executeImmediateQuery(sparkSession, sqlStmtStr, args, hasIntoClause = false)
+      resolveInnerStatement(sparkSession, sqlStmtStr, args, hasIntoClause = false)
     }
   }
 
@@ -105,7 +116,15 @@ object ResolveExecuteImmediate {
     }
   }
 
-  private def executeImmediateQuery(
+  /**
+   * Parses and analyzes the dynamic SQL and returns the plan that replaces the EXECUTE IMMEDIATE
+   * node. No command payload is executed here: with an INTO clause the analyzed query is returned
+   * for the caller to wrap in [[SetVariable]] (a command is rejected); otherwise a command payload
+   * is wrapped in [[ExecuteImmediateCommand]] to run at the execution level and a query is returned
+   * analyzed for lazy execution. Nodes that execute during analysis, such as CALL, are still run by
+   * the analyzer here (see the branch below).
+   */
+  private def resolveInnerStatement(
       sparkSession: SparkSession,
       sqlStmtStr: Expression,
       args: Seq[Expression],
@@ -123,50 +142,57 @@ object ResolveExecuteImmediate {
       stopIndex = Some(sqlString.length - 1)
     )
 
-    // Execute the query with local variables hidden and EXECUTE IMMEDIATE origin set.
-    // Both must cover parsing, analysis, and execution phases.
+    // Parse and analyze the inner statement with local variables hidden and EXECUTE IMMEDIATE
+    // origin set, but without executing it (command payloads run later at the execution level).
+    // Both must cover parsing and analysis.
     // CurrentOrigin.withOrigin ensures expressions created during parsing get the proper context.
-    val result = withHiddenLocalVariables {
+    val analyzed = withHiddenLocalVariables {
       CurrentOrigin.withOrigin(executeImmediateOrigin) {
-        // Use shared parameterized query execution logic (same as OPEN CURSOR)
-        val df = if (args.isEmpty) {
-          // No parameters - execute directly
-          sparkSession.sql(sqlString)
-        } else {
-          // For parameterized queries, use shared parameter binding utility
-          val (paramValues, paramNames) = ParameterBindingUtils.buildUnifiedParameters(args)
-
-          sparkSession.asInstanceOf[ClassicSparkSession]
-            .sql(sqlString, paramValues, paramNames)
-        }
-
-        // SQL scripts (BEGIN/END blocks) are explicitly disallowed in EXECUTE IMMEDIATE.
-        // This is a design constraint: EXECUTE IMMEDIATE is for executing single SQL statements,
-        // and SQL scripts have their own variable scoping and control flow that would conflict
-        // with EXECUTE IMMEDIATE's parameter passing semantics.
-        if (df.queryExecution.logical.isInstanceOf[CompoundBody]) {
-          throw QueryCompilationErrors.sqlScriptInExecuteImmediate(sqlString)
-        }
-
-        // Force analysis to happen while local variables are hidden. This is critical  because
-        // DataFrames are lazy and analysis would otherwise happen after withHiddenLocalVariables
-        // has restored the original context.
-        df.queryExecution.analyzed
-        df
+        parseAndAnalyzeInnerStatement(
+          sparkSession.asInstanceOf[ClassicSparkSession], sqlString, args)
       }
     }
 
-    // If this EXECUTE IMMEDIATE has an INTO clause, commands are not allowed
-    if (hasIntoClause && result.queryExecution.analyzed.isInstanceOf[Command]) {
-      throw QueryCompilationErrors.invalidStatementForExecuteInto(sqlString)
-    }
-
-    // For commands, use commandExecuted to avoid double execution
-    // For queries, use analyzed to avoid eager evaluation
-    if (result.queryExecution.analyzed.isInstanceOf[Command]) {
-      result.queryExecution.commandExecuted
+    if (hasIntoClause) {
+      // If this EXECUTE IMMEDIATE has an INTO clause, commands are not allowed.
+      // The caller wraps the analyzed query in SetVariable.
+      if (QueryExecution.isEagerlyExecutedCommand(analyzed)) {
+        throw QueryCompilationErrors.invalidStatementForExecuteInto(sqlString)
+      }
+      analyzed
+    } else if (QueryExecution.isEagerlyExecutedCommand(analyzed)) {
+      // Defer eager-command payloads to the execution level. This matches the shapes
+      // QueryExecution.eagerlyExecuteCommands runs (not just Command). CALL is not among them and
+      // already ran during the analysis above.
+      ExecuteImmediateCommand(analyzed)
     } else {
-      result.queryExecution.analyzed
+      // Splice the query; it executes lazily like any other query.
+      analyzed
+    }
+  }
+
+  /**
+   * Parses and analyzes the dynamic SQL, returning the analyzed plan without executing it. Parsing
+   * and parameter binding are shared with `SparkSession.sql` via
+   * [[org.apache.spark.sql.classic.SparkSession.parseParameterizedPlan]]. Unlike `sql`, the plan is
+   * analyzed here but never wrapped in a `Dataset`, so command payloads are not run during
+   * analysis; the caller defers them to the execution level.
+   */
+  private def parseAndAnalyzeInnerStatement(
+      session: ClassicSparkSession,
+      sqlString: String,
+      args: Seq[Expression]): LogicalPlan = {
+    // Extract the USING arguments the same way OPEN CURSOR does.
+    val (values, paramNames) = ParameterBindingUtils.buildUnifiedParameters(args)
+    // parseParameterizedPlan self-activates the session; withActive here also covers analysis.
+    // The caller has already hidden local variables and set the EXECUTE IMMEDIATE origin.
+    session.withActive {
+      val parsedPlan = session.parseParameterizedPlan(sqlString, values, paramNames)
+      // EXECUTE IMMEDIATE does not support SQL scripts.
+      if (parsedPlan.isInstanceOf[CompoundBody]) {
+        throw QueryCompilationErrors.sqlScriptInExecuteImmediate(sqlString)
+      }
+      session.sessionState.analyzer.executeAndCheck(parsedPlan, new QueryPlanningTracker)
     }
   }
 

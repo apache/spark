@@ -24,6 +24,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -178,6 +179,26 @@ class ArrowBatchTransformer:
         return pa.RecordBatch.from_arrays(
             [batch.columns[i] for i in column_indices],
             [batch.schema.names[i] for i in column_indices],
+        )
+
+    @classmethod
+    def concat_batches(cls, batches: Iterable["pa.RecordBatch"]) -> "pa.RecordBatch":
+        """Concatenate same-schema RecordBatches by row.
+
+        A single batch is returned unchanged. PyArrow before 19.0.0 has no ``concat_batches``;
+        the fallback concatenates the equivalent StructArrays and converts the result back to a
+        RecordBatch.
+        """
+        import pyarrow as pa
+
+        batches = tuple(batches)
+        assert batches
+        if len(batches) == 1:
+            return batches[0]
+        if hasattr(pa, "concat_batches"):
+            return pa.concat_batches(batches)
+        return pa.RecordBatch.from_struct_array(
+            pa.concat_arrays([batch.to_struct_array() for batch in batches])
         )
 
     @staticmethod
