@@ -764,6 +764,29 @@ public class UnsafeExternalSorterSuite {
   }
 
   @Test
+  public void testSingleRoundLoserTreeMergeWithNineSpills() throws Exception {
+    // 9 real spills with merge factor -1 (single round): 9 > LINEAR_MERGE_MAX_RUNS (8) selects
+    // the loser-tree merger over real UnsafeSorterSpillReaders, not just synthetic unit tests.
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.setSpillMergeFactor(-1);
+
+    for (int spill = 0; spill < 9; spill++) {
+      for (int i = spill * 10; i < (spill + 1) * 10; i++) {
+        insertNumber(sorter, i);
+      }
+      sorter.spill();
+    }
+
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertEquals(0, sorter.getSpillMergeRounds()); // single round: the loser-tree path
+    verifyIntIterator(iter, 0, 90);
+    assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
   public void testBoundedMergeWithInMemoryData() throws Exception {
     // Set merge factor to 2 to force multi-round merge
     final UnsafeExternalSorter sorter = newSorter();
