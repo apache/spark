@@ -1459,7 +1459,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkDelete("""{"a": null, "b": 2}""", Seq("$.a"), """{"b":2}""")
     checkDelete("[null, 1, null]", Seq("$[0]"), "[1,null]")
 
-    // Mixed literal + dynamic path exercises both `ParsedDeletePath` and `DynamicDeletePath`
+    // Mixed literal + dynamic path exercises both `ParsedVariantPath` and `DynamicVariantPath`
     // arms of `eval` in a single call.
     val mixedLitDyn = VariantDelete(Seq(
       Literal(parseJson("""{"a": 1, "b": 2, "c": 3}""")),
