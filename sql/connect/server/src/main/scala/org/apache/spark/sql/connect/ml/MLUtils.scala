@@ -242,7 +242,9 @@ private[ml] object MLUtils {
   def parseRelationProto(relation: proto.Relation, sessionHolder: SessionHolder): DataFrame = {
     val planner = new SparkConnectPlanner(sessionHolder)
     val plan = planner.transformRelation(relation)
-    Dataset.ofRows(sessionHolder.session, plan)
+    // Spark Connect re-resolves the plan on each request, so the refresh phase would only re-issue
+    // redundant catalog loads for tables just resolved in this same QueryExecution.
+    Dataset.ofRows(sessionHolder.session, plan, refreshPhaseEnabled = false)
   }
 
   /**
