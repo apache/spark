@@ -280,6 +280,13 @@ public class ExternalBlockHandler extends RpcHandler
       // In any cases of the error, diagnoseShuffleBlockCorruption should return UNKNOWN_ISSUE,
       // so it should always reply as success.
       callback.onSuccess(new CorruptionCause(cause).toByteBuffer());
+    } else if (msgObj instanceof DiagnoseShuffleChunkCorruption msg) {
+      checkAuth(client, msg.appId);
+      Cause cause = mergeManager.diagnoseShuffleChunkCorruption(msg.appId, msg.shuffleId,
+        msg.shuffleMergeId, msg.reduceId, msg.chunkId, msg.checksum, msg.algorithm);
+      // In any cases of the error, diagnoseShuffleChunkCorruption should return UNKNOWN_ISSUE,
+      // so it should always reply as success.
+      callback.onSuccess(new CorruptionCause(cause).toByteBuffer());
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }
