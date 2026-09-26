@@ -63,9 +63,12 @@ trait ExternalUDFExec extends UnaryExecNode {
    * Finalizes the session on task completion (which fires on both success and
    * failure). [[WorkerSession#close]] is the single finalizer: it fetches the
    * `FinishResponse` if processing completed, or cancels anything still in
-   * flight and waits for the `CancelResponse`. The provided function receives
-   * the session and must return the result iterator. It may use the session
-   * but MUST NOT close it.
+   * flight and waits for the `CancelResponse`. For the UDF sessions used here,
+   * exhausting the data iterator completes execution and surfaces execution or
+   * finish errors. Therefore, `close` only cleans up the session and its returned
+   * termination does not determine whether the Spark task succeeds. The provided
+   * function receives the session and must return the result iterator. It may use
+   * the session but MUST NOT close it.
    */
   protected def withUDFWorkerSession(
       taskContext: TaskContext,
@@ -81,10 +84,9 @@ trait ExternalUDFExec extends UnaryExecNode {
     // resolves to whichever terminator the stream reached:
     //
     //  - Task completed and the result iterator was fully consumed: process()
-    //    sent Finish (input exhausted) and the data drained. close() then
-    //    typically returns the Finished termination -- but a failure during the
-    //    finish/cleanup phase (raised after the data drained, so it reached no one
-    //    through the iterator) is surfaced here too, as Failed / TransportFailed.
+    //    sent Finish (input exhausted), drained the output, and surfaced any
+    //    execution or finish error. close() observes the settled termination and
+    //    finishes cleaning up the request side.
     //  - Task failed, was killed, or stopped before draining (e.g. a downstream
     //    LIMIT or exception): the stream has not finished, so close() sends a
     //    Cancel, the worker runs its cleanup, and its CancelResponse is returned
@@ -96,12 +98,11 @@ trait ExternalUDFExec extends UnaryExecNode {
     //    raising it (a thread interrupt may still propagate); the underlying
     //    failure has already surfaced through the result iterator.
     //
-    // The returned Termination (per-execution metrics, finish/cancel callback
-    // result) is not consumed yet -- TODO [SPARK-57324] surface it once metrics
-    // wiring lands.
-    taskContext.addTaskCompletionListener[Unit] { _ =>
-      session.close()
-    }
+    // For these UDF sessions, exhausting the data iterator covers execution and
+    // surfaces its errors. close() only cleans up protocol state and releases or
+    // invalidates the worker handle, so its return value is intentionally ignored.
+    //
+    taskContext.addTaskCompletionListener[Unit](_ => session.close())
 
     f(session)
   }
