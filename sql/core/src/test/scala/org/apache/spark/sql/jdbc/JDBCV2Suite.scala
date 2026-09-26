@@ -280,6 +280,14 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     }
   }
 
+  test("SPARK-40608: partially push an OR predicate and evaluate its residual") {
+    val df = sql("SELECT name, id FROM h2.test.people " +
+      "WHERE id = 1 OR (id = 2 AND split(name, ',')[0] = 'fred')")
+    assert(df.queryExecution.optimizedPlan.exists(_.isInstanceOf[Filter]))
+    checkPushedInfo(df, "PushedFilters: [(ID = 1) OR (ID = 2)]")
+    checkAnswer(df, Seq(Row("fred", 1)))
+  }
+
   test("SPARK-57243: IS [NOT] NULL over a composite operand is pushed down and runs on H2") {
     val df1 = sql("SELECT name FROM h2.test.employee WHERE (salary = 10000) IS NOT NULL")
     checkFiltersRemoved(df1)
