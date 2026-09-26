@@ -1681,6 +1681,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val MEMOIZE_COMMON_EXPRESSIONS_IN_BRANCHES =
+    buildConf("spark.sql.optimizer.memoizeCommonExpressionsInBranches.enabled")
+      .internal()
+      .doc("When true, a subexpression that occurs more than once inside a single branch of an " +
+        "`if` or `case when` is rewritten into a `With`, so that the rows reaching that branch " +
+        "evaluate it once. Subexpression elimination cannot cover this: it evaluates its " +
+        "candidates before the projection, so it only considers expressions that are always " +
+        "evaluated, plus those shared by every branch of a group.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED =
     buildConf("spark.sql.subexpressionElimination.filterExec.enabled")
       .internal()
@@ -9337,6 +9349,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def subexpressionEliminationSkipForShotcutExpr: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR)
+
+  def memoizeCommonExpressionsInBranches: Boolean =
+    getConf(MEMOIZE_COMMON_EXPRESSIONS_IN_BRANCHES)
 
   def subexpressionEliminationFilterExecEnabled: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED)
