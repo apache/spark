@@ -35,7 +35,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException, Spar
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
-import org.apache.spark.internal.config.SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS
+import org.apache.spark.internal.config.{DRIVER_INSTANCE_ID, SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS}
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason, LiveListenerBus, TaskSchedulerImpl}
@@ -174,7 +174,8 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(executorEndpoint.address).thenReturn(RpcAddress("localhost", 10000 + executorId.toInt))
     backend.createDriverEndpoint().receiveAndReply(mock(classOf[RpcCallContext])).apply(
       RegisterExecutor(executorId, executorEndpoint, s"host-$executorId", 1,
-        Map.empty, Map.empty, Map.empty, defaultProfile.id))
+        Map.empty, Map(DRIVER_INSTANCE_ID.key -> backend.driverInstanceId),
+        Map.empty, defaultProfile.id))
     assert(backend.isExecutorActive(executorId))
     executorEndpoint
   }
