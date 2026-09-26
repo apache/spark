@@ -54,10 +54,10 @@ import org.apache.spark.sql.types.{
  */
 object AnsiStringPromotionTypeCoercion {
   def apply(expression: Expression): Expression = expression match {
-    case b @ BinaryOperator(left, right)
-        if findWiderTypeForString(left.dataType, right.dataType).isDefined =>
-      val promoteType = findWiderTypeForString(left.dataType, right.dataType).get
-      b.withNewChildren(Seq(castExpr(left, promoteType), castExpr(right, promoteType)))
+    case b: BinaryOperator
+        if findWiderTypeForString(b.left.dataType, b.right.dataType).isDefined =>
+      val promoteType = findWiderTypeForString(b.left.dataType, b.right.dataType).get
+      b.withNewChildren(Seq(castExpr(b.left, promoteType), castExpr(b.right, promoteType)))
 
     case Abs(e @ StringTypeExpression(), failOnError) => Abs(Cast(e, DoubleType), failOnError)
     case m @ UnaryMinus(e @ StringTypeExpression(), _) =>
