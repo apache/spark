@@ -18,7 +18,14 @@
 package org.apache.spark.memory;
 
 import java.io.IOException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -185,6 +192,349 @@ public class TaskMemoryManagerSuite {
       nestedPage = taskMemoryManager.allocatePage(256, this);
       return 0;
     }
+  }
+
+  /** One Comet-like consumer owns both ordinary and optional bytes through the same task. */
+  private static final class OptionalMemoryConsumer extends MemoryConsumer {
+    private final AtomicLong optionalBytes = new AtomicLong();
+
+    OptionalMemoryConsumer(TaskMemoryManager manager) {
+      super(manager, 0L, MemoryMode.OFF_HEAP);
+    }
+
+    synchronized long reserveOptional(long size) {
+      long got = taskMemoryManager.tryAcquireOptionalExecutionMemory(size, this);
+      optionalBytes.addAndGet(got);
+      used.addAndGet(got);
+      return got;
+    }
+
+    synchronized long acquireOrdinary(long size) {
+      long got = taskMemoryManager.acquireExecutionMemory(size, this);
+      used.addAndGet(got);
+      return got;
+    }
+
+    synchronized void releaseOrdinary(long size) {
+      taskMemoryManager.releaseExecutionMemory(size, this);
+      used.addAndGet(-size);
+    }
+
+    synchronized void reclaimOptional() {
+      long size = optionalBytes.get();
+      if (size > 0) {
+        taskMemoryManager.releaseOptionalExecutionMemory(size, this);
+        optionalBytes.addAndGet(-size);
+        used.addAndGet(-size);
+      }
+    }
+
+    @Override
+    public long spill(long size, MemoryConsumer trigger) {
+      return 0L;
+    }
+  }
+
+  private static SparkConf optionalTestConf(boolean enabled) {
+    return new SparkConf(false)
+      .set("spark.memory.optional.enabled", Boolean.toString(enabled))
+      .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), true)
+      .set(package$.MODULE$.MEMORY_OFFHEAP_SIZE(), 1000L)
+      .set(package$.MODULE$.MEMORY_STORAGE_FRACTION(), 0.0);
+  }
+
+  private UnifiedMemoryManager optionalTestPool(boolean enabled) {
+    return new UnifiedMemoryManager(optionalTestConf(enabled), 1000L, 0L, 1);
+  }
+
+  @Test
+  public void optionalAdmissionCanReclaimAnotherTasksReadAhead() throws Exception {
+    UnifiedMemoryManager pool = optionalTestPool(true);
+    TaskMemoryManager owner = new TaskMemoryManager(pool, 1);
+    TaskMemoryManager requester = new TaskMemoryManager(pool, 2);
+    OptionalMemoryConsumer readAhead = new OptionalMemoryConsumer(owner);
+    TestMemoryConsumer ordinary = new TestMemoryConsumer(requester, MemoryMode.OFF_HEAP);
+
+    Assertions.assertEquals(0, readAhead.reserveOptional(1)); // Must register first.
+    AutoCloseable registration =
+      owner.registerOptionalMemoryReclaimer(readAhead, readAhead::reclaimOptional);
+    Assertions.assertNotNull(registration);
+    Assertions.assertEquals(400, readAhead.reserveOptional(400));
+    Assertions.assertEquals(400, owner.getMemoryConsumptionForThisTask());
+    String breakdown = owner.getMemoryConsumptionBreakdown();
+    Assertions.assertTrue(breakdown.contains(readAhead.toString() + ": "), breakdown);
+    Assertions.assertFalse(breakdown.contains("(not attributed to a specific consumer)"),
+      breakdown);
+
+    // The owner has no ordinary grant. Its optional bytes must not shrink the peer's share.
+    ordinary.use(700);
+    Assertions.assertEquals(700, ordinary.getUsed());
+    Assertions.assertEquals(0, readAhead.getUsed());
+    Assertions.assertEquals(0, owner.getMemoryConsumptionForThisTask());
+    Assertions.assertEquals(700, pool.executionMemoryUsed());
+
+    registration.close();
+    registration.close();
+    ordinary.free(700);
+    Assertions.assertEquals(0, owner.cleanUpAllAllocatedMemory());
+    Assertions.assertEquals(0, requester.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void optionalAndOrdinaryBytesOfOneConsumerHaveSeparateReleasePaths() throws Exception {
+    UnifiedMemoryManager pool = optionalTestPool(true);
+    TaskMemoryManager owner = new TaskMemoryManager(pool, 1);
+    OptionalMemoryConsumer readAhead = new OptionalMemoryConsumer(owner);
+    AutoCloseable registration =
+      owner.registerOptionalMemoryReclaimer(readAhead, readAhead::reclaimOptional);
+
+    Assertions.assertEquals(100, readAhead.reserveOptional(100));
+    Assertions.assertEquals(200, readAhead.acquireOrdinary(200));
+    Assertions.assertEquals(300, readAhead.getUsed());
+    readAhead.reclaimOptional();
+    Assertions.assertEquals(200, owner.getMemoryConsumptionForThisTask());
+    Assertions.assertEquals(200, readAhead.getUsed());
+    readAhead.releaseOrdinary(200);
+    registration.close();
+    Assertions.assertEquals(0, owner.cleanUpAllAllocatedMemory());
+    Assertions.assertEquals(300, owner.getPeakOffHeapExecutionMemory());
+  }
+
+  @Test
+  public void optionalReleaseCannotSpendAnotherConsumersCredit() throws Exception {
+    UnifiedMemoryManager pool = optionalTestPool(true);
+    TaskMemoryManager owner = new TaskMemoryManager(pool, 1);
+    OptionalMemoryConsumer first = new OptionalMemoryConsumer(owner);
+    OptionalMemoryConsumer second = new OptionalMemoryConsumer(owner);
+    OptionalMemoryConsumer unregistered = new OptionalMemoryConsumer(owner);
+    AutoCloseable firstRegistration =
+      owner.registerOptionalMemoryReclaimer(first, first::reclaimOptional);
+    AutoCloseable secondRegistration =
+      owner.registerOptionalMemoryReclaimer(second, second::reclaimOptional);
+
+    Assertions.assertEquals(300, first.reserveOptional(300));
+    Assertions.assertEquals(300, second.reserveOptional(300));
+    // The task-level pool has 600 bytes; neither the 400-byte first release nor an unrelated
+    // consumer's 100-byte release may spend credit owned by the second consumer.
+    Assertions.assertThrows(AssertionError.class,
+      () -> owner.releaseOptionalExecutionMemory(400, first));
+    Assertions.assertThrows(AssertionError.class,
+      () -> owner.releaseOptionalExecutionMemory(100, unregistered));
+    Assertions.assertEquals(600, owner.getMemoryConsumptionForThisTask());
+    Assertions.assertEquals(300, first.optionalBytes.get());
+    Assertions.assertEquals(300, second.optionalBytes.get());
+
+    first.reclaimOptional();
+    Assertions.assertEquals(300, owner.getMemoryConsumptionForThisTask());
+    second.reclaimOptional();
+    firstRegistration.close();
+    secondRegistration.close();
+    Assertions.assertEquals(0, owner.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void skipsDrainedOwnerWhenAnotherConsumerInTaskHoldsOptionalBytes() throws Exception {
+    UnifiedMemoryManager pool = optionalTestPool(true);
+    TaskMemoryManager owner = new TaskMemoryManager(pool, 1);
+    TaskMemoryManager peer = new TaskMemoryManager(pool, 2);
+    OptionalMemoryConsumer idle = new OptionalMemoryConsumer(owner);
+    OptionalMemoryConsumer readAhead = new OptionalMemoryConsumer(owner);
+    TestMemoryConsumer ordinary = new TestMemoryConsumer(peer, MemoryMode.OFF_HEAP);
+    AtomicInteger idleCalls = new AtomicInteger();
+    AutoCloseable idleRegistration =
+      owner.registerOptionalMemoryReclaimer(idle, () -> idleCalls.incrementAndGet());
+    AutoCloseable activeRegistration =
+      owner.registerOptionalMemoryReclaimer(readAhead, readAhead::reclaimOptional);
+
+    Assertions.assertEquals(400, readAhead.reserveOptional(400));
+    ordinary.use(700);
+    Assertions.assertEquals(700, ordinary.getUsed());
+    Assertions.assertEquals(0, idleCalls.get());
+    Assertions.assertEquals(0, readAhead.optionalBytes.get());
+
+    idleRegistration.close();
+    activeRegistration.close();
+    ordinary.free(700);
+    Assertions.assertEquals(0, owner.cleanUpAllAllocatedMemory());
+    Assertions.assertEquals(0, peer.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void reclamationSeesGrantBeforeItsOwnerCreditIsPublished() throws Exception {
+    CountDownLatch grantReady = new CountDownLatch(1);
+    CountDownLatch allowPublication = new CountDownLatch(1);
+    CountDownLatch callbackStarted = new CountDownLatch(1);
+    UnifiedMemoryManager pool = new UnifiedMemoryManager(optionalTestConf(true), 1000L, 0L, 1) {
+      @Override
+      public long tryAcquireExecutionMemory(
+          long size, long taskAttemptId, MemoryMode mode) {
+        long granted = super.tryAcquireExecutionMemory(size, taskAttemptId, mode);
+        if (taskAttemptId == 1L && granted > 0L) {
+          grantReady.countDown();
+          try {
+            if (!allowPublication.await(10, TimeUnit.SECONDS)) {
+              // Invariants must propagate even when JVM assertions are disabled.
+              // checkstyle.off: RegexpSinglelineJava
+              throw new AssertionError("optional grant was not allowed to publish its credit");
+              // checkstyle.on: RegexpSinglelineJava
+            }
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            // Invariants must propagate even when JVM assertions are disabled.
+            // checkstyle.off: RegexpSinglelineJava
+            throw new AssertionError(e);
+            // checkstyle.on: RegexpSinglelineJava
+          }
+        }
+        return granted;
+      }
+    };
+    TaskMemoryManager owner = new TaskMemoryManager(pool, 1);
+    TaskMemoryManager peer = new TaskMemoryManager(pool, 2);
+    OptionalMemoryConsumer readAhead = new OptionalMemoryConsumer(owner);
+    TestMemoryConsumer ordinary = new TestMemoryConsumer(peer, MemoryMode.OFF_HEAP);
+    AutoCloseable registration = owner.registerOptionalMemoryReclaimer(readAhead, () -> {
+      callbackStarted.countDown();
+      readAhead.reclaimOptional();
+    });
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    Future<?> peerAcquisition = null;
+    try {
+      Future<Long> optionalAcquisition = executor.submit(() -> readAhead.reserveOptional(400));
+      Assertions.assertTrue(grantReady.await(10, TimeUnit.SECONDS));
+      Assertions.assertEquals(400, pool.executionMemoryUsed());
+      // The shared grant is visible, but the owner has not yet published its local credit.
+      peerAcquisition = executor.submit(() -> ordinary.use(700));
+      Assertions.assertTrue(callbackStarted.await(10, TimeUnit.SECONDS));
+      Assertions.assertFalse(peerAcquisition.isDone());
+      allowPublication.countDown();
+      Assertions.assertEquals(400L, optionalAcquisition.get(10, TimeUnit.SECONDS).longValue());
+      peerAcquisition.get(10, TimeUnit.SECONDS);
+      Assertions.assertEquals(700, ordinary.getUsed());
+      Assertions.assertEquals(0, readAhead.optionalBytes.get());
+      registration.close();
+      ordinary.free(700);
+      Assertions.assertEquals(0, owner.cleanUpAllAllocatedMemory());
+      Assertions.assertEquals(0, peer.cleanUpAllAllocatedMemory());
+    } finally {
+      allowPublication.countDown();
+      if (peerAcquisition != null) peerAcquisition.cancel(true);
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  public void incompleteOptionalDrainKeepsRegistrationAndCredit() throws Exception {
+    UnifiedMemoryManager pool = optionalTestPool(true);
+    TaskMemoryManager owner = new TaskMemoryManager(pool, 1);
+    OptionalMemoryConsumer readAhead = new OptionalMemoryConsumer(owner);
+    AutoCloseable registration = owner.registerOptionalMemoryReclaimer(readAhead, () -> { });
+
+    Assertions.assertEquals(400, readAhead.reserveOptional(400));
+    Assertions.assertThrows(AssertionError.class, registration::close);
+    Assertions.assertEquals(400, owner.getMemoryConsumptionForThisTask());
+    Assertions.assertEquals(0, readAhead.reserveOptional(1));
+    // Task cleanup must fail visibly rather than silently drop the unread native reservation.
+    Assertions.assertThrows(AssertionError.class, owner::cleanUpAllAllocatedMemory);
+    Assertions.assertEquals(400, owner.getMemoryConsumptionForThisTask());
+    Assertions.assertEquals(400, readAhead.optionalBytes.get());
+    readAhead.reclaimOptional();
+    registration.close();
+    Assertions.assertEquals(0, owner.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void cleanupClosesOptionalAdmissionBeforeDrainingOwner() throws Exception {
+    UnifiedMemoryManager pool = optionalTestPool(true);
+    TaskMemoryManager owner = new TaskMemoryManager(pool, 1);
+    OptionalMemoryConsumer readAhead = new OptionalMemoryConsumer(owner);
+    CountDownLatch callbackStarted = new CountDownLatch(1);
+    CountDownLatch allowRelease = new CountDownLatch(1);
+    AutoCloseable registration = owner.registerOptionalMemoryReclaimer(readAhead, () -> {
+      Assertions.assertFalse(Thread.holdsLock(owner));
+      Assertions.assertFalse(Thread.holdsLock(pool));
+      callbackStarted.countDown();
+      try {
+        if (!allowRelease.await(5, TimeUnit.SECONDS)) {
+          // Invariants must propagate even when JVM assertions are disabled.
+          // checkstyle.off: RegexpSinglelineJava
+          throw new AssertionError("timed out before optional cleanup could release memory");
+          // checkstyle.on: RegexpSinglelineJava
+        }
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        // Invariants must propagate even when JVM assertions are disabled.
+        // checkstyle.off: RegexpSinglelineJava
+        throw new AssertionError(e);
+        // checkstyle.on: RegexpSinglelineJava
+      }
+      readAhead.reclaimOptional();
+    });
+    Assertions.assertEquals(400, readAhead.reserveOptional(400));
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+    try {
+      Future<Long> cleanup = executor.submit(owner::cleanUpAllAllocatedMemory);
+      Assertions.assertTrue(callbackStarted.await(5, TimeUnit.SECONDS));
+      Assertions.assertEquals(400, pool.executionMemoryUsed());
+      // This call must fail immediately rather than wait behind the pending callback.
+      Assertions.assertEquals(0, owner.tryAcquireOptionalExecutionMemory(1, readAhead));
+      allowRelease.countDown();
+      Assertions.assertEquals(0L, cleanup.get(5, TimeUnit.SECONDS).longValue());
+      Assertions.assertEquals(0, pool.executionMemoryUsed());
+      Assertions.assertNull(owner.registerOptionalMemoryReclaimer(readAhead, () -> { }));
+      Assertions.assertEquals(0, readAhead.reserveOptional(1));
+      registration.close();
+    } finally {
+      allowRelease.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  public void failedOwnerCleanupRetainsItsOptionalCharge() throws Exception {
+    UnifiedMemoryManager pool = optionalTestPool(true);
+    TaskMemoryManager owner = new TaskMemoryManager(pool, 1);
+    TaskMemoryManager peer = new TaskMemoryManager(pool, 2);
+    OptionalMemoryConsumer readAhead = new OptionalMemoryConsumer(owner);
+    NonSpillingConsumer ownOrdinary = new NonSpillingConsumer(owner);
+    TestMemoryConsumer ordinary = new TestMemoryConsumer(peer, MemoryMode.OFF_HEAP);
+    AtomicBoolean failFirstDrain = new AtomicBoolean(true);
+    AutoCloseable registration = owner.registerOptionalMemoryReclaimer(readAhead, () -> {
+      if (failFirstDrain.getAndSet(false)) {
+        throw new IllegalStateException("injected read-ahead cleanup failure");
+      }
+      readAhead.reclaimOptional();
+    });
+
+    Assertions.assertEquals(300, readAhead.reserveOptional(300));
+    ownOrdinary.use(100);
+    Assertions.assertEquals(100, ownOrdinary.getUsed());
+    Assertions.assertThrows(IllegalStateException.class, owner::cleanUpAllAllocatedMemory);
+    // Ordinary cleanup proceeds, but the failed optional owner stays charged and visible.
+    Assertions.assertEquals(300, owner.getMemoryConsumptionForThisTask());
+    Assertions.assertEquals(300, readAhead.optionalBytes.get());
+    Assertions.assertTrue(owner.getMemoryConsumptionBreakdown().contains(readAhead.toString()));
+    Assertions.assertEquals(0, readAhead.reserveOptional(1));
+    ordinary.use(700);
+    Assertions.assertEquals(700, ordinary.getUsed());
+    registration.close(); // Retry the still-registered owner; only its 300 bytes are released.
+    Assertions.assertEquals(0, pool.getExecutionMemoryUsageForTask(1));
+    ordinary.free(700);
+    Assertions.assertEquals(0, owner.cleanUpAllAllocatedMemory());
+    Assertions.assertEquals(0, peer.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void disabledOptionalMemoryDoesNotChangeTaskCleanup() {
+    UnifiedMemoryManager pool = optionalTestPool(false);
+    TaskMemoryManager owner = new TaskMemoryManager(pool, 1);
+    OptionalMemoryConsumer readAhead = new OptionalMemoryConsumer(owner);
+    Assertions.assertNull(owner.registerOptionalMemoryReclaimer(readAhead,
+      () -> Assertions.fail("disabled owner must never be called")));
+    Assertions.assertEquals(0, readAhead.reserveOptional(100));
+    Assertions.assertEquals(100, readAhead.acquireOrdinary(100));
+    Assertions.assertEquals(100, owner.cleanUpAllAllocatedMemory());
+    Assertions.assertEquals(0, owner.getMemoryConsumptionForThisTask());
   }
 
   @Test
