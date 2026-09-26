@@ -1804,20 +1804,26 @@ class WholeStageCodegenSuite extends SharedSparkSession
   private def largeCaseWhen(c: String, n: Int): String =
     (1 to n).map(k => s"WHEN $c = $k THEN $c * $k").mkString("CASE ", " ", " ELSE 0 END")
 
-  /** The generated code of each whole stage codegen stage of `df`'s executed plan. */
-  private def stageCodes(df: DataFrame): Seq[CodeAndComment] =
-    df.queryExecution.executedPlan.collect { case w: WholeStageCodegenExec => w.doCodeGen()._2 }
-
   /** The largest method of `df`'s stages, compiled. */
   private def maxStageMethodSize(df: DataFrame): Int =
-    stageCodes(df).map(c => CodeGenerator.compile(c)._2.maxMethodCodeSize).max
+    genCode(df).map(c => CodeGenerator.compile(c)._2.maxMethodCodeSize).max
 
   /**
    * Whether a CASE WHEN of one of `df`'s stages was split into methods, whose names carry the
    * prefix of the operator they were generated for, such as `project_caseWhen_0_0`.
    */
   private def splitsCaseWhen(df: DataFrame): Boolean =
-    stageCodes(df).exists(c => "private byte \\w*caseWhen_\\d".r.findFirstIn(c.body).nonEmpty)
+    genCode(df).exists(c => "private byte \\w*caseWhen_\\d".r.findFirstIn(c.body).nonEmpty)
+
+  /** Whether a split method of a CASE WHEN of `df`'s stages takes a row. */
+  private def splitCaseWhenTakesRow(df: DataFrame): Boolean = genCode(df).exists(c =>
+    "private byte \\w*caseWhen_\\d\\w*\\([^)]*InternalRow ".r.findFirstIn(c.body).nonEmpty)
+
+  /** The rows of `query` computed without whole stage codegen, which each test checks against. */
+  private def withoutWholeStage(query: => DataFrame): Seq[Row] =
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      query.collect().toSeq
+    }
 
   test("SPARK-33301: a CASE WHEN too large for one method is split under whole stage codegen") {
     // Inside a stage the inputs are local variables of the stage's method, and the branches were
@@ -1863,10 +1869,42 @@ class WholeStageCodegenSuite extends SharedSparkSession
       def df: DataFrame =
         spark.read.parquet(path.getCanonicalPath).selectExpr(s"CASE $branches ELSE upper(s) END")
       assert(splitsCaseWhen(df))
-      val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-        df.collect().toSeq
+      checkAnswer(df, withoutWholeStage(df))
+    }
+  }
+
+  test("SPARK-33301: each split method takes only what its own branches read") {
+    // Every branch reads its own nullable `bigint` column, three parameter slots each, so the
+    // union over all branches is past the 255 slots a method can take, while each method takes
+    // the columns of the branches it holds, and the methods grouping the calls the union of what
+    // their calls take. Each column is read twice, so the projection evaluates it before the
+    // CASE WHEN.
+    withTempPath { path =>
+      val columns = 90
+      spark.range(100)
+        .selectExpr((1 to columns).map(i => s"if(id % $i = 0, null, id + $i) AS c$i"): _*)
+        .write.parquet(path.getCanonicalPath)
+      val branches = (1 to columns).map(i => s"WHEN c$i > 150 THEN c$i").mkString(" ")
+      def df: DataFrame =
+        spark.read.parquet(path.getCanonicalPath).selectExpr(s"CASE $branches ELSE -1 END AS v")
+      assert(splitsCaseWhen(df))
+      checkAnswer(df, withoutWholeStage(df))
+    }
+  }
+
+  test("SPARK-33301: a CASE WHEN whose methods would take too many parameters stays in one piece") {
+    // Every branch reads all three columns, and no expression repeats, so that subexpression
+    // elimination, which the same limit governs, has nothing to split.
+    withSQLConf("spark.sql.CodeGenerator.validParamLength" -> "4") {
+      withTempPath { path =>
+        spark.range(50).selectExpr("id AS a", "id + 1 AS b", "id + 2 AS c")
+          .write.parquet(path.getCanonicalPath)
+        val branches = (1 to 100).map(k => s"WHEN a + $k = b THEN c * $k").mkString(" ")
+        def df: DataFrame =
+          spark.read.parquet(path.getCanonicalPath).selectExpr(s"CASE $branches ELSE 0 END AS v")
+        assert(!splitsCaseWhen(df))
+        checkAnswer(df, withoutWholeStage(df))
       }
-      checkAnswer(df, expected)
     }
   }
 
@@ -1883,19 +1921,43 @@ class WholeStageCodegenSuite extends SharedSparkSession
         case _ => false
       })
       assert(splitsCaseWhen(df))
-      assert(!stageCodes(df).exists(c =>
-        "private byte \\w*caseWhen_\\d\\w*\\([^)]*InternalRow ".r.findFirstIn(c.body).nonEmpty))
-      val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-        sql(query).collect().toSeq
-      }
-      checkAnswer(df, expected)
+      assert(!splitCaseWhenTakesRow(df))
+      checkAnswer(df, withoutWholeStage(sql(query)))
+    }
+  }
+
+  test("SPARK-33301: a common expression in a branch under a keyed aggregate takes the buffer") {
+    // `nullif` is a `With`, which stays in the plan in a branch other than the first, and whose
+    // definition, made a method, is called with `INPUT_ROW`: the aggregate's buffer, which the
+    // split methods therefore take.
+    withTempView("t") {
+      spark.range(1000).selectExpr("id % 7 AS k", "CAST(id % 400 AS INT) AS v")
+        .createOrReplaceTempView("t")
+      val branches = "WHEN v = 0 THEN 0 WHEN v = 1 THEN nullif(nullif(v * 3, 1), 2) " +
+        (2 to 300).map(k => s"WHEN v = $k THEN v * $k").mkString(" ")
+      val query = s"SELECT k, sum(CASE $branches ELSE 0 END) AS s FROM t GROUP BY k"
+      val df = sql(query)
+      assert(splitsCaseWhen(df))
+      assert(splitCaseWhenTakesRow(df))
+      checkAnswer(df, withoutWholeStage(sql(query)))
+    }
+  }
+
+  test("SPARK-33301: max_by under a keyed aggregate, whose update reads the buffer") {
+    // `max_by` updates and merges its buffer with CASE WHENs of three branches that read the
+    // buffer through `INPUT_ROW`.
+    withTempView("t") {
+      spark.range(1000)
+        .selectExpr("id % 7 AS k", "concat('value ', cast(id AS string)) AS s", "id % 97 AS o")
+        .createOrReplaceTempView("t")
+      val query = "SELECT k, max_by(s, o), min_by(s, o) FROM t GROUP BY k"
+      checkAnswer(sql(query), withoutWholeStage(sql(query)))
     }
   }
 
   test("SPARK-33301: a large CASE WHEN in a join condition compiles") {
-    // A join leaves `INPUT_ROW` naming the row of its build side, a local of the loop over the
-    // matches, while it generates the code of a condition; the split methods must not take it
-    // where the code does not read it. Under testing a stage that fails to compile throws.
+    // A join generates its condition inside the loop over the matches, where `INPUT_ROW` names
+    // the row of the build side; the split methods take it only if the code reads it.
     withTempView("l", "r") {
       spark.range(200).selectExpr("id % 20 AS k", "id % 300 AS v").createOrReplaceTempView("l")
       spark.range(100).selectExpr("id % 20 AS k", "id % 7 AS w").createOrReplaceTempView("r")
@@ -1903,33 +1965,28 @@ class WholeStageCodegenSuite extends SharedSparkSession
       Seq(
         s"SELECT /*+ MERGE(r) */ l.k, l.v, r.w FROM l JOIN r ON l.k = r.k AND $condition",
         s"SELECT /*+ BROADCAST(r) */ l.k, l.v, r.w FROM l JOIN r ON l.k = r.k AND $condition",
-        // The part of the condition on the streamed side alone is generated before the loop.
         s"SELECT /*+ MERGE(r) */ l.k, l.v, r.w FROM l LEFT JOIN r " +
           s"ON l.k = r.k AND ${largeCaseWhen("l.v", 300)} > 50"
       ).foreach { query =>
-        val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-          sql(query).collect().toSeq
-        }
-        checkAnswer(sql(query), expected)
+        val df = sql(query)
+        assert(splitsCaseWhen(df), query)
+        checkAnswer(df, withoutWholeStage(sql(query)))
       }
     }
   }
 
-  test("SPARK-33301: the split methods read the slots of compacted mutable state as fields") {
-    // `ExpandExec` keeps its string outputs in a compacted array of mutable state, so the CASE
-    // WHEN above a ROLLUP reads `mutableStateArray_0[i]`, a field that needs no parameter.
+  test("SPARK-33301: a CASE WHEN in an aggregate over a ROLLUP") {
+    // The aggregate reads the rows `ExpandExec` produces, through the parameters of its own
+    // consume method.
     withTempView("t") {
       spark.range(300)
         .selectExpr("id % 300 AS v", "concat('g', cast(id % 3 AS string)) AS g")
         .createOrReplaceTempView("t")
       val query =
         s"SELECT g, sum(${largeCaseWhen("v", 300)}) AS s FROM t GROUP BY ROLLUP(g, v % 2)"
-      val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-        sql(query).collect().toSeq
-      }
       val df = sql(query)
       assert(splitsCaseWhen(df))
-      checkAnswer(df, expected)
+      checkAnswer(df, withoutWholeStage(sql(query)))
     }
   }
 
@@ -1940,6 +1997,20 @@ class WholeStageCodegenSuite extends SharedSparkSession
     val df = spark.range(10).selectExpr(s"($caseWhen) + 1 AS a", s"($caseWhen) + 2 AS b")
     assert(splitsCaseWhen(df))
     checkAnswer(df, (0L until 10L).map(i => Row(i * i + 1, i * i + 2)))
+  }
+
+  test("SPARK-33301: functions added in a discarded pass of subexpression elimination go") {
+    // Subexpression elimination generates its subexpressions once without splitting and, when
+    // that code is too large, again split, discarding the first; the methods the first pass
+    // added go with it, `computeCommonExpr` methods of a `nullif` included, whose calls to the
+    // first pass's CASE WHEN methods would otherwise name methods no longer declared.
+    val caseWhen = largeCaseWhen("id", 300)
+    val second = (1 to 300).map(k => s"WHEN id = $k THEN id + $k")
+      .mkString("CASE ", " ", " ELSE 0 END")
+    def df: DataFrame = spark.range(10).selectExpr(s"($caseWhen) + 1 AS a",
+      s"($caseWhen) + 2 AS b", s"IF(id < 0, 0, nullif($second, 0)) AS c",
+      s"IF(id < 0, 0, nullif($second, 0)) AS d")
+    checkAnswer(df, withoutWholeStage(df))
   }
 
   test("SPARK-33301: a CASE WHEN reading an input not evaluated yet stays in one piece") {

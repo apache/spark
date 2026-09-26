@@ -811,7 +811,17 @@ class CodegenContext extends Logging {
       className: String) = {
     classSize(className) += funcCode.length
     classFunctions(className) += funcName -> funcCode
+    if (discardableFunctions != null) {
+      discardableFunctions += className -> funcName
+    }
   }
+
+  /**
+   * The functions added while subexpression elimination generates code it may discard, as
+   * (class, function); null outside that generation. See
+   * `subexpressionEliminationForWholeStageCodegen`.
+   */
+  private var discardableFunctions: mutable.ArrayBuffer[(String, String)] = null
 
   /**
    * Declares all function code. If the added functions are too many, split them into nested
@@ -1157,12 +1167,8 @@ class CodegenContext extends Logging {
    *
    * Note that different from `splitExpressions`, we will extract the current inputs of this
    * context and pass them to the generated functions. The input is `INPUT_ROW` for normal codegen
-   * path, and `currentVars` for whole stage codegen path.
-   *
-   * Under whole stage codegen the inputs are local variables of the operator's method, and which
-   * of them the code reads is known only from the expressions the code was generated for, so the
-   * code is split only when the caller passes those as `sources` and every local they read can be
-   * passed to a function (see `wholeStageSplitArguments`). Otherwise it stays in one piece.
+   * path, and `currentVars` for whole stage codegen path. This method does not split under whole
+   * stage codegen; the overload that takes the expressions the code was generated for does.
    *
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
@@ -1171,8 +1177,6 @@ class CodegenContext extends Logging {
    * @param returnType the return type of the split function.
    * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
    * @param foldFunctions folds the split function calls.
-   * @param sources the expressions whose generated code `expressions` is, which under whole
-   *                stage codegen decide the arguments of the split functions.
    */
   def splitExpressionsWithCurrentInputs(
       expressions: Seq[String],
@@ -1180,50 +1184,169 @@ class CodegenContext extends Logging {
       extraArguments: Seq[(String, String)] = Nil,
       returnType: String = "void",
       makeSplitFunction: String => String = identity,
-      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";"),
-      sources: Seq[Expression] = Nil): String = {
-    val inputs = if (currentVars != null) {
-      // The walk that finds the arguments is only worth doing for code that will be split.
-      if (SQLConf.get.wholeStageSplitExpressions && buildCodeBlocks(expressions).length > 1) {
-        wholeStageSplitArguments(sources, extraArguments)
-      } else {
-        None
-      }
+      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
+    if (INPUT_ROW == null || currentVars != null) {
+      expressions.mkString("\n")
     } else {
-      Option(INPUT_ROW).map(row => Seq("InternalRow" -> row))
-    }
-    inputs match {
-      case Some(arguments) =>
-        val before = if (currentVars != null && discardableFunctions != null) {
-          classFunctions.map { case (c, fs) => c -> fs.keySet.toSet }.toMap
-        } else {
-          null
-        }
-        val code = splitExpressions(
-          expressions,
-          funcName,
-          arguments ++ extraArguments,
-          returnType,
-          makeSplitFunction,
-          foldFunctions)
-        if (before != null) {
-          classFunctions.foreach { case (c, fs) =>
-            val existing = before.getOrElse(c, Set.empty[String])
-            fs.keys.filterNot(existing).foreach(f => discardableFunctions += c -> f)
-          }
-        }
-        code
-      case None =>
-        expressions.mkString("\n")
+      splitExpressions(
+        expressions,
+        funcName,
+        ("InternalRow", INPUT_ROW) +: extraArguments,
+        returnType,
+        makeSplitFunction,
+        foldFunctions)
     }
   }
 
   /**
-   * The functions split out under whole stage codegen while subexpression elimination generates
-   * code it may discard, as (class, function); null outside that generation. See
-   * `subexpressionEliminationForWholeStageCodegen`.
+   * `splitExpressionsWithCurrentInputs` for code whose sources are known, which it splits under
+   * whole stage codegen as well. There the inputs are local variables of the operator's method,
+   * and which of them a piece of code reads is known only from the expressions it was generated
+   * for, so `sources` gives those, one sequence for each entry of `expressions`. Each function
+   * split out takes the locals its own entries read (see `wholeStageSplitArguments`), and a
+   * function that groups calls takes what its calls take. The code stays in one piece where the
+   * code of any function reads a local no function could take. Outside whole stage codegen this is
+   * the method above.
+   *
+   * It is an overload rather than a new parameter of the method above, whose signature code
+   * outside Spark is compiled against.
+   *
+   * @param expressions the codes to evaluate expressions.
+   * @param sources the expressions each entry of `expressions` was generated from.
+   * @param funcName the split function name base.
+   * @param extraArguments the list of (type, name) of the arguments of the split functions,
+   *                       except for the current inputs.
+   * @param returnType the return type of the split function.
+   * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
+   * @param foldFunctions folds the split function calls.
    */
-  private var discardableFunctions: mutable.ArrayBuffer[(String, String)] = null
+  def splitExpressionsWithCurrentInputs(
+      expressions: Seq[String],
+      sources: Seq[Seq[Expression]],
+      funcName: String,
+      extraArguments: Seq[(String, String)],
+      returnType: String,
+      makeSplitFunction: String => String,
+      foldFunctions: Seq[String] => String): String = {
+    require(sources.length == expressions.length,
+      s"${sources.length} source sequences for ${expressions.length} pieces of code")
+    if (currentVars == null) {
+      splitExpressionsWithCurrentInputs(
+        expressions, funcName, extraArguments, returnType, makeSplitFunction, foldFunctions)
+    } else if (!SQLConf.get.wholeStageSplitExpressions) {
+      expressions.mkString("\n")
+    } else {
+      splitWholeStage(expressions, sources, funcName, extraArguments, returnType,
+        makeSplitFunction, foldFunctions).getOrElse(expressions.mkString("\n"))
+    }
+  }
+
+  /**
+   * The whole stage split of `splitExpressionsWithCurrentInputs`: None where the code is one
+   * block, or where the code of a block reads a local no function could take.
+   */
+  private def splitWholeStage(
+      expressions: Seq[String],
+      sources: Seq[Seq[Expression]],
+      funcName: String,
+      extraArguments: Seq[(String, String)],
+      returnType: String,
+      makeSplitFunction: String => String,
+      foldFunctions: Seq[String] => String): Option[String] = {
+    val blocks = buildCodeBlocksOf(expressions)
+    if (blocks.length <= 1) {
+      None
+    } else {
+      val blockArguments = blocks.map { case (_, entries) =>
+        wholeStageSplitArguments(entries.flatMap(sources), extraArguments)
+      }
+      Option.when(blockArguments.forall(_.isDefined)) {
+        val func = freshName(funcName)
+        val calls = blocks.zip(blockArguments.flatten).zipWithIndex.map {
+          case (((body, _), arguments), i) =>
+            splitCall(s"${func}_$i", arguments ++ extraArguments, returnType,
+              makeSplitFunction(body))
+        }
+        foldFunctions(
+          groupSplitCalls(calls, func, returnType, makeSplitFunction, foldFunctions).map(_.call))
+      }
+    }
+  }
+
+  /** A call to a function split out of whole stage generated code, and the arguments it takes. */
+  private case class SplitCall(call: String, arguments: Seq[(String, String)])
+
+  /** Adds the function `name` taking `arguments` and running `body`, and returns a call to it. */
+  private def splitCall(
+      name: String,
+      arguments: Seq[(String, String)],
+      returnType: String,
+      body: String): SplitCall = {
+    if (Utils.isTesting) {
+      // Passing global variables to the split method is dangerous, as any mutating to it is
+      // ignored and may lead to unexpected behavior.
+      arguments.foreach { case (_, argument) =>
+        assert(!mutableStateNames.contains(argument),
+          s"split function argument $argument cannot be a global variable.")
+      }
+    }
+    val argString = arguments.map { case (t, argument) => s"$t $argument" }.mkString(", ")
+    val code =
+      s"""
+         |private $returnType $name($argString) {
+         |  $body
+         |}
+       """.stripMargin
+    SplitCall(s"${addNewFunction(name, code)}(${arguments.map(_._2).mkString(", ")})", arguments)
+  }
+
+  /**
+   * `groupFunctionCalls` for calls that take different arguments: a group takes the union of what
+   * its calls take, and is closed when one more call would take it past
+   * `SPLIT_CALLS_PER_GROUP` calls or past the parameters a method can have. Where no group can
+   * hold two calls, the calls are left as they are.
+   */
+  private def groupSplitCalls(
+      calls: Seq[SplitCall],
+      funcName: String,
+      returnType: String,
+      makeSplitFunction: String => String,
+      foldFunctions: Seq[String] => String,
+      level: Int = 0): Seq[SplitCall] = {
+    if (calls.length <= splitCallsPerMethod(calls.maxBy(_.arguments.length).arguments)) {
+      calls
+    } else {
+      val groups = mutable.ArrayBuffer.empty[mutable.ArrayBuffer[SplitCall]]
+      var taken = Seq.empty[(String, String)]
+      calls.foreach { c =>
+        val union = (taken ++ c.arguments).distinctBy(_._2)
+        if (groups.isEmpty || groups.last.length == SPLIT_CALLS_PER_GROUP ||
+            !isValidParamLength(paramSlots(union))) {
+          groups += mutable.ArrayBuffer(c)
+          taken = c.arguments
+        } else {
+          groups.last += c
+          taken = union
+        }
+      }
+      if (groups.length == calls.length) {
+        calls
+      } else {
+        val grouped = groups.zipWithIndex.map { case (group, i) =>
+          splitCall(s"${funcName}_group${level}_$i",
+            group.flatMap(_.arguments).distinctBy(_._2).toSeq, returnType,
+            makeSplitFunction(foldFunctions(group.map(_.call).toSeq)))
+        }.toSeq
+        groupSplitCalls(grouped, funcName, returnType, makeSplitFunction, foldFunctions, level + 1)
+      }
+    }
+  }
+
+  /** The parameter slots of a method taking `arguments`, `this` included. */
+  private def paramSlots(arguments: Seq[(String, String)]): Int =
+    1 + arguments.map { case (javaType, _) =>
+      if (javaType == JAVA_LONG || javaType == JAVA_DOUBLE) 2 else 1
+    }.sum
 
   /**
    * The arguments of a function split out of whole stage generated code so that the code generated
@@ -1242,18 +1365,21 @@ class CodegenContext extends Logging {
    * It refuses, as `CommonExprSlots.methodArgs` does and for the reasons it gives:
    *  - an input the operator has not evaluated yet, whose code was generated into this code and
    *    names locals of the operator producing the row;
-   *  - a value no parameter can carry: a `SimpleExprValue`;
+   *  - a value no parameter can carry: a `SimpleExprValue`, or a slot of a compacted mutable
+   *    state array such as `mutableStateArray_0[3]`, which is not a name;
    *  - more parameter slots than a method can take, `extraArguments` included.
    * And two it has of its own:
    *  - a state for a node that overrides `genCode` and so may generate its child instead of reading
-   *    the state (`Alias`, `Collate` and an identity `Cast` do), so that what the code reads below
-   *    it is not in the state;
-   *  - a `LambdaVariable`, whose value is a local declared by the loop of an object expression.
-   * A slot of a compacted mutable state array is a field like any other and needs no argument.
+   *    the state (`Alias`, `Collate` and a `Cast` that changes no structure do), so that what the
+   *    code reads below it is not in the state;
+   *  - a `LambdaVariable`. Its value is a field that the loop of its object expression assigns,
+   *    which a function could read as it is, but no test reaches such a split, so the code keeps
+   *    its place.
    * `INPUT_ROW` is passed only when the code reads it: through an input the operator has not put
-   * in `currentVars`, or through a `CodegenFallback`, which evaluates its children from the row.
-   * An operator may leave `INPUT_ROW` naming a local that is not in scope where this code is, as
-   * a join does after generating the variables of its build side.
+   * in `currentVars`, or through a `CommonExpressionRef`, whose definition `CommonExprSlots` may
+   * make a method that takes `INPUT_ROW` wherever it is set. An operator may leave `INPUT_ROW`
+   * naming a local that is not in scope where other code is, as a join does after generating the
+   * variables of its build side, which is why it is not passed otherwise.
    */
   private def wholeStageSplitArguments(
       sources: Seq[Expression],
@@ -1264,24 +1390,17 @@ class CodegenContext extends Logging {
     def canPass(v: ExprValue): Boolean = v match {
       case local: VariableValue =>
         val name = local.variableName
-        val slot = name.indexOf('[')
-        if (slot > 0 && name.endsWith("]") && mutableStateNames.contains(name.take(slot)) &&
-            name.substring(slot + 1, name.length - 1).forall(Character.isDigit)) {
-          // A slot of a compacted mutable state array, which is a field.
-          true
-        } else {
-          // A field needs no argument, and passing one is refused by `splitExpressions`.
-          if (isName(name) && !mutableStateNames.contains(name)) {
-            args.getOrElseUpdate(name, local)
-          }
-          isName(name)
+        // A field needs no argument, and passing one is refused by `splitExpressions`.
+        if (isName(name) && !mutableStateNames.contains(name)) {
+          args.getOrElseUpdate(name, local)
         }
+        isName(name)
       case _: GlobalValue | _: LiteralValue => true
       case _ => false
     }
     // `Expression.genCode` is what reads a state; a node that overrides it may not.
     def readsSubExprState(e: Expression): Boolean = e match {
-      case c: Cast => !DataType.equalsStructurally(c.child.dataType, c.dataType)
+      case c: Cast => !c.generatesChildCode
       case _ => e.getClass.getMethod("genCode", classOf[CodegenContext]).getDeclaringClass ==
         classOf[Expression]
     }
@@ -1305,15 +1424,14 @@ class CodegenContext extends Logging {
               possible = input.code == EmptyBlock && canPass(input.value) && canPass(input.isNull)
             case _: BoundReference =>
               needsRow = true
-            case f: CodegenFallback =>
-              needsRow |= !f.isInstanceOf[LeafExpression]
-              toVisit.pushAll(f.children)
             case _: LambdaVariable =>
               possible = false
             case w: With =>
               w.defs.foreach(d => nestedDefs.put(d.id.id, d.child))
               toVisit.push(w.child)
             case ref: CommonExpressionRef =>
+              // The call to a definition made a method passes `INPUT_ROW` wherever it is set.
+              needsRow |= INPUT_ROW != null
               if (visited.add(ref.id.id)) {
                 nestedDefs.get(ref.id.id)
                   .orElse(currentCommonExprs.get(ref.id.id).map(_.definition))
@@ -1472,25 +1590,32 @@ class CodegenContext extends Logging {
    *
    * @param expressions the codes to evaluate expressions.
    */
-  private def buildCodeBlocks(expressions: Seq[String]): Seq[String] = {
-    val blocks = new ArrayBuffer[String]()
+  private def buildCodeBlocks(expressions: Seq[String]): Seq[String] =
+    buildCodeBlocksOf(expressions).map(_._1)
+
+  /** `buildCodeBlocks`, with the indices in `expressions` of the codes each block holds. */
+  private def buildCodeBlocksOf(expressions: Seq[String]): Seq[(String, Seq[Int])] = {
+    val blocks = new ArrayBuffer[(String, Seq[Int])]()
     val blockBuilder = new StringBuilder()
+    val entries = new ArrayBuffer[Int]()
     var length = 0
     val splitThreshold = SQLConf.get.methodSplitThreshold
-    for (code <- expressions) {
+    for ((code, i) <- expressions.zipWithIndex) {
       // We can't know how many bytecode will be generated, so use the length of source code
       // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
       // also not be too small, or it will have many function calls (for wide table), see the
       // results in BenchmarkWideTable.
       if (length > splitThreshold) {
-        blocks += blockBuilder.toString()
+        blocks += blockBuilder.toString() -> entries.toSeq
         blockBuilder.clear()
+        entries.clear()
         length = 0
       }
       blockBuilder.append(code)
+      entries += i
       length += CodeFormatter.stripExtraNewLinesAndComments(code).length
     }
-    blocks += blockBuilder.toString()
+    blocks += blockBuilder.toString() -> entries.toSeq
     blocks.toSeq
   }
 
@@ -1678,7 +1803,7 @@ class CodegenContext extends Logging {
     val commonExprs = equivalentExpressions.getCommonSubexpressions
 
     // The code of the non-split pass is discarded when the split pass below is taken, and with it
-    // the calls to any function split out of it; those functions are removed then.
+    // the calls to every function added while generating it; those functions are removed then.
     val outerDiscardable = discardableFunctions
     val nonSplitFunctions = mutable.ArrayBuffer.empty[(String, String)]
     discardableFunctions = nonSplitFunctions
@@ -1704,6 +1829,10 @@ class CodegenContext extends Logging {
       allStates.toSeq
     } finally {
       discardableFunctions = outerDiscardable
+      // This pass is part of an enclosing pass's code, and goes when that is discarded.
+      if (outerDiscardable != null) {
+        outerDiscardable ++= nonSplitFunctions
+      }
     }
 
     // For some operators, they do not require all its child's outputs to be evaluated in advance.
