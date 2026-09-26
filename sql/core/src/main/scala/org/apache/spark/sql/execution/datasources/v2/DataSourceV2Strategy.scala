@@ -1022,7 +1022,11 @@ private[sql] object DataSourceV2Strategy extends Logging {
     val literalized = expr.transform {
       case s: ExecScalarSubquery => s.toLiteral
     }
-    translateFilterV2(literalized)
+    // Type coercion of the compared sides may wrap the filtered column in a cast, e.g.
+    // `cast(part_col as bigint) = <scalar subquery>` when an INT partition column is compared
+    // with a BIGINT subquery. The optimizer can't unwrap it as the value is only known now, so
+    // unwrap it here with the same code the optimizer applies to a comparison with a literal.
+    translateFilterV2(UnwrapCastInBinaryComparison.unwrapCastInFilter(literalized))
   }
 
   /**
