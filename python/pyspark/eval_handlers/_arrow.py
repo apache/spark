@@ -37,7 +37,7 @@ from pyspark.eval_handlers._base import (
     CoGroupedEvalTypeHandler,
     GroupedEvalTypeHandler,
 )
-from pyspark.eval_handlers.utils import extract_key_value_indexes
+from pyspark.eval_handlers.utils import extract_key_value_indexes, hashable_grouping_key
 from pyspark.eval_handlers.verification import (
     verify_iter_result_row_count,
     verify_iterator_exhausted,
@@ -274,10 +274,9 @@ class ArrowGroupedAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         import pyarrow as pa
 
         for group in data:
-            batch_list = list(group)
-            if not batch_list:
+            concatenated = ArrowBatchTransformer.concat_batches(group)
+            if concatenated is None:
                 continue
-            concatenated = ArrowBatchTransformer.concat_batches(batch_list)
             results = [
                 udf_func(
                     *[concatenated.column(o) for o in args_offsets],
@@ -353,10 +352,9 @@ class ArrowWindowAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         import pyarrow as pa
 
         for group in data:
-            batch_list = list(group)
-            if not batch_list:
+            concatenated = ArrowBatchTransformer.concat_batches(group)
+            if concatenated is None:
                 continue
-            concatenated = ArrowBatchTransformer.concat_batches(batch_list)
             num_rows = concatenated.num_rows
 
             result_arrays = []
@@ -385,6 +383,283 @@ class ArrowWindowAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
                         }
                         results.append(udf_func(*slices, **kw_slices))
                     result_arrays.append(pa.array(results))
+                else:
+                    raise PySparkRuntimeError(
+                        errorClass="INVALID_WINDOW_BOUND_TYPE",
+                        messageParameters={"window_bound_type": bound_type},
+                    )
+
+            batch = pa.RecordBatch.from_arrays(result_arrays, self._col_names)
+            yield ArrowBatchTransformer.enforce_schema(batch, self._return_schema)
+
+
+class ArrowGroupedAggIncrementalPartialUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
+    """SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF: map-side PARTIAL stage of an
+    incremental ``Aggregator``. Hash-combine input rows into a per-group buffer via
+    the aggregator's ``reduce`` and emit one row per key: the grouping key columns
+    followed by one buffer struct column per aggregator.
+
+    Ordinary (multi-group) batches are streamed in; the worker keeps one running
+    buffer per distinct grouping key -- never whole groups of rows. Because the FINAL
+    stage re-groups these authoritatively after the shuffle, the grouping here only
+    needs to be a best-effort combine: any keys it fails to collapse (e.g. NaN, which
+    compares unequal to itself) are merged downstream."""
+
+    eval_type = PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF
+
+    def __init__(
+        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
+    ) -> None:
+        require_minimum_pyarrow_version()
+        super().__init__(udfs, runner_conf, eval_conf)
+        # The leading `num_grouping_keys` input columns are the grouping keys (see the operator);
+        # `grouping_key_schema` carries their names/types so the emitted key columns round-trip.
+        grouping_key_schema = eval_conf.grouping_key_schema
+        self._num_grouping_keys = (
+            len(grouping_key_schema.fields) if grouping_key_schema is not None else 0
+        )
+
+        self._buffer_col_names = ["_%d" % i for i in range(len(udfs))]
+        self._buffer_arrow_types = [
+            to_arrow_type(
+                agg.bufferSchema,
+                timezone="UTC",
+                prefers_large_types=runner_conf.use_large_var_types,
+            )
+            for agg, _, _, _ in udfs
+        ]
+        # Buffer field names are invariant across groups; compute them once per aggregator.
+        self._field_names_by_udf = [
+            [f.name for f in agg.bufferSchema.fields] for agg, _, _, _ in udfs
+        ]
+
+        # The aggregator's `reduce` receives a single positional tuple, so any named arguments at
+        # the call site are appended after the positional ones, in call order (kwargs_offsets
+        # preserves that order). This mirrors how a Python call `f(*args, **kwargs)` would order
+        # them into one value tuple.
+        self._input_offsets_by_udf = [
+            list(args_offsets) + list(kwargs_offsets.values())
+            for _, args_offsets, kwargs_offsets, _ in udfs
+        ]
+        # Input columns actually consumed per batch: the leading grouping keys plus every
+        # aggregator input, deduplicated. A UDF input may reuse a grouping-key column (the operator
+        # dedups its projection), so converting by distinct offset avoids repeated `to_pylist()`.
+        self._needed_offsets = sorted(
+            set(range(self._num_grouping_keys))
+            | {o for offsets in self._input_offsets_by_udf for o in offsets}
+        )
+
+        # Cap the map-side buffer so a high-cardinality partition -- exactly where partial
+        # aggregation degenerates -- cannot grow the per-key dict without bound and OOM the worker.
+        # When the distinct-key count reaches the cap we flush the whole map as one batch and start
+        # fresh; end-of-partition buffers are emitted in equally bounded chunks. This is safe
+        # because the FINAL stage re-groups the emitted partial buffers authoritatively after the
+        # shuffle and merges any duplicate keys that early flushes produce. A non-positive
+        # maxRecordsPerBatch means "unbounded" (mirroring the reader side).
+        max_records = runner_conf.arrow_max_records_per_batch
+        self._cap = max_records if max_records > 0 else None
+
+    def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+        import pyarrow as pa
+
+        num_grouping_keys = self._num_grouping_keys
+        cap = self._cap
+
+        # hashable key -> (representative key value tuple, list of per-aggregator buffers)
+        groups: dict[Any, tuple] = {}
+        key_field_types: list | None = None
+
+        def make_batch(entries: list) -> pa.RecordBatch:
+            arrays = []
+            names = []
+            for j in range(num_grouping_keys):
+                arrays.append(
+                    pa.array(
+                        [e[0][j] for e in entries],
+                        type=key_field_types[j],  # type: ignore[index]
+                    )
+                )
+                names.append("k_%d" % j)
+            for i, field_names in enumerate(self._field_names_by_udf):
+                structs = [
+                    {name: e[1][i][t] for t, name in enumerate(field_names)} for e in entries
+                ]
+                arrays.append(pa.array(structs, type=self._buffer_arrow_types[i]))
+                names.append(self._buffer_col_names[i])
+            return pa.RecordBatch.from_arrays(arrays, names)
+
+        for batch in data:
+            if key_field_types is None:
+                key_field_types = [batch.schema.field(j).type for j in range(num_grouping_keys)]
+            pylist_by_offset = {o: batch.column(o).to_pylist() for o in self._needed_offsets}
+            key_cols = [pylist_by_offset[j] for j in range(num_grouping_keys)]
+            udf_cols = [
+                [pylist_by_offset[o] for o in offsets] for offsets in self._input_offsets_by_udf
+            ]
+            for r in range(batch.num_rows):
+                key_values = tuple(key_cols[j][r] for j in range(num_grouping_keys))
+                hashable_key = hashable_grouping_key(key_values)
+                entry = groups.get(hashable_key)
+                if entry is None:
+                    buffers = [agg.zero() for agg, _, _, _ in self._udfs]
+                    groups[hashable_key] = (key_values, buffers)
+                else:
+                    buffers = entry[1]
+                for i, (agg, _, _, _) in enumerate(self._udfs):
+                    cols_i = udf_cols[i]
+                    buffers[i] = agg.reduce(buffers[i], tuple(c[r] for c in cols_i))
+            if cap is not None and len(groups) >= cap:
+                yield make_batch(list(groups.values()))
+                groups = {}
+
+        if not groups:
+            # Empty partition (or fully flushed above): emit nothing more. The FINAL stage
+            # supplies the global-aggregation identity row when there is no input at all.
+            return
+
+        entries = list(groups.values())
+        if cap is None:
+            yield make_batch(entries)
+        else:
+            for start in range(0, len(entries), cap):
+                yield make_batch(entries[start : start + cap])
+
+
+class ArrowGroupedAggIncrementalFinalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
+    """SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF: post-shuffle FINAL stage of an
+    incremental ``Aggregator``. Merge each group's partial buffers via the aggregator's
+    ``merge`` and produce the output via ``finish``, streaming the buffers one batch at
+    a time.
+
+    Every group the JVM sends yields exactly one output row; null partial-buffer rows
+    are skipped, so an empty global aggregation (a single all-null buffer row injected
+    by the operator) still produces ``finish(zero)``."""
+
+    eval_type = PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF
+
+    def __init__(
+        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
+    ) -> None:
+        require_minimum_pyarrow_version()
+        super().__init__(udfs, runner_conf, eval_conf)
+        self._col_names = ["_%d" % i for i in range(len(udfs))]
+        self._return_schema = to_arrow_schema(
+            StructType([StructField(n, rt) for n, (_, _, _, rt) in zip(self._col_names, udfs)]),
+            timezone="UTC",
+            prefers_large_types=runner_conf.use_large_var_types,
+        )
+        # Buffer field names are invariant across groups and batches; compute once per aggregator.
+        self._field_names_by_udf = [
+            [f.name for f in agg.bufferSchema.fields] for agg, _, _, _ in udfs
+        ]
+
+    def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
+        import pyarrow as pa
+
+        for group in data:
+            merged: list = [None] * len(self._udfs)
+            for batch in group:
+                for i, (agg, args_offsets, _, _) in enumerate(self._udfs):
+                    field_names = self._field_names_by_udf[i]
+                    m = merged[i]
+                    for row in batch.column(args_offsets[0]).to_pylist():
+                        if row is None:
+                            continue
+                        partial = tuple(row[name] for name in field_names)
+                        m = partial if m is None else agg.merge(m, partial)
+                    merged[i] = m
+            results = []
+            for i, (agg, _, _, _) in enumerate(self._udfs):
+                m = merged[i] if merged[i] is not None else agg.zero()
+                results.append(agg.finish(m))
+            # Type each output array explicitly (mirroring the PARTIAL stage) so a non-trivial
+            # outputType or an all-None column does not depend on Arrow type inference.
+            result_arrays = [
+                pa.array([r], type=self._return_schema.field(i).type) for i, r in enumerate(results)
+            ]
+            batch = pa.RecordBatch.from_arrays(result_arrays, self._col_names)
+            yield ArrowBatchTransformer.enforce_schema(batch, self._return_schema)
+
+
+class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
+    """SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF: window aggregation with an incremental
+    ``Aggregator``. The operator sends each frame -- the whole partition for an
+    unbounded frame, or per-row ``[begin, end)`` slices for a bounded one -- and each
+    frame's rows are folded with ``reduce`` (from a fresh ``zero``) and finished with
+    ``finish``, one output value per input row. A window has no shuffle, so the
+    intermediate buffer never leaves the worker; ``merge`` is not used here."""
+
+    eval_type = PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF
+
+    def __init__(
+        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
+    ) -> None:
+        require_minimum_pyarrow_version()
+        super().__init__(udfs, runner_conf, eval_conf)
+        self._window_bound_types = runner_conf.window_bound_types
+        self._col_names = ["_%d" % i for i in range(len(udfs))]
+        self._return_schema = to_arrow_schema(
+            StructType([StructField(n, rt) for n, (_, _, _, rt) in zip(self._col_names, udfs)]),
+            timezone="UTC",
+            prefers_large_types=runner_conf.use_large_var_types,
+        )
+
+    def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
+        import pyarrow as pa
+
+        def fold(agg: Any, buffer: Any, value_cols: list, start: int, end: int) -> Any:
+            # Fold rows ``[start, end)`` (each a tuple across ``value_cols``, matching the
+            # call-site argument order) into ``buffer`` via the aggregator's ``reduce``.
+            for r in range(start, end):
+                buffer = agg.reduce(buffer, tuple(c[r] for c in value_cols))
+            return buffer
+
+        for group in data:
+            concatenated = ArrowBatchTransformer.concat_batches(group)
+            if concatenated is None:
+                continue
+            num_rows = concatenated.num_rows
+
+            result_arrays = []
+            for udf_index, (agg, args_offsets, kwargs_offsets, _) in enumerate(self._udfs):
+                bound_type = self._window_bound_types[udf_index]
+                result_type = self._return_schema.field(udf_index).type
+                if bound_type == "unbounded":
+                    # One frame spanning the whole partition: compute once, repeat per row.
+                    value_cols = [concatenated.column(o).to_pylist() for o in args_offsets] + [
+                        concatenated.column(v).to_pylist() for v in kwargs_offsets.values()
+                    ]
+                    result = agg.finish(fold(agg, agg.zero(), value_cols, 0, num_rows))
+                    result_arrays.append(pa.array([result] * num_rows, type=result_type))
+                elif bound_type == "bounded":
+                    # Per-row frame ``[begin, end)``. Materialize the aggregator's input columns
+                    # once; frames index into them by row.
+                    begin_col = concatenated.column(args_offsets[0])
+                    end_col = concatenated.column(args_offsets[1])
+                    data_offsets = list(args_offsets[2:]) + list(kwargs_offsets.values())
+                    value_cols = [concatenated.column(o).to_pylist() for o in data_offsets]
+                    # When consecutive frames share the same lower bound and only grow on the
+                    # right (e.g. rowsBetween(unboundedPreceding, currentRow)), extend the
+                    # running buffer by the newly-included rows instead of refolding from
+                    # ``zero`` -- O(n) overall rather than O(n^2). Otherwise -- the lower bound
+                    # advanced (a row left the window, which ``reduce`` cannot subtract) or the
+                    # frame shrank -- refold the frame from ``zero``.
+                    results = []
+                    have_running = False
+                    running: Any = None
+                    prev_begin = -1
+                    prev_end = 0
+                    for i in range(num_rows):
+                        begin = begin_col[i].as_py()
+                        end = end_col[i].as_py()
+                        if have_running and begin == prev_begin and end >= prev_end:
+                            running = fold(agg, running, value_cols, prev_end, end)
+                        else:
+                            running = fold(agg, agg.zero(), value_cols, begin, end)
+                        have_running = True
+                        prev_begin, prev_end = begin, end
+                        results.append(agg.finish(running))
+                    result_arrays.append(pa.array(results, type=result_type))
                 else:
                     raise PySparkRuntimeError(
                         errorClass="INVALID_WINDOW_BOUND_TYPE",
