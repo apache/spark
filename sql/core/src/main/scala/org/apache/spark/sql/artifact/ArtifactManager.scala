@@ -33,13 +33,14 @@ import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
+import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST, JAR_IVY_CONNECT_TIMEOUT, JAR_IVY_READ_TIMEOUT, JAR_IVY_REPO_PATH, JAR_IVY_SETTING_PATH}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.storage.{BlockManager, CacheId, StorageLevel}
-import org.apache.spark.util.{ChildFirstURLClassLoader, StubClassLoader, Utils}
+import org.apache.spark.util.{ChildFirstURLClassLoader, RuntimeDependencyResolver, StubClassLoader, Utils}
+import org.apache.spark.util.RuntimeDependencyResolver.{AllowRequestedRepositories, RepositoryPolicy}
 
 /**
  * This class handles the storage of artifacts as well as preparing the artifacts for use.
@@ -69,6 +70,21 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
   protected[artifact] val (artifactPath, artifactURI): (Path, String) =
     (ArtifactUtils.concatenatePaths(artifactRootPath, session.sessionUUID),
       s"$artifactRootURI/${session.sessionUUID}")
+
+  private lazy val runtimeDependencyResolver = {
+    val sparkConf = session.sparkContext.getConf
+    val ivyPath = Files.createDirectories(artifactPath.resolve(".ivy-cache")).toString
+    new RuntimeDependencyResolver(
+      ivySettingsPath = sparkConf.get(JAR_IVY_SETTING_PATH),
+      ivyPath = Some(ivyPath),
+      localIvyPath = sparkConf.getOption(JAR_IVY_REPO_PATH.key))
+  }
+
+  private[sql] lazy val ivyConnectTimeoutMs: Int =
+    session.sparkContext.getConf.get(JAR_IVY_CONNECT_TIMEOUT).toInt
+
+  private[sql] lazy val ivyReadTimeoutMs: Int =
+    session.sparkContext.getConf.get(JAR_IVY_READ_TIMEOUT).toInt
 
   // The base directory/URI where all class file artifacts are stored for this `sessionUUID`.
   protected[artifact] val (classDir, replClassURI): (Path, String) =
@@ -320,6 +336,21 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
 
     if (failedArtifactExceptions.nonEmpty) {
       throw ArtifactUtils.mergeExceptionsWithSuppressed(failedArtifactExceptions.toSeq)
+    }
+  }
+
+  private[sql] def resolveArtifacts(
+      uri: URI,
+      repositoryPolicy: RepositoryPolicy = AllowRequestedRepositories,
+      connectTimeoutMs: Int = ivyConnectTimeoutMs,
+      readTimeoutMs: Int = ivyReadTimeoutMs,
+      isCancelled: () => Boolean = () => false): Seq[Artifact] = {
+    uri.getScheme match {
+      case "ivy" =>
+        runtimeDependencyResolver
+          .resolve(uri, connectTimeoutMs, readTimeoutMs, repositoryPolicy, isCancelled)
+          .map(path => Artifact.newJarArtifact(path.getFileName, new Artifact.LocalFile(path)))
+      case _ => Artifact.parseArtifacts(uri)
     }
   }
 

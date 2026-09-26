@@ -1071,9 +1071,16 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.jars.ivySettings</code></td>
   <td></td>
   <td>
-    Path to an Ivy settings file to customize resolution of jars specified using <code>spark.jars.packages</code>
-    instead of the built-in defaults, such as maven central. Additional repositories given by the command-line
-    option <code>--repositories</code> or <code>spark.jars.repositories</code> will also be included.
+    Path to an Ivy settings file to customize resolution of jars specified using
+    <code>spark.jars.packages</code> or <code>ivy://</code> URIs passed to
+    <code>SparkSession.addArtifact</code> instead of the built-in defaults, such as maven central.
+    For <code>spark.jars.packages</code>, additional repositories from
+    <code>spark.jars.repositories</code> will also be included.
+    The <code>spark-submit --repositories</code> option applies to submission-time resolution.
+    In Spark Connect, Ivy URIs with a <code>repos</code> query parameter or sent to a server without
+    server-side Maven resolution are resolved by the client and do not use this setting. Other Ivy
+    URIs are resolved by the server, so Maven and Ivy repositories local to the client, such as
+    <code>~/.m2/repository</code> and <code>~/.ivy2.5.2/local</code>, are not searched.
     Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
     artifact server like Artifactory. Details on the settings file format can be
     found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>.
@@ -1085,7 +1092,28 @@ Apart from these, the following properties are also available, and may be useful
   </td>
   <td>2.2.0</td>
 </tr>
- <tr>
+<tr>
+  <td><code>spark.jars.ivyConnectTimeout</code></td>
+  <td>30s</td>
+  <td>
+    Connection timeout for Ivy repository requests made by
+    <code>SparkSession.addArtifact</code>.
+    Client-resolved Spark Connect Ivy URIs do not use this setting.
+    This must be set before the SparkContext starts.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.jars.ivyReadTimeout</code></td>
+  <td>5m</td>
+  <td>
+    Read timeout for Ivy repository requests made by <code>SparkSession.addArtifact</code>.
+    Client-resolved Spark Connect Ivy URIs do not use this setting.
+    This must be set before the SparkContext starts.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.jars.repositories</code></td>
   <td></td>
   <td>
