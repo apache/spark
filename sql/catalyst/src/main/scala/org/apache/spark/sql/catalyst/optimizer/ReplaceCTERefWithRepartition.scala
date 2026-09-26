@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations
 import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
 
@@ -54,14 +55,42 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
     case WithCTE(child, cteDefs) =>
       cteDefs.foreach { cteDef =>
         val inlined = replaceWithRepartition(cteDef.child, cteMap)
-        val withRepartition =
-          if (canSkipExtraRepartition(inlined) || cteDef.underSubquery) {
-            // If the CTE definition plan itself is a repartition operation or if it hosts a merged
-            // scalar subquery, we do not need to add an extra repartition shuffle.
-            inlined
-          } else {
-            RepartitionByExpression(Seq.empty, inlined, None)
-          }
+        val withRepartition = cteDef.forcePartitioning match {
+          case Some(h: HashPartitioning) =>
+            // A pinned partitioning materializes the CTE as a plan-reuse RepartitionByExpression
+            // on the pinned expressions, so guaranteed CTE reuse can pick it up. This is an
+            // explicit producer contract, honored independently of forceSkipInline, and it takes
+            // precedence over `canSkipExtraRepartition` -- the pin states the exact partitioning
+            // (keys and number of partitions) we must produce.
+            RepartitionByExpression(
+              h.expressions, inlined, optNumPartitions = Some(h.numPartitions))
+              .addRepartitionId(reassign = true)
+          case Some(other) =>
+            // forcePartitioning is an internal dev API; only HashPartitioning is supported
+            // today (see CTERelationDef.forcePartitioning).
+            throw new UnsupportedOperationException(
+              s"CTERelationDef.forcePartitioning supports only HashPartitioning, but got " +
+                s"${other.getClass.getSimpleName}")
+          case None =>
+            if (cteDef.forceSkipInline) {
+              if (canSkipExtraRepartition(inlined) || cteDef.underSubquery) {
+                // If the CTE definition plan itself is a repartition operation or if it hosts a
+                // merged scalar subquery, we do not need to add an extra repartition shuffle.
+                inlined
+              } else {
+                RepartitionByExpression(Seq.empty, inlined, None)
+                  .addRepartitionId(reassign = true)
+              }
+            } else {
+              // Non-forceSkipInline CTEs keep the original OSS behavior: a plain repartition that
+              // is not sealed for guaranteed reuse (no repartitionId).
+              if (canSkipExtraRepartition(inlined) || cteDef.underSubquery) {
+                inlined
+              } else {
+                RepartitionByExpression(Seq.empty, inlined, None)
+              }
+            }
+        }
         cteMap.put(cteDef.id, withRepartition)
       }
       replaceWithRepartition(child, cteMap)
@@ -74,8 +103,7 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
       if (ref.outputSet == cteDefPlan.outputSet) {
         cteDefPlan
       } else {
-        val ctePlan = DeduplicateRelations(
-          Join(cteDefPlan, cteDefPlan, Inner, None, JoinHint(None, None))).children(1)
+        val ctePlan = deduplicatePlan(cteDefPlan)
         val projectList = ref.output.zip(ctePlan.output).map { case (tgtAttr, srcAttr) =>
           Alias(srcAttr, tgtAttr.name)(exprId = tgtAttr.exprId)
         }
@@ -91,5 +119,12 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
         }
 
     case _ => plan
+  }
+
+  private def deduplicatePlan(plan: LogicalPlan): LogicalPlan = {
+    // The CTE definition plan is duplicated when inlined into each reference. Re-assign fresh
+    // exprIds to the duplicated copy (via DeduplicateRelations) to avoid attribute conflicts.
+    DeduplicateRelations(
+      Join(plan, plan, Inner, None, JoinHint(None, None))).children(1)
   }
 }

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_QUERY_STAGE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE_REUSE, LOGICAL_QUERY_STAGE, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -573,9 +573,48 @@ object LogicalPlanIntegrity {
       .orElse(LogicalPlanIntegrity.validateNoDanglingReferences(currentPlan))
       .orElse(LogicalPlanIntegrity.validateAggregateExpressions(currentPlan))
       .orElse(LogicalPlanIntegrity.validateNullability(currentPlan))
+      .orElse(LogicalPlanIntegrity.validateCTEReuseRelations(currentPlan))
       .map(err => s"${err}\nPrevious schema:${previousPlan.output.mkString(", ")}" +
         s"\nPrevious plan: ${previousPlan.treeString}")
     validation
+  }
+
+  /**
+   * Validates that CTEReuseRelation nodes are correctly formed.
+   * join must also reside within the same shared subplan. A subplan whose runtime
+   * filter references an external join would fail when materialized independently.
+   *
+   * Returns an error message if the check fails, or None if it succeeds.
+   */
+  def validateCTEReuseRelations(plan: LogicalPlan): Option[String] = {
+    if (!plan.containsPattern(CTE_REUSE)) {
+      None
+    } else {
+      // CTEReuseRelation is a leaf whose sharedSubplan is metadata (not a child), so
+      // collectWithSubqueries stops at it. Descend into sharedSubplan explicitly so nested
+      // same-id reuse relations are validated too, not just the top-level ones.
+      val cteReuses = mutable.ArrayBuffer.empty[CTEReuseRelation]
+      def collectDeep(p: LogicalPlan): Unit = p.foreachWithSubqueries {
+        case r: CTEReuseRelation =>
+          cteReuses += r
+          collectDeep(r.sharedSubplan)
+        case _ =>
+      }
+      collectDeep(plan)
+      if (cteReuses.isEmpty) {
+        None
+      } else {
+        // Check: same cteId must have same canonicalized sharedSubplan.
+        val grouped = cteReuses.groupBy(_.cteId)
+        grouped.collectFirst {
+          case (id, group) if group.map(_.sharedSubplan.canonicalized).distinct.size > 1 =>
+            val canonicals = group.map(_.sharedSubplan.canonicalized).distinct
+            s"CTEReuseRelation nodes with cteId=$id have " +
+              s"${canonicals.size} distinct canonical forms, expected 1.\n" +
+              s"Full plan:\n${plan.treeString}"
+        }
+      }
+    }
   }
 }
 

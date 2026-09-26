@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet}
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.CTE
 import org.apache.spark.util.collection.Utils
@@ -69,7 +70,14 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
       case WithCTE(child, cteDefs) =>
         cteDefs.zipWithIndex.foreach { case (cteDef, precedence) =>
           gatherPredicatesAndAttributes(cteDef.child, cteMap)
-          cteMap.put(cteDef.id, (cteDef, precedence, Seq.empty, AttributeSet.empty))
+          // Seed retained attributes with the forced-partitioning keys (if any) so column pruning
+          // never drops a partition key the pinned repartition depends on, even when no reference
+          // projects it.
+          val forcedAttrs = cteDef.forcePartitioning match {
+            case Some(h: HashPartitioning) => AttributeSet(h.expressions.flatMap(_.references))
+            case _ => AttributeSet.empty
+          }
+          cteMap.put(cteDef.id, (cteDef, precedence, Seq.empty, forcedAttrs))
         }
         gatherPredicatesAndAttributes(child, cteMap)
 
@@ -133,7 +141,7 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
   private def pushdownPredicatesAndAttributes(
       plan: LogicalPlan,
       cteMap: CTEMap): LogicalPlan = plan.transformWithSubqueries {
-    case cteDef @ CTERelationDef(child, id, originalPlanWithPredicates, _, _, _, _) =>
+    case cteDef @ CTERelationDef(child, id, originalPlanWithPredicates, _, _, _, _, _) =>
       val (_, _, newPreds, newAttrSet) = cteMap(id)
       val preds = originalPlanWithPredicates.map(_._2).getOrElse(Seq.empty)
       if (!isTruePredicate(newPreds) &&
@@ -278,7 +286,7 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
 object CleanUpTempCTEInfo extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.transformWithPruning(_.containsPattern(CTE)) {
-      case cteDef @ CTERelationDef(_, _, Some(_), _, _, _, _) =>
+      case cteDef @ CTERelationDef(_, _, Some(_), _, _, _, _, _) =>
         cteDef.copy(originalPlanWithPredicates = None)
     }
 }

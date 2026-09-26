@@ -319,7 +319,9 @@ case class EnsureRequirements(
         }
 
         child match {
-          case s: ShuffleExchangeExec =>
+          // A CTE-reuse shuffle is immutable: don't rewrite its partitioning in place,
+          // wrap it in a new shuffle so the shared exchange stays canonically equal.
+          case s: ShuffleExchangeExec if !s.isCreatedForSubplanReuse =>
             s.copy(outputPartitioning = newPartitioning)
           case gpe: GroupPartitionsExec =>
             // Strip every grouping this rule inserted (they can stack on a re-run): a

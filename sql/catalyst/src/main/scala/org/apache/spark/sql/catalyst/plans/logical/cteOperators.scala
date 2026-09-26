@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedSubqueryColumnAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
@@ -119,6 +120,10 @@ case class UnionLoopRef(
  *                        regardless of determinism or reference count. This lets a producer
  *                        force the CTE to be materialized instead of duplicated, e.g. when the
  *                        CTE wraps a non-deterministic source that must be evaluated exactly once.
+ * @param forcePartitioning If set, the CTE will be repartitioned with the given partitioning
+ *                          when materialized. Only HashPartitioning is supported today; any other
+ *                          partitioning raises an UnsupportedOperationException when the CTE
+ *                          reference is replaced with a repartition.
  */
 case class CTERelationDef(
     child: LogicalPlan,
@@ -127,17 +132,19 @@ case class CTERelationDef(
     underSubquery: Boolean = false,
     maxDepth: Option[Int] = None,
     materialized: Option[Boolean] = None,
-    forceSkipInline: Boolean = false) extends UnaryNode {
+    forceSkipInline: Boolean = false,
+    forcePartitioning: Option[Partitioning] = None) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
-  // Keep the default string representation stable when `forceSkipInline` is not set, so that
-  // existing plan comparisons and golden files are unaffected by the field. The materialization
-  // option is printed as its keyword, and omitted when unspecified.
+  // Keep the default string representation stable when `forceSkipInline` and `forcePartitioning`
+  // are not set, so existing plan comparisons and golden files are unaffected by the new fields.
+  // The materialization option is printed as its keyword, and omitted when unspecified.
   override def stringArgs: Iterator[Any] = {
     val option = materialized.map(m => if (m) "MATERIALIZED" else "NOT MATERIALIZED")
     Iterator(child, id, originalPlanWithPredicates, underSubquery, maxDepth, option) ++
-      (if (forceSkipInline) Iterator(forceSkipInline) else Iterator.empty)
+      (if (forceSkipInline) Iterator(forceSkipInline) else Iterator.empty) ++
+      (if (forcePartitioning.isDefined) Iterator(forcePartitioning) else Iterator.empty)
   }
 
   override def maxRows: Option[Long] = if (conf.getConf(SQLConf.CTE_RELATION_DEF_MAX_ROWS)) {

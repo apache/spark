@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
@@ -49,6 +49,7 @@ import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 
@@ -301,7 +302,35 @@ case class AdaptiveSparkPlanExec(
   /**
    * Run `fun` on finalized physical plan
    */
-  def withFinalPlanUpdate[T](fun: SparkPlan => T): T = lock.synchronized {
+  /**
+   * Drive this AQE to completion of all non-result stages without creating a
+   * [[ResultQueryStageExec]] on top. Used by [[CTEReuseQueryStageExec]] for shared CTE
+   * materialization: all references to a CTE wrap this same inner AQE, whose materialization runs
+   * exactly once via the lazy `materializeFuture`.
+   */
+  def materialize(): Future[Any] = materializeFuture
+
+  @transient private lazy val materializeFuture: Future[Any] = {
+    // The inner AQE runs on a reused pool thread that does not inherit the initiating query's
+    // thread-locals. Capture them on the thread that first forces this lazy val (the outer AQE's
+    // stage-materialization thread, which carries the execution id, job group, scheduler
+    // properties, and artifact state) and forward them exactly as subquery execution does (see
+    // `SubqueryExec`), so the inner CTE jobs stay attributed to the query and reachable by its
+    // cancellation instead of running with an absent or stale execution context.
+    val executionId = context.session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    val threadLocals = SQLExecution.captureThreadLocals(context.session)
+    Future {
+      threadLocals.runWith {
+        SQLExecution.withExecutionId(context.session, executionId) {
+          withFinalPlanUpdate((_: SparkPlan) => (), skipResultStage = true)
+        }
+      }
+    }(AdaptiveSparkPlanExec.cteExecutionContext)
+  }
+
+  def withFinalPlanUpdate[T](
+      fun: SparkPlan => T,
+      skipResultStage: Boolean = false): T = lock.synchronized {
     _isFinalPlan = false
     // In case of this adaptive plan being executed out of `withActive` scoped functions, e.g.,
     // `plan.queryExecution.rdd`, we need to set active session here as new plan nodes can be
@@ -314,7 +343,7 @@ case class AdaptiveSparkPlanExec(
         // Use inputPlan logicalLink here in case some top level physical nodes may be removed
         // during `initialPlan`
         var currentLogicalPlan = inputPlan.logicalLink.get
-        var result = createQueryStages(fun, currentPhysicalPlan, firstRun = true)
+        var result = createQueryStages(fun, currentPhysicalPlan, firstRun = true, skipResultStage)
         val events = new LinkedBlockingQueue[StageMaterializationEvent]()
         val errors = new mutable.ArrayBuffer[Throwable]()
         val obsoleteCancelledStageIds = new mutable.HashSet[Int]
@@ -429,17 +458,23 @@ case class AdaptiveSparkPlanExec(
             }
           }
           // Now that some stages have finished, we can try creating new stages.
-          result = createQueryStages(fun, currentPhysicalPlan, firstRun = false)
+          result = createQueryStages(fun, currentPhysicalPlan, firstRun = false, skipResultStage)
         }
       }
     }
     _isFinalPlan = true
-    finalPlanUpdate
-    // Dereference the result so it can be GCed. After this resultStage.isMaterialized will return
-    // false, which is expected. If we want to collect result again, we should invoke
-    // `withFinalPlanUpdate` and pass another result handler and we will create a new result stage.
-    currentPhysicalPlan.asInstanceOf[ResultQueryStageExec].resultOption.getAndUpdate(_ => None)
-      .get.asInstanceOf[T]
+    if (skipResultStage) {
+      // Materialize-only path (e.g. from `materialize()`): no ResultQueryStageExec was created.
+      ().asInstanceOf[T]
+    } else {
+      finalPlanUpdate
+      // Dereference the result so it can be GCed. After this resultStage.isMaterialized will return
+      // false, which is expected. If we want to collect result again, we should invoke
+      // `withFinalPlanUpdate` and pass another result handler and we will create a new
+      // result stage.
+      currentPhysicalPlan.asInstanceOf[ResultQueryStageExec].resultOption.getAndUpdate(_ => None)
+        .get.asInstanceOf[T]
+    }
   }
 
   /** Include stages retained by earlier adopted plans as well as newly created query stages. */
@@ -788,7 +823,8 @@ case class AdaptiveSparkPlanExec(
   private def createQueryStages(
       resultHandler: SparkPlan => Any,
       plan: SparkPlan,
-      firstRun: Boolean): CreateStageResult = {
+      firstRun: Boolean,
+      skipResultStage: Boolean = false): CreateStageResult = {
     plan match {
       // 1. ResultQueryStageExec is already created, no need to create non-result stages
       case resultStage @ ResultQueryStageExec(_, optimizedPlan, _) =>
@@ -816,8 +852,8 @@ case class AdaptiveSparkPlanExec(
         var allNewStages = result.newStages
         var newPlan = result.newPlan
         var allChildStagesMaterialized = result.allChildStagesMaterialized
-        // 3. Create result stage
-        if (allNewStages.isEmpty && allChildStagesMaterialized) {
+        // 3. Create result stage (unless the caller only wants non-result stages materialized).
+        if (!skipResultStage && allNewStages.isEmpty && allChildStagesMaterialized) {
           val resultStage = newResultQueryStage(resultHandler, newPlan)
           newPlan = resultStage
           allChildStagesMaterialized = false
@@ -841,6 +877,25 @@ case class AdaptiveSparkPlanExec(
    * 3) A list of the new query stages that have been created.
    */
   private def createNonResultQueryStages(plan: SparkPlan): CreateStageResult = plan match {
+    case re: CTEReuseExchange =>
+      // `PlanCTEReuse` (a preprocessing rule) builds and registers the shared inner AQE for every
+      // cteId before stage creation, so the registry must already hold it -- a miss is a planning
+      // bug. The registry lives on the shared `AdaptiveExecutionContext`, so nested / re-plan paths
+      // that drop `PlanCTEReuse` still find the entry registered by the outer initial run.
+      val innerAQE = context.cteAQERegistry.getOrElse(re.cteId,
+        throw SparkException.internalError(
+          s"No inner AQE registered for CTE cteId=${re.cteId}; PlanCTEReuse must run first."))
+      // Pass this reference's `output` so the stage remaps the shared inner AQE's (primary
+      // reference's) attribute ids into this reference's id space, as aliased references need.
+      val stage = CTEReuseQueryStageExec(currentStageId, innerAQE, re.output)
+      currentStageId += 1
+      setLogicalLinkForNewQueryStage(stage, re)
+      val isMaterialized = stage.isMaterialized
+      CreateStageResult(
+        newPlan = stage,
+        allChildStagesMaterialized = isMaterialized,
+        newStages = if (isMaterialized) Seq.empty else Seq(stage))
+
     // A pipelined shuffle exchange must NOT be promoted to a query stage: a pipelined
     // producer cannot materialize on its own (its consumer must be gang-scheduled with it;
     // the DAGScheduler rejects a map-stage job over a pipelined dependency outright).
@@ -1219,6 +1274,13 @@ object AdaptiveSparkPlanExec {
   private[adaptive] val executionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("QueryStageCreator", 16))
 
+  // A separate, larger pool for CTE-reuse inner AQEs. Each inner AQE's `materialize()` blocks a
+  // pool thread waiting on its child stages; sharing the 16-thread `QueryStageCreator` pool would
+  // let deeply nested CTEs exhaust it and deadlock, so CTE inner AQEs get their own pool.
+  private[adaptive] val cteExecutionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("CTEReuseInnerAQE",
+      SQLConf.get.getConf(StaticSQLConf.CTE_MATERIALIZATION_MAX_THREAD_THRESHOLD)))
+
   /**
    * The temporary [[LogicalPlan]] link for query stages.
    *
@@ -1257,6 +1319,14 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    */
   val stageCache: TrieMap[SparkPlan, ExchangeQueryStageExec] =
     new TrieMap[SparkPlan, ExchangeQueryStageExec]()
+
+  /**
+   * Registry of the shared inner [[AdaptiveSparkPlanExec]] for each reused CTE, keyed by `cteId`.
+   * Populated by `PlanCTEReuse` (AQE on): all references to one CTE wrap the same inner AQE so the
+   * CTE body is materialized once and shared. Shared across the main query and its sub-queries.
+   */
+  val cteAQERegistry: TrieMap[Long, AdaptiveSparkPlanExec] =
+    new TrieMap[Long, AdaptiveSparkPlanExec]()
 
   private val stageLifecycleLock = new Object
 
