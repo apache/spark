@@ -96,6 +96,22 @@ object TypeUtils extends QueryErrorsBase {
           "inputType" -> toSQLType(other)))
   }
 
+  def checkForAnsiIntervalOrNumericOrTimeType(input: Expression): TypeCheckResult =
+    input.dataType match {
+      case _: AnsiIntervalType | _: TimeType | NullType =>
+        TypeCheckResult.TypeCheckSuccess
+      case dt if dt.isInstanceOf[NumericType] => TypeCheckResult.TypeCheckSuccess
+      case other =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" ->
+              Seq(NumericType, AnsiIntervalType, AnyTimeType).map(toSQLType).mkString(" or "),
+            "inputSql" -> toSQLExpr(input),
+            "inputType" -> toSQLType(other)))
+    }
+
   def getNumeric(t: DataType, exactNumericRequired: Boolean = false): Numeric[Any] = {
     if (exactNumericRequired) {
       PhysicalNumericType.exactNumeric(t.asInstanceOf[NumericType])
