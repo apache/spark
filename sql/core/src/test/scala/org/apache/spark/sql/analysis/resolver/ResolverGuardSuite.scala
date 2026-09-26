@@ -116,6 +116,10 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
       "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 |> SELECT a, t.a, t.b")
     checkResolverGuard(
       "VALUES (1, 2, 3) AS t(a, b, c) |> SET b = 20 |> SELECT t.*")
+    val repeatedSourceQuery =
+      "VALUES (1, 2) AS s(a, b) |> SELECT a, a, b " +
+        "|> AS t |> SET b = 3 |> SELECT t.*"
+    checkResolverGuard(repeatedSourceQuery)
     checkResolverGuard(
       "SELECT 1 AS x, NAMED_STRUCT('x', 2) AS col " +
         "|> AS col |> SET x = x + 1 |> SELECT x, col.x")
@@ -135,6 +139,11 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
         "VALUES (1, 2, 3) AS t(a, b, c) |> SET b = 20 |> SELECT t.*"
       ).queryExecution.executedPlan.executeCollectPublic()
       assert(qualifiedStarRows.toSeq === Seq(Row(1, 2, 3)))
+
+      val repeatedSource = sql(repeatedSourceQuery)
+      assert(repeatedSource.schema.fieldNames === Array("a", "a", "b"))
+      val repeatedSourceRows = repeatedSource.queryExecution.executedPlan.executeCollectPublic()
+      assert(repeatedSourceRows.toSeq === Seq(Row(1, 1, 2)))
     }
 
     val aliasQuery = "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 |> AS u"
