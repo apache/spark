@@ -27,6 +27,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.{RecordReader, RecordWriter}
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
+import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.io.Writable
 
@@ -36,7 +37,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveInspectors
 import org.apache.spark.sql.hive.HiveShim._
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -75,7 +76,9 @@ private[hive] case class HiveScriptTransformationExec(
       val mutableRow = new SpecificInternalRow(output.map(_.dataType))
 
       @transient
-      lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.map(unwrapperFor)
+      lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.zip(output).map {
+        case (field, attr) => unwrapperFor(field, attr.dataType)
+      }
 
       override def hasNext: Boolean = {
         if (completed) {
@@ -256,7 +259,8 @@ object HiveScriptIOSchema extends HiveInspectors {
       output: Seq[Attribute]): Option[(AbstractSerDe, StructObjectInspector)] = {
     ioschema.outputSerdeClass.map { serdeClass =>
       val (columns, columnTypes) = parseAttrs(output)
-      val serde = initSerDe(serdeClass, columns, columnTypes, ioschema.outputSerdeProps)
+      val serdeTypes = outputTypesForSerDe(serdeClass, columnTypes)
+      val serde = initSerDe(serdeClass, columns, serdeTypes, ioschema.outputSerdeProps)
       val structObjectInspector = serde.getObjectInspector().asInstanceOf[StructObjectInspector]
       (serde, structObjectInspector)
     }
@@ -266,6 +270,22 @@ object HiveScriptIOSchema extends HiveInspectors {
     val columns = attrs.zipWithIndex.map(e => s"${e._1.prettyName}_${e._2}")
     val columnTypes = attrs.map(_.dataType)
     (columns, columnTypes)
+  }
+
+  /**
+   * Hive LazySimpleSerDe CHAR/VARCHAR types truncate on deserialize. Map them to STRING so
+   * Spark applies first-class length checks. Only LazySimpleSerDe and subclasses get this
+   * rewrite; other SerDes keep the declared CHAR/VARCHAR schema.
+   */
+  private def outputTypesForSerDe(
+      serdeClassName: String,
+      columnTypes: Seq[DataType]): Seq[DataType] = {
+    val serdeClass = Utils.classForName[AbstractSerDe](serdeClassName)
+    if (classOf[LazySimpleSerDe].isAssignableFrom(serdeClass)) {
+      columnTypes.map(ScriptTransformationIOSchema.toUnboundedStringType)
+    } else {
+      columnTypes
+    }
   }
 
   def initSerDe(
