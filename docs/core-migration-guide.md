@@ -24,6 +24,8 @@ license: |
 
 ## Upgrading from Core 4.2 to 4.3
 
+- Since Spark 4.3, when submitting to a standalone cluster in cluster mode through the RPC submission gateway, which is what `spark-submit` uses unless `spark.master.rest.enabled` is set to `true`, Spark forwards to the driver only the environment variables whose name starts with `SPARK_`, excluding `SPARK_ENV_LOADED`, `SPARK_HOME`, `SPARK_CONF_DIR`, `SPARK_LOCAL_IP`, and `SPARK_LOCAL_HOSTNAME`, matching the REST submission gateway. Previously the full environment of the submitting process was forwarded, so variables such as `JAVA_HOME`, `HADOOP_CONF_DIR`, `YARN_CONF_DIR`, and `LD_LIBRARY_PATH` no longer reach the driver. To restore the legacy behavior, you can set `spark.standalone.submit.filterEnvironment` to `false`; `SPARK_LOCAL_IP` and `SPARK_LOCAL_HOSTNAME` are never forwarded regardless, since they describe the submitting host rather than the worker the driver runs on.
+
 - Spark 4.3 adds pre-fetch filtering and CSRF tokens to side-effect causing Spark UI actions, _except for_ `/workers/kill` which is used by decomissioning, and requires POST requests for non-YARN deployments. You can re-enable GET request handling by setting `spark.ui.actionsViaGetEnabled=true`, however CSRF token validation remains even with GET requests enabled. If you have scripted actions outside of Spark to kill running jobs you will need to fetch the previous page and grab the CSRF token first.
 
 - Since Spark 4.3, Spark compresses serialized RDD partitions by default. To restore the legacy behavior, you can set `spark.rdd.compress` to `false`.

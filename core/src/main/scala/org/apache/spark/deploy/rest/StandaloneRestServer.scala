@@ -22,7 +22,7 @@ import java.io.File
 import jakarta.servlet.http.HttpServletResponse
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
-import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription, SparkSubmit}
+import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription, DriverEnvironment, SparkSubmit}
 import org.apache.spark.deploy.ClientArguments._
 import org.apache.spark.internal.config
 import org.apache.spark.launcher.{JavaModuleOptions, SparkLauncher}
@@ -231,10 +231,13 @@ private[rest] class StandaloneSubmitRequestServlet(
       _.replace(s":$masterRestPort", s":$masterPort")).getOrElse(masterUrl)
     val appArgs = Option(request.appArgs).getOrElse(Array[String]())
     // Filter SPARK_LOCAL_(IP|HOSTNAME) environment variables from being set on the remote system.
+    // This is the server-side check: clients that do not go through RestSubmissionClient
+    // (including older spark-submit) can set these variables, and the Worker would pass them
+    // into the driver's process environment (SPARK-20025).
     // In addition, the placeholders are replaced into the values of environment variables.
     val environmentVariables =
       Option(request.environmentVariables).getOrElse(Map.empty[String, String])
-        .filterNot(x => x._1.matches("SPARK_LOCAL_(IP|HOSTNAME)"))
+        .filterNot(x => DriverEnvironment.HOST_SPECIFIC_ENV_VARS.contains(x._1))
         .map(x => (x._1, replacePlaceHolder(x._2)))
 
     // Construct driver description
