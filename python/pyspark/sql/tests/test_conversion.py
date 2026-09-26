@@ -115,6 +115,17 @@ class ArrowBatchTransformerTests(unittest.TestCase):
         self.assertEqual(flattened.num_rows, 0)
         self.assertEqual(flattened.num_columns, 2)
 
+    def test_concat_batches(self):
+        import pyarrow as pa
+
+        batches = [
+            pa.RecordBatch.from_arrays([pa.array([1, 2])], ["x"]),
+            pa.RecordBatch.from_arrays([pa.array([3])], ["x"]),
+        ]
+        result = ArrowBatchTransformer.concat_batches(iter(batches))
+        self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])
+        self.assertIs(ArrowBatchTransformer.concat_batches(iter(batches[:1])), batches[0])
+
     def test_wrap_struct_basic(self):
         """Test wrapping columns into a struct."""
         import pyarrow as pa

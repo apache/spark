@@ -27,7 +27,7 @@ import org.apache.spark.internal.config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_T
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, NO_BROADCAST_AND_REPLICATION}
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -66,6 +66,9 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     val c = pair._2
     val df = sql(sqlString)
     val optimized = df.queryExecution.optimizedPlan
+    val optimizedJoin = optimized.collectFirst { case join: Join => join }.getOrElse {
+      fail(s"No join in optimized plan:\n$optimized")
+    }
     val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
       case j: BroadcastHashJoinExec => j
@@ -80,13 +83,13 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       fail(s"$sqlString expected operator: $c, but got ${operators.head}\n physical: \n$physical")
     }
     assert(
-      canPlanAsBroadcastHashJoin(optimized.asInstanceOf[Join], conf) ===
+      canPlanAsBroadcastHashJoin(optimizedJoin, conf) ===
         operators.head.isInstanceOf[BroadcastHashJoinExec],
       "canPlanAsBroadcastHashJoin not in sync with join selection codepath!")
     operators.head match {
       case bhj: BroadcastHashJoinExec =>
         assert(
-          getBroadcastHashJoinBuildSide(optimized.asInstanceOf[Join], conf)
+          getBroadcastHashJoinBuildSide(optimizedJoin, conf)
             .contains(bhj.buildSide),
           "getBroadcastHashJoinBuildSide not in sync with join selection codepath!")
       case _ =>
@@ -1308,34 +1311,53 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
-  test("SPARK-36082: left-broadcast NAAJ fallback uses nested-loop join") {
+  test("SPARK-36082, SPARK-59673: NAAJ threshold eligibility precedes broadcast hints") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
-      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true") {
       withTempView("naajHintedLeft", "naajHintedRight") {
         Seq[java.lang.Double](-0.0d, 2.0d, null).toDF("key")
           .createOrReplaceTempView("naajHintedLeft")
         Seq[java.lang.Double](0.0d, 1.0d).toDF("key")
           .createOrReplaceTempView("naajHintedRight")
 
-        val result = sql(
-          "select /*+ BROADCAST(naajHintedLeft) */ naajHintedLeft.* " +
-            "from naajHintedLeft left anti join naajHintedRight on " +
+        val querySuffix =
+          "* from naajHintedLeft left anti join naajHintedRight on " +
             "naajHintedLeft.key = naajHintedRight.key or " +
-            "isnull(naajHintedLeft.key = naajHintedRight.key)")
-        val plan = result.queryExecution.sparkPlan
-        val nestedLoopJoins = plan.collect {
-          case join: BroadcastNestedLoopJoinExec => join
+            "isnull(naajHintedLeft.key = naajHintedRight.key)"
+        val leftHintedQuery = "select /*+ BROADCAST(naajHintedLeft) */ " + querySuffix
+        val rightHintedQuery = "select /*+ BROADCAST(naajHintedRight) */ " + querySuffix
+        val unhintedQuery = "select " + querySuffix
+
+        def checkNAAJ(
+            query: String,
+            expectedClass: Class[_ <: BinaryExecNode],
+            expectedBuildSide: BuildSide): Unit = {
+          assertJoin((query, expectedClass)) match {
+            case join: BroadcastHashJoinExec =>
+              assert(join.isNullAwareAntiJoin)
+              assert(join.buildSide === expectedBuildSide)
+            case join: BroadcastNestedLoopJoinExec =>
+              assert(join.buildSide === expectedBuildSide)
+            case join =>
+              fail(s"Unexpected join: $join")
+          }
+          checkAnswer(sql(query), Row(2.0d))
         }
-        val nullAwareHashJoins = plan.collect {
-          case join: BroadcastHashJoinExec if join.isNullAwareAntiJoin => join
+
+        withSQLConf(
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
+          SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+          checkNAAJ(leftHintedQuery, classOf[BroadcastHashJoinExec], BuildRight)
+          checkNAAJ(unhintedQuery, classOf[BroadcastHashJoinExec], BuildRight)
         }
-        assert(nestedLoopJoins.size === 1)
-        assert(nestedLoopJoins.head.buildSide === BuildLeft)
-        assert(nullAwareHashJoins.isEmpty)
-        checkAnswer(result, Row(2.0d))
+
+        withSQLConf(
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+          SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+          checkNAAJ(leftHintedQuery, classOf[BroadcastNestedLoopJoinExec], BuildLeft)
+          checkNAAJ(rightHintedQuery, classOf[BroadcastNestedLoopJoinExec], BuildRight)
+        }
       }
     }
   }

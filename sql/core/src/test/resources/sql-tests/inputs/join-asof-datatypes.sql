@@ -105,6 +105,21 @@ ASOF JOIN (
 ) r
   MATCH_CONDITION (t.k >= r.k);
 
+-- FVT-ASOF-4-012a: whole STRUCT columns with different field names but same types
+SELECT r.k.y AS matched
+FROM VALUES (named_struct('a', 2, 'b', 5)) AS t(k)
+ASOF JOIN VALUES (named_struct('x', 1, 'y', 9)) AS r(k)
+  MATCH_CONDITION (t.k >= r.k);
+
+-- FVT-ASOF-4-012b: whole STRUCT columns with same field name and coercible field types
+-- (field a widens INT to BIGINT by name; closest match is a = 1)
+SELECT r.k.a AS matched
+FROM VALUES (named_struct('a', 3)) AS t(k)
+ASOF JOIN VALUES
+    (named_struct('a', CAST(1 AS BIGINT))),
+    (named_struct('a', CAST(4 AS BIGINT))) AS r(k)
+  MATCH_CONDITION (t.k >= r.k);
+
 -- FVT-ASOF-4-013: coercion TINYINT vs BIGINT
 SELECT t.k, r.k AS matched_k
 FROM VALUES (CAST(10 AS TINYINT)) AS t(k) ASOF JOIN VALUES (CAST(5 AS BIGINT)) AS r(k)
@@ -127,10 +142,54 @@ FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
      VALUES (TIMESTAMP_NTZ '2026-06-29 09:00:00') AS r(ts_ntz)
   MATCH_CONDITION (t.ts >= r.ts_ntz);
 
+-- FVT-ASOF-4-016a: coercion DATE vs STRING (SPARK-59527), coerced like the >= operator
+SELECT t.d, r.s AS matched_s
+FROM VALUES (DATE '2026-06-29') AS t(d) ASOF JOIN
+     VALUES ('2026-06-28'), ('2026-06-29') AS r(s)
+  MATCH_CONDITION (t.d >= r.s);
+
+-- FVT-ASOF-4-016b: coercion TIMESTAMP vs STRING (SPARK-59527)
+SELECT t.ts, r.s AS matched_s
+FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
+     VALUES ('2026-06-29 09:00:00'), ('2026-06-29 10:00:00') AS r(s)
+  MATCH_CONDITION (t.ts >= r.s);
+
+-- FVT-ASOF-4-016c: coercion INT vs STRING sorts the right buffer by value, not lexicographically.
+-- '9' sorts after '10'/'20' as text but 9 < 10 < 20 by value; the as-of match for 25 must be 20.
+SELECT t.k, r.s AS matched_s
+FROM VALUES (25) AS t(k) ASOF JOIN
+     VALUES ('9'), ('10'), ('20') AS r(s)
+  MATCH_CONDITION (t.k >= r.s);
+
+-- FVT-ASOF-4-016d: coercion STRING vs DATE with the string on the left (SPARK-59527)
+SELECT t.s, r.d AS matched_d
+FROM VALUES ('2026-06-29') AS t(s) ASOF JOIN
+     VALUES (DATE '2026-06-28'), (DATE '2026-06-29') AS r(d)
+  MATCH_CONDITION (t.s >= r.d);
+
+-- FVT-ASOF-4-016e: coercion TIMESTAMP_NTZ vs STRING (NTZ common type via AtomicType fallback)
+SELECT t.ts, r.s AS matched_s
+FROM VALUES (TIMESTAMP_NTZ '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
+     VALUES ('2026-06-29 09:00:00'), ('2026-06-29 10:00:00') AS r(s)
+  MATCH_CONDITION (t.ts >= r.s);
+
+-- FVT-ASOF-4-016f: coercion TIME vs STRING (SPARK-59527), the string is cast to TIME
+SELECT t.tm, r.s AS matched_s
+FROM VALUES (TIME '10:00:00') AS t(tm) ASOF JOIN
+     VALUES ('09:00:00'), ('10:00:00') AS r(s)
+  MATCH_CONDITION (t.tm >= r.s);
+
 -- FVT-ASOF-4-017: ARRAY<INT> operand
 SELECT t.a, r.a AS matched_a
 FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN
      VALUES (ARRAY(1, 2)), (ARRAY(1, 4)) AS r(a)
+  MATCH_CONDITION (t.a >= r.a);
+
+-- FVT-ASOF-4-017a: coercion ARRAY<INT> vs ARRAY<BIGINT>
+SELECT t.a, r.a AS matched_a
+FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN
+     VALUES (ARRAY(CAST(1 AS BIGINT), CAST(2 AS BIGINT))),
+            (ARRAY(CAST(1 AS BIGINT), CAST(4 AS BIGINT))) AS r(a)
   MATCH_CONDITION (t.a >= r.a);
 
 -- FVT-ASOF-4-018: ARRAY<STRUCT> whole column MATCH_CONDITION

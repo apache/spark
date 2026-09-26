@@ -68,23 +68,7 @@ SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (jitter_ts(t.trade_time) >= q.quote_time)
   ON t.symbol = q.symbol;
 
--- FVT-ASOF-8-008: CURRENT_TIMESTAMP in MATCH_CONDITION operand (query-foldable constant)
-SELECT count(*) AS cnt
-FROM trades t ASOF JOIN quotes q
-  MATCH_CONDITION (current_timestamp() >= q.quote_time)
-  ON t.symbol = q.symbol;
-
--- FVT-ASOF-8-008a: literal constant in MATCH_CONDITION operand (right)
-SELECT count(*) AS cnt
-FROM trades t ASOF JOIN quotes q
-  MATCH_CONDITION (t.trade_time >= TIMESTAMP '2026-06-29 10:00:00')
-  ON t.symbol = q.symbol;
-
--- FVT-ASOF-8-008b: literal constant in MATCH_CONDITION operand (left)
-SELECT count(*) AS cnt
-FROM trades t ASOF JOIN quotes q
-  MATCH_CONDITION (TIMESTAMP '2026-06-29 10:00:00' >= q.quote_time)
-  ON t.symbol = q.symbol;
+-- FVT-ASOF-8-008: constant MATCH_CONDITION operand, covered by FVT-ASOF-3-024..027 in join-asof-errors.sql
 
 -- FVT-ASOF-8-009: QUALIFY on ASOF — covered by FVT-ASOF-6-007
 

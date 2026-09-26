@@ -153,6 +153,8 @@ jobs:
           - >-
             pyspark-connect
           - >-
+            pyspark-periodic
+          - >-
             pyspark-pandas
           - >-
             pyspark-pandas-slow

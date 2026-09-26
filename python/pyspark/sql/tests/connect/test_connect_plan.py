@@ -61,6 +61,7 @@ if should_test_connect:
     )
     from pyspark.sql.types import (
         ArrayType,
+        CharType,
         DoubleType,
         IntegerType,
         MapType,
@@ -69,6 +70,7 @@ if should_test_connect:
         StructType,
         TimestampLTZNanosType,
         TimestampNTZNanosType,
+        VarcharType,
     )
 
 
@@ -87,6 +89,32 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         with self.assertRaises(PySparkTypeError) as error:
             UDFRegistration(self.connect).register("inprocess", udf)
         self.assertEqual(error.exception.getCondition(), "INVALID_UDF_EVAL_TYPE")
+
+    def test_char_varchar_collation_type_round_trip(self):
+        data_types = [
+            CharType(4),
+            CharType(4, "UTF8_BINARY"),
+            CharType(4, "UTF8_LCASE"),
+            VarcharType(6),
+            VarcharType(6, "UTF8_BINARY"),
+            VarcharType(6, "UNICODE_CI"),
+            StructType(
+                [
+                    StructField("c", CharType(4, "UTF8_LCASE")),
+                    StructField("v", ArrayType(VarcharType(6, "UNICODE_CI"))),
+                ]
+            ),
+        ]
+
+        for data_type in data_types:
+            proto_type = pyspark_types_to_proto_types(data_type)
+            self.assertEqual(data_type, proto_schema_to_pyspark_data_type(proto_type))
+
+        default_char = pyspark_types_to_proto_types(CharType(4)).char
+        self.assertFalse(default_char.HasField("collation"))
+        explicit_binary_char = pyspark_types_to_proto_types(CharType(4, "UTF8_BINARY")).char
+        self.assertTrue(explicit_binary_char.HasField("collation"))
+        self.assertEqual(explicit_binary_char.collation, "UTF8_BINARY")
 
     def test_sql_project(self):
         plan = self.connect.sql("SELECT 1")._plan.to_proto(self.connect)
@@ -783,6 +811,22 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(data_source.options.get("op2"), "opv2")
         self.assertEqual(len(data_source.paths), 1)
         self.assertEqual(data_source.paths[0], "test_path")
+
+    def test_reader_options_case_insensitive(self):
+        reader = DataFrameReader(self.connect)
+        df = (
+            reader.option("versionAsOf", 0)
+            .option("versionasof", 1)
+            .option("versionAsOf", 2)
+            .table("myTable")
+        )
+        options = df._plan.to_proto(self.connect).root.read.named_table.options
+        self.assertEqual(dict(options), {"versionAsOf": "2"})
+
+        reader = DataFrameReader(self.connect)
+        df = reader.option("header", False).option("HEADER", True).load(format="csv")
+        options = df._plan.to_proto(self.connect).root.read.data_source.options
+        self.assertEqual(dict(options), {"HEADER": "true"})
 
     def test_relation_changes(self):
         reader = DataFrameReader(self.connect)
