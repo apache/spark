@@ -120,6 +120,12 @@ ASOF JOIN VALUES
     (named_struct('a', CAST(4 AS BIGINT))) AS r(k)
   MATCH_CONDITION (t.k >= r.k);
 
+-- FVT-ASOF-4-012c: empty STRUCT operands (SPARK-59749); two empty structs are equal
+SELECT t.id, r.tag AS matched
+FROM VALUES (1, named_struct()) AS t(id, k) ASOF JOIN
+     VALUES (named_struct(), 'hit') AS r(k, tag)
+  MATCH_CONDITION (t.k >= r.k);
+
 -- FVT-ASOF-4-013: coercion TINYINT vs BIGINT
 SELECT t.k, r.k AS matched_k
 FROM VALUES (CAST(10 AS TINYINT)) AS t(k) ASOF JOIN VALUES (CAST(5 AS BIGINT)) AS r(k)
@@ -206,6 +212,13 @@ ASOF JOIN (
 SELECT r.c1, r.c2
 FROM VALUES (1, 2) AS t(c1, c2) ASOF JOIN VALUES (1, 1) AS r(c1, c2)
   MATCH_CONDITION ((t.c1, t.c2) >= (r.c1, r.c2));
+
+-- FVT-ASOF-4-018b: ARRAY of empty STRUCT (SPARK-59749); the elements tie, so length decides
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a >= r.a);
 
 -- FVT-ASOF-4-019: MAP operand rejection — covered by FVT-ASOF-3-010
 

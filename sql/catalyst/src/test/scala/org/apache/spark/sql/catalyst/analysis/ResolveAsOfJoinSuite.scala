@@ -81,6 +81,12 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
   private val leftStruct: LogicalPlan = LocalRelation(lstruct)
   private val rightStruct: LogicalPlan = LocalRelation(rstruct)
 
+  // Arrays of empty structs: each element has no fields, so it is compared as one value.
+  private val lemptyArr = AttributeReference("ea", ArrayType(StructType(Nil)))()
+  private val remptyArr = AttributeReference("ea", ArrayType(StructType(Nil)))()
+  private val leftEmptyArr: LogicalPlan = LocalRelation(lemptyArr)
+  private val rightEmptyArr: LogicalPlan = LocalRelation(remptyArr)
+
   /** Build an [[AsOfJoin]] from a `MATCH_CONDITION` whose operands are already resolved. */
   private def asOf(
       leftExpr: Expression = la,
@@ -184,6 +190,17 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
     // Each element pair reuses the subtractable-leaf distance (Subtract) inside the lambda.
     val body = zip.function.asInstanceOf[LambdaFunction].function
     assert(body.isInstanceOf[Subtract], s"expected a Subtract element distance, got $body")
+  }
+
+  test("materializes an array of empty structs into a whole-element signed distance") {
+    val resolved = ResolveAsOfJoin.apply(
+      asOf(leftExpr = lemptyArr, rightExpr = remptyArr, l = leftEmptyArr, r = rightEmptyArr))
+      .asInstanceOf[AsOfJoin]
+    val zip = resolved.orderExpression.asInstanceOf[ZipWith]
+    // Splitting an empty struct into its zero fields would leave an empty array per element.
+    val body = zip.function.asInstanceOf[LambdaFunction].function
+    assert(body.isInstanceOf[If], s"expected a signed element distance, got $body")
+    assert(body.dataType == IntegerType)
   }
 
   test("materializes a positional struct operand into a flattened per-field distance") {

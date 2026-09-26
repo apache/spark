@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin.MatchConditionTypes
 import org.apache.spark.sql.types._
 
@@ -231,17 +230,33 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(!MatchConditionTypes.usesArrayOrderExpression(leftArray, diffNameArray))
   }
 
-  test("empty struct operands are invalid") {
+  test("empty struct operands are valid and compare as a whole value") {
     val emptyStruct = StructType(Nil)
-    assert(!MatchConditionTypes.isValidOperandType(emptyStruct))
-    assert(!MatchConditionTypes.areOperandsCompatible(emptyStruct, emptyStruct))
+    assert(MatchConditionTypes.isValidOperandType(emptyStruct))
+    assert(MatchConditionTypes.areOperandsCompatible(emptyStruct, emptyStruct))
+    // Splitting into zero fields would compare two empty literals, so a NULL operand would match.
     assert(!MatchConditionTypes.usesStructDecomposition(emptyStruct, emptyStruct))
   }
 
-  test("nested empty struct operands are invalid") {
+  test("nested empty struct operands are valid") {
     val nestedEmptyStruct = StructType(StructField("x", StructType(Nil)) :: Nil)
-    assert(!MatchConditionTypes.isValidOperandType(nestedEmptyStruct))
-    assert(!MatchConditionTypes.areOperandsCompatible(nestedEmptyStruct, nestedEmptyStruct))
+    assert(MatchConditionTypes.isValidOperandType(nestedEmptyStruct))
+    assert(MatchConditionTypes.areOperandsCompatible(nestedEmptyStruct, nestedEmptyStruct))
+    assert(MatchConditionTypes.usesStructDecomposition(nestedEmptyStruct, nestedEmptyStruct))
+  }
+
+  test("empty struct and non-empty struct operands are incompatible") {
+    val emptyStruct = StructType(Nil)
+    val nonEmptyStruct = StructType(StructField("a", IntegerType) :: Nil)
+    assert(!MatchConditionTypes.areOperandsCompatible(emptyStruct, nonEmptyStruct))
+    assert(!MatchConditionTypes.areOperandsCompatible(nonEmptyStruct, emptyStruct))
+    val nestedEmpty = StructType(StructField("x", emptyStruct) :: Nil)
+    val nestedNonEmpty = StructType(StructField("x", nonEmptyStruct) :: Nil)
+    assert(!MatchConditionTypes.areOperandsCompatible(nestedEmpty, nestedNonEmpty))
+    val emptyArray = ArrayType(emptyStruct)
+    val nonEmptyArray = ArrayType(nonEmptyStruct)
+    assert(!MatchConditionTypes.areOperandsCompatible(emptyArray, nonEmptyArray))
+    assert(!MatchConditionTypes.usesArrayOrderExpression(emptyArray, nonEmptyArray))
   }
 
   test("identical struct schemas enable whole-struct sort") {
@@ -300,14 +315,11 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(!MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
   }
 
-  test("array operands with empty struct elements are invalid") {
-    // An array whose element contains an empty struct is invalid even though the array itself
-    // is orderable (the ArrayType arm of containsEmptyStructType).
+  test("array operands with empty struct elements are valid") {
     val arrayOfEmptyStruct = ArrayType(StructType(Nil))
-    // Pin orderability so the rejection is due to the empty struct, not non-orderability.
-    assert(RowOrdering.isOrderable(arrayOfEmptyStruct))
-    assert(!MatchConditionTypes.isValidOperandType(arrayOfEmptyStruct))
-    assert(!MatchConditionTypes.areOperandsCompatible(arrayOfEmptyStruct, arrayOfEmptyStruct))
+    assert(MatchConditionTypes.isValidOperandType(arrayOfEmptyStruct))
+    assert(MatchConditionTypes.areOperandsCompatible(arrayOfEmptyStruct, arrayOfEmptyStruct))
+    assert(MatchConditionTypes.usesArrayOrderExpression(arrayOfEmptyStruct, arrayOfEmptyStruct))
   }
 
   test("array operands with incompatible struct element field types are rejected") {

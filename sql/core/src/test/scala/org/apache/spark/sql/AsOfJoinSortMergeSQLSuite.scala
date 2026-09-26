@@ -435,6 +435,67 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Row(Row(5, Seq(1, 1))) :: Nil)
   }
 
+  test("empty STRUCT column MATCH_CONDITION") {
+    // Empty structs are equal, also when nested, so inclusive operators match and strict do not.
+    for {
+      emptyStruct <- Seq("named_struct()", "named_struct('e', named_struct())")
+      (op, tag) <- Seq(">=" -> "hit", "<=" -> "hit", ">" -> null, "<" -> null)
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES ($emptyStruct) AS t(s)
+             |LEFT ASOF JOIN VALUES ($emptyStruct, 'hit') AS r(s, tag)
+             |  MATCH_CONDITION (t.s $op r.s)
+             |""".stripMargin),
+        Row(tag) :: Nil)
+    }
+  }
+
+  test("NULL empty STRUCT operand never matches") {
+    // A NULL operand fails every comparison, though any two non-NULL empty structs are equal.
+    for {
+      (leftValue, rightValue) <- Seq(
+        "CAST(NULL AS STRUCT<>)" -> "named_struct()",
+        "named_struct()" -> "CAST(NULL AS STRUCT<>)")
+      op <- Seq(">=", ">", "<=", "<")
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES ($leftValue) AS t(s)
+             |LEFT ASOF JOIN VALUES ($rightValue, 'hit') AS r(s, tag)
+             |  MATCH_CONDITION (t.s $op r.s)
+             |""".stripMargin),
+        Row(null) :: Nil)
+    }
+  }
+
+  test("STRUCT with an empty STRUCT field MATCH_CONDITION") {
+    // The empty field always ties, so field 'seq' alone picks the nearest match to 5.
+    for {
+      (left, right) <- Seq("t.k" -> "r.k", "(t.k.e, t.k.seq)" -> "(r.k.e, r.k.seq)")
+      (op, seq) <- Seq(">=" -> 5, ">" -> 4, "<=" -> 5, "<" -> 6)
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.k.seq
+             |FROM VALUES (named_struct('e', named_struct(), 'seq', 5)) AS t(k)
+             |ASOF JOIN VALUES
+             |  (named_struct('e', named_struct(), 'seq', 3)),
+             |  (named_struct('e', named_struct(), 'seq', 4)),
+             |  (named_struct('e', named_struct(), 'seq', 5)),
+             |  (named_struct('e', named_struct(), 'seq', 6)),
+             |  (named_struct('e', named_struct(), 'seq', 7)) AS r(k)
+             |  MATCH_CONDITION ($left $op $right)
+             |""".stripMargin),
+        Row(seq) :: Nil)
+    }
+  }
+
   test("ARRAY<INT> MATCH_CONDITION") {
     checkSortMergeAsOf(
       sql(
@@ -545,6 +606,24 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |  MATCH_CONDITION (t.a >= r.a)
           |""".stripMargin),
       Row(Seq(Row(1, 4))) :: Nil)
+  }
+
+  test("ARRAY of empty STRUCT MATCH_CONDITION") {
+    // Empty struct elements always tie, so the arrays order by length alone.
+    Seq(">=" -> 2, ">" -> 1, "<=" -> 2, "<" -> 3).foreach { case (op, size) =>
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT size(r.a)
+             |FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a)
+             |ASOF JOIN VALUES
+             |  (ARRAY(named_struct())),
+             |  (ARRAY(named_struct(), named_struct())),
+             |  (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+             |  MATCH_CONDITION (t.a $op r.a)
+             |""".stripMargin),
+        Row(size) :: Nil)
+    }
   }
 
   test("STRUCT tuple from scalar columns MATCH_CONDITION") {
@@ -726,6 +805,74 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |  MATCH_CONDITION (t.a <= r.a)
           |""".stripMargin),
       Row(Seq(1, 6)) :: Nil)
+  }
+
+  test("forward MATCH_CONDITION with NULL array elements picks the smallest right row") {
+    // NULL elements sort first: [null] < [null, null] < [5]. A distance-based pick chose [5].
+    val nullInt = "CAST(NULL AS INT)"
+    val nullEmpty = "CAST(NULL AS STRUCT<>)"
+    for {
+      (left, rights) <- Seq(
+        s"ARRAY($nullInt)" -> s"(ARRAY($nullInt, $nullInt), 'nn'), (ARRAY(5), 'five')",
+        s"ARRAY($nullEmpty)" ->
+          s"(ARRAY($nullEmpty, $nullEmpty), 'nn'), (ARRAY(named_struct()), 'e')")
+      op <- Seq("<=", "<")
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES ($left) AS t(a)
+             |ASOF JOIN VALUES $rights AS r(a, tag)
+             |  MATCH_CONDITION (t.a $op r.a)
+             |""".stripMargin),
+        Row("nn") :: Nil)
+    }
+  }
+
+  test("forward MATCH_CONDITION with a NULL struct field picks the smallest right row") {
+    // A NULL field sorts first, so {null, 7} < {x, 1}. A distance-based pick chose {x, 1}.
+    for {
+      (nullField, value) <- Seq(
+        "CAST(NULL AS INT)" -> "0",
+        "CAST(NULL AS STRUCT<>)" -> "named_struct()")
+      (left, right) <- Seq("t.k" -> "r.k", "(t.k.f, t.k.seq)" -> "(r.k.f, r.k.seq)")
+      op <- Seq("<=", "<")
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES (named_struct('f', $nullField, 'seq', 5)) AS t(k)
+             |ASOF JOIN VALUES
+             |  (named_struct('f', $nullField, 'seq', 7), 's7'),
+             |  (named_struct('f', $value, 'seq', 1), 's1') AS r(k, tag)
+             |  MATCH_CONDITION ($left $op $right)
+             |""".stripMargin),
+        Row("s7") :: Nil)
+    }
+  }
+
+  test("ARRAY<STRUCT> MATCH_CONDITION with fields of different types") {
+    // The per-element distance mixes INT and INTERVAL, which one array(...) could not hold.
+    def element(first: String, time: String): String =
+      s"ARRAY(named_struct('f', $first, 'ts', TIMESTAMP '2026-06-29 $time'))"
+    for {
+      first <- Seq("1", "named_struct()")
+      (op, tag) <- Seq(">=" -> "r9", ">" -> "r9", "<=" -> "r11", "<" -> "r11")
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES (${element(first, "10:00:00")}) AS t(a)
+             |ASOF JOIN VALUES
+             |  (${element(first, "09:00:00")}, 'r9'),
+             |  (${element(first, "11:00:00")}, 'r11') AS r(a, tag)
+             |  MATCH_CONDITION (t.a $op r.a)
+             |""".stripMargin),
+        Row(tag) :: Nil)
+    }
   }
 
   test("ARRAY<STRUCT> operands with different field names") {
