@@ -54,9 +54,9 @@ from pyspark.errors import PySparkNotImplementedError
 from pyspark.sql import types as T
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.tests.arrow.test_arrow_python_udf_transpile import (
-    ARROW_TRANSPILE_SUPPORTED,
     _TRANSPILE_OFF,
     _TRANSPILE_ON,
+    ARROW_TRANSPILE_SUPPORTED,
     ArrowUDFTranspileTestsMixin,
     _eval_python_nodes,
 )
@@ -69,7 +69,6 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 from pyspark.util import PythonEvalType, is_remote_only
-
 
 TRANSPILES = "TRANSPILES"
 NO_TRANSPILE = "NO_TRANSPILE"
@@ -143,6 +142,8 @@ _SAMPLES = (
     ("time", T.TimeType(6), "other"),
     ("timestamp", T.TimestampType(), "other"),
     ("timestamp_ntz", T.TimestampNTZType(), "other"),
+    ("timestamp_ltz_nanos", T.TimestampLTZNanosType(), "other"),
+    ("timestamp_ntz_nanos", T.TimestampNTZNanosType(), "other"),
     ("decimal", T.DecimalType(10, 2), "numeric"),
     ("double", T.DoubleType(), "numeric"),
     ("float", T.FloatType(), "numeric"),
@@ -178,6 +179,8 @@ _EXPECTED_RETURN_VERDICT = {
     "time": NO_TRANSPILE,
     "timestamp": NO_TRANSPILE,
     "timestamp_ntz": NO_TRANSPILE,
+    "timestamp_ltz_nanos": NO_TRANSPILE,
+    "timestamp_ntz_nanos": NO_TRANSPILE,
     "decimal": NO_TRANSPILE,
     "double": TRANSPILES,
     "float": TRANSPILES,
@@ -221,6 +224,8 @@ _EXPECTED_INPUT_VERDICT = {
     "time": NO_TRANSPILE,
     "timestamp": NO_TRANSPILE,
     "timestamp_ntz": NO_TRANSPILE,
+    "timestamp_ltz_nanos": NO_TRANSPILE,
+    "timestamp_ntz_nanos": NO_TRANSPILE,
     "decimal": NO_TRANSPILE,
     "double": TRANSPILES,
     "float": TRANSPILES,

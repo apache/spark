@@ -80,7 +80,6 @@ from pyspark.testing.utils import (
 )
 from pyspark.util import PythonEvalType, is_remote_only
 
-
 # Transpilation requires both flags, at construction and again in ConvertToCatalyst.
 _TRANSPILE_ON = {
     "spark.sql.experimental.optimizer.transpilePyUDFs": True,
