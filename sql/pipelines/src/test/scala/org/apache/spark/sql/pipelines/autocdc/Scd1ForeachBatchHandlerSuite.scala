@@ -107,7 +107,7 @@ class Scd1ForeachBatchHandlerSuite
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
     assert(resultAuxTable.collect().isEmpty)
-    checkAnswer(resultTargetTable, Row(1, "old", Row(null, 10L)))
+    checkAnswer(resultTargetTable, Row(1, "old", Row(null, 10L, null)))
   }
 
   test(
@@ -139,7 +139,7 @@ class Scd1ForeachBatchHandlerSuite
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
     assert(resultAuxTable.collect().isEmpty)
-    checkAnswer(resultTargetTable, Row(1, "old", Row(null, 10L)))
+    checkAnswer(resultTargetTable, Row(1, "old", Row(null, 10L, null)))
   }
 
   test(
@@ -260,7 +260,7 @@ class Scd1ForeachBatchHandlerSuite
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
     assert(resultAuxTable.collect().isEmpty)
-    checkAnswer(resultTargetTable, Row(1, "old", Row(null, 10L)))
+    checkAnswer(resultTargetTable, Row(1, "old", Row(null, 10L, null)))
   }
 
   // ===========================================================================================
@@ -283,8 +283,8 @@ class Scd1ForeachBatchHandlerSuite
 
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
-    checkAnswer(resultAuxTable, Row(1, Row(10L, null)))
-    checkAnswer(resultTargetTable, Row(2, "fresh", Row(null, 20L)))
+    checkAnswer(resultAuxTable, Row(1, Row(10L, null, null)))
+    checkAnswer(resultTargetTable, Row(2, "fresh", Row(null, 20L, null)))
   }
 
   test(
@@ -301,7 +301,7 @@ class Scd1ForeachBatchHandlerSuite
 
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
-    checkAnswer(resultAuxTable, Row(1, Row(20L, null)))
+    checkAnswer(resultAuxTable, Row(1, Row(20L, null, null)))
     assert(resultTargetTable.collect().isEmpty)
   }
 
@@ -321,7 +321,7 @@ class Scd1ForeachBatchHandlerSuite
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
     assert(resultAuxTable.collect().isEmpty)
-    checkAnswer(resultTargetTable, Row(1, "newer", Row(null, 20L)))
+    checkAnswer(resultTargetTable, Row(1, "newer", Row(null, 20L, null)))
   }
 
   test(
@@ -374,7 +374,7 @@ class Scd1ForeachBatchHandlerSuite
     excludeExec.execute(microbatchOf(sourceSchema)(Row(1, null, 2L, true)), batchId = 3L)
 
     val targetTableAfterBatch4 = spark.read.table(defaultTargetTableIdentifier.quotedString)
-    checkAnswer(targetTableAfterBatch4, Row(1, "dave", Row(null, 4L)))
+    checkAnswer(targetTableAfterBatch4, Row(1, "dave", Row(null, 4L, null)))
 
     // Batch 5: newer delete (seq=5) wipes the row from the target.
     excludeExec.execute(microbatchOf(sourceSchema)(Row(1, null, 5L, true)), batchId = 4L)
@@ -385,7 +385,7 @@ class Scd1ForeachBatchHandlerSuite
     val auxTableAfterBatch6 = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val targetTableAfterBatch6 = spark.read.table(defaultTargetTableIdentifier.quotedString)
     assert(targetTableAfterBatch6.collect().isEmpty)
-    checkAnswer(auxTableAfterBatch6, Row(1, Row(5L, null)))
+    checkAnswer(auxTableAfterBatch6, Row(1, Row(5L, null, null)))
   }
 
   test(
@@ -398,7 +398,7 @@ class Scd1ForeachBatchHandlerSuite
 
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
-    checkAnswer(resultTargetTable, Row(1, "bob", Row(null, 2L)))
+    checkAnswer(resultTargetTable, Row(1, "bob", Row(null, 2L, null)))
     assert(resultAuxTable.collect().isEmpty)
   }
 
@@ -417,7 +417,7 @@ class Scd1ForeachBatchHandlerSuite
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
     assert(resultTargetTable.collect().isEmpty)
-    checkAnswer(resultAuxTable, Row(99, Row(1L, null)))
+    checkAnswer(resultAuxTable, Row(99, Row(1L, null, null)))
   }
 
   test(
@@ -431,7 +431,7 @@ class Scd1ForeachBatchHandlerSuite
 
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
-    checkAnswer(resultTargetTable, Row(1, "alice", Row(null, 5L)))
+    checkAnswer(resultTargetTable, Row(1, "alice", Row(null, 5L, null)))
     assert(resultAuxTable.collect().isEmpty)
   }
 
@@ -449,8 +449,8 @@ class Scd1ForeachBatchHandlerSuite
 
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
-    checkAnswer(resultTargetTable, Row(1, "alice", Row(null, 5L)))
-    checkAnswer(resultAuxTable, Row(1, Row(2L, null)))
+    checkAnswer(resultTargetTable, Row(1, "alice", Row(null, 5L, null)))
+    checkAnswer(resultAuxTable, Row(1, Row(2L, null, null)))
   }
 
   test(
@@ -473,7 +473,7 @@ class Scd1ForeachBatchHandlerSuite
 
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
-    checkAnswer(resultTargetTable, Row(1, "bob", Row(null, 3L)))
+    checkAnswer(resultTargetTable, Row(1, "bob", Row(null, 3L, null)))
     assert(resultAuxTable.collect().isEmpty)
   }
 
@@ -536,9 +536,9 @@ class Scd1ForeachBatchHandlerSuite
     checkAnswer(
       resultTargetTable.orderBy("country", "city"),
       Seq(
-        Row("UK", "London", 9000000L, Row(null, 1L)),
-        Row("US", "Los Angeles", 4000000L, Row(null, 1L)),
-        Row("US", "New York", 8000000L, Row(null, 1L))
+        Row("UK", "London", 9000000L, Row(null, 1L, null)),
+        Row("US", "Los Angeles", 4000000L, Row(null, 1L, null)),
+        Row("US", "New York", 8000000L, Row(null, 1L, null))
       )
     )
     assert(resultAuxTable.collect().isEmpty)
@@ -560,8 +560,8 @@ class Scd1ForeachBatchHandlerSuite
     checkAnswer(
       resultTargetTable.orderBy("id"),
       Seq(
-        Row(1, "alice-updated", Row(null, 2L)),
-        Row(2, "bob", Row(null, 1L))
+        Row(1, "alice-updated", Row(null, 2L, null)),
+        Row(2, "bob", Row(null, 1L, null))
       )
     )
     assert(resultAuxTable.collect().isEmpty)
@@ -613,7 +613,7 @@ class Scd1ForeachBatchHandlerSuite
 
       val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
       val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
-      checkAnswer(resultTargetTable, Row(1, "bob", Row(null, 2L)))
+      checkAnswer(resultTargetTable, Row(1, "bob", Row(null, 2L, null)))
       assert(resultAuxTable.collect().isEmpty)
     }
   }
