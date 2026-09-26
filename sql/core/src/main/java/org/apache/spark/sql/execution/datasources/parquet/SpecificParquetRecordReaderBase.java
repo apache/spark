@@ -278,6 +278,16 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
      * Reads the next row group from this reader. Returns null if there is no more row group.
      */
     PageReadStore readNextRowGroup() throws IOException;
+
+    /**
+     * Returns the underlying {@link ParquetFileReader}, or null if this reader does not wrap one
+     * (e.g. test implementations). Callers can use this to access lower-level APIs such as
+     * {@code setRequestedSchema}, {@code readRowGroup(int)} and
+     * {@code readFilteredRowGroup(int, RowRanges)} which are needed for late materialization.
+     */
+    default ParquetFileReader getUnderlyingReader() {
+      return null;
+    }
   }
 
   private static class ParquetRowGroupReaderImpl implements ParquetRowGroupReader {
@@ -290,6 +300,11 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     @Override
     public PageReadStore readNextRowGroup() throws IOException {
       return reader.readNextFilteredRowGroup();
+    }
+
+    @Override
+    public ParquetFileReader getUnderlyingReader() {
+      return reader;
     }
 
     @Override

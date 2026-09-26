@@ -48,8 +48,10 @@ import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, RebaseDateTime}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.FileSourceScanLike
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.internal.SQLConf._
@@ -190,6 +192,53 @@ class ParquetFileFormat
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    buildParquetReader(
+      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, Nil, options, hadoopConf,
+      Map.empty)
+  }
+
+  /**
+   * The conf that turns this on is read here rather than in the planner, the way `supportBatch`
+   * reads its own confs, so a Parquet-named conf does not decide for a format that is not Parquet.
+   *
+   * Subclasses answer false on purpose, even though they inherit this reader: a subclass may
+   * customize reading by overriding `buildReaderWithPartitionValues`, and a scan with storage
+   * filters routes through `buildReaderWithStorageFilters` instead, which would silently bypass
+   * whatever the subclass does.
+   */
+  override def supportsStorageFilterPushdown(sparkSession: SparkSession): Boolean =
+    getSqlConf(sparkSession).parquetStorageFilterPushdownEnabled &&
+      getClass == classOf[ParquetFileFormat]
+
+  override def supportsStorageFilter(expr: Expression): Boolean =
+    ParquetStorageFilter.isSupportedStorageFilter(expr)
+
+  override def buildReaderWithStorageFilters(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      storageFilters: Seq[Expression],
+      options: Map[String, String],
+      hadoopConf: Configuration,
+      storageFilterMetrics: Map[String, SQLMetric])
+    : Option[PartitionedFile => Iterator[InternalRow]] = {
+    Some(buildParquetReader(sparkSession, dataSchema, partitionSchema, requiredSchema, filters,
+      storageFilters, options, hadoopConf, storageFilterMetrics))
+  }
+
+  /** The implementation behind both public entry points above. */
+  private def buildParquetReader(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      storageFilters: Seq[Expression],
+      options: Map[String, String],
+      hadoopConf: Configuration,
+      storageFilterMetrics: Map[String, SQLMetric]): PartitionedFile => Iterator[InternalRow] = {
     val sqlConf = getSqlConf(sparkSession)
     setupHadoopConf(hadoopConf, sqlConf, requiredSchema)
 
@@ -229,6 +278,34 @@ class ParquetFileFormat
     val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
     val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
     val archiveFormatEnabled = parquetOptions.archiveFormatEnabled
+
+    // Late materialization needs the vectorized reader. `enableVectorizedReader` is recomputed from
+    // the live session conf when the RDD is built, so a flip of
+    // spark.sql.parquet.enableVectorizedReader (or the nested-column variant) after planning lands
+    // here, and the filters are simply not installed: the post-scan Filter still holds them.
+    val storageFilterOpt: Option[ParquetStorageFilter] = if (storageFilters.isEmpty) {
+      None
+    } else if (!enableVectorizedReader) {
+      logInfo(log"Not honoring storage filters for schema " +
+        log"${MDC(SCHEMA, resultSchema.catalogString)}: the vectorized Parquet reader is disabled")
+      None
+    } else {
+      val metrics = StorageFilterMetrics(
+        rowGroupsSkipped = storageFilterMetrics.getOrElse(
+          FileSourceScanLike.STORAGE_FILTER_ROW_GROUPS_SKIPPED, null),
+        rowsExcludedByRowGroup = storageFilterMetrics.getOrElse(
+          FileSourceScanLike.STORAGE_FILTER_ROWS_EXCLUDED_BY_ROW_GROUP, null),
+        rowsExcludedWithinRowGroup = storageFilterMetrics.getOrElse(
+          FileSourceScanLike.STORAGE_FILTER_ROWS_EXCLUDED_WITHIN_ROW_GROUP, null),
+        bytesAvoidedByRowGroup = storageFilterMetrics.getOrElse(
+          FileSourceScanLike.STORAGE_FILTER_BYTES_AVOIDED_BY_ROW_GROUP, null),
+        bytesAvoidedByPageFiltering = storageFilterMetrics.getOrElse(
+          FileSourceScanLike.STORAGE_FILTER_BYTES_AVOIDED_BY_PAGE_FILTERING, null))
+      // `create` requires every condition storageFiltersFor already pre-checked, so a violation
+      // is a planner bug rather than something to work around here.
+      Some(ParquetStorageFilter.create(storageFilters, requiredSchema, metrics,
+        sqlConf.parquetStorageFilterPushdownMaxSplicedRowGroupBytes))
+    }
 
     // Should always be set by FileSourceScanExec creating this.
     // Check conf before checking option, to allow working around an issue by changing conf.
@@ -321,7 +398,7 @@ class ParquetFileFormat
           buildVectorizedIterator(
             hadoopAttemptContext, split, file.partitionValues, partitionSchema, convertTz,
             datetimeRebaseSpec, int96RebaseSpec, enableOffHeapColumnVector, returningBatch,
-            capacity, openedFooter, shouldCloseInputStream)
+            capacity, openedFooter, shouldCloseInputStream, storageFilterOpt)
         } else {
           logDebug(s"Falling back to parquet-mr")
           buildRowBasedIterator(
@@ -366,7 +443,8 @@ class ParquetFileFormat
       returningBatch: Boolean,
       batchSize: Int,
       openedFooter: OpenedParquetFooter,
-      shouldCloseInputStream: AtomicBoolean): Iterator[InternalRow] = {
+      shouldCloseInputStream: AtomicBoolean,
+      storageFilter: Option[ParquetStorageFilter]): Iterator[InternalRow] = {
     // scalastyle:on argcount
     assert(openedFooter.inputStreamOpt.isPresent)
     val vectorizedReader = new VectorizedParquetRecordReader(
@@ -377,6 +455,7 @@ class ParquetFileFormat
       int96RebaseSpec.timeZone,
       enableOffHeapColumnVector && TaskContext.get() != null,
       batchSize)
+    storageFilter.foreach(vectorizedReader.setStorageFilter)
     // SPARK-37089: We cannot register a task completion listener to close this iterator here
     // because downstream exec nodes have already registered their listeners. Since listeners
     // are executed in reverse order of registration, a listener registered here would close the

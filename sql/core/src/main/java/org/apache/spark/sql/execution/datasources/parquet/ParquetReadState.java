@@ -19,30 +19,29 @@ package org.apache.spark.sql.execution.datasources.parquet;
 
 import org.apache.parquet.column.ColumnDescriptor;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
 import java.util.PrimitiveIterator;
 
 /**
  * Helper class to store intermediate state while reading a Parquet column chunk.
  */
 final class ParquetReadState {
-  /** A special row range used when there is no row indexes (hence all rows must be included) */
-  private static final RowRange MAX_ROW_RANGE = new RowRange(Long.MIN_VALUE, Long.MAX_VALUE);
+  /** The row indexes to include, only not-null if the column index is present. */
+  private final PrimitiveIterator.OfLong rowIndexes;
 
   /**
-   * A special row range used when the row indexes are present AND all the row ranges have been
-   * processed. This serves as a sentinel at the end indicating that all rows come after the last
-   * row range should be skipped.
+   * The current row range, as its bounds rather than as an object: one range per surviving row is
+   * what a filter with scattered survivors produces, for every column reader of every row group.
+   *
+   * <p>With no row indexes they are the whole range, since every row must be included. Once the
+   * indexes are exhausted they are inverted, which says that every row from there on is to be
+   * skipped.
    */
-  private static final RowRange END_ROW_RANGE = new RowRange(Long.MAX_VALUE, Long.MIN_VALUE);
+  private long currentRangeStart;
+  private long currentRangeEnd;
 
-  /** Iterator over all row ranges, only not-null if column index is present */
-  private final Iterator<RowRange> rowRanges;
-
-  /** The current row range */
-  private RowRange currentRange;
+  /** The row index that ended the current range by not continuing it, so it starts the next one. */
+  private long pendingRowIndex;
+  private boolean hasPendingRowIndex;
 
   /** Maximum repetition level for the Parquet column */
   final int maxRepetitionLevel;
@@ -90,41 +89,8 @@ final class ParquetReadState {
     this.maxRepetitionLevel = descriptor.getMaxRepetitionLevel();
     this.maxDefinitionLevel = descriptor.getMaxDefinitionLevel();
     this.isRequired = isRequired;
-    this.rowRanges = constructRanges(rowIndexes);
+    this.rowIndexes = rowIndexes;
     nextRange();
-  }
-
-  /**
-   * Construct a list of row ranges from the given `rowIndexes`. For example, suppose the
-   * `rowIndexes` are `[0, 1, 2, 4, 5, 7, 8, 9]`, it will be converted into 3 row ranges:
-   * `[0-2], [4-5], [7-9]`.
-   */
-  private Iterator<RowRange> constructRanges(PrimitiveIterator.OfLong rowIndexes) {
-    if (rowIndexes == null) {
-      return null;
-    }
-
-    List<RowRange> rowRanges = new ArrayList<>();
-    long currentStart = Long.MIN_VALUE;
-    long previous = Long.MIN_VALUE;
-
-    while (rowIndexes.hasNext()) {
-      long idx = rowIndexes.nextLong();
-      if (currentStart == Long.MIN_VALUE) {
-        currentStart = idx;
-      } else if (previous + 1 != idx) {
-        RowRange range = new RowRange(currentStart, previous);
-        rowRanges.add(range);
-        currentStart = idx;
-      }
-      previous = idx;
-    }
-
-    if (previous != Long.MIN_VALUE) {
-      rowRanges.add(new RowRange(currentStart, previous));
-    }
-
-    return rowRanges.iterator();
   }
 
   /**
@@ -151,32 +117,51 @@ final class ParquetReadState {
    * Returns the start index of the current row range.
    */
   long currentRangeStart() {
-    return currentRange.start;
+    return currentRangeStart;
   }
 
   /**
    * Returns the end index of the current row range.
    */
   long currentRangeEnd() {
-    return currentRange.end;
+    return currentRangeEnd;
   }
 
   /**
-   * Advance to the next range.
+   * Advances to the next range, coalescing the run of ascending row indexes that forms it. For
+   * example `[0, 1, 2, 4, 5, 7, 8, 9]` yields `[0-2]`, then `[4-5]`, then `[7-9]`.
+   *
+   * <p>One range at a time on purpose. They are consumed once, in order, so holding them all buys
+   * nothing and costs a list per column reader of the row group, which for scattered survivors is
+   * one entry per row in every one of those lists.
    */
   void nextRange() {
-    if (rowRanges == null) {
-      currentRange = MAX_ROW_RANGE;
-    } else if (!rowRanges.hasNext()) {
-      currentRange = END_ROW_RANGE;
-    } else {
-      currentRange = rowRanges.next();
+    if (rowIndexes == null) {
+      currentRangeStart = Long.MIN_VALUE;
+      currentRangeEnd = Long.MAX_VALUE;
+      return;
     }
-  }
-
-  /**
-   * Helper struct to represent a range of row indexes `[start, end]`.
-   */
-  private record RowRange(long start, long end) {
+    if (!hasPendingRowIndex && !rowIndexes.hasNext()) {
+      currentRangeStart = Long.MAX_VALUE;
+      currentRangeEnd = Long.MIN_VALUE;
+      return;
+    }
+    long start = hasPendingRowIndex ? pendingRowIndex : rowIndexes.nextLong();
+    hasPendingRowIndex = false;
+    long end = start;
+    // A range can only be closed by seeing the index that does not continue it, so that index is
+    // held back for the next call.
+    while (rowIndexes.hasNext()) {
+      long idx = rowIndexes.nextLong();
+      if (idx == end + 1) {
+        end = idx;
+      } else {
+        pendingRowIndex = idx;
+        hasPendingRowIndex = true;
+        break;
+      }
+    }
+    currentRangeStart = start;
+    currentRangeEnd = end;
   }
 }
