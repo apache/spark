@@ -306,6 +306,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <form action="app/kill/" method="POST" style="display:inline">
         <input type="hidden" name="id" value={app.id}/>
         <input type="hidden" name="terminate" value="true"/>
+        <input type="hidden" name="csrfToken" value={parent.csrfToken}/>
         <a href="#" onclick={confirm} class="kill-link">(kill)</a>
       </form>
     }
@@ -356,6 +357,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <form action="driver/kill/" method="POST" style="display:inline">
         <input type="hidden" name="id" value={driver.id}/>
         <input type="hidden" name="terminate" value="true"/>
+        <input type="hidden" name="csrfToken" value={parent.csrfToken}/>
         <a href="#" onclick={confirm} class="kill-link">(kill)</a>
       </form>
     }
