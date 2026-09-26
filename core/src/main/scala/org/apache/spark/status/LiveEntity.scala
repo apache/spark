@@ -379,17 +379,40 @@ private class LiveExecutorStageSummary(
     attemptId: Int,
     executorId: String) extends LiveEntity {
 
-  import LiveEntityHelpers._
-
   var taskTime = 0L
   var succeededTasks = 0
   var failedTasks = 0
   var killedTasks = 0
   var isExcluded = false
 
-  var metrics = createMetrics(default = 0L)
+  // Only the longs that ExecutorStageSummary exposes. Do not hold a v1.TaskMetrics graph
+  // (Input/Output/ShuffleRead/ShuffleWrite/ShufflePushRead) per (stage, executor).
+  var inputBytes = 0L
+  var inputRecords = 0L
+  var outputBytes = 0L
+  var outputRecords = 0L
+  var shuffleRead = 0L
+  var shuffleReadRecords = 0L
+  var shuffleWrite = 0L
+  var shuffleWriteRecords = 0L
+  var memoryBytesSpilled = 0L
+  var diskBytesSpilled = 0L
 
   val peakExecutorMetrics = new ExecutorMetrics()
+
+  def addTaskMetrics(delta: v1.TaskMetrics): Unit = {
+    inputBytes += delta.inputMetrics.bytesRead
+    inputRecords += delta.inputMetrics.recordsRead
+    outputBytes += delta.outputMetrics.bytesWritten
+    outputRecords += delta.outputMetrics.recordsWritten
+    shuffleRead +=
+      delta.shuffleReadMetrics.remoteBytesRead + delta.shuffleReadMetrics.localBytesRead
+    shuffleReadRecords += delta.shuffleReadMetrics.recordsRead
+    shuffleWrite += delta.shuffleWriteMetrics.bytesWritten
+    shuffleWriteRecords += delta.shuffleWriteMetrics.recordsWritten
+    memoryBytesSpilled += delta.memoryBytesSpilled
+    diskBytesSpilled += delta.diskBytesSpilled
+  }
 
   override protected def doUpdate(): Any = {
     val info = new v1.ExecutorStageSummary(
@@ -397,16 +420,16 @@ private class LiveExecutorStageSummary(
       failedTasks,
       succeededTasks,
       killedTasks,
-      metrics.inputMetrics.bytesRead,
-      metrics.inputMetrics.recordsRead,
-      metrics.outputMetrics.bytesWritten,
-      metrics.outputMetrics.recordsWritten,
-      metrics.shuffleReadMetrics.remoteBytesRead + metrics.shuffleReadMetrics.localBytesRead,
-      metrics.shuffleReadMetrics.recordsRead,
-      metrics.shuffleWriteMetrics.bytesWritten,
-      metrics.shuffleWriteMetrics.recordsWritten,
-      metrics.memoryBytesSpilled,
-      metrics.diskBytesSpilled,
+      inputBytes,
+      inputRecords,
+      outputBytes,
+      outputRecords,
+      shuffleRead,
+      shuffleReadRecords,
+      shuffleWrite,
+      shuffleWriteRecords,
+      memoryBytesSpilled,
+      diskBytesSpilled,
       isExcluded,
       Some(peakExecutorMetrics).filter(_.isSet()),
       isExcluded)
