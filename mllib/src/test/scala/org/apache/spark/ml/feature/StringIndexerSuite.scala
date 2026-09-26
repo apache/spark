@@ -519,6 +519,26 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("StringIndexer skips rows with invalid multiple input columns") {
+    val training = Seq(("a", "e"), ("b", "f")).toDF("label1", "label2")
+    val data = Seq(
+      (0, "a", "e"),
+      (1, "c", "e"),
+      (2, "a", "g"),
+      (3, null, "e"),
+      (4, "b", "f")
+    ).toDF("id", "label1", "label2")
+
+    val model = new StringIndexer()
+      .setInputCols(Array("label1", "label2"))
+      .setOutputCols(Array("labelIndex1", "labelIndex2"))
+      .setHandleInvalid("skip")
+      .fit(training)
+
+    val transformed = model.transform(data).select("id", "labelIndex1", "labelIndex2")
+    checkAnswer(transformed, Seq(Row(0, 0.0, 0.0), Row(4, 1.0, 1.0)))
+  }
+
   test("Correctly skipping NULL and NaN values") {
     val df = Seq(("a", Double.NaN), (null, 1.0), ("b", 2.0), (null, 3.0)).toDF("str", "double")
 
