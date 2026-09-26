@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin, SQLHelper}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{IdentityBroadcastMode, RoundRobinPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -50,6 +51,20 @@ case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFall
   override def eval(input: InternalRow): Any = null.asInstanceOf[Any]
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(optKey = if (optKey.isDefined) Some(newChildren(0)) else None)
+}
+
+case class SpecializedUnary(child: Expression) extends Expression with CodegenFallback {
+  override def children: Seq[Expression] =
+    throw new IllegalStateException("children should not be materialized")
+  override def mapChildren(f: Expression => Expression): Expression = {
+    val newChild = f(child)
+    if (newChild fastEquals child) this else copy(child = newChild)
+  }
+  override def nullable: Boolean = child.nullable
+  override def dataType: DataType = child.dataType
+  override def eval(input: InternalRow): Any = child.eval(input)
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = copy(child = newChildren.head)
 }
 
 case class ComplexPlan(exprs: Seq[Seq[Expression]])
@@ -180,6 +195,78 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assert(actual === expect)
   }
 
+  test("mapChildren returns the original node when all children are fast equal") {
+    val expression = Coalesce(Seq(Literal(1), Literal(2)))
+    val visited = new ArrayBuffer[Int]()
+    val result = expression.mapChildren {
+      case literal @ Literal(value: Int, _) =>
+        visited += value
+        literal
+      case other => other
+    }
+
+    assert(result eq expression)
+    assert(visited == Seq(1, 2))
+    val leaf = Dummy(None)
+    assert(leaf.mapChildren(identity) eq leaf)
+  }
+
+  test("mapChildren returns the original node when every child is equal but a distinct copy") {
+    val expression = Coalesce(Seq(Literal(1), Literal(2)))
+    // A fresh, structurally-equal copy for every child must still return `this`, since no child
+    // changes materially.
+    val result = expression.mapChildren {
+      case Literal(value: Int, dt) => Literal(value, dt)
+      case other => other
+    }
+    assert(result eq expression)
+  }
+
+  test("mapChildren retains an equal replacement when another child changes") {
+    val tag = TreeNodeTag[String]("equal-copy")
+    val expression = Coalesce(Seq(Literal(1), Literal(2)))
+    val equalCopy = Literal(1)
+    equalCopy.setTagValue(tag, "retained")
+
+    val result = expression.mapChildren {
+      case Literal(1, _) => equalCopy
+      case Literal(2, _) => Literal(3)
+      case other => other
+    }
+
+    assert(result.children.head eq equalCopy)
+    assert(result.children.head.getTagValue(tag).contains("retained"))
+    assert(result.children(1) == Literal(3))
+  }
+
+  test("mapChildren retains non-adjacent equal replacements when a later child changes") {
+    val c0 = Literal(10)
+    val c1 = Literal(11)
+    val c2 = Literal(12)
+    val c3 = Literal(13)
+    val c4 = Literal(14)
+    val expression = Coalesce(Seq(c0, c1, c2, c3, c4))
+    val copy1 = Literal(11)
+    val copy3 = Literal(13)
+
+    // Keep a reference-equal prefix, retain non-adjacent equal copies, and change the last child.
+    val result = expression.mapChildren {
+      case l if l eq c0 => c0
+      case l if l eq c1 => copy1
+      case l if l eq c2 => c2
+      case l if l eq c3 => copy3
+      case l if l eq c4 => Literal(99)
+      case other => other
+    }
+
+    assert(result ne expression)
+    assert(result.children(0) eq c0)
+    assert(result.children(1) eq copy1)
+    assert(result.children(2) eq c2)
+    assert(result.children(3) eq copy3)
+    assert(result.children(4) == Literal(99))
+  }
+
   test("preserves origin") {
     CurrentOrigin.setPosition(1, 1)
     val add = Add(Literal(1), Literal(1))
@@ -191,6 +278,68 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
     assert(transformed.origin.line.isDefined)
     assert(transformed.origin.startPosition.isDefined)
+  }
+
+  test("transform rules see node origins and restore the previous origin") {
+    val left = CurrentOrigin.withOrigin(Origin(line = Some(1))) {
+      Literal(1)
+    }
+    val right = CurrentOrigin.withOrigin(Origin(line = Some(2))) {
+      Literal(2)
+    }
+    val expression = CurrentOrigin.withOrigin(Origin(line = Some(3))) {
+      Add(left, right)
+    }
+    val previousOrigin = Origin(line = Some(4))
+    val visited = new ArrayBuffer[Expression]()
+
+    CurrentOrigin.set(previousOrigin)
+    try {
+      expression.transformUpWithPruning(AlwaysProcess.fn) {
+        case e =>
+          assert(CurrentOrigin.get == e.origin)
+          visited += e
+          e
+      }
+      assert(visited.size == 3)
+      assert(CurrentOrigin.get == previousOrigin)
+
+      intercept[RuntimeException] {
+        expression.transformDownWithPruning(AlwaysProcess.fn) {
+          case _: Literal => throw new RuntimeException("rule failed")
+        }
+      }
+      assert(CurrentOrigin.get == previousOrigin)
+    } finally {
+      CurrentOrigin.reset()
+    }
+  }
+
+  test("transformUpWithPruning does not materialize specialized children") {
+    val expression = SpecializedUnary(Literal(1))
+    assert(expression.transformUp { case e => e } eq expression)
+  }
+
+  test("transformUpWithPruning preserves pruning and ineffective rule tracking") {
+    val expression = Add(Literal(1), Literal(2))
+    val ruleId = RuleId(0)
+    var visited = 0
+    val rule: PartialFunction[Expression, Expression] = {
+      case e =>
+        visited += 1
+        e
+    }
+
+    expression.transformUpWithPruning(AlwaysProcess.fn, ruleId)(rule)
+    assert(visited == 3)
+
+    visited = 0
+    expression.transformUpWithPruning(AlwaysProcess.fn, ruleId)(rule)
+    assert(visited == 0)
+
+    visited = 0
+    Add(Literal(1), Literal(2)).transformUpWithPruning(_ => false)(rule)
+    assert(visited == 0)
   }
 
   test("foreach up") {
