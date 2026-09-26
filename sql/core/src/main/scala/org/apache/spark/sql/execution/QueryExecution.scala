@@ -32,9 +32,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, LazyExpression, NameParameterizedQuery, UnsupportedOperationChecker}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, UnresolvedInsert, UnresolvedWith, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Call, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, UnresolvedInsert, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.transactions.TransactionUtils
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
@@ -54,6 +55,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, W
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{LazyTry, Utils, UUIDv7Generator}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -251,6 +253,20 @@ class QueryExecution(
     lazyCommandExecuted.get
   }
 
+  /*
+   * The plan carrying this query's result. A `Call` runs at `commandExecuted`, so its output lives
+   * there, not on `analyzed` (a `Call` has empty output). Read the result's columns/schema through
+   * these accessors rather than `analyzed`.
+   */
+  private[sql] def resultLogicalPlan: LogicalPlan = analyzed match {
+    case _: Call => commandExecuted
+    case _ => analyzed
+  }
+
+  def resultOutput: Seq[Attribute] = resultLogicalPlan.output
+
+  def resultSchema: StructType = resultLogicalPlan.schema
+
   private def commandExecutionName(command: Command): String = command match {
     case _: CreateTableAsSelect => "create"
     case _: ReplaceTableAsSelect => "replace"
@@ -272,8 +288,14 @@ class QueryExecution(
       tracker.setReadyForExecution()
       val (qe, result) = QueryExecution.runCommand(
         sparkSession, p, name, refreshPhaseEnabled, mode, Some(shuffleCleanupMode), Some(analyzer))
+      // A CALL statement's procedure is invoked during execution, so its result schema is only
+      // known from the executed plan; `analyzed.output` is empty for a `Call`.
+      val commandOutput = p match {
+        case _: Call => qe.executedPlan.output
+        case _ => qe.analyzed.output
+      }
       CommandResult(
-        qe.analyzed.output,
+        commandOutput,
         qe.commandExecuted,
         qe.executedPlan,
         result.toImmutableArraySeq)
@@ -287,6 +309,13 @@ class QueryExecution(
           case _ => ("multi-commands", CommandExecutionMode.SKIP) // Union / WithCTE(Union)
         }
         eagerlyExecute(node, name, mode)
+      // A runnable CALL runs at execution time like a command, but is handled outside
+      // isEagerlyExecutedCommand on purpose: a Call's output is known only after it runs, so
+      // EXECUTE IMMEDIATE must splice a Call (its ExecuteImmediateCommand payload fixes output at
+      // plan time and cannot carry it) rather than defer it. `execute` separates a runnable CALL
+      // from an EXPLAINed one, which is planned to ExplainOnlySparkPlan.
+      case c: Call if c.execute =>
+        eagerlyExecute(c, "call", CommandExecutionMode.NON_ROOT)
     }
   }
 

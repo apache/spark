@@ -112,7 +112,7 @@ private[sql] object Dataset {
     sparkSession.withActive {
       val qe = sparkSession.sessionState.executePlan(logicalPlan)
       if (!qe.isLazyAnalysis) qe.assertAnalyzed()
-      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
+      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.resultSchema))
     }
 
   def ofRows(
@@ -123,7 +123,7 @@ private[sql] object Dataset {
       val qe = new QueryExecution(
         sparkSession, logicalPlan, shuffleCleanupModeOpt = Some(shuffleCleanupMode))
       if (!qe.isLazyAnalysis) qe.assertAnalyzed()
-      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
+      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.resultSchema))
     }
 
   /** A variant of ofRows that allows passing in a tracker so we can track query parsing time. */
@@ -136,7 +136,7 @@ private[sql] object Dataset {
     val qe = new QueryExecution(
       sparkSession, logicalPlan, tracker, shuffleCleanupModeOpt = Some(shuffleCleanupMode))
     if (!qe.isLazyAnalysis) qe.assertAnalyzed()
-    new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
+    new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.resultSchema))
   }
 }
 
@@ -311,13 +311,14 @@ class Dataset[T] private[sql](
 
   private[sql] def resolve(colName: String): NamedExpression = {
     val resolver = sparkSession.sessionState.analyzer.resolver
-    queryExecution.analyzed.resolveQuoted(colName, resolver)
+    queryExecution.resultLogicalPlan.resolveQuoted(colName, resolver)
       .getOrElse(throw QueryCompilationErrors.unresolvedColumnError(colName, schema.fieldNames))
   }
 
   private[sql] def numericColumns: Seq[Expression] = {
+    val resolver = sparkSession.sessionState.analyzer.resolver
     schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
-      queryExecution.analyzed.resolveQuoted(n.name, sparkSession.sessionState.analyzer.resolver).get
+      queryExecution.resultLogicalPlan.resolveQuoted(n.name, resolver).get
     }.toImmutableArraySeq
   }
 
@@ -534,7 +535,7 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def schema: StructType = sparkSession.withActive {
-    queryExecution.analyzed.schema
+    queryExecution.resultSchema
   }
 
   /** @inheritdoc */
@@ -910,7 +911,7 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   def col(colName: String): Column = colName match {
     case "*" =>
-      Column(ResolvedStar(queryExecution.analyzed.output))
+      Column(ResolvedStar(queryExecution.resultOutput))
     case _ =>
       if (sparkSession.sessionState.conf.supportQuotedRegexColumnName) {
         colRegex(colName)
@@ -1401,7 +1402,7 @@ class Dataset[T] private[sql](
   @scala.annotation.varargs
   def drop(colNames: String*): DataFrame = {
     val resolver = sparkSession.sessionState.analyzer.resolver
-    val allColumns = queryExecution.analyzed.output
+    val allColumns = queryExecution.resultOutput
     val remainingCols = allColumns.filter { attribute =>
       colNames.forall(n => !resolver(attribute.name, n))
     }.map(attribute => Column(attribute))
@@ -1805,13 +1806,16 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   @DeveloperApi
   def sameSemantics(other: sql.Dataset[T]): Boolean = {
-    queryExecution.analyzed.sameResult(other.queryExecution.analyzed)
+    // Use resultLogicalPlan so a CALL compares its executed CommandResult (the procedure's rows),
+    // not the empty `Call` node; otherwise two calls returning different rows compare equal.
+    queryExecution.resultLogicalPlan.sameResult(other.queryExecution.resultLogicalPlan)
   }
 
   /** @inheritdoc */
   @DeveloperApi
   def semanticHash(): Int = {
-    queryExecution.analyzed.semanticHash()
+    // Same as sameSemantics: hash a CALL's executed result, not the empty `Call` node.
+    queryExecution.resultLogicalPlan.semanticHash()
   }
 
   ////////////////////////////////////////////////////////////////////////////

@@ -2327,7 +2327,7 @@ case class Call(
     procedure: LogicalPlan,
     args: Seq[Expression],
     execute: Boolean = true)
-  extends UnaryNode with ExecutableDuringAnalysis {
+  extends UnaryNode {
 
   override def output: Seq[Attribute] = Nil
 
@@ -2375,10 +2375,6 @@ case class Call(
   private def simpleString(name: String, maxFields: Int): String = {
     val argsString = truncatedString(args, ", ", maxFields)
     s"Call $name($argsString)"
-  }
-
-  override def stageForExplain(): Call = {
-    copy(execute = false)
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Call =

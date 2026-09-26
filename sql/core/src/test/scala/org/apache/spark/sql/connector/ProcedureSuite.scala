@@ -18,12 +18,14 @@
 package org.apache.spark.sql.connector
 
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicInteger
 
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkNumberFormatException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.plans.logical.Call
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, DefaultValue, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, SimpleProcedure, UnboundProcedure}
@@ -32,6 +34,8 @@ import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode
 import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.read.{LocalScan, Scan}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLType, toSQLValue}
+import org.apache.spark.sql.execution.{CommandExecutionMode, CommandResultExec}
+import org.apache.spark.sql.execution.datasources.v2.CallExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.CASE_SENSITIVE
 import org.apache.spark.sql.test.SharedSparkSession
@@ -405,6 +409,152 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     }
   }
 
+  test("procedure is not invoked during analysis") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundNonExecutableSum)
+    // NonExecutableSum.call throws. Analysis (including checkAnalysis) must not invoke it, so
+    // resolving/analyzing the CALL must not throw and must leave a Call node (not a result).
+    val plan = spark.sessionState.sqlParser.parsePlan("CALL cat.ns.sum(5, 5)")
+    val qe = spark.sessionState.executePlan(plan)
+    qe.assertAnalyzed()
+    assert(qe.analyzed.isInstanceOf[Call])
+  }
+
+  test("schema-only analysis does not execute a CALL and reports an empty schema") {
+    InvocationCounter.reset()
+    catalog.createProcedure(Identifier.of(Array("ns"), "counter"), UnboundCountingProcedure)
+    // Spark Connect's schema-only analyze path builds the plan in SKIP mode (see
+    // SparkConnectAnalyzeHandler.getDataFrameWithoutExecuting). The procedure must not be invoked,
+    // and the result schema is empty because a procedure's columns are known only after it runs.
+    val plan = spark.sessionState.sqlParser.parsePlan("CALL cat.ns.counter()")
+    val qe = spark.sessionState.executePlan(plan, CommandExecutionMode.SKIP)
+    assert(qe.resultSchema.isEmpty)
+    assert(InvocationCounter.count == 0)
+    // Executing the CALL invokes the procedure and reports its real schema (classic path).
+    assert(sql("CALL cat.ns.counter()").schema.fieldNames === Array("count"))
+    assert(InvocationCounter.count == 1)
+  }
+
+  test("procedure is invoked exactly once at execution") {
+    InvocationCounter.reset()
+    catalog.createProcedure(Identifier.of(Array("ns"), "counter"), UnboundCountingProcedure)
+    val df = sql("CALL cat.ns.counter()")
+    // CALL is eagerly executed when the DataFrame is created, exactly once.
+    assert(InvocationCounter.count == 1)
+    // Collecting returns the already-computed result and does not invoke the procedure again.
+    checkAnswer(df, Row(1) :: Nil)
+    assert(InvocationCounter.count == 1)
+  }
+
+  test("executed CALL is planned as CallExec") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    val executedPlan = sql("CALL cat.ns.sum(5, 5)").queryExecution.executedPlan
+    val commandResult = executedPlan.collectFirst { case c: CommandResultExec => c }
+    assert(commandResult.isDefined, s"expected a CommandResultExec, but got:\n$executedPlan")
+    assert(commandResult.get.commandPhysicalPlan.isInstanceOf[CallExec])
+  }
+
+  test("CALL result columns are addressable via the DataFrame API") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    val df = sql("CALL cat.ns.sum(5, 5)")
+    // The result columns are known only after execution, but must be addressable via the
+    // DataFrame API consistently with `df.schema` (they come from the executed plan, not the
+    // empty output of the `Call` logical node).
+    assert(df.schema.fieldNames === Array("out"))
+    checkAnswer(df.select(df("out")), Row(10) :: Nil)
+    checkAnswer(df.select(df.col("out")), Row(10) :: Nil)
+    checkAnswer(df.select(df.col("*")), Row(10) :: Nil)
+    assert(df.drop("out").columns.isEmpty)
+    assert(df.drop("nonexistent").columns === Array("out"))
+  }
+
+  test("CALL result columns support DataFrame numeric aggregation") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    // `groupBy().mean()` enumerates numeric columns via `Dataset.numericColumns`, which resolves
+    // against the executed plan; reading the empty `Call` output previously threw here.
+    checkAnswer(sql("CALL cat.ns.sum(5, 5)").groupBy().mean(), Row(10.0) :: Nil)
+  }
+
+  test("na functions operate on the CALL result columns") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    val df = sql("CALL cat.ns.sum(5, 5)")
+    // `na.fill`/`na.replace` enumerate columns from the executed plan's output; reading the empty
+    // `Call` output previously yielded a 0-column DataFrame with no error.
+    assert(df.na.fill(0L).columns === Array("out"))
+    assert(df.na.fill(Map("out" -> 0)).columns === Array("out"))
+    val replaced = df.na.replace(Seq("out"), Map(10 -> 20))
+    assert(replaced.columns === Array("out"))
+    checkAnswer(replaced, Row(20) :: Nil)
+  }
+
+  test("writing a CALL result to a table uses the executed result") {
+    InvocationCounter.reset()
+    catalog.createProcedure(Identifier.of(Array("ns"), "counter"), UnboundCountingProcedure)
+    val df = sql("CALL cat.ns.counter()")
+    assert(InvocationCounter.count == 1)
+    withTable("cat.ns.call_results") {
+      df.write.saveAsTable("cat.ns.call_results")
+      // Writing must reuse the already-executed result (real schema + cached rows), not re-plan the
+      // empty-output `Call` node, which would build a schemaless table and invoke the procedure
+      // a second time.
+      assert(InvocationCounter.count == 1)
+      val written = spark.table("cat.ns.call_results")
+      assert(written.schema.fieldNames === Array("count"))
+      checkAnswer(written, Row(1) :: Nil)
+    }
+  }
+
+  test("caching a CALL DataFrame does not re-invoke the procedure") {
+    InvocationCounter.reset()
+    catalog.createProcedure(Identifier.of(Array("ns"), "counter"), UnboundCountingProcedure)
+    val df = sql("CALL cat.ns.counter()")
+    assert(InvocationCounter.count == 1)
+    // Caching must reuse the already-executed result (a CommandResult holding the rows), not the
+    // empty-output `Call` node, which would invoke the procedure a second time when materialized.
+    df.persist()
+    try {
+      checkAnswer(df, Row(1) :: Nil)
+      assert(InvocationCounter.count == 1)
+    } finally {
+      df.unpersist()
+    }
+  }
+
+  test("EXPLAIN CALL does not invoke the procedure") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundNonExecutableSum)
+    // NonExecutableSum.call throws; EXPLAIN must render the CALL without invoking the procedure.
+    val explain = sql("EXPLAIN CALL cat.ns.sum(5, 5)").head().get(0).toString
+    assert(explain.contains("cat.ns.sum(5, 5)"))
+  }
+
+  test("EXECUTE IMMEDIATE 'CALL' runs the procedure and reports its result schema") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    // Without INTO the CALL is spliced by ResolveExecuteImmediate and run by the outer command
+    // path, so it reports the procedure's real schema and rows -- not the empty `Call` output.
+    val df = sql("EXECUTE IMMEDIATE 'CALL cat.ns.sum(5, 5)'")
+    assert(df.schema.fieldNames === Array("out"))
+    checkAnswer(df, Row(10) :: Nil)
+  }
+
+  test("EXECUTE IMMEDIATE 'CALL' invokes the procedure exactly once") {
+    InvocationCounter.reset()
+    catalog.createProcedure(Identifier.of(Array("ns"), "counter"), UnboundCountingProcedure)
+    val df = sql("EXECUTE IMMEDIATE 'CALL cat.ns.counter()'")
+    // The spliced CALL is eagerly executed when the DataFrame is created, exactly once.
+    assert(InvocationCounter.count == 1)
+    checkAnswer(df, Row(1) :: Nil)
+    assert(InvocationCounter.count == 1)
+  }
+
+  test("EXECUTE IMMEDIATE 'CALL' INTO assigns the procedure result to the target variable") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    withSessionVariable("call_into_v") {
+      sql("DECLARE call_into_v INT")
+      // With INTO the CALL is executed during analysis so its real output resolves the assignment.
+      sql("EXECUTE IMMEDIATE 'CALL cat.ns.sum(5, 5)' INTO call_into_v")
+      checkAnswer(sql("SELECT call_into_v"), Row(10) :: Nil)
+    }
+  }
+
   test("SPARK-51350: Implement SHOW procedures") {
     catalog.createProcedure(Identifier.of(Array("ns"), "foo"), UnboundSum)
     catalog.createProcedure(Identifier.of(Array("ns"), "abc"), UnboundLongSum)
@@ -690,6 +840,37 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
 
     override def call(input: InternalRow): java.util.Iterator[Scan] = {
       throw new UnsupportedOperationException()
+    }
+  }
+
+  object InvocationCounter {
+    private val counter = new AtomicInteger(0)
+    def reset(): Unit = counter.set(0)
+    def count: Int = counter.get()
+    def increment(): Int = counter.incrementAndGet()
+  }
+
+  object UnboundCountingProcedure extends UnboundProcedure {
+    override def name: String = "counter"
+    override def description: String = "counts invocations"
+    override def bind(inputType: StructType): BoundProcedure = CountingProcedure
+  }
+
+  object CountingProcedure extends BoundProcedure {
+    override def name: String = "counter"
+
+    override def description: String = "counts invocations"
+
+    override def isDeterministic: Boolean = false
+
+    override def parameters: Array[ProcedureParameter] = Array.empty
+
+    override def call(input: InternalRow): java.util.Iterator[Scan] = {
+      val invocations = InvocationCounter.increment()
+      val result = Result(
+        new StructType().add("count", DataTypes.IntegerType),
+        Array(InternalRow(invocations)))
+      Collections.singleton[Scan](result).iterator()
     }
   }
 
