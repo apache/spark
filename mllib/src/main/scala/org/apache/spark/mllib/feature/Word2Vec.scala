@@ -457,17 +457,23 @@ class Word2Vec extends Serializable with Logging {
       }.map { case (id, (vec, count)) =>
         BLAS.nativeBLAS.sscal(vectorSize, 1.0f / count, vec, 1)
         (id, vec)
-      }.collect()
-      var i = 0
-      while (i < synAgg.length) {
-        val index = synAgg(i)._1
-        if (index < vocabSize) {
-          Array.copy(synAgg(i)._2, 0, syn0Global, index * vectorSize, vectorSize)
-        } else {
-          Array.copy(synAgg(i)._2, 0, syn1Global, (index - vocabSize) * vectorSize, vectorSize)
-        }
-        i += 1
       }
+      val updateSyn = (_: Int, partitionSyn: Array[(Int, Array[Float])]) => {
+        var i = 0
+        while (i < partitionSyn.length) {
+          val (index, vec) = partitionSyn(i)
+          if (index < vocabSize) {
+            Array.copy(vec, 0, syn0Global, index * vectorSize, vectorSize)
+          } else {
+            Array.copy(vec, 0, syn1Global, (index - vocabSize) * vectorSize, vectorSize)
+          }
+          i += 1
+        }
+      }
+      sc.runJob(
+        synAgg,
+        (iter: Iterator[(Int, Array[Float])]) => iter.toArray,
+        updateSyn)
       bcSyn0Global.destroy()
       bcSyn1Global.destroy()
     }
