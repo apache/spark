@@ -26,27 +26,30 @@ import org.apache.spark.sql.classic
 
 trait SharedSparkSession extends QueryTest with classic.SparkSessionBinder {
 
-  // Runs func (which must trigger exactly one SQL execution) and returns the SQL metrics of that
-  // execution as a map keyed by (planNodeId, planNodeName, metricName) -> metricValue.
-  def runAndFetchMetrics(func: => Unit): Map[(Long, String, String), String] = {
+  // Runs func (which must trigger exactly one SQL execution), waits until the status store has
+  // computed the SQL metrics of that execution and returns its execution id.
+  def runAndWaitForExecution(func: => Unit): Long = {
     val statusStore = spark.sharedState.statusStore
-    val oldCount = statusStore.executionsList().size
+    // The listener updates the status store asynchronously, so the latest execution in the store
+    // may still be one from before func. Execution ids only grow, so wait for an execution with a
+    // larger id than any existing one. Execution counts cannot be used for this, as old
+    // executions are evicted once spark.sql.ui.retainedExecutions is reached.
+    val lastExecId = statusStore.executionsList().lastOption.map(_.executionId).getOrElse(-1L)
 
     func
 
-    // Wait until the new execution is started and being tracked.
     eventually(timeout(10.seconds), interval(10.milliseconds)) {
-      assert(statusStore.executionsCount() >= oldCount)
+      val exec = statusStore.executionsList().lastOption
+      assert(exec.exists(e => e.executionId > lastExecId && e.metricValues != null))
+      exec.get.executionId
     }
+  }
 
-    // Wait for listener to finish computing the metrics for the execution.
-    eventually(timeout(10.seconds), interval(10.milliseconds)) {
-      assert(statusStore.executionsList().nonEmpty &&
-        statusStore.executionsList().last.metricValues != null)
-    }
-
-    val exec = statusStore.executionsList().last
-    val execId = exec.executionId
+  // Runs func (which must trigger exactly one SQL execution) and returns the SQL metrics of that
+  // execution as a map keyed by (planNodeId, planNodeName, metricName) -> metricValue.
+  def runAndFetchMetrics(func: => Unit): Map[(Long, String, String), String] = {
+    val execId = runAndWaitForExecution(func)
+    val statusStore = spark.sharedState.statusStore
     val sqlMetrics = statusStore.planGraph(execId).allNodes
       .flatMap(n => n.metrics.map(m => (m.accumulatorId, (n.id, n.name, m.name))))
       .toMap

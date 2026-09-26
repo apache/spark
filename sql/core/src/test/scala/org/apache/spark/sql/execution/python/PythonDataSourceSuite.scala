@@ -928,27 +928,13 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     val df = spark.read.format(dataSourceName).load()
 
     val statusStore = spark.sharedState.statusStore
-    val oldCount = statusStore.executionsList().size
-
-    df.collect()
-
-    // Wait until the new execution is started and being tracked.
-    while (statusStore.executionsCount() < oldCount) {
-      Thread.sleep(100)
-    }
-
-    // Wait for listener to finish computing the metrics for the execution.
-    while (statusStore.executionsList().isEmpty ||
-      statusStore.executionsList().last.metricValues == null) {
-      Thread.sleep(100)
-    }
+    val execId = runAndWaitForExecution(df.collect())
 
     val executedPlan = df.queryExecution.executedPlan.collectFirst {
       case p: BatchScanExec => p
     }
     assert(executedPlan.isDefined)
 
-    val execId = statusStore.executionsList().last.executionId
     val metrics = statusStore.executionMetrics(execId)
     val pythonDataSent = executedPlan.get.metrics("pythonDataSent")
     val pythonDataReceived = executedPlan.get.metrics("pythonDataReceived")

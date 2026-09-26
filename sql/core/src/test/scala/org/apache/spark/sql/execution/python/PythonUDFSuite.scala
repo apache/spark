@@ -99,10 +99,9 @@ class PythonUDFSuite extends SharedSparkSession {
 
     val df = base.groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)))
-    df.count()
+    val lastExecId = runAndWaitForExecution(df.count())
 
     val statusStore = spark.sharedState.statusStore
-    val lastExecId = statusStore.executionsList().last.executionId
     val executionMetrics = statusStore.execution(lastExecId).get.metrics.mkString
     for (metric <- pythonSQLMetrics) {
       assert(executionMetrics.contains(metric))
@@ -183,10 +182,9 @@ class PythonUDFSuite extends SharedSparkSession {
 
     val df = base.groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)))
-    df.count()
+    val lastExecId = runAndWaitForExecution(df.count())
 
     val statusStore = spark.sharedState.statusStore
-    val lastExecId = statusStore.executionsList().last.executionId
     val executionMetrics = statusStore.execution(lastExecId).get.metrics.mkString
     for (metric <- pythonSQLMetrics) {
       assert(executionMetrics.contains(metric),
