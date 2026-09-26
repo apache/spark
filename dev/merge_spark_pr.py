@@ -111,6 +111,10 @@ BRANCH_PREFIX = "PR_TOOL"
 SKIP_VERSION_CHECK = os.environ.get("SKIP_VERSION_CHECK", "")
 # Path of this script relative to the repo root, used to fetch the canonical copy from master.
 MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
+# Optional pre-push check offered by maybe_compile_check: a clean SBT compile of the main and
+# test sources run on the merged tree, i.e. exactly what would be pushed. Slow on a cold build,
+# but catches mis-resolved conflicts and PRs that bit-rotted after their CI ran.
+COMPILE_CHECK_CMD = ["build/sbt", ";clean;compile;test:compile"]
 
 
 def semver_branch_rank(name):
@@ -828,6 +832,82 @@ def clean_up():
             git.run("git branch -D %s" % branch)
 
 
+def maybe_compile_check(ref_name):
+    """Offer to run a clean SBT compile of main and test sources on `ref_name` before pushing.
+
+    The merged (or cherry-picked) tree at `ref_name` is exactly what would be pushed, so a
+    clean compile here catches breakage -- a mis-resolved conflict, or a PR that bit-rotted
+    against the target branch after its CI ran -- before it lands on the Apache repo.
+    Declining skips the check; a failed compile aborts the merge unless the committer
+    explicitly overrides. The build's output streams to the terminal so a long compile does
+    not look like a hang.
+
+    Declining runs no build:
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> with (
+    ...     patch("builtins.input", return_value=""),
+    ...     patch("subprocess.call") as run,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_MERGE_PR_1_MASTER")
+    >>> run.call_count
+    0
+
+    Accepting runs the SBT compile once; a green build returns quietly:
+
+    >>> with (
+    ...     patch("builtins.input", return_value="y"),
+    ...     patch("subprocess.call", return_value=0) as run,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_MERGE_PR_1_MASTER")
+    >>> run.call_count
+    1
+    >>> run.call_args[0][0] == COMPILE_CHECK_CMD
+    True
+
+    A failed compile aborts the merge (SystemExit from fail) when the override is declined:
+
+    >>> with (
+    ...     patch("builtins.input", side_effect=["y", ""]),
+    ...     patch("subprocess.call", return_value=1),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         maybe_compile_check("PR_TOOL_MERGE_PR_1_MASTER")
+    ...         aborted = False
+    ...     except SystemExit:
+    ...         aborted = True
+    >>> aborted
+    True
+
+    The experts-only override continues past a failed compile:
+
+    >>> with (
+    ...     patch("builtins.input", side_effect=["y", "y"]),
+    ...     patch("subprocess.call", return_value=1),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_MERGE_PR_1_MASTER")
+    """
+    if (
+        get_input(
+            "Run '%s' on %s before pushing? (y/N): " % (" ".join(COMPILE_CHECK_CMD), ref_name),
+            ["y", "n", ""],
+        )
+        != "y"
+    ):
+        return
+    print("Running '%s' ..." % " ".join(COMPILE_CHECK_CMD))
+    if subprocess.call(COMPILE_CHECK_CMD) == 0:
+        print("Compile check passed.")
+        return
+    continue_maybe("Compile check failed on %s. Push anyway? (experts only!)" % ref_name)
+
+
 # merge the requested PR and return the merge hash
 def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors):
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
@@ -883,6 +963,8 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     merge_message_flags += ["-m", authors]
 
     git.run(["git", "commit", '--author="%s"' % primary_author] + merge_message_flags)
+
+    maybe_compile_check(target_branch_name)
 
     continue_maybe(
         "Merge complete (local ref %s). Push to %s?" % (target_branch_name, PUSH_REMOTE_NAME)
@@ -945,6 +1027,8 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
             )
         else:
             print("Cherry-pick already completed manually; continuing with the backport.")
+
+    maybe_compile_check(pick_branch_name)
 
     continue_maybe(
         "Pick complete (local ref %s). Push to %s?" % (pick_branch_name, PUSH_REMOTE_NAME)
