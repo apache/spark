@@ -32,8 +32,8 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInt
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Deduplicate, DeduplicateWithinWatermark, Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.classic.ClassicConversions._
-import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
@@ -323,6 +323,22 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         .pivot(Column("id"), Seq(1, 2, 3))
         .agg(min(lit(1)).as("agg1"))
     comparePlans(connectPlan2, sparkPlan2)
+  }
+
+  test("SPARK-59684: pivot by a struct column without explicit values") {
+    val schema = new StructType()
+      .add("v", IntegerType)
+      .add("s", new StructType().add("a", IntegerType))
+    val data = Seq(1, 2).map { i =>
+      new GenericInternalRow(Array[Any](i, new GenericInternalRow(Array[Any](i * 10))))
+    }
+    val connectPlan =
+      createLocalRelationProto(schema, data).pivot("v".protoAttr)("s".protoAttr, Seq.empty)(
+        proto_min(proto.Expression.newBuilder().setLiteral(toLiteralProto(1)).build())
+          .as("agg1"))
+    val result = Dataset.ofRows(spark, transform(connectPlan))
+    assert(result.columns.toSeq === Seq("v", "{10}", "{20}"))
+    assert(result.orderBy("v").collect().toSeq === Seq(Row(1, 1, null), Row(2, null, 1)))
   }
 
   test("GroupingSets expressions") {
