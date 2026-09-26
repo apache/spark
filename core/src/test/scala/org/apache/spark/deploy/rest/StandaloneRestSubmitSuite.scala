@@ -31,7 +31,7 @@ import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark._
-import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
+import org.apache.spark.deploy.{DriverEnvironment, SparkSubmit, SparkSubmitArguments}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState._
 import org.apache.spark.deploy.master.RecoveryState
@@ -431,20 +431,30 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
 
   test("client does not send 'SPARK_ENV_LOADED' env var by default") {
     val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_ENV_LOADED" -> "1")
-    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    val filteredVariables = DriverEnvironment.filterSystemEnvironment(environmentVariables)
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
   }
 
   test("client does not send 'SPARK_HOME' env var by default") {
     val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_HOME" -> "1")
-    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    val filteredVariables = DriverEnvironment.filterSystemEnvironment(environmentVariables)
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
   }
 
   test("client does not send 'SPARK_CONF_DIR' env var by default") {
     val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_CONF_DIR" -> "1")
-    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    val filteredVariables = DriverEnvironment.filterSystemEnvironment(environmentVariables)
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
+  }
+
+  test("SPARK-59404: client does not send 'SPARK_LOCAL_(IP|HOSTNAME)' env vars by default") {
+    val environmentVariables = Map(
+      "SPARK_VAR" -> "1",
+      "SPARK_LOCAL_IP" -> "1",
+      "SPARK_LOCAL_HOSTNAME" -> "1",
+      "SPARK_LOCAL_DIRS" -> "1")
+    val filteredVariables = DriverEnvironment.filterSystemEnvironment(environmentVariables)
+    assert(filteredVariables == Map("SPARK_VAR" -> "1", "SPARK_LOCAL_DIRS" -> "1"))
   }
 
   test("SPARK-49033: Support server-side environment variable replacement in REST Submission API") {
@@ -457,6 +467,23 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     val servlet = new StandaloneSubmitRequestServlet(null, null, null)
     val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
     assert(desc.command.environment.get("AWS_ENDPOINT_URL") === Some("2.13"))
+  }
+
+  test("SPARK-59404: server-side filter drops 'SPARK_LOCAL_(IP|HOSTNAME)' from the request") {
+    val request = new CreateSubmissionRequest
+    request.appResource = ""
+    request.mainClass = ""
+    request.appArgs = Array.empty[String]
+    request.sparkProperties = Map.empty[String, String]
+    // A client that does not go through RestSubmissionClient can send anything, so the
+    // server drops these itself rather than trusting the client to have done it.
+    request.environmentVariables = Map(
+      "SPARK_LOCAL_IP" -> "10.0.0.1",
+      "SPARK_LOCAL_HOSTNAME" -> "submitter",
+      "SPARK_LOCAL_DIRS" -> "/tmp/spark")
+    val servlet = new StandaloneSubmitRequestServlet(null, null, null)
+    val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+    assert(desc.command.environment === Map("SPARK_LOCAL_DIRS" -> "/tmp/spark"))
   }
 
   test("SPARK-49034: Support server-side sparkProperties replacement in REST Submission API") {
