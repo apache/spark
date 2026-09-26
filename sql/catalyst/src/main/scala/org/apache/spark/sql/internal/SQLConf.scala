@@ -584,6 +584,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val GENERATOR_PRESERVE_SELECT_LIST_ORDER =
+    buildConf("spark.sql.generator.preserveSelectListOrder")
+      .internal()
+      .doc("When true, independent generator expressions in a SELECT list are extracted in " +
+        "SELECT-list order. When false, Spark extracts the first generator whose children are " +
+        "resolved, which can reorder generator evaluation.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()
