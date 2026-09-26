@@ -1870,10 +1870,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-33301: the split methods take the aggregation buffer row of a keyed aggregate") {
+  test("SPARK-33301: a CASE WHEN under a keyed aggregate takes its input, not the buffer row") {
     // The aggregate's update code reads the buffer from `INPUT_ROW` and the input from local
-    // variables; both are passed to the split methods, which sit inside the method the aggregate
-    // splits its own code into.
+    // variables. The CASE WHEN reads only the input, so its split methods take that and not the
+    // buffer row, which is passed only to code that reads it.
     withTempView("t") {
       spark.range(1000).selectExpr("id % 13 AS k", "id % 300 AS v").createOrReplaceTempView("t")
       val query = s"SELECT k, sum(${largeCaseWhen("v", 300)}) AS s FROM t GROUP BY k"
@@ -1883,9 +1883,52 @@ class WholeStageCodegenSuite extends SharedSparkSession
         case _ => false
       })
       assert(splitsCaseWhen(df))
+      assert(!stageCodes(df).exists(c =>
+        "private byte \\w*caseWhen_\\d\\w*\\([^)]*InternalRow ".r.findFirstIn(c.body).nonEmpty))
       val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
         sql(query).collect().toSeq
       }
+      checkAnswer(df, expected)
+    }
+  }
+
+  test("SPARK-33301: a large CASE WHEN in a join condition compiles") {
+    // A join leaves `INPUT_ROW` naming the row of its build side, a local of the loop over the
+    // matches, while it generates the code of a condition; the split methods must not take it
+    // where the code does not read it. Under testing a stage that fails to compile throws.
+    withTempView("l", "r") {
+      spark.range(200).selectExpr("id % 20 AS k", "id % 300 AS v").createOrReplaceTempView("l")
+      spark.range(100).selectExpr("id % 20 AS k", "id % 7 AS w").createOrReplaceTempView("r")
+      val condition = s"${largeCaseWhen("l.v", 300)} + r.w > 50"
+      Seq(
+        s"SELECT /*+ MERGE(r) */ l.k, l.v, r.w FROM l JOIN r ON l.k = r.k AND $condition",
+        s"SELECT /*+ BROADCAST(r) */ l.k, l.v, r.w FROM l JOIN r ON l.k = r.k AND $condition",
+        // The part of the condition on the streamed side alone is generated before the loop.
+        s"SELECT /*+ MERGE(r) */ l.k, l.v, r.w FROM l LEFT JOIN r " +
+          s"ON l.k = r.k AND ${largeCaseWhen("l.v", 300)} > 50"
+      ).foreach { query =>
+        val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          sql(query).collect().toSeq
+        }
+        checkAnswer(sql(query), expected)
+      }
+    }
+  }
+
+  test("SPARK-33301: the split methods read the slots of compacted mutable state as fields") {
+    // `ExpandExec` keeps its string outputs in a compacted array of mutable state, so the CASE
+    // WHEN above a ROLLUP reads `mutableStateArray_0[i]`, a field that needs no parameter.
+    withTempView("t") {
+      spark.range(300)
+        .selectExpr("id % 300 AS v", "concat('g', cast(id % 3 AS string)) AS g")
+        .createOrReplaceTempView("t")
+      val query =
+        s"SELECT g, sum(${largeCaseWhen("v", 300)}) AS s FROM t GROUP BY ROLLUP(g, v % 2)"
+      val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        sql(query).collect().toSeq
+      }
+      val df = sql(query)
+      assert(splitsCaseWhen(df))
       checkAnswer(df, expected)
     }
   }

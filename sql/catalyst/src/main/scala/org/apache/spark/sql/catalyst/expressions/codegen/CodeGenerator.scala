@@ -1183,23 +1183,47 @@ class CodegenContext extends Logging {
       foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";"),
       sources: Seq[Expression] = Nil): String = {
     val inputs = if (currentVars != null) {
-      if (SQLConf.get.wholeStageSplitExpressions) wholeStageSplitArguments(sources) else None
+      // The walk that finds the arguments is only worth doing for code that will be split.
+      if (SQLConf.get.wholeStageSplitExpressions && buildCodeBlocks(expressions).length > 1) {
+        wholeStageSplitArguments(sources, extraArguments)
+      } else {
+        None
+      }
     } else {
       Option(INPUT_ROW).map(row => Seq("InternalRow" -> row))
     }
     inputs match {
       case Some(arguments) =>
-        splitExpressions(
+        val before = if (currentVars != null && discardableFunctions != null) {
+          classFunctions.map { case (c, fs) => c -> fs.keySet.toSet }.toMap
+        } else {
+          null
+        }
+        val code = splitExpressions(
           expressions,
           funcName,
           arguments ++ extraArguments,
           returnType,
           makeSplitFunction,
           foldFunctions)
+        if (before != null) {
+          classFunctions.foreach { case (c, fs) =>
+            val existing = before.getOrElse(c, Set.empty[String])
+            fs.keys.filterNot(existing).foreach(f => discardableFunctions += c -> f)
+          }
+        }
+        code
       case None =>
         expressions.mkString("\n")
     }
   }
+
+  /**
+   * The functions split out under whole stage codegen while subexpression elimination generates
+   * code it may discard, as (class, function); null outside that generation. See
+   * `subexpressionEliminationForWholeStageCodegen`.
+   */
+  private var discardableFunctions: mutable.ArrayBuffer[(String, String)] = null
 
   /**
    * The arguments of a function split out of whole stage generated code so that the code generated
@@ -1218,37 +1242,51 @@ class CodegenContext extends Logging {
    * It refuses, as `CommonExprSlots.methodArgs` does and for the reasons it gives:
    *  - an input the operator has not evaluated yet, whose code was generated into this code and
    *    names locals of the operator producing the row;
-   *  - a value no parameter can carry: a `SimpleExprValue`, or a variable naming a slot of a
-   *    compacted mutable state array;
-   *  - more parameter slots than a method can take.
+   *  - a value no parameter can carry: a `SimpleExprValue`;
+   *  - more parameter slots than a method can take, `extraArguments` included.
    * And two it has of its own:
-   *  - a state for a node whose `genCode` generates its child instead of reading the state
-   *    (`Alias`, `Collate`, an identity `Cast`), so that what the code reads below it is not in
-   *    the state;
+   *  - a state for a node that overrides `genCode` and so may generate its child instead of reading
+   *    the state (`Alias`, `Collate` and an identity `Cast` do), so that what the code reads below
+   *    it is not in the state;
    *  - a `LambdaVariable`, whose value is a local declared by the loop of an object expression.
+   * A slot of a compacted mutable state array is a field like any other and needs no argument.
+   * `INPUT_ROW` is passed only when the code reads it: through an input the operator has not put
+   * in `currentVars`, or through a `CodegenFallback`, which evaluates its children from the row.
+   * An operator may leave `INPUT_ROW` naming a local that is not in scope where this code is, as
+   * a join does after generating the variables of its build side.
    */
-  private def wholeStageSplitArguments(sources: Seq[Expression]): Option[Seq[(String, String)]] = {
+  private def wholeStageSplitArguments(
+      sources: Seq[Expression],
+      extraArguments: Seq[(String, String)]): Option[Seq[(String, String)]] = {
     val args = mutable.LinkedHashMap.empty[String, VariableValue]
+    def isName(name: String): Boolean = name.nonEmpty &&
+      Character.isJavaIdentifierStart(name.head) && name.forall(Character.isJavaIdentifierPart)
     def canPass(v: ExprValue): Boolean = v match {
       case local: VariableValue =>
         val name = local.variableName
-        val isName = name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
-          name.forall(Character.isJavaIdentifierPart)
-        // A field needs no argument, and passing one is refused by `splitExpressions`.
-        if (isName && !mutableStateNames.contains(name)) {
-          args.getOrElseUpdate(name, local)
+        val slot = name.indexOf('[')
+        if (slot > 0 && name.endsWith("]") && mutableStateNames.contains(name.take(slot)) &&
+            name.substring(slot + 1, name.length - 1).forall(Character.isDigit)) {
+          // A slot of a compacted mutable state array, which is a field.
+          true
+        } else {
+          // A field needs no argument, and passing one is refused by `splitExpressions`.
+          if (isName(name) && !mutableStateNames.contains(name)) {
+            args.getOrElseUpdate(name, local)
+          }
+          isName(name)
         }
-        isName
       case _: GlobalValue | _: LiteralValue => true
       case _ => false
     }
+    // `Expression.genCode` is what reads a state; a node that overrides it may not.
     def readsSubExprState(e: Expression): Boolean = e match {
-      case _: Alias | _: Collate => false
       case c: Cast => !DataType.equalsStructurally(c.child.dataType, c.dataType)
-      case _ => true
+      case _ => e.getClass.getMethod("genCode", classOf[CodegenContext]).getDeclaringClass ==
+        classOf[Expression]
     }
-    var possible = sources.nonEmpty &&
-      (INPUT_ROW == null || canPass(JavaCode.variable(INPUT_ROW, classOf[InternalRow])))
+    var needsRow = false
+    var possible = sources.nonEmpty
     val visited = mutable.HashSet.empty[Long]
     // The definitions of a `With` in the trees walked here, which are in `currentCommonExprs`
     // only while that `With` is generated.
@@ -1265,6 +1303,11 @@ class CodegenContext extends Logging {
             case ref: BoundReference if currentVars(ref.ordinal) != null =>
               val input = currentVars(ref.ordinal)
               possible = input.code == EmptyBlock && canPass(input.value) && canPass(input.isNull)
+            case _: BoundReference =>
+              needsRow = true
+            case f: CodegenFallback =>
+              needsRow |= !f.isInstanceOf[LeafExpression]
+              toVisit.pushAll(f.children)
             case _: LambdaVariable =>
               possible = false
             case w: With =>
@@ -1281,9 +1324,15 @@ class CodegenContext extends Logging {
           }
       }
     }
+    if (needsRow) {
+      possible &&= INPUT_ROW != null && canPass(JavaCode.variable(INPUT_ROW, classOf[InternalRow]))
+    }
     val params = args.values.toSeq
-    Option.when(
-      possible && isValidParamLength(calculateParamLengthFromExprValues(params))) {
+    val extraSlots = extraArguments.map { case (javaType, _) =>
+      if (javaType == JAVA_LONG || javaType == JAVA_DOUBLE) 2 else 1
+    }.sum
+    Option.when(possible &&
+        isValidParamLength(calculateParamLengthFromExprValues(params) + extraSlots)) {
       params.map(v => typeName(v.javaType) -> v.variableName)
     }
   }
@@ -1628,7 +1677,12 @@ class CodegenContext extends Logging {
     // elimination.
     val commonExprs = equivalentExpressions.getCommonSubexpressions
 
-    val nonSplitCode = {
+    // The code of the non-split pass is discarded when the split pass below is taken, and with it
+    // the calls to any function split out of it; those functions are removed then.
+    val outerDiscardable = discardableFunctions
+    val nonSplitFunctions = mutable.ArrayBuffer.empty[(String, String)]
+    discardableFunctions = nonSplitFunctions
+    val nonSplitCode = try {
       val allStates = mutable.ArrayBuffer.empty[SubExprEliminationState]
       commonExprs.map { expr =>
         withSubExprEliminationExprs(localSubExprEliminationExprsForNonSplit.toMap) {
@@ -1648,6 +1702,8 @@ class CodegenContext extends Logging {
         }
       }
       allStates.toSeq
+    } finally {
+      discardableFunctions = outerDiscardable
     }
 
     // For some operators, they do not require all its child's outputs to be evaluated in advance.
@@ -1662,6 +1718,9 @@ class CodegenContext extends Logging {
     val needSplit = nonSplitCode.map(_.eval.code.length).sum > SQLConf.get.methodSplitThreshold
     val (subExprsMap, exprCodes) = if (needSplit) {
       if (inputVarsForAllFuncs.map(calculateParamLengthFromExprValues).forall(isValidParamLength)) {
+        nonSplitFunctions.foreach { case (className, funcName) =>
+          classFunctions(className).remove(funcName).foreach(classSize(className) -= _.length)
+        }
         val localSubExprEliminationExprs =
           mutable.HashMap.empty[ExpressionEquals, SubExprEliminationState]
 
