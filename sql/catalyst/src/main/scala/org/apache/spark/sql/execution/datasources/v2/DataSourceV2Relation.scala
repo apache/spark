@@ -116,8 +116,8 @@ case class DataSourceV2Relation(
     identifier: Option[Identifier],
     options: CaseInsensitiveStringMap,
     timeTravelSpec: Option[TimeTravelSpec] = None,
-    // Bound at analysis so sameResult / cache reuse distinguish preserve-only vs standard
-    // CHAR/VARCHAR scans. None means no scan mode was bound.
+    // Analysis binds this mode so that sameResult comparisons and cache reuse distinguish
+    // preserve-only from standard CHAR/VARCHAR scans. None means no scan mode was bound.
     charVarcharScanMode: Option[CharVarcharScanMode] = None)
   extends DataSourceV2RelationBase(table, output, catalog, identifier, options, timeTravelSpec)
   with ExposesMetadataColumns {

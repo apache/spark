@@ -3371,7 +3371,7 @@ class DataSourceV2DataFrameSuite
           sql(s"INSERT INTO $t VALUES ('abcdef')")
         }
         withSQLConf(preserveConf: _*) {
-          spark.table(t).createOrReplaceTempView("v")
+          spark.table(t).select("v").createOrReplaceTempView("v")
         }
         withSQLConf(standardConf: _*) {
           checkError(

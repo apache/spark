@@ -377,7 +377,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   /**
    * Re-caches every entry whose plan contains the given catalog-less [[DataSourceV2Relation]].
    * The scan mode is ignored only for this mutation-specific match so an unbound write target
-   * invalidates preserve-native and standard cache entries without weakening normal cache identity.
+   * invalidates preserve-only and standard cache entries without weakening normal cache identity.
    */
   def recacheByV2Relation(spark: SparkSession, relation: DataSourceV2Relation): Unit = {
     recacheByCondition(spark, cd => cd.plan.exists {

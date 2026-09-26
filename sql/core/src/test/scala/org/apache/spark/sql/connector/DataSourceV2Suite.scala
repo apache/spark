@@ -523,18 +523,22 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
 
       appendData("a", "x")
       val preserveRead = withSQLConf(preserveConf: _*) {
-        readData.persist(MEMORY_ONLY)
+        val read = readData.persist(MEMORY_ONLY)
+        checkAnswer(read, Row("a", "x"))
+        read
       }
       val standardRead = withSQLConf(standardConf: _*) {
-        readData.persist(DISK_ONLY)
+        val read = readData.persist(DISK_ONLY)
+        checkAnswer(read, Row("a", "x"))
+        read
       }
       try {
         appendData("b", "y")
         withSQLConf(preserveConf: _*) {
-          checkAnswer(preserveRead, Seq(Row("a", "x"), Row("b", "y")))
+          checkAnswer(readData, Seq(Row("a", "x"), Row("b", "y")))
         }
         withSQLConf(standardConf: _*) {
-          checkAnswer(standardRead, Seq(Row("a", "x"), Row("b", "y")))
+          checkAnswer(readData, Seq(Row("a", "x"), Row("b", "y")))
         }
         assert(spark.sharedState.cacheManager.lookupCachedData(preserveRead).get
           .cachedRepresentation.cacheBuilder.storageLevel === MEMORY_ONLY)

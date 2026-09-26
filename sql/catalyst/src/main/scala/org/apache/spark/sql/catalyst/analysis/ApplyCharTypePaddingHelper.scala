@@ -72,7 +72,7 @@ object ApplyCharTypePaddingHelper {
 
   /**
    * Returns whether `project` is a read-side CHAR/VARCHAR projection generated for `relation`
-   * under either scan mode. Used to strip a stale policy Project before rebinding.
+   * under either scan mode. Callers use this to strip a stale policy Project before rebinding.
    */
   private[sql] def isAnyReadSidePaddingProject(
       project: Project,

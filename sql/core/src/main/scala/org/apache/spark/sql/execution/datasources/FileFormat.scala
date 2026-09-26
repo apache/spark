@@ -167,8 +167,9 @@ trait FileFormat {
   }
 
   /**
-   * Same as [[buildReaderWithPartitionValues]], with the CHAR/VARCHAR mode bound during analysis.
-   * The mode is encoded only while crossing the legacy seven-argument virtual method boundary.
+   * Behaves like [[buildReaderWithPartitionValues]], but uses the CHAR/VARCHAR mode bound during
+   * analysis. The mode is encoded only while crossing the legacy seven-argument virtual method
+   * boundary.
    */
   private[sql] def buildReaderWithPartitionValues(
       sparkSession: SparkSession,
@@ -287,7 +288,8 @@ object FileFormat {
   val OPTION_RETURNING_BATCH = "returning_batch"
 
   /**
-   * Engine-private entry used only at the legacy seven-argument reader boundary.
+   * This engine-private Hadoop configuration key is used only at the legacy seven-argument reader
+   * boundary.
    */
   private[sql] val CHAR_VARCHAR_SCAN_MODE = "__spark_sql_char_varchar_scan_mode"
 

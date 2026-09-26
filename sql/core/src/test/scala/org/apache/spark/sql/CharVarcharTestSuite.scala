@@ -2629,12 +2629,12 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     val formatName = classOf[TrackingOrcFileFormat].getName
     // A delegating subclass overrides the public seven-argument reader and calls `super`. That
     // `super` call must retain the analyzed scan mode bridged across the legacy signature, so a
-    // standard-semantics scan cannot be silently downgraded to native preserve behavior. Cover
+    // standard-semantics scan cannot be silently downgraded to preserve-only behavior. Cover
     // both the row and vectorized ORC readers.
     Seq(true, false).foreach { vectorizedReaderEnabled =>
       withSQLConf(
           SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString) {
-        // In-length value: assert the subclass override actually runs under both bound modes.
+        // Value within the length limit: assert the subclass override runs under both bound modes.
         withTempPath { dir =>
           val path = dir.getCanonicalPath
           Seq("ab").toDF("v").write.mode("overwrite").orc(path)

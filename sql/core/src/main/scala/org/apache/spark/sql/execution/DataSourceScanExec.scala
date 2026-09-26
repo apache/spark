@@ -715,10 +715,12 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
  * @param tableIdentifier Identifier for the table in the metastore.
  * @param disableBucketedScan Disable bucketed scan based on physical query plan, see rule
  *                            [[DisableUnnecessaryBucketedScan]] for details.
- * @param charVarcharScanMode Analyzed CHAR/VARCHAR scan mode. Compared by `sameResult` so
- *                            preserve-only and standard scans are not reused. A bound mode uses
- *                            the mode-aware reader overload; `None` uses the legacy overload.
- *                            ORC maps these paths to constrained or physical STRING decoding.
+ * @param charVarcharScanMode This is the CHAR/VARCHAR scan mode captured during analysis.
+ *                            `sameResult`
+ *                            compares it so preserve-only and standard scans are not reused. A
+ *                            bound mode uses the mode-aware reader overload; `None` uses the
+ *                            legacy overload. ORC maps these paths to constrained or physical
+ *                            STRING decoding.
  */
 case class FileSourceScanExec(
     @transient override val relation: HadoopFsRelation,
@@ -762,8 +764,9 @@ case class FileSourceScanExec(
     val readFile: (PartitionedFile) => Iterator[InternalRow] = charVarcharScanMode match {
       // A bound mode routes through the mode-aware overload regardless of the concrete file
       // format. Its default implementation bridges the mode across the legacy signature via an
-      // engine-private Hadoop entry and dispatches virtually, so a format subclass (and its
-      // `super` call) observes the analyzed mode instead of defaulting to preserve-native.
+      // engine-private Hadoop configuration entry and dispatches virtually, so a format subclass
+      // (and its `super` call) observes the analyzed mode instead of falling back to preserve-only
+      // semantics.
       case Some(mode) =>
         relation.fileFormat.buildReaderWithPartitionValues(
           sparkSession = relation.sparkSession,
