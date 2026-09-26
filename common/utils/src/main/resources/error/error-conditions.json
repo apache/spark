@@ -7087,6 +7087,12 @@
     ],
     "sqlState" : "42939"
   },
+  "RESULT_ROWS_MISMATCH" : {
+    "message" : [
+      "External UDF output row count was <output_length>; expected <input_length>. An external UDF must produce exactly one row for each input row."
+    ],
+    "sqlState" : "21000"
+  },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the <newRoutineType> <routineName> because a <existingRoutineType> of that name already exists.",
@@ -9066,6 +9072,11 @@
       "EXTERNAL_UDF" : {
         "message" : [
           "External UDF expressions are disabled. Set <config> to true to enable planning."
+        ]
+      },
+      "EXTERNAL_UDF_IN_BARRIER_TASK" : {
+        "message" : [
+          "External UDF execution in a barrier task without callback transport."
         ]
       },
       "EXTERNAL_UDF_IN_ON_CLAUSE" : {
