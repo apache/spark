@@ -756,6 +756,23 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual(0, self._eval_python_count(projected))
             self.assertEqual([r[0] for r in projected.collect()], ["yes", "no", "no"])
 
+    def test_udf_transpile_truthiness_survives_a_narrowed_parameter(self):
+        # A parameter read by a bare `if x` (SPARK-56925) AND by an operator that needs a
+        # narrower category -- `//` wants integral, `/` wants fractional -- carries that
+        # refined category rather than plain "numeric". Which kind of number it is cannot
+        # change whether the number is zero, so the refinement must not cost the lowering:
+        # each half lowered alone while the combination lowered neither.
+        floor_if = lambda x: (x // 2) if x else 0  # noqa: E731
+        div_if = lambda x: (x / 2) if x else 0.0  # noqa: E731
+        self.assertEqual(
+            [0, 0, 1, -1, -2],
+            self._native_vals(floor_if, LongType(), "a long", [(0,), (1,), (2,), (-2,), (-3,)]),
+        )
+        self.assertEqual(
+            [0.0, 0.5, -1.5],
+            self._native_vals(div_if, DoubleType(), "a double", [(0.0,), (1.0,), (-3.0,)]),
+        )
+
     def test_udf_transpile_falls_back_for_bare_truthiness_test(self):
         # For categories the transpiler cannot lower to a truthiness expression
         # (currently "binary"), bare `if x:` must still fall back to interpreted
