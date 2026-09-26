@@ -1917,6 +1917,71 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     checkInfoPopulated(listener, logUrlMap, processId)
   }
 
+  test("SPARK-59711: LiveExecutorStageSummary accumulates all exposed task metrics") {
+    // Give every field a distinct, non-zero value derived from `base` so a dropped or
+    // mismatched term in addTaskMetrics is caught.
+    def buildMetrics(base: Long): TaskMetrics = {
+      val metrics = TaskMetrics.empty
+      metrics.inputMetrics.incBytesRead(base + 1)
+      metrics.inputMetrics.incRecordsRead(base + 2)
+      metrics.outputMetrics.setBytesWritten(base + 3)
+      metrics.outputMetrics.setRecordsWritten(base + 4)
+      metrics.shuffleReadMetrics.incRemoteBytesRead(base + 5)
+      metrics.shuffleReadMetrics.incLocalBytesRead(base + 6)
+      metrics.shuffleReadMetrics.incRecordsRead(base + 7)
+      metrics.shuffleWriteMetrics.incBytesWritten(base + 8)
+      metrics.shuffleWriteMetrics.incRecordsWritten(base + 9)
+      metrics.incMemoryBytesSpilled(base + 10)
+      metrics.incDiskBytesSpilled(base + 11)
+      metrics
+    }
+
+    def assertSummary(stage: StageInfo, executorId: String, metrics: TaskMetrics): Unit = {
+      val execs = new AppStatusStore(store).executorSummary(stage.stageId, stage.attemptNumber())
+      val info = execs(executorId)
+      assert(info.inputBytes === metrics.inputMetrics.bytesRead)
+      assert(info.inputRecords === metrics.inputMetrics.recordsRead)
+      assert(info.outputBytes === metrics.outputMetrics.bytesWritten)
+      assert(info.outputRecords === metrics.outputMetrics.recordsWritten)
+      assert(info.shuffleRead === metrics.shuffleReadMetrics.totalBytesRead)
+      assert(info.shuffleReadRecords === metrics.shuffleReadMetrics.recordsRead)
+      assert(info.shuffleWrite === metrics.shuffleWriteMetrics.bytesWritten)
+      assert(info.shuffleWriteRecords === metrics.shuffleWriteMetrics.recordsWritten)
+      assert(info.memoryBytesSpilled === metrics.memoryBytesSpilled)
+      assert(info.diskBytesSpilled === metrics.diskBytesSpilled)
+    }
+
+    val listener = new AppStatusListener(store, conf, true)
+    listener.onExecutorAdded(createExecutorAddedEvent(1))
+    val stage = new StageInfo(1, 0, "stage", 1, Nil, Nil, "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    listener.onJobStart(SparkListenerJobStart(1, time, Seq(stage), null))
+    time += 1
+    stage.submissionTime = Some(time)
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
+
+    val task = createTasks(1, Array("1")).head
+    listener.onTaskStart(SparkListenerTaskStart(stage.stageId, stage.attemptNumber(), task))
+
+    // Heartbeat metrics are a cumulative snapshot for the task so far.
+    val heartbeat = buildMetrics(100)
+    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(
+      task.executorId,
+      Seq((task.taskId, stage.stageId, stage.attemptNumber(),
+        heartbeat.accumulators().map(AccumulatorSuite.makeInfo)))))
+    assertSummary(stage, task.executorId, heartbeat)
+
+    // Task end reports a higher cumulative snapshot. The summary must equal that snapshot,
+    // so both the heartbeat delta and the task-end delta were applied.
+    val taskEnd = buildMetrics(200)
+    time += 1
+    task.markFinished(TaskState.FINISHED, time)
+    listener.onTaskEnd(SparkListenerTaskEnd(
+      stage.stageId, stage.attemptNumber(), "taskType", Success, task,
+      new ExecutorMetrics, taskEnd))
+    assertSummary(stage, task.executorId, taskEnd)
+  }
+
   test("SPARK-41187: Stage should be removed from liveStages to avoid deadExecutors accumulated") {
 
     val listener = new AppStatusListener(store, conf, true)

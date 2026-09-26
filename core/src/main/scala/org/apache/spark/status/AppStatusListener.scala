@@ -771,7 +771,7 @@ private[spark] class AppStatusListener(
       esummary.failedTasks += failedDelta
       esummary.killedTasks += killedDelta
       if (metricsDelta != null) {
-        esummary.metrics = LiveEntityHelpers.addMetrics(esummary.metrics, metricsDelta)
+        esummary.addTaskMetrics(metricsDelta)
       }
 
       val isLastTask = stage.activeTasksPerExecutor(event.taskInfo.executorId) == 0
@@ -974,7 +974,7 @@ private[spark] class AppStatusListener(
           maybeUpdate(stage, now)
 
           val esummary = stage.executorSummary(event.execId)
-          esummary.metrics = LiveEntityHelpers.addMetrics(esummary.metrics, delta)
+          esummary.addTaskMetrics(delta)
           maybeUpdate(esummary, now)
         }
       }
