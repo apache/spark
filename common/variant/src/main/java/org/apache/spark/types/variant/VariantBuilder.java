@@ -527,6 +527,15 @@ public class VariantBuilder {
   }
 
   private void appendVariantImpl(byte[] value, byte[] metadata, int pos) {
+    appendVariantImpl(value, metadata, pos, /* needCanonicalization */ false);
+  }
+
+  // Shared re-emit walk for `appendVariant` and `canonicalize`. Object/array structure is rebuilt
+  // identically in both modes. When `needCanonicalization` is true, scalar values are
+  // canonicalized as they are re-emitted (see `appendCanonicalizedScalar`); otherwise they are
+  // copied byte-for-byte, which is the behavior `appendVariant` and its callers rely on.
+  private void appendVariantImpl(
+      byte[] value, byte[] metadata, int pos, boolean needCanonicalization) {
     checkIndex(pos, value.length);
     int basicType = value[pos] & BASIC_TYPE_MASK;
     switch (basicType) {
@@ -541,7 +550,7 @@ public class VariantBuilder {
             String key = getMetadataKey(metadata, id);
             int newId = addKey(key);
             fields.add(new FieldEntry(key, newId, writePos - start));
-            appendVariantImpl(value, metadata, elementPos);
+            appendVariantImpl(value, metadata, elementPos, needCanonicalization);
           }
           finishWritingObject(start, fields);
           return null;
@@ -555,16 +564,347 @@ public class VariantBuilder {
             int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
             int elementPos = dataStart + offset;
             offsets.add(writePos - start);
-            appendVariantImpl(value, metadata, elementPos);
+            appendVariantImpl(value, metadata, elementPos, needCanonicalization);
           }
           finishWritingArray(start, offsets);
           return null;
         });
         break;
       default:
+        if (needCanonicalization) {
+          appendCanonicalizedScalar(value, pos);
+        } else {
+          shallowAppendVariantImpl(value, pos);
+        }
+        break;
+    }
+  }
+
+  // Canonicalize and append a single scalar value: integers re-emitted at the smallest int width,
+  // integer-valued decimals promoted to the integer encoding, decimal trailing zeros stripped,
+  // -0.0 mapped to +0.0, and short strings short-encoded -- so e.g. `1.0`, `1`, and a wide-encoded
+  // `1` all produce byte-equal output. The scalar canonicalization rules that the read-side check
+  // (`isValueCanonical`) must mirror are factored into shared helpers so the two cannot drift.
+  private void appendCanonicalizedScalar(byte[] value, int pos) {
+    switch (VariantUtil.getType(value, pos)) {
+      case LONG:
+        appendLong(VariantUtil.getLong(value, pos));
+        break;
+      case DECIMAL: {
+        BigDecimal bd = VariantUtil.getDecimal(value, pos);
+        if (decimalPromotesToLong(bd)) {
+          appendLong(bd.longValue());
+        } else {
+          // Fractional, or too large for a long: emit as a decimal (negative scale coerced to 0).
+          appendDecimal(canonicalDecimalForm(bd));
+        }
+        break;
+      }
+      case FLOAT:
+        appendFloat(canonicalizeFloat(VariantUtil.getFloat(value, pos)));
+        break;
+      case DOUBLE:
+        appendDouble(canonicalizeDouble(VariantUtil.getDouble(value, pos)));
+        break;
+      case STRING:
+        appendString(VariantUtil.getString(value, pos));
+        break;
+      default:
         shallowAppendVariantImpl(value, pos);
         break;
     }
+  }
+
+  // Return a canonical Variant.
+  // Two Variants are semantically equal iff their canonical forms are byte-equal,
+  // so canonicalizing lets the byte-equality machinery (hash aggregate bucketing,
+  // hash partitioning) group and compare Variants by value rather than by
+  // their incidental physical encoding.
+  //
+  // The metadata dictionary is rebuilt with its keys sorted by (the same order
+  // finishWritingObject already uses for object fields, so the two stay
+  // consistent) and unused entries stripped, with field ids remapped to the sorted positions.
+  public static Variant canonicalize(Variant v) {
+    // Fast path: an already-canonical input is returned unchanged. isCanonical rejects sub-variants
+    // (pos != 0) -- a view into a parent's shared value/metadata -- so those fall through to the
+    // rebuild below, which reads the element at v.pos and produces a standalone canonical Variant.
+    if (isCanonical(v)) {
+      return v;
+    }
+    return doCanonicalize(v);
+  }
+
+  static Variant doCanonicalize(Variant v) {
+    VariantBuilder builder = new VariantBuilder(/* allowDuplicateKeys */ false);
+    builder.buildCanonicalized(v.value, v.metadata, v.pos);
+    return builder.result();
+  }
+
+  private void buildCanonicalized(byte[] value, byte[] metadata, int pos) {
+    int numKeys = getMetadataNumKeys(metadata);
+    boolean[] seen = new boolean[numKeys];
+    ArrayList<byte[]> keys = new ArrayList<>();
+    collectAllObjectKeys(value, metadata, pos, seen, keys);
+    keys.sort((a, b) -> compareKeys(a, b));
+    for (byte[] key : keys) {
+      addKey(new String(key, StandardCharsets.UTF_8));
+    }
+    appendVariantImpl(value, metadata, pos, /* needCanonicalization */ true);
+  }
+
+  private void collectAllObjectKeys(
+      byte[] value, byte[] metadata, int pos, boolean[] seen, ArrayList<byte[]> keys) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    switch (basicType) {
+      case OBJECT:
+        handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+          for (int i = 0; i < size; ++i) {
+            int id = readUnsigned(value, idStart + idSize * i, idSize);
+            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+            int elementPos = dataStart + offset;
+            if (id >= seen.length) {
+              throw malformedVariant();
+            }
+            if (!seen[id]) {
+              seen[id] = true;
+              keys.add(getMetadataKeyBytes(metadata, id));
+            }
+            collectAllObjectKeys(value, metadata, elementPos, seen, keys);
+          }
+          return null;
+        });
+        break;
+      case ARRAY:
+        handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
+          for (int i = 0; i < size; ++i) {
+            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+            int elementPos = dataStart + offset;
+            collectAllObjectKeys(value, metadata, elementPos, seen, keys);
+          }
+          return null;
+        });
+        break;
+      default:
+        break;
+    }
+  }
+
+  // Return true iff `v` is ALREADY in the exact byte form that `buildCanonicalized` would produce
+  // -- i.e. calling `canonicalize(v)` is a no-op. A sub-variant (pos != 0) is never canonical (its
+  // value/metadata are a view into a parent). Intended as a read-side fast
+  // path so already-canonical Variants skip the allocation-heavy rebuild (dictionary sort +
+  // re-serialize).
+  //
+  // Checked here:
+  //   - metadata dictionary: keys sorted + deduped, minimal offset width, no unused keys;
+  //   - objects/arrays: field ids ascending, offsets exact-cumulative, id/offset widths minimal;
+  //   - scalars:
+  //     - minimal int width
+  //     - decimal integer-promoted, trailing-zero-free, minimal width
+  //     - float/double the exact bytes appendFloat/appendDouble emit
+  //     - string short-encoded when it fits.
+  public static boolean isCanonical(Variant v) {
+    if (v.pos != 0) {
+      return false;
+    }
+    byte[] value = v.value;
+    byte[] metadata = v.metadata;
+    checkIndex(0, metadata.length);
+    int metaOffsetSize = ((metadata[0] >> 6) & 0x3) + 1;
+    int numKeys = readUnsigned(metadata, 1, metaOffsetSize);
+
+    if (readUnsigned(metadata, 1 + metaOffsetSize, metaOffsetSize) != 0) {
+      return false;
+    }
+
+    if (numKeys > 1) {
+      byte[] prevKey = getMetadataKeyBytes(metadata, 0);
+      for (int id = 1; id < numKeys; ++id) {
+        byte[] key = getMetadataKeyBytes(metadata, id);
+        if (compareKeys(prevKey, key) >= 0) {
+          return false;
+        }
+        prevKey = key;
+      }
+    }
+    int lastOffset = readUnsigned(metadata, 1 + (numKeys + 1) * metaOffsetSize, metaOffsetSize);
+    // No trailing bytes: canonicalize emits exactly this length (header + dict-size field +
+    // (numKeys + 1) offsets + the lastOffset string bytes)
+    if (metadata.length != 1 + (numKeys + 2) * metaOffsetSize + lastOffset) {
+      return false;
+    }
+    // numKeys > lastOffset is possible if we have an empty key.
+    long maxSize = Math.max(lastOffset, numKeys);
+    if ((metadata[0] & 0xFF) != (VERSION | ((minIntWidth(maxSize) - 1) << 6))) {
+      return false;
+    }
+    boolean[] referenced = new boolean[numKeys];
+    if (!isValueCanonical(value, metadata, 0, referenced)) {
+      return false;
+    }
+    // No trailing bytes after the value (canonicalize emits an exact-length value).
+    if (VariantUtil.valueSize(value, 0) != value.length) {
+      return false;
+    }
+    for (int id = 0; id < numKeys; ++id) {
+      if (!referenced[id]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Value-traversal half of `isCanonical`. Returns false on the first non-canonical node.
+  private static boolean isValueCanonical(
+      byte[] value, byte[] metadata, int pos, boolean[] referenced) {
+    switch (VariantUtil.getType(value, pos)) {
+      case OBJECT:
+        return handleObject(value, pos,
+            (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+          // Size (element-count) field is 1 byte unless size > U8_MAX, else 4 (never 2 or 3).
+          // idStart - pos - 1 is its stored width.
+          if (idStart - pos - 1 != (size > U8_MAX ? U32_SIZE : 1)) {
+            return false;
+          }
+          // Field ids strictly ascending: with a sorted dictionary, canon emits fields in key
+          // order, and key order == id order. This also rejects duplicate keys (equal ids).
+          int prevId = -1;
+          int dataSize = 0;
+          for (int i = 0; i < size; ++i) {
+            int id = readUnsigned(value, idStart + idSize * i, idSize);
+            if (id <= prevId || id >= referenced.length) {
+              return false;
+            }
+            prevId = id;
+            referenced[id] = true;
+            // Offsets must be the exact running data size (no gaps or padding).
+            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+            if (offset != dataSize) {
+              return false;
+            }
+            int elementPos = dataStart + offset;
+            if (!isValueCanonical(value, metadata, elementPos, referenced)) {
+              return false;
+            }
+            dataSize += VariantUtil.valueSize(value, elementPos);
+          }
+          int lastOffset = readUnsigned(value, offsetStart + offsetSize * size, offsetSize);
+          if (lastOffset != dataSize) {
+            return false;
+          }
+          int maxId = size == 0 ? 0 : prevId;
+          return idSize == minIntWidth(maxId) && offsetSize == minIntWidth(dataSize);
+        });
+      case ARRAY:
+        return handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
+          // Same minimal size-field-width rule as objects (offsetStart - pos - 1 is the width).
+          if (offsetStart - pos - 1 != (size > U8_MAX ? U32_SIZE : 1)) {
+            return false;
+          }
+          int dataSize = 0;
+          for (int i = 0; i < size; ++i) {
+            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+            if (offset != dataSize) {
+              return false;
+            }
+            int elementPos = dataStart + offset;
+            if (!isValueCanonical(value, metadata, elementPos, referenced)) {
+              return false;
+            }
+            dataSize += VariantUtil.valueSize(value, elementPos);
+          }
+          int lastOffset = readUnsigned(value, offsetStart + offsetSize * size, offsetSize);
+          if (lastOffset != dataSize) {
+            return false;
+          }
+          return offsetSize == minIntWidth(dataSize);
+        });
+      case LONG:
+        // Must use the smallest int width `appendLong` would pick.
+        return VariantUtil.getTypeInfo(value, pos)
+            == canonicalLongTypeInfo(VariantUtil.getLong(value, pos));
+      case DECIMAL: {
+        BigDecimal onDisk = VariantUtil.getDecimalWithOriginalScale(value, pos);
+        BigDecimal stripped = onDisk.stripTrailingZeros();
+        // A decimal that promotes to a long is stored as the wrong type -> not canonical.
+        if (decimalPromotesToLong(stripped)) {
+          return false;
+        }
+        BigDecimal canonForm = canonicalDecimalForm(stripped);
+        return onDisk.scale() == canonForm.scale()
+            && VariantUtil.getTypeInfo(value, pos) == canonicalDecimalTypeInfo(canonForm);
+      }
+      case FLOAT: {
+        // Canonical iff the stored 4 bytes are exactly what `appendFloat` would write.
+        int rawBits = (int) VariantUtil.readLong(value, pos + 1, 4);
+        float f = Float.intBitsToFloat(rawBits);
+        return rawBits == Float.floatToIntBits(canonicalizeFloat(f));
+      }
+      case DOUBLE: {
+        // Same as FLOAT, over 8 bytes.
+        long rawBits = VariantUtil.readLong(value, pos + 1, 8);
+        double d = Double.longBitsToDouble(rawBits);
+        return rawBits == Double.doubleToLongBits(canonicalizeDouble(d));
+      }
+      case STRING:
+        // A short string is always canonical (its length <= MAX_SHORT_STR_SIZE by construction). A
+        // LONG_STR is canonical only when its length exceeds the short-string cap.
+        if ((value[pos] & BASIC_TYPE_MASK) == SHORT_STR) {
+          return true;
+        }
+        return readUnsigned(value, pos + 1, U32_SIZE) > MAX_SHORT_STR_SIZE;
+      default:
+        return true;
+    }
+  }
+
+  // Smallest unsigned integer byte width that can hold `value`.
+  private static int minIntWidth(long value) {
+    if (value <= U8_MAX) return 1;
+    if (value <= U16_MAX) return 2;
+    if (value <= U24_MAX) return 3;
+    return 4;
+  }
+
+  // Smallest long type width that can hold `l`.
+  private static int canonicalLongTypeInfo(long l) {
+    if (l == (byte) l) return INT1;
+    if (l == (short) l) return INT2;
+    if (l == (int) l) return INT4;
+    return INT8;
+  }
+
+  // Smallest decimal type width that can hold `d`.
+  private static int canonicalDecimalTypeInfo(BigDecimal d) {
+    if (d.scale() <= MAX_DECIMAL4_PRECISION && d.precision() <= MAX_DECIMAL4_PRECISION) {
+      return DECIMAL4;
+    } else if (d.scale() <= MAX_DECIMAL8_PRECISION && d.precision() <= MAX_DECIMAL8_PRECISION) {
+      return DECIMAL8;
+    } else {
+      return DECIMAL16;
+    }
+  }
+
+  // -0.0 canonicalizes to +0.0.
+  private static float canonicalizeFloat(float f) {
+    return f == 0.0f ? 0.0f : f;
+  }
+
+  private static double canonicalizeDouble(double d) {
+    return d == 0.0d ? 0.0d : d;
+  }
+
+  // True iff a stripped decimal is a whole number that fits in a long.
+  private static boolean decimalPromotesToLong(BigDecimal stripped) {
+    return stripped.scale() <= 0
+        && stripped.compareTo(LONG_MIN_AS_DECIMAL) >= 0
+        && stripped.compareTo(LONG_MAX_AS_DECIMAL) <= 0;
+  }
+
+  // The decimal canon emits for a non-promoted value.
+  private static BigDecimal canonicalDecimalForm(BigDecimal stripped) {
+    return stripped.scale() < 0 ? stripped.setScale(0) : stripped;
   }
 
   private void appendWithDeletionImpl(
@@ -1235,10 +1575,7 @@ public class VariantBuilder {
   // `[0, SIZE_LIMIT]`.
   private int getIntegerSize(int value) {
     assert value >= 0 && value <= SIZE_LIMIT;
-    if (value <= U8_MAX) return 1;
-    if (value <= U16_MAX) return 2;
-    if (value <= U24_MAX) return 3;
-    return 4;
+    return minIntWidth(value);
   }
 
   private void parseFloatingPoint(JsonParser parser) throws IOException {
