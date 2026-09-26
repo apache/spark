@@ -323,6 +323,40 @@ def _eval_python_nodes(df):
     return counts
 
 
+def _python_udf_expr_count(df):
+    """Count PythonUDF expression nodes across every Python-eval operator in ``df``.
+
+    Operator counts alone no longer say whether a call was lowered: a chain of UDFs is
+    evaluated as a pipeline inside ONE operator, so three chained UDFs and one UDF both
+    show a single ArrowEvalPythonExec. What still distinguishes them is how many PythonUDF
+    expressions that operator holds -- a lowered call is gone from the tree, while the alias
+    naming it survives, so this counts nodes rather than matching the plan string.
+    """
+    total = 0
+    stack = [df._jdf.queryExecution().executedPlan()]
+    while stack:
+        node = stack.pop()
+        name = node.getClass().getSimpleName()
+        if name == "AdaptiveSparkPlanExec":
+            stack.append(node.executedPlan())
+            continue
+        if name.endswith("EvalPythonExec"):
+            udfs = node.udfs()
+            for i in range(udfs.size()):
+                exprs = [udfs.apply(i)]
+                while exprs:
+                    expr = exprs.pop()
+                    if expr.getClass().getSimpleName() == "PythonUDF":
+                        total += 1
+                    expr_children = expr.children()
+                    for j in range(expr_children.size()):
+                        exprs.append(expr_children.apply(j))
+        children = node.children()
+        for i in range(children.size()):
+            stack.append(children.apply(i))
+    return total
+
+
 @unittest.skipIf(is_remote_only(), "UDF transpilation is only supported in non-Connect Spark.")
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
@@ -598,15 +632,26 @@ class ArrowUDFTranspilePlanShapeTests(ArrowUDFTranspileTestsMixin, ReusedSQLTest
 
     def test_middle_of_arrow_udf_chain_is_not_elided(self):
         # ConvertToCatalyst keeps a transpilable UDF whose inputs are all Python UDFs,
-        # because UDF -> UDF -> UDF pipelines into one Arrow batch. So the chain must show
-        # two Arrow operators, not three and not one.
+        # because UDF -> UDF -> UDF pipelines into one Arrow batch.
+        #
+        # Asserted on the PythonUDF expression count, not the operator count: the chain is
+        # evaluated as a pipeline inside a single ArrowEvalPythonExec, so the operator count
+        # is 1 whether or not the middle call was lowered. Three PythonUDF expressions means
+        # all three still run in Python; lowering the middle one leaves 1, since the option
+        # replaces it and the outer call's argument becomes plain arithmetic.
         with self.sql_conf(_TRANSPILE_ON):
             outer = _arrow_udf(floor_halve, LongType())
             middle = _arrow_udf(add_one, LongType())
             inner = _arrow_udf(floor_third, LongType())
             self._assert_transpiled(middle, "the middle UDF of the chain")
             df = self.spark.range(10).select(outer(middle(inner("id"))))
-            self.assertEqual(2, _eval_python_nodes(df)["ArrowEvalPythonExec"])
+            self.assertEqual(1, _eval_python_nodes(df)["ArrowEvalPythonExec"])
+            self.assertEqual(3, _python_udf_expr_count(df))
+            # The contrast: the same middle UDF over a column rather than a UDF IS lowered,
+            # so only the outer call is left. Without this the assertion above would also
+            # pass if nothing were ever lowered.
+            lowered = self.spark.range(10).select(outer(middle("id")))
+            self.assertEqual(1, _python_udf_expr_count(lowered))
 
     def test_output_schema_is_identical_with_and_without_transpilation(self):
         # ConvertToCatalyst substitutes the option with no cast back to the declared return
