@@ -35,6 +35,70 @@ keeps the option matrix small; prefer doing so. To bound plan growth,
 functions with more than three untyped parameters only emit the
 all-numeric and all-string variants.
 
+Constructs that short-circuit in Python -- ``and`` / ``or`` and chained
+comparisons such as ``0 <= x <= 100`` -- fold with ``&`` / ``|``. That fold is
+what is meant to keep the ``raise_error`` NULL guard in a later operand from
+firing on rows Python never reaches, since ``And`` skips its right operand when
+the left is exactly ``false`` (and ``Or`` when the left is exactly ``true``) in
+both ``eval`` and ``doGenCode``. Note the "exactly": a NULL left operand still
+evaluates the right. ``and`` / ``or`` operands must therefore be provably boolean
+and non-NULL (see ``_is_never_null_boolean``); chain links need no such gate,
+because every comparison lowering is total.
+
+That short-circuit is an EVALUATION-time property only, and it does not by itself
+survive the optimizer. Four divergences, all measured rather than reasoned about.
+None of them is specific to chained comparisons: the ``and`` form of each repro
+(``a < b and b < c`` for ``a < b < c``) predates this lowering and diverges
+identically, so a chain is new syntax reaching an existing hole.
+
+* Predicate pushdown through a JOIN -- CLOSED by SPARK-58627. ``Optimizer``
+  partitions on ``cond.deterministic && !cond.throwable``, and the fold is
+  splittable by ``splitConjunctivePredicates``, so while ``RaiseError`` still
+  reported non-throwable a guard could be pushed below a join and run on rows the
+  join drops. That hit a PURE chain with no ``and`` / ``or``:
+  ``lambda a, b, c: a < b < c`` over a join returned False correctly under
+  ``select`` but raised USER_RAISED_EXCEPTION under ``filter``. ``RaiseError``
+  now overrides ``throwable``, and the same repro returns Python's answer.
+  ``test_udf_transpile_boolop_short_circuits`` is the regression test.
+* Predicate pushdown through an AGGREGATE or WINDOW -- OPEN, and the reason the
+  bullet above says "through a JOIN". Only the three join sites test
+  ``!cond.throwable``; the Aggregate arm is explicit that it does not
+  ("We can push down deterministic predicate through Aggregate, including
+  throwable predicate"), and the Window / Union / EventTimeWatermark arms
+  partition on ``_.deterministic`` alone. Measured:
+  ``groupBy("b", "c").agg(sum("a").alias("sa")).filter(lambda: sa < b < c)``
+  splits the fold, pushing the ``b < c`` guard BELOW the ``Aggregate`` while
+  ``sa < b`` stays above, and raises. The Aggregate arm's own reasoning is about
+  ROWS -- grouping keys cannot gain distinct values -- and says nothing about
+  conjunct ORDER, which is the only thing a guard in a fold relies on.
+* BooleanSimplification -- OPEN, and it breaks the fold two different ways. It
+  consults neither ``deterministic`` nor ``throwable``. Common-factor elimination
+  for disjunction (``(a && b) || (a && c) => a && (b || c)``) hoists a shared
+  guard to the FRONT of a conjunction, where it evaluates unconditionally:
+  ``(a < b < c) or (d < b < c)`` on ``(5, 1, None, 7)`` raises where Python
+  returns False. Its absorption case (``(a && b) || b => b``) is worse, because
+  it drops a guard instead of moving it: ``(a < b < c) or (b < c)`` on
+  ``(None, 0, 1)`` returns True where Python raises TypeError, with only one of
+  the two ``raise_error`` guards surviving. A silently wrong answer, not a
+  spurious error.
+* Subexpression elimination -- OPEN. ``spark.sql.subexpressionElimination.enabled``
+  defaults true while ``...skipForShortcutExpr`` defaults FALSE, so a conjunct
+  living only in a short-circuited position is hoisted and evaluated
+  unconditionally. ``Expression.throwable`` does NOT help -- this rule never
+  consults it, so SPARK-58627 does not cover this one.
+* NaN -- OPEN. Spark orders NaN above every value and treats ``NaN = NaN`` as
+  true where Python does neither (SPARK-58781).
+
+Subexpression elimination and BooleanSimplification are INDEPENDENTLY sufficient,
+which is worth knowing before reaching for a conf to prove a theory. On the
+``(a < b < c) or (d < b < c)`` repro, each of ``skipForShortcutExpr=true``,
+``subexpressionElimination.enabled=false`` and excluding ``BooleanSimplification``
+still raises on its own; only excluding ``BooleanSimplification`` AND disabling
+one of the subexpression-elimination levers returns Python's answer.
+
+A chain duplicates every interior operand by construction, so it manufactures the
+common subexpressions and the common factors these rules need. Treat them as live.
+
 ``len(s)`` lowers to Catalyst ``length`` for a string operand (SPARK-55214).
 Other ``len`` arguments (numbers, lists, ...) stay interpreted Python.
 ``len(None)`` raises (via ``raise_error`` on NULL), matching CPython.
@@ -90,42 +154,6 @@ inline a deterministic one again where that is faster, as they may for any other
 expression. A draw is never inlined, because those rules check determinism.
 
 An argument the body never reads is not computed at all.
-
-Constructs that short-circuit in Python -- ``and`` / ``or`` and chained
-comparisons such as ``0 <= x <= 100`` -- fold with ``&`` / ``|``. That fold is
-what is meant to keep the ``raise_error`` NULL guard in a later operand from
-firing on rows Python never reaches, since ``And`` skips its right operand when
-the left is exactly ``false`` (and ``Or`` when the left is exactly ``true``) in
-both ``eval`` and ``doGenCode``. Note the "exactly": a NULL left operand still
-evaluates the right. ``and`` / ``or`` operands must therefore be provably boolean
-and non-NULL (see ``_is_never_null_boolean``); chain links need no such gate,
-because every comparison lowering is total.
-
-That short-circuit is an EVALUATION-time property only, and it does not by itself
-survive the optimizer. Three divergences, all measured rather than reasoned about:
-
-* Predicate pushdown -- CLOSED by SPARK-58627. ``Optimizer`` partitions on
-  ``cond.deterministic && !cond.throwable``, and the fold is splittable by
-  ``splitConjunctivePredicates``, so while ``RaiseError`` still reported
-  non-throwable a guard could be pushed below a join and run on rows the join
-  drops. That hit a PURE chain with no ``and`` / ``or``:
-  ``lambda a, b, c: a < b < c`` over a join returned False correctly under
-  ``select`` but raised USER_RAISED_EXCEPTION under ``filter``. ``RaiseError``
-  now overrides ``throwable``, and the same repro returns Python's answer.
-  ``test_udf_transpile_boolop_short_circuits`` is the regression test.
-* Subexpression elimination -- OPEN. ``spark.sql.subexpressionElimination.enabled``
-  defaults true while ``...skipForShortcutExpr`` defaults FALSE, so a conjunct
-  living only in a short-circuited position is hoisted and evaluated
-  unconditionally. Measured on a plain ``select``, no join and no filter:
-  ``(a < b < c) or (d > 0 and b < c)`` on ``(5, 1, None, -1)`` raises where
-  Python returns False, and setting ``skipForShortcutExpr=true`` alone fixes it.
-  ``Expression.throwable`` does NOT help -- this rule never consults it, so
-  SPARK-58627 does not cover this one.
-* NaN -- OPEN. Spark orders NaN above every value and treats ``NaN = NaN`` as
-  true where Python does neither (SPARK-58781).
-
-A chain duplicates every interior operand by construction, so it manufactures
-the common subexpressions the second bullet needs. Treat that one as live.
 """
 
 import ast
@@ -300,8 +328,11 @@ def _is_never_null_boolean(node: ast.AST) -> bool:
     bare ``None`` operand is not enough because a ternary can evaluate to one
     (``(True if c else None) and x``).
 
-    ``not`` and if/ternary *tests* keep using ``_is_definitely_boolean``: they
-    wrap the operand in ``coalesce``, so they handle NULL explicitly.
+    ``not`` and if/ternary *tests* do not need this: both wrap the operand in
+    ``coalesce``, so both handle NULL explicitly. ``not`` gates on
+    ``_is_definitely_boolean``; an if/ternary test that fails that gate falls to
+    ``_truthiness_col`` (SPARK-56925), which coalesces in every category, so a
+    bare ``if x`` is total too.
 
     This answers "would it be NULL?", not "can it be lowered at all" -- it says
     True for shapes ``_convert_chunk`` goes on to refuse, such as ``x in "abc"``.
@@ -355,14 +386,18 @@ class CatalystTranspiler(AbstractTranspiler):
 
     variety = "catalyst"
 
-    # Class-level default so the lowering helpers can be driven directly (tests
-    # call ``_convert_chunk`` without going through ``_transpile_from_ast``, which
-    # is what normally resets this).
-    _lowered_comparisons = 0
-
     def __init__(self) -> None:
         self._param_categories: dict[int, str] = {}
         self._category_cache: dict[int, str] = {}
+        # Every field above is per-lowering state that ``_transpile_from_ast``
+        # resets on entry; they are seeded here so an instance is usable before
+        # the first lowering. A subclass overriding that seam -- it is the
+        # documented override point for
+        # ``spark.sql.experimental.optimizer.pyTranspilers`` -- has to reset ALL
+        # of them, not just the cache: a stale counter is a monotonic budget that
+        # refuses part-way through the variant list and silently emits fewer
+        # options.
+        self._lowered_comparisons: int = 0
 
     # TODO (SPARK-55218): handle implicit-None return bodies like
     # ``def f(x): x + x`` -- no return statement means return None;
