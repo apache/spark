@@ -176,6 +176,20 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     })
   }
 
+  test("SPARK-58969: Launcher client dependency aliases", k8sTestTag, MinikubeTag) {
+    tryDepsTest({
+      val sourceFileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
+      val expectedAlias = "expected-alias.txt"
+      assert(sourceFileName != expectedAlias)
+      sparkAppConf.set("spark.files", s"$HOST_PATH/$sourceFileName#$expectedAlias")
+      val examplesJar = Utils.getTestFileAbsolutePath(getExamplesJarName(), sparkHomeDir)
+      runSparkRemoteCheckAndVerifyCompletion(
+        appResource = examplesJar,
+        appArgs = Array(expectedAlias),
+        timeout = Option(DEPS_TIMEOUT))
+    })
+  }
+
   test(
     "SPARK-40817: Check that remote files do not get discarded in spark.files",
     k8sTestTag,
