@@ -252,6 +252,29 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(Decimal(10, 2, 0) - Decimal(-90, 2, 0) === Decimal(100, 3, 0))
   }
 
+  test("compact long multiply fast path matches the BigDecimal path") {
+    // `Decimal(bigDecimal)` is always expanded (decimalVal != null), so `*` on the expanded
+    // copies takes the BigDecimal reference path, while `*` on the compact operands takes the
+    // long fast path; both must agree on value AND scale. Small operands exercise the fast path;
+    // large operands / high scales push the product out of the compact range -> BigDecimal path.
+    def checkMul(a: Decimal, b: Decimal): Unit = {
+      val ref = Decimal(a.toJavaBigDecimal) * Decimal(b.toJavaBigDecimal)
+      val fast = a * b
+      assert(
+        fast.toJavaBigDecimal.compareTo(ref.toJavaBigDecimal) === 0 && fast.scale === ref.scale,
+        s"$a * $b -> fast=${fast.toJavaBigDecimal} (scale ${fast.scale}), " +
+          s"ref=${ref.toJavaBigDecimal} (scale ${ref.scale})")
+    }
+
+    val unscaleds = Seq(0L, 1L, -1L, 7L, -7L, 12345L, -98765L, 999999999L, -999999999L,
+      1000000000L, 123456789012345L, 999999999999999999L, -999999999999999999L)
+    val scales = Seq(0, 1, 2, 5, 9, 18)
+    for (ua <- unscaleds; sa <- scales; ub <- unscaleds; sb <- scales) {
+      checkMul(Decimal(ua, DecimalType.MAX_PRECISION, sa),
+        Decimal(ub, DecimalType.MAX_PRECISION, sb))
+    }
+  }
+
   test("quot") {
     assert(Decimal(100).quot(Decimal(100)) === Decimal(BigDecimal("1")))
     assert(Decimal(100).quot(Decimal(33)) === Decimal(BigDecimal("3")))
