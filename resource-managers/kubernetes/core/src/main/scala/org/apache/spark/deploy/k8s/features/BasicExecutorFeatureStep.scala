@@ -181,6 +181,7 @@ private[spark] class BasicExecutorFeatureStep(
           ++ kubernetesConf.environment
           ++ sparkAuthSecret
           ++ Seq(ENV_CLASSPATH -> kubernetesConf.get(EXECUTOR_CLASS_PATH).orNull)
+          ++ Seq(ENV_EXECUTOR_LIBRARY_PATH -> kubernetesConf.get(EXECUTOR_LIBRARY_PATH).orNull)
           ++ allOpts) ++
       KubernetesUtils.buildEnvVarsWithFieldRef(
         Seq(
