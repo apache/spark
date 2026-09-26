@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
 import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -79,13 +80,53 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   }
 
   /**
+   * Returns whether `fieldName` names the column a datasource writes corrupt records to.
+   *
+   * The comparison goes through `SQLConf.resolver`, so it honours `spark.sql.caseSensitive` like
+   * every other identifier comparison in the analyzer. Matching on `==` instead leaves the field
+   * unrecognised whenever the schema and the `columnNameOfCorruptRecord` option differ only in
+   * case: the column is then treated as ordinary data, and the record that should have been
+   * captured in it is lost.
+   */
+  def isCorruptRecordColumn(fieldName: String, columnNameOfCorruptRecord: String): Boolean = {
+    SQLConf.get.resolver(fieldName, columnNameOfCorruptRecord)
+  }
+
+  /**
+   * Returns `schema` without the column a datasource writes corrupt records to, which is the
+   * schema the underlying record parser is given. The corrupt record column holds the raw text
+   * of a record that failed to parse, so it is never read from the record itself.
+   */
+  def schemaWithoutCorruptRecordColumn(
+      schema: StructType,
+      columnNameOfCorruptRecord: String): StructType = {
+    StructType(schema.filterNot(f => isCorruptRecordColumn(f.name, columnNameOfCorruptRecord)))
+  }
+
+  /**
+   * Resolves the field a datasource writes corrupt records to, honouring
+   * `spark.sql.caseSensitive` the same way the rest of schema resolution does. Returns None when
+   * the schema declares no such field, which is the normal case for a reader that does not ask
+   * for the corrupt record.
+   */
+  def corruptRecordFieldIndex(
+      schema: StructType,
+      columnNameOfCorruptRecord: String): Option[Int] = {
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      schema.getFieldIndex(columnNameOfCorruptRecord)
+    } else {
+      schema.getFieldIndexCaseInsensitive(columnNameOfCorruptRecord)
+    }
+  }
+
+  /**
    * A convenient function for schema validation in datasources supporting
    * `columnNameOfCorruptRecord` as an option.
    */
   def verifyColumnNameOfCorruptRecord(
       schema: StructType,
       columnNameOfCorruptRecord: String): Unit = {
-    schema.getFieldIndex(columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
+    corruptRecordFieldIndex(schema, columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
       val f = schema(corruptFieldIndex)
       if (!f.dataType.isInstanceOf[StringType] || !f.nullable) {
         throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError(
