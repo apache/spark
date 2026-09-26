@@ -161,7 +161,7 @@ Input [6]: [i_item_sk#1, i_brand_id#2, i_brand#3, ext_price#11, sold_item_sk#12,
 Output [4]: [t_time_sk#30, t_hour#31, t_minute#32, t_meal_time#33]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
-PushedFilters: [Or(EqualTo(t_meal_time,breakfast           ),EqualTo(t_meal_time,dinner              )), IsNotNull(t_time_sk)]
+PushedFilters: [In(t_meal_time, [breakfast           ,dinner              ]), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int,t_meal_time:string>
 
 (28) ColumnarToRow [codegen id : 5]
@@ -169,7 +169,7 @@ Input [4]: [t_time_sk#30, t_hour#31, t_minute#32, t_meal_time#33]
 
 (29) Filter [codegen id : 5]
 Input [4]: [t_time_sk#30, t_hour#31, t_minute#32, t_meal_time#33]
-Condition : (((t_meal_time#33 = breakfast           ) OR (t_meal_time#33 = dinner              )) AND isnotnull(t_time_sk#30))
+Condition : (t_meal_time#33 IN (breakfast           ,dinner              ) AND isnotnull(t_time_sk#30))
 
 (30) Project [codegen id : 5]
 Output [3]: [t_time_sk#30, t_hour#31, t_minute#32]

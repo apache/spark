@@ -680,6 +680,18 @@ object SQLConf {
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
+  val COMBINE_DISJUNCTIVE_IN_PREDICATES_ENABLED =
+    buildConf("spark.sql.optimizer.combineDisjunctiveInPredicates.enabled")
+      .internal()
+      .doc("When true, the optimizer coalesces OR-connected equality and IN predicates on the " +
+        "same deterministic, non-foldable expression into a single IN predicate, e.g. " +
+        "'x = 1 OR x IN (2, 3)' becomes 'x IN (1, 2, 3)'. This lets OptimizeIn further dedup " +
+        "and, for large lists, convert to InSet.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   private val VALID_LOG_LEVELS: Array[String] = Level.values.map(_.toString)
 
   val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
@@ -8822,6 +8834,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
+
+  def combineDisjunctiveInPredicates: Boolean =
+    getConf(COMBINE_DISJUNCTIVE_IN_PREDICATES_ENABLED)
 
   def planChangeLogLevel: Level = getConf(PLAN_CHANGE_LOG_LEVEL)
 
