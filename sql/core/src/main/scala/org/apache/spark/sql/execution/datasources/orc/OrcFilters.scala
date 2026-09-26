@@ -281,9 +281,19 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           .isNull(dataTypeMap(name).fieldName, getType(name)).end())
 
       case In(name, values) if dataTypeMap.contains(name) =>
-        val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(name).fieldType))
-        Some(builder.startAnd().in(dataTypeMap(name).fieldName, getType(name),
-          castedValues.map(_.asInstanceOf[AnyRef]): _*).end())
+        // SPARK-59605: a NULL in the IN list is inert (`x IN (.., NULL)` matches the same rows as
+        // IN on the non-null values), and castLiteralValue would NPE on a null literal. Drop NULLs;
+        // if none remain (e.g. `IN (NULL)`) there is nothing safe to push. Under Not(In) the pushed
+        // NOT(IN(non-nulls)) is over-inclusive but safe: Spark re-applies the full predicate.
+        val nonNullValues = values.filter(_ != null)
+        if (nonNullValues.isEmpty) {
+          None
+        } else {
+          val fieldType = dataTypeMap(name).fieldType
+          val castedValues = nonNullValues.map(v => castLiteralValue(v, fieldType))
+          Some(builder.startAnd().in(dataTypeMap(name).fieldName, getType(name),
+            castedValues.map(_.asInstanceOf[AnyRef]): _*).end())
+        }
 
       case _ => None
     }

@@ -72,6 +72,35 @@ case class Person(name: String, age: Int, contacts: Seq[Contact])
 abstract class OrcQueryTest extends OrcTest {
   import testImplicits._
 
+  test("SPARK-59605: ORC IN filter with NULL matches with pushdown on and off") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.sql(
+        "SELECT * FROM VALUES " +
+          "(CAST(NULL AS INT), 'null'), (1, 'a'), (2, 'b'), (3, 'c') AS t(id, label)")
+        .write.orc(path)
+
+      Seq("true", "false").foreach { pushdown =>
+        withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> pushdown) {
+          checkAnswer(
+            spark.read.orc(path)
+              .where("id IN (1, 3, NULL)")
+              .select("id", "label")
+              .orderBy("id", "label"),
+            Seq(Row(1, "a"), Row(3, "c")))
+
+          // NOT IN with NULL: under three-valued logic every row evaluates to FALSE or NULL,
+          // never TRUE, so the result is empty.
+          checkAnswer(
+            spark.read.orc(path)
+              .where("id NOT IN (1, 3, NULL)")
+              .select("id", "label"),
+            Seq.empty[Row])
+        }
+      }
+    }
+  }
+
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
       (s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0)
