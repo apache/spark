@@ -241,6 +241,15 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)
   }
 
+  test("SPARK-59798: extra library path gets translated into an environment variable") {
+    baseConf.set(config.EXECUTOR_LIBRARY_PATH, "/opt/lib1:/opt/lib2")
+    initDefaultProfile(baseConf)
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    checkEnv(executor, baseConf, Map(ENV_EXECUTOR_LIBRARY_PATH -> "/opt/lib1:/opt/lib2"))
+  }
+
   test("SPARK-32655 Support appId/execId placeholder in SPARK_EXECUTOR_DIRS") {
     val kconf = newExecutorConf(environment = Map(ENV_EXECUTOR_DIRS ->
       "/p1/SPARK_APPLICATION_ID/SPARK_EXECUTOR_ID,/p2/SPARK_APPLICATION_ID/SPARK_EXECUTOR_ID"))
