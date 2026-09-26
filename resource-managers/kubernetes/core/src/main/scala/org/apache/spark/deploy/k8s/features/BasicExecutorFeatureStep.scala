@@ -142,6 +142,21 @@ private[spark] class BasicExecutorFeatureStep(
         case _ => Nil
       }.getOrElse(Nil)
 
+      // SparkConf.isExecutorStartupConf withholds the spark.ssl.* passwords from the
+      // executor conf. The pod allocator resolves them from the driver SecurityManager
+      // and passes them in through the environment, as the standalone worker does in
+      // CommandUtils. A name the user already binds, via
+      // spark.kubernetes.executor.secretKeyRef, spark.executorEnv or the pod template,
+      // is skipped and the user's value wins: buildEnvVars does not deduplicate and
+      // Kubernetes resolves a repeated name last-wins.
+      val userBoundEnvNames = kubernetesConf.secretEnvNamesToKeyRefs.keySet ++
+        kubernetesConf.environment.keySet ++
+        Option(pod.container).flatMap(c => Option(c.getEnv))
+          .map(_.asScala.map(_.getName).toSet).getOrElse(Set.empty)
+      val sslRpcPasswords = kubernetesConf.sslRpcPasswordEnvs.filterNot {
+        case (name, _) => userBoundEnvNames.contains(name)
+      }.toSeq
+
       val userOpts = kubernetesConf.get(EXECUTOR_JAVA_OPTIONS).toSeq.flatMap { opts =>
         val subsOpts = Utils.substituteAppNExecIds(opts, kubernetesConf.appId,
           kubernetesConf.executorId)
@@ -186,6 +201,7 @@ private[spark] class BasicExecutorFeatureStep(
           ++ attributes
           ++ kubernetesConf.environment
           ++ sparkAuthSecret
+          ++ sslRpcPasswords
           ++ Seq(ENV_CLASSPATH -> kubernetesConf.get(EXECUTOR_CLASS_PATH).orNull)
           ++ allOpts) ++
       KubernetesUtils.buildEnvVarsWithFieldRef(
