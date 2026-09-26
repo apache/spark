@@ -1964,6 +1964,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assert(cleanedProject.getTagValue(Project.hiddenOutputTag).contains(Seq(ordinary)))
   }
 
+  test("SPARK-59146: pipe SET cleanup invalidates cached hidden output") {
+    val visible = AttributeReference("a", IntegerType)()
+    val retained = AttributeReference("a", IntegerType)()
+      .withQualifier(Seq("t"))
+      .markAsQualifiedAccessOnly()
+      .markAsPipeSetRetained()
+    val project = Project(Seq(visible), LocalRelation(visible, retained))
+    project.setTagValue(Project.hiddenOutputTag, Seq(retained))
+
+    assert(project.resolve(Seq("t", "a"), caseInsensitiveResolution).nonEmpty)
+
+    val cleanedProject = EliminateResolvedPipeSetInputs(project).asInstanceOf[Project]
+
+    assert(cleanedProject ne project)
+    assert(cleanedProject.resolve(Seq("t", "a"), caseInsensitiveResolution).isEmpty)
+  }
+
   test("SPARK-59146: pipe SET cleanup preserves empty hidden output overrides") {
     case class MetadataLeaf(
         override val output: Seq[Attribute],

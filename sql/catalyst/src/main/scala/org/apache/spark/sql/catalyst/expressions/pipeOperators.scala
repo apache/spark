@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{
   PIPE_EXPRESSION,
   PIPE_OPERATOR,
   PLAN_EXPRESSION,
-  PROJECT,
   TreePattern
 }
 import org.apache.spark.sql.catalyst.util._
@@ -98,19 +97,26 @@ case class PipeSetInput(child: LogicalPlan) extends UnaryNode {
  * output prevents them from being resolved by a subsequent Dataset operation.
  */
 object EliminateResolvedPipeSetInputs extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan =
-    plan.resolveOperatorsUpWithSubqueriesAndPruning(
-      _.containsAnyPattern(PIPE_OPERATOR, PLAN_EXPRESSION, PROJECT), ruleId) {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    val planWithCleanedHiddenOutput =
+      plan.transformDownWithSubqueriesAndReferenceEquality {
+        case project: Project =>
+          project.getTagValue(Project.hiddenOutputTag) match {
+            case Some(hiddenOutput) if hiddenOutput.exists(_.pipeSetRetained) =>
+              val cleanedHiddenOutput = hiddenOutput.filterNot(_.pipeSetRetained)
+              val cleanedProject = project.copy()
+              cleanedProject.copyTagsFrom(project)
+              cleanedProject.setTagValue(Project.hiddenOutputTag, cleanedHiddenOutput)
+              cleanedProject
+            case _ => project
+          }
+      }
+
+    planWithCleanedHiddenOutput.resolveOperatorsUpWithSubqueriesAndPruning(
+      _.containsAnyPattern(PIPE_OPERATOR, PLAN_EXPRESSION), ruleId) {
       case pipeSetInput: PipeSetInput if pipeSetInput.resolved => pipeSetInput.child
-      case project: Project =>
-        project.getTagValue(Project.hiddenOutputTag) match {
-          case Some(hiddenOutput) if hiddenOutput.exists(_.pipeSetRetained) =>
-            val cleanedHiddenOutput = hiddenOutput.filterNot(_.pipeSetRetained)
-            project.setTagValue(Project.hiddenOutputTag, cleanedHiddenOutput)
-            project
-          case _ => project
-        }
     }
+  }
 }
 
 /** This rule removes transparent pipe-operator nodes from a logical plan after analysis. */
