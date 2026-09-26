@@ -151,6 +151,13 @@ class AbstractTranspiler(object):
     # Specify the "friendly" name a user can add to spark.sql.experimental.optimizer.pyTranspilers
     # to enable this transpiler.
     variety: str = ""
+    #: The raising NULL checks the last lowering needed, as short human-readable labels
+    #: ("comparison `>` on a, b"). Read after each ``_transpile_from_ast`` and unioned
+    #: across the kept variants, so a subclass that emits a check which raises should
+    #: assign it here; the caller warns once per UDF that such a check makes the
+    #: expression throwable and so unmovable by the optimizer. Leave it empty to say
+    #: nothing. A bare ``str`` is accepted and treated as a single label.
+    null_guards: frozenset = frozenset()
 
     @classmethod
     def register(cls) -> None:
@@ -356,10 +363,12 @@ class CatalystTranspiler(AbstractTranspiler):
         # ``_transpile_from_ast``; both are reset there per variant.
         self._param_categories: dict[int, str] = {}
         self._category_cache: dict[int, str] = {}
-        # Instance attributes, not class ones: as class defaults, re-annotating
-        # either as ``set`` -- which reads like a cleanup -- would turn the ``|=``
-        # below into an in-place mutation of the class dict, leaking state between
-        # every UDF in the process. Both are reset per variant in
+        # ``_pending_null_guards`` is an instance attribute, not a class one: as a
+        # class default, re-annotating it as ``set`` -- which reads like a cleanup --
+        # would turn the ``|=`` in ``_raise_on_null`` into an in-place mutation of the
+        # class dict, leaking state between every UDF in the process. ``_non_null`` is
+        # only ever rebound, never ``|=``'d, so it is safe either way and frozenset
+        # merely keeps the two consistent. Both are reset per variant in
         # ``_transpile_from_ast``.
         self._non_null: frozenset = frozenset()
         self._pending_null_guards: frozenset = frozenset()
@@ -463,12 +472,19 @@ class CatalystTranspiler(AbstractTranspiler):
 
         ``label`` names the construct (e.g. ``"comparison `>`"``) plus the parameters
         checked, so a half-narrowed ``a is not None and a > b`` reports just ``b``.
+        Reached through the whole operand, not just a bare one: ``a > (b + 1)`` checks
+        ``b + 1``, so ``b`` is what the user has to guard and ``b`` is what we name.
         """
         checked = [(node, c) for node, c in operands if not self._is_never_null(params, node)]
         if not checked:
             return otherwise
         named = sorted(
-            {node.id for node, _ in checked if isinstance(node, ast.Name) and node.id in params}
+            {
+                inner.id
+                for node, _ in checked
+                for inner in ast.walk(node)
+                if isinstance(inner, ast.Name) and inner.id in params
+            }
         )
         self._pending_null_guards |= {f"{label} on {', '.join(named)}" if named else label}
         guard = self._any_null([c for _, c in checked])
@@ -699,8 +715,11 @@ class CatalystTranspiler(AbstractTranspiler):
                 otherwise = value
                 break
             emitted.append((condition, value))
-        # At least one rung survives: an undecided operand leaves both rungs undecided,
-        # and with none undecided we took the early return above.
+        # At least one rung survives. Not because an undecided operand leaves both
+        # rungs undecided -- it does not: with one side undecided and the other proven
+        # non-NULL, ``_and3(None, False)`` is False and that rung is dropped. It holds
+        # because every reachable (left, right) combination leaves at least one rung
+        # not-False, and the all-decided case took the early return above.
         result = when(emitted[0][0], emitted[0][1])
         for condition_col, value in emitted[1:]:
             result = result.when(condition_col, value)
@@ -1734,7 +1753,12 @@ def _transpile_func(
                         # Only for a KEPT variant, and after the appends: guarded by
                         # ``getattr``/``str`` so a third-party transpiler reporting
                         # nothing (or something odd) cannot cost us these options.
-                        null_guards |= set(map(str, getattr(transpiler, "null_guards", ())))
+                        # A bare ``str`` is wrapped rather than iterated -- iterating one
+                        # yields a label per character.
+                        reported = getattr(transpiler, "null_guards", ())
+                        if isinstance(reported, str):
+                            reported = (reported,)
+                        null_guards |= set(map(str, reported))
                 except Exception as e:
                     errors.append(str(e))
         return (

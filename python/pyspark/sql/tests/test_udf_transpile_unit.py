@@ -2641,7 +2641,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertFalse(UserDefinedFunction(bool_add, LongType()).transpiled)
             self.assertTrue(UserDefinedFunction(bytes_ident, BinaryType()).transpiled)
 
-    def _optimized_plan(self, func, return_type, schema):
+    def _transpiled_plan(self, func, return_type, schema):
         """The optimized plan of ``func`` applied to every column of ``schema``.
 
         The lowered NULL checks are what these tests are about, so they have to be
@@ -2741,7 +2741,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     "the expectation should be what Python actually does",
                 )
                 self.assertEqual(expected, self._vals(func, BooleanType(), "a long", rows))
-                plan = self._optimized_plan(func, BooleanType(), "a long")
+                plan = self._transpiled_plan(func, BooleanType(), "a long")
                 self.assertNotIn("raise_error", plan)
 
     def test_udf_transpile_keeps_the_null_check_it_needs(self):
@@ -2755,7 +2755,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         for func, schema in ((unguarded, "a long"), (two_columns, "a long, b long")):
             with self.subTest(func="lambda", schema=schema):
-                plan = self._optimized_plan(func, BooleanType(), schema)
+                plan = self._transpiled_plan(func, BooleanType(), schema)
                 self.assertIn("raise_error", plan)
         boolean = BooleanType()
         self._raises(unguarded, "a long", [(None,)], "cannot compare null", boolean)
@@ -2809,7 +2809,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 return None
 
         schema = "a long, b long"
-        partial = self._optimized_plan(one_guarded, BooleanType(), schema)
+        partial = self._transpiled_plan(one_guarded, BooleanType(), schema)
         self.assertIn("raise_error", partial)
         # Only `b` is still checked. Note `isnull(a` does not match the guard's own
         # `isnotnull(a...)`, which is the test rather than a check on the operand.
@@ -2818,7 +2818,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         rows = [(5, 1), (1, 5), (1, None), (None, 1)]
         for func in (both_guarded, composite_and, composite_or, composite_not_or):
             with self.subTest(func=getattr(func, "__name__", "lambda")):
-                self.assertNotIn("raise_error", self._optimized_plan(func, BooleanType(), schema))
+                self.assertNotIn("raise_error", self._transpiled_plan(func, BooleanType(), schema))
                 self.assertEqual(
                     [func(a, b) for a, b in rows],
                     self._vals(func, BooleanType(), schema, rows),
@@ -2851,7 +2851,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         for func in (or_test, not_and_test):
             with self.subTest(func=func.__name__):
-                self.assertIn("raise_error", self._optimized_plan(func, BooleanType(), schema))
+                self.assertIn("raise_error", self._transpiled_plan(func, BooleanType(), schema))
                 with self.assertRaises(Exception):
                     func(None, 1)
                 self._raises(func, schema, [(None, 1)], "cannot compare null", BooleanType())

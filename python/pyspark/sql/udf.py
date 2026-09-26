@@ -348,14 +348,30 @@ class UserDefinedFunction:
             # differs between ``udf(...)`` and a direct ``UserDefinedFunction(...)``,
             # and a wrong constant is worse than the default, which at least matches
             # the two sibling warnings above.
-            warnings.warn(
-                f"Transpiled UDF {func} still checks for NULL in "
-                f"{', '.join(pending_guard_warning)} and raises if it finds one, so "
-                "Spark cannot push a filter on this UDF through a join or combine it "
-                "with an adjacent filter. Guard the parameter (`if x is not None:`) "
-                "or bind a non-nullable column to drop the check.",
-                UserWarning,
-            )
+            #
+            # In its own handler, and NOT in the one above: this warning is advice
+            # about a lowering that is already good, so under warnings-as-errors it
+            # must not escape and break the UDF definition outright. The handler
+            # above would instead have thrown the lowering away, which is the other
+            # way to get this wrong.
+            #
+            # Says "may not" rather than "cannot": what reaches the plan is not
+            # decided yet. Binding a non-nullable column folds the check away
+            # (NullPropagation and SimplifyConditionals), and
+            # ``asNondeterministic()`` discards the lowering entirely -- both
+            # happen after this point.
+            try:
+                warnings.warn(
+                    f"Transpiled UDF {func} still checks for NULL in "
+                    f"{', '.join(pending_guard_warning)} and raises if it finds one, so "
+                    "Spark may not be able to push a filter on this UDF through a join "
+                    "or combine it with an adjacent filter. Guard the parameter "
+                    "(`if x is not None:`) or bind a non-nullable column to drop the "
+                    "check; binding one already drops it.",
+                    UserWarning,
+                )
+            except Exception:
+                pass
 
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
