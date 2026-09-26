@@ -15,12 +15,17 @@
 # limitations under the License.
 #
 
+import threading
 import time
+import unittest
+import uuid
+from unittest.mock import MagicMock
 
 import pyspark.cloudpickle
 from pyspark.errors import AnalysisException
+from pyspark.sql.connect.streaming.query import StreamingQueryListenerBus
 from pyspark.sql.functions import count, lit
-from pyspark.sql.streaming.listener import StreamingQueryListener
+from pyspark.sql.streaming.listener import QueryStartedEvent, StreamingQueryListener
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.utils import eventually
@@ -82,6 +87,126 @@ class TestListenerLocalV2(StreamingQueryListener):
 
     def onQueryTerminated(self, event):
         self.terminated.append(event)
+
+
+class StreamingQueryListenerBusTests(unittest.TestCase):
+    def test_remove_last_listener_with_pending_event(self):
+        listener = TestListenerLocalV2()
+        next_listener = TestListenerLocalV2()
+
+        client = MagicMock()
+        sqm = MagicMock()
+        sqm._session.client = client
+        listener_bus = StreamingQueryListenerBus(sqm)
+        listener_bus._listener_bus.append(listener)
+
+        # Reproduce the ordering that used to deadlock: removal requests server-side
+        # shutdown while the event thread dispatches a pending event. The request must
+        # not hold the listener state lock, which the event thread also needs. After
+        # dispatch, keep the event thread alive long enough to verify that append waits
+        # for shutdown to finish.
+        remove_command_started = threading.Event()
+        event_dispatched = threading.Event()
+        event_thread_can_exit = threading.Event()
+        removal_finished = threading.Event()
+        append_finished = threading.Event()
+        lifecycle_wait_started = threading.Event()
+        thread_errors = []
+        threads = []
+
+        class TrackingLifecycleLock:
+            def __init__(self):
+                self._lock = threading.Lock()
+
+            def __enter__(self):
+                if self._lock.locked():
+                    lifecycle_wait_started.set()
+                self._lock.acquire()
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                self._lock.release()
+
+        listener_bus._lifecycle_lock = TrackingLifecycleLock()
+
+        def execute_command(_):
+            remove_command_started.set()
+            if not event_dispatched.wait(5):
+                raise TimeoutError("pending event was not dispatched")
+
+        client.execute_command.side_effect = execute_command
+
+        event = QueryStartedEvent(
+            id=uuid.uuid4(),
+            runId=uuid.uuid4(),
+            name="pending-event",
+            timestamp="2026-09-17T00:00:00.000Z",
+            jobTags=set(),
+        )
+
+        def dispatch_pending_event():
+            try:
+                if not remove_command_started.wait(5):
+                    raise TimeoutError("listener removal did not start")
+                listener_bus.post_to_all(event)
+                event_dispatched.set()
+                event_thread_can_exit.wait()
+            except BaseException as error:
+                thread_errors.append(error)
+
+        def remove_listener():
+            try:
+                listener_bus.remove(listener)
+            except BaseException as error:
+                thread_errors.append(error)
+            finally:
+                removal_finished.set()
+
+        register_server_side_listener = MagicMock(return_value=iter(()))
+        listener_bus._register_server_side_listener = register_server_side_listener
+
+        def append_listener():
+            try:
+                listener_bus.append(next_listener)
+            except BaseException as error:
+                thread_errors.append(error)
+            finally:
+                append_finished.set()
+
+        event_thread = threading.Thread(target=dispatch_pending_event, daemon=True)
+        listener_bus._execution_thread = event_thread
+        removal_thread = threading.Thread(target=remove_listener, daemon=True)
+        threads.extend([event_thread, removal_thread])
+
+        try:
+            event_thread.start()
+            removal_thread.start()
+
+            self.assertTrue(
+                event_dispatched.wait(5),
+                "removeListener blocked the event thread while waiting for it to exit",
+            )
+
+            append_thread = threading.Thread(target=append_listener, daemon=True)
+            threads.append(append_thread)
+            append_thread.start()
+            self.assertTrue(
+                lifecycle_wait_started.wait(5),
+                "addListener did not wait for the listener shutdown",
+            )
+            self.assertFalse(append_finished.is_set())
+
+            event_thread_can_exit.set()
+            self.assertTrue(removal_finished.wait(5))
+            self.assertTrue(append_finished.wait(5))
+
+            self.assertEqual(thread_errors, [])
+            self.assertEqual(listener.start, [event])
+            self.assertEqual(listener_bus._listener_bus, [next_listener])
+            register_server_side_listener.assert_called_once_with()
+        finally:
+            event_thread_can_exit.set()
+            for thread in threads:
+                thread.join(timeout=1)
 
 
 class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTestCase):
