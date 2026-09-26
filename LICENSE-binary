@@ -442,6 +442,7 @@ python/pyspark/errors/exceptions/tblib.py
 
 BSD 3-Clause
 ------------
+org.apache.spark:spark-libbid_2.13 (Intel RDFP portions; see LICENSE-Intel-RDFP.txt)
 com.esotericsoftware:kryo-shaded
 com.esotericsoftware:minlog
 com.esotericsoftware:reflectasm
