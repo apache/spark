@@ -619,10 +619,28 @@ private[deploy] class Worker(
           // SPARK_EXECUTOR_DIRS environment variable, and deleted by the Worker when the
           // application finishes.
           val appLocalDirs = appDirectories.getOrElse(appId, {
-            val localRootDirs = Utils.getOrCreateLocalRootDirs(conf)
+            val localRootDirs = Utils.getConfiguredLocalDirs(conf)
             val dirs = localRootDirs.flatMap { dir =>
               try {
-                val appDir = Utils.createDirectory(dir, namePrefix = "executor")
+                // Scope the executor's local dir to this Worker and the application:
+                // <root>/spark-<workerId>/<appId>. The appId segment is what
+                // spark.shuffle.service.requireAppScopedLocalDirs checks at registration.
+                // The per-worker directory keeps Workers that share local root dirs from
+                // sharing an application directory -- in local-cluster mode every Worker
+                // runs in one JVM, where Utils.getOrCreateLocalRootDirs resolves to the
+                // same spark-* dirs -- so one Worker's application cleanup cannot delete
+                // another Worker's live directory. The workerId is folded into the
+                // spark-* name rather than added as a level of its own because
+                // Kubernetes shuffle recovery walks a fixed depth from the executor's
+                // local dir. It is sanitized because it can contain characters that are
+                // significant in paths, e.g. ':' from an IPv6 host, which is also the
+                // SPARK_EXECUTOR_DIRS separator.
+                val workerDir = new File(dir, s"spark-${Utils.sanitizeDirName(workerId)}")
+                val appDir = new File(workerDir, appId)
+                if (!Utils.createDirectory(appDir)) {
+                  throw new IOException(s"Failed to create directory $appDir")
+                }
+                Utils.chmod700(workerDir)
                 Utils.chmod700(appDir)
                 Some(appDir.getAbsolutePath())
               } catch {
