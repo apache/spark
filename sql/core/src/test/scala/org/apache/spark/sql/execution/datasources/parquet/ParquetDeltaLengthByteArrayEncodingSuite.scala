@@ -16,12 +16,15 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.nio.charset.StandardCharsets
 import java.util.Random
 
 import org.apache.commons.lang3.RandomStringUtils
-import org.apache.parquet.bytes.{ByteBufferInputStream, DirectByteBufferAllocator}
+import org.apache.parquet.bytes.{ByteBufferInputStream, BytesInput, DirectByteBufferAllocator}
 import org.apache.parquet.column.values.Utils
+import org.apache.parquet.column.values.delta.DeltaBinaryPackingValuesWriterForInteger
 import org.apache.parquet.column.values.deltalengthbytearray.DeltaLengthByteArrayValuesWriter
+import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.sql.catalyst.util.STUtils
@@ -105,6 +108,41 @@ class ParquetDeltaLengthByteArrayEncodingSuite
     }
   }
 
+  test("value length larger than the rest of the page is rejected when skipping") {
+    // The second value claims 100 bytes but only 2 bytes are left in the page.
+    reader.initFromPage(2, craftPage(lengths = Array(2, 100), data = "abcd"))
+    val e = intercept[ParquetDecodingException] {
+      reader.skipBinary(2)
+    }
+    assert(e.getMessage.contains("Failed to skip 102 bytes"))
+  }
+
+  test("negative value length is rejected") {
+    val lengths = Array(2, -1, 2)
+    reader.initFromPage(3, craftPage(lengths, data = "abcd"))
+    writableColumnVector = new OnHeapColumnVector(3, StringType)
+    val e1 = intercept[ParquetDecodingException] {
+      reader.readBinary(3, writableColumnVector, 0)
+    }
+    assert(e1.getMessage.contains("negative value length: -1"))
+
+    reader = new VectorizedDeltaLengthByteArrayReader()
+    reader.initFromPage(3, craftPage(lengths, data = "abcd"))
+    val e2 = intercept[ParquetDecodingException] {
+      reader.skipBinary(3)
+    }
+    assert(e2.getMessage.contains("negative value length: -1"))
+
+    // getBytes is the path used by the DELTA_BYTE_ARRAY reader to read suffixes.
+    reader = new VectorizedDeltaLengthByteArrayReader()
+    reader.initFromPage(3, craftPage(lengths, data = "abcd"))
+    reader.getBytes(0)
+    val e3 = intercept[ParquetDecodingException] {
+      reader.getBytes(1)
+    }
+    assert(e3.getMessage.contains("negative value length: -1"))
+  }
+
   testGeo("geo types single point") { geoType =>
     assertGeoReadWrite(writer, reader, Array(makePointWkb(1, 1)), geoType)
   }
@@ -162,6 +200,16 @@ class ParquetDeltaLengthByteArrayEncodingSuite
       }
       assert(wkbValues(i) sameElements actualWkb)
     }
+  }
+
+  /** Builds a raw DELTA_LENGTH_BYTE_ARRAY page from explicit lengths and value bytes. */
+  private def craftPage(lengths: Array[Int], data: String): ByteBufferInputStream = {
+    val lengthWriter = new DeltaBinaryPackingValuesWriterForInteger(
+      128, 4, 64 * 1024, 64 * 1024, new DirectByteBufferAllocator)
+    lengths.foreach(lengthWriter.writeInteger)
+    BytesInput.concat(
+      lengthWriter.getBytes,
+      BytesInput.from(data.getBytes(StandardCharsets.UTF_8))).toInputStream
   }
 
   private def writeData(writer: DeltaLengthByteArrayValuesWriter, values: Array[String]): Unit = {

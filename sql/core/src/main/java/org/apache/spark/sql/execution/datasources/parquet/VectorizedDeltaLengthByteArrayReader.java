@@ -59,6 +59,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     int length;
     for (int i = 0; i < total; i++) {
       length = lengthsVector.getInt(currentRow + i);
+      checkLength(length);
       try {
         buffer = in.slice(length);
       } catch (EOFException e) {
@@ -89,6 +90,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     int length;
     for (int i = 0; i < total; i++) {
       length = lengthsVector.getInt(currentRow + i);
+      checkLength(length);
       byte[] physicalValue;
       try {
         // Converts WKB into a physical representation of geometry/geography.
@@ -104,6 +106,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
 
   public ByteBuffer getBytes(int rowId) {
     int length = lengthsVector.getInt(rowId);
+    checkLength(length);
     try {
       return in.slice(length);
     } catch (EOFException e) {
@@ -113,12 +116,29 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
 
   @Override
   public void skipBinary(int total) {
+    long totalLength = 0;
     for (int i = 0; i < total; i++) {
-      int remaining = lengthsVector.getInt(currentRow + i);
-      while (remaining > 0) {
-        remaining -= in.skip(remaining);
-      }
+      int length = lengthsVector.getInt(currentRow + i);
+      checkLength(length);
+      totalLength += length;
+    }
+    try {
+      in.skipFully(totalLength);
+    } catch (IOException e) {
+      throw new ParquetDecodingException("Failed to skip " + totalLength + " bytes", e);
     }
     currentRow += total;
+  }
+
+  /**
+   * The value lengths are read from the file, so reject a negative length before using it:
+   * slicing or skipping a negative length moves the stream position backwards instead of
+   * failing, and a corrupt page must fail the read instead of producing malformed values.
+   */
+  private static void checkLength(int length) {
+    if (length < 0) {
+      throw new ParquetDecodingException(
+          "Corrupted DELTA_LENGTH_BYTE_ARRAY page: negative value length: " + length);
+    }
   }
 }
