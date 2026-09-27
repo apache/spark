@@ -3866,6 +3866,38 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-59805: sum and avg of decimal(15,2) whose wide buffer crosses the compact " +
+      "unscaled range") {
+    // The decimal(25,2) sum buffer is stored in the variable-length region of an UnsafeRow.
+    // Per group, the running sum crosses |unscaled| = 10^18 (value 10^16), where the Decimal
+    // representation switches between Long and BigDecimal, in one or both directions.
+    val max = BigDecimal("9999999999999.99")
+    val groups: Seq[(Int, Seq[BigDecimal])] = Seq(
+      0 -> Seq.fill(1500)(max),
+      1 -> Seq.fill(1500)(-max),
+      2 -> (Seq.fill(1500)(max) ++ Seq.fill(1499)(-max)),
+      3 -> (Seq.fill(700)(max) ++ Seq.fill(1400)(-max) ++ Seq.fill(700)(max) :+ BigDecimal("0.01")),
+      4 -> Seq(BigDecimal("0.01"), BigDecimal("-0.03"), BigDecimal("1234.56")))
+    val df = groups
+      .flatMap { case (k, values) => values.map(v => (k, v)) }
+      .toDF("k", "v")
+      .repartition(3)
+      .select($"k", $"v".cast("decimal(15, 2)").as("v"))
+    // avg(decimal(15,2)) returns decimal(19,6).
+    def sumAndAvg(values: Seq[BigDecimal]): Seq[java.math.BigDecimal] = {
+      val sum = values.sum
+      Seq(sum, (sum / values.size).setScale(6, BigDecimal.RoundingMode.HALF_UP)).map(_.bigDecimal)
+    }
+    val expectedPerGroup = groups.map { case (k, values) => Row(k +: sumAndAvg(values): _*) }
+    val expectedTotal = Row(sumAndAvg(groups.flatMap(_._2)): _*)
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        checkAnswer(df.groupBy("k").agg(sum("v"), avg("v")), expectedPerGroup)
+        checkAnswer(df.agg(sum("v"), avg("v")), expectedTotal)
+      }
+    }
+  }
+
   test("SPARK-32761: aggregating multiple distinct CONSTANT columns") {
      checkAnswer(sql("select count(distinct 2), count(distinct 2,3)"), Row(1, 1))
   }

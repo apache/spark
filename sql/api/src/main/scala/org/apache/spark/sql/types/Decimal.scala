@@ -230,6 +230,12 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
+  /**
+   * Whether this Decimal is in the compact representation, i.e. backed by an unscaled Long
+   * (see `toUnscaledLong`) rather than by a BigDecimal.
+   */
+  private[sql] def isCompact: Boolean = decimalVal.eq(null)
+
   override def toString: String = toBigDecimal.toString()
 
   def toPlainString: String = toJavaBigDecimal.toPlainString
@@ -269,7 +275,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    *   if the decimal is too big to fit in Byte type.
    */
   private[sql] def roundToByte(): Byte =
-    roundToNumeric[Byte](ByteType, Byte.MaxValue, Byte.MinValue)(_.toByte)(_.toByte)
+    roundToNumeric[Byte](ByteType, Byte.MaxValue, Byte.MinValue)(_.toByte)
 
   /**
    * @return
@@ -278,7 +284,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    *   if the decimal is too big to fit in Short type.
    */
   private[sql] def roundToShort(): Short =
-    roundToNumeric[Short](ShortType, Short.MaxValue, Short.MinValue)(_.toShort)(_.toShort)
+    roundToNumeric[Short](ShortType, Short.MaxValue, Short.MinValue)(_.toShort)
 
   /**
    * @return
@@ -287,16 +293,16 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    *   if the decimal too big to fit in Int type.
    */
   private[sql] def roundToInt(): Int =
-    roundToNumeric[Int](IntegerType, Int.MaxValue, Int.MinValue)(_.toInt)(_.toInt)
+    roundToNumeric[Int](IntegerType, Int.MaxValue, Int.MinValue)(_.toInt)
 
   private def toSqlValue: String = this.toString + "BD"
 
   private def roundToNumeric[T <: AnyVal](
       integralType: IntegralType,
       maxValue: Int,
-      minValue: Int)(f1: Long => T)(f2: Double => T): T = {
+      minValue: Int)(f: Long => T): T = {
     if (decimalVal.eq(null)) {
-      val numericVal = f1(actualLongVal)
+      val numericVal = f(actualLongVal)
       if (actualLongVal == numericVal) {
         numericVal
       } else {
@@ -306,9 +312,12 @@ final class Decimal extends Ordered[Decimal] with Serializable {
           integralType)
       }
     } else {
-      val doubleVal = decimalVal.toDouble
-      if (Math.floor(doubleVal) <= maxValue && Math.ceil(doubleVal) >= minValue) {
-        f2(doubleVal)
+      // Truncate exactly, as `roundToLong` does. Going through a Double would round values
+      // just below a bound (e.g. 2147483647.99999999) up past it and wrongly overflow.
+      val truncated = decimalVal.bigDecimal.toBigInteger
+      if (truncated.bitLength() < 32 &&
+          truncated.intValue() <= maxValue && truncated.intValue() >= minValue) {
+        f(truncated.longValue())
       } else {
         throw DataTypeErrors.castingCauseOverflowError(
           toSqlValue,
