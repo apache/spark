@@ -795,10 +795,21 @@ private[spark] class DAGScheduler(
   private def outputTrackerMaster(
       shuffleDep: ShuffleDependency[_, _, _]): Option[ShuffleOutputTrackerMaster] = {
     if (shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]) {
-      // Key off the manager's flag, NOT tracker presence: a tracker can exist (e.g. a blocking
-      // MultiShuffleManager creates one) even when the incremental manager wants none, and an
-      // in-process channel shuffle must still register with NO tracker (availability lives on the
-      // ShuffleMapStage). A manager that wants a tracker with none configured is a fail-loud error.
+      // A pipelined shuffle uses the StreamingShuffleOutputTracker only when its manager
+      // discovers writers over RPC. An in-process transport declares it needs no tracker; such a
+      // shuffle registers with no output tracker at all, and its map-stage availability is tracked
+      // locally on the ShuffleMapStage.
+      //
+      // Key off the manager's flag, NOT merely off tracker PRESENCE: a tracker can exist even when
+      // the pipelined (incremental) manager does not want one. SparkEnv.initialize-
+      // StreamingShuffleOutputTracker creates the tracker when the incremental manager needs it OR
+      // when the BLOCKING manager is a MultiShuffleManager (blockingIsMulti). In the latter case
+      // (MultiShuffleManager blocking + in-process channel incremental) the tracker is present but
+      // the channel manager reports usesStreamingShuffleOutputTracker = false, so a channel shuffle
+      // must still register with NO tracker -- registering it there would be inert (the channel
+      // reader/writer never consult it) but would contradict this invariant and the one
+      // PipelinedShuffleRoutingSuite pins. When the manager DOES want a tracker but none exists,
+      // that is a real misconfiguration (a consumer would find no writer locations), so fail loud.
       if (!sc.env.pipelinedShuffleManager.usesStreamingShuffleOutputTracker) {
         None
       } else {
@@ -1170,14 +1181,29 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Shape of the shuffle boundaries in a job's RDD graph, computed before any stage exists so an
-   * unsupported job fails fast with no partial state. Supported: all-regular, all-pipelined, or
-   * MATERIALIZED-PREFIX MIXED (pipelined suffix reading fully-materialized regular boundaries, no
-   * pipelined shuffle below a regular one). This is the shape adaptive execution produces.
+   * Shape of the shuffle boundaries in the RDD graph rooted at a job's final RDD, computed
+   * before any stage is created (so an unsupported job is rejected
+   * fail-fast with no partial scheduler state).
    *
-   * An unmaterialized regular boundary in a pipelined job, or a pipelined shuffle below a regular
-   * boundary, is rejected: such a stage would have to run while gang-admitted producers hold slots
-   * (blocked on backpressure), which admission does not account for and can deadlock the group.
+   * The supported shapes are:
+   *  - all-regular (`hasPipelined` false, nothing pipelined anywhere);
+   *  - all-pipelined (`hasPipelined` true, no regular boundary anywhere);
+   *  - MATERIALIZED-PREFIX MIXED: pipelined shuffles in the region reachable from the final RDD
+   *    without crossing a regular shuffle, where every regular boundary at the edge of that
+   *    region is FULLY MATERIALIZED (all map outputs registered with the MapOutputTracker) and
+   *    no pipelined shuffle sits below any regular boundary. The materialized prefix never
+   *    re-runs, so the job executes exactly like an all-pipelined job whose leaves read
+   *    already-materialized shuffle data; gang admission demand (final stage + suffix producers)
+   *    is unchanged. This is the shape adaptive execution produces: prior map-stage jobs
+   *    materialize the prefix stages, and the final job runs the pipelined tail.
+   *
+   * An UNMATERIALIZED regular boundary in a pipelined job stays rejected: its stage would have to
+   * run while gang-admitted producers already hold slots (blocked on transport backpressure
+   * waiting for consumers), and admission does not account for the prefix's slots -- the prefix
+   * could be starved and deadlock the group. Sequencing the prefix before the gang is future
+   * work. A pipelined shuffle BELOW a regular boundary is also rejected: it is not part of the
+   * suffix group, and (if the boundary were unmaterialized) would have to run under a regime the
+   * group machinery does not cover.
    */
   private[scheduler] case class JobShuffleShape(
       hasPipelined: Boolean,
@@ -1189,11 +1215,15 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Which KINDS of shuffle boundary `finalRDD`'s graph contains: any pipelined and any regular
-   * (non-pipelined) dependency. The cheap pre-pass for [[classifyJobShuffleShape]]: a job with only
-   * one kind cannot be an unsupported mix, so the precise below-regular walk runs only when both
-   * kinds are present. Reuses the shared `traverseRDDGraph` (RDD-keyed visited set, no per-visit
-   * allocation).
+   * Which KINDS of shuffle boundary the RDD graph rooted at `finalRDD` contains: any
+   * [[PipelinedShuffleDependency]], and any regular (non-pipelined) `ShuffleDependency`. Narrow
+   * dependencies are not boundaries and are ignored. Walks the RDD graph directly (before any stage
+   * exists) over the shared `traverseRDDGraph`, whose visited set is keyed on the RDD alone -- so
+   * this pass allocates nothing per visit.
+   *
+   * This is the cheap pre-pass for [[classifyJobShuffleShape]]: a job with only one kind cannot be
+   * an unsupported mix, so the precise (and more expensive) below-regular analysis is only needed
+   * when both kinds are present.
    */
   private[scheduler] def classifyJobShuffleKinds(finalRDD: RDD[_]): (Boolean, Boolean) = {
     var hasPipelined = false
@@ -2475,10 +2505,14 @@ private[spark] class DAGScheduler(
     // Job submitted, clear internal data.
     barrierJobIdToNumTasksCheckFailures.remove(jobId)
 
-    // Stamp the per-run epoch (the jobId) into the job's properties BEFORE creating the ActiveJob,
-    // so every stage's tasks (cloned from these properties) carry the SAME epoch. It keys the
-    // in-process channel rendezvous per run (see SPARK_PIPELINED_RUN_EPOCH). Copy, do not mutate,
-    // the caller's Properties. Inert for a non-pipelined job.
+    // For a pipelined job, stamp the per-run epoch (the jobId) into the job's properties BEFORE
+    // creating the ActiveJob, so submitMissingTasks -- which clones jobIdToActiveJob(jobId)
+    // .properties per stage -- carries the SAME epoch to every stage's tasks. Both the producer
+    // (writer) and the consumer (reader) of the one gang belong to this job, so both read one
+    // value; a different run is a different job, hence a different epoch, which keys the
+    // in-process channel rendezvous per run (see SPARK_PIPELINED_RUN_EPOCH). Copy the caller's
+    // Properties rather than mutating it. Inert for a non-pipelined job (property never set,
+    // never read).
     val jobProperties =
       if (hasPipelined && pipelinedManagerWantsLiveReduceHints) {
         val p = Utils.cloneProperties(if (properties == null) new Properties() else properties)
@@ -2965,28 +2999,53 @@ private[spark] class DAGScheduler(
       .getOrElse(new Properties())
     addPySparkConfigsToProperties(stage, properties)
 
-    // For a pipelined PRODUCER stage, tell its tasks which of its reduce partitions the job reads,
-    // so the in-process channel writer drops records routed to partitions no consumer drains
-    // (otherwise a partial read fills the unread queues and deadlocks the writer). The live set is
-    // per-SHUFFLE-EDGE; liveReduceSet returns None for a middle exchange (kept fully live).
+    // For a pipelined PRODUCER stage, tell its tasks which of its reduce partitions the job
+    // actually reads. The in-process channel writer drops records routed to partitions no
+    // consumer will drain -- otherwise a partial-read job (LIMIT / executeTake reads a subset)
+    // fills the unread partitions' bounded queues and deadlocks the writer. The result stage
+    // is created before submitStage, so its partitions are known here.
+    //
+    // The live set is per-SHUFFLE-EDGE, not per-job: it is the reduce partitions the consumer of
+    // THIS shuffle reads. liveReduceSet computes it by walking the narrow chain from the result
+    // RDD down to this shuffle, threading the read partition subset through each dependency's
+    // getParents. A MIDDLE pipelined exchange in a chain (e.g. a subquery's hash below a
+    // single-partition agg) is consumed by another map stage that reads ALL its partitions, and
+    // its shuffle is not narrow-reachable from the result RDD (an intervening shuffle blocks the
+    // walk), so liveReduceSet returns None and the property is left unset -- fully live -- which
+    // is correct. See the None handling below for the fail-fast case.
     stage match {
       case sms: ShuffleMapStage
           if isPipelinedProducer(stage) && pipelinedManagerWantsLiveReduceHints =>
         val resultStage = jobIdToActiveJob.get(jobId).map(_.finalStage)
           .collect { case rs: ResultStage => rs }
         resultStage.foreach { rs =>
-          // The reduce-partition set the result stage's live partition subset maps to through the
-          // narrow chain down to this shuffle (see liveReduceSet).
+          // Tell this pipelined producer's tasks which of ITS reduce partitions the job's readers
+          // will actually drain, so the writer can drop records routed to partitions no consumer
+          // reads (a partial read -- LIMIT / executeTake -- runs only a subset of the result
+          // stage's partitions; feeding the rest fills their bounded queues and deadlocks the
+          // writer). This is the reduce-partition set the result stage's partition subset maps to
+          // through the narrow chain down to this shuffle (see liveReduceSet).
           liveReduceSet(rs.rdd, rs.partitions.toSet, sms.shuffleDep.shuffleId) match {
             case Some(reduceSet) =>
               properties.setProperty(
                 SparkContext.SPARK_PIPELINED_LIVE_REDUCE_PARTITIONS,
                 reduceSet.toArray.sorted.mkString(","))
             case None =>
-              // None means either (a) the result stage does not narrow-reach this shuffle (a middle
-              // exchange, whose consumer reads all its partitions, keep fully live), or (b) it
-              // reaches but the mapping is uncomputable (non-identity spec). Only (b) with partial
-              // read is unsafe (the writer would feed partitions with no reader and hang); fail it.
+              // liveReduceSet is None in two very different situations:
+              //
+              //  (a) the result stage does NOT narrow-reach THIS shuffle -- a MIDDLE pipelined
+              //      exchange in a chain, whose shuffle sits below an intervening shuffle the
+              //      narrow walk cannot cross. Its consumer (the next map stage) reads ALL of its
+              //      reduce partitions, so it must stay fully live. Leave the property unset
+              //      regardless of partial vs full read -- never fail here.
+              //
+              //  (b) the result stage DOES narrow-reach this shuffle but the mapping is
+              //      uncomputable (a non-identity reader spec, or an unrecognized narrow edge on
+              //      the reaching path). For a FULL read that is safe (all partitions get a
+              //      reader, all-live drops nothing). For a PARTIAL read it is the one unsafe
+              //      case: the writer would feed reduce partitions with no reader and hang.
+              //
+              // Only (b) with a partial read fails fast; every other None leaves it fully live.
               val reaches =
                 rddReachesShuffle(rs.rdd, sms.shuffleDep.shuffleId).getOrElse(rs.rdd, false)
               val partialRead = rs.partitions.length < rs.rdd.partitions.length
