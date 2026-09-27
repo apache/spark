@@ -318,7 +318,7 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
                     % (line_major, line_major)
                 )
             continue
-        prefix = b.replace("branch-", "")
+        prefix = b.replace("branch-", "") + "."
         found_versions = [n for n in names if n.startswith(prefix)]
         chosen = _semver_max_version(found_versions)
         if chosen:
@@ -351,6 +351,37 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
 
     filtered = [item for item in contributions if keep(item)]
     return list(dict.fromkeys(v for _, v in filtered)), warnings
+
+
+def compute_revert_fix_versions(merge_branches, unreleased_version_names, existing_version_names):
+    """Suggest recorded Fix Versions to remove for the branches receiving a revert.
+
+    Infer each branch separately so that redundant versions recorded by separate merge
+    runs are included in the removal candidates.
+
+    >>> versions = ["5.0.0", "4.3.0", "4.2.0", "3.5.2"]
+    >>> compute_revert_fix_versions(
+    ...     ["master", "branch-4.x", "branch-4.2"], versions, versions)
+    (['5.0.0', '4.3.0', '4.2.0'], [])
+    >>> compute_revert_fix_versions(["master"], versions, versions)
+    (['5.0.0'], [])
+    >>> compute_revert_fix_versions(["branch-4.2"], versions, ["4.3.0", "3.5.2"])
+    ([], [])
+    >>> compute_revert_fix_versions(["branch-4.x"], versions, ["4.3.0", "4.2.0"])
+    (['4.3.0'], [])
+    >>> compute_revert_fix_versions(
+    ...     ["branch-4.2"], ["4.2.1", "4.20.0"], ["4.2.1", "4.20.0"])
+    (['4.2.1'], [])
+    """
+    candidates = set()
+    warnings = []
+    for branch in merge_branches:
+        versions, branch_warnings = compute_merge_default_fix_versions(
+            [branch], unreleased_version_names
+        )
+        candidates.update(versions)
+        warnings.extend(branch_warnings)
+    return [v for v in existing_version_names if v in candidates], warnings
 
 
 def additional_fix_versions(inferred_versions, existing_versions):
@@ -1594,6 +1625,50 @@ def resolve_jira_issue(
     )
 
 
+def remove_jira_fix_versions(merge_branches, default_jira_id=""):
+    issue = get_jira_issue("Enter the JIRA id for the reverted change", default_jira_id)
+    if issue is None:
+        return
+
+    versions = asf_jira.project_versions("SPARK")
+    unreleased_names = [
+        v.name
+        for v in versions
+        if not v.raw["released"] and not v.raw["archived"] and parse_version(v.name) is not None
+    ]
+    existing_names = [v.name for v in issue.fields.fixVersions]
+    available_names = set(existing_names).intersection(unreleased_names)
+    if not available_names:
+        print("JIRA issue %s has no unreleased fix versions to remove." % issue.key)
+        return
+
+    defaults, warnings = compute_revert_fix_versions(
+        merge_branches, unreleased_names, existing_names
+    )
+    for warning in warnings:
+        print_error(warning)
+    print("Revert merged into: %s" % ", ".join(merge_branches))
+    print("JIRA issue %s has fix version(s): %s" % (issue.key, existing_names))
+    print("Available unreleased fix version(s) to remove: %s" % sorted(available_names))
+    while True:
+        raw = bold_input(
+            "Enter comma-separated fix version(s) to remove [%s], or 'skip': " % ",".join(defaults)
+        )
+        if raw.strip().lower() == "skip":
+            return
+        removals = fix_versions_from_input(raw, ",".join(defaults))
+        if not removals:
+            print("No fix version selected; update %s manually if needed." % issue.key)
+            return
+        if set(removals).issubset(available_names):
+            break
+        print_error("Select only unreleased fix versions currently recorded on this JIRA.")
+
+    prompt = "Remove fix version(s) %s from %s? (y/N): " % (removals, issue.key)
+    if get_input(prompt, ["y", "n", ""]) == "y":
+        jira_ops.remove_fix_versions(issue, removals)
+
+
 def choose_jira_assignee(issue):
     """
     Prompt the user to choose who to assign the issue to in jira, given a list of candidates,
@@ -1691,6 +1766,10 @@ class Jira:
             % (issue.key, [v["name"] for v in new_version_jsons])
         )
 
+    def remove_fix_versions(self, issue, version_names):
+        issue.update(update={"fixVersions": [{"remove": {"name": name}} for name in version_names]})
+        print("Successfully removed fixVersions=%s from %s!" % (version_names, issue.key))
+
     def resolve_issue(
         self, issue, resolve_id, fix_version_jsons, comment, resolution_id, fix_version_names
     ):
@@ -1736,6 +1815,9 @@ class DryRunJira(Jira):
             % ([v["name"] for v in new_version_jsons], issue.key)
         )
 
+    def remove_fix_versions(self, issue, version_names):
+        print("DRY-RUN: would remove fixVersions=%s from JIRA %s." % (version_names, issue.key))
+
     def resolve_issue(
         self, issue, resolve_id, fix_version_jsons, comment, resolution_id, fix_version_names
     ):
@@ -1775,11 +1857,12 @@ def resolve_jira_issues(title, merge_branches, comment, title_components=()):
         )
 
 
-def update_jira_for_pr(pr_num, title, merge_branches, title_components):
+def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_revert=False):
     skip_jira_title_tags = ("MINOR", "TRIVIAL", "FOLLOWUP")
     tags = set(title_components)
+    jira_title = title[len('Revert "') : -1] if is_revert else title
     try:
-        parsed = Title.parse(title)
+        parsed = Title.parse(jira_title)
         tags.update(parsed.leading)
         tags.update(parsed.components)
     except ValueError:
@@ -1796,6 +1879,12 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components):
     # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
     print()
     continue_maybe("Would you like to update an associated JIRA?")
+    if is_revert:
+        jira_ids = list(dict.fromkeys(re.findall("SPARK-[0-9]{4,5}", jira_title)))
+        for jira_id in jira_ids or [""]:
+            remove_jira_fix_versions(merge_branches, jira_id)
+        return
+
     jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
         pr_num,
         GITHUB_BASE,
@@ -2417,9 +2506,8 @@ def main():
             # pushes have already landed.
             if picked_commits:
                 post_merge_comment(pr_num, picked_commits)
-            # Backport mode may be the first chance to resolve a JIRA after an interrupted
-            # original merge. If it was already resolved, add any newly inferred fix versions.
-            update_jira_for_pr(pr_num, title, picked_refs, title_components)
+            # Reconcile JIRA with every branch that contains the merge or revert.
+            update_jira_for_pr(pr_num, title, picked_refs, title_components, is_revert=is_revert_pr)
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -2538,10 +2626,139 @@ def main():
             post_merge_comment(pr_num, merged_commits)
         # This is deliberately in the finally block: once the target branch has been pushed,
         # cancelling a later cherry-pick must not bypass the JIRA update decision.
-        update_jira_for_pr(pr_num, title, merged_refs, title_components)
+        update_jira_for_pr(pr_num, title, merged_refs, title_components, is_revert=is_revert_pr)
 
 
 __test__ = {
+    "remove_jira_fix_versions": """
+    A revert removes the versions for its branches while preserving released, archived,
+    and unrelated versions. JIRA receives individual removals so concurrent additions survive.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from types import SimpleNamespace
+    >>> from unittest.mock import Mock, call, patch
+    >>> def version(name, released=False, archived=False):
+    ...     return SimpleNamespace(
+    ...         name=name, raw={"name": name, "released": released, "archived": archived})
+    >>> versions = [version("5.0.0"), version("4.3.0"), version("4.2.1", released=True),
+    ...             version("4.2.0", archived=True), version("3.5.2")]
+    >>> issue = Mock(key="SPARK-1234")
+    >>> issue.fields.fixVersions = versions
+    >>> client = Mock()
+    >>> client.project_versions.return_value = versions
+    >>> writer = Jira(client)
+    >>> def run_removal(answers):
+    ...     issue.reset_mock()
+    ...     client.reset_mock()
+    ...     output = StringIO()
+    ...     with (
+    ...         patch.dict(remove_jira_fix_versions.__globals__, asf_jira=client,
+    ...                    jira_ops=writer, get_jira_issue=Mock(return_value=issue)),
+    ...         patch("builtins.input", side_effect=answers),
+    ...         redirect_stdout(output),
+    ...     ):
+    ...         remove_jira_fix_versions(["master", "branch-4.x"], "SPARK-1234")
+    ...     return output.getvalue()
+    >>> output = run_removal(["", "y"])
+    >>> issue.update.assert_called_once_with(update={"fixVersions": [
+    ...     {"remove": {"name": "5.0.0"}}, {"remove": {"name": "4.3.0"}}]})
+    >>> client.mock_calls
+    [call.project_versions('SPARK')]
+
+    The committer can narrow the selection, decline confirmation, or skip the update.
+
+    >>> output = run_removal(["5.0.0", "y"])
+    >>> issue.update.assert_called_once_with(
+    ...     update={"fixVersions": [{"remove": {"name": "5.0.0"}}]})
+    >>> for answers in (["", "n"], ["", ""], ["skip"]):
+    ...     output = run_removal(answers)
+    ...     issue.update.assert_not_called()
+
+    Released, archived, and unrecorded versions are rejected even when entered manually.
+
+    >>> output = run_removal(["4.2.1", "4.2.0", "9.9.9", "", "y"])
+    >>> output.count("Select only unreleased fix versions currently recorded on this JIRA.")
+    3
+    >>> issue.update.assert_called_once_with(update={"fixVersions": [
+    ...     {"remove": {"name": "5.0.0"}}, {"remove": {"name": "4.3.0"}}]})
+
+    Dry runs log the removal without writing to JIRA.
+
+    >>> writer = DryRunJira(client)
+    >>> output = run_removal(["", "y"])
+    >>> "DRY-RUN: would remove fixVersions=['5.0.0', '4.3.0'] from JIRA SPARK-1234." in output
+    True
+    >>> issue.update.assert_not_called()
+    >>> client.mock_calls
+    [call.project_versions('SPARK')]
+
+    Removing the last fix versions is allowed. A rerun with no matching versions is a no-op.
+
+    >>> writer = Jira(client)
+    >>> issue.fields.fixVersions = versions[:2]
+    >>> output = run_removal(["", "y"])
+    >>> issue.update.assert_called_once_with(update={"fixVersions": [
+    ...     {"remove": {"name": "5.0.0"}}, {"remove": {"name": "4.3.0"}}]})
+    >>> issue.fields.fixVersions = versions[2:]
+    >>> output = run_removal([""])
+    >>> issue.update.assert_not_called()
+    >>> issue.fields.fixVersions = []
+    >>> output = run_removal([])
+    >>> "no unreleased fix versions to remove" in output
+    True
+    >>> issue.update.assert_not_called()
+    """,
+    "update_jira_for_revert": """
+    Reverts update each referenced JIRA once and bypass the resolve/add path.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, call, patch
+    >>> remover, resolver, confirm = Mock(), Mock(), Mock()
+    >>> def update(title, branches, is_revert=False):
+    ...     remover.reset_mock()
+    ...     resolver.reset_mock()
+    ...     confirm.reset_mock()
+    ...     with (
+    ...         patch.dict(update_jira_for_pr.__globals__, remove_jira_fix_versions=remover,
+    ...                    resolve_jira_issues=resolver, continue_maybe=confirm),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         update_jira_for_pr("123", title, branches, [], is_revert=is_revert)
+    >>> title = 'Revert "[SPARK-1234][SPARK-5678][SQL] Fix SPARK-1234"'
+    >>> update(title, ["master", "branch-4.x"], is_revert=True)
+    >>> assert remover.call_args_list == [
+    ...     call(['master', 'branch-4.x'], 'SPARK-1234'),
+    ...     call(['master', 'branch-4.x'], 'SPARK-5678')]
+    >>> resolver.assert_not_called()
+
+    Backport-only runs use the same removal path. A missing JIRA id is entered interactively.
+
+    >>> update('Revert "[SPARK-1234][SQL] Fix"', ["branch-4.2"], is_revert=True)
+    >>> remover.assert_called_once_with(["branch-4.2"], "SPARK-1234")
+    >>> update('Revert "Fix"', ["master"], is_revert=True)
+    >>> remover.assert_called_once_with(["master"], "")
+
+    Wrapped skip tags preserve the existing policy for MINOR, TRIVIAL, and FOLLOWUP changes.
+
+    >>> for title in ('Revert "[MINOR][SQL] Fix"', 'Revert "[TRIVIAL][SQL] Fix"',
+    ...               'Revert "[SPARK-1234][SQL][FOLLOWUP] Fix"'):
+    ...     update(title, ["master"], is_revert=True)
+    ...     remover.assert_not_called()
+    ...     resolver.assert_not_called()
+    ...     confirm.assert_not_called()
+
+    Ordinary merges and reapplies still resolve the issue or add fix versions.
+
+    >>> for title in ('[SPARK-1234][SQL] Fix', 'Reapply "[SPARK-1234][SQL] Fix"'):
+    ...     update(title, ["master"])
+    ...     remover.assert_not_called()
+    ...     resolver.assert_called_once_with(
+    ...         title, ["master"],
+    ...         "Issue resolved by pull request 123\\n[https://github.com/apache/spark/pull/123]",
+    ...         [])
+    """,
     "reconcile_jira_affects_versions": """
     Blank input accepts the suggested version and appends it to the existing versions:
 
