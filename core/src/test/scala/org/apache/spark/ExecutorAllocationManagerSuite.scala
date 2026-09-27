@@ -252,7 +252,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     // was added specifically to be triggered by the *next* new drop, same as recovery
     // itself) -- confirm it's still there immediately after:
     def recoveredSize(): Int = manager.listener.invokePrivate(
-      PrivateMethod[mutable.HashSet[_]](Symbol("recoveredStageAttempts"))()).size
+      PrivateMethod[java.util.Set[_]](Symbol("recoveredStageAttempts"))()).size
     assert(recoveredSize() === 1,
       "expected the entry to still be present immediately after -- the sweep runs on the " +
         "next reconcile() call, not eagerly inside maxNumExecutorsNeededPerResourceProfile()")
