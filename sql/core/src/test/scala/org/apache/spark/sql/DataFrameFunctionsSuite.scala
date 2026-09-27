@@ -1554,6 +1554,22 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     )
   }
 
+  testWithWholeStageCodegenOnAndOff("SPARK-59604: map lookup respects LAST_WIN") { _ =>
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      val df = spark.range(3).selectExpr(
+        "map(id, id, id, id + 10)[id]",
+        "map(id, id, id, cast(null as bigint))[id]",
+        "map(id, id, 1L, 100L)[id]",
+        "map(id, id, id + 1, id + 10)[1L]",
+        "map(id, id)[cast(null as bigint)]",
+        "map(id, id)[-1L]")
+      checkAnswer(df, Seq(
+        Row(10L, null, 0L, 10L, null, null),
+        Row(11L, null, 100L, 1L, null, null),
+        Row(12L, null, 2L, null, null, null)))
+    }
+  }
+
   test("map_concat function") {
     val df1 = Seq(
       (Map[Int, Int](1 -> 100, 2 -> 200), Map[Int, Int](3 -> 300, 4 -> 400)),
