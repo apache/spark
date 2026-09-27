@@ -176,6 +176,25 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     rpcEnv.shutdown()
   }
 
+  test("SPARK-59138: hasUnreliablyStoredShuffle reflects active shuffle reliability") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+
+    assert(!tracker.hasUnreliablyStoredShuffle)
+    tracker.registerShuffle(0, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES,
+      isReliablyStored = true)
+    assert(!tracker.hasUnreliablyStoredShuffle)
+    tracker.registerShuffle(1, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+    assert(tracker.hasUnreliablyStoredShuffle)
+    tracker.unregisterShuffle(1)
+    assert(!tracker.hasUnreliablyStoredShuffle)
+
+    tracker.stop()
+    rpcEnv.shutdown()
+  }
+
   test("SPARK-59138: host loss drops merge results but keeps reliably-stored map output") {
     val pushConf = new SparkConf()
     pushConf.set(PUSH_BASED_SHUFFLE_ENABLED, true)

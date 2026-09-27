@@ -1240,6 +1240,16 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.get(shuffleId).exists(_.isReliablyStored)
   }
 
+  /**
+   * Whether any registered map-output shuffle is not reliably stored off-executor. Consulted by
+   * application-wide executor retirement (e.g. executor hold) to refuse retiring executors while
+   * a shuffle's only copy still lives on them. Pipelined shuffles are tracked separately and
+   * excluded.
+   */
+  def hasUnreliablyStoredShuffle: Boolean = {
+    shuffleStatuses.valuesIterator.exists(!_.isReliablyStored)
+  }
+
   def getNumAvailableOutputs(shuffleId: Int): Int = {
     shuffleStatuses.get(shuffleId).map(_.numAvailableMapOutputs).getOrElse(0)
   }
