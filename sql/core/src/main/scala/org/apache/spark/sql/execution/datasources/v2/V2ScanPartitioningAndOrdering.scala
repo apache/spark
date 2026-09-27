@@ -17,8 +17,8 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.CLASS_NAME
-import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, COLUMN_NAMES}
+import org.apache.spark.sql.catalyst.expressions.{NamedExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.DATA_SOURCE_V2_SCAN_RELATION
@@ -50,6 +50,18 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
           val partitioning = sequenceToOption(
             kgp.keys().map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog))
               .toImmutableArraySeq)
+          if (partitioning.isEmpty) {
+            val unresolvedRefs = kgp.keys().flatMap(_.references()).filter { ref =>
+              V2ExpressionUtils.resolveRefOpt[NamedExpression](ref, relation).isEmpty
+            }
+            if (unresolvedRefs.nonEmpty) {
+              logWarning(
+                log"Spark ignores the reported ${MDC(CLASS_NAME, kgp.getClass.getSimpleName)} " +
+                  log"because the partition key columns cannot be resolved: " +
+                  log"${MDC(COLUMN_NAMES, unresolvedRefs.map(_.describe()).mkString(", "))}. " +
+                  log"Storage-partitioned join will not be applied for this scan.")
+            }
+          }
           // Keep the partitioning when at least one of its keys is still in the scan output: the
           // scan projects the pruned key positions away when reporting its physical output
           // partitioning (see DataSourceV2ScanExecBase.outputPartitioning). When no key survives,

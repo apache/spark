@@ -17,7 +17,10 @@
 package org.apache.spark.sql.connector
 
 import java.sql.Timestamp
+import java.util
 import java.util.Collections
+
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.rdd.SortedMergeCoalescedRDD
@@ -28,11 +31,14 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryCatalystRuntimeFilterCatalog, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryBaseTable, InMemoryCatalystRuntimeFilterCatalog, InMemoryTable, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions._
-import org.apache.spark.sql.connector.distributions.Distributions
+import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.Expressions._
+import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder, SupportsReportPartitioning}
+import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning}
 import org.apache.spark.sql.execution.{
   ExtendedMode,
   FormattedMode,
@@ -56,6 +62,7 @@ import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.ExtendedSQLTest
 
 abstract class KeyGroupedPartitioningSuiteBase extends DistributionAndOrderingSuiteBase {
@@ -3393,6 +3400,44 @@ class KeyGroupedPartitioningSuite
           case other => fail(s"expected UnknownPartitioning but got $other")
         }
       }
+    }
+  }
+
+  test("SPARK-59721: an unresolvable reported partition key falls back to unknown partitioning") {
+    val catalogName = "unresolvable_key_cat"
+    spark.conf.set(s"spark.sql.catalog.$catalogName",
+      classOf[UnresolvablePartitionKeyCatalog].getName)
+    try {
+      val unresolvableKeyCatalog = spark.sessionState.catalogManager.catalog(catalogName)
+        .asInstanceOf[InMemoryTableCatalog]
+      createTable(table, columns, Array(identity("id")), catalog = unresolvableKeyCatalog)
+      sql(s"INSERT INTO $catalogName.ns.$table VALUES " +
+          "(1, 'aa', cast('2020-01-01' as timestamp)), " +
+          "(2, 'bb', cast('2020-01-02' as timestamp))")
+      createTable(table, columns, Array(identity("id")))
+      sql(s"INSERT INTO testcat.ns.$table VALUES " +
+          "(1, 'cc', cast('2020-01-03' as timestamp)), " +
+          "(2, 'dd', cast('2020-01-04' as timestamp))")
+
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = sql(
+          s"""SELECT t1.data, t2.data FROM $catalogName.ns.$table t1
+             |JOIN testcat.ns.$table t2 ON t1.id = t2.id
+             |""".stripMargin)
+        val logAppender = new LogAppender("unresolvable partition key")
+        withLogAppender(logAppender, level = Some(Level.WARN)) {
+          checkAnswer(df, Seq(Row("aa", "cc"), Row("bb", "dd")))
+        }
+        val warnings = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+          .filter(_.contains("partition key columns cannot be resolved"))
+        assert(warnings.nonEmpty)
+        assert(warnings.forall(_.contains("resolved: missing.")))
+        val scans = collectScans(df.queryExecution.executedPlan)
+        assert(scans.map(_.keyGroupedPartitioning.isDefined).sorted == Seq(false, true))
+        assert(collectShuffles(df.queryExecution.executedPlan).nonEmpty)
+      }
+    } finally {
+      spark.conf.unset(s"spark.sql.catalog.$catalogName")
     }
   }
 
@@ -9317,4 +9362,44 @@ class KeyGroupedPartitioningCatalystRuntimeFilterSuite
   after {
     catalog.clearTables()
   }
+}
+
+/**
+ * An in-memory catalog whose tables report a `KeyGroupedPartitioning` keyed on a column that
+ * does not exist in the table.
+ */
+class UnresolvablePartitionKeyCatalog extends InMemoryTableCatalog {
+  // scalastyle:off argcount
+  override protected def newInMemoryTable(
+      name: String,
+      columns: Array[Column],
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint],
+      distribution: Distribution,
+      ordering: Array[SortOrder],
+      requiredNumPartitions: Option[Int],
+      advisoryPartitionSize: Option[Long],
+      distributionStrictlyRequired: Boolean,
+      numRowsPerSplit: Int,
+      id: String): InMemoryBaseTable = {
+    // scalastyle:on argcount
+    new InMemoryTable(name, columns, partitioning, properties, constraints, distribution,
+        ordering, requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired,
+        numRowsPerSplit, id) {
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+        new InMemoryScanBuilder(schema(), options) {
+          override def build(): Scan = UnresolvablePartitionKeyScan(super.build())
+        }
+    }
+  }
+}
+
+case class UnresolvablePartitionKeyScan(inner: Scan) extends SupportsReportPartitioning {
+  override def readSchema(): StructType = inner.readSchema()
+  override def toBatch: Batch = inner.toBatch
+  override def description(): String = inner.description()
+  override def outputPartitioning(): Partitioning = new KeyGroupedPartitioning(
+    Array[Expression](FieldReference("missing")),
+    inner.asInstanceOf[SupportsReportPartitioning].outputPartitioning().numPartitions())
 }
