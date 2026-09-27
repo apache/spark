@@ -1003,9 +1003,8 @@ private[spark] class MapOutputTrackerMaster(
       numReduces: Int,
       isReliablyStored: Boolean): Unit = {
     // isReliablyStored is orthogonal to push-based shuffle; the branches differ only in tracking
-    // merge status (numReduces). pushBasedShuffleEnabled is app-global while reliability is
-    // per-shuffle, so no shuffle is both: a reliable manager (e.g. Celeborn) intercepts it, and its
-    // local-disk fallback runs through the built-in SortShuffleManager as unreliable.
+    // merge status (numReduces). Both bits are independent, so a shuffle may be reliable,
+    // push-based, both, or neither.
     if (pushBasedShuffleEnabled) {
       if (shuffleStatuses.put(shuffleId,
         new ShuffleStatus(numMaps, numReduces, bufferRacingMigrations,
@@ -1144,12 +1143,15 @@ private[spark] class MapOutputTrackerMaster(
 
   /**
    * Removes shuffle outputs on this host. With `respectReliablyStored` true, reliably-stored
-   * shuffles are kept, except `failedShuffleId` (the shuffle whose fetch failed), which is cleared
-   * so its correlated maps go in one pass. Host-local merge results are always removed.
+   * shuffles are kept. Host-local merge results are always removed.
    */
   def removeOutputsOnHost(host: String, respectReliablyStored: Boolean): CleanupOutcome =
     removeOutputsOnHost(host, respectReliablyStored, None)
 
+  /**
+   * `failedShuffleId` (the shuffle whose fetch failed) is cleared even when reliably stored, so its
+   * correlated maps go in one pass. With `restrictToFailedShuffle`, only that shuffle is touched.
+   */
   def removeOutputsOnHost(
       host: String,
       respectReliablyStored: Boolean,
@@ -1164,12 +1166,15 @@ private[spark] class MapOutputTrackerMaster(
 
   /**
    * Removes map outputs on this executor. With `respectReliablyStored` true, reliably-stored
-   * shuffles are kept, except `failedShuffleId` (the shuffle whose fetch failed), which is cleared
-   * so its correlated maps go in one pass.
+   * shuffles are kept.
    */
   def removeOutputsOnExecutor(execId: String, respectReliablyStored: Boolean): CleanupOutcome =
     removeOutputsOnExecutor(execId, respectReliablyStored, None)
 
+  /**
+   * `failedShuffleId` (the shuffle whose fetch failed) is cleared even when reliably stored, so its
+   * correlated maps go in one pass. With `restrictToFailedShuffle`, only that shuffle is touched.
+   */
   def removeOutputsOnExecutor(
       execId: String,
       respectReliablyStored: Boolean,
