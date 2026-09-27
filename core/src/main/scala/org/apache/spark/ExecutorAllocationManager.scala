@@ -1023,14 +1023,23 @@ private[spark] class ExecutorAllocationManager(
             Some(store.stageAttempt(attempt.stageId, attempt.stageAttemptId)._1.status)
           } catch {
             case _: NoSuchElementException => None // evicted from AppStatusStore entirely
+            case NonFatal(e) =>
+              // Same rationale as fetchGroundTruthStageData's NonFatal branch below: a
+              // disk-backed live UI store can throw something other than
+              // NoSuchElementException if this races with the store being closed during
+              // application shutdown. Treat it the same as "no ground truth available" so
+              // this sweep doesn't propagate into schedule()'s caller and keep failing (and
+              // re-logging via Utils.tryLog) on every tick for the remainder of shutdown.
+              logDebug(s"Failed to fetch ground truth stage status for $attempt", e)
+              None
           }
           groundTruthStatus match {
             case Some(v1.StageStatus.ACTIVE) | Some(v1.StageStatus.PENDING) =>
             // Ground truth still considers this attempt in progress; leave it recovered.
             case _ =>
-              // COMPLETE/FAILED/SKIPPED, or evicted entirely (None) -- either way
-              // AppStatusStore no longer considers this attempt in progress. Clean it up the
-              // same way a real (undropped) StageCompleted would have.
+              // COMPLETE/FAILED/SKIPPED, or evicted/unreachable entirely (None) -- either way
+              // AppStatusStore no longer considers this attempt in progress (or can't be
+              // asked). Clean it up the same way a real (undropped) StageCompleted would have.
               handleStageCompleted(attempt.stageId, attempt.stageAttemptId)
           }
         }
