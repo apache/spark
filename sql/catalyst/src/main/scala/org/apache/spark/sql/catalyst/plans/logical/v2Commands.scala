@@ -21,8 +21,8 @@ import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUns
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{DescribeCommandSchema, QueryPlan}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
@@ -1644,24 +1644,11 @@ case class CreateFunction(
 }
 
 /**
- * The logical plan of the CREATE FUNCTION command for SQL Functions.
+ * Used to apply ApplyDefaultCollation to CreateUserDefinedFunctionCommand
  */
-case class CreateUserDefinedFunction(
-    child: LogicalPlan,
-    inputParamText: Option[String],
-    returnTypeText: String,
-    exprText: Option[String],
-    queryText: Option[String],
-    comment: Option[String],
-    collation: Option[String],
-    isDeterministic: Option[Boolean],
-    containsSQL: Option[Boolean],
-    language: RoutineLanguage,
-    isTableFunc: Boolean,
-    ignoreIfExists: Boolean,
-    replace: Boolean) extends UnaryCommand {
-  override protected def withNewChildInternal(newChild: LogicalPlan): CreateUserDefinedFunction =
-    copy(child = newChild)
+trait CreateUserDefinedFunctionLike extends LogicalPlan {
+  def collation: Option[String]
+  def withCollation(collation: Option[String]): LogicalPlan
 }
 
 /**

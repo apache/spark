@@ -46,7 +46,30 @@ object MimaExcludes {
       "org.apache.spark.ml.regression.DecisionTreeRegressionModel.numLeave"),
     // [SPARK-59154] Remove unused prediction variance helper after inlining its implementation.
     ProblemFilters.exclude[DirectMissingMethodProblem](
-      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.predictVariance")
+      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.predictVariance"),
+    // [SPARK-50698][SQL] Refactor CreateUserDefinedFunction command to extend UnaryRunnableCommand
+    ProblemFilters.exclude[MissingTypesProblem](
+      "org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand"),
+    ProblemFilters.exclude[DirectMissingMethodProblem](
+      "org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand.apply"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand.apply"),
+    ProblemFilters.exclude[MissingTypesProblem](
+      "org.apache.spark.sql.execution.command.CreateSQLFunctionCommand"),
+    ProblemFilters.exclude[DirectMissingMethodProblem](
+      "org.apache.spark.sql.execution.command.CreateSQLFunctionCommand.apply"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.sql.execution.command.CreateSQLFunctionCommand.apply"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.sql.execution.command.CreateSQLFunctionCommand.copy"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.sql.execution.command.CreateSQLFunctionCommand.this"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.sql.execution.command.CreateSQLFunctionCommand.copy$default$1"),
+    ProblemFilters.exclude[MissingClassProblem](
+      "org.apache.spark.sql.catalyst.plans.logical.CreateUserDefinedFunction"),
+    ProblemFilters.exclude[MissingClassProblem](
+      "org.apache.spark.sql.catalyst.plans.logical.CreateUserDefinedFunction$")
   )
 
   // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).
