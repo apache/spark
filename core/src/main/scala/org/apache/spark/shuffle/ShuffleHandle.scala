@@ -31,6 +31,10 @@ abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {
    * remote shuffle service or distributed filesystem). When true, losing the executor or its host
    * does not lose the output, so its map outputs are not unregistered on executor/worker loss.
    *
+   * Applies only to materialized, map-output-tracked (blocking) shuffles. A pipelined shuffle is
+   * located through the streaming task-location registry, not map-status cleanup, so it cannot
+   * honor this flag; the scheduler rejects a non-`None` value on a pipelined dependency.
+   *
    * Per-shuffle override of the app-global `ShuffleDriverComponents.supportsReliableStorage()`:
    * `Some(value)` is authoritative for this shuffle; `None` (the default) means "no per-shuffle
    * information", so the global flag is used and managers that don't set it keep legacy behavior.

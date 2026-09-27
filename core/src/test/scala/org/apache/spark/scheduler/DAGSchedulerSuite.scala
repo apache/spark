@@ -7652,6 +7652,33 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
+  test("pipelined shuffle: an explicit reliablyStored value on a pipelined dependency is " +
+    "rejected") {
+    // reliablyStored is a map-output-tracker contract; the streaming tracker ignores it. A
+    // pipelined handle opting into Some(_) would silently get no guarantee, so the producer-stage
+    // check must reject it before any stage is created.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency[Int, Int, Int](producerRdd,
+        new HashPartitioner(2)) {
+      override val shuffleHandle: ShuffleHandle =
+        new BaseShuffleHandle(shuffleId, this) {
+          override def reliablyStored: Option[Boolean] = Some(true)
+        }
+    }
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    submit(consumerRdd, Array(0, 1), listener = failListener)
+    assert(failure.get() != null,
+      "pipelined dependency with an explicit reliablyStored value should be rejected")
+    assert(failure.get().getMessage.contains("reliablyStored"))
+    assert(taskSets.isEmpty)
+    assertDataStructuresEmpty()
+  }
+
   test("regular shuffle job with dynamic allocation enabled is NOT rejected (path is inert)") {
     // The dynamic-allocation fail-fast must apply only to jobs with a pipelined dependency; a plain
     // regular-shuffle job with dynamic allocation on runs normally.

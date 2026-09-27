@@ -867,6 +867,12 @@ private[spark] class DAGScheduler(
     if (shuffleDep.shuffleMergeEnabled) {
       throw pipelinedUnsupportedError("push-based shuffle merge as a pipelined shuffle")
     }
+    // reliablyStored is a map-output-tracker contract: the streaming tracker never consults it, so
+    // an explicit Some(_) here would be silently ignored. Reject it rather than accept a guarantee
+    // we cannot honor; a pipelined handle must leave reliablyStored None.
+    if (shuffleDep.shuffleHandle.reliablyStored.isDefined) {
+      throw pipelinedUnsupportedError("an explicit reliablyStored value on a pipelined shuffle")
+    }
     // A reliable RDD checkpoint in a member's within-stage chain (producer OR consumer side) is
     // rejected in checkPipelinedGroupsSupportedInRDDGraph, at job submission before any stage is
     // created -- so a reject leaves no partial stage state and both chain sides are covered.
