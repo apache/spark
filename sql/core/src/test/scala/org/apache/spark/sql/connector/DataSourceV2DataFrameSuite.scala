@@ -3745,6 +3745,17 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("SPARK-44517: write deduplicated non-nullable columns to a NOT NULL table") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id BIGINT NOT NULL, value BIGINT NOT NULL) USING foo")
+      val input = spark.range(3).selectExpr("id", "id + 10 AS value")
+      val deduplicated = input.dropDuplicates("id")
+      deduplicated.writeTo(t).append()
+      checkAnswer(spark.table(t), Seq(Row(0L, 10L), Row(1L, 11L), Row(2L, 12L)))
+    }
+  }
+
   test("SPARK-53924: temp view on DSv2 table detects nullability changes") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
