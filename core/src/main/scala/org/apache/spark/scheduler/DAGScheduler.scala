@@ -333,6 +333,9 @@ private[spark] class DAGScheduler(
    */
   private val reliableShuffleFileLostEpoch = new HashMap[(String, Int), Long]
 
+  /** VisibleForTest. Number of live reliable-loss fence entries. */
+  private[scheduler] def reliableShuffleFileLostEpochSize: Int = reliableShuffleFileLostEpoch.size
+
   private [scheduler] val outputCommitCoordinator = env.outputCommitCoordinator
 
   // A closure serializer that we reuse.
@@ -1560,6 +1563,9 @@ private[spark] class DAGScheduler(
                 }
                 for ((k, v) <- shuffleIdToMapStage.find(_._2 == stage)) {
                   shuffleIdToMapStage.remove(k)
+                  // Retire this shuffle's reliable-loss fences so they are bounded by live
+                  // shuffles, not left to accumulate as failed executors are replaced by new ids.
+                  reliableShuffleFileLostEpoch.filterInPlace { case ((_, id), _) => id != k }
                 }
                 if (waitingStages.contains(stage)) {
                   logDebug("Removing stage %d from waiting set.".format(stageId))

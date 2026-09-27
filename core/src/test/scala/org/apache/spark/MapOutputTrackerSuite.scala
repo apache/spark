@@ -252,6 +252,30 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     rpcEnv.shutdown()
   }
 
+  test("SPARK-59138: losing an executor with no output for a reliable shuffle still bumps epoch") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+
+    val size = MapStatus.compressSize(1000L)
+    // Reliable shuffle whose only map lives on executor "b", not on the lost executor "a".
+    tracker.registerShuffle(0, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES,
+      isReliablyStored = true)
+    tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("b", "hostB", 1000), Array(size), 5))
+
+    // Nothing on "a" was preserved (the reliable output is elsewhere), so this ordinary no-op loss
+    // must still advance the epoch. Target-scoped preservation, not shuffle-level classification,
+    // is what keeps the fence: a whole-shuffle "reliable" verdict here would wrongly suppress it.
+    val epochBefore = tracker.getEpoch
+    tracker.removeOutputsOnExecutor("a", respectReliablyStored = true)
+    assert(tracker.getNumAvailableOutputs(0) === 1)
+    assert(tracker.getEpoch > epochBefore)
+
+    tracker.stop()
+    rpcEnv.shutdown()
+  }
+
   test("SPARK-59138: restrictToFailedShuffle cleans only the failed shuffle, leaving co-located " +
     "outputs intact") {
     val rpcEnv = createRpcEnv("test")
