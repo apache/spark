@@ -1568,12 +1568,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("mapType" -> toSQLType(m.dataType)))
   }
 
-  def nonFoldableOptionError(): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_OPTIONS.NON_FOLDABLE",
-      messageParameters = Map.empty)
-  }
-
   def nonMapFunctionNotAllowedError(): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_OPTIONS.NON_MAP_FUNCTION",

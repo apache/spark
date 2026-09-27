@@ -1022,6 +1022,22 @@ class JsonFunctionsSuite extends SharedSparkSession {
         stop = 22
       )
     )
+
+    val df3 = Seq((Tuple1(1), "true")).toDF("a", "pretty")
+    val nonFoldableQuery = "to_json(a, map('pretty', pretty))"
+    checkError(
+      exception = intercept[AnalysisException] {
+        df3.selectExpr(nonFoldableQuery)
+      },
+      condition = "NON_FOLDABLE_ARGUMENT",
+      parameters = Map(
+        "funcName" -> "`to_json`",
+        "paramName" -> "`options`",
+        "paramType" -> "\"MAP<STRING, STRING>\""),
+      context = ExpectedContext(
+        fragment = nonFoldableQuery,
+        start = 0,
+        stop = nonFoldableQuery.length - 1))
   }
 
   test("SPARK-19967 Support from_json in SQL") {

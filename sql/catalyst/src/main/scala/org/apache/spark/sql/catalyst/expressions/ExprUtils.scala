@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
 import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -59,14 +60,16 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
     dataType.asInstanceOf[StructType]
   }
 
-  def convertToMapData(exp: Expression): Map[String, String] = exp match {
+  def convertToMapData(exp: Expression, functionName: String): Map[String, String] = exp match {
     case m: CreateMap
       if AbstractMapType(
         StringTypeWithCollation(supportsTrimCollation = true),
         StringTypeWithCollation(supportsTrimCollation = true))
         .acceptsType(m.dataType) =>
-      if (!m.foldable) {
-        throw QueryCompilationErrors.nonFoldableOptionError()
+      if (!m.foldable &&
+          !SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_NON_FOLDABLE_OPTIONS)) {
+        throw QueryCompilationErrors.nonFoldableArgumentError(
+          functionName, "options", m.dataType)
       }
       val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
       ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>

@@ -474,6 +474,22 @@ class XmlFunctionsSuite extends SharedSparkSession {
         stop = 21
       )
     )
+
+    val df3 = Seq((Tuple1(1), "RECORD")).toDF("a", "rowTag")
+    val nonFoldableQuery = "to_xml(a, map('rowTag', rowTag))"
+    checkError(
+      exception = intercept[AnalysisException] {
+        df3.selectExpr(nonFoldableQuery)
+      },
+      condition = "NON_FOLDABLE_ARGUMENT",
+      parameters = Map(
+        "funcName" -> "`to_xml`",
+        "paramName" -> "`options`",
+        "paramType" -> "\"MAP<STRING, STRING>\""),
+      context = ExpectedContext(
+        fragment = nonFoldableQuery,
+        start = 0,
+        stop = nonFoldableQuery.length - 1))
   }
 
   test("Support from_xml in SQL") {

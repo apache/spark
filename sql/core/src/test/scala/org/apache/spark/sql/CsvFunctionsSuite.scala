@@ -440,18 +440,63 @@ class CsvFunctionsSuite extends SharedSparkSession {
   }
 
   test("to_csv with non-foldable options") {
-    val df = Seq((Tuple1(1), ",")).toDF("a", "delimiter")
+    val df = Seq(((1, 2), ",")).toDF("a", "delimiter")
+    val errorParameters = Map(
+      "funcName" -> "`to_csv`",
+      "paramName" -> "`options`",
+      "paramType" -> "\"MAP<STRING, STRING>\"")
 
     checkError(
       exception = intercept[AnalysisException] {
         df.selectExpr("to_csv(a, map('delimiter', delimiter))")
       },
-      condition = "INVALID_OPTIONS.NON_FOLDABLE",
-      parameters = Map.empty,
+      condition = "NON_FOLDABLE_ARGUMENT",
+      parameters = errorParameters,
       context = ExpectedContext(
         fragment = "to_csv(a, map('delimiter', delimiter))",
         start = 0,
         stop = 37))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          """SELECT transform(array('|'),
+            |  x -> to_csv(named_struct('a', 1, 'b', 2), map('delimiter', x)))
+            |""".stripMargin).collect()
+      },
+      condition = "NON_FOLDABLE_ARGUMENT",
+      parameters = errorParameters,
+      context = ExpectedContext(
+        fragment = "to_csv(named_struct('a', 1, 'b', 2), map('delimiter', x))",
+        start = 36,
+        stop = 92))
+
+    val evaluableNonFoldableOptions = Seq(
+      "nvl(NULL, '|')",
+      "elt(1, '|', ',')",
+      "transform(array('|'), x -> x)[0]",
+      "CASE WHEN length('|') = 1 THEN '|' ELSE raise_error('bad') END")
+    evaluableNonFoldableOptions.foreach { option =>
+      val query = s"to_csv(a, map('delimiter', $option))"
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.selectExpr(query)
+        },
+        condition = "NON_FOLDABLE_ARGUMENT",
+        parameters = errorParameters,
+        context = ExpectedContext(
+          fragment = query,
+          start = 0,
+          stop = query.length - 1))
+    }
+
+    withSQLConf(SQLConf.LEGACY_ALLOW_NON_FOLDABLE_OPTIONS.key -> "true") {
+      evaluableNonFoldableOptions.foreach { option =>
+        checkAnswer(
+          df.selectExpr(s"to_csv(a, map('delimiter', $option))"),
+          Row("1|2") :: Nil)
+      }
+    }
   }
 
   test("parse timestamps with locale") {
