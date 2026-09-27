@@ -1313,7 +1313,8 @@ class CodegenContext extends Logging {
       makeSplitFunction: String => String,
       foldFunctions: Seq[String] => String,
       level: Int = 0): Seq[SplitCall] = {
-    if (calls.length <= splitCallsPerMethod(calls.maxBy(_.arguments.length).arguments)) {
+    if (calls.isEmpty ||
+        calls.length <= splitCallsPerMethod(calls.maxBy(_.arguments.length).arguments)) {
       calls
     } else {
       val groups = mutable.ArrayBuffer.empty[mutable.ArrayBuffer[SplitCall]]
@@ -1430,7 +1431,13 @@ class CodegenContext extends Logging {
               w.defs.foreach(d => nestedDefs.put(d.id.id, d.child))
               toVisit.push(w.child)
             case ref: CommonExpressionRef =>
-              // The call to a definition made a method passes `INPUT_ROW` wherever it is set.
+              // The call to a definition made a method passes `INPUT_ROW` wherever it is set, and
+              // whether the definition is made one depends on the length of its code
+              // (`CommonExprSlots.build`), which is generated only after these arguments are
+              // computed. So the row is taken wherever it is set: for a definition that ends up
+              // inlined, an argument the method does not read. That is safe where references
+              // reach code generation - an aggregate, where `INPUT_ROW` is in scope -
+              // `RewriteWithExpression` having inlined a `With` in a join condition.
               needsRow |= INPUT_ROW != null
               if (visited.add(ref.id.id)) {
                 nestedDefs.get(ref.id.id)

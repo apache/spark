@@ -1894,14 +1894,16 @@ class WholeStageCodegenSuite extends SharedSparkSession
 
   test("SPARK-33301: a CASE WHEN whose methods would take too many parameters stays in one piece") {
     // Every branch reads all three columns, and no expression repeats, so that subexpression
-    // elimination, which the same limit governs, has nothing to split.
-    withSQLConf("spark.sql.CodeGenerator.validParamLength" -> "4") {
-      withTempPath { path =>
-        spark.range(50).selectExpr("id AS a", "id + 1 AS b", "id + 2 AS c")
-          .write.parquet(path.getCanonicalPath)
-        val branches = (1 to 100).map(k => s"WHEN a + $k = b THEN c * $k").mkString(" ")
-        def df: DataFrame =
-          spark.read.parquet(path.getCanonicalPath).selectExpr(s"CASE $branches ELSE 0 END AS v")
+    // elimination, which the same limit governs, has nothing to split. Under the default limit
+    // the same CASE WHEN splits, so it is the limit that keeps it in one piece.
+    withTempPath { path =>
+      spark.range(50).selectExpr("id AS a", "id + 1 AS b", "id + 2 AS c")
+        .write.parquet(path.getCanonicalPath)
+      val branches = (1 to 100).map(k => s"WHEN a + $k = b THEN c * $k").mkString(" ")
+      def df: DataFrame =
+        spark.read.parquet(path.getCanonicalPath).selectExpr(s"CASE $branches ELSE 0 END AS v")
+      assert(splitsCaseWhen(df))
+      withSQLConf("spark.sql.CodeGenerator.validParamLength" -> "4") {
         assert(!splitsCaseWhen(df))
         checkAnswer(df, withoutWholeStage(df))
       }
@@ -1945,12 +1947,13 @@ class WholeStageCodegenSuite extends SharedSparkSession
 
   test("SPARK-33301: max_by under a keyed aggregate, whose update reads the buffer") {
     // `max_by` updates and merges its buffer with CASE WHENs of three branches that read the
-    // buffer through `INPUT_ROW`.
+    // buffer through `INPUT_ROW`, so their split methods take the row. The value is a number: a
+    // string one is not updatable in place, and Spark plans a sort aggregate outside the stage.
     withTempView("t") {
-      spark.range(1000)
-        .selectExpr("id % 7 AS k", "concat('value ', cast(id AS string)) AS s", "id % 97 AS o")
-        .createOrReplaceTempView("t")
-      val query = "SELECT k, max_by(s, o), min_by(s, o) FROM t GROUP BY k"
+      spark.range(1000).selectExpr("id % 7 AS k", "id % 97 AS o").createOrReplaceTempView("t")
+      val query = "SELECT k, max_by(o * 3, o), min_by(o * 3, o) FROM t GROUP BY k"
+      assert(splitsCaseWhen(sql(query)))
+      assert(splitCaseWhenTakesRow(sql(query)))
       checkAnswer(sql(query), withoutWholeStage(sql(query)))
     }
   }
@@ -2010,6 +2013,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     def df: DataFrame = spark.range(10).selectExpr(s"($caseWhen) + 1 AS a",
       s"($caseWhen) + 2 AS b", s"IF(id < 0, 0, nullif($second, 0)) AS c",
       s"IF(id < 0, 0, nullif($second, 0)) AS d")
+    assert(splitsCaseWhen(df))
     checkAnswer(df, withoutWholeStage(df))
   }
 
