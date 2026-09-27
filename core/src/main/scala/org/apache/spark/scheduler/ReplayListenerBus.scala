@@ -22,7 +22,7 @@ import java.nio.charset.{CodingErrorAction, StandardCharsets}
 
 import scala.annotation.tailrec
 
-import com.fasterxml.jackson.core.JsonParseException
+import com.fasterxml.jackson.core.{JsonParseException, JsonProcessingException}
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException
 
 import org.apache.spark.SparkConf
@@ -108,9 +108,7 @@ private[spark] class ReplayListenerBus(
       }
 
       @tailrec private def fetchLine(): (String, Int) = {
-        val sb = new java.lang.StringBuilder()
-        var overLong = false
-        var byteLength = 0L
+        val buffer = new BoundedLineBuffer(maxLineLength)
         var c = reader.read()
         if (c == -1) {
           null
@@ -118,34 +116,11 @@ private[spark] class ReplayListenerBus(
           val index = lineIndex
           lineIndex += 1
           while (c != -1 && c != '\n') {
-            if (!overLong) {
-              // The strict decoder guarantees valid surrogate pairs. Count their four UTF-8
-              // bytes on the high surrogate and zero on the low surrogate.
-              byteLength += (if (c < 0x80) {
-                1
-              } else if (c < 0x800) {
-                2
-              } else if (Character.isHighSurrogate(c.toChar)) {
-                4
-              } else if (Character.isLowSurrogate(c.toChar)) {
-                0
-              } else {
-                3
-              })
-              // Allow one extra byte until we know whether the line ends in CRLF.
-              if (byteLength <= maxLineLength.toLong + 1) {
-                sb.append(c.toChar)
-              } else {
-                overLong = true
-              }
-            }
+            buffer.append(c.toChar)
             c = reader.read()
           }
-          if (sb.length() > 0 && sb.charAt(sb.length() - 1) == '\r') {
-            sb.setLength(sb.length() - 1)
-            byteLength -= 1
-          }
-          if (overLong || byteLength > maxLineLength) {
+          val line = buffer.result()
+          if (line.isEmpty) {
             if (!warned) {
               logWarning(log"Skipped event log lines longer than " +
                 log"${MDC(MAX_SIZE, maxLineLength)} bytes in " +
@@ -154,7 +129,7 @@ private[spark] class ReplayListenerBus(
             }
             fetchLine()
           } else {
-            (sb.toString, index)
+            (line.get, index)
           }
         }
       }
@@ -230,6 +205,10 @@ private[spark] class ReplayListenerBus(
         // Just stop replay.
         false
       case _: EOFException if maybeTruncated => false
+      case jpe: JsonProcessingException =>
+        logError(log"Exception parsing Spark event log: ${MDC(PATH, sourceName)} " +
+          log"at line ${MDC(LINE_NUM, lineNumber)}", jpe)
+        throw jpe
       case ioe: IOException =>
         throw ioe
       case e: Exception =>
@@ -254,13 +233,12 @@ private[spark] class HaltReplayException extends RuntimeException
 private[spark] object ReplayListenerBus {
 
   /**
-   * Default per-line cap during replay: far above any legitimate event line, so replay
-   * memory stays bounded even for corrupt logs. Matches the default of
-   * spark.history.fs.eventLog.maxLineLength.
+   * Default UTF-8 line-length cap, matching spark.history.fs.eventLog.maxLineLength.
+   * Keep the maximum buffered character count close to the original 512 MiB / 2 cap.
    */
-  val DEFAULT_MAX_LINE_LENGTH: Int = 512 * 1024 * 1024
+  val DEFAULT_MAX_LINE_LENGTH: Int = 256 * 1024 * 1024
 
-  /** Resolves the replay line-length cap from configuration; <= 0 disables the cap. */
+  /** Resolves the byte limit, using Int.MaxValue for non-positive or larger values. */
   def maxLineLength(conf: SparkConf): Int = {
     val configured = conf.get(History.EVENT_LOG_MAX_LINE_LENGTH)
     if (configured <= 0 || configured > Int.MaxValue) Int.MaxValue else configured.toInt
@@ -270,4 +248,37 @@ private[spark] object ReplayListenerBus {
 
   // utility filter that selects all event logs during replay
   val SELECT_ALL_FILTER: ReplayEventsFilter = { (eventString: String) => true }
+
+  /** Accumulates a bounded prefix of one decoded line, allowing a possible trailing CR. */
+  private[scheduler] class BoundedLineBuffer(maxLineLength: Int) {
+    private val buffer = new java.lang.StringBuilder()
+    private var byteLength = 0L
+    private val bufferLimit = maxLineLength.toLong + 1
+
+    def length: Int = buffer.length()
+
+    def append(c: Char): Unit = {
+      if (byteLength <= bufferLimit) {
+        // The strict decoder emits valid surrogate pairs: count two bytes per half.
+        byteLength += (if (c < 0x80) 1 else if (c < 0x800 || Character.isSurrogate(c)) 2 else 3)
+        // Reserve one extra byte for a possible CR in the line ending.
+        if (byteLength <= bufferLimit) {
+          buffer.append(c)
+        }
+      }
+    }
+
+    def result(): Option[String] = {
+      val trailingCR = length > 0 && buffer.charAt(length - 1) == '\r'
+      val contentLength = byteLength - (if (trailingCR) 1 else 0)
+      if (contentLength > maxLineLength) {
+        None
+      } else if (trailingCR) {
+        Some(buffer.substring(0, length - 1))
+      } else {
+        Some(buffer.toString)
+      }
+    }
+  }
+
 }
