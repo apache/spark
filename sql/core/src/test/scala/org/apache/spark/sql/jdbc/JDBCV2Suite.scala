@@ -37,7 +37,7 @@ import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, Unbound
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.{FormattedMode, RowDataSourceScanExec}
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCRDD, JDBCOptions}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JDBCRDD}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
@@ -1902,31 +1902,18 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
   }
 
   test("DataFrameWriterV2: truncate closes JDBC connections") {
-    val connections = new ConcurrentLinkedQueue[Connection]()
-    val dialect = new JdbcDialect {
-      override def canHandle(url: String): Boolean = h2Dialect.canHandle(url)
-
-      override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
-        val connectionFactory = h2Dialect.createConnectionFactory(options)
-        (partitionId: Int) => {
-          val connection = connectionFactory(partitionId)
-          connections.add(connection)
-          connection
-        }
-      }
-    }
-
     JdbcDialects.unregisterDialect(h2Dialect)
     try {
-      JdbcDialects.registerDialect(dialect)
+      ConnectionTrackingH2Dialect.clearConnections()
+      JdbcDialects.registerDialect(ConnectionTrackingH2Dialect)
       withTable("h2.test.abc") {
         sql("CREATE TABLE h2.test.abc AS SELECT * FROM h2.test.people")
         sql("SELECT 'bob' AS NAME, 4 AS ID").writeTo("h2.test.abc").overwrite(lit(true))
-        assert(connections.asScala.nonEmpty)
-        assert(connections.asScala.forall(_.isClosed))
+        assert(ConnectionTrackingH2Dialect.hasTrackedConnections)
+        assert(ConnectionTrackingH2Dialect.allConnectionsClosed)
       }
     } finally {
-      JdbcDialects.unregisterDialect(dialect)
+      JdbcDialects.unregisterDialect(ConnectionTrackingH2Dialect)
       JdbcDialects.registerDialect(h2Dialect)
     }
   }
@@ -3226,4 +3213,25 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAnswer(df, Seq(Row("keep", 1), Row(null, 2)))
   }
 
+}
+
+private object ConnectionTrackingH2Dialect extends JdbcDialect {
+  private val connections = new ConcurrentLinkedQueue[Connection]()
+
+  def clearConnections(): Unit = connections.clear()
+
+  def hasTrackedConnections: Boolean = !connections.isEmpty
+
+  def allConnectionsClosed: Boolean = connections.asScala.forall(_.isClosed)
+
+  override def canHandle(url: String): Boolean = H2Dialect().canHandle(url)
+
+  override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+    val connectionFactory = H2Dialect().createConnectionFactory(options)
+    (partitionId: Int) => {
+      val connection = connectionFactory(partitionId)
+      connections.add(connection)
+      connection
+    }
+  }
 }
