@@ -114,22 +114,25 @@ class FileTableSuite extends SharedSparkSession {
     }
   }
 
-  allFileBasedDataSources.foreach { format =>
-    test("SPARK-49519, SPARK-50287: Merge options of table and relation when " +
-      s"constructing ScanBuilder and WriteBuilder in FileFormat - $format") {
+  for {
+    format <- allFileBasedDataSources
+    (tableKey, operationKey) <- Seq(("k2", "k2"), ("k2", "K2"), ("K2", "k2"))
+  } {
+    test("SPARK-49519, SPARK-50287, SPARK-57472: Merge options of table and relation when " +
+      s"constructing ScanBuilder and WriteBuilder - $format ($tableKey/$operationKey)") {
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
         val userSpecifiedSchema = StructType(Seq(StructField("c1", StringType)))
 
         DataSource.lookupDataSourceV2(format, spark.sessionState.conf) match {
           case Some(provider) =>
             val dsOptions = new CaseInsensitiveStringMap(
-              Map("k1" -> "v1", "k2" -> "ds_v2").asJava)
+              Map("k1" -> "v1", tableKey -> "ds_v2").asJava)
             val table = provider.getTable(
               userSpecifiedSchema,
               Array.empty,
               dsOptions.asCaseSensitiveMap()).asInstanceOf[FileTable]
             val tableOptions = new CaseInsensitiveStringMap(
-              Map("k2" -> "table_v2", "k3" -> "v3").asJava)
+              Map(operationKey -> "table_v2", "k3" -> "v3").asJava)
 
             val mergedReadOptions = table.newScanBuilder(tableOptions) match {
               case csv: CSVScanBuilder => csv.options
@@ -150,6 +153,14 @@ class FileTableSuite extends SharedSparkSession {
             assert(mergedWriteOptions.get("k1") === "v1")
             assert(mergedWriteOptions.get("k2") === "table_v2")
             assert(mergedWriteOptions.get("k3") === "v3")
+
+            val expected = Map("k1" -> "v1", operationKey -> "table_v2", "k3" -> "v3")
+            assert(mergedReadOptions.asCaseSensitiveMap().asScala.toMap === expected)
+            assert(mergedWriteOptions.asCaseSensitiveMap().asScala.toMap === expected)
+            assert(dsOptions.asCaseSensitiveMap().asScala.toMap ===
+              Map("k1" -> "v1", tableKey -> "ds_v2"))
+            assert(tableOptions.asCaseSensitiveMap().asScala.toMap ===
+              Map(operationKey -> "table_v2", "k3" -> "v3"))
           case _ =>
             throw new IllegalArgumentException(s"Failed to get table provider for $format")
         }
