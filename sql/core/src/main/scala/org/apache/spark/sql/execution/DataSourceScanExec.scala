@@ -658,21 +658,10 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
     }
   } ++ storageFilterMetrics ++ driverMetrics
 
+  // The format names and creates these, since what a storage filter avoids is measured in the
+  // format's own units. This node only carries them into `metrics` so they reach the SQL UI.
   protected lazy val storageFilterMetrics: Map[String, SQLMetric] = if (storageFilters.nonEmpty) {
-    // See `StorageFilterMetrics` for what each of these counts.
-    Map(
-      FileSourceScanLike.STORAGE_FILTER_ROW_GROUPS_SKIPPED ->
-        SQLMetrics.createMetric(sparkContext, "row groups skipped by storage filter"),
-      FileSourceScanLike.STORAGE_FILTER_ROWS_EXCLUDED_BY_ROW_GROUP ->
-        SQLMetrics.createMetric(sparkContext, "rows excluded by storage filter (whole row group)"),
-      FileSourceScanLike.STORAGE_FILTER_ROWS_EXCLUDED_WITHIN_ROW_GROUP ->
-        SQLMetrics.createMetric(sparkContext, "rows excluded by storage filter (within row group)"),
-      FileSourceScanLike.STORAGE_FILTER_BYTES_AVOIDED_BY_ROW_GROUP ->
-        SQLMetrics.createSizeMetric(sparkContext,
-          "bytes avoided by storage filter (whole row group)"),
-      FileSourceScanLike.STORAGE_FILTER_BYTES_AVOIDED_BY_PAGE_FILTERING ->
-        SQLMetrics.createSizeMetric(sparkContext,
-          "bytes avoided by storage filter (page filtering)"))
+    relation.fileFormat.storageFilterMetrics(sparkContext)
   } else {
     Map.empty
   }
@@ -733,14 +722,6 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
       bucketToFilesGrouping.forall(p => p._2.length <= 1)
     }
   }
-}
-
-object FileSourceScanLike {
-  val STORAGE_FILTER_ROW_GROUPS_SKIPPED = "storageFilterRowGroupsSkipped"
-  val STORAGE_FILTER_ROWS_EXCLUDED_BY_ROW_GROUP = "storageFilterRowsExcludedByRowGroup"
-  val STORAGE_FILTER_ROWS_EXCLUDED_WITHIN_ROW_GROUP = "storageFilterRowsExcludedWithinRowGroup"
-  val STORAGE_FILTER_BYTES_AVOIDED_BY_ROW_GROUP = "storageFilterBytesAvoidedByRowGroup"
-  val STORAGE_FILTER_BYTES_AVOIDED_BY_PAGE_FILTERING = "storageFilterBytesAvoidedByPageFiltering"
 }
 
 /**

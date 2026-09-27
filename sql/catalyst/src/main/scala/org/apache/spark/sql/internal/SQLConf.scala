@@ -1956,9 +1956,11 @@ object SQLConf {
         "more read of the key columns, since the phase that evaluated the filter already read " +
         "them. A file written with no Parquet page index is read with the filter applied only " +
         "where it empties a whole row group, since narrowing to part of one needs that index, so " +
-        "every row group of it that keeps a row pays that. Setting " +
-        "parquet.filter.columnindex.enabled to false turns this off entirely, because reading " +
-        "part of a row group goes through the page index. Note that " +
+        "every row group of it that keeps a row pays that. Narrowing to part of a row group also " +
+        "trusts that index, which a read with no pushed data filter never consults, so on a file " +
+        "whose page index is present but wrong this can pair a row's key with another row's " +
+        "values. Setting parquet.filter.columnindex.enabled to false is the escape hatch, and it " +
+        "leaves the filter with the row groups it empties, which need no index at all. Note that " +
         "the surviving key values of a whole row group are buffered before the " +
         "first batch of that row group is produced, so a task holds up to one extra copy of the " +
         "key columns for one row group.")
@@ -1970,18 +1972,21 @@ object SQLConf {
   val PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES =
     buildConf("spark.sql.parquet.storageFilterPushdown.maxSplicedRowGroupBytes")
       .internal()
-      .doc("Most memory, in bytes, that the vectorized Parquet reader holds for one row group " +
-        "while it applies a storage filter. Two things count against it, they sit in different " +
-        "pools, and both grow with the number of surviving rows: the key values buffered to " +
-        "splice into the output batches, which follow the reader's memory mode and so can be off " +
-        "heap, and the row ranges those rows fall into, always on heap, which the second phase " +
-        "needs to select its pages. The count is examined after every surviving row. Past the " +
-        "limit the reader releases the buffer and reads every projected column of the surviving " +
-        "rows instead, " +
-        "which costs one extra read of the key columns, and past it again it reads the row group " +
+      .doc("The maximum memory, in bytes, that the vectorized Parquet reader holds for one row " +
+        "group while it applies a storage filter. Two things count against it, and both grow " +
+        "with the number of surviving rows. One is the key values buffered to splice into the " +
+        "output " +
+        "batches, which follow the reader's memory mode and so can be off heap. The other is the " +
+        "row ranges those rows fall into, always on heap, which the second phase needs to select " +
+        "its pages. The count is examined after every surviving row. Past the limit the reader " +
+        "releases the buffer and reads every projected column of the surviving rows instead, " +
+        "which costs one extra read of the key columns. Past it again it reads the row group " +
         "with no filter applied at all, which is correct but as slow as not pushing the filter. " +
-        "What is counted is the buffered values and their per-row overhead, not the backing " +
-        "arrays, which a column vector may grow beyond that.")
+        "A variable-length key value is charged four times its length, which covers the null " +
+        "byte per element of the vector's byte child and the doubling that child does as it " +
+        "grows. " +
+        "What is counted is an estimate of what the buffer holds, not a bound on what the column " +
+        "vectors behind it allocate.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)

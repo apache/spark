@@ -22,6 +22,7 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.mapreduce.Job
 
+import org.apache.spark.SparkContext
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -168,8 +169,9 @@ trait FileFormat {
 
   /**
    * Like [[buildReaderWithPartitionValues]] but additionally accepts a sequence of storage filters:
-   * Catalyst expressions that the storage layer may evaluate to drive value-column IO pruning based
-   * on key-column evaluation (e.g., late materialization with a runtime bloom filter).
+   * Catalyst expressions that the storage layer may evaluate to prune the IO of the columns they do
+   * not reference, by reading and evaluating the ones they do first (e.g. late materialization with
+   * a runtime bloom filter).
    *
    * Honoring them is optional, here and in a reader that does implement them: the planner leaves
    * every one of them in the post-scan `Filter` as well, so ignoring one is a missed optimization
@@ -201,7 +203,7 @@ trait FileFormat {
       storageFilters: Seq[Expression],
       options: Map[String, String],
       hadoopConf: Configuration,
-      storageFilterMetrics: Map[String, SQLMetric] = Map.empty
+      storageFilterMetrics: Map[String, SQLMetric]
     ): Option[PartitionedFile => Iterator[InternalRow]] = None
 
   /**
@@ -212,6 +214,16 @@ trait FileFormat {
   def supportsStorageFilterPushdown(sparkSession: SparkSession): Boolean = false
 
   /**
+   * The SQL metrics this format's reader updates while it applies storage filters, keyed the way
+   * the scan then exposes them. Asked once per scan, and only for a scan that has storage filters.
+   *
+   * It belongs to the format for the same reason the conf does: what there is to count is the
+   * format's own vocabulary. Row groups and page filtering are Parquet's words, and another format
+   * measures what it avoided differently.
+   */
+  def storageFilterMetrics(sparkContext: SparkContext): Map[String, SQLMetric] = Map.empty
+
+  /**
    * Whether this format's reader can evaluate `expr` as a storage filter, i.e. whether the planner
    * may offer it to [[buildReaderWithStorageFilters]].
    *
@@ -220,9 +232,6 @@ trait FileFormat {
    * shapes and column types a reader supports stay in that reader's own package. Answering true
    * says the reader can evaluate the expression, not that it will: the conjunct stays in the
    * post-scan `Filter`, so a reader is free to give a file up.
-   *
-   * `expr` is the expression [[buildReaderWithStorageFilters]] will be given, not a canonicalized
-   * form of it, so a format may decide by column name or field metadata.
    */
   def supportsStorageFilter(expr: Expression): Boolean = false
 

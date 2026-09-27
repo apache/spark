@@ -25,7 +25,11 @@ import java.util.PrimitiveIterator;
  * Helper class to store intermediate state while reading a Parquet column chunk.
  */
 final class ParquetReadState {
-  /** The row indexes to include, only not-null if the column index is present. */
+  /**
+   * The row indexes to include, not-null only when the read covers part of a block rather than all
+   * of it. That comes either from a pushed filter's column index or from a storage filter's
+   * surviving rows, and parquet derives the indexes from the offset indexes in both cases.
+   */
   private final PrimitiveIterator.OfLong rowIndexes;
 
   /**

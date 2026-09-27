@@ -153,7 +153,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
   /**
    * The conjuncts of `afterScanFilters` the file format can evaluate at the storage layer for late
-   * materialization, to prune value-column IO.
+   * materialization, to prune the IO of the columns the filter does not reference.
    *
    * They stay in the post-scan `Filter` as well, the way a pushed data filter does: the reader is
    * offered them, not obliged to honor them, so the plan keeps the exact check. What it costs is
@@ -179,11 +179,11 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
    *  - [[FileFormat.supportsStorageFilter]] accepts it. That is where the expression shapes and
    *    column types a reader can evaluate live, so this method names neither a format nor a type.
    *
-   * One last condition is on the set that survives: at least one projected data column must be left
-   * for the reader to prune. A scan that projects nothing but the filter's own key columns reads
-   * the same columns for the same rows either way, since the reader has to read a key column to
-   * evaluate the filter on it, so offering it could only add the cost of evaluating the predicate
-   * outside the generated code. Nothing is offered in that case.
+   * One last condition is on the set that survives: at least one projected column must be left for
+   * the reader to prune. A scan that projects nothing but the filter's own storage-key columns
+   * reads the same columns for the same rows either way, since the reader has to read a key column
+   * to evaluate the filter on it, so offering it could only add the cost of evaluating the
+   * predicate outside the generated code. Nothing is offered in that case.
    */
   private def storageFiltersFor(
       afterScanFilters: ExpressionSet,
@@ -204,8 +204,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       expr.deterministic && refs.nonEmpty && refs.forall(dataAttrs.contains) &&
         fsRelation.fileFormat.supportsStorageFilter(expr)
     }
-    val keyAttrs = AttributeSet(offered.flatMap(_.references))
-    if (readDataColumns.forall(keyAttrs.contains)) Nil else offered
+    val storageKeyAttrs = AttributeSet(offered.flatMap(_.references))
+    if (readDataColumns.forall(storageKeyAttrs.contains)) Nil else offered
   }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
