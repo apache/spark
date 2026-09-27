@@ -35,10 +35,9 @@ import org.apache.spark.util.JsonProtocol
 /**
  * A SparkListenerBus that can be used to replay events from serialized event data.
  *
- * @param maxLineLength Maximum number of byes (1/2 chars) of a single event log line that will be
- *                      materialized during replay. Longer lines are drained, skipped and
- *                      logged, bounding the memory replay can use when an event log is
- *                      corrupt or unexpectedly large.
+ * @param maxLineLength Maximum UTF-8 byte length of a single event log line, excluding its line
+ *                      ending. Longer lines are drained, skipped and logged, bounding the
+ *                      memory replay can use when an event log is corrupt or unexpectedly large.
  */
 private[spark] class ReplayListenerBus(
     maxLineLength: Int = ReplayListenerBus.DEFAULT_MAX_LINE_LENGTH)
@@ -67,22 +66,26 @@ private[spark] class ReplayListenerBus(
       maybeTruncated: Boolean = false,
       eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Boolean = {
     val lines = boundedLines(logData, sourceName)
-    replay(lines, sourceName, maybeTruncated, eventsFilter)
+    replayEntries(lines, sourceName, maybeTruncated, eventsFilter)
   }
 
   /**
-   * Reads '\n'-terminated lines like Source.getLines(), but never materializes more than
-   * `maxLineLength` bytes of a single line. An over-long line is drained and skipped
-   * with a warning instead of being turned into a String.
+   * Reads '\n'-terminated lines and retains their original zero-based indices. The limit
+   * measures UTF-8 content bytes, excluding the line ending, rather than JVM heap usage.
+   * The character buffer is bounded by the limit plus one possible trailing CR. An over-long
+   * line is drained and skipped with a warning instead of being turned into a String.
    */
-  private def boundedLines(logData: InputStream, sourceName: String): Iterator[String] = {
+  private def boundedLines(
+      logData: InputStream,
+      sourceName: String): Iterator[(String, Int)] = {
     // Fail on malformed input like Source.getLines() does instead of replacing it.
     val decoder = StandardCharsets.UTF_8.newDecoder()
       .onMalformedInput(CodingErrorAction.REPORT)
       .onUnmappableCharacter(CodingErrorAction.REPORT)
     val reader = new BufferedReader(new InputStreamReader(logData, decoder))
-    new Iterator[String] {
-      private var nextLine: String = _
+    new Iterator[(String, Int)] {
+      private var nextLine: (String, Int) = _
+      private var lineIndex = 0
       private var lineFetched = false
       private var warned = false
 
@@ -94,7 +97,7 @@ private[spark] class ReplayListenerBus(
         nextLine != null
       }
 
-      override def next(): String = {
+      override def next(): (String, Int) = {
         if (!hasNext) {
           throw new NoSuchElementException("No more lines")
         }
@@ -104,35 +107,54 @@ private[spark] class ReplayListenerBus(
         line
       }
 
-      @tailrec private def fetchLine(): String = {
+      @tailrec private def fetchLine(): (String, Int) = {
         val sb = new java.lang.StringBuilder()
         var overLong = false
+        var byteLength = 0L
         var c = reader.read()
         if (c == -1) {
           null
         } else {
+          val index = lineIndex
+          lineIndex += 1
           while (c != -1 && c != '\n') {
-            if (sb.length() * 2 < maxLineLength) {
-              sb.append(c.toChar)
-            } else {
-              overLong = true
+            if (!overLong) {
+              // The strict decoder guarantees valid surrogate pairs. Count their four UTF-8
+              // bytes on the high surrogate and zero on the low surrogate.
+              byteLength += (if (c < 0x80) {
+                1
+              } else if (c < 0x800) {
+                2
+              } else if (Character.isHighSurrogate(c.toChar)) {
+                4
+              } else if (Character.isLowSurrogate(c.toChar)) {
+                0
+              } else {
+                3
+              })
+              // Allow one extra byte until we know whether the line ends in CRLF.
+              if (byteLength <= maxLineLength.toLong + 1) {
+                sb.append(c.toChar)
+              } else {
+                overLong = true
+              }
             }
             c = reader.read()
           }
-          if (overLong) {
+          if (sb.length() > 0 && sb.charAt(sb.length() - 1) == '\r') {
+            sb.setLength(sb.length() - 1)
+            byteLength -= 1
+          }
+          if (overLong || byteLength > maxLineLength) {
             if (!warned) {
               logWarning(log"Skipped event log lines longer than " +
-                log"${MDC(MAX_SIZE, maxLineLength)} characters in " +
+                log"${MDC(MAX_SIZE, maxLineLength)} bytes in " +
                 log"${MDC(FILE_NAME, sourceName)}")
               warned = true
             }
             fetchLine()
           } else {
-            // Handle CRLF line endings like Source.getLines() does.
-            if (sb.length() > 0 && sb.charAt(sb.length() - 1) == '\r') {
-              sb.setLength(sb.length() - 1)
-            }
-            sb.toString
+            (sb.toString, index)
           }
         }
       }
@@ -148,15 +170,21 @@ private[spark] class ReplayListenerBus(
       sourceName: String,
       maybeTruncated: Boolean,
       eventsFilter: ReplayEventsFilter): Boolean = {
+    replayEntries(lines.zipWithIndex, sourceName, maybeTruncated, eventsFilter)
+  }
+
+  private def replayEntries(
+      lines: Iterator[(String, Int)],
+      sourceName: String,
+      maybeTruncated: Boolean,
+      eventsFilter: ReplayEventsFilter): Boolean = {
     var currentLine: String = null
     var lineNumber: Int = 0
     val unrecognizedEvents = new scala.collection.mutable.HashSet[String]
     val unrecognizedProperties = new scala.collection.mutable.HashSet[String]
 
     try {
-      val lineEntries = lines
-        .zipWithIndex
-        .filter { case (line, _) => eventsFilter(line) }
+      val lineEntries = lines.filter { case (line, _) => eventsFilter(line) }
 
       while (lineEntries.hasNext) {
         try {
