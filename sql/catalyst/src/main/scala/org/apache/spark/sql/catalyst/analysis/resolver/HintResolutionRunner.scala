@@ -39,8 +39,12 @@ import org.apache.spark.sql.internal.SQLConf
  * The "Disable Hints" batch precedes the "Hints" batch, exactly like in the fixed-point Analyzer,
  * so that `spark.sql.optimizer.disableHints` keeps hiding the hints from the injected rules.
  *
- * The rules are applied on the main plan, the CTE definitions and the subquery plans. The
- * fixed-point Analyzer covers those same subtrees, through two different mechanisms:
+ * The rules are applied to a plan before its nested CTE definitions and subquery plans. That
+ * matches the fixed-point Analyzer, whose "Hints" batch finishes before `ResolveSubquery`
+ * re-enters the Analyzer: the containing plan observes subqueries that have not had the batch
+ * applied yet, and a subquery created by an injected rule still receives the batch before
+ * relation metadata is resolved. The fixed-point Analyzer covers those subtrees through two
+ * mechanisms:
  *  - `CTESubstitution` merges the CTE definitions into the main plan in the "Substitution" batch,
  *    which runs before the "Hints" batch, so the rules observe them as part of the main plan;
  *  - subquery plans are resolved by `ResolveSubquery` re-entering the whole Analyzer through
@@ -72,12 +76,12 @@ class HintResolutionRunner(hintResolutionRules: Seq[Rule[LogicalPlan]])
   }
 
   /**
-   * Applies the hint resolution rules by first recursing into the CTE definitions and the
-   * subqueries and then applying the rules on the entire plan. No rules are injected by default,
-   * in which case the plan is returned as is and the [[RuleExecutor]] is never constructed
-   * (`hintResolver` is lazy). That also skips the "Disable Hints" batch, which only matters for
-   * plans that still carry an [[UnresolvedHint]] - a shape the single-pass Resolver does not
-   * support in the first place.
+   * Applies the hint resolution rules to `plan` first, then to the CTE definitions and subquery
+   * plans that exist afterwards, including subqueries the rules just created. No rules are
+   * injected by default, in which case the plan is returned as is and the [[RuleExecutor]] is
+   * never constructed (`hintResolver` is lazy). That also skips the "Disable Hints" batch, which
+   * only matters for plans that still carry an [[UnresolvedHint]] - a shape the single-pass
+   * Resolver does not support in the first place.
    *
    * The recursion needs [[AnalysisHelper.allowInvokingTransformsInAnalyzer]] to rewrite the inner
    * plans, so the rules are invoked within its scope, like the rewrite rules in [[PlanRewriter]].
@@ -95,17 +99,18 @@ class HintResolutionRunner(hintResolutionRules: Seq[Rule[LogicalPlan]])
   }
 
   private def doResolveWithSubqueries(plan: LogicalPlan): LogicalPlan = {
-    val planWithResolvedCteDefinitions = resolveCteDefinitions(plan)
+    // The containing plan's batch runs before nested plans, matching the fixed-point Analyzer:
+    // its "Hints" batch completes before ResolveSubquery re-enters the Analyzer. Running the
+    // batch first also picks up subqueries that the rules themselves create.
+    val planAfterHints = hintResolver.execute(plan)
+    val planWithResolvedCteDefinitions = resolveCteDefinitions(planAfterHints)
 
-    val planWithResolvedSubqueries =
-      planWithResolvedCteDefinitions.transformAllExpressionsWithPruning(
-        _.containsPattern(PLAN_EXPRESSION)
-      ) {
-        case subqueryExpression: SubqueryExpression =>
-          subqueryExpression.withNewPlan(doResolveWithSubqueries(subqueryExpression.plan))
-      }
-
-    hintResolver.execute(planWithResolvedSubqueries)
+    planWithResolvedCteDefinitions.transformAllExpressionsWithPruning(
+      _.containsPattern(PLAN_EXPRESSION)
+    ) {
+      case subqueryExpression: SubqueryExpression =>
+        subqueryExpression.withNewPlan(doResolveWithSubqueries(subqueryExpression.plan))
+    }
   }
 
   /**

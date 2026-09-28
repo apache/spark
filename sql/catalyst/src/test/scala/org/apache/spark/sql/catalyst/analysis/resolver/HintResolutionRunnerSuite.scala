@@ -176,4 +176,55 @@ class HintResolutionRunnerSuite extends SparkFunSuite {
     assert(observedRoots.contains(classOf[Project]))
     assert(!observedRoots.contains(classOf[SubqueryAlias]))
   }
+
+  test("containing plan's hint batch sees unprocessed subqueries") {
+    var sawUnprocessedSubquery = false
+
+    val observingRule = new Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = {
+        plan.expressions.foreach { expression =>
+          expression.foreach {
+            case subquery: ScalarSubquery =>
+              subquery.plan.foreach {
+                case relation: UnresolvedRelation
+                    if relation.multipartIdentifier == Seq("sub") =>
+                  sawUnprocessedSubquery = true
+                case _ =>
+              }
+            case _ =>
+          }
+        }
+        RenameRelations(plan)
+      }
+    }
+
+    val subquery = UnresolvedRelation(Seq("sub")).select($"col1")
+    val plan = UnresolvedRelation(Seq("main")).select(ScalarSubquery(subquery).as("scalar"))
+
+    val result = new HintResolutionRunner(Seq(observingRule)).resolveWithSubqueries(plan)
+
+    assert(sawUnprocessedSubquery)
+    assert(relationNames(result).sorted == Seq("main_renamed", "sub_renamed"))
+  }
+
+  test("a subquery created by a hint rule is rewritten before the runner returns") {
+    val introduceSubquery = new Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan match {
+        case project: Project
+            if project.child.isInstanceOf[UnresolvedRelation] &&
+              project.child.asInstanceOf[UnresolvedRelation].multipartIdentifier == Seq("main") &&
+              !project.expressions.exists(_.isInstanceOf[ScalarSubquery]) =>
+          val created = UnresolvedRelation(Seq("created")).select($"col1")
+          project.copy(projectList = Seq(ScalarSubquery(created).as("scalar")))
+        case other =>
+          other
+      }
+    }
+
+    val plan = UnresolvedRelation(Seq("main")).select($"col1")
+    val result = new HintResolutionRunner(Seq(introduceSubquery, RenameRelations))
+      .resolveWithSubqueries(plan)
+
+    assert(relationNames(result).sorted == Seq("created_renamed", "main_renamed"))
+  }
 }

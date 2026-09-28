@@ -262,6 +262,33 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
       }
   }
 
+  /**
+   * Replaces a projection that does not already contain a scalar subquery with one over
+   * [[IntroducePathSubquery.path]]. [[RedirectPathRelation]] then has to rewrite that relation,
+   * which only happens if hint rules run again on subqueries created by an earlier rule.
+   */
+  case class IntroducePathSubquery(spark: SparkSession) extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case project @ Project(projectList, _)
+          if IntroducePathSubquery.path.isDefined &&
+            !projectList.exists(_.exists(
+              _.isInstanceOf[org.apache.spark.sql.catalyst.expressions.ScalarSubquery])) =>
+        val path = IntroducePathSubquery.path.get
+        val relation = UnresolvedRelation(Seq("parquet", path))
+        val countStar = org.apache.spark.sql.catalyst.analysis.UnresolvedFunction(
+          Seq("count"),
+          Seq(org.apache.spark.sql.catalyst.analysis.UnresolvedStar(None)),
+          isDistinct = false)
+        val subqueryPlan = Aggregate(Nil, Seq(Alias(countStar, "c")()), relation)
+        val scalar = org.apache.spark.sql.catalyst.expressions.ScalarSubquery(subqueryPlan)
+        project.copy(projectList = Seq(Alias(scalar, "c")()))
+    }
+  }
+
+  object IntroducePathSubquery {
+    var path: Option[String] = None
+  }
+
   test("inject custom hint rule") {
     withSession(Seq(_.injectHintResolutionRule(MyHintRule))) { session =>
       assert(
@@ -351,6 +378,66 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
           message.contains(SQLConf.ANALYZER_MAX_ITERATIONS.key),
           s"unexpected error for singlePass=$singlePass: $message"
         )
+      }
+    }
+  }
+
+  test("SPARK-59574: containing plan's hint batch sees an unprocessed subquery") {
+    Seq(false, true).foreach { singlePass =>
+      var sawUnprocessedSubquery = false
+      case class ObserveThenRename(spark: SparkSession) extends Rule[LogicalPlan] {
+        private val original = Seq("nosuch_order_table")
+
+        override def apply(plan: LogicalPlan): LogicalPlan = {
+          plan.expressions.foreach { expression =>
+            expression.foreach {
+              case subquery: org.apache.spark.sql.catalyst.expressions.ScalarSubquery =>
+                subquery.plan.foreach {
+                  case relation: UnresolvedRelation
+                      if relation.multipartIdentifier == original =>
+                    sawUnprocessedSubquery = true
+                  case _ =>
+                }
+              case _ =>
+            }
+          }
+          plan.resolveOperators {
+            case relation: UnresolvedRelation if relation.multipartIdentifier == original =>
+              relation.copy(multipartIdentifier = Seq("nosuch_order_table_renamed"))
+          }
+        }
+      }
+
+      withSession(Seq(_.injectHintResolutionRule(ObserveThenRename))) { session =>
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+        session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+        intercept[AnalysisException] {
+          session.sql("SELECT (SELECT * FROM nosuch_order_table)").queryExecution.analyzed
+        }
+        assert(sawUnprocessedSubquery, s"subquery was already rewritten (singlePass=$singlePass)")
+      }
+    }
+  }
+
+  test("SPARK-59574: subquery created by a hint rule is rewritten before metadata lookup") {
+    Seq(false, true).foreach { singlePass =>
+      withSession(Seq(
+          _.injectHintResolutionRule(IntroducePathSubquery.apply),
+          _.injectHintResolutionRule(RedirectPathRelation))) { session =>
+        val dir = Utils.createTempDir()
+        try {
+          val path = new File(dir, "data").getCanonicalPath
+          session.range(1).write.parquet(path)
+          session.range(3).write.parquet(path + REDIRECT_SUFFIX)
+          IntroducePathSubquery.path = Some(path)
+          session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+          session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+
+          assert(session.sql("SELECT 1").head().getLong(0) === 3)
+        } finally {
+          IntroducePathSubquery.path = None
+          Utils.deleteRecursively(dir)
+        }
       }
     }
   }
