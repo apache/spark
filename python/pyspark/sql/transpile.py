@@ -247,39 +247,30 @@ def _null_narrowed(params: List[str], test_node: ast.AST) -> Tuple[frozenset, fr
     All other nodes yield empty sets (conservative; no narrowing assumed).
     """
     match test_node:
-        case ast.Compare(
-            left=ast.Name(id=name),
-            ops=[ast.IsNot()],
-            comparators=[ast.Constant(value=None)],
+        case (
+            ast.Compare(
+                left=ast.Name(id=name),
+                ops=[op],
+                comparators=[ast.Constant(value=None)],
+            )
+            | ast.Compare(
+                left=ast.Constant(value=None),
+                ops=[op],
+                comparators=[ast.Name(id=name)],
+            )
         ) if name in params:
-            return frozenset([name]), frozenset()
-        case ast.Compare(
-            left=ast.Name(id=name),
-            ops=[ast.Is()],
-            comparators=[ast.Constant(value=None)],
-        ) if name in params:
-            return frozenset(), frozenset([name])
-        case ast.Compare(
-            left=ast.Constant(value=None),
-            ops=[ast.IsNot()],
-            comparators=[ast.Name(id=name)],
-        ) if name in params:
-            return frozenset([name]), frozenset()
-        case ast.Compare(
-            left=ast.Constant(value=None),
-            ops=[ast.Is()],
-            comparators=[ast.Name(id=name)],
-        ) if name in params:
-            return frozenset(), frozenset([name])
+            if isinstance(op, ast.IsNot):
+                return frozenset({name}), frozenset()
+            if isinstance(op, ast.Is):
+                return frozenset(), frozenset({name})
         case ast.BoolOp(op=ast.And(), values=values):
-            # x is not None and y is not None → body: {x, y}, else: {}
+            # x is not None and y is not None and … → body: union, else: {}
             body_nonnull: frozenset = frozenset()
             for v in values:
                 bn, _ = _null_narrowed(params, v)
-                body_nonnull = body_nonnull | bn
+                body_nonnull |= bn
             return body_nonnull, frozenset()
-        case _:
-            return frozenset(), frozenset()
+    return frozenset(), frozenset()
 
 
 class CatalystTranspiler(AbstractTranspiler):
@@ -945,23 +936,16 @@ class CatalystTranspiler(AbstractTranspiler):
         self._nonnull_params = frozenset()
         self._null_guard_emitted = False
         function_body = function_ast.body
-        # Normalize `if x is None: return y\nreturn body` (2-stmt early-return)
+        # Normalize `if <test>: return y\nreturn body` (2-stmt early-return)
         # into a single if/else so null narrowing can apply to the main body.
-        if (
-            len(function_body) == 2
-            and isinstance(function_body[0], ast.If)
-            and not function_body[0].orelse
-            and len(function_body[0].body) == 1
-            and isinstance(function_body[0].body[0], ast.Return)
-            and isinstance(function_body[1], ast.Return)
-        ):
-            synthesized = ast.If(
-                test=function_body[0].test,
-                body=function_body[0].body,
-                orelse=[function_body[1]],
-            )
-            ast.fix_missing_locations(ast.copy_location(synthesized, function_body[0]))
-            function_body = [synthesized]
+        match function_body:
+            case [
+                ast.If(test=test, body=[ast.Return() as early_ret], orelse=[]) as if_node,
+                ast.Return() as main_ret,
+            ]:
+                synthesized = ast.If(test=test, body=[early_ret], orelse=[main_ret])
+                ast.fix_missing_locations(ast.copy_location(synthesized, if_node))
+                function_body = [synthesized]
         if len(function_body) != 1:
             raise UnsupportedOperationException(
                 "functions with more than one top-level statement are not "
