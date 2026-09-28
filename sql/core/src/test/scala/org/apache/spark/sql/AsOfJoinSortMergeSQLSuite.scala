@@ -204,6 +204,26 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Row(180.15) :: Nil)
   }
 
+  test("TIMESTAMP MATCH_CONDITION with legacy intervals") {
+    // TIMESTAMP - TIMESTAMP is then a CalendarInterval, which has no ordering. Backward and
+    // Forward never read that distance, so they must still run.
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      for ((op, tag) <- Seq(">=" -> "r9", ">" -> "r9", "<=" -> "r11", "<" -> "r11")) {
+        checkSortMergeAsOf(
+          sql(
+            s"""
+               |SELECT r.tag
+               |FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts)
+               |ASOF JOIN VALUES
+               |  (TIMESTAMP '2026-06-29 09:00:00', 'r9'),
+               |  (TIMESTAMP '2026-06-29 11:00:00', 'r11') AS r(ts, tag)
+               |  MATCH_CONDITION (t.ts $op r.ts)
+               |""".stripMargin),
+          Row(tag) :: Nil)
+      }
+    }
+  }
+
   test("DATE scalar MATCH_CONDITION") {
     checkSortMergeAsOf(
       sql(
@@ -726,6 +746,67 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |  MATCH_CONDITION (t.a <= r.a)
           |""".stripMargin),
       Row(Seq(1, 6)) :: Nil)
+  }
+
+  test("forward MATCH_CONDITION with NULL array elements picks the smallest right row") {
+    // NULL elements sort first: [null] < [null, null] < [5].
+    val nullInt = "CAST(NULL AS INT)"
+    for {
+      (left, rights) <- Seq(
+        s"ARRAY($nullInt)" -> s"(ARRAY($nullInt, $nullInt), 'nn'), (ARRAY(5), 'five')")
+      op <- Seq("<=", "<")
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES ($left) AS t(a)
+             |ASOF JOIN VALUES $rights AS r(a, tag)
+             |  MATCH_CONDITION (t.a $op r.a)
+             |""".stripMargin),
+        Row("nn") :: Nil)
+    }
+  }
+
+  test("forward MATCH_CONDITION with a NULL struct field picks the smallest right row") {
+    // A NULL field sorts first, so {null, 7} < {x, 1}.
+    for {
+      (nullField, value) <- Seq("CAST(NULL AS INT)" -> "0")
+      (left, right) <- Seq("t.k" -> "r.k", "(t.k.f, t.k.seq)" -> "(r.k.f, r.k.seq)")
+      op <- Seq("<=", "<")
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES (named_struct('f', $nullField, 'seq', 5)) AS t(k)
+             |ASOF JOIN VALUES
+             |  (named_struct('f', $nullField, 'seq', 7), 's7'),
+             |  (named_struct('f', $value, 'seq', 1), 's1') AS r(k, tag)
+             |  MATCH_CONDITION ($left $op $right)
+             |""".stripMargin),
+        Row("s7") :: Nil)
+    }
+  }
+
+  test("forward MATCH_CONDITION with a leading STRING field picks the smallest right row") {
+    // {c, 1} < {d, 0}. The STRING field distance is 1 for both, so a distance picks {d, 0}.
+    for {
+      (left, right) <- Seq("t.k" -> "r.k", "(t.k.s, t.k.n)" -> "(r.k.s, r.k.n)")
+      op <- Seq("<=", "<")
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES (named_struct('s', 'b', 'n', 5)) AS t(k)
+             |ASOF JOIN VALUES
+             |  (named_struct('s', 'c', 'n', 1), 'c1'),
+             |  (named_struct('s', 'd', 'n', 0), 'd0') AS r(k, tag)
+             |  MATCH_CONDITION ($left $op $right)
+             |""".stripMargin),
+        Row("c1") :: Nil)
+    }
   }
 
   test("forward MATCH_CONDITION skips a closer row that fails a non-equi ON predicate") {
