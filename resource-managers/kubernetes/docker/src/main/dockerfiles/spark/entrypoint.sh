@@ -91,6 +91,10 @@ case "$1" in
     ;;
   executor)
     shift 1
+    # Prepend spark.executor.extraLibraryPath to the existing library path
+    if [ -n "$SPARK_EXECUTOR_LIBRARY_PATH" ]; then
+      export LD_LIBRARY_PATH="$SPARK_EXECUTOR_LIBRARY_PATH${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
     CMD=(
       ${JAVA_HOME}/bin/java
       "${SPARK_EXECUTOR_JAVA_OPTS[@]}"
