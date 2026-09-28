@@ -53,7 +53,7 @@ case class SortMergeAsOfJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    isSkewJoin: Boolean = false) extends ShuffledJoin {
+    isSkewJoin: Boolean = false) extends ShuffledJoin with PredicateHelper {
 
   require(leftSortExprs.nonEmpty && rightSortExprs.nonEmpty &&
     leftSortExprs.length == rightSortExprs.length,
@@ -92,27 +92,21 @@ case class SortMergeAsOfJoinExec(
 
   override def outputOrdering: Seq[SortOrder] = left.outputOrdering
 
-  // Detect from asOfCondition so composite MATCH_CONDITION sort keys still work.
-  // Nearest has no leading comparison: its condition is TRUE, NOT(l = r), or a range.
-  private val asOfDirection: AsOfJoinDirection = leadingAsOfComparison match {
-    case Some(_: GreaterThanOrEqual | _: GreaterThan) => Backward
-    case Some(_: LessThanOrEqual | _: LessThan) => Forward
-    case _ => Nearest
-  }
-
-  /** The leading `left op right` comparison of asOfCondition, if it has one. */
-  private def leadingAsOfComparison: Option[BinaryComparison] = {
-    val leftAttrs = left.outputSet
-    val rightAttrs = right.outputSet
-    def leading(expr: Expression): Option[BinaryComparison] = expr match {
-      case And(c, _) => leading(c)
+  // Detect from asOfCondition so composite MATCH_CONDITION sort keys still work. Only a first
+  // `left op right` conjunct counts. Nearest has none: its condition is TRUE, NOT(l = r), or
+  // starts with `right >= left - tolerance`.
+  private val asOfDirection: AsOfJoinDirection =
+    splitConjunctivePredicates(asOfCondition).head match {
       case c: BinaryComparison
-          if c.left.references.subsetOf(leftAttrs) && c.right.references.subsetOf(rightAttrs) =>
-        Some(c)
-      case _ => None
+          if c.left.references.subsetOf(left.outputSet) &&
+            c.right.references.subsetOf(right.outputSet) =>
+        c match {
+          case _: GreaterThanOrEqual | _: GreaterThan => Backward
+          case _: LessThanOrEqual | _: LessThan => Forward
+          case _ => Nearest
+        }
+      case _ => Nearest
     }
-    leading(asOfCondition)
-  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -183,7 +177,9 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   private val boundAsOfCond = bindReference(asOfCondition, joinedOutput)
-  private val boundOrderExpr = bindReference(orderExpression, joinedOutput)
+  // Lazy, since only Nearest reads the distance. Its type can have no ordering, for example
+  // CalendarInterval from TIMESTAMP - TIMESTAMP with spark.sql.legacy.interval.enabled.
+  private lazy val boundOrderExpr = bindReference(orderExpression, joinedOutput)
   private val boundResidualCond =
     residualCondition.map(bindReference(_, joinedOutput))
 
@@ -201,7 +197,8 @@ private[joins] class SortMergeAsOfJoinScanner(
   private val leftKeyProj = UnsafeProjection.create(leftKeys, leftOutput)
   private val rightKeyProj = UnsafeProjection.create(rightKeys, rightOutput)
 
-  private val distanceOrdering =
+  // Lazy for the same reason as boundOrderExpr.
+  private lazy val distanceOrdering =
     TypeUtils.getInterpretedOrdering(orderExpression.dataType)
 
   // Materialize an all-null right row as UnsafeRow. GenericInternalRow cannot be
@@ -370,6 +367,15 @@ private[joins] class SortMergeAsOfJoinScanner(
     if (needsCopy) rightRow.copy() else rightRow
   }
 
+  /** Whether `cond` is TRUE on the current joined row. FALSE and NULL both fail. */
+  private def holds(cond: Expression): Boolean = {
+    val result = cond.eval(joinedRow)
+    result != null && result.asInstanceOf[Boolean]
+  }
+
+  /** Whether the residual ON condition, if any, holds on the current joined row. */
+  private def residualHolds: Boolean = boundResidualCond.forall(holds)
+
   /**
    * Backward joins: keeps the last row that passes both conditions. The scan stops
    * once the as-of condition turns false after a match, since it stays false after that.
@@ -384,13 +390,8 @@ private[joins] class SortMergeAsOfJoinScanner(
       val rightRow = iter.next()
       joinedRow.withRight(rightRow)
 
-      val asOfSatisfied = boundAsOfCond.eval(joinedRow)
-      if (asOfSatisfied != null && asOfSatisfied.asInstanceOf[Boolean]) {
-        val residualSatisfied = boundResidualCond.forall { cond =>
-          val result = cond.eval(joinedRow)
-          result != null && result.asInstanceOf[Boolean]
-        }
-        if (residualSatisfied) {
+      if (holds(boundAsOfCond)) {
+        if (residualHolds) {
           // Last match wins (closest right.t to left.t)
           bestMatch = retainMatch(rightRow, needsCopy)
         }
@@ -405,26 +406,27 @@ private[joins] class SortMergeAsOfJoinScanner(
 
   /**
    * Forward joins: returns the first row that passes both conditions. It picks by buffer
-   * order, not by distance, since NULLs inside arrays or structs make the distance wrong.
+   * order, not by distance: the distance can rank STRUCT and ARRAY values wrongly, for
+   * example ones with NULL parts or a leading STRING field.
    */
   private def findFirstForward(leftRow: InternalRow): InternalRow = {
     val iter = rightGroupBuffer.generateIterator()
-    val needsCopy = rightGroupBuffer.isSpillBacked
+    var asOfSeen = false
 
     joinedRow.withLeft(leftRow)
     while (iter.hasNext) {
       val rightRow = iter.next()
       joinedRow.withRight(rightRow)
 
-      val asOfSatisfied = boundAsOfCond.eval(joinedRow)
-      if (asOfSatisfied != null && asOfSatisfied.asInstanceOf[Boolean]) {
-        val residualSatisfied = boundResidualCond.forall { cond =>
-          val result = cond.eval(joinedRow)
-          result != null && result.asInstanceOf[Boolean]
+      if (holds(boundAsOfCond)) {
+        asOfSeen = true
+        if (residualHolds) {
+          // No copy: the caller projects this row before the buffer iterator moves again.
+          return rightRow
         }
-        if (residualSatisfied) {
-          return retainMatch(rightRow, needsCopy)
-        }
+      } else if (asOfSeen) {
+        // Past the tolerance bound, so no later row passes the as-of condition.
+        return null
       }
     }
     null
@@ -445,13 +447,8 @@ private[joins] class SortMergeAsOfJoinScanner(
       val rightRow = iter.next()
       joinedRow.withRight(rightRow)
 
-      val asOfSatisfied = boundAsOfCond.eval(joinedRow)
-      if (asOfSatisfied != null && asOfSatisfied.asInstanceOf[Boolean]) {
-        val residualSatisfied = boundResidualCond.forall { cond =>
-          val result = cond.eval(joinedRow)
-          result != null && result.asInstanceOf[Boolean]
-        }
-        if (residualSatisfied) {
+      if (holds(boundAsOfCond)) {
+        if (residualHolds) {
           val distance = boundOrderExpr.eval(joinedRow)
           if (distance != null) {
             if (bestMatch == null || distanceOrdering.lt(distance, bestDistance)) {

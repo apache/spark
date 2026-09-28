@@ -204,6 +204,26 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Row(180.15) :: Nil)
   }
 
+  test("TIMESTAMP MATCH_CONDITION with legacy intervals") {
+    // TIMESTAMP - TIMESTAMP is then a CalendarInterval, which has no ordering. Backward and
+    // Forward never read that distance, so they must still run.
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      for ((op, tag) <- Seq(">=" -> "r9", ">" -> "r9", "<=" -> "r11", "<" -> "r11")) {
+        checkSortMergeAsOf(
+          sql(
+            s"""
+               |SELECT r.tag
+               |FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts)
+               |ASOF JOIN VALUES
+               |  (TIMESTAMP '2026-06-29 09:00:00', 'r9'),
+               |  (TIMESTAMP '2026-06-29 11:00:00', 'r11') AS r(ts, tag)
+               |  MATCH_CONDITION (t.ts $op r.ts)
+               |""".stripMargin),
+          Row(tag) :: Nil)
+      }
+    }
+  }
+
   test("DATE scalar MATCH_CONDITION") {
     checkSortMergeAsOf(
       sql(
@@ -866,6 +886,26 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
              |  MATCH_CONDITION ($left $op $right)
              |""".stripMargin),
         Row("s7") :: Nil)
+    }
+  }
+
+  test("forward MATCH_CONDITION with a leading STRING field picks the smallest right row") {
+    // {c, 1} < {d, 0}. The STRING field distance is 1 for both, so a distance picks {d, 0}.
+    for {
+      (left, right) <- Seq("t.k" -> "r.k", "(t.k.s, t.k.n)" -> "(r.k.s, r.k.n)")
+      op <- Seq("<=", "<")
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES (named_struct('s', 'b', 'n', 5)) AS t(k)
+             |ASOF JOIN VALUES
+             |  (named_struct('s', 'c', 'n', 1), 'c1'),
+             |  (named_struct('s', 'd', 'n', 0), 'd0') AS r(k, tag)
+             |  MATCH_CONDITION ($left $op $right)
+             |""".stripMargin),
+        Row("c1") :: Nil)
     }
   }
 

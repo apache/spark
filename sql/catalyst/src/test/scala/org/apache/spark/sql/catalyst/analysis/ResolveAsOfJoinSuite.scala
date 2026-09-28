@@ -197,7 +197,7 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
       asOf(leftExpr = lemptyArr, rightExpr = remptyArr, l = leftEmptyArr, r = rightEmptyArr))
       .asInstanceOf[AsOfJoin]
     val zip = resolved.orderExpression.asInstanceOf[ZipWith]
-    // Splitting an empty struct into its zero fields would leave an empty array per element.
+    // An empty struct has no fields to split, so each element gets one whole-value distance.
     val body = zip.function.asInstanceOf[LambdaFunction].function
     assert(body.isInstanceOf[If], s"expected a signed element distance, got $body")
     assert(body.dataType == IntegerType)
