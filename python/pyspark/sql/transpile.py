@@ -241,16 +241,17 @@ def _truthiness_col(cat: Optional[str], c: Column) -> Optional[Column]:
     Returns ``None`` for unsupported or unknown categories (caller falls back).
 
     Semantics (NULL-as-False throughout, matching Python's ``None`` is falsy):
-      "bool"    -> coalesce(c, False)
-      "string"  -> coalesce(length(c) > 0, False)  -- empty string is falsy
-      "numeric" -> coalesce(c != 0, False)           -- zero is falsy
-                   NaN != 0 is True in Spark so float NaN is truthy, matching Python.
+      "bool"                    -> coalesce(c, False)
+      "string"                  -> coalesce(length(c) > 0, False)  -- empty is falsy
+      "numeric"/"integer"/"float" -> coalesce(c != 0, False)        -- zero is falsy
+                                     NaN != 0 is True in Spark so float NaN is
+                                     truthy, matching Python.
     """
     if cat == "bool":
         return coalesce(c, lit(False))
     if cat == "string":
         return coalesce(length(c) > lit(0), lit(False))
-    if cat == "numeric":
+    if cat is not None and _is_numeric_cat(cat):
         return coalesce(c != lit(0), lit(False))
     return None
 
