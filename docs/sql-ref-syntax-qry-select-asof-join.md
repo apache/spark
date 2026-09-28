@@ -121,9 +121,7 @@ comparison_operator
 
 * **NULL.** A `NULL` in either operand never satisfies the `MATCH_CONDITION`
   comparison. Left rows whose operand is `NULL` are dropped under `INNER ASOF` and
-  retained with `NULL` right-side columns under `LEFT ASOF`. A `NULL` element of an
-  `ARRAY` operand, or a `NULL` field of a `STRUCT` operand, does not block a match. It
-  sorts before any non-`NULL` value, so `ARRAY(NULL) <= ARRAY(5)` is true.
+  retained with `NULL` right-side columns under `LEFT ASOF`.
 
 * **Ties.** If multiple right rows share the same *R* value that is closest to *L*
   after applying `ON`/`USING`, the choice among tied rows is not deterministic. Add a
