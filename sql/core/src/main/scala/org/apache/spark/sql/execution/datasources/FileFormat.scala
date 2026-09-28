@@ -190,9 +190,11 @@ trait FileFormat {
    * Scalar subqueries inside `storageFilters` are expected to have been materialized before this
    * method is called, so that the returned reader can be safely serialized to executors.
    *
-   * `storageFilterMetrics` is an optional map of SQL metrics the reader can update during execution
-   * (e.g. number of row groups skipped). The scan is expected to expose these metrics via its
-   * `metrics` field so they show up in the SQL UI.
+   * `storageFilterMetrics` is the SQL metrics the reader updates during execution, keyed the way
+   * this format's own `storageFilterMetrics` created them, since that is where a scan gets them. A
+   * format is free to ignore them, and free to require its own, so a caller that passes anything
+   * else is a caller of the wrong format. The scan is expected to expose them via its `metrics`
+   * field so they show up in the SQL UI.
    */
   def buildReaderWithStorageFilters(
       sparkSession: SparkSession,

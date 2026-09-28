@@ -92,6 +92,10 @@ object ParquetTestAccess {
       isRequired: Boolean,
       rowIndexes: PrimitiveIterator.OfLong = null,
       rowRanges: RowRanges = null): AnyRef = {
+    // `forRead` ignores the indexes when it has ranges, so a caller passing both would believe it
+    // had tested a route it did not.
+    require(rowIndexes == null || rowRanges == null,
+      "a read state is told the rows either as indexes or as ranges, not both")
     try {
       stateForRead.invoke(null, descriptor, Boolean.box(isRequired), rowRanges, rowIndexes)
     } catch {

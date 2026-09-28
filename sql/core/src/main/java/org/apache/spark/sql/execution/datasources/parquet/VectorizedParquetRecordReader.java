@@ -1131,6 +1131,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
                   + "%d of %d rows, so a plain read of the block is not what it asks for",
               blockIdx, lateMatReader.getFile(), baselineRows, blockRowCount));
         }
+        restateTotalRowCount(blockIdx);
         lateMatReader.setRequestedSchema(requestedColumns);
         dataPages = lateMatReader.readFilteredRowGroup(blockIdx, finalRanges);
       }
@@ -1232,6 +1233,27 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     return pageIndexUnusable
         ? RowRanges.createSingle(blockRowCount)
         : lateMatReader.getRowRanges(blockIdx);
+  }
+
+  /**
+   * Restates how many rows this reader will return, from {@code firstWholeBlock} on, as every row
+   * of every block left. Called when {@link #pageIndexUnusable} latches mid-file, which is the one
+   * thing that can make this reader return more rows than it said it would.
+   *
+   * <p>{@link #totalRowCount} is {@code getFilteredRecordCount()}, which counted every block
+   * through the page index at initialize, and {@link #nextBatch} stops the read once it has
+   * returned that many. From here on the index is not to be trusted, so every remaining block is
+   * read whole, and the old count would stop the read inside one of them, silently dropping the
+   * rest of the file. It cannot be too low afterwards: a block the filter empties is skipped
+   * without contributing, so the restated count can only overshoot, and then
+   * {@code hitEndOfData} ends the read instead.
+   */
+  private void restateTotalRowCount(int firstWholeBlock) {
+    totalRowCount = totalCountLoadedSoFar;
+    List<BlockMetaData> blocks = lateMatReader.getRowGroups();
+    for (int i = firstWholeBlock; i < totalBlockCount; i++) {
+      totalRowCount += blocks.get(i).getRowCount();
+    }
   }
 
   /**
