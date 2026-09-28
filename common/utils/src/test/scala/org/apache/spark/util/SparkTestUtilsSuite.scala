@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import java.util.concurrent.{CountDownLatch, Executors}
 
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
@@ -49,7 +49,8 @@ class SparkTestUtilsSuite extends AnyFunSuite with SparkTestUtils { // scalastyl
       }
       start.countDown()
 
-      assert(Await.result(Future.sequence(compiledClasses), 30.seconds).forall(_.exists()))
+      val results = SparkThreadUtils.awaitResult(Future.sequence(compiledClasses), 30.seconds)
+      assert(results.forall(_.exists()))
     } finally {
       executor.shutdownNow()
     }
