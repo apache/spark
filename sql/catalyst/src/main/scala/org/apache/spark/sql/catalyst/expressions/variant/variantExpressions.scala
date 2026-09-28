@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.variant
 
 import java.time.ZoneId
 
+import scala.util.matching.Regex
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.SparkRuntimeException
@@ -368,14 +369,35 @@ object VariantPathParser extends RegexParsers {
 
   override def skipWhitespace: Boolean = false
 
-  // Parse key segment like `.name`, `['name']`, or `["name"]`.
+  // Parse a key segment: `.name`, `['name']`, or `["name"]`. Dot notation is taken literally;
+  // both bracket forms are unescaped by `unescapeQuotedKey`.
   private def key: Parser[VariantPathSegment] =
-    for {
-      key <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^']*".r <~ "']" |
-        "[\"" ~> """[^"]*""".r <~ "\"]"
-    } yield {
-      ObjectExtraction(key)
-    }
+    '.' ~> "[^\\.\\[]+".r ^^ ObjectExtraction |
+      "['" ~> """(?:\\[\s\S]|[^'\\])*""".r <~ "']" ^^ { k =>
+        ObjectExtraction(unescapeQuotedKey(k))
+      } |
+      "[\"" ~> """(?:\\[\s\S]|[^"\\])*""".r <~ "\"]" ^^ { k =>
+        ObjectExtraction(unescapeQuotedKey(k))
+      }
+
+  // Matches one escape: `\uXXXX`, or a backslash plus any single character.
+  private val escapeSeq = """\\(u[0-9a-fA-F]{4}|[\s\S])""".r
+
+  // Decodes `\\`, `\'`, `\"`, `\b \t \n \f \r`, and `\uXXXX`; any other `\x` is left literal.
+  private def unescapeQuotedKey(raw: String): String =
+    if (raw.indexOf('\\') < 0) raw
+    else escapeSeq.replaceAllIn(raw, m => Regex.quoteReplacement(decodeEscape(m.group(1))))
+
+  private def decodeEscape(esc: String): String = esc match {
+    case "b" => "\b"
+    case "t" => "\t"
+    case "n" => "\n"
+    case "f" => "\f"
+    case "r" => "\r"
+    case s if s.length == 5 => Integer.parseInt(s.substring(1), 16).toChar.toString  // \uXXXX
+    case "\\" | "'" | "\"" => esc      // the escaped character itself
+    case other => "\\" + other         // unknown escape: keep the backslash
+  }
 
   private val parser: Parser[List[VariantPathSegment]] = phrase(root ~> rep(key | index))
 
