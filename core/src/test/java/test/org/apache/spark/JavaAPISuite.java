@@ -1578,4 +1578,19 @@ public class JavaAPISuite implements Serializable {
     assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex8.getCondition());
   }
 
+  @Test
+  public void testHeterogeneousKeysAndValuesDoNotThrowArrayStoreException() {
+    List<Tuple2<Number, Object>> pairs = Arrays.asList(
+      new Tuple2<>(1, "stringVal"),
+      new Tuple2<>(2.0, 100)
+    );
+    JavaPairRDD<Number, Object> pairRDD = sc.parallelizePairs(pairs);
+
+    List<Number> keys = pairRDD.keys().collect();
+    assertEquals(Arrays.asList(1, 2.0), keys);
+
+    List<Object> values = pairRDD.values().collect();
+    assertEquals(Arrays.asList("stringVal", 100), values);
+  }
+
 }
