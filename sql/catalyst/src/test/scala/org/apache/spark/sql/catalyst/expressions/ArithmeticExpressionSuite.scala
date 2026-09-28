@@ -582,9 +582,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Pmod(positiveShort, negativeShort), positiveShort.toShort)
     checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
     checkEvaluation(Pmod(positiveLong, negativeLong), positiveLong)
-    // Negative divisor (n < 0): `pmod` is only positive for a positive divisor, so these expected
-    // values are intentionally <= 0 (released behavior). They guard the r < 0, n < 0 path where
-    // `r + n` still needs `% n` -- dropping it goes out of range (pmod(-3, -5) would be -8).
+    // Negative divisor (n < 0): `pmod` is only guaranteed non-negative for a positive divisor.
+    // These cases have negative dividends, so the expected values are <= 0 (released behavior).
+    // They guard the r < 0, n < 0 path where `r + n` still needs `% n` -- dropping it goes out
+    // of range (pmod(-3, -5) would be -8).
     checkEvaluation(Pmod(Literal(-3), Literal(-5)), -3)
     checkEvaluation(Pmod(Literal(-7), Literal(-3)), -1)
     checkEvaluation(Pmod(Literal(-3L), Literal(-5L)), -3L)
