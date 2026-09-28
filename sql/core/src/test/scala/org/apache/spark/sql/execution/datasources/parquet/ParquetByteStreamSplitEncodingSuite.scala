@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 import org.apache.parquet.bytes.{ByteBufferInputStream, DirectByteBufferAllocator}
 import org.apache.parquet.column.values.ValuesWriter
 import org.apache.parquet.column.values.bytestreamsplit.ByteStreamSplitValuesWriter._
+import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.SparkFunSuite
@@ -114,6 +115,56 @@ abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFun
     }
   }
 
+  private type Reader = VectorizedByteStreamSplitValuesReader
+  private type BatchOp = (Reader, Int, WritableColumnVector) => Unit
+
+  /**
+   * Every batch read and skip of the reader that applies to this value width, with a column
+   * vector type it can write into. The 4-byte and 8-byte reads assemble exactly 4 and 8
+   * streams, so they only apply to pages of that width.
+   */
+  private lazy val batchOps: Seq[(String, DataType, BatchOp)] =
+    Seq[(String, DataType, Int, BatchOp)](
+      ("readBytes", ByteType, 4, (r, n, c) => r.readBytes(n, c, 0)),
+      ("readShorts", ShortType, 4, (r, n, c) => r.readShorts(n, c, 0)),
+      ("readIntegers", IntegerType, 4, (r, n, c) => r.readIntegers(n, c, 0)),
+      ("readIntegersAsLongs", LongType, 4, (r, n, c) => r.readIntegersAsLongs(n, c, 0)),
+      ("readIntegersAsDoubles", DoubleType, 4, (r, n, c) => r.readIntegersAsDoubles(n, c, 0)),
+      ("readFloats", FloatType, 4, (r, n, c) => r.readFloats(n, c, 0)),
+      ("readFloatsAsDoubles", DoubleType, 4, (r, n, c) => r.readFloatsAsDoubles(n, c, 0)),
+      ("readLongs", LongType, 8, (r, n, c) => r.readLongs(n, c, 0)),
+      ("readLongsAsInts", IntegerType, 8, (r, n, c) => r.readLongsAsInts(n, c, 0)),
+      ("readDoubles", DoubleType, 8, (r, n, c) => r.readDoubles(n, c, 0)),
+      ("readBinary", BinaryType, typeWidth, (r, n, c) => r.readBinary(n, c, 0)),
+      ("readFixedLenByteArray", BinaryType, typeWidth,
+        (r, n, c) => r.readFixedLenByteArray(n, typeWidth, c, 0)),
+      ("skipBytes", ByteType, typeWidth, (r, n, _) => r.skipBytes(n)),
+      ("skipShorts", ShortType, typeWidth, (r, n, _) => r.skipShorts(n)),
+      ("skipIntegers", IntegerType, typeWidth, (r, n, _) => r.skipIntegers(n)),
+      ("skipLongs", LongType, typeWidth, (r, n, _) => r.skipLongs(n)),
+      ("skipFloats", FloatType, typeWidth, (r, n, _) => r.skipFloats(n)),
+      ("skipDoubles", DoubleType, typeWidth, (r, n, _) => r.skipDoubles(n)),
+      ("skipBinary", BinaryType, typeWidth, (r, n, _) => r.skipBinary(n)),
+      ("skipFixedLenByteArray", BinaryType, typeWidth,
+        (r, n, _) => r.skipFixedLenByteArray(n, typeWidth))
+    ).collect { case (name, dt, width, op) if width == typeWidth => (name, dt, op) }
+
+  /** Every single-value read of the reader that applies to this value width. */
+  private lazy val singleOps: Seq[(String, Reader => Any)] = Seq[(String, Int, Reader => Any)](
+    ("readByte", 4, _.readByte()),
+    ("readShort", 4, _.readShort()),
+    ("readInteger", 4, _.readInteger()),
+    ("readFloat", 4, _.readFloat()),
+    ("readLong", 8, _.readLong()),
+    ("readDouble", 8, _.readDouble()),
+    ("readBinary(len)", typeWidth, _.readBinary(typeWidth))
+  ).collect { case (name, width, op) if width == typeWidth => (name, op) }
+
+  private def assertCorrupted(msg: String)(f: => Any): Unit = {
+    val e = intercept[ParquetDecodingException](f)
+    assert(e.getMessage.contains("Corrupted BYTE_STREAM_SPLIT page"), msg)
+  }
+
   // --- tests ---
 
   test("batch read - sequential values") {
@@ -164,6 +215,106 @@ abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFun
       for (i <- 0 until remaining) {
         assertEqual(data(90 + i), getFromVector(cv, 20 + i), s"mismatch at ${90 + i}")
       }
+    } finally {
+      cv.close()
+    }
+  }
+
+  test("batch reads and skips that end exactly at the end of the page") {
+    val data = Array.tabulate(10)(i => sequentialValue(i))
+    val page = encode(data)
+    for ((name, dt, op) <- batchOps) {
+      val cv = new OnHeapColumnVector(data.length, dt)
+      try {
+        val reader = newReader(page, data.length)
+        skipBatch(reader, 4)
+        op(reader, 6, cv)
+        // Nothing is left, but empty reads and skips are still allowed.
+        op(reader, 0, cv)
+        skipBatch(reader, 0)
+        readBatch(reader, 0, cv, 0)
+        assertCorrupted(name)(readSingle(reader))
+      } finally {
+        cv.close()
+      }
+    }
+  }
+
+  test("batch reads and skips past the end of the page fail") {
+    val data = Array.tabulate(10)(i => sequentialValue(i))
+    val page = encode(data)
+    for ((name, dt, op) <- batchOps) {
+      val cv = new OnHeapColumnVector(data.length, dt)
+      try {
+        assertCorrupted(name)(op(newReader(page, data.length), 11, cv))
+        val reader = newReader(page, data.length)
+        skipBatch(reader, 4)
+        assertCorrupted(name)(op(reader, 7, cv))
+        assertCorrupted(name)(op(newReader(page, data.length), -1, cv))
+      } finally {
+        cv.close()
+      }
+    }
+  }
+
+  test("single-value reads past the end of the page fail") {
+    val data = Array.tabulate(10)(i => sequentialValue(i))
+    val page = encode(data)
+    for ((name, op) <- singleOps) {
+      val reader = newReader(page, data.length)
+      skipBatch(reader, 4)
+      for (_ <- 0 until 6) op(reader)
+      assertCorrupted(name)(op(reader))
+    }
+  }
+
+  test("read the last value of the page after a skip") {
+    val data = Array.tabulate(10)(i => sequentialValue(i))
+    val reader = newReader(encode(data), data.length)
+    skipBatch(reader, 9)
+    assertEqual(data(9), readSingle(reader), "mismatch at index 9")
+  }
+
+  test("page length that is not a multiple of the value width fails") {
+    val page = encode(Array.tabulate(10)(i => sequentialValue(i)))
+    for (extra <- 1 until typeWidth) {
+      assertCorrupted(s"extra $extra bytes") {
+        newReader(page ++ Array.fill[Byte](extra)(1), 11)
+      }
+    }
+    for (missing <- 1 until typeWidth) {
+      assertCorrupted(s"missing $missing bytes")(newReader(page.dropRight(missing), 10))
+    }
+  }
+
+  test("more encoded values than the page value count fails") {
+    val data = Array.tabulate(10)(i => sequentialValue(i))
+    assertCorrupted("page value count 9")(newReader(encode(data), data.length - 1))
+  }
+
+  test("fewer encoded values than the page value count (nulls) is allowed") {
+    // For a nullable column the page value count includes nulls, which are not encoded.
+    val data = Array.tabulate(10)(i => sequentialValue(i))
+    val reader = newReader(encode(data), data.length + 5)
+    val cv = new OnHeapColumnVector(data.length, sparkType)
+    try {
+      readBatch(reader, data.length, cv, 0)
+      for (i <- data.indices) assertEqual(data(i), getFromVector(cv, i), s"mismatch at $i")
+      assertCorrupted("read past the encoded values")(readBatch(reader, 1, cv, 0))
+    } finally {
+      cv.close()
+    }
+  }
+
+  test("empty page") {
+    val reader = newReader(Array.emptyByteArray, 3)
+    val cv = new OnHeapColumnVector(1, sparkType)
+    try {
+      readBatch(reader, 0, cv, 0)
+      skipBatch(reader, 0)
+      assertCorrupted("skip")(skipBatch(reader, 1))
+      assertCorrupted("batch read")(readBatch(reader, 1, cv, 0))
+      assertCorrupted("single read")(readSingle(reader))
     } finally {
       cv.close()
     }
@@ -477,6 +628,49 @@ class ParquetByteStreamSplitEncodingFLBASuite extends SparkFunSuite {
       for (i <- 0 until 50) {
         assert(cv.getBinary(20 + i).toSeq === data(50 + i).toSeq, s"mismatch at index ${50 + i}")
       }
+    } finally {
+      cv.close()
+    }
+  }
+
+  test("FLBA reads and skips past the end of the page fail - odd width 5") {
+    val typeWidth = 5
+    val data = Array.fill(10)(Array.fill(typeWidth)(random.nextInt(256).toByte))
+    val page = writeFLBA(data, typeWidth)
+    def newReader(
+        p: Array[Byte] = page,
+        count: Int = data.length): VectorizedByteStreamSplitValuesReader = {
+      val reader = new VectorizedByteStreamSplitValuesReader(typeWidth)
+      reader.initFromPage(count, ByteBufferInputStream.wrap(ByteBuffer.wrap(p)))
+      reader
+    }
+    def assertCorrupted(f: => Any): Unit = {
+      val e = intercept[ParquetDecodingException](f)
+      assert(e.getMessage.contains("Corrupted BYTE_STREAM_SPLIT page"))
+    }
+    val cv = new OnHeapColumnVector(data.length, BinaryType)
+    try {
+      // Exact fit: skip 4, read the remaining 6 in a batch.
+      val reader = newReader()
+      reader.skipFixedLenByteArray(4, typeWidth)
+      reader.readFixedLenByteArray(6, typeWidth, cv, 0)
+      for (i <- 0 until 6) {
+        assert(cv.getBinary(i).toSeq === data(4 + i).toSeq, s"mismatch at index ${4 + i}")
+      }
+      assertCorrupted(reader.readBinary(typeWidth))
+      assertCorrupted(reader.skipFixedLenByteArray(1, typeWidth))
+
+      assertCorrupted(newReader().readFixedLenByteArray(11, typeWidth, cv, 0))
+      assertCorrupted(newReader().skipFixedLenByteArray(11, typeWidth))
+      val r2 = newReader()
+      r2.skipFixedLenByteArray(9, typeWidth)
+      assert(r2.readBinary(typeWidth).getBytes.toSeq === data(9).toSeq)
+      assertCorrupted(r2.readBinary(typeWidth))
+
+      for (extra <- 1 until typeWidth) {
+        assertCorrupted(newReader(page ++ Array.fill[Byte](extra)(1), 11))
+      }
+      assertCorrupted(newReader(count = data.length - 1))
     } finally {
       cv.close()
     }
