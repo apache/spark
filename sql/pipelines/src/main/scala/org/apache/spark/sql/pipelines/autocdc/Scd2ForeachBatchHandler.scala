@@ -116,12 +116,8 @@ case class Scd2ForeachBatchHandler(
       .transform(d => batchProcessor.assertWellFormedRowsPostDecomposition(d, batchId))
       .transform(batchProcessor.dropRedundantRowsPostDecomposition)
 
-    val withCoalescedIgnoredNullsDf = batchProcessor.changeArgs.ignoreNullSelection match {
-      case Some(ignoreNullSelection) =>
-        batchProcessor.coalesceIgnoredNulls(decomposedDf, ignoreNullSelection)
-      case None =>
-        decomposedDf
-    }
+    val withCoalescedIgnoredNullsDf =
+      batchProcessor.coalesceIgnoredNulls(decomposedDf)
 
     val reconciledAndRoutedDf = withCoalescedIgnoredNullsDf
       .transform(batchProcessor.reconcileStartAndEndAt)
