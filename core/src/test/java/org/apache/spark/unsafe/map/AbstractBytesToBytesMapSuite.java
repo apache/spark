@@ -901,23 +901,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   @Test
   public void configuredKeyOperationsRejectLookupAfterFree() {
     BytesToBytesMap.KeyOperationsFactory keyOperationsFactory =
-      () -> new BytesToBytesMap.KeyOperations() {
-        @Override
-        public int hash(Object base, long offset, int length) {
-          return 0;
-        }
-
-        @Override
-        public boolean equals(
-            Object leftBase,
-            long leftOffset,
-            int leftLength,
-            Object rightBase,
-            long rightOffset,
-            int rightLength) {
-          return false;
-        }
-      };
+      () -> fail("Key operations must not be created after free");
     BytesToBytesMap map =
       new BytesToBytesMap(taskMemoryManager, 64, PAGE_SIZE_BYTES, keyOperationsFactory);
     final long[] key = new long[]{1L};
@@ -938,6 +922,7 @@ public abstract class AbstractBytesToBytesMapSuite {
       new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
     final long[] key = new long[]{1L};
     try {
+      BytesToBytesMap.Location loc = map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8);
       map.destructiveIterator();
       assertThrows(IllegalStateException.class, map::reset);
       assertThrows(
@@ -945,8 +930,7 @@ public abstract class AbstractBytesToBytesMapSuite {
         () -> map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8));
       assertThrows(
         IllegalStateException.class,
-        () -> loc.append(
-          key, Platform.LONG_ARRAY_OFFSET, 8, value, Platform.LONG_ARRAY_OFFSET, 8));
+        () -> loc.append(key, Platform.LONG_ARRAY_OFFSET, 8, key, Platform.LONG_ARRAY_OFFSET, 8));
       assertThrows(IllegalStateException.class, map::getArray);
       assertThrows(IllegalStateException.class, map::maxNumKeysIndex);
       assertThrows(IllegalStateException.class, map::iterator);
