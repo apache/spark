@@ -18,8 +18,7 @@ package org.apache.spark
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
-import scala.concurrent.{Await, Future}
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.Try
 
@@ -34,6 +33,7 @@ import org.apache.spark.scheduler.OutputCommitCoordinator
 import org.apache.spark.storage.BlockManager
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.udf.worker.core.{UDFDispatcherFactory, WorkerDispatcher, WorkerLogger}
+import org.apache.spark.util.ThreadUtils
 
 class SparkEnvUDFDispatcherSuite extends SparkFunSuite {
 
@@ -115,6 +115,8 @@ class SparkEnvUDFDispatcherSuite extends SparkFunSuite {
     val conf = new SparkConf(false)
       .set(UDF.DISPATCHER_FACTORY, classOf[TestBlockingDispatcherFactory].getName)
     val env = newEnv(conf)
+    val pool = ThreadUtils.newDaemonFixedThreadPool(2, "udf-dispatcher-test")
+    implicit val executionContext: ExecutionContext = ExecutionContext.fromExecutor(pool)
     val creator = Future { Try(env.getExternalUDFDispatcher(spec)) }
     try {
       assert(factory.entered.await(10, TimeUnit.SECONDS))
@@ -128,8 +130,8 @@ class SparkEnvUDFDispatcherSuite extends SparkFunSuite {
       assert(stopStarted.await(10, TimeUnit.SECONDS))
       assert(!stopFinished.await(100, TimeUnit.MILLISECONDS))
       factory.release.countDown()
-      val result = Await.result(creator, 30.seconds)
-      Await.result(stopper, 30.seconds)
+      val result = ThreadUtils.awaitResult(creator, 30.seconds)
+      ThreadUtils.awaitResult(stopper, 30.seconds)
       assert(result.isSuccess || result.failed.get.isInstanceOf[IllegalStateException])
       if (factory.dispatcherCreated) {
         verify(factory.dispatcher).close()
@@ -139,6 +141,7 @@ class SparkEnvUDFDispatcherSuite extends SparkFunSuite {
       }
     } finally {
       factory.release.countDown()
+      pool.shutdownNow()
     }
   }
 
