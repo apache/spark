@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution.externalUDF
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.UnaryExecNode
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.udf.worker.UDFWorkerSpecification
-import org.apache.spark.udf.worker.core.{WorkerSecurityScope, WorkerSession}
+import org.apache.spark.udf.worker.core.{Termination, WorkerSecurityScope, WorkerSession}
 
 /**
  * :: Experimental ::
@@ -48,9 +50,8 @@ trait ExternalUDFExec extends UnaryExecNode {
   // Metrics
   // ---------------------------------------------------------------------------
 
-  protected def externalUdfMetrics: Map[String, SQLMetric] = Map(
-    // TODO [SPARK-57324]: Emit the correct metrics here
-  )
+  protected lazy val externalUdfMetrics: Map[String, SQLMetric] =
+    ExternalUDFMetrics.create(sparkContext)
 
   override lazy val metrics: Map[String, SQLMetric] = externalUdfMetrics
 
@@ -99,11 +100,65 @@ trait ExternalUDFExec extends UnaryExecNode {
     //    failure has already surfaced through the result iterator.
     //
     // For these UDF sessions, exhausting the data iterator covers execution and
-    // surfaces its errors. close() only cleans up protocol state and releases or
-    // invalidates the worker handle, so its return value is intentionally ignored.
+    // surfaces its errors. close() cleans up protocol state and releases or
+    // invalidates the worker handle; a clean terminal response also carries the
+    // execution's final or partial metrics.
     //
-    taskContext.addTaskCompletionListener[Unit](_ => session.close())
+    taskContext.addTaskCompletionListener[Unit] { _ =>
+      recordTerminalMetrics(session.close())
+    }
 
     f(session)
+  }
+
+  protected def recordTerminalMetrics(termination: Termination): Unit = {
+    val reported = termination match {
+      case Termination.Finished(response) => Some(response.getMetricsMap)
+      case Termination.Cancelled(response) => Some(response.getMetricsMap)
+      case _ => None
+    }
+    reported.foreach(values => ExternalUDFMetrics.update(metrics, values.asScala))
+  }
+}
+
+private[externalUDF] object ExternalUDFMetrics {
+  private val sizeMetrics = Map(
+    "bytesIn" -> "data received by the external UDF worker",
+    "bytesOut" -> "data returned by the external UDF worker")
+
+  private val countMetrics = Map(
+    "rowsIn" -> "rows received by the external UDF worker",
+    "rowsOut" -> "rows returned by the external UDF worker",
+    "batchesIn" -> "batches received by the external UDF worker",
+    "batchesOut" -> "batches returned by the external UDF worker")
+
+  private val timingMetrics = Map(
+    "initWallNanos" -> "external UDF worker initialization time",
+    "processingWallNanos" -> "external UDF worker processing time",
+    "receiveWallNanos" -> "time awaiting external UDF worker requests",
+    "sendWallNanos" -> "time blocked returning external UDF worker responses",
+    "workWallNanos" -> "external UDF worker execution time",
+    "workCpuNanos" -> "external UDF worker CPU time")
+
+  def create(sc: org.apache.spark.SparkContext): Map[String, SQLMetric] = {
+    sizeMetrics.map { case (name, description) =>
+      name -> SQLMetrics.createSizeMetric(sc, description)
+    } ++ countMetrics.map { case (name, description) =>
+      name -> SQLMetrics.createMetric(sc, description, initValue = -1)
+    } ++ timingMetrics.map { case (name, description) =>
+      name -> SQLMetrics.createNanoTimingMetric(sc, description)
+    }
+  }
+
+  def update(target: Map[String, SQLMetric], reported: collection.Map[String, String]): Unit = {
+    reported.foreach { case (name, value) =>
+      for {
+        metric <- target.get(name)
+        parsed <- value.toLongOption
+        if parsed >= 0L
+      } {
+        metric += parsed
+      }
+    }
   }
 }

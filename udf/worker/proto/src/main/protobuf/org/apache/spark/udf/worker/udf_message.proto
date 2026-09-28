@@ -407,8 +407,24 @@ message Finish {}
 //     introduced as a separate streaming message in a future revision
 //     without changing this contract. TODO(SPARK-56922).
 message FinishResponse {
-    // Per-execution metrics accumulated over the session. Free-form;
-    // names are worker-defined.
+    // Per-execution metrics accumulated over the session. Portable names:
+    //
+    //   bytesIn / bytesOut       application payload bytes accepted / produced
+    //   rowsIn / rowsOut         exact row counts, omitted when unavailable
+    //   batchesIn / batchesOut   data request / response counts
+    //   initWallNanos            worker-side initialization wall time
+    //   processingWallNanos      wall time from initialization to termination
+    //   receiveWallNanos         wall time awaiting inbound protocol messages
+    //   sendWallNanos            wall time blocked handing off responses
+    //   workWallNanos            wall time executing work units
+    //   workCpuNanos             CPU time executing work units
+    //
+    // Values are base-10 non-negative integers. All values are cumulative for
+    // this Execute stream; timing values are nanoseconds. Absence means
+    // unavailable, while zero means measured zero. Workers may add names, and
+    // engines MUST ignore unknown names and malformed values. Byte counts
+    // exclude gRPC, HTTP/2, and TLS framing. Wait times are not transfer times
+    // and MUST NOT be used as rate denominators.
     map<string, string> metrics = 1;
 
     // (Optional) Inline finish result returned by the worker.
@@ -470,9 +486,8 @@ message Cancel {
 // accumulated up to the point of cancellation -- even a partial execution
 // may produce useful diagnostics (e.g. rows processed before abort).
 message CancelResponse {
-    // Per-execution metrics accumulated up to cancellation. Free-form;
-    // names are worker-defined. See [[FinishResponse.metrics]] for the
-    // full metrics design.
+    // Per-execution metrics accumulated up to cancellation. Values are partial
+    // snapshots and follow the names and rules in [[FinishResponse.metrics]].
     map<string, string> metrics = 1;
 
     // (Optional) Error raised by the cancel callback (if any), invoked
