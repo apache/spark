@@ -48,7 +48,8 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
   /**
-   * Non-throwing variant of `resolveRef`. Returns `None` if the reference cannot be resolved.
+   * Variant of `resolveRef` that returns `None` if no attribute matches the reference. It still
+   * throws for a missing nested field or an ambiguous reference.
    */
   private[sql] def resolveRefOpt[T <: NamedExpression](
       ref: NamedReference, plan: LogicalPlan): Option[T] = {

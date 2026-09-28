@@ -41,10 +41,17 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
 
   private val funCatalog = {
     val catalog = new InMemoryCatalog
-    Seq("bucket", "years").foreach { name =>
+    Seq("bucket", "years", "f").foreach { name =>
       catalog.createFunction(Identifier.of(Array.empty, name), AnyInputFunction)
     }
     Some(catalog)
+  }
+
+  private def checkUnresolvedError(exc: AnalysisException): Unit = {
+    checkError(
+      exception = exc,
+      condition = "_LEGACY_ERROR_TEMP_1137",
+      parameters = Map("name" -> "missing", "outputStr" -> "a"))
   }
 
   test("SPARK-39313: toCatalystOrdering should fail if V2Expression can not be translated") {
@@ -64,11 +71,18 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
 
   test("SPARK-59721: toCatalyst throws the specific resolution error for an unresolvable " +
     "FieldReference") {
-    val exc = intercept[AnalysisException] {
+    checkUnresolvedError(intercept[AnalysisException] {
       V2ExpressionUtils.toCatalyst(FieldReference("missing"), plan)
+    })
+  }
+
+  test("SPARK-59721: toCatalyst throws the specific resolution error for an unresolvable " +
+    "BucketTransform ref or NamedTransform arg") {
+    Seq(Expressions.bucket(4, "missing"), Expressions.years("missing")).foreach { transform =>
+      checkUnresolvedError(intercept[AnalysisException] {
+        V2ExpressionUtils.toCatalyst(transform, plan, funCatalog)
+      })
     }
-    assert(exc.getCondition == "_LEGACY_ERROR_TEMP_1137")
-    assert(exc.getMessage.contains("Unable to resolve"))
   }
 
   test("SPARK-59721: toCatalystTransformOpt returns None for an unresolvable IdentityTransform") {
@@ -90,14 +104,26 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
       Expressions.years("missing"), plan, funCatalog).isEmpty)
   }
 
+  test("SPARK-59721: a nested transform whose function cannot be loaded returns None from " +
+    "toCatalystTransformOpt and fails toCatalyst") {
+    val nested = ApplyTransform("f", Seq(ApplyTransform("g", Seq(FieldReference("a")))))
+    assert(V2ExpressionUtils.toCatalystTransformOpt(
+      ApplyTransform("f", Seq(FieldReference("a"))), plan, funCatalog).isDefined)
+    assert(V2ExpressionUtils.toCatalystTransformOpt(nested, plan, funCatalog).isEmpty)
+    checkError(
+      exception = intercept[AnalysisException] {
+        V2ExpressionUtils.toCatalyst(nested, plan, funCatalog)
+      },
+      condition = "_LEGACY_ERROR_TEMP_3054",
+      parameters = Map("expr" -> "f(g(a))"))
+  }
+
   test("SPARK-59721: toCatalystOrdering still fails on an unresolvable sort key, with the " +
     "specific 'unable to resolve' message") {
     val sortOnMissing = SortValue(
       FieldReference("missing"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
-    val exc = intercept[AnalysisException] {
+    checkUnresolvedError(intercept[AnalysisException] {
       V2ExpressionUtils.toCatalystOrdering(Array(sortOnMissing), plan)
-    }
-    assert(exc.getCondition == "_LEGACY_ERROR_TEMP_1137")
-    assert(exc.getMessage.contains("Unable to resolve"))
+    })
   }
 }
