@@ -1954,9 +1954,10 @@ object SQLConf {
         "filter as well, the way a pushed data filter does, so honoring it is optional: a reader " +
         "that meets a row group it cannot prune reads it the way a plain scan would, plus one " +
         "more read of the key columns, since the phase that evaluated the filter already read " +
-        "them. A file written with no Parquet page index is read with the filter applied only " +
-        "where it empties a whole row group, since narrowing to part of one needs that index, so " +
-        "every row group of it that keeps a row pays that. Narrowing to part of a row group also " +
+        "them. A row group without a Parquet page index for every projected column is read with " +
+        "the filter applied only where it empties that row group whole, since narrowing to part " +
+        "of one needs that index, so such a row group pays that read whenever it keeps a row. " +
+        "Narrowing to part of a row group also " +
         "trusts that index, which a read with no pushed data filter never consults, so on a file " +
         "whose page index is present but wrong this can pair a row's key with another row's " +
         "values. Setting parquet.filter.columnindex.enabled to false is the escape hatch, and it " +

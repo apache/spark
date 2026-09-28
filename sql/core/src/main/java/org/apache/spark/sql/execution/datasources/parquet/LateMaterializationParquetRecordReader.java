@@ -268,8 +268,12 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
       try {
         if (persistentBatchColumns != null) {
           closeAll(persistentBatchColumns);
-          persistentBatchColumns = null;
+        } else if (columnarBatch != null) {
+          // `takeOverBatch` has not run, or threw part way: the batch super built is then the only
+          // thing holding its vectors.
+          columnarBatch.close();
         }
+        persistentBatchColumns = null;
         spliceBatchColumns = null;
         columnarBatch = null;
       } finally {
@@ -290,10 +294,12 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
 
   @Override
   public float getProgress() {
-    // Under a storage filter, rowsReturned counts survivors while totalRowCount is the pre-filter
-    // count, so the ratio would stall below 1. hitEndOfData is the real terminator here.
+    // Under a storage filter, rowsReturned counts survivors while totalRowCount is the count before
+    // the filter narrowed anything, so the ratio neither reaches 1 on its own nor stays below it: a
+    // row group read whole after the page index is given up can return more rows than that count.
+    // `hitEndOfData` is the real terminator here, and the ratio is clamped to what it means.
     if (hitEndOfData) return 1.0f;
-    return super.getProgress();
+    return Math.min(1.0f, super.getProgress());
   }
 
   /**
@@ -673,16 +679,20 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
           pushedFilterRanges, baselineRows);
 
       // Whether phase 2 can read part of this row group at all, which is what everything below
-      // buffers for. It needs an offset index for every column it reads, and the footer already
-      // says which columns have one, for free. Without that check the cost of learning it is a row
-      // group's survivors copied and then thrown away, since the phase-2 read is where parquet
-      // resolves the indexes and throws. The check cannot replace that catch: it covers the columns
-      // a spliced row group reads, not the ones it would read after giving splicing up, and an
-      // index can be present but unreadable.
+      // buffers for. Reading part of one goes through the block's column index store, and parquet
+      // builds that store over every column of the requested schema, emptying it altogether if one
+      // of them has no offset index. So this asks the footer about the whole projection rather than
+      // about the columns phase 2 reads: a key column without an index would otherwise pass here
+      // and throw in phase 2, and the cost of learning it there is a row group's survivors copied
+      // and then thrown away. The footer answers for free.
       // False says the filter is left with emptying this row group whole, and then nothing is
-      // buffered either: phase 2 will read the key columns again along with everything else.
-      boolean canNarrowRowGroup =
-          !pageIndexUnusable && blockAccounting.hasOffsetIndexes(blockIdx, nonKeyPaths);
+      // buffered either: phase 2 reads the key columns again along with everything else, over
+      // ranges an empty store has already widened to the whole block, which is why it cannot throw.
+      // Parquet's own exception stays as the backstop for what the footer cannot see: an offset
+      // index it claims but cannot produce.
+      boolean canNarrowRowGroup = !pageIndexUnusable
+          && blockAccounting.hasOffsetIndexes(blockIdx, keyOnlyPaths)
+          && blockAccounting.hasOffsetIndexes(blockIdx, nonKeyPaths);
       spliceCurrentRowGroup = canNarrowRowGroup;
 
       // Phase 1: switch to key-only schema, read key columns under pushedFilterRanges, evaluate the
@@ -757,15 +767,16 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
         abandonSplicing();
         finalRanges = pushedFilterRanges;
         finalRowCount = baselineRows;
-        // The retry only avoids the same wall because a store missing one column's offset index
-        // reports no column index either, so these ranges cover the whole block and parquet reads
-        // it without consulting an index. That is three parquet internals deep, so it is checked:
-        // a release that changes any of them should fail here rather than throw from the read.
         if (baselineRows != blockRowCount) {
-          throw new IllegalStateException(String.format(
-              "Cannot read row group %d of %s without an offset index: the pushed filter selects "
-                  + "%d of %d rows, so a plain read of the block is not what it asks for",
-              blockIdx, fileReader.getFile(), baselineRows, blockRowCount));
+          // The retry avoids the same wall because a store missing one column's offset index
+          // reports no column index either, so these ranges cover the whole block and parquet reads
+          // it without consulting an index. That is three parquet internals deep, so it is not
+          // assumed: if they are narrower, the block is read whole instead, which is a superset of
+          // them. The extra rows cost the post-scan Filter work, where failing here would fail a
+          // query a plain read answers, and under `ignoreCorruptFiles` would be read as a corrupt
+          // file and drop the rest of this one.
+          finalRanges = RowRanges.createSingle(blockRowCount);
+          finalRowCount = blockRowCount;
         }
         fileReader.setRequestedSchema(requestedColumns);
         dataPages = fileReader.readFilteredRowGroup(blockIdx, finalRanges);

@@ -937,21 +937,20 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("a row group that loses the page index mid-file does not cut the read short") {
-    // The count the reader is given at initialize is `getFilteredRecordCount()`, which resolves
-    // every block through the page index, and `nextBatch` stops the read once it has returned that
-    // many rows. Learning mid-file that the index cannot be used makes every row group after that
-    // one be read whole, which is more rows than that count allows for, so the count has to be
-    // restated or the read stops between two row groups and the rest of the file is dropped.
+  test("a key column with no offset index does not cost the file its page filtering") {
+    // Reading part of a row group goes through the block's column index store, and parquet builds
+    // that store over every column of the requested schema, emptying it altogether if one of them
+    // has no offset index. So a row group whose key column has none cannot be narrowed either, and
+    // the footer check has to ask about the whole projection: asking only about the columns phase 2
+    // reads would let such a row group buffer its survivors and then have phase 2 throw, and the
+    // reader answers that by not trusting the page index for the rest of the file. Every row group
+    // after it would then be read whole, which is more than a plain read of the same query, since
+    // that keeps the pushed data filter's page pruning.
     //
-    // The file that gets there. The first row group's key column has no offset index, so that
-    // block's column index store is empty and phase 2's narrowed read of it throws, which is what
-    // makes the reader stop trusting the index. The store is built over the whole projection at
-    // initialize, which is why the key column's missing index empties it, while the footer check
-    // sees only the non-key column and lets splicing engage. The other two row groups have an index
-    // for both columns, and the pushed data filter narrows them to one page each, so the count the
-    // reader starts with is far below what it then reads. Three row groups are the fewest that lose
-    // a row: with two, reading the first whole cannot overshoot the count on its own.
+    // The file: the first row group's key column has no offset index while its value column does,
+    // and the other two have one for both. The pushed data filter matches one value per row group,
+    // so parquet's statistics filter keeps all three while its column index narrows the two it can
+    // to the page that value is in.
     withTempDir { dir =>
       val blocks = (0 until 3).map(b => ((b * 100 + 1L) to (b * 100 + 100L)).map(i => (i, i)))
       val path = writeParquetFileByHand(dir, blocks,
@@ -965,11 +964,8 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       val schema = StructType(Seq(
         StructField("k", LongType, nullable = false),
         StructField("v", LongType, nullable = false)))
-      // One matching value per row group, so parquet's statistics filter keeps all three while the
-      // column index narrows the two that have one to the page that value is in.
       val pushed = Seq(sources.In("v", Array[Any](1L, 101L, 201L)))
-      // Part of the first row group, so phase 2 asks parquet for part of a row group, which is what
-      // reaches the empty store and throws. A filter that kept every row would be read whole.
+      // Keeps part of each row group, so a row group that can be narrowed is narrowed.
       val storageFilters =
         Seq(GreaterThanOrEqual(BoundReference(0, LongType, nullable = false), Literal(50L)))
       val readerFn = new ParquetFileFormat().buildReaderWithStorageFilters(
@@ -987,13 +983,22 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
           case row: InternalRow => Seq(row.getLong(1))
         }.toSeq
       }
-      // Without this the test would pass on a file the reader never stumbles on.
-      assert(logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      // The footer check gets there before the phase-2 read does, which is what keeps the rest of
+      // the file's page filtering: this WARN is what the exception path would have reported.
+      assert(!logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
         .exists(_.contains("without page-level storage filtering")),
-        "the read must have discovered the missing offset index")
-      assert(values == (1L to 300L),
-        s"every row of every row group must come back once the index is given up; got " +
-          s"${values.size} rows, last ${values.lastOption}")
+        "the footer check must decline the row group rather than the read discovering it")
+      // The row group that cannot be narrowed comes back whole, since its filter is given up and
+      // the empty store widens its ranges to the block.
+      assert((1L to 100L).forall(values.contains),
+        s"the first row group must come back whole; got ${values.count(_ <= 100L)} of its rows")
+      // The other two keep their page pruning, which is the regression this pins: read whole they
+      // would contribute 200 rows rather than one page each.
+      assert(values.size < 300,
+        s"the row groups that can be narrowed must still be; got all ${values.size} rows")
+      // And every row the pushed filter actually matches survives the narrowing.
+      assert(Seq(1L, 101L, 201L).forall(values.contains),
+        s"the matching rows must be in the output; got ${values.size} rows")
     }
   }
 
@@ -2355,8 +2360,9 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     // WholeStageCodegenExec, and only when the row loop exits with a batch still in hand. That exit
     // is the limit check, which needs a limit inside the same codegen stage, so the plan is built
     // with LocalLimitExec and handed to CollapseCodegenStages. The generated source is asserted to
-    // hold that close, which pins that this plan is the shape that closes a batch from outside at
-    // all; whether the close runs is what the collect below exercises.
+    // hold that close, which says no more than that `ColumnarToRowExec` is in the stage, since it
+    // emits that line unconditionally. What exercises the close is the collect below, where the
+    // limit makes the row loop exit with a batch still in hand.
     //
     // What it exercises: the spliced batch's columns are closed from outside while the reader is
     // still open, and the reader's own close() then runs over the same vectors.
