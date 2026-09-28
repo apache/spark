@@ -119,8 +119,8 @@ private[spark] class ReplayListenerBus(
             buffer.append(c.toChar)
             c = reader.read()
           }
-          val line = buffer.result()
-          if (line.isEmpty) {
+          val maybeLine = buffer.result()
+          if (maybeLine.isEmpty) {
             if (!warned) {
               logWarning(log"Skipped event log lines longer than " +
                 log"${MDC(MAX_SIZE, maxLineLength)} bytes in " +
@@ -129,7 +129,7 @@ private[spark] class ReplayListenerBus(
             }
             fetchLine()
           } else {
-            (line.get, index)
+            (maybeLine.get, index)
           }
         }
       }
