@@ -92,17 +92,12 @@ case class SortMergeAsOfJoinExec(
 
   override def outputOrdering: Seq[SortOrder] = left.outputOrdering
 
-  // Backward joins scan the right-side buffer forward and keep the last match.
   // Detect from asOfCondition so composite MATCH_CONDITION sort keys still work.
-  private val isBackwardJoin: Boolean = leadingAsOfComparison.exists {
-    case _: GreaterThanOrEqual | _: GreaterThan => true
-    case _ => false
-  }
-
-  // Forward joins keep the first match, the smallest right value in the ascending buffer.
-  private val isForwardJoin: Boolean = leadingAsOfComparison.exists {
-    case _: LessThanOrEqual | _: LessThan => true
-    case _ => false
+  // Nearest has no leading comparison: its condition is TRUE, NOT(l = r), or a range.
+  private val asOfDirection: AsOfJoinDirection = leadingAsOfComparison match {
+    case Some(_: GreaterThanOrEqual | _: GreaterThan) => Backward
+    case Some(_: LessThanOrEqual | _: LessThan) => Forward
+    case _ => Nearest
   }
 
   /** The leading `left op right` comparison of asOfCondition, if it has one. */
@@ -122,8 +117,7 @@ case class SortMergeAsOfJoinExec(
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val spillSize = longMetric("spillSize")
-    val isBackward = isBackwardJoin
-    val isForward = isForwardJoin
+    val direction = asOfDirection
     val inMemoryThreshold = conf.sortMergeJoinExecBufferInMemoryThreshold
     val sizeInBytesSpillThreshold = conf.sortMergeJoinExecBufferSpillSizeThreshold
     val spillThreshold = conf.sortMergeJoinExecBufferSpillThreshold
@@ -135,7 +129,7 @@ case class SortMergeAsOfJoinExec(
         leftKeys, rightKeys,
         asOfCondition, orderExpression,
         joinType, condition,
-        numOutputRows, spillSize, isBackward, isForward,
+        numOutputRows, spillSize, direction,
         inMemoryThreshold, sizeInBytesSpillThreshold, spillThreshold
       )
       TaskContext.get().addTaskCompletionListener[Unit](_ => scanner.close())
@@ -154,17 +148,10 @@ case class SortMergeAsOfJoinExec(
  *
  * Both inputs are sorted by (equi-keys, as-of key) ascending. For each
  * left row within an equi-key group, we scan the right-side buffer
- * forward to find the best match.
- *
- * For Backward joins (left.t >= right.t), the forward scan keeps the
- * last as-of-satisfying row as the best match (since the buffer is
- * sorted ascending, the last satisfying row is the closest).
- *
- * For Forward joins (left.t <= right.t), the first as-of-satisfying row
- * is the match (the buffer is sorted ascending, so it is the smallest).
- *
- * For Nearest joins, the forward scan uses distance-based
- * early termination (stop when distance starts increasing).
+ * forward to find the best match:
+ *  - Backward (left.t >= right.t): the last satisfying row is the closest.
+ *  - Forward (left.t <= right.t): the first satisfying row is the closest.
+ *  - Nearest: the satisfying row with the smallest distance.
  */
 private[joins] class SortMergeAsOfJoinScanner(
     leftIter: Iterator[InternalRow],
@@ -179,8 +166,7 @@ private[joins] class SortMergeAsOfJoinScanner(
     residualCondition: Option[Expression],
     numOutputRows: SQLMetric,
     spillSize: SQLMetric,
-    isBackwardJoin: Boolean,
-    isForwardJoin: Boolean,
+    direction: AsOfJoinDirection,
     inMemoryThreshold: Int,
     sizeInBytesSpillThreshold: Long,
     spillThreshold: Int) {
@@ -365,27 +351,11 @@ private[joins] class SortMergeAsOfJoinScanner(
     rightDone = true
   }
 
-  /**
-   * Find the best matching right row using forward-only scan.
-   *
-   * For Backward joins: keeps the last as-of-satisfying row (since the
-   * buffer is sorted ascending, the last satisfying row has the largest
-   * right.t <= left.t, which is the closest match). Early-terminates
-   * when as-of condition transitions from true to false (monotone).
-   *
-   * For Forward joins: returns the first as-of-satisfying row.
-   *
-   * For Nearest joins: uses distance-based early termination
-   * (stop when distance starts increasing past the minimum).
-   */
-  private def findBestInGroup(leftRow: InternalRow): InternalRow = {
-    if (isBackwardJoin) {
-      findBestBackwardForward(leftRow)
-    } else if (isForwardJoin) {
-      findFirstForward(leftRow)
-    } else {
-      findBestNearest(leftRow)
-    }
+  /** Finds the best right row in the current group for `leftRow`, or null if none passes. */
+  private def findBestInGroup(leftRow: InternalRow): InternalRow = direction match {
+    case Backward => findLastBackward(leftRow)
+    case Forward => findFirstForward(leftRow)
+    case Nearest => findNearest(leftRow)
   }
 
   /**
@@ -401,12 +371,10 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   /**
-   * Forward scan for Backward joins: last-match-wins.
-   * Buffer is sorted ascending by as-of key. For left.t >= right.t,
-   * as-of condition is monotone: true for right.t <= left.t, then false.
-   * The last satisfying row is the closest match.
+   * Backward joins: keeps the last row that passes both conditions. The scan stops
+   * once the as-of condition turns false after a match, since it stays false after that.
    */
-  private def findBestBackwardForward(leftRow: InternalRow): InternalRow = {
+  private def findLastBackward(leftRow: InternalRow): InternalRow = {
     var bestMatch: InternalRow = null
     val iter = rightGroupBuffer.generateIterator()
     val needsCopy = rightGroupBuffer.isSpillBacked
@@ -436,11 +404,8 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   /**
-   * Forward scan for Forward joins: first-match-wins.
-   * Buffer is sorted ascending by as-of key. For left.t <= right.t,
-   * as-of condition is monotone: false for right.t < left.t, then true.
-   * The first satisfying row is the closest match. A distance is not used
-   * because NULL elements or fields inside composite operands break it.
+   * Forward joins: returns the first row that passes both conditions. It picks by buffer
+   * order, not by distance, since NULLs inside arrays or structs make the distance wrong.
    */
   private def findFirstForward(leftRow: InternalRow): InternalRow = {
     val iter = rightGroupBuffer.generateIterator()
@@ -466,10 +431,10 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   /**
-   * Forward scan for Nearest joins: distance-based termination.
-   * Stop when distance starts increasing past the minimum found so far.
+   * Nearest joins: keeps the row with the smallest distance. The scan stops once the
+   * distance starts to grow past the minimum found so far.
    */
-  private def findBestNearest(leftRow: InternalRow): InternalRow = {
+  private def findNearest(leftRow: InternalRow): InternalRow = {
     var bestMatch: InternalRow = null
     var bestDistance: Any = null
     val iter = rightGroupBuffer.generateIterator()

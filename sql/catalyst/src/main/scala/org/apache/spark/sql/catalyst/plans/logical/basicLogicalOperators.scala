@@ -2772,7 +2772,6 @@ object AsOfJoin {
    */
   private[catalyst] object MatchConditionTypes {
 
-    /** Any orderable type, including an empty struct, which equals any other empty struct. */
     def isValidOperandType(dataType: DataType): Boolean = RowOrdering.isOrderable(dataType)
 
     /** Whether the `>=` this join builds can compare the two operands. */
@@ -3115,7 +3114,7 @@ object AsOfJoin {
       }
   }
 
-  /** A struct, not an array, since field distances can differ in type (INT vs INTERVAL). */
+  /** Groups multiple field distances in a struct because their types may differ. */
   private def wrapCompositeOrderExpression(diffs: Seq[Expression]): Expression = {
     diffs match {
       case Seq(single) => single

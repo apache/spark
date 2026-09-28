@@ -665,6 +665,22 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Row("MSFT", 420.50) :: Nil)
   }
 
+  test("forward MATCH_CONDITION skips the closest right row when ON rejects it") {
+    // Row 6 is closest but fails ON. Rows 7 and 8 pass, and 7 is the closer one.
+    for (op <- Seq("<=", "<")) {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.ts
+             |FROM VALUES (5, 10) AS t(ts, qty)
+             |ASOF JOIN VALUES (6, 20), (7, 5), (8, 1) AS r(ts, min_qty)
+             |  MATCH_CONDITION (t.ts $op r.ts)
+             |  ON t.qty > r.min_qty
+             |""".stripMargin),
+        Row(7) :: Nil)
+    }
+  }
+
   test("non-equi range predicate in ON") {
     setupTradeQuoteViews()
     checkSortMergeAsOf(
@@ -808,7 +824,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("forward MATCH_CONDITION with NULL array elements picks the smallest right row") {
-    // NULL elements sort first: [null] < [null, null] < [5]. A distance-based pick chose [5].
+    // NULL elements sort first: [null] < [null, null] < [5].
     val nullInt = "CAST(NULL AS INT)"
     val nullEmpty = "CAST(NULL AS STRUCT<>)"
     for {
@@ -831,7 +847,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("forward MATCH_CONDITION with a NULL struct field picks the smallest right row") {
-    // A NULL field sorts first, so {null, 7} < {x, 1}. A distance-based pick chose {x, 1}.
+    // A NULL field sorts first, so {null, 7} < {x, 1}.
     for {
       (nullField, value) <- Seq(
         "CAST(NULL AS INT)" -> "0",
@@ -854,7 +870,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("ARRAY<STRUCT> MATCH_CONDITION with fields of different types") {
-    // The per-element distance mixes INT and INTERVAL, which one array(...) could not hold.
+    // Each element has an INT distance and an INTERVAL distance.
     def element(first: String, time: String): String =
       s"ARRAY(named_struct('f', $first, 'ts', TIMESTAMP '2026-06-29 $time'))"
     for {
