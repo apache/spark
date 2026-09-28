@@ -17,8 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import scala.jdk.CollectionConverters._
+
+import org.apache.hadoop.fs.Path
+import org.apache.parquet.hadoop.ParquetFileReader
+import org.apache.parquet.hadoop.util.HadoopInputFile
+
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 class ParquetColumnIndexSuite extends ParquetTest with SharedSparkSession {
   import testImplicits._
@@ -48,9 +55,11 @@ class ParquetColumnIndexSuite extends ParquetTest with SharedSparkSession {
    *  |---------|---------|---------|---------|
    *  |-------|-----|-----|---|---|---|---|---|
    * col_2   400   300   300 200 200 200 200 200
+   * See `parquetV2Options` for the layout with the Parquet v2 writer.
    */
-  def checkUnalignedPages(df: DataFrame, extraOptions: Map[String, String] = Map.empty)(
+  def checkUnalignedPages(df: DataFrame, parquetV2: Boolean = false, filterColumn: String = "_1")(
       actions: (DataFrame => DataFrame)*): Unit = {
+    val extraOptions = if (parquetV2) parquetV2Options(filterColumn) else Map.empty[String, String]
     Seq(true, false).foreach { enableDictionary =>
       withTempPath(file => {
         df.coalesce(1)
@@ -60,6 +69,16 @@ class ParquetColumnIndexSuite extends ParquetTest with SharedSparkSession {
             // Applied last to override the options above, e.g. the page size.
             .options(extraOptions)
             .parquet(file.getCanonicalPath)
+
+        // Column index filtering skips nothing unless the filter column has multiple pages.
+        val parquetFile = file.listFiles().filter(_.getName.startsWith("part")).head
+        val in = HadoopInputFile.fromPath(
+          new Path(parquetFile.getCanonicalPath), spark.sessionState.newHadoopConf())
+        Utils.tryWithResource(ParquetFileReader.open(in)) { reader =>
+          val column = reader.getFooter.getBlocks.get(0).getColumns.asScala
+            .find(_.getPath.toDotString == filterColumn).get
+          assert(reader.readOffsetIndex(column).getPageCount > 1)
+        }
 
         val parquetDf = spark.read.parquet(file.getCanonicalPath)
 
@@ -88,92 +107,70 @@ class ParquetColumnIndexSuite extends ParquetTest with SharedSparkSession {
     checkUnalignedPages(df)(actions: _*)
   }
 
+  private def allTypesDf: DataFrame = spark.range(0, 2000).selectExpr(
+    "id as _1",
+    "cast(id as short) as _3",
+    "cast(id as int) as _4",
+    "cast(id as float) as _5",
+    "cast(id as double) as _6",
+    "cast(id as decimal(20,0)) as _7",
+    "cast(cast(1618161925000 + id * 1000 * 60 * 60 * 24 as timestamp) as date) as _9",
+    "cast(1618161925000 + id as timestamp) as _10"
+  )
+
   test("test reading unaligned pages - test all types") {
-    val df = spark.range(0, 2000).selectExpr(
-      "id as _1",
-      "cast(id as short) as _3",
-      "cast(id as int) as _4",
-      "cast(id as float) as _5",
-      "cast(id as double) as _6",
-      "cast(id as decimal(20,0)) as _7",
-      "cast(cast(1618161925000 + id * 1000 * 60 * 60 * 24 as timestamp) as date) as _9",
-      "cast(1618161925000 + id as timestamp) as _10"
-    )
-    checkUnalignedPages(df)(actions: _*)
+    checkUnalignedPages(allTypesDf)(actions: _*)
   }
 
   test("test reading unaligned pages - test all types (Parquet v2 writer)") {
-    val df = spark.range(0, 2000).selectExpr(
-      "id as _1",
-      "cast(id as short) as _3",
-      "cast(id as int) as _4",
-      "cast(id as float) as _5",
-      "cast(id as double) as _6",
-      "cast(id as decimal(20,0)) as _7",
-      "cast(cast(1618161925000 + id * 1000 * 60 * 60 * 24 as timestamp) as date) as _9",
-      "cast(1618161925000 + id as timestamp) as _10"
-    )
-    checkUnalignedPages(df, parquetV2Options("_1"))(actions: _*)
+    checkUnalignedPages(allTypesDf, parquetV2 = true)(actions: _*)
   }
 
+  private def allTypesDictEncodeDf: DataFrame = spark.range(0, 2000).selectExpr(
+    "id as _1",
+    "cast(id % 10 as byte) as _2",
+    "cast(id % 10 as short) as _3",
+    "cast(id % 10 as int) as _4",
+    "cast(id % 10 as float) as _5",
+    "cast(id % 10 as double) as _6",
+    "cast(id % 10 as decimal(20,0)) as _7",
+    "cast(id % 2 as boolean) as _8",
+    "cast(cast(1618161925000 + (id % 10) * 1000 * 60 * 60 * 24 as timestamp) as date) as _9",
+    "cast(1618161925000 + (id % 10) as timestamp) as _10"
+  )
+
   test("test reading unaligned pages - test all types (dict encode)") {
-    val df = spark.range(0, 2000).selectExpr(
-      "id as _1",
-      "cast(id % 10 as byte) as _2",
-      "cast(id % 10 as short) as _3",
-      "cast(id % 10 as int) as _4",
-      "cast(id % 10 as float) as _5",
-      "cast(id % 10 as double) as _6",
-      "cast(id % 10 as decimal(20,0)) as _7",
-      "cast(id % 2 as boolean) as _8",
-      "cast(cast(1618161925000 + (id % 10) * 1000 * 60 * 60 * 24 as timestamp) as date) as _9",
-      "cast(1618161925000 + (id % 10) as timestamp) as _10"
-    )
-    checkUnalignedPages(df)(actions: _*)
+    checkUnalignedPages(allTypesDictEncodeDf)(actions: _*)
   }
 
   test("test reading unaligned pages - test all types (dict encode, Parquet v2 writer)") {
-    val df = spark.range(0, 2000).selectExpr(
-      "id as _1",
-      "cast(id % 10 as byte) as _2",
-      "cast(id % 10 as short) as _3",
-      "cast(id % 10 as int) as _4",
-      "cast(id % 10 as float) as _5",
-      "cast(id % 10 as double) as _6",
-      "cast(id % 10 as decimal(20,0)) as _7",
-      "cast(id % 2 as boolean) as _8",
-      "cast(cast(1618161925000 + (id % 10) * 1000 * 60 * 60 * 24 as timestamp) as date) as _9",
-      "cast(1618161925000 + (id % 10) as timestamp) as _10"
-    )
-    checkUnalignedPages(df, parquetV2Options("_1"))(actions: _*)
+    checkUnalignedPages(allTypesDictEncodeDf, parquetV2 = true)(actions: _*)
   }
+
+  private def nullsDf: DataFrame = spark.range(0, 2000).map { i =>
+    val strVal = if (i >= 400 && i < 450) null else s"$i:${"o".repeat((i / 100).toInt)}"
+    (i, strVal)
+  }.toDF()
 
   test("SPARK-36123: reading from unaligned pages - test filters with nulls") {
     // insert 50 null values in [400, 450) to verify that they are skipped during processing row
     // range [500, 1000) against the second page of col_2 [400, 800)
-    val df = spark.range(0, 2000).map { i =>
-      val strVal = if (i >= 400 && i < 450) null else s"$i:${"o".repeat((i / 100).toInt)}"
-      (i, strVal)
-    }.toDF()
-    checkUnalignedPages(df)(actions: _*)
+    checkUnalignedPages(nullsDf)(actions: _*)
   }
 
   test("reading from unaligned pages - test filters with nulls (Parquet v2 writer)") {
-    val df = spark.range(0, 2000).map { i =>
-      val strVal = if (i >= 400 && i < 450) null else s"$i:${"o".repeat((i / 100).toInt)}"
-      (i, strVal)
-    }.toDF()
-    checkUnalignedPages(df, parquetV2Options("_1"))(actions: _*)
+    checkUnalignedPages(nullsDf, parquetV2 = true)(actions: _*)
   }
 
+  private def structDf: DataFrame =
+    (0 until 2000).map(i => Tuple1((i.toLong, s"$i:${"o".repeat(i / 100)}"))).toDF("s")
+
   test("reading unaligned pages - struct type") {
-    val df = (0 until 2000).map(i => Tuple1((i.toLong, s"$i:${"o".repeat(i / 100)}"))).toDF("s")
-    checkUnalignedPages(df)(structActions: _*)
+    checkUnalignedPages(structDf, filterColumn = "s._1")(structActions: _*)
   }
 
   test("reading unaligned pages - struct type (Parquet v2 writer)") {
-    val df = (0 until 2000).map(i => Tuple1((i.toLong, s"$i:${"o".repeat(i / 100)}"))).toDF("s")
-    checkUnalignedPages(df, parquetV2Options("s._1"))(structActions: _*)
+    checkUnalignedPages(structDf, parquetV2 = true, filterColumn = "s._1")(structActions: _*)
   }
 
   test("SPARK-59828: reading unaligned pages - FIXED_LEN_BYTE_ARRAY with DELTA_BYTE_ARRAY") {
