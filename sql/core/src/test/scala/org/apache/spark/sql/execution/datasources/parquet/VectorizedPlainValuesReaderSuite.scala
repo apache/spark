@@ -25,7 +25,7 @@ import org.apache.parquet.io.ParquetDecodingException
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{GeographyType, GeometryType, StringType}
 
 /**
  * Tests that the vectorized PLAIN reader rejects corrupt pages on both the read and the skip
@@ -54,12 +54,35 @@ class VectorizedPlainValuesReaderSuite extends SparkFunSuite {
     assert(e.getMessage.contains("negative binary length: -12"))
   }
 
-  test("binary length larger than the rest of the page is rejected when skipping") {
-    val reader = newReader(page(100, "ab"))
-    val e = intercept[ParquetDecodingException] {
-      reader.skipBinary(1)
+  test("binary length larger than the rest of the page is rejected") {
+    val expected = "binary length 100 is larger than the 2 bytes left in the page"
+    val e1 = intercept[ParquetDecodingException] {
+      newReader(page(100, "ab")).readBinary(1, new OnHeapColumnVector(1, StringType), 0)
     }
-    assert(e.getMessage.contains("Failed to skip 100 bytes"))
+    assert(e1.getMessage.contains(expected))
+    val e2 = intercept[ParquetDecodingException] {
+      newReader(page(100, "ab")).skipBinary(1)
+    }
+    assert(e2.getMessage.contains(expected))
+  }
+
+  test("geo paths reject invalid binary lengths") {
+    // The lengths are validated before the WKB is parsed, so the payload does not matter.
+    Seq(GeometryType(0), GeographyType(4326)).foreach { geoType =>
+      def read(bytes: Array[Byte]): Unit = {
+        val reader = newReader(bytes)
+        val v = new OnHeapColumnVector(1, geoType)
+        geoType match {
+          case _: GeometryType => reader.readGeometry(1, v, 0)
+          case _: GeographyType => reader.readGeography(1, v, 0)
+        }
+      }
+      val e1 = intercept[ParquetDecodingException](read(page(-1, "abcd")))
+      assert(e1.getMessage.contains("negative binary length: -1"), geoType)
+      // Without the check, readNBytes returned a 2-byte array instead of failing.
+      val e2 = intercept[ParquetDecodingException](read(page(100, "ab")))
+      assert(e2.getMessage.contains("binary length 100 is larger than the 2 bytes left"), geoType)
+    }
   }
 
   test("fixed-width skips past the end of the page are rejected") {
@@ -72,7 +95,9 @@ class VectorizedPlainValuesReaderSuite extends SparkFunSuite {
       ("skipFloats", _.skipFloats(3), 12L),
       ("skipLongs", _.skipLongs(2), 16L),
       ("skipDoubles", _.skipDoubles(2), 16L),
-      ("skipFixedLenByteArray", _.skipFixedLenByteArray(3, 4), 12L))
+      ("skipFixedLenByteArray", _.skipFixedLenByteArray(3, 4), 12L),
+      // 72 booleans are 9 bytes.
+      ("skipBooleans", _.skipBooleans(72), 9L))
     cases.foreach { case (name, skip, bytes) =>
       val e = intercept[ParquetDecodingException] {
         skip(newReader(eightBytes))

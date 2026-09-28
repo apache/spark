@@ -106,11 +106,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     }
     if (i + 7 < total) {
       int numBytesToSkip = (total - i) / 8;
-      try {
-        in.skipFully(numBytesToSkip);
-      } catch (IOException e) {
-        throw new ParquetDecodingException("Failed to skip bytes", e);
-      }
+      skipFully(numBytesToSkip);
       i += numBytesToSkip * 8;
     }
     if (i < total) {
@@ -140,15 +136,21 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   /**
-   * Reads the length prefix of a binary value. The length is read from the file, so reject a
-   * negative length: slicing or skipping a negative length moves the stream position backwards
-   * instead of failing.
+   * Reads the length prefix of a binary value. The length is read from the file, so validate it
+   * against the rest of the page: on a `SingleBufferInputStream`, slicing or skipping a negative
+   * length moves the stream position backwards instead of failing, and `readNBytes` returns a
+   * short array instead of failing when the length runs past the end of the page.
    */
   private int readLength() {
     int len = readInteger();
     if (len < 0) {
       throw new ParquetDecodingException(
           "Corrupted PLAIN page: negative binary length: " + len);
+    }
+    int available = in.available();
+    if (len > available) {
+      throw new ParquetDecodingException("Corrupted PLAIN page: binary length " + len +
+          " is larger than the " + available + " bytes left in the page");
     }
     return len;
   }

@@ -38,6 +38,8 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
   private final VectorizedDeltaBinaryPackedReader lengthReader;
   private ByteBufferInputStream in;
   private WritableColumnVector lengthsVector;
+  // Number of value lengths decoded from the page, i.e. the number of rows that can be read.
+  private int lengthCount;
   private int currentRow = 0;
 
   VectorizedDeltaLengthByteArrayReader() {
@@ -48,8 +50,46 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
     lengthsVector = new OnHeapColumnVector(valueCount, IntegerType);
     lengthReader.initFromPage(valueCount, in);
-    lengthReader.readIntegers(lengthReader.getTotalValueCount(), lengthsVector, 0);
+    lengthCount = lengthReader.getTotalValueCount();
+    if (lengthCount > valueCount) {
+      throw new ParquetDecodingException("Corrupted DELTA_LENGTH_BYTE_ARRAY data: " +
+          lengthCount + " value lengths in a page of " + valueCount + " values");
+    }
+    lengthReader.readIntegers(lengthCount, lengthsVector, 0);
     this.in = in.remainingStream();
+    validateLengths();
+  }
+
+  /**
+   * The value lengths are read from the file, so validate all of them once, before any of them
+   * is used: a corrupt page must fail the read instead of producing malformed values. Values are
+   * consumed in order, so once every length is non-negative and they add up to at most the bytes
+   * left in the page, no read or skip of a value can run past the end of the page.
+   */
+  private void validateLengths() {
+    long totalLength = 0;
+    for (int i = 0; i < lengthCount; i++) {
+      int length = lengthsVector.getInt(i);
+      if (length < 0) {
+        throw new ParquetDecodingException(
+            "Corrupted DELTA_LENGTH_BYTE_ARRAY data: negative value length: " + length);
+      }
+      totalLength += length;
+    }
+    int available = in.available();
+    if (totalLength > available) {
+      throw new ParquetDecodingException("Corrupted DELTA_LENGTH_BYTE_ARRAY data: value " +
+          "lengths add up to " + totalLength + " bytes, but only " + available + " are left");
+    }
+  }
+
+  /** Checks that the rows [startRow, startRow + total) have a decoded value length. */
+  private void checkRows(int startRow, int total) {
+    if (startRow < 0 || (long) startRow + total > lengthCount) {
+      throw new ParquetDecodingException("Corrupted DELTA_LENGTH_BYTE_ARRAY data: reading " +
+          total + " values from row " + startRow + ", but only " + lengthCount +
+          " value lengths were decoded");
+    }
   }
 
   @Override
@@ -57,13 +97,13 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     ByteBuffer buffer;
     ByteBufferOutputWriter outputWriter = ByteBufferOutputWriter::writeArrayByteBuffer;
     int length;
+    checkRows(currentRow, total);
     for (int i = 0; i < total; i++) {
       length = lengthsVector.getInt(currentRow + i);
-      checkLength(length);
       try {
         buffer = in.slice(length);
       } catch (EOFException e) {
-        throw new ParquetDecodingException("Failed to read " + length + " bytes");
+        throw new ParquetDecodingException("Failed to read " + length + " bytes", e);
       }
       outputWriter.write(c, rowId + i, buffer, length);
     }
@@ -88,15 +128,15 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
      WKBConverterStrategy converter) {
     ByteBufferOutputWriter outputWriter = ByteBufferOutputWriter::writeArrayByteBuffer;
     int length;
+    checkRows(currentRow, total);
     for (int i = 0; i < total; i++) {
       length = lengthsVector.getInt(currentRow + i);
-      checkLength(length);
       byte[] physicalValue;
       try {
         // Converts WKB into a physical representation of geometry/geography.
         physicalValue = converter.convert(in.readNBytes(length), srid);
       } catch (IOException e) {
-        throw new ParquetDecodingException("Failed to read " + length + " bytes");
+        throw new ParquetDecodingException("Failed to read " + length + " bytes", e);
       }
 
       outputWriter.write(c, rowId + i, ByteBuffer.wrap(physicalValue), physicalValue.length);
@@ -105,22 +145,21 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
   }
 
   public ByteBuffer getBytes(int rowId) {
+    checkRows(rowId, 1);
     int length = lengthsVector.getInt(rowId);
-    checkLength(length);
     try {
       return in.slice(length);
     } catch (EOFException e) {
-      throw new ParquetDecodingException("Failed to read " + length + " bytes");
+      throw new ParquetDecodingException("Failed to read " + length + " bytes", e);
     }
   }
 
   @Override
   public void skipBinary(int total) {
+    checkRows(currentRow, total);
     long totalLength = 0;
     for (int i = 0; i < total; i++) {
-      int length = lengthsVector.getInt(currentRow + i);
-      checkLength(length);
-      totalLength += length;
+      totalLength += lengthsVector.getInt(currentRow + i);
     }
     try {
       in.skipFully(totalLength);
@@ -128,17 +167,5 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
       throw new ParquetDecodingException("Failed to skip " + totalLength + " bytes", e);
     }
     currentRow += total;
-  }
-
-  /**
-   * The value lengths are read from the file, so reject a negative length before using it:
-   * slicing or skipping a negative length moves the stream position backwards instead of
-   * failing, and a corrupt page must fail the read instead of producing malformed values.
-   */
-  private static void checkLength(int length) {
-    if (length < 0) {
-      throw new ParquetDecodingException(
-          "Corrupted DELTA_LENGTH_BYTE_ARRAY page: negative value length: " + length);
-    }
   }
 }

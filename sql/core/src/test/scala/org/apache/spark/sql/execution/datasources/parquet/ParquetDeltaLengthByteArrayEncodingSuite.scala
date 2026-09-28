@@ -108,39 +108,69 @@ class ParquetDeltaLengthByteArrayEncodingSuite
     }
   }
 
-  test("value length larger than the rest of the page is rejected when skipping") {
+  test("value lengths larger than the rest of the page are rejected") {
     // The second value claims 100 bytes but only 2 bytes are left in the page.
-    reader.initFromPage(2, craftPage(lengths = Array(2, 100), data = "abcd"))
     val e = intercept[ParquetDecodingException] {
-      reader.skipBinary(2)
+      reader.initFromPage(2, craftPage(lengths = Array(2, 100), data = "abcd"))
     }
-    assert(e.getMessage.contains("Failed to skip 102 bytes"))
+    assert(e.getMessage.contains("value lengths add up to 102 bytes, but only 4 are left"))
   }
 
   test("negative value length is rejected") {
-    val lengths = Array(2, -1, 2)
-    reader.initFromPage(3, craftPage(lengths, data = "abcd"))
-    writableColumnVector = new OnHeapColumnVector(3, StringType)
-    val e1 = intercept[ParquetDecodingException] {
-      reader.readBinary(3, writableColumnVector, 0)
+    val e = intercept[ParquetDecodingException] {
+      reader.initFromPage(3, craftPage(lengths = Array(2, -1, 3), data = "abcd"))
     }
-    assert(e1.getMessage.contains("negative value length: -1"))
+    assert(e.getMessage.contains("negative value length: -1"))
+  }
 
-    reader = new VectorizedDeltaLengthByteArrayReader()
-    reader.initFromPage(3, craftPage(lengths, data = "abcd"))
-    val e2 = intercept[ParquetDecodingException] {
-      reader.skipBinary(3)
+  test("more value lengths than values in the page are rejected") {
+    val e = intercept[ParquetDecodingException] {
+      reader.initFromPage(2, craftPage(lengths = Array(1, 1, 1), data = "abc"))
     }
-    assert(e2.getMessage.contains("negative value length: -1"))
+    assert(e.getMessage.contains("3 value lengths in a page of 2 values"))
+  }
+
+  test("rows without a decoded value length are rejected") {
+    // The page has 3 values but only 2 value lengths, so the third row has no length.
+    def newReader(): VectorizedDeltaLengthByteArrayReader = {
+      val r = new VectorizedDeltaLengthByteArrayReader()
+      r.initFromPage(3, craftPage(lengths = Array(2, 2), data = "abcd"))
+      r
+    }
+    val expected = "reading 3 values from row 0, but only 2 value lengths were decoded"
+    val e1 = intercept[ParquetDecodingException] {
+      newReader().readBinary(3, new OnHeapColumnVector(3, StringType), 0)
+    }
+    assert(e1.getMessage.contains(expected))
+    val e2 = intercept[ParquetDecodingException] {
+      newReader().skipBinary(3)
+    }
+    assert(e2.getMessage.contains(expected))
 
     // getBytes is the path used by the DELTA_BYTE_ARRAY reader to read suffixes.
-    reader = new VectorizedDeltaLengthByteArrayReader()
-    reader.initFromPage(3, craftPage(lengths, data = "abcd"))
-    reader.getBytes(0)
+    val r = newReader()
+    r.getBytes(0)
+    r.getBytes(1)
     val e3 = intercept[ParquetDecodingException] {
-      reader.getBytes(1)
+      r.getBytes(2)
     }
-    assert(e3.getMessage.contains("negative value length: -1"))
+    assert(e3.getMessage.contains(
+      "reading 1 values from row 2, but only 2 value lengths were decoded"))
+  }
+
+  testGeo("geo path rejects rows without a decoded value length") { geoType =>
+    val wkb = makePointWkb(1, 1)
+    val is = BytesInput.concat(
+      lengthsInput(Array(wkb.length)), BytesInput.from(wkb)).toInputStream
+    reader.initFromPage(2, is)
+    val v = new OnHeapColumnVector(2, geoType)
+    val e = intercept[ParquetDecodingException] {
+      geoType match {
+        case _: GeometryType => reader.readGeometry(2, v, 0)
+        case _: GeographyType => reader.readGeography(2, v, 0)
+      }
+    }
+    assert(e.getMessage.contains("but only 1 value lengths were decoded"))
   }
 
   testGeo("geo types single point") { geoType =>
@@ -204,12 +234,17 @@ class ParquetDeltaLengthByteArrayEncodingSuite
 
   /** Builds a raw DELTA_LENGTH_BYTE_ARRAY page from explicit lengths and value bytes. */
   private def craftPage(lengths: Array[Int], data: String): ByteBufferInputStream = {
+    BytesInput.concat(
+      lengthsInput(lengths),
+      BytesInput.from(data.getBytes(StandardCharsets.UTF_8))).toInputStream
+  }
+
+  /** Encodes value lengths with DELTA_BINARY_PACKED, as in a DELTA_LENGTH_BYTE_ARRAY page. */
+  private def lengthsInput(lengths: Array[Int]): BytesInput = {
     val lengthWriter = new DeltaBinaryPackingValuesWriterForInteger(
       128, 4, 64 * 1024, 64 * 1024, new DirectByteBufferAllocator)
     lengths.foreach(lengthWriter.writeInteger)
-    BytesInput.concat(
-      lengthWriter.getBytes,
-      BytesInput.from(data.getBytes(StandardCharsets.UTF_8))).toInputStream
+    lengthWriter.getBytes
   }
 
   private def writeData(writer: DeltaLengthByteArrayValuesWriter, values: Array[String]): Unit = {
