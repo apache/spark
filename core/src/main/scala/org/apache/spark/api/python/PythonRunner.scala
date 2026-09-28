@@ -30,7 +30,7 @@ import scala.util.{Success, Try}
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.{JsonParser, JsonProcessingException}
-import com.fasterxml.jackson.databind.{DeserializationFeature, JsonNode, ObjectMapper}
+import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
@@ -213,13 +213,21 @@ private[spark] object BasePythonRunner extends Logging {
     }
   }
 
+  // Values used to update the existing Python SQL metrics and task spill metrics.
+  private[python] case class WorkerMetrics(
+      bootTimestampMs: Long,
+      initTimestampMs: Long,
+      finishTimestampMs: Long,
+      pythonExecutionDurationMs: Long,
+      memoryBytesSpilled: Long,
+      diskBytesSpilled: Long)
+
   private lazy val workerMetricsMapper = new ObjectMapper()
     .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
     .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
-    .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
 
-  /** Read one JSON object after METRICS_DATA, leaving the next section to the caller. */
-  private[python] def readWorkerMetrics(stream: DataInputStream): JsonNode = {
+  /** Read and validate worker metrics after METRICS_DATA; ignore additional fields. */
+  private[python] def readWorkerMetrics(stream: DataInputStream): WorkerMetrics = {
     val length = stream.readInt()
     if (length <= 0) {
       throw new SparkException(s"Invalid Python worker report length: $length")
@@ -234,20 +242,7 @@ private[spark] object BasePythonRunner extends Logging {
     if (report == null || !report.isObject) {
       throw new SparkException("Expected a Python worker JSON object")
     }
-    report
-  }
 
-  // Values used to update the existing Python SQL metrics and task spill metrics.
-  private[python] case class WorkerMetrics(
-      bootTimestampMs: Long,
-      initTimestampMs: Long,
-      finishTimestampMs: Long,
-      pythonExecutionDurationMs: Long,
-      memoryBytesSpilled: Long,
-      diskBytesSpilled: Long)
-
-  /** Validate the current metric fields before updating them; additional fields are ignored. */
-  private[python] def validateWorkerMetrics(report: JsonNode): WorkerMetrics = {
     def metricValue(name: String): Long = {
       val value = report.get(name)
       if (value == null || !value.isIntegralNumber || !value.canConvertToLong) {
@@ -913,8 +908,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     protected def read(): OUT
 
     protected def handleMetricsData(): Unit = {
-      val report = BasePythonRunner.readWorkerMetrics(stream)
-      val workerMetrics = BasePythonRunner.validateWorkerMetrics(report)
+      val workerMetrics = BasePythonRunner.readWorkerMetrics(stream)
       val bootTime = workerMetrics.bootTimestampMs
       val initTime = workerMetrics.initTimestampMs
       val finishTime = workerMetrics.finishTimestampMs
