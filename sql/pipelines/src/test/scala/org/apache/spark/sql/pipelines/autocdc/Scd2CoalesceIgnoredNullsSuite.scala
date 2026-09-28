@@ -270,6 +270,56 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("reconstructed nested structs retain schema metadata and nullability") {
+    def commentMetadata(comment: String): Metadata =
+      new MetadataBuilder().putString("comment", comment).build()
+
+    val cityMetadata = commentMetadata("city")
+    val zipMetadata = commentMetadata("zip")
+    val addressMetadata = commentMetadata("address")
+    val noteMetadata = commentMetadata("note")
+    val profileMetadata = commentMetadata("profile")
+    val addressType = StructType(Seq(
+      StructField("city", StringType, nullable = false, cityMetadata),
+      StructField("zip", StringType, nullable = true, zipMetadata)
+    ))
+    val profileType = StructType(Seq(
+      StructField("address", addressType, nullable = false, addressMetadata),
+      StructField("note", StringType, nullable = true, noteMetadata)
+    ))
+    val schema = StructType(Seq(
+      StructField("id", IntegerType, nullable = false),
+      StructField("profile", profileType, nullable = false, profileMetadata)
+    ))
+    val authoredMap = versionMap(
+      Seq("profile", "address", "city") -> true,
+      Seq("profile", "address", "zip") -> true,
+      Seq("profile", "note") -> true)
+    val unauthoredZipMap = versionMap(
+      Seq("profile", "address", "city") -> true,
+      Seq("profile", "address", "zip") -> false,
+      Seq("profile", "note") -> true)
+    val input = targetTableOf(schema)(
+      Row(1, Row(Row("city-1", "zip-1"), "note-1"),
+        10L, null, cdcMetadata(10L, authoredMap)),
+      Row(1, Row(Row("city-2", null), "note-2"),
+        20L, null, cdcMetadata(20L, unauthoredZipMap))
+    )
+
+    val result = coalesce(input, includeColumns("profile"))
+
+    assert(result.schema == input.schema)
+    checkAnswer(
+      result,
+      Seq(
+        Row(1, Row(Row("city-1", "zip-1"), "note-1"),
+          10L, null, cdcMetadata(10L, authoredMap)),
+        Row(1, Row(Row("city-2", "zip-1"), "note-2"),
+          20L, null, cdcMetadata(20L, unauthoredZipMap))
+      )
+    )
+  }
+
   gridTest("column selection honors the configured resolver")(
     Seq(
       (false, "VALUE"),

@@ -1718,7 +1718,7 @@ object Scd2BatchProcessor {
       path: Seq[String],
       dataType: DataType,
       contextsBeneath: Seq[LeafInheritanceContext]): Column = {
-    dataType match {
+    val reconstructed = dataType match {
       case struct: StructType =>
         val contextsByChildName = contextsBeneath.groupBy(_.path(path.length))
         val rebuilt = F.struct(
@@ -1728,7 +1728,7 @@ object Scd2BatchProcessor {
               .get(field.name)
               .map(constructCoalescedIgnoreNullColumn(childPath, field.dataType, _))
               .getOrElse(F.col(QuotingUtils.quoteNameParts(childPath)))
-              .as(field.name)
+              .as(field.name, field.metadata)
           }: _*
         )
         val anyInherits = contextsBeneath.map(_.inherits).reduce(_ || _)
@@ -1739,6 +1739,7 @@ object Scd2BatchProcessor {
         F.when(context.inherits, context.valueToInherit)
           .otherwise(F.col(QuotingUtils.quoteNameParts(path)))
     }
+    reconstructed.cast(dataType)
   }
 
   /**
