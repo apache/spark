@@ -17,6 +17,7 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.Collections
+import java.util.concurrent.ScheduledThreadPoolExecutor
 
 import scala.jdk.CollectionConverters._
 
@@ -396,6 +397,37 @@ class ExecutorResizePluginSuite
             "confValue" -> value.toDouble.toString,
             "confRequirement" -> requirement))
       }
+    }
+  }
+
+  test("SPARK-59842: resizeInterval defaults to 1 minute") {
+    assert(new SparkConf(false).get(EXECUTOR_RESIZE_INTERVAL) === 60)
+  }
+
+  test("SPARK-59842: init returns early when resizeInterval is 0") {
+    val plugin = new ExecutorResizeDriverPlugin()
+    val sparkConf = new SparkConf().set(EXECUTOR_RESIZE_INTERVAL.key, "0")
+    val sc = mock(classOf[SparkContext])
+    when(sc.conf).thenReturn(sparkConf)
+    val pluginCtx = mock(classOf[PluginContext])
+
+    val result = plugin.init(sc, pluginCtx)
+
+    assert(result.isEmpty)
+  }
+
+  test("SPARK-59842: init schedules the resize task by default") {
+    val plugin = new ExecutorResizeDriverPlugin()
+    val sc = mock(classOf[SparkContext])
+    when(sc.conf).thenReturn(new SparkConf())
+    val pluginCtx = mock(classOf[PluginContext])
+    try {
+      assert(plugin.init(sc, pluginCtx).isEmpty)
+      val field = plugin.getClass.getDeclaredField("periodicService")
+      field.setAccessible(true)
+      assert(field.get(plugin).asInstanceOf[ScheduledThreadPoolExecutor].getQueue.size === 1)
+    } finally {
+      plugin.shutdown()
     }
   }
 }
