@@ -728,6 +728,50 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Row(Seq(1, 6)) :: Nil)
   }
 
+  test("forward MATCH_CONDITION skips a closer row that fails a non-equi ON predicate") {
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT r.k
+          |FROM VALUES (10, 5) AS t(k, lim)
+          |ASOF JOIN VALUES (12, 9), (15, 1), (20, 0) AS r(k, v)
+          |  MATCH_CONDITION (t.k <= r.k)
+          |  ON r.v < t.lim
+          |""".stripMargin),
+      Row(15) :: Nil)
+  }
+
+  // The far row makes (right - left) too big for the type, so a distance-based scan would fail.
+  Seq(
+    ("INT", "-100", "-50", "2147483647"),
+    ("BIGINT", "-100", "-50", "9223372036854775807"),
+    ("DECIMAL(38, 0)", "-99999999999999999999999999999999999999", "1", "2"),
+    ("INTERVAL YEAR TO MONTH",
+      "INTERVAL '-100' MONTH", "INTERVAL '-50' MONTH", "INTERVAL '178956970-7' YEAR TO MONTH"),
+    ("INTERVAL DAY TO SECOND",
+      "INTERVAL '-100' DAY", "INTERVAL '-50' DAY", "INTERVAL '106751991' DAY")
+  ).foreach { case (dataType, left, near, far) =>
+    test(s"forward $dataType MATCH_CONDITION picks the closest row when right - left overflows") {
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+          Seq("<=", "<").foreach { op =>
+            checkSortMergeAsOf(
+              sql(
+                s"""
+                   |SELECT r.tag
+                   |FROM VALUES (CAST($left AS $dataType)) AS t(k)
+                   |ASOF JOIN VALUES
+                   |  (CAST($near AS $dataType), 'near'),
+                   |  (CAST($far AS $dataType), 'far') AS r(k, tag)
+                   |  MATCH_CONDITION (t.k $op r.k)
+                   |""".stripMargin),
+              Row("near") :: Nil)
+          }
+        }
+      }
+    }
+  }
+
   test("ARRAY<STRUCT> operands with different field names") {
     checkSortMergeAsOf(
       sql(
