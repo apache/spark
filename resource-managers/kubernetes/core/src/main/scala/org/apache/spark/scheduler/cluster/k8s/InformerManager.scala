@@ -20,8 +20,6 @@ import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer
 
-import org.apache.spark.SparkConf
-import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL
 import org.apache.spark.deploy.k8s.Constants.{SPARK_APP_ID_LABEL, SPARK_EXECUTOR_INACTIVE_LABEL, SPARK_POD_EXECUTOR_ROLE, SPARK_ROLE_LABEL}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
@@ -36,10 +34,8 @@ import org.apache.spark.util.Utils
  * that forces retries so transient errors self-heal instead of leaving executor pod state
  * silently frozen.
  */
-private[spark] class InformerManager(kubernetesClient: KubernetesClient, conf: SparkConf)
-  extends Logging {
+private[spark] class InformerManager(kubernetesClient: KubernetesClient) extends Logging {
 
-  private val resyncInterval = conf.get(KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL)
   private[k8s] var informer: SharedIndexInformer[Pod] = _
   private var stopped = false
 
@@ -54,7 +50,10 @@ private[spark] class InformerManager(kubernetesClient: KubernetesClient, conf: S
         .withLabel(SPARK_APP_ID_LABEL, applicationId)
         .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
         .withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
-        .runnableInformer(resyncInterval)
+        // Resync stays disabled: the lister source's periodic replaceSnapshot already
+        // reconciles the full state, and the informer source's event handler drops
+        // unchanged-resourceVersion updates, so a resync replay would be all no-ops.
+        .runnableInformer(0)
         .exceptionHandler((_: Boolean, t: Throwable) => {
           logWarning("Executor pods informer hit an error; will retry", t)
           true

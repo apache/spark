@@ -38,7 +38,6 @@ class ExecutorPodsListerSnapshotSourceSuite extends SparkFunSuite with BeforeAnd
   private val testNamespace = "test-namespace"
   private val sparkConf = new SparkConf
   private val pollingInterval = sparkConf.get(KUBERNETES_EXECUTOR_LISTER_POLLING_INTERVAL)
-  private val resyncInterval = sparkConf.get(KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL)
   private val pollingExecutor = new DeterministicScheduler
 
   private var informerManager: InformerManager = _
@@ -65,11 +64,11 @@ class ExecutorPodsListerSnapshotSourceSuite extends SparkFunSuite with BeforeAnd
   override def beforeEach(): Unit = {
     MockitoAnnotations.openMocks(this).close()
     InformerTestUtils.stubInformerBuilder(
-      kubernetesClient, podOperations, scopedPods, informer, TEST_SPARK_APP_ID, resyncInterval)
+      kubernetesClient, podOperations, scopedPods, informer, TEST_SPARK_APP_ID)
     when(kubernetesClient.getNamespace).thenReturn(testNamespace)
     when(informer.getIndexer).thenReturn(indexer)
 
-    informerManager = new InformerManager(kubernetesClient, sparkConf)
+    informerManager = new InformerManager(kubernetesClient)
     snapshotSource = new ExecutorPodsListerSnapshotSource(
       sparkConf, kubernetesClient, snapshotsStore, informerManager, pollingExecutor)
   }

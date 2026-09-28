@@ -205,7 +205,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       kubernetesClient: KubernetesClient,
       snapshotsStore: ExecutorPodsSnapshotsStore): Seq[ExecutorPodsSnapshotSource] = {
     if (conf.get(KUBERNETES_EXECUTOR_ENABLE_INFORMER)) {
-      val informerManager = new InformerManager(kubernetesClient, conf)
+      val informerManager = new InformerManager(kubernetesClient)
       val listerExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
         "kubernetes-executor-pod-lister-sync")
       Seq(

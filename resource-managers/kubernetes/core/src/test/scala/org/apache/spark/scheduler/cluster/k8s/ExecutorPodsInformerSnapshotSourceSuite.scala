@@ -24,15 +24,11 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.Fabric8Aliases.{LABELED_PODS, PODS}
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.{runningExecutor, TEST_SPARK_APP_ID}
 
 class ExecutorPodsInformerSnapshotSourceSuite extends SparkFunSuite with BeforeAndAfterEach {
-
-  private val sparkConf = new SparkConf()
-  private val resyncInterval = sparkConf.get(KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL)
 
   private var snapshotSource: ExecutorPodsInformerSnapshotSource = _
   private var informerManager: InformerManager = _
@@ -57,9 +53,9 @@ class ExecutorPodsInformerSnapshotSourceSuite extends SparkFunSuite with BeforeA
     MockitoAnnotations.openMocks(this).close()
     handlerCaptor = ArgumentCaptor.forClass(classOf[ResourceEventHandler[Pod]])
     InformerTestUtils.stubInformerBuilder(
-      kubernetesClient, podOperations, scopedPods, informer, TEST_SPARK_APP_ID, resyncInterval)
+      kubernetesClient, podOperations, scopedPods, informer, TEST_SPARK_APP_ID)
 
-    informerManager = new InformerManager(kubernetesClient, sparkConf)
+    informerManager = new InformerManager(kubernetesClient)
     snapshotSource = new ExecutorPodsInformerSnapshotSource(snapshotsStore, informerManager)
   }
 

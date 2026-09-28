@@ -1376,17 +1376,6 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>4.4.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.informerResyncInterval</code></td>
-  <td><code>0s</code></td>
-  <td>
-    Interval at which the informer replays every cached executor pod as an update event to
-    registered handlers. The replay reads from the local cache only and does not re-list
-    against the apiserver. Only applies when <code>spark.kubernetes.executor.enableInformer</code>
-    is <code>true</code>. Set to <code>0</code> to disable (default).
-  </td>
-  <td>4.4.0</td>
-</tr>
-<tr>
   <td><code>spark.kubernetes.driver.request.cores</code></td>
   <td>(none)</td>
   <td>

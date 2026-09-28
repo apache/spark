@@ -27,8 +27,8 @@ import org.apache.spark.deploy.k8s.Fabric8Aliases.{LABELED_PODS, PODS}
 
 /**
  * Shared Mockito stubs for the `kubernetesClient.pods().withLabel(...).withoutLabel(...)
- * .runnableInformer(resyncInterval)` chain that [[InformerManager]] uses. Extracted so the
- * three informer-related suites don't have to copy the same 5-line label-filter setup.
+ * .runnableInformer(0)` chain that [[InformerManager]] uses. Extracted so the three
+ * informer-related suites don't have to copy the same 5-line label-filter setup.
  */
 object InformerTestUtils {
 
@@ -44,13 +44,12 @@ object InformerTestUtils {
       podOperations: PODS,
       scopedPods: LABELED_PODS,
       informer: SharedIndexInformer[Pod],
-      applicationId: String,
-      resyncInterval: Long): Unit = {
+      applicationId: String): Unit = {
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withLabel(SPARK_APP_ID_LABEL, applicationId)).thenReturn(scopedPods)
     when(scopedPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(scopedPods)
     when(scopedPods.withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")).thenReturn(scopedPods)
-    when(scopedPods.runnableInformer(resyncInterval)).thenReturn(informer)
+    when(scopedPods.runnableInformer(0)).thenReturn(informer)
     when(informer.exceptionHandler(any(classOf[ExceptionHandler]))).thenReturn(informer)
     when(informer.isRunning).thenReturn(false)
   }

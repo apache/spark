@@ -55,9 +55,9 @@ private[spark] class ExecutorPodsInformerSnapshotSource(
     }
 
     override def onUpdate(oldPod: Pod, newPod: Pod): Unit = {
-      // When the informer runs with a non-zero resync period, every cached pod is replayed as
-      // an onUpdate with an unchanged resourceVersion. Skip those no-op replays to avoid
-      // driving snapshot subscribers with N churn snapshots per resync round.
+      // The informer runs with resync disabled (see InformerManager), so replays with an
+      // unchanged resourceVersion should not occur in practice. Keep this cheap guard anyway
+      // to avoid driving snapshot subscribers with no-op churn if a replay ever happens.
       if (oldPod.getMetadata.getResourceVersion != newPod.getMetadata.getResourceVersion) {
         logDebug(s"Received update executor pod event for pod named " +
           s"${newPod.getMetadata.getName}")
