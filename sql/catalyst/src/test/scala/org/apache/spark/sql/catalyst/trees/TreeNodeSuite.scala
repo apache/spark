@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.trees
 
-import java.lang.management.ManagementFactory
 import java.math.BigInteger
 import java.util.UUID
+import java.util.concurrent.{CyclicBarrier, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.annotation.nowarn
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
@@ -42,6 +45,8 @@ import org.apache.spark.sql.catalyst.plans.physical.{IdentityBroadcastMode, Roun
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.collection.BitSet
 
 case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFallback {
   override def children: Seq[Expression] = optKey.toSeq
@@ -99,29 +104,48 @@ case class FakeLeafPlan(child: LogicalPlan)
 
 case class FakeCurryingProduct(x: Expression)(val y: Int)
 
+case class ConcurrentTreeNode(barrier: CyclicBarrier, computeCount: AtomicInteger)
+  extends LeafNode {
+  override def output: Seq[Attribute] = Nil
+
+  override protected def getDefaultTreePatternBits: BitSet = {
+    computeCount.incrementAndGet()
+    barrier.await(10, TimeUnit.SECONDS)
+    new BitSet(TreePattern.maxId)
+  }
+}
+
 class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   test("constructing unused Literals does not allocate eager cache state") {
-    val bean = ManagementFactory.getThreadMXBean.asInstanceOf[com.sun.management.ThreadMXBean]
-    assert(bean.isThreadAllocatedMemorySupported)
-    bean.setThreadAllocatedMemoryEnabled(true)
-    val count = 100000
-    val literals = new Array[Literal](count)
+    val literal = Literal(1)
+    val cacheFields = classOf[TreeNode[_]].getDeclaredFields
+      .filter(_.getName.endsWith("CacheValue"))
 
-    var i = 0
-    while (i < count) {
-      Literal(1)
-      i += 1
+    assert(cacheFields.length === 5)
+    cacheFields.foreach { field =>
+      field.setAccessible(true)
+      assert(field.get(literal) === null, s"${field.getName} was eagerly initialized")
     }
+  }
 
-    val before = bean.getCurrentThreadAllocatedBytes
-    i = 0
-    while (i < count) {
-      literals(i) = Literal(1)
-      i += 1
+  test("concurrent cache initialization returns and reuses the selected value") {
+    val barrier = new CyclicBarrier(2)
+    val computeCount = new AtomicInteger
+    val node = ConcurrentTreeNode(barrier, computeCount)
+    val executor = ThreadUtils.newDaemonFixedThreadPool(2, "tree-node-cache-test")
+    val executionContext = ExecutionContext.fromExecutorService(executor)
+    try {
+      val first = Future(node.treePatternBits)(executionContext)
+      val second = Future(node.treePatternBits)(executionContext)
+      val firstResult = ThreadUtils.awaitResult(first, 10.seconds)
+      val secondResult = ThreadUtils.awaitResult(second, 10.seconds)
+
+      assert(firstResult eq secondResult)
+      assert(node.treePatternBits eq firstResult)
+      assert(computeCount.get() === 2)
+    } finally {
+      executor.shutdownNow()
     }
-    val bytesPerLiteral = (bean.getCurrentThreadAllocatedBytes - before) / count
-
-    assert(bytesPerLiteral < 220, s"unused Literal allocated $bytesPerLiteral bytes")
   }
 
   test("top node changed") {

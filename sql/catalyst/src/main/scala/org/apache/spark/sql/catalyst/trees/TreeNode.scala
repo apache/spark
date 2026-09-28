@@ -50,8 +50,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.Utils
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
@@ -60,6 +60,7 @@ private class MutableInt(var i: Int)
 private object TreeNode {
   // Volatile fields provide safe publication but need compare-and-set to ensure concurrent readers
   // return the same cached instance. VarHandles avoid allocating an atomic wrapper for every node.
+  // Cache computations must not return null because null marks an uninitialized cache.
   private val lookup = MethodHandles.privateLookupIn(classOf[TreeNode[_]], MethodHandles.lookup())
 
   val treePatternBitsCache =
