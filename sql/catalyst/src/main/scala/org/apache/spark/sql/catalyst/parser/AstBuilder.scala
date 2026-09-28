@@ -5826,8 +5826,6 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitPartitionTransform(
       ctx: PartitionTransformContext): Transform = {
-    // No withOrigin here: `partitionField : transform #partitionTransform`, so the two contexts
-    // span the same tokens and visitTransform already sets the origin from the inner one.
     visitTransform(ctx.transform)
   }
 
@@ -6306,9 +6304,8 @@ class AstBuilder extends DataTypeAstBuilder
    * Parse the optional write distribution and ordering clauses of a CREATE/REPLACE TABLE statement:
    * `DISTRIBUTED BY PARTITION` and `[LOCALLY] ORDERED BY ... | UNORDERED`.
    *
-   * Returns the distribution mode name together with the requested ordering. The mode is null when
-   * the statement did not ask for one, which is distinct from "none": null leaves the choice to the
-   * data source's own default, while "none" is an explicit request for no distribution.
+   * Returns the distribution mode and the ordering. The mode is null when the statement did not ask
+   * for one, which leaves the choice to the catalog; "none" is an explicit request.
    */
   private def writeSpecsFrom(
       ctx: CreateTableClausesContext): (String, Seq[V2SortOrder]) = {
@@ -6336,10 +6333,8 @@ class AstBuilder extends DataTypeAstBuilder
     if (distributionSpec != null) {
       TableInfo.DISTRIBUTION_MODE_HASH
     } else if (orderingSpec.UNORDERED != null || orderingSpec.LOCALLY != null) {
-      // Explicitly no distribution: sort within each task only.
       TableInfo.DISTRIBUTION_MODE_NONE
     } else {
-      // A global ordering, which needs a range distribution to order across files as well.
       TableInfo.DISTRIBUTION_MODE_RANGE
     }
   }
@@ -6519,12 +6514,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     val (writeDistributionMode, writeOrdering) = writeSpecsFrom(ctx.createTableClauses())
 
-    // Note this counts partition transforms and bucketing, not `partitioning`, which also holds a
-    // ClusterByTransform. CLUSTER BY carries clustering columns for the connector to interpret, not
-    // a partition spec, and it is mutually exclusive with both PARTITIONED BY and CLUSTERED BY ...
-    // INTO ... BUCKETS -- so a table using it provably has nothing to distribute by. (CLUSTERED BY
-    // ... INTO ... BUCKETS is a different clause and does count: a BucketTransform is a partition
-    // transform.)
+    // Bucketing counts as partitioning here; CLUSTER BY does not.
     if (writeDistributionMode == TableInfo.DISTRIBUTION_MODE_HASH && partitionTransforms.isEmpty) {
       throw QueryParsingErrors.distributedByPartitionWithoutPartitioning(ctx.createTableClauses())
     }
@@ -6625,7 +6615,7 @@ class AstBuilder extends DataTypeAstBuilder
     val identifierContext = ctx.replaceTableHeader().identifierReference()
     val (writeDistributionMode, writeOrdering) = writeSpecsFrom(ctx.createTableClauses())
 
-    // Partition transforms and bucketing only, not CLUSTER BY: see visitCreateTable.
+    // Bucketing counts as partitioning here; CLUSTER BY does not.
     if (writeDistributionMode == TableInfo.DISTRIBUTION_MODE_HASH && partitionTransforms.isEmpty) {
       throw QueryParsingErrors.distributedByPartitionWithoutPartitioning(ctx.createTableClauses())
     }

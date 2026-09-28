@@ -28,23 +28,19 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, CreateTableAsSelect, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, V2CreateTablePlan}
 import org.apache.spark.sql.connector.catalog.{Column, DelegatingTable, Identifier, InMemoryTable, InMemoryTableCatalog, StagedTable, StagingInMemoryTableCatalog, Table, TableCatalogCapability, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, LogicalExpressions, NullOrdering, SortDirection, SortOrder}
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, IdentityTransform, LogicalExpressions, NullOrdering, SortDirection, SortOrder}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
 /**
  * Tests the create-time write distribution and ordering clauses: CREATE/REPLACE TABLE ...
- * DISTRIBUTED BY PARTITION ... [LOCALLY] ORDERED BY ... | UNORDERED.
- *
- * These cover the Spark side only -- what the parser produces, what reaches the catalog, and how a
- * catalog that has not advertised support for the clauses is rejected. The end-to-end coverage
- * against a catalog that does implement them lives in Iceberg's TestDistributedAndOrderedTables.
+ * DISTRIBUTED BY PARTITION ... [LOCALLY] ORDERED BY ... | UNORDERED. Covers what the parser
+ * produces, what reaches the catalog, and how a catalog without the capability is rejected.
  */
 class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
 
-  // The catalog manager caches a catalog instance under its name for the whole session, so without
-  // this a later test would get an earlier test's catalog -- with its tables and its recordings.
+  // The catalog manager caches catalogs for the session; reset it so tests don't share tables.
   override def afterEach(): Unit = {
     spark.sessionState.catalogManager.reset()
     super.afterEach()
@@ -52,7 +48,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
 
   private def parse(sql: String): LogicalPlan = spark.sessionState.sqlParser.parsePlan(sql)
 
-  /** Analyzes without running the command, so the normalization rules can be inspected. */
   private def analyze(sql: String): LogicalPlan =
     spark.sessionState.executePlan(parse(sql)).analyzed
 
@@ -95,9 +90,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("an explicit DISTRIBUTED BY PARTITION decides the distribution on its own") {
-    // The ordering clause only implies a distribution when DISTRIBUTED BY PARTITION is absent, so
-    // beside it LOCALLY has no effect and UNORDERED contributes only "no sort order" -- which is
-    // the whole point of allowing that combination: cluster each write by partition, unsorted.
     Seq(
       ("ORDERED BY id", 1),
       ("LOCALLY ORDERED BY id", 1),
@@ -155,7 +147,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("the parenthesised ORDERED BY form parses the same") {
-    // Iceberg's own ALTER TABLE ... WRITE ORDERED BY accepts both, so accept both here too.
     Seq("ORDERED BY id DESC, c", "ORDERED BY (id DESC, c)").foreach { clause =>
       parse(s"CREATE TABLE t (id INT, c STRING) USING foo $clause") match {
         case c: CreateTable =>
@@ -167,9 +158,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("the write clauses may appear in any position among the other create-table clauses") {
-    // createTableClauses is an order-insensitive loop, so the two write clauses are independent
-    // members of it rather than one combined clause -- otherwise anything between them would count
-    // as a duplicate.
     Seq(
       "ORDERED BY id PARTITIONED BY (c) DISTRIBUTED BY PARTITION",
       "DISTRIBUTED BY PARTITION PARTITIONED BY (c) LOCALLY ORDERED BY id",
@@ -199,7 +187,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("DISTRIBUTED BY PARTITION requires a partitioned table") {
-    // The check sits in the parser, so it has to be wired up on all four statement forms.
     Seq(
       "CREATE TABLE t (id INT) USING foo DISTRIBUTED BY PARTITION",
       "CREATE TABLE t USING foo DISTRIBUTED BY PARTITION AS SELECT 1 AS id",
@@ -213,31 +200,23 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("ordering references are normalized to the schema's spelling") {
-    // The parser cannot know the schema, so ORDERED BY id on a column `ID` arrives as `id`.
-    // PreprocessTableCreation rewrites it, exactly as it does for the partitioning -- a connector
-    // that stores the ordering by name would otherwise record a name its own schema does not have.
     withSQLConf("spark.sql.catalog.testcat" -> classOf[RecordingInMemoryTableCatalog].getName) {
       assert(orderingOf(analyze("CREATE TABLE testcat.t (ID INT, TS TIMESTAMP) USING foo " +
         "ORDERED BY id, days(ts) DESC")) === Seq("ID ASC NULLS FIRST", "days(TS) DESC NULLS LAST"))
 
-      // and on the CTAS path, where the schema comes from the query
       assert(orderingOf(analyze(
         "CREATE TABLE testcat.t USING foo ORDERED BY id AS SELECT 1 AS ID")) ===
         Seq("ID ASC NULLS FIRST"))
 
-      // A transform Spark does not model is an ApplyTransform, which is not rewritable, so nothing
-      // can fix its case. Rather than hand the connector a name its schema does not have, the
-      // reference has to match exactly -- the same rule the partitioning check applies.
       assert(orderingOf(analyze("CREATE TABLE testcat.t (ID INT) USING foo " +
         "ORDERED BY truncate(4, ID)")) === Seq("truncate(4, ID) ASC NULLS FIRST"))
       val e = intercept[AnalysisException] {
         analyze("CREATE TABLE testcat.t (ID INT) USING foo ORDERED BY truncate(4, id)")
       }
-      assert(e.getCondition === "UNSUPPORTED_FEATURE.WRITE_ORDERING_WITH_UNKNOWN_COLUMN")
+      assert(e.getCondition === "WRITE_ORDERING_WITH_UNKNOWN_COLUMN")
       assert(e.getMessageParameters.get("cols") === "`id`")
 
-      // and normalization is per reference, not per transform: one unresolvable reference must not
-      // stop its siblings being rewritten, or they would be reported as missing along with it
+      // references are normalized independently, so only the unresolvable one is reported
       val multi = intercept[AnalysisException] {
         analyze("CREATE TABLE testcat.t (ID INT) USING foo ORDERED BY bucket(4, id, nope)")
       }
@@ -246,8 +225,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("REPLACE TABLE and RTAS normalize the ordering too") {
-    // Each of the four plans carries its own copy of the ordering and its own withWriteOrdering, so
-    // covering the CREATE pair above says nothing about the REPLACE pair.
     withSQLConf("spark.sql.catalog.testcat" -> classOf[RecordingInMemoryTableCatalog].getName) {
       assert(orderingOf(analyze("REPLACE TABLE testcat.t (ID INT) USING foo ORDERED BY id")) ===
         Seq("ID ASC NULLS FIRST"))
@@ -258,8 +235,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("a case-sensitive session resolves the ordering case-sensitively") {
-    // Both the normalization guard and the CheckAnalysis check consult the conf's resolver, so the
-    // strict mode needs its own case: what normalization fixes up above has to be rejected here.
     withSQLConf(
       "spark.sql.catalog.testcat" -> classOf[RecordingInMemoryTableCatalog].getName,
       SQLConf.CASE_SENSITIVE.key -> "true") {
@@ -268,15 +243,30 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
       val e = intercept[AnalysisException] {
         analyze("CREATE TABLE testcat.t (ID INT) USING foo ORDERED BY id")
       }
-      assert(e.getCondition === "UNSUPPORTED_FEATURE.WRITE_ORDERING_WITH_UNKNOWN_COLUMN")
+      assert(e.getCondition === "WRITE_ORDERING_WITH_UNKNOWN_COLUMN")
       assert(e.getMessageParameters.get("cols") === "`id`")
     }
   }
 
+  test("a case-insensitive session does not normalize an ApplyTransform's references") {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[RecordingInMemoryTableCatalog].getName) {
+      assert(orderingOf(analyze("CREATE TABLE testcat.t (id INT) USING foo ORDERED BY ID")) ===
+        Seq("id ASC NULLS FIRST"))
+
+      val e = intercept[AnalysisException] {
+        analyze("CREATE TABLE testcat.t (id INT) USING foo ORDERED BY truncate(4, ID)")
+      }
+      assert(e.getCondition === "WRITE_ORDERING_WITH_UNKNOWN_COLUMN")
+      assert(e.getMessageParameters.get("cols") === "`ID`")
+
+      val p = intercept[AnalysisException] {
+        analyze("CREATE TABLE testcat.t (id INT) USING foo PARTITIONED BY (truncate(4, ID))")
+      }
+      assert(p.getCondition === "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED")
+    }
+  }
+
   test("ORDERED BY needs a schema to resolve against") {
-    // With no column list and no query there is nothing to resolve the sort keys against, so say
-    // that rather than blaming each key for being absent from a schema that does not exist. Same
-    // position PARTITIONED BY takes on a schemaless CREATE TABLE.
     withSQLConf("spark.sql.catalog.testcat" -> classOf[RecordingInMemoryTableCatalog].getName) {
       Seq("ORDERED BY id", "LOCALLY ORDERED BY id").foreach { clause =>
         val e = intercept[AnalysisException] {
@@ -292,33 +282,23 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
 
   test("an ordering on an unknown column is rejected during analysis") {
     withSQLConf("spark.sql.catalog.testcat" -> classOf[RecordingInMemoryTableCatalog].getName) {
-      // CheckAnalysis validates the ordering's references the same way it validates the
-      // partitioning's, so this holds for every transform, not just the rewritable ones that
-      // PreprocessTableCreation normalizes, and regardless of whether the schema is defined.
       Seq(
         "CREATE TABLE testcat.t (id INT) USING foo ORDERED BY nope",
         "CREATE TABLE testcat.t (id INT) USING foo ORDERED BY days(nope)",
-        // truncate() is an ApplyTransform, i.e. NOT a RewritableTransform: this is the case that
-        // PreprocessTableCreation's normalization cannot see at all
         "CREATE TABLE testcat.t (id INT) USING foo ORDERED BY truncate(4, nope)",
-        // and on the CTAS path, where the schema comes from the query
         "CREATE TABLE testcat.t USING foo ORDERED BY nope AS SELECT 1 AS id"
       ).foreach { stmt =>
         val e = intercept[AnalysisException](analyze(stmt))
-        assert(e.getCondition === "UNSUPPORTED_FEATURE.WRITE_ORDERING_WITH_UNKNOWN_COLUMN", stmt)
+        assert(e.getCondition === "WRITE_ORDERING_WITH_UNKNOWN_COLUMN", stmt)
         assert(e.getMessageParameters.get("cols") === "`nope`", stmt)
       }
 
-      // a nested struct field is fine, though -- a reference through a map or array key fails
-      // its own way, with INVALID_FIELD_NAME, rather than reaching this condition
+      // a nested struct field resolves
       analyze("CREATE TABLE testcat.t (p STRUCT<x: INT>) USING foo ORDERED BY p.x")
     }
   }
 
   test("a repeated ordering column is accepted, unlike a repeated partition column") {
-    // Reusing SchemaUtils.checkTransformDuplication here would have rejected two bucket transforms
-    // of different widths, which are legitimately different sort keys. And a repeated sort key is
-    // redundant rather than contradictory, so nothing needs rejecting.
     withSQLConf("spark.sql.catalog.testcat" -> classOf[RecordingInMemoryTableCatalog].getName) {
       assert(orderingOf(analyze("CREATE TABLE testcat.t (id INT) USING foo " +
         "ORDERED BY bucket(4, id), bucket(8, id)")) ===
@@ -329,9 +309,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("DISTRIBUTED BY PARTITION is not satisfied by CLUSTER BY") {
-    // CLUSTER BY lands in `partitioning` as a ClusterByTransform, but it carries clustering columns
-    // for the connector to interpret rather than a partition spec, so there is nothing to
-    // distribute by. Bucketing does count -- a bucket transform is a real partition transform.
     val e = intercept[ParseException] {
       parse("CREATE TABLE t (id INT, c STRING) USING foo CLUSTER BY (c) DISTRIBUTED BY PARTITION")
     }
@@ -345,6 +322,24 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("CLUSTER BY and the write clauses both reach the catalog") {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[RecordingInMemoryTableCatalog].getName) {
+      sql("CREATE TABLE testcat.ordered (a INT, b INT) USING foo CLUSTER BY (a) ORDERED BY (b)")
+      sql("CREATE TABLE testcat.unordered (a INT, b INT) USING foo CLUSTER BY (a) UNORDERED")
+
+      assert(calls("testcat") === Seq(
+        WriteSpecCall("createTable", "ordered", "range", Seq("b ASC NULLS FIRST")),
+        WriteSpecCall("createTable", "unordered", "none", Seq.empty)))
+      Seq("ordered", "unordered").foreach { name =>
+        val clustering = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
+          .loadTable(Identifier.of(Array.empty, name)).partitioning().collect {
+            case ClusterByTransform(columns) => columns.map(_.describe)
+          }
+        assert(clustering.toSeq === Seq(Seq("a")), name)
+      }
+    }
+  }
+
   test("CREATE TABLE / CTAS / REPLACE TABLE / RTAS hand the distribution and ordering " +
     "to the catalog") {
     withSQLConf("spark.sql.catalog.testcat" -> classOf[RecordingInMemoryTableCatalog].getName) {
@@ -353,7 +348,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
       sql("CREATE TABLE testcat.ctas USING foo ORDERED BY id AS SELECT 1 AS id")
       // a non-staging catalog replaces by dropping and re-creating, so this is createTable as well
       sql("REPLACE TABLE testcat.t (id INT) USING foo LOCALLY ORDERED BY id")
-      // RTAS builds its TableInfo in an exec of its own, so it needs its own case
       sql("REPLACE TABLE testcat.t USING foo PARTITIONED BY (c) DISTRIBUTED BY PARTITION " +
         "ORDERED BY id AS SELECT 1 AS id, 'a' AS c")
 
@@ -366,8 +360,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("a statement with no write clause carries neither a distribution nor an ordering") {
-    // The TableInfo a plain statement builds leaves both unset, so a catalog can tell "the user
-    // said nothing" from "the user asked for none" without Spark guessing.
     withSQLConf("spark.sql.catalog.testcat" -> classOf[RecordingInMemoryTableCatalog].getName) {
       sql("CREATE TABLE testcat.plain (id INT) USING foo")
       sql("CREATE TABLE testcat.plain_ctas USING foo AS SELECT 1 AS id")
@@ -381,9 +373,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("the staging catalog gets them on stageCreate / stageReplace / stageCreateOrReplace") {
-    // Iceberg's SparkCatalog is a StagingTableCatalog, so an atomic CTAS goes through stageCreate
-    // rather than createTable. That is a separate set of default methods, each with its own
-    // argument list to get right.
     val catalogClass = classOf[RecordingStagingInMemoryTableCatalog].getName
     withSQLConf("spark.sql.catalog.stagingcat" -> catalogClass) {
       sql("CREATE TABLE stagingcat.t USING foo ORDERED BY id AS SELECT 1 AS id")
@@ -391,7 +380,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
       sql("CREATE OR REPLACE TABLE stagingcat.t USING foo UNORDERED AS SELECT 3 AS id")
       sql("REPLACE TABLE stagingcat.t (id INT) USING foo ORDERED BY id DESC NULLS FIRST")
       sql("CREATE OR REPLACE TABLE stagingcat.t (id INT) USING foo LOCALLY ORDERED BY id")
-      // a plain statement reaches the same method, carrying neither value
       sql("CREATE TABLE stagingcat.plain USING foo AS SELECT 1 AS id")
 
       assert(calls("stagingcat") === Seq(
@@ -405,9 +393,7 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("a staging catalog sees an unstaged CREATE TABLE through createTable") {
-    // A CREATE TABLE with an explicit column list is not staged: it goes through CreateTableExec,
-    // so a staging catalog has to read the request from createTable as well as the three stage*
-    // methods. StagingTableCatalog's javadoc says so; this pins it.
+    // A CREATE TABLE with an explicit column list is not staged.
     val catalogClass = classOf[RecordingStagingInMemoryTableCatalog].getName
     withSQLConf("spark.sql.catalog.stagingcat" -> catalogClass) {
       sql("CREATE TABLE stagingcat.t (id INT) USING foo ORDERED BY id")
@@ -419,7 +405,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
 
   test("a catalog that does not advertise the capability fails loudly") {
     withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
-      // plain CREATE TABLE keeps working -- no regression for catalogs that ignore the new args
       sql("CREATE TABLE testcat.plain (id INT) USING foo")
       assert(sql("SHOW TABLES IN testcat").count() === 1)
 
@@ -443,15 +428,11 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
             "operation" -> s"$operation ... DISTRIBUTED BY/ORDERED BY"))
       }
 
-      // nothing was created, and the pre-existing table is untouched
       assert(sql("SHOW TABLES IN testcat").count() === 1)
     }
   }
 
   test("UNORDERED is a request too, not a no-op") {
-    // A catalog's own default may well be a distribution; only the catalog knows. So asking for
-    // none is asking for something, and a catalog that cannot record it must say so rather than
-    // hand back a table that still uses its default.
     withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
       checkError(
         exception = intercept[AnalysisException] {
@@ -466,8 +447,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("REPLACE TABLE is rejected before the existing table is dropped") {
-    // ReplaceTableExec drops and re-creates, so a check inside createTable would come too late:
-    // the table would already be gone. The capability check runs while planning instead.
     withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
       sql("CREATE TABLE testcat.t (id INT) USING foo")
       sql("INSERT INTO testcat.t VALUES (1)")
@@ -494,7 +473,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
       }
     }
 
-    // the CTAS branch of the v1 conversion is a separate call site
     withTable("v1_ctas") {
       checkError(
         exception = intercept[AnalysisException] {
@@ -508,8 +486,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("CREATE TEMPORARY TABLE ... USING cannot carry the clauses") {
-    // This builds a temp view, which has nowhere to record either, so it must not silently drop
-    // the clause.
     Seq("ORDERED BY id", "UNORDERED").foreach { clause =>
       val e = intercept[ParseException] {
         parse(s"CREATE TEMPORARY TABLE t (id INT) USING parquet $clause")
@@ -521,9 +497,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("a Table realized from a TableInfo reports the declared default") {
-    // The accessors are a declared default for later writes -- not a claim about existing data.
-    // DelegatingTable is how Spark realizes a TableInfo whose catalog has no Table of its own, so
-    // it has to surface them the same way it surfaces columns, partitioning and constraints.
     val writeOrdering = Array(LogicalExpressions.sort(
       FieldReference("id"), SortDirection.DESCENDING, NullOrdering.NULLS_LAST))
     val info = new TableInfo.Builder()
@@ -536,16 +509,32 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
     assert(table.writeDistributionMode() === TableInfo.DISTRIBUTION_MODE_HASH)
     assert(WriteSpecCall.render(table.writeOrdering().toSeq) === Seq("id DESC NULLS LAST"))
 
-    // and a table that declares nothing keeps the defaults, so an unaware catalog is unaffected
     val plain: Table = new DelegatingTable(
       new TableInfo.Builder().withColumns(Array(Column.create("id", IntegerType))).build(), "t")
     assert(plain.writeDistributionMode() === null)
     assert(plain.writeOrdering().isEmpty)
   }
 
+  test("SHOW CREATE TABLE keeps the types of literals in a sort key") {
+    withSQLConf("spark.sql.catalog.reportcat" -> classOf[ReportingInMemoryTableCatalog].getName) {
+      def ordering(): Seq[SortOrder] = spark.sessionState.catalogManager.catalog("reportcat")
+        .asTableCatalog.loadTable(Identifier.of(Array.empty, "t")).writeOrdering().toSeq
+
+      withTable("reportcat.t") {
+        sql("CREATE TABLE reportcat.t (id INT) USING foo ORDERED BY " +
+          "f(id, DATE '1970-01-01', TIMESTAMP '2020-01-01 10:00:00', 1.5BD, 10L, 'x')")
+        val declared = ordering()
+        val ddl = sql("SHOW CREATE TABLE reportcat.t").head().getString(0)
+        assert(ddl.contains("DATE '1970-01-01'"), ddl)
+
+        sql("DROP TABLE reportcat.t")
+        sql(ddl)
+        assert(ordering() === declared)
+      }
+    }
+  }
+
   test("SHOW CREATE TABLE reproduces the clauses and DESCRIBE EXTENDED reports them") {
-    // A table the clauses cannot be recovered from is a table you cannot recreate, so the accessors
-    // have to reach both display paths -- the same two `constraints()` already reaches.
     withSQLConf("spark.sql.catalog.reportcat" -> classOf[ReportingInMemoryTableCatalog].getName) {
       Seq(
         ("ORDERED BY (id DESC)", "ORDERED BY (id DESC NULLS LAST)"),
@@ -562,14 +551,12 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
         }
       }
 
-      // and a table that declares nothing gains no clause
       withTable("reportcat.plain") {
         sql("CREATE TABLE reportcat.plain (id INT) USING foo")
         val ddl = sql("SHOW CREATE TABLE reportcat.plain").head().getString(0)
         assert(!ddl.contains("ORDERED BY") && !ddl.contains("DISTRIBUTED BY"), ddl)
       }
 
-      // DESCRIBE reports the values verbatim, so it covers the pairs SHOW CREATE TABLE cannot spell
       withTable("reportcat.t") {
         sql("CREATE TABLE reportcat.t (id INT, c STRING) USING foo " +
           "PARTITIONED BY (c) DISTRIBUTED BY PARTITION ORDERED BY (id DESC)")
@@ -601,19 +588,14 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
           val ddl = sql("SHOW CREATE TABLE reportcat.t").head().getString(0)
           assert(!ddl.contains(absent), s"for mode=$mode clauses=[$clauses], got:\n$ddl")
 
-          // and what it does emit has to parse -- otherwise the table cannot be recreated at all
           sql(s"DROP TABLE reportcat.t")
           sql(ddl)
           assert(sql("SHOW CREATE TABLE reportcat.t").head().getString(0) === ddl)
         }
       }
 
-      // An ordering the syntax cannot spell -- a transform over an arithmetic expression, which no
-      // statement could have produced -- is the ordering-side counterpart of the `hash`-without-
-      // partitioning hazard: emitting `ORDERED BY (+(id, 1) ...)` would break the whole statement.
-      // Both distribution modes are covered, because bailing out of only the `ORDERED BY` half
-      // would leave `range` emitting nothing (fine) but `none` emitting `UNORDERED` -- declaring no
-      // ordering on a table that has one.
+      // With an unspellable ordering, dropping only ORDERED BY would still emit UNORDERED under
+      // mode `none`, declaring no ordering on a table that has one.
       Seq(
         ("range", "ORDERED BY"),
         ("none", "UNORDERED")
@@ -626,14 +608,12 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
           assert(!ddl.contains(absent), s"for mode=$mode, got:\n$ddl")
           assert(!ddl.contains("ORDERED BY"), s"for mode=$mode, got:\n$ddl")
 
-          // and what it does emit has to parse -- the unspellable ordering must not leak into it
           sql(s"DROP TABLE reportcat.t")
           sql(ddl)
           assert(sql("SHOW CREATE TABLE reportcat.t").head().getString(0) === ddl)
         }
       }
 
-      // DESCRIBE still reports the value, so an omitted clause is not a hidden one
       withTable("reportcat.t") {
         sql("CREATE TABLE reportcat.t (id INT) USING foo " +
           s"TBLPROPERTIES ('${ReportingInMemoryTable.MODE_OVERRIDE}' = 'range')")
@@ -645,10 +625,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("the new keywords stay usable as identifiers") {
-    // The four keywords added for these clauses (DISTRIBUTED, LOCALLY, ORDERED, UNORDERED) are
-    // non-reserved, so tables and columns may still be named after them. This is the actual risk of
-    // adding keywords to the shared lexer, so pin it down -- in ANSI mode too, since that is where
-    // the reserved/non-reserved split actually bites and the four are added to `ansiNonReserved`.
     Seq(false, true).foreach { ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
         withTable("ordered", "unordered") {
@@ -658,7 +634,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
           checkAnswer(
             sql("SELECT distributed, locally, ordered, unordered FROM ordered"),
             Row(1, 2, 3, 4))
-          // also as a table name, an alias and a qualified reference
           checkAnswer(sql("SELECT unordered.ordered FROM ordered AS unordered"), Row(3))
           sql("CREATE TABLE unordered (ordered INT) USING parquet")
           checkAnswer(sql("SELECT count(*) FROM unordered"), Row(0))
@@ -668,11 +643,7 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 }
 
-/**
- * One catalog call, with the requested write distribution and ordering rendered as text. An
- * in-memory table has nowhere to store either, so recording the calls is the only way to check
- * that the values arrive at the connector at all, and in the right argument positions.
- */
+/** One recorded catalog call, with the requested write distribution and ordering as text. */
 case class WriteSpecCall(
     method: String,
     table: String,
@@ -755,11 +726,7 @@ class RecordingStagingInMemoryTableCatalog
   }
 }
 
-/**
- * An in-memory table that reports the declared write distribution and ordering back, the way a
- * connector that stores them does. The plain InMemoryTable drops everything a TableInfo carries
- * beyond columns, partitioning and constraints, so nothing in-tree can exercise the display paths.
- */
+/** An in-memory table that reports the declared write distribution and ordering back. */
 class ReportingInMemoryTable(tableName: String, tableInfo: TableInfo)
   extends InMemoryTable(
     tableName,
@@ -768,9 +735,7 @@ class ReportingInMemoryTable(tableName: String, tableInfo: TableInfo)
     tableInfo.properties(),
     tableInfo.constraints()) {
 
-  // A (mode, ordering) pair the syntax cannot express -- `hash` with no partitioning, say -- can
-  // still reach Spark from a connector, and this property is the only way a test can build one,
-  // since every route through the parser is closed by design.
+  // Reports a mode the syntax cannot request, such as `hash` without partitioning.
   override def writeDistributionMode(): String = {
     Option(tableInfo.properties().get(ReportingInMemoryTable.MODE_OVERRIDE))
       .getOrElse(tableInfo.writeDistributionMode())
@@ -794,11 +759,8 @@ object ReportingInMemoryTable {
 }
 
 /**
- * A catalog whose tables report the declared write distribution and ordering back.
- *
- * NOTE for whoever adds `ALTER TABLE` support: `InMemoryTableCatalog.alterTable` rebuilds a plain
- * `InMemoryTable`, so an ALTER through this fixture silently drops the declared layout. That is the
- * fixture's limitation, not Spark's -- override `alterTable` here before writing such a test.
+ * A catalog whose tables report the declared write distribution and ordering back. Its
+ * `alterTable`, inherited from `InMemoryTableCatalog`, drops the declared layout.
  */
 class ReportingInMemoryTableCatalog extends InMemoryTableCatalog {
 
@@ -806,7 +768,7 @@ class ReportingInMemoryTableCatalog extends InMemoryTableCatalog {
     WriteSpecCapability.add(super.capabilities)
 
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
-    // Same bookkeeping the overridden method does, so a test sees the real catalog's behaviour.
+    // Mirrors InMemoryTableCatalog.createTable.
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }

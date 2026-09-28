@@ -9467,11 +9467,6 @@
         "message" : [
           "Write for the binary file data source."
         ]
-      },
-      "WRITE_ORDERING_WITH_UNKNOWN_COLUMN" : {
-        "message" : [
-          "Invalid write ordering: <cols> is not a column of the table."
-        ]
       }
     },
     "sqlState" : "0A000"
@@ -10100,6 +10095,12 @@
       "Error parsing WKB: <parseError> at position <pos>"
     ],
     "sqlState" : "22023"
+  },
+  "WRITE_ORDERING_WITH_UNKNOWN_COLUMN" : {
+    "message" : [
+      "Invalid write ordering: <cols> is not a column of the table."
+    ],
+    "sqlState" : "42703"
   },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [

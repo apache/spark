@@ -130,8 +130,8 @@ case class ShowCreateTableExec(
   /**
    * True for a sort key expression the `transformArgument` grammar rule can represent: a plain
    * column reference, or a transform whose name is an identifier and whose own arguments are
-   * references or constants. The name check is an approximation of the `identifier` rule, a
-   * reserved word (`select`) passes it but still fails to parse under ANSI.
+   * references or constants. The name check approximates `identifier`: a reserved word such as
+   * `select` passes it but fails to parse under ANSI.
    */
   private def isSpellable(e: V2Expression): Boolean = e match {
     case _: NamedReference => true
@@ -142,14 +142,8 @@ case class ShowCreateTableExec(
   }
 
   /**
-   * Emits the write distribution and ordering the table declares as the default for writes into it,
-   * so that a table created with those clauses can be recreated from this statement.
-   *
-   * The pair a connector may report is wider than the syntax can spell: `hash` on a table with no
-   * partitioning (the parser rejects `DISTRIBUTED BY PARTITION` there), a `range` distribution with
-   * no ordering, an ordering with no distribution, a mode this Spark version does not know, or a
-   * sort key expression `isSpellable` rejects. DESCRIBE TABLE EXTENDED reports both values
-   * verbatim regardless.
+   * Emits the table's declared write distribution and ordering as clauses. Pairs with no clause
+   * form, such as `hash` without partitioning or an unspellable sort key, are omitted.
    */
   private def showTableWriteDistributionAndOrdering(
       table: Table,
@@ -162,7 +156,7 @@ case class ShowCreateTableExec(
       } else {
         None
       }
-      // Bucketing counts as partitioning, CLUSTER BY does not.
+      // Bucketing counts as partitioning here; CLUSTER BY does not.
       val hasPartitioning = table.partitioning.exists(!_.isInstanceOf[ClusterByTransform])
       (table.writeDistributionMode(), orderBy) match {
         case (TableInfo.DISTRIBUTION_MODE_HASH, Some(o)) if hasPartitioning =>

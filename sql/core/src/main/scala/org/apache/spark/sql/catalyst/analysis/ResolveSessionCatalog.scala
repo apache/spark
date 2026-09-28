@@ -726,11 +726,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       throw QueryCompilationErrors.missingCatalogCreateFunctionAbilityError(catalog)
   }
 
-  /**
-   * A v1 table has nowhere to record a write distribution or ordering, so converting the plan to a
-   * v1 command would silently drop the clause and hand back a table with none of the requested
-   * layout. Reject it instead.
-   */
+  /** Rejects a write distribution or ordering, which a v1 table cannot record. */
   private def failIfWriteDistributionOrOrdering(
       ident: TableIdentifier,
       operation: String,

@@ -34,29 +34,20 @@ import org.apache.spark.sql.types.StructType;
 public class TableInfo {
 
   /**
-   * The write distribution mode a statement asks for with {@code DISTRIBUTED BY PARTITION}:
-   * cluster each write by the table's partitioning.
-   * <p>
-   * This is one of exactly three values a non-null {@link #writeDistributionMode()} can take. The
-   * set is closed, so a catalog may treat an unrecognized value as an error rather than a mode it
-   * does not know yet.
+   * Write distribution mode for {@code DISTRIBUTED BY PARTITION}: cluster each write by the
+   * table's partitioning. One of the three possible values of {@link #writeDistributionMode()}.
    */
   public static final String DISTRIBUTION_MODE_HASH = "hash";
 
   /**
-   * The write distribution mode implied by a global {@code ORDERED BY}: range-partition each write
-   * so the ordering holds across write tasks, not only within one. See
-   * {@link #DISTRIBUTION_MODE_HASH}.
+   * Write distribution mode for a bare {@code ORDERED BY}: range-partition each write so the
+   * ordering holds across its tasks, not only within one.
    */
   public static final String DISTRIBUTION_MODE_RANGE = "range";
 
   /**
-   * The write distribution mode a statement asks for with {@code UNORDERED}, or with
-   * {@code LOCALLY ORDERED BY}: do not distribute, so any ordering holds within a write task only.
-   * <p>
-   * This is an explicit request, distinct from a null {@link #writeDistributionMode()}, which means
-   * the statement said nothing and leaves the choice to the catalog's own default. See
-   * {@link #DISTRIBUTION_MODE_HASH}.
+   * Write distribution mode for {@code UNORDERED} or {@code LOCALLY ORDERED BY}: do not
+   * distribute, so any ordering holds within a write task only.
    */
   public static final String DISTRIBUTION_MODE_NONE = "none";
 
@@ -98,25 +89,21 @@ public class TableInfo {
   public Constraint[] constraints() { return constraints; }
 
   /**
-   * The write distribution the statement asked for, or null when it asked for none.
+   * The requested write distribution: {@link #DISTRIBUTION_MODE_HASH},
+   * {@link #DISTRIBUTION_MODE_RANGE}, {@link #DISTRIBUTION_MODE_NONE}, or null when the statement
+   * did not ask for one, which leaves the choice to the catalog.
    * <p>
-   * A non-null value is one of {@link #DISTRIBUTION_MODE_HASH}, {@link #DISTRIBUTION_MODE_RANGE} or
-   * {@link #DISTRIBUTION_MODE_NONE}. Null means the statement said nothing, which is distinct from
-   * {@code none}: null leaves the choice to the catalog's own default, while {@code none} is an
-   * explicit request not to distribute.
-   * <p>
-   * A catalog only sees a non-null value if it returns
-   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING} from
-   * {@link TableCatalog#capabilities()}; otherwise Spark rejects the statement while planning it,
-   * rather than creating a table that silently lacks the requested layout.
+   * Only catalogs that report
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING} see a
+   * request; for any other catalog, Spark rejects the statement.
    *
    * @since 4.4.0
    */
   public String writeDistributionMode() { return writeDistributionMode; }
 
   /**
-   * The write ordering the statement asked for, empty when it asked for none. Gated on the same
-   * capability as {@link #writeDistributionMode()}.
+   * The requested write ordering, empty when none was requested. Gated on the same capability as
+   * {@link #writeDistributionMode()}.
    *
    * @since 4.4.0
    */
