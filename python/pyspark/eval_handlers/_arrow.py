@@ -277,7 +277,7 @@ class ArrowGroupedAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
             batch_list = list(group)
             if not batch_list:
                 continue
-            concatenated = ArrowBatchTransformer.concat_batches(batch_list)
+            concatenated = ArrowBatchTransformer.concat_batches(batch_list, batch_list[0].schema)
             results = [
                 udf_func(
                     *[concatenated.column(o) for o in args_offsets],
@@ -356,7 +356,7 @@ class ArrowWindowAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
             batch_list = list(group)
             if not batch_list:
                 continue
-            concatenated = ArrowBatchTransformer.concat_batches(batch_list)
+            concatenated = ArrowBatchTransformer.concat_batches(batch_list, batch_list[0].schema)
             num_rows = concatenated.num_rows
 
             result_arrays = []
