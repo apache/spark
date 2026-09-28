@@ -1081,4 +1081,23 @@ object JavaPairRDD {
     new JavaPairRDD[K, V](rdd.rdd)
   }
 
+  /** Convert a JavaRDD of key-value pairs to JavaPairRDD with an explicit key class. */
+  @Since("4.4.0")
+  def fromJavaRDD[K, V](rdd: JavaRDD[(K, V)], keyClass: Class[K]): JavaPairRDD[K, V] = {
+    implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
+    implicit val ctagV: ClassTag[V] = fakeClassTag
+    new JavaPairRDD[K, V](rdd.rdd)
+  }
+
+  /** Convert a JavaRDD of key-value pairs to JavaPairRDD with explicit key and value classes. */
+  @Since("4.4.0")
+  def fromJavaRDD[K, V](
+      rdd: JavaRDD[(K, V)],
+      keyClass: Class[K],
+      valueClass: Class[V]): JavaPairRDD[K, V] = {
+    implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
+    implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
+    new JavaPairRDD[K, V](rdd.rdd)
+  }
+
 }

@@ -36,8 +36,10 @@ import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import org.apache.spark.HashPartitioner;
 import org.apache.spark.Partitioner;
 import org.apache.spark.SparkConf;
+import org.apache.spark.SparkException;
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
 import scala.Tuple2;
@@ -1529,6 +1531,51 @@ public class JavaAPISuite implements Serializable {
     assertEquals(2, cachedRddsMap.size());
     assertEquals("RDD1", cachedRddsMap.get(0).name());
     assertEquals("RDD2", cachedRddsMap.get(1).name());
+  }
+
+  @Test
+  public void testArrayKeyUnderHashPartitionerFails() {
+    List<Tuple2<byte[], Integer>> pairs = Arrays.asList(
+      new Tuple2<>(new byte[]{1}, 1),
+      new Tuple2<>(new byte[]{2}, 2)
+    );
+    JavaPairRDD<byte[], Integer> pairRDD = sc.parallelizePairs(pairs);
+
+    SparkException ex1 = assertThrows(SparkException.class,
+      () -> pairRDD.partitionBy(new HashPartitioner(2)));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex1.getCondition());
+
+    SparkException ex2 = assertThrows(SparkException.class,
+      () -> pairRDD.join(pairRDD));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex2.getCondition());
+
+    SparkException ex3 = assertThrows(SparkException.class,
+      () -> pairRDD.cogroup(pairRDD));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex3.getCondition());
+
+    SparkException ex4 = assertThrows(SparkException.class,
+      () -> pairRDD.subtractByKey(pairRDD));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex4.getCondition());
+
+    // Also test JavaPairRDD.fromJavaRDD with explicit key class
+    JavaRDD<Tuple2<byte[], Integer>> rdd = sc.parallelize(pairs);
+    JavaPairRDD<byte[], Integer> fromJava = JavaPairRDD.fromJavaRDD(rdd, byte[].class);
+
+    SparkException ex5 = assertThrows(SparkException.class,
+      () -> fromJava.partitionBy(new HashPartitioner(2)));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex5.getCondition());
+
+    SparkException ex6 = assertThrows(SparkException.class,
+      () -> fromJava.join(fromJava));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex6.getCondition());
+
+    SparkException ex7 = assertThrows(SparkException.class,
+      () -> fromJava.cogroup(fromJava));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex7.getCondition());
+
+    SparkException ex8 = assertThrows(SparkException.class,
+      () -> fromJava.subtractByKey(fromJava));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex8.getCondition());
   }
 
 }
