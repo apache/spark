@@ -1725,6 +1725,17 @@ class BaseUDFTestsMixin:
 
             check_logs()
 
+    def test_udf_struct_result_length_mismatch(self):
+        # SPARK-59781: StructType.toInternal used to truncate a struct result longer than the
+        # declared return type when a field needed conversion (the date column here), so the
+        # extra value was dropped without an error.
+        @udf("a string, d date", useArrow=False)
+        def longer_struct(i):
+            return ("x", datetime.date(2026, 9, 23), i)
+
+        with self.assertRaisesRegex(PythonException, "FIELD_STRUCT_LENGTH_MISMATCH"):
+            self.spark.range(1).select(longer_struct(col("id"))).collect()
+
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
