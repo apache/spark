@@ -2348,6 +2348,12 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
+  // SPARK-58814 CHAR/VARCHAR cache invariant coverage (scope freeze):
+  // Capture  - non-first-class CHAR relations keep an unbound scan mode
+  // Identity - CHAR/VARCHAR scan modes do not split caches for non-CHAR relations
+  // Mutation - catalog V2 recache; refreshTable V1 recache; RENAME TABLE time travel;
+  //            RENAME TABLE does not promote a dependent query cache
+  // Replay   - same recache/rename tests assert retained mode and storage level
   test("RENAME TABLE manages cache with time travel plans correctly") {
     val t = "testcat.tbl"
     val tRenamed = "testcat.tbl_renamed"

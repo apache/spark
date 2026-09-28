@@ -82,6 +82,24 @@ private[sql] case class TableCacheDescriptor(
  * Internal to Spark SQL. All its public APIs take analyzed plans and will normalize them before
  * further usage, or take [[Dataset]] and get its normalized plan. See `QueryExecution.normalize`
  * for more details about plan normalization.
+ *
+ * CHAR/VARCHAR cache lifecycle (SPARK-58814). Explicit Legacy identity is SPARK-59751.
+ *
+ * Capture: first-class CHAR/VARCHAR relations bind PreserveNative or SparkStandard in analysis.
+ * The analyzer-generated read-side Project is part of that captured policy. None means no mode
+ * was bound, including relations with no CHAR/VARCHAR columns.
+ *
+ * Identity: ordinary cache substitution uses sameResult, which includes the bound mode. The two
+ * bound modes are distinct keys. Relations without CHAR/VARCHAR columns do not split.
+ *
+ * Mutation matching: write, refresh, and rename discovery ignore only the scan mode (and, for
+ * catalog-less V2, Table instance and extra write options). V1 matches BaseRelation. Catalog V2
+ * matches catalog and identifier. Catalog-less V2 matches table name and path. Rename restores
+ * direct table caches, including padding Projects, and drops dependents and time travel.
+ *
+ * Replay: rebuild and rename restoration clone a session, set both CHAR/VARCHAR SQLConf flags
+ * for the captured mode, and never mutate the caller session. Direct V2 recache recreates the
+ * relation from the catalog table so output matches the new schema, then re-analyzes padding.
  */
 class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
