@@ -815,12 +815,10 @@ class CatalystTranspiler(AbstractTranspiler):
                         "and free variables / closures are not supported"
                     )
             case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
-                # SPARK-55214: the smallest string op not already covered by
-                # concat (`+`) / repeat (`*`). Python ``len`` on a str is
-                # the number of Unicode code points; Spark ``length`` on a
-                # string column is character length -- they match for
-                # well-formed UTF-8. NULL stays NULL (the same unguarded
-                # caveat as ``x + 1``); Python's ``len(None)`` raises.
+                # SPARK-55214: Python ``len`` on a str is  the number of Unicode 
+                # points; Spark ``length`` on a string column is character length
+                # they match for well-formed UTF-8. NULL stays NULL, while
+                # Python's ``len(None)`` raises.
                 if self._category(params, arg) != "string":
                     raise UnsupportedOperationException(
                         "`len` is only lowered for string operands; other "
