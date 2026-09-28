@@ -549,12 +549,13 @@ object IntervalUtils extends SparkIntervalUtils {
   private def parseNanos(nanos: String, isNegative: Boolean): Long = {
     if (nanos != null) {
       val maxNanosLen = 9
-      // Parse the fraction directly and scale by the missing trailing zeros instead of
-      // building a padded string. `raw` is in [0, 999999999]. The modern grammar bounds the
-      // fraction to 1..9 digits, but the legacy day-time parser
-      // (spark.sql.legacy.fromDayTimeString) captures an unbounded fraction, so a 10+ digit
-      // value (e.g. "0000000001") is possible; there `raw` is already at nanosecond scale,
-      // so return it directly.
+      // Parse the fraction as an integer and scale it up by the missing trailing zeros,
+      // instead of building a zero-padded string. `raw` is in [0, 999999999].
+      // The modern grammar bounds the fraction to 1..9 digits. The legacy day-time parser
+      // (spark.sql.legacy.fromDayTimeString.enabled) captures an unbounded fraction, so a
+      // 10+ digit value (e.g. "0000000001") can reach here; for length >= 9 return `raw`
+      // unscaled, which reproduces the old `alignedStr = nanos` result exactly and avoids a
+      // negative multiplier index.
       val raw = toLongWithRange(nanosStr, nanos, 0L, 999999999L)
       val nanoSecond =
         if (nanos.length >= maxNanosLen) raw

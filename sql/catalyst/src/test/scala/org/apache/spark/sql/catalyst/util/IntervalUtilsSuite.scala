@@ -332,6 +332,18 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       assert(fromDayTimeString("0 0:0:0.0000000001") === new CalendarInterval(0, 0, 0L))
       assert(fromDayTimeString("0 0:0:0.0999999999") ===
         new CalendarInterval(0, 0, 999999L))
+      // A 10+ digit fraction whose value exceeds 999999999 must still throw the same
+      // out-of-range error (the digits are parsed whole, not truncated to 9).
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          fromDayTimeString("0 0:0:0.1000000000")
+        },
+        parameters = Map(
+          "msg" -> "requirement failed: nanosecond 1000000000 outside range [0, 999999999]",
+          "input" -> "0 0:0:0.1000000000"),
+        condition = "INVALID_INTERVAL_FORMAT.DAY_TIME_PARSING",
+        sqlState = Some("22006")
+      )
 
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
