@@ -2612,7 +2612,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual(combo[0], "string")
 
     def test_udf_transpile_null_narrowing_skips_null_guard(self):
-        # SPARK-58628: when a parameter is guarded by `x is not None` in an
+        # When a parameter is guarded by `x is not None` in an
         # if/ternary test, the transpiler should skip the raise_error null guard
         # for ordering comparisons on that parameter within the guarded branch.
         cases_if = [
@@ -2656,7 +2656,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                         )
 
     def test_udf_transpile_early_return_null_guard(self):
-        # SPARK-58628: a 2-statement early-return pattern
+        # A 2-statement early-return pattern
         # `if x is None: return y\nreturn body` is normalized to a single
         # if/else so null narrowing applies to the main body.
         def early_return_gt(x):
@@ -2699,7 +2699,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     )
 
     def test_udf_transpile_null_guard_warning(self):
-        # SPARK-58628: when the transpiler still emits a null guard (because
+        # When the transpiler still emits a null guard (because
         # non-null cannot be proven), it emits a UserWarning at construction time.
         import warnings
 
@@ -2716,7 +2716,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertIn("NULL guard", str(null_guard_warnings[0].message))
 
     def test_udf_transpile_null_narrowing_len(self):
-        # SPARK-58628: a guarded len() call should skip the raise_error null guard.
+        # A guarded len() call should skip the raise_error null guard.
         def len_guarded(x):
             if x is not None:
                 return len(x) > 3
