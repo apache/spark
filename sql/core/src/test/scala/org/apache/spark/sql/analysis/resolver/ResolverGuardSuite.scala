@@ -120,6 +120,10 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
       "VALUES (1, 2) AS s(a, b) |> SELECT a, a, b " +
         "|> AS t |> SET b = 3 |> SELECT t.*"
     checkResolverGuard(repeatedSourceQuery)
+    val sequentialAssignmentsQuery =
+      "VALUES (1, 10) AS t(a, b) " +
+        "|> SET a = a + 1, b = b + 1 |> SELECT a, b, t.*"
+    checkResolverGuard(sequentialAssignmentsQuery)
     checkResolverGuard(
       "SELECT 1 AS x, NAMED_STRUCT('x', 2) AS col " +
         "|> AS col |> SET x = x + 1 |> SELECT x, col.x")
@@ -144,6 +148,11 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
       assert(repeatedSource.schema.fieldNames === Array("a", "a", "b"))
       val repeatedSourceRows = repeatedSource.queryExecution.executedPlan.executeCollectPublic()
       assert(repeatedSourceRows.toSeq === Seq(Row(1, 1, 2)))
+
+      val sequentialAssignments = sql(sequentialAssignmentsQuery)
+      val sequentialAssignmentRows =
+        sequentialAssignments.queryExecution.executedPlan.executeCollectPublic()
+      assert(sequentialAssignmentRows.toSeq === Seq(Row(2, 11, 1, 10)))
     }
 
     val aliasQuery = "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 |> AS u"
@@ -153,6 +162,38 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
         SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
       assert(sql(aliasQuery).schema.fieldNames === Array("a", "b"))
+    }
+  }
+
+  test("SPARK-59146: retained columns follow outer join nullability") {
+    val outerJoinQueries = Seq(
+      "VALUES (1) AS t(a) |> SET a = a + 1 " +
+        "|> RIGHT OUTER JOIN VALUES (3) AS u(c) ON a = c |> SELECT t.a" ->
+        Set(Row(null)),
+      "VALUES (1) AS t(a) |> SET a = a + 1 " +
+        "|> RIGHT OUTER JOIN VALUES (3) AS u(a) USING (a) |> SELECT t.a" ->
+        Set(Row(null)),
+      "VALUES (1) AS t(a) |> SET a = a + 1 " +
+        "|> FULL OUTER JOIN VALUES (3) AS u(c) ON a = c |> SELECT t.a" ->
+        Set(Row(1), Row(null)),
+      "VALUES (1) AS t(a) |> SET a = a + 1 " +
+        "|> FULL OUTER JOIN VALUES (3) AS u(a) USING (a) |> SELECT t.a" ->
+        Set(Row(1), Row(null)))
+    outerJoinQueries.foreach { case (query, _) => checkResolverGuard(query) }
+
+    Seq(false, true).foreach { singlePassEnabled =>
+      withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePassEnabled.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        outerJoinQueries.foreach { case (query, expectedRows) =>
+          val result = sql(query)
+          assert(result.schema.fieldNames === Array("a"))
+          assert(result.schema("a").nullable)
+          val rows = result.queryExecution.executedPlan.executeCollectPublic()
+          assert(rows.toSet === expectedRows)
+        }
+      }
     }
   }
 
@@ -195,6 +236,14 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     val terminalSortByQuery =
       "VALUES (2, 20), (1, 10) AS t(a, b) |> SET a = -a SORT BY t.a"
     Seq(terminalOrderByQuery, terminalSortByQuery).foreach(query => checkResolverGuard(query))
+    val aggregateOrderByQuery =
+      "SELECT a, 1, sum(b) FROM VALUES (1, 2) AS v(a, b) GROUP BY 1, 2 ORDER BY 1"
+    withSQLConf(
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
+      assert(sql(aggregateOrderByQuery).collect().toSeq === Seq(Row(1, 1, 2)))
+    }
     Seq(false, true).foreach { singlePassEnabled =>
       withSQLConf(
           SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePassEnabled.toString,
