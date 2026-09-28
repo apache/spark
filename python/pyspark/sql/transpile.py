@@ -19,8 +19,8 @@ Experimental tools for transpiling UDFS.
 
 Transpilation is only attempted when both
 ``spark.sql.experimental.optimizer.transpilePyUDFs=true`` and
-``spark.sql.ansi.enabled=true``. The generated Catalyst expressions target
-ANSI-mode SQL semantics (overflow raises, divide-by-zero raises,
+``spark.sql.ansi.enabled=true``. The generated Catalyst expressions
+target ANSI-mode SQL semantics (overflow raises, divide-by-zero raises,
 etc.); running them under non-ANSI mode would silently diverge from the
 Python interpretation in ways we don't currently track. If you flip
 transpilation on with ANSI off the UDF will fall back to interpreted
