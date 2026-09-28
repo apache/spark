@@ -968,9 +968,9 @@ case class Scd2BatchProcessor(
   }
 
   /**
-   * Establishes version maps for upsert-representing rows that do not have one. Existing maps are
-   * preserved, and delete-encoded rows retain null maps because their user-data authorship is not
-   * meaningful.
+   * Establishes version maps from stored values and the current ignore-null selection for
+   * upsert-representing rows that do not have one. Existing maps are preserved, and delete-encoded
+   * rows retain null maps because their user-data authorship is not meaningful.
    */
   private def initializeMissingVersionMaps(
       rowsDf: DataFrame,
