@@ -183,26 +183,29 @@ class ArrowBatchTransformer:
 
     @classmethod
     def concat_batches(
-        cls, batches: Iterable["pa.RecordBatch"], schema: "pa.Schema"
+        cls, batches: Iterable["pa.RecordBatch"], schema: Optional["pa.Schema"] = None
     ) -> "pa.RecordBatch":
-        """Concatenate RecordBatches of ``schema`` by row.
+        """Concatenate same-schema RecordBatches by row.
 
-        ``batches`` may be any iterable of RecordBatches and is consumed once. Zero-row batches
-        are dropped, every remaining batch must match ``schema``, and an input with no rows
-        returns an empty batch of ``schema``, so the result always has ``schema``. A single
-        remaining batch is returned unchanged. PyArrow before 19.0.0 has no ``concat_batches``;
-        the fallback concatenates the equivalent StructArrays and converts the result back to a
-        RecordBatch.
+        ``batches`` may be any iterable of RecordBatches and is consumed once, and zero-row
+        batches are dropped. If ``schema`` is given, every remaining batch must match it and an
+        input with no rows returns an empty batch of ``schema``; without it, an input with no
+        rows raises. A single remaining batch is returned unchanged. PyArrow before 19.0.0 has
+        no ``concat_batches``; the fallback concatenates the equivalent StructArrays and
+        converts the result back to a RecordBatch.
         """
         import pyarrow as pa
 
         batches = [batch for batch in batches if batch.num_rows]
-        for batch in batches:
-            if not batch.schema.equals(schema):
-                raise PySparkValueError(
-                    f"RecordBatch schema {batch.schema} does not match {schema}"
-                )
+        if schema is not None:
+            for batch in batches:
+                if not batch.schema.equals(schema):
+                    raise PySparkValueError(
+                        f"RecordBatch schema {batch.schema} does not match {schema}"
+                    )
         if not batches:
+            if schema is None:
+                raise PySparkValueError("concat_batches needs a schema when the input has no rows")
             return pa.RecordBatch.from_pylist([], schema=schema)
         if len(batches) == 1:
             return batches[0]
