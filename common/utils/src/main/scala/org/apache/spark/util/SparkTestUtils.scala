@@ -69,7 +69,7 @@ private[spark] trait SparkTestUtils {
       val fileName = className + ".class"
       val result = SparkFileUtils.recursiveList(compileDir)
         .find(file => file.isFile && file.getName == fileName)
-        .getOrElse(throw new AssertionError(s"Compiled file not found: $fileName"))
+        .getOrElse(throw new IllegalStateException(s"Compiled file not found: $fileName"))
       val out = new File(destDir, fileName)
       Files.move(result.toPath, out.toPath)
       out
