@@ -284,37 +284,29 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
     )
   }
 
-  test("collapseMicrobatchRowsPerKey materializes a dense map for row-level input") {
-    val locationType = new StructType()
-      .add("city", StringType, nullable = false)
-    val profileType = new StructType()
-      .add("location", locationType, nullable = false)
+  test("collapseMicrobatchRowsPerKey materializes version-map entries for row-level input") {
+    val cityMetadata = new MetadataBuilder().putString("description", "city").build()
+    val locationMetadata = new MetadataBuilder().putString("description", "location").build()
+    val profileMetadata = new MetadataBuilder().putString("description", "profile").build()
+    val locationType = StructType(
+      Seq(StructField("city", StringType, nullable = false, cityMetadata)))
+    val profileType = StructType(
+      Seq(StructField("location", locationType, nullable = false, locationMetadata)))
     val schema = new StructType()
       .add("id", IntegerType, nullable = false)
       .add("value", StringType, nullable = false)
-      .add("profile", profileType)
+      .add("profile", profileType, nullable = true, profileMetadata)
       .add(metadataColName, metadataSchema, nullable = false)
-    val input = dataFrameOf(schema)(
-      Row(1, "value", Row(Row("city")), Row(null, 1L, null))
-    )
+    val input = dataFrameOf(schema)(Row(1, "value", Row(Row("city")), Row(null, 1L, null)))
 
     val result = collapseMicrobatchRowsPerKey(input)
+    val expectedVersionMap = Map(
+      encodedPath("value") -> 1L, encodedPath("profile", "location", "city") -> 1L)
 
+    assert(result.schema("profile") == schema("profile"))
     checkAnswer(
       result,
-      Row(
-        1,
-        "value",
-        Row(Row("city")),
-        Row(
-          null,
-          1L,
-          Map(
-            encodedPath("value") -> 1L,
-            encodedPath("profile", "location", "city") -> 1L
-          )
-        )
-      )
+      Row(1, "value", Row(Row("city")), Row(null, 1L, expectedVersionMap))
     )
   }
 

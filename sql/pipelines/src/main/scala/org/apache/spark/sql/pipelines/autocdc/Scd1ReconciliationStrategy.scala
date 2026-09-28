@@ -20,8 +20,9 @@ package org.apache.spark.sql.pipelines.autocdc
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.util.QuotingUtils
-import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.classic.{DataFrame, ExpressionUtils}
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -429,7 +430,14 @@ private[pipelines] object Scd1LeafLevelReconciliation {
         leavesBeneath.head.authoredValue
     }
 
-    aggregated.as(field.name, field.metadata)
+    val nullabilityChecked =
+      if (field.nullable) {
+        aggregated
+      } else {
+        ExpressionUtils.column(
+          AssertNotNull(ExpressionUtils.expression(aggregated), path))
+      }
+    nullabilityChecked.cast(field.dataType).as(field.name, field.metadata)
   }
 
   /**
