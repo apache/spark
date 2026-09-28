@@ -101,30 +101,22 @@ object MathUtils {
 
   def pmod(a: Int, n: Int): Int = {
     val r = a % n
-    if (r >= 0) r
-    else if (n > 0) r + n
-    else (r + n) % n
+    if (r >= 0) r else if (n > 0) r + n else (r + n) % n
   }
 
   def pmod(a: Long, n: Long): Long = {
     val r = a % n
-    if (r >= 0) r
-    else if (n > 0) r + n
-    else (r + n) % n
+    if (r >= 0) r else if (n > 0) r + n else (r + n) % n
   }
 
   def pmod(a: Byte, n: Byte): Byte = {
     val r = a % n
-    (if (r >= 0) r
-     else if (n > 0) r + n
-     else (r + n) % n).toByte
+    (if (r >= 0) r else if (n > 0) r + n else (r + n) % n).toByte
   }
 
   def pmod(a: Short, n: Short): Short = {
     val r = a % n
-    (if (r >= 0) r
-     else if (n > 0) r + n
-     else (r + n) % n).toShort
+    (if (r >= 0) r else if (n > 0) r + n else (r + n) % n).toShort
   }
 
   def pmod(a: Float, n: Float): Float = {
