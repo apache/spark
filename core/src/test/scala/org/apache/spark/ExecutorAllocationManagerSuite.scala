@@ -316,6 +316,59 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
         "(non-default) resource profile, not lumped into the default profile")
   }
 
+  test("SPARK-59561: reconcile() while suspended does not bypass the zero-target hold") {
+    // reconcile() is called from schedule() unconditionally, before the `if (suspended) return`
+    // check -- so it keeps running even while allocation is suspended. This is only safe
+    // because handleStageSubmitted() (which reconcile() calls to register a recovered stage)
+    // already guards new resource-profile targets with `if (suspended) 0 else
+    // initialNumExecutors` (see SPARK-58828's "a new resource profile submitted while
+    // suspended gets a zero target" test for the non-reconciled version of this same guard).
+    // This test exercises that guard specifically through the reconcile() path, so a future
+    // refactor of either mechanism cannot silently break this interaction.
+    val conf = createConf(0, 20, 0)
+    val statusStore = AppStatusStore.createLiveStore(conf)
+    ResourceProfile.reInitDefaultProfile(conf)
+    val rpManagerLocal = new ResourceProfileManager(conf, listenerBus)
+    val clock = new ManualClock(2020L)
+    val manager = new ExecutorAllocationManager(client, listenerBus, conf, clock = clock,
+      resourceProfileManager = rpManagerLocal, reliableShuffleStorage = false,
+      statusStoreProvider = () => Some(statusStore))
+    managers += manager
+    manager.start()
+
+    manager.suspend()
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+
+    // A stage's SparkListenerStageSubmitted is dropped on the manager's side (only AppStatusStore
+    // knows about it), while allocation is suspended.
+    val stageInfo = createStageInfo(0, 5)
+    stageInfo.submissionTime = Some(System.currentTimeMillis())
+    statusStore.listener.get.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
+
+    manager.listener.reconcile(statusStore)
+
+    // The stage must be recovered (its need-calculation reflects the 5 pending tasks)...
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(defaultProfile.id) === 5,
+      "the dropped stage must still be recovered while suspended -- reconcile() itself is not " +
+        "gated on suspended")
+    // ...but the target itself must stay at zero: recovery must not bypass the suspend hold.
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0,
+      "a stage recovered via reconcile() while suspended must not raise the target above zero")
+
+    // Resuming arms the backlog timer for the now-recovered load (see resume()'s "trigger an
+    // immediate ramp-up" branch), but the target itself only ramps up on the next schedule()
+    // tick, same as the normal (non-reconciled) ramp-up path exercised by SPARK-58828's
+    // "suspend and resume executor allocation" test.
+    manager.resume()
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0,
+      "resume() itself only arms the ramp-up timer; the target does not jump until schedule()")
+    clock.advance(schedulerBacklogTimeout * 1000)
+    schedule(manager)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1,
+      "expected schedule() after resume() to ramp up for load recovered via reconcile() while " +
+        "suspended -- proving that load was not lost or double-counted, just deferred")
+  }
+
   test("SPARK-59561: the shrink (updateAndSyncNumExecutorsTarget) path also reflects a " +
       "recovered-then-completed stage correctly") {
     val conf = createConf(0, 10, 0)
