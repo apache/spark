@@ -134,8 +134,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
       parameters = Map(
-        "operand1" -> "\"(trade_time + quote_time)\"",
-        "operand2" -> "\"quote_time\""),
+        "refs1" -> "\"(trade_time + quote_time)\"",
+        "refs2" -> "\"quote_time\""),
       queryContext = Array(
         ExpectedContext(
           fragment = """ASOF JOIN quotes q
@@ -159,8 +159,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
       parameters = Map(
-        "operand1" -> "\"symbol\"",
-        "operand2" -> "\"symbol\""))
+        "refs1" -> "\"symbol\"",
+        "refs2" -> "\"symbol\""))
   }
 
   test("MATCH_CONDITION rejects a literal even when a same-side column is present") {
@@ -177,7 +177,7 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException](sql(sqlText)),
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
-      parameters = Map("operand1" -> "\"symbol\"", "operand2" -> "\"AAPL\""))
+      parameters = Map("refs1" -> "\"symbol\"", "refs2" -> "\"AAPL\""))
   }
 
   test("MATCH_CONDITION rejects non-deterministic expressions") {
@@ -290,8 +290,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
       parameters = Map(
-        "operand1" -> "\"current_timestamp()\"",
-        "operand2" -> "\"quote_time\""))
+        "refs1" -> "\"current_timestamp()\"",
+        "refs2" -> "\"quote_time\""))
   }
 
   test("MATCH_CONDITION rejects a literal constant operand (no join input reference)") {
@@ -308,8 +308,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
       parameters = Map(
-        "operand1" -> "\"trade_time\"",
-        "operand2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
+        "refs1" -> "\"trade_time\"",
+        "refs2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
   }
 
   test("MATCH_CONDITION rejects two literal operands (neither references a join input)") {
@@ -327,8 +327,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
       parameters = Map(
-        "operand1" -> "\"TIMESTAMP '2026-06-29 10:00:00'\"",
-        "operand2" -> "\"TIMESTAMP '2026-06-29 09:00:00'\""))
+        "refs1" -> "\"TIMESTAMP '2026-06-29 10:00:00'\"",
+        "refs2" -> "\"TIMESTAMP '2026-06-29 09:00:00'\""))
   }
 
   test("MATCH_CONDITION rejects a constant operand under the single-pass analyzer") {
@@ -346,8 +346,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
         sqlState = Some("42K0E"),
         parameters = Map(
-          "operand1" -> "\"trade_time\"",
-          "operand2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
+          "refs1" -> "\"trade_time\"",
+          "refs2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
     }
   }
 
