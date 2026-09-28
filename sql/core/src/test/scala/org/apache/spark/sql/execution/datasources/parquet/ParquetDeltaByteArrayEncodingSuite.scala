@@ -108,6 +108,28 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
     assert(e.getMessage.contains("prefix length 3"))
   }
 
+  test("more prefix lengths than values in the page are rejected") {
+    val is = craftPage(prefixLengths = Array(0, 0, 0), suffixes = Array("a", "b", "c"))
+    val e = intercept[ParquetDecodingException] {
+      reader.initFromPage(2, is)
+    }
+    assert(e.getMessage.contains("3 prefix lengths in a page of 2 values"))
+  }
+
+  test("prefix length and suffix counts must match") {
+    // Without the check, the second row silently read a zero prefix length.
+    val e1 = intercept[ParquetDecodingException] {
+      reader.initFromPage(2, craftPage(prefixLengths = Array(0), suffixes = Array("ab", "cd")))
+    }
+    assert(e1.getMessage.contains("1 prefix lengths but 2 suffixes"))
+
+    reader = new VectorizedDeltaByteArrayReader()
+    val e2 = intercept[ParquetDecodingException] {
+      reader.initFromPage(2, craftPage(prefixLengths = Array(0, 0), suffixes = Array("ab")))
+    }
+    assert(e2.getMessage.contains("2 prefix lengths but 1 suffixes"))
+  }
+
   test("prefix length equal to the previous value's length is accepted") {
     val is = craftPage(prefixLengths = Array(0, 2), suffixes = Array("ab", ""))
     reader.initFromPage(2, is)

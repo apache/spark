@@ -83,6 +83,11 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     }
   }
 
+  /** Returns the number of values in the page, i.e. the number of decoded value lengths. */
+  int getValueCount() {
+    return lengthCount;
+  }
+
   /** Checks that the rows [startRow, startRow + total) have a decoded value length. */
   private void checkRows(int startRow, int total) {
     if (startRow < 0 || (long) startRow + total > lengthCount) {

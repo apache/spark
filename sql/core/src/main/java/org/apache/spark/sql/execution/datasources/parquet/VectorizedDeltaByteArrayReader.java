@@ -61,9 +61,21 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
     prefixLengthVector = new OnHeapColumnVector(valueCount, IntegerType);
     prefixLengthReader.initFromPage(valueCount, in);
-    prefixLengthReader.readIntegers(prefixLengthReader.getTotalValueCount(),
-        prefixLengthVector, 0);
+    int prefixCount = prefixLengthReader.getTotalValueCount();
+    if (prefixCount > valueCount) {
+      throw new ParquetDecodingException("Corrupted DELTA_BYTE_ARRAY page: " + prefixCount +
+          " prefix lengths in a page of " + valueCount + " values");
+    }
+    prefixLengthReader.readIntegers(prefixCount, prefixLengthVector, 0);
     suffixReader.initFromPage(valueCount, in);
+    // Every value has both a prefix length and a suffix. Rows are bounds-checked against the
+    // decoded suffixes, so a row past the decoded prefix lengths would otherwise silently read
+    // a zero prefix length.
+    int suffixCount = suffixReader.getValueCount();
+    if (prefixCount != suffixCount) {
+      throw new ParquetDecodingException("Corrupted DELTA_BYTE_ARRAY page: " + prefixCount +
+          " prefix lengths but " + suffixCount + " suffixes");
+    }
   }
 
   @Override
