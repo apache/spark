@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.{CharVarcharScanMode, CharVarcharUtils}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
@@ -69,28 +68,12 @@ private[sql] case class RenameTableExec(
           restored
       }
       cacheTable(
-        sessionForCharVarcharScanMode(cache.charVarcharScanMode, cache.plan),
+        session.sharedState.cacheManager.sessionForCharVarcharScanMode(
+          session, cache.charVarcharScanMode, cache.plan),
         rewritten,
         Some(qualifiedNewIdent.quoted),
         cache.storageLevel)
     }
     Seq.empty
-  }
-
-  // Re-cache under the mode that produced the original plan without changing the caller session.
-  private def sessionForCharVarcharScanMode(
-      mode: Option[CharVarcharScanMode],
-      plan: LogicalPlan): SparkSession = {
-    val restoreSession = session.cloneSession()
-    mode.foreach { m =>
-      val nativeTypes = plan.exists {
-        case relation: DataSourceV2Relation =>
-          relation.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))
-        case _ => false
-      }
-      CharVarcharScanMode.configure(
-        restoreSession.sessionState.conf, m, nativeCharVarcharTypes = nativeTypes)
-    }
-    restoreSession
   }
 }

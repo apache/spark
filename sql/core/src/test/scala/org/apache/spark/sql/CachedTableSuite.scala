@@ -2349,10 +2349,17 @@ class CachedTableSuite extends SharedSparkSession
   }
 
   // SPARK-58814 CHAR/VARCHAR cache invariant coverage (scope freeze):
+  // In scope: two bound identities (PreserveNative, SparkStandard) and the analyzer
+  // padding Project. Capture, identity, mutation matching, and replay of those.
+  // Out of scope: Hive INSERT uncache-vs-recache, continuous-write invalidation,
+  // AQE recacheByPlan, Legacy identity (SPARK-59751), CACHE TABLE pin of a SparkStandard
+  // padding Project, view rename multi-entry capture.
   // Capture  - non-first-class CHAR relations keep an unbound scan mode
   // Identity - CHAR/VARCHAR scan modes do not split caches for non-CHAR relations
   // Mutation - catalog V2 recache; refreshTable V1 recache; RENAME TABLE time travel;
-  //            RENAME TABLE does not promote a dependent query cache
+  //            RENAME TABLE does not promote a dependent query cache;
+  //            V1 table rename restores both bound modes;
+  //            micro-batch WriteToDataSourceV2 invalidates both bound modes
   // Replay   - same recache/rename tests assert retained mode and storage level
   test("RENAME TABLE manages cache with time travel plans correctly") {
     val t = "testcat.tbl"

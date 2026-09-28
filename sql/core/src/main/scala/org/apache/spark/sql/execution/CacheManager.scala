@@ -69,8 +69,13 @@ private[sql] case class TableCacheDescriptor(
     storageLevel: StorageLevel) {
   def charVarcharScanMode: Option[CharVarcharScanMode] =
     plan.collectFirst {
-      case r: DataSourceV2Relation => r.charVarcharScanMode
-    }.flatten
+      case r: DataSourceV2Relation if r.charVarcharScanMode.isDefined =>
+        r.charVarcharScanMode.get
+      case r: LogicalRelation if r.charVarcharScanMode.isDefined =>
+        r.charVarcharScanMode.get
+      case r: HiveTableRelation if r.charVarcharScanMode.isDefined =>
+        r.charVarcharScanMode.get
+    }
 }
 
 /**
@@ -95,7 +100,18 @@ private[sql] case class TableCacheDescriptor(
  * Mutation matching: write, refresh, and rename discovery ignore only the scan mode (and, for
  * catalog-less V2, Table instance and extra write options). V1 matches BaseRelation. Catalog V2
  * matches catalog and identifier. Catalog-less V2 matches table name and path. Rename restores
- * direct table caches, including padding Projects, and drops dependents and time travel.
+ * every direct table cache, including padding Projects, and drops dependents and time travel.
+ * V1 rename restores every bound-mode direct table cache. WriteToDataSourceV2 invalidates by
+ * V2 identity, not ordinary sameResult. CACHE TABLE pin does not unwrap a padding Project:
+ * that Project's child is a cleaned scan, and substituting it as the pinned relation makes
+ * later reads miss the cache. Views do not split CHAR/VARCHAR identity on CACHE TABLE, so
+ * view rename stays the pre-existing single-entry restore.
+ *
+ * In scope: defects that exist only because CHAR/VARCHAR has two bound identities or an
+ * analyzer padding Project, and that can be fixed without changing general pin substitution.
+ * Out of scope (SPARK-59751 or pre-existing): Hive INSERT dropping caches instead of recaching,
+ * continuous-write invalidation, AQE recacheByPlan, Legacy identity, CACHE TABLE pin of a
+ * SparkStandard padding Project, view rename capturing more than one cache entry.
  *
  * Replay: rebuild and rename restoration clone a session, set both CHAR/VARCHAR SQLConf flags
  * for the captured mode, and never mutate the caller session. Direct V2 recache recreates the
@@ -329,6 +345,27 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     nameInCache.length == name.length && nameInCache.zip(name).forall(resolver.tupled)
   }
 
+  private def isDirectNamedCache(
+      plan: LogicalPlan,
+      name: Seq[String],
+      resolver: Resolver): Boolean = {
+    EliminateSubqueryAliases(plan) match {
+      case LogicalRelationWithTable(_, Some(catalogTable)) =>
+        isSameName(name, catalogTable.identifier.nameParts, resolver)
+      case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec, _) =>
+        val nameInCache = v2Ident.toQualifiedNameParts(catalog)
+        isSameName(name, nameInCache, resolver) && timeTravelSpec.isEmpty
+      case HiveTableRelation(catalogTable, _, _, _, _, _) =>
+        isSameName(name, catalogTable.identifier.nameParts, resolver)
+      case v: View =>
+        isSameName(name, v.desc.identifier.nameParts, resolver)
+      case project @ Project(_, child)
+          if ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, child) =>
+        isDirectNamedCache(child, name, resolver)
+      case _ => false
+    }
+  }
+
   private def uncacheByCondition(
       spark: SparkSession,
       isMatchedPlan: LogicalPlan => Boolean,
@@ -462,6 +499,37 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         None
       }
     }
+  }
+
+  /**
+   * Direct table or view caches for `name`, including analyzer CHAR/VARCHAR padding Projects.
+   * Dependent query caches are omitted so rename can restore only the object's own entries.
+   */
+  def lookupDirectCacheDescriptorsByName(
+      name: Seq[String],
+      resolver: Resolver): Seq[TableCacheDescriptor] = {
+    cachedData.collect {
+      case cd if isDirectNamedCache(cd.plan, name, resolver) =>
+        TableCacheDescriptor(cd.plan, cd.cachedRepresentation.cacheBuilder.storageLevel)
+    }
+  }
+
+  /**
+   * Clone of `spark` with both CHAR/VARCHAR SQLConf flags set for `mode`. Used by rename
+   * restore so SparkStandard cannot inherit the caller's PRESERVE value.
+   */
+  private[sql] def sessionForCharVarcharScanMode(
+      spark: SparkSession,
+      mode: Option[CharVarcharScanMode],
+      plan: LogicalPlan): SparkSession = {
+    val restore = spark.cloneSession()
+    mode.foreach { m =>
+      CharVarcharScanMode.configure(
+        restore.sessionState.conf,
+        m,
+        nativeCharVarcharTypes = hasNativeCharVarcharTypes(plan))
+    }
+    restore
   }
 
   /**

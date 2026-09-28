@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -65,6 +67,48 @@ trait AlterTableRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"ALTER TABLE $src RENAME TO dst_tbl")
       checkTables("ns", "dst_tbl")
       QueryTest.checkAnswer(sql(s"SELECT c0 FROM $dst"), Seq(Row(0)))
+    }
+  }
+
+  test("rename restores both CHAR/VARCHAR scan-mode caches") {
+    // V2 table rename is covered by CachedTableSuite; this hits V1 AlterTableRenameCommand.
+    assume(commandVersion == "V1")
+    withNamespaceAndTable("ns", "dst_char_tbl") { dst =>
+      val src = dst.replace("dst", "src")
+      val preserveConf = Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
+      val standardConf = Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
+      val cacheManager = spark.sharedState.cacheManager
+      sql(s"CREATE TABLE $src (id INT, value CHAR(4)) $defaultUsing")
+      sql(s"INSERT INTO $src VALUES (1, 'ab')")
+      withSQLConf(preserveConf: _*) {
+        sql(s"CACHE TABLE $src OPTIONS('storageLevel' 'MEMORY_ONLY')")
+      }
+      withSQLConf(standardConf: _*) {
+        sql(s"CACHE TABLE $src OPTIONS('storageLevel' 'DISK_ONLY')")
+      }
+      withSQLConf(preserveConf: _*) {
+        sql(s"ALTER TABLE $src RENAME TO ns.dst_char_tbl")
+      }
+      assert(cacheManager.numCachedEntries === 2)
+      Seq(preserveConf, standardConf).foreach { modeConf =>
+        withSQLConf(modeConf: _*) {
+          val renamed = sql(s"SELECT * FROM $dst")
+          assert(spark.sharedState.cacheManager.lookupCachedData(renamed).isDefined)
+          QueryTest.checkAnswer(renamed, Seq(Row(1, "ab  ")))
+        }
+      }
+      val restored = cacheManager.lookupDirectCacheDescriptorsByName(
+        Seq("ns", "dst_char_tbl"), spark.sessionState.conf.resolver) ++
+        cacheManager.lookupDirectCacheDescriptorsByName(
+          Seq(catalog, "ns", "dst_char_tbl"), spark.sessionState.conf.resolver)
+      val modes = restored.map(_.charVarcharScanMode).toSet
+      assert(modes === Set(
+        Some(CharVarcharScanMode.PreserveNative),
+        Some(CharVarcharScanMode.SparkStandard)))
     }
   }
 
