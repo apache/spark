@@ -223,7 +223,8 @@ class SparkEnv (
    * using the new UDF framework proposed in SPARK-55278.
    * Initialized on first use via [[getExternalUDFDispatcher]].
    */
-  @volatile private var udfDispatcherManager: Option[UDFDispatcherManager] = None
+  // Guarded by this SparkEnv's monitor, together with isStopped.
+  private var udfDispatcherManager: Option[UDFDispatcherManager] = None
 
   private def createUDFDispatcherManager(): UDFDispatcherManager = {
     val factory = SparkEnv.resolveUDFDispatcherFactory(
@@ -238,15 +239,14 @@ class SparkEnv (
    */
   private[spark] def getExternalUDFDispatcher(
       workerSpec: UDFWorkerSpecification): WorkerDispatcher = {
-    val manager : UDFDispatcherManager = udfDispatcherManager.getOrElse {
-      synchronized {
-        // Get or Else synchronized to protect
-        // against concurrent creation requests.
-        udfDispatcherManager.getOrElse {
-          val created = createUDFDispatcherManager()
-          udfDispatcherManager = Some(created)
-          created
-        }
+    val manager = synchronized {
+      if (isStopped) {
+        throw new IllegalStateException("SparkEnv is stopped")
+      }
+      udfDispatcherManager.getOrElse {
+        val created = createUDFDispatcherManager()
+        udfDispatcherManager = Some(created)
+        created
       }
     }
     manager.getDispatcher(workerSpec)
@@ -275,9 +275,15 @@ class SparkEnv (
     new AtomicReference[VersionedCredentials]()
 
   private[spark] def stop(): Unit = {
-
-    if (!isStopped) {
-      isStopped = true
+    val shouldStop = synchronized {
+      if (isStopped) {
+        false
+      } else {
+        isStopped = true
+        true
+      }
+    }
+    if (shouldStop) {
       pythonWorkers.values.foreach(_.stop())
       udfDispatcherManager.foreach(_.close())
       mapOutputTracker.stop()
@@ -540,7 +546,7 @@ object SparkEnv extends Logging {
       case Some(className) =>
         // Validate before constructing so that a misconfigured class is reported against
         // the config key, rather than as a ClassCastException from the call site.
-        val cls = Utils.classForName[AnyRef](className)
+        val cls = Utils.classForName[AnyRef](className, initialize = false)
         if (!classOf[UDFDispatcherFactory].isAssignableFrom(cls)) {
           throw new SparkException(
             s"${UDF.DISPATCHER_FACTORY.key} is set to $className, which does not implement " +
