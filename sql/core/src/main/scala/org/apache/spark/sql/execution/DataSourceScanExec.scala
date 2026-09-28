@@ -565,11 +565,7 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
       // metadata entry verbatim, unlike `verboseStringWithOperatorId` which drops empty ones, so an
       // unconditional entry would append `StorageFilters: []` to every file-scan explain line for a
       // feature that is off by default.
-      (if (storageFilters.nonEmpty) {
-        Map("StorageFilters" -> seqToString(storageFilters))
-      } else {
-        Map.empty[String, String]
-      })
+      Option.when(storageFilters.nonEmpty)("StorageFilters" -> seqToString(storageFilters))
 
     relation.bucketSpec.map { spec =>
       val bucketedKey = "Bucketed"
@@ -833,7 +829,7 @@ case class FileSourceScanExec(
       // the first `requiredSchema.length` attributes line up with its fields.
       val requestedDataAttrs = output.take(requiredSchema.length)
       storageFilters.map { expr =>
-        val subqueryReplaced = expr.transform {  case s: execution.ScalarSubquery => s.toLiteral }
+        val subqueryReplaced = expr.transform { case s: execution.ScalarSubquery => s.toLiteral }
         BindReferences.bindReference(subqueryReplaced, requestedDataAttrs)
       }
     }

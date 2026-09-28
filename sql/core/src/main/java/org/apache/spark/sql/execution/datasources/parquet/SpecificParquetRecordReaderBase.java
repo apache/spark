@@ -89,10 +89,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   /**
    * The Parquet reader {@link #reader} wraps, or null when a {@link ParquetRowGroupReader} was
-   * handed in rather than built here, which no file reader stands behind. Late materialization
-   * drives it directly, for the APIs a row-group reader does not describe:
-   * {@code setRequestedSchema}, {@code getRowRanges(int)} and
-   * {@code readFilteredRowGroup(int, RowRanges)}. The wrapper owns it and closes it.
+   * handed in rather than built here, which no file reader stands behind. A subclass that needs an
+   * API a row-group reader does not describe reads it here. The wrapper owns it and closes it.
    */
   protected ParquetFileReader fileReader;
 
@@ -247,6 +245,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   @Override
   public void close() throws IOException {
+    fileReader = null;
     if (reader != null) {
       reader.close();
       reader = null;

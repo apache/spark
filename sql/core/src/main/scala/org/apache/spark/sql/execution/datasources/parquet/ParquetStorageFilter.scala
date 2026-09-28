@@ -51,6 +51,13 @@ case class StorageFilterMetrics(
     bytesAvoidedByRowGroup: SQLMetric,
     bytesAvoidedByPageFiltering: SQLMetric) {
 
+  /** Counts a row group whose data columns the filter kept the reader from touching at all. */
+  def recordRowGroupSkipped(excludedRows: Long, avoidedBytes: Long): Unit = {
+    rowGroupsSkipped.add(1L)
+    rowsExcludedByRowGroup.add(excludedRows)
+    bytesAvoidedByRowGroup.add(avoidedBytes)
+  }
+
   /** These counters keyed for the scan, which carries them without naming any of them. */
   def toMap: Map[String, SQLMetric] = Map(
     StorageFilterMetrics.ROW_GROUPS_SKIPPED -> rowGroupsSkipped,
@@ -129,6 +136,13 @@ class ParquetStorageFilter private (
   }
 
   def test(keyRow: InternalRow): Boolean = predicate.eval(keyRow)
+
+  /**
+   * The predicate itself, for a caller that evaluates it per row of a batch. Resolving the `lazy
+   * val` costs a volatile read, which is why a loop takes it out of the loop rather than calling
+   * [[test]].
+   */
+  def preparedPredicate: BasePredicate = predicate
 }
 
 object ParquetStorageFilter {

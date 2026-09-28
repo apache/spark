@@ -204,7 +204,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       expr.deterministic && refs.nonEmpty && refs.subsetOf(dataAttrs) &&
         fsRelation.fileFormat.supportsStorageFilter(expr)
     }
-    val storageKeyAttrs = AttributeSet(offered.flatMap(_.references))
+    if (offered.isEmpty) return Nil
+    val storageKeyAttrs = AttributeSet.fromAttributeSets(offered.map(_.references))
     if (dataAttrs.subsetOf(storageKeyAttrs)) Nil else offered
   }
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.{ByteArrayOutputStream, File}
+import java.io.File
 import java.net.URI
 import java.time.LocalTime
 import java.util.concurrent.atomic.AtomicLong
@@ -42,6 +42,7 @@ import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{sources, DataFrame, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BloomFilterMightContain, BoundReference, Cast, EqualTo, Expression, GreaterThanOrEqual, IsNull, LessThanOrEqual, Literal, Or, Predicate, Rand, Remainder, SecondsToTimestamp, XxHash64}
+import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.plans.logical.{Filter => LogicalFilter}
 import org.apache.spark.sql.execution.{CollapseCodegenStages, ColumnarToRowExec, FileSourceScanExec, FilterExec, LocalLimitExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -56,9 +57,9 @@ import org.apache.spark.util.Utils
 import org.apache.spark.util.sketch.BloomFilter
 
 /**
- * Tests the late-materialization path of [[VectorizedParquetRecordReader]] driven by a
- * [[ParquetStorageFilter]]. Writes small multi-row-group parquet files, wires a hand-built filter
- * into the reader, and asserts correctness and the five storage-filter metrics.
+ * Tests [[LateMaterializationParquetRecordReader]] driven by a [[ParquetStorageFilter]]. Writes
+ * small multi-row-group parquet files, wires a hand-built filter into the reader, and asserts
+ * correctness and the five storage-filter metrics.
  */
 class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -154,15 +155,11 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     readAllWith(filePath, Seq("k", "v"), storageFilter,
       (batch, i) => (batch.column(0).getLong(i), batch.column(1).getUTF8String(i).toString))
 
-  // Builds a `k >= threshold` storage filter bound to position 0.
+  // Builds a `k >= threshold` storage filter bound to position 0, over a long key.
   private def keyAtLeastFilter(
       threshold: Long,
-      metrics: StorageFilterMetrics = allMetrics()): ParquetStorageFilter = {
-    val expr = GreaterThanOrEqual(BoundReference(0, LongType, nullable = false), Literal(threshold))
-    val requested = StructType(Seq(
-      StructField("k", LongType, nullable = false), StructField("v", StringType, nullable = false)))
-    createFilter(Seq(expr), requested, metrics)
-  }
+      metrics: StorageFilterMetrics = allMetrics()): ParquetStorageFilter =
+    keyTypeAtLeastFilter(Literal(threshold), LongType, metrics)
 
   // Writes a single-column (just `k`) parquet file for the supplied key type via Spark's
   // {@code Encoder}.
@@ -431,11 +428,9 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   }
 
   // Serializes a [[BloomFilter]] to bytes suitable for a [[Literal]].
-  private def bloomBytes(bf: BloomFilter): Array[Byte] = {
-    val out = new ByteArrayOutputStream()
-    bf.writeTo(out)
-    out.toByteArray
-  }
+  // The same serialization a runtime bloom's Literal carries, so these tests build theirs the way
+  // the planner does.
+  private def bloomBytes(bf: BloomFilter): Array[Byte] = BloomFilterAggregate.serialize(bf)
 
   // Computes `XxHash64(v)` using the same seed Spark uses for runtime bloom filters.
   private def xxHash64(v: Any, dt: DataType): Long = {
@@ -1200,8 +1195,8 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       .flatMap(_.getEncodings.asScala).toSet
 
   // Reads every batch, projecting each row through `extract`. `storageFilter` may be null, which
-  // selects the plain (non-splicing) vectorized path. Every read helper in this suite goes through
-  // here.
+  // builds the plain vectorized reader rather than the late-materialization one. Every read helper
+  // in this suite goes through here.
   //
   // `tryInitializeResource` closes the reader if anything inside throws and leaves it open
   // otherwise, which is the contract these helpers need: the caller closes it once its assertions
@@ -1219,9 +1214,12 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       partitionColumns: StructType = new StructType(),
       partitionValues: InternalRow = null): (Seq[T], VectorizedParquetRecordReader) = {
     Utils.tryInitializeResource {
-      new VectorizedParquetRecordReader(useOffHeap, capacity)
+      if (storageFilter == null) {
+        new VectorizedParquetRecordReader(useOffHeap, capacity)
+      } else {
+        new LateMaterializationParquetRecordReader(useOffHeap, capacity, storageFilter)
+      }
     } { reader =>
-      reader.setStorageFilter(storageFilter)
       reader.initialize(filePath, columns.asJava)
       reader.initBatch(partitionColumns, partitionValues)
       val collected = mutable.ArrayBuffer[T]()
@@ -1498,8 +1496,8 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   }
 
   test("partition columns are preserved alongside spliced key columns") {
-    // Exercises the `i < isKeyTopLevel.length` branch of the emit loop: the partition slot sits
-    // past the end of isKeyTopLevel and must come from persistentBatchColumns, not the key queues.
+    // The emit path rewrites the key slots alone, and a partition slot is not one of them: it sits
+    // past the data columns and must keep the constant vector `initBatch` populated for it.
     withTempDir { dir =>
       val rows = (1L to 200L).map(i => (i, s"v_$i"))
       val path = writeParquetFile(dir, rows, rowGroupSize = 256L)
@@ -1553,11 +1551,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         val path = writeParquetFile(dir, rows, rowGroupSize = 256L)
         val m = allMetrics()
         val filter = keyAtLeastFilter(195L, m)
-        val reader = new VectorizedParquetRecordReader(useOffHeap, 4096)
+        val reader = new LateMaterializationParquetRecordReader(useOffHeap, 4096, filter)
         val collected = mutable.ArrayBuffer[(Long, String)]()
         try {
           // Inside the try: an off-heap vector allocated before a failing one has to be closed.
-          reader.setStorageFilter(filter)
           reader.initialize(path, Seq("k", "v").asJava)
           reader.initBatch(new StructType(), null)
           while (reader.nextBatch()) {
@@ -1591,9 +1588,8 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       val rows = (1L to 200L).map(i => (i, s"v_$i"))
       val path = writeParquetFile(dir, rows, rowGroupSize = 256L)
       val filter = keyAtLeastFilter(100L)
-      val reader = new VectorizedParquetRecordReader(false, 8)
+      val reader = new LateMaterializationParquetRecordReader(false, 8, filter)
       try {
-        reader.setStorageFilter(filter)
         reader.initialize(path, Seq("k", "v").asJava)
         reader.initBatch(new StructType(), null)
         val collected = mutable.ArrayBuffer[(Long, String)]()
@@ -2314,8 +2310,9 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   }
 
   test("survivor count is an exact multiple of capacity: no partial trailing accumulator") {
-    // finalizePartialAccumulators' early return only runs when the last accumulator is exactly
-    // full. 64 survivors at capacity 16 hits it; the multi-batch tests use 71, which does not. The
+    // Phase 1's end-of-row-group push has nothing to do only when the last accumulator came out
+    // exactly full. 64 survivors at capacity 16 does that; the multi-batch tests use 71, which does
+    // not. The
     // 64 are the tail of a 100-row row group, so a reader that declined the filter would return the
     // other 36 as well rather than passing.
     withTempDir { dir =>

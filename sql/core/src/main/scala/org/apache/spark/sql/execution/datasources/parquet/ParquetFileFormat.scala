@@ -447,15 +447,28 @@ class ParquetFileFormat
       storageFilter: Option[ParquetStorageFilter]): Iterator[InternalRow] = {
     // scalastyle:on argcount
     assert(openedFooter.inputStreamOpt.isPresent)
-    val vectorizedReader = new VectorizedParquetRecordReader(
-      convertTz.orNull,
-      datetimeRebaseSpec.mode.toString,
-      datetimeRebaseSpec.timeZone,
-      int96RebaseSpec.mode.toString,
-      int96RebaseSpec.timeZone,
-      enableOffHeapColumnVector && TaskContext.get() != null,
-      batchSize)
-    storageFilter.foreach(vectorizedReader.setStorageFilter)
+    // The storage-filter read path lives in a subclass, so the plain reader carries none of it.
+    val vectorizedReader = storageFilter match {
+      case None =>
+        new VectorizedParquetRecordReader(
+          convertTz.orNull,
+          datetimeRebaseSpec.mode.toString,
+          datetimeRebaseSpec.timeZone,
+          int96RebaseSpec.mode.toString,
+          int96RebaseSpec.timeZone,
+          enableOffHeapColumnVector && TaskContext.get() != null,
+          batchSize)
+      case Some(filter) =>
+        new LateMaterializationParquetRecordReader(
+          convertTz.orNull,
+          datetimeRebaseSpec.mode.toString,
+          datetimeRebaseSpec.timeZone,
+          int96RebaseSpec.mode.toString,
+          int96RebaseSpec.timeZone,
+          enableOffHeapColumnVector && TaskContext.get() != null,
+          batchSize,
+          filter)
+    }
     // SPARK-37089: We cannot register a task completion listener to close this iterator here
     // because downstream exec nodes have already registered their listeners. Since listeners
     // are executed in reverse order of registration, a listener registered here would close the

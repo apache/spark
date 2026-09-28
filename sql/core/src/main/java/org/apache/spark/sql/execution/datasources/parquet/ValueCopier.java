@@ -47,6 +47,13 @@ import org.apache.spark.sql.types.*;
 interface ValueCopier {
   void copy(WritableColumnVector dst, int dstRow, WritableColumnVector src, int srcRow);
 
+  /**
+   * The one copier for a value the vector holds in its byte child, which is every variable-length
+   * type below. Shared so that {@link #isVariableLength} can answer by asking which copier a type
+   * gets, rather than stating the same boundary a second time.
+   */
+  ValueCopier BYTE_ARRAY = (dst, dRow, src, sRow) -> dst.putByteArray(dRow, src.getBinary(sRow));
+
   /** Whether a value of this type can be copied, which is the one list described above. */
   static boolean supports(DataType dt) {
     return forTypeOrNull(dt) != null;
@@ -102,23 +109,22 @@ interface ValueCopier {
       if (precision <= Decimal.MAX_LONG_DIGITS()) {
         return (dst, dRow, src, sRow) -> dst.putLong(dRow, src.getLong(sRow));
       }
-      return (dst, dRow, src, sRow) -> dst.putByteArray(dRow, src.getBinary(sRow));
+      return BYTE_ARRAY;
     }
     // StringType covers CHAR and VARCHAR: both extend it.
     if (dt instanceof StringType || dt instanceof BinaryType) {
-      return (dst, dRow, src, sRow) -> dst.putByteArray(dRow, src.getBinary(sRow));
+      return BYTE_ARRAY;
     }
     return null;
   }
 
   /**
    * Whether a key value lives in the vector's byte child rather than in its fixed-width array,
-   * which is what the survivor budget charges by length. {@code WritableColumnVector.isArray()} is
-   * the vector's own answer, but it is protected, so this states the same boundary for the types
-   * above: {@code DecimalType.isByteArrayDecimalType} is exactly where that method puts a decimal.
+   * which is what the survivor budget charges by length. Answered by which copier the type gets, so
+   * a type added above cannot be charged as fixed-width by accident.
+   * {@code WritableColumnVector.isArray()} is the vector's own answer, but it is protected.
    */
   static boolean isVariableLength(DataType dt) {
-    return DecimalType.isByteArrayDecimalType(dt)
-        || dt instanceof StringType || dt instanceof BinaryType;
+    return forTypeOrNull(dt) == BYTE_ARRAY;
   }
 }

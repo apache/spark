@@ -83,8 +83,6 @@ abstract class ParquetReadState {
     this.maxRepetitionLevel = descriptor.getMaxRepetitionLevel();
     this.maxDefinitionLevel = descriptor.getMaxDefinitionLevel();
     this.isRequired = isRequired;
-    // The first range is left to the subclass constructors: reading it needs state only they can
-    // set, and this one runs before they do.
   }
 
   /**
@@ -102,12 +100,18 @@ abstract class ParquetReadState {
       boolean isRequired,
       RowRanges rowRanges,
       PrimitiveIterator.OfLong rowIndexes) {
+    ParquetReadState state;
     if (rowRanges != null) {
-      return new RangeListState(descriptor, isRequired, rowRanges.getRanges());
+      state = new RangeListState(descriptor, isRequired, rowRanges.getRanges());
+    } else if (rowIndexes == null) {
+      state = new AllRowsState(descriptor, isRequired);
+    } else {
+      state = new RowIndexState(descriptor, isRequired, rowIndexes);
     }
-    return rowIndexes == null
-        ? new AllRowsState(descriptor, isRequired)
-        : new RowIndexState(descriptor, isRequired, rowIndexes);
+    // Here rather than in the constructors: reading the first range needs the state each subclass
+    // sets, and a constructor calling `nextRange` would be calling into its own subclass.
+    state.nextRange();
+    return state;
   }
 
   /**
@@ -161,7 +165,6 @@ abstract class ParquetReadState {
   private static final class AllRowsState extends ParquetReadState {
     AllRowsState(ColumnDescriptor descriptor, boolean isRequired) {
       super(descriptor, isRequired);
-      nextRange();
     }
 
     @Override
@@ -182,7 +185,6 @@ abstract class ParquetReadState {
         ColumnDescriptor descriptor, boolean isRequired, List<RowRanges.Range> ranges) {
       super(descriptor, isRequired);
       this.ranges = ranges;
-      nextRange();
     }
 
     @Override
@@ -215,7 +217,6 @@ abstract class ParquetReadState {
         ColumnDescriptor descriptor, boolean isRequired, PrimitiveIterator.OfLong rowIndexes) {
       super(descriptor, isRequired);
       this.rowIndexes = rowIndexes;
-      nextRange();
     }
 
     @Override
