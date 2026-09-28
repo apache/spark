@@ -35,7 +35,9 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.Changelog
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor}
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
@@ -70,6 +72,9 @@ import org.apache.spark.unsafe.types.CalendarInterval
  *     post-processing pass through unchanged.
  */
 object ResolveChangelogTable extends Rule[LogicalPlan] {
+
+  private val internalChangelogSubtree =
+    TreeNodeTag[Unit]("internal_changelog_subtree")
 
   /**
    * Reserved (`__spark_cdc_*`) column names used internally by post-processing;
@@ -139,7 +144,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
         updatedRel = injectNetChangeComputation(
           updatedRel, rowIdExprs, table.changelogContext.computeUpdates())
       }
-      updatedRel
+      markInternalChangelogSubtree(updatedRel, rel)
 
     case rel @ StreamingRelationV2(_, _, table: ChangelogTable, _, _, _, _, _, _)
         if !table.resolved =>
@@ -162,7 +167,43 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
         updatedRel = addStreamingNetChangeComputation(
           updatedRel, changelog, table.changelogContext.computeUpdates())
       }
-      updatedRel
+      markInternalChangelogSubtree(updatedRel, rel)
+  }
+
+  /** Rejects user access to metadata columns exposed only for changelog post-processing. */
+  private[analysis] def checkNoUserMetadataColumnAccess(plan: LogicalPlan): Unit = {
+    val metadataColumnsByExprId = plan.collect {
+      case relation: DataSourceV2Relation
+          if relation.table.isInstanceOf[ChangelogTable] =>
+        relation.metadataOutput.map(attribute => attribute.exprId -> attribute.name)
+      case relation: StreamingRelationV2
+          if relation.table.isInstanceOf[ChangelogTable] =>
+        relation.metadataOutput.map(attribute => attribute.exprId -> attribute.name)
+    }.flatten.toMap
+
+    def check(node: LogicalPlan): Unit = {
+      if (!node.containsTag(internalChangelogSubtree)) {
+        node.expressions.foreach(_.foreach {
+          case attribute: Attribute if metadataColumnsByExprId.contains(attribute.exprId) =>
+            throw QueryCompilationErrors.changelogMetadataColumnNotSupportedError(
+              metadataColumnsByExprId(attribute.exprId))
+          case _ =>
+        })
+        node.children.foreach(check)
+      }
+    }
+
+    if (metadataColumnsByExprId.nonEmpty) {
+      check(plan)
+    }
+  }
+
+  private def markInternalChangelogSubtree(
+      plan: LogicalPlan,
+      source: LogicalPlan): LogicalPlan = {
+    plan.mergeTagsFrom(source)
+    plan.setTagValue(internalChangelogSubtree, ())
+    plan
   }
 
   // ---------------------------------------------------------------------------

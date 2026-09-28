@@ -9064,6 +9064,11 @@
           "Relation <relationId> does not support Change Data Capture (CDC)."
         ]
       },
+      "CHANGELOG_METADATA_COLUMN" : {
+        "message" : [
+          "Changelog metadata column <columnName> cannot be queried directly."
+        ]
+      },
       "CLAUSE_WITH_PIPE_OPERATORS" : {
         "message" : [
           "The SQL pipe operator syntax using |> does not support <clauses>."

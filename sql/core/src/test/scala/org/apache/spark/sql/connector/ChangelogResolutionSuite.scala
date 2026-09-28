@@ -164,6 +164,47 @@ class ChangelogResolutionSuite extends SharedSparkSession {
     assert(colNames.contains("_commit_timestamp"))
   }
 
+  test("CHANGES metadata columns are available internally but not user-queryable") {
+    val ident = Identifier.of(Array.empty, "test_table")
+    val catalog = spark.sessionState.catalogManager
+      .catalog(cdcCatalogName)
+      .asInstanceOf[InMemoryChangelogCatalog]
+    val metadataColumn = new MetadataColumn {
+      override def name(): String = "_metadata"
+      override def dataType(): StructType = new StructType()
+        .add("row_id", LongType, nullable = false)
+      override def isNullable(): Boolean = false
+    }
+    catalog.setChangelogProperties(ident, ChangelogProperties(
+      containsCarryoverRows = true,
+      rowIdPaths = Seq(Seq("_metadata", "row_id")),
+      rowVersionName = Some("_commit_version"),
+      metadataColumns = Array(metadataColumn)))
+
+    val changes =
+      s"$cdcCatalogName.test_table CHANGES FROM VERSION 1 TO VERSION 5"
+    val starSchema = sql(s"SELECT * FROM $changes").schema
+    assert(!starSchema.fieldNames.contains("_metadata"))
+
+    checkError(
+      intercept[AnalysisException] {
+        sql(s"SELECT _metadata.row_id FROM $changes").schema
+      },
+      condition = "UNSUPPORTED_FEATURE.CHANGELOG_METADATA_COLUMN",
+      parameters = Map("columnName" -> "`_metadata`"))
+
+    val changesDf = spark.read
+      .option("startingVersion", "1")
+      .option("endingVersion", "5")
+      .changes(s"$cdcCatalogName.test_table")
+    checkError(
+      intercept[AnalysisException] {
+        changesDf.select(changesDf.metadataColumn("_metadata").getField("row_id")).schema
+      },
+      condition = "UNSUPPORTED_FEATURE.CHANGELOG_METADATA_COLUMN",
+      parameters = Map("columnName" -> "`_metadata`"))
+  }
+
   test("DataStreamReader - changes() rejects user-specified schema") {
     val e = intercept[AnalysisException] {
       import org.apache.spark.sql.types.StructType

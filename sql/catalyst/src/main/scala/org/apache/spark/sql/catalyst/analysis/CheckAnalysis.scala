@@ -1221,6 +1221,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         }
     }
     checkCollectedMetrics(plan)
+    ResolveChangelogTable.checkNoUserMetadataColumnAccess(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
       case o if !o.resolved =>
