@@ -91,7 +91,7 @@ GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY")
 # conflicts and the computed merge hash stay realistic -- but every outbound effect is routed
 # through a DryRun* client (see Git/GitHub/Jira below) that logs a "DRY-RUN: would ..." line
 # instead of executing it: the git push to PUSH_REMOTE_NAME, the GitHub PR close/comment, and all
-# JIRA writes (component and fixVersion updates, assignment, and the resolve transition).
+# JIRA writes (component and fixVersion updates, assignment, and resolve/reopen transitions).
 DRY_RUN_ENV = bool(os.environ.get("DRY_RUN"))
 
 
@@ -1465,9 +1465,7 @@ def get_jira_issue(prompt, default_jira_id=""):
             resolution = issue.fields.resolution
             resolution_name = resolution.name if resolution is not None else None
             print("JIRA issue %s already has status '%s' (%s)" % (jira_id, status, resolution_name))
-            # Only a ticket an earlier merge resolved as Fixed can legitimately gain
-            # another Fix Version. Duplicate / Won't Fix / Invalid tickets must not be
-            # touched.
+            # Only Fixed resolutions permit updates to resolved or closed tickets.
             if resolution_name != "Fixed":
                 return None
         if get_input("Check if the JIRA information is as expected (y/N): ", ["y", "n", ""]) == "y":
@@ -1625,11 +1623,33 @@ def resolve_jira_issue(
     )
 
 
-def remove_jira_fix_versions(merge_branches, default_jira_id=""):
+def revert_jira_issue(merge_branches, default_jira_id=""):
     issue = get_jira_issue("Enter the JIRA id for the reverted change", default_jira_id)
     if issue is None:
         return
 
+    remove_jira_fix_versions(issue, merge_branches)
+    if issue.fields.status.name not in ("Resolved", "Closed"):
+        return
+
+    prompt = "Reopen JIRA issue %s so the change can be reworked? (y/N): " % issue.key
+    if get_input(prompt, ["y", "n", ""]) != "y":
+        return
+    try:
+        reopen = next(
+            (t for t in asf_jira.transitions(issue.key) if t["name"] == "Reopen Issue"), None
+        )
+        if reopen is None:
+            print_error(
+                "No Reopen Issue transition available for %s; reopen it manually." % issue.key
+            )
+            return
+        jira_ops.reopen_issue(issue, reopen["id"])
+    except Exception as e:
+        print_error("Failed to reopen %s; reopen it manually: %s" % (issue.key, e))
+
+
+def remove_jira_fix_versions(issue, merge_branches):
     versions = asf_jira.project_versions("SPARK")
     unreleased_names = [
         v.name
@@ -1729,7 +1749,7 @@ class Jira:
     """ASF JIRA writes used by the merge script -- the single seam for JIRA mutations.
 
     The pre-write JIRA lookups stay on the module-level asf_jira client; the writes (components,
-    fix versions, the resolve transition, assignment, and the contributor-role grant) go through
+    fix versions, workflow transitions, assignment, and the contributor-role grant) go through
     here, so DryRunJira can log them. Two Production writes (add_fix_versions, resolve_issue) also
     read the issue back afterward to print the updated summary; DryRunJira skips the write and that
     read-back alike. main() builds Jira(asf_jira) normally and DryRunJira(asf_jira) for a dry run,
@@ -1786,6 +1806,11 @@ class Jira:
             print("Unable to fetch JIRA issue %s after resolving" % issue.key)
         print("Successfully resolved %s with fixVersions=%s!" % (issue.key, fix_version_names))
 
+    def reopen_issue(self, issue, reopen_id):
+        # Spark's Reopen Issue workflow clears the resolution.
+        self._client.transition_issue(issue.key, reopen_id)
+        print("Successfully reopened %s!" % issue.key)
+
     def assign(self, issue_key, assignee):
         # Shorthand for jira.client.JIRA.assign_issue. The library's own assign_issue re-searches
         # users and blindly picks the first of 20 candidates when unmatched; here the assignee is
@@ -1825,6 +1850,9 @@ class DryRunJira(Jira):
             "DRY-RUN: would resolve JIRA %s as Fixed with fixVersions=%s and add comment:\n%s"
             % (issue.key, fix_version_names, comment)
         )
+
+    def reopen_issue(self, issue, reopen_id):
+        print("DRY-RUN: would reopen JIRA %s." % issue.key)
 
     def assign(self, issue_key, assignee):
         print("DRY-RUN: would assign JIRA %s to '%s'." % (issue_key, assignee))
@@ -1882,7 +1910,7 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_rever
     if is_revert:
         jira_ids = list(dict.fromkeys(re.findall("SPARK-[0-9]{4,5}", jira_title)))
         for jira_id in jira_ids or [""]:
-            remove_jira_fix_versions(merge_branches, jira_id)
+            revert_jira_issue(merge_branches, jira_id)
         return
 
     jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
@@ -2630,7 +2658,7 @@ def main():
 
 
 __test__ = {
-    "remove_jira_fix_versions": """
+    "revert_jira_issue": """
     A revert removes the versions for its branches while preserving released, archived,
     and unrelated versions. JIRA receives individual removals so concurrent additions survive.
 
@@ -2645,22 +2673,23 @@ __test__ = {
     ...             version("4.2.0", archived=True), version("3.5.2")]
     >>> issue = Mock(key="SPARK-1234")
     >>> issue.fields.fixVersions = versions
+    >>> issue.fields.status.name = "Open"
     >>> client = Mock()
     >>> client.project_versions.return_value = versions
     >>> writer = Jira(client)
-    >>> def run_removal(answers):
+    >>> def run_revert(answers):
     ...     issue.reset_mock()
     ...     client.reset_mock()
     ...     output = StringIO()
     ...     with (
-    ...         patch.dict(remove_jira_fix_versions.__globals__, asf_jira=client,
+    ...         patch.dict(revert_jira_issue.__globals__, asf_jira=client,
     ...                    jira_ops=writer, get_jira_issue=Mock(return_value=issue)),
     ...         patch("builtins.input", side_effect=answers),
     ...         redirect_stdout(output),
     ...     ):
-    ...         remove_jira_fix_versions(["master", "branch-4.x"], "SPARK-1234")
+    ...         revert_jira_issue(["master", "branch-4.x"], "SPARK-1234")
     ...     return output.getvalue()
-    >>> output = run_removal(["", "y"])
+    >>> output = run_revert(["", "y"])
     >>> issue.update.assert_called_once_with(update={"fixVersions": [
     ...     {"remove": {"name": "5.0.0"}}, {"remove": {"name": "4.3.0"}}]})
     >>> client.mock_calls
@@ -2668,16 +2697,16 @@ __test__ = {
 
     The committer can narrow the selection, decline confirmation, or skip the update.
 
-    >>> output = run_removal(["5.0.0", "y"])
+    >>> output = run_revert(["5.0.0", "y"])
     >>> issue.update.assert_called_once_with(
     ...     update={"fixVersions": [{"remove": {"name": "5.0.0"}}]})
     >>> for answers in (["", "n"], ["", ""], ["skip"]):
-    ...     output = run_removal(answers)
+    ...     output = run_revert(answers)
     ...     issue.update.assert_not_called()
 
     Released, archived, and unrecorded versions are rejected even when entered manually.
 
-    >>> output = run_removal(["4.2.1", "4.2.0", "9.9.9", "", "y"])
+    >>> output = run_revert(["4.2.1", "4.2.0", "9.9.9", "", "y"])
     >>> output.count("Select only unreleased fix versions currently recorded on this JIRA.")
     3
     >>> issue.update.assert_called_once_with(update={"fixVersions": [
@@ -2686,7 +2715,7 @@ __test__ = {
     Dry runs log the removal without writing to JIRA.
 
     >>> writer = DryRunJira(client)
-    >>> output = run_removal(["", "y"])
+    >>> output = run_revert(["", "y"])
     >>> "DRY-RUN: would remove fixVersions=['5.0.0', '4.3.0'] from JIRA SPARK-1234." in output
     True
     >>> issue.update.assert_not_called()
@@ -2697,17 +2726,92 @@ __test__ = {
 
     >>> writer = Jira(client)
     >>> issue.fields.fixVersions = versions[:2]
-    >>> output = run_removal(["", "y"])
+    >>> output = run_revert(["", "y"])
     >>> issue.update.assert_called_once_with(update={"fixVersions": [
     ...     {"remove": {"name": "5.0.0"}}, {"remove": {"name": "4.3.0"}}]})
     >>> issue.fields.fixVersions = versions[2:]
-    >>> output = run_removal([""])
+    >>> output = run_revert([""])
     >>> issue.update.assert_not_called()
     >>> issue.fields.fixVersions = []
-    >>> output = run_removal([])
+    >>> output = run_revert([])
     >>> "no unreleased fix versions to remove" in output
     True
     >>> issue.update.assert_not_called()
+
+    Resolved and closed tickets can be reopened even when no fix versions remain.
+
+    >>> client.transitions.return_value = [
+    ...     {"id": "701", "name": "Close Issue"}, {"id": "3", "name": "Reopen Issue"}]
+    >>> for status in ("Resolved", "Closed"):
+    ...     issue.fields.status.name = status
+    ...     output = run_revert(["y"])
+    ...     client.transitions.assert_called_once_with("SPARK-1234")
+    ...     client.transition_issue.assert_called_once_with("SPARK-1234", "3")
+    ...     issue.update.assert_not_called()
+
+    Reopening is optional and independent of fix-version removal.
+
+    >>> for answer in ("n", ""):
+    ...     output = run_revert([answer])
+    ...     client.transitions.assert_not_called()
+    ...     client.transition_issue.assert_not_called()
+    >>> issue.fields.fixVersions = versions
+    >>> output = run_revert(["", "y", "y"])
+    >>> issue.update.assert_called_once_with(update={"fixVersions": [
+    ...     {"remove": {"name": "5.0.0"}}, {"remove": {"name": "4.3.0"}}]})
+    >>> client.transition_issue.assert_called_once_with("SPARK-1234", "3")
+    >>> for answers in (["skip", "y"], ["", "n", "y"]):
+    ...     output = run_revert(answers)
+    ...     issue.update.assert_not_called()
+    ...     client.transition_issue.assert_called_once_with("SPARK-1234", "3")
+    >>> output = run_revert(["", "y", "n"])
+    >>> issue.update.assert_called_once()
+    >>> client.transition_issue.assert_not_called()
+
+    Dry runs log both updates and leave JIRA untouched.
+
+    >>> writer = DryRunJira(client)
+    >>> output = run_revert(["", "y", "y"])
+    >>> "DRY-RUN: would remove fixVersions=" in output
+    True
+    >>> "DRY-RUN: would reopen JIRA SPARK-1234." in output
+    True
+    >>> issue.update.assert_not_called()
+    >>> client.transition_issue.assert_not_called()
+
+    Unavailable transitions report that manual action is needed.
+
+    >>> writer = Jira(client)
+    >>> client.transitions.return_value = [{"id": "701", "name": "Close Issue"}]
+    >>> output = run_revert(["skip", "y"])
+    >>> "No Reopen Issue transition available for SPARK-1234; reopen it manually." in output
+    True
+    >>> client.transition_issue.assert_not_called()
+
+    Lookup and transition failures are nonfatal and request manual reopening.
+
+    >>> client.transitions.side_effect = RuntimeError("lookup failed")
+    >>> output = run_revert(["skip", "y"])
+    >>> "Failed to reopen SPARK-1234; reopen it manually: lookup failed" in output
+    True
+    >>> client.transition_issue.assert_not_called()
+    >>> client.transitions.side_effect = None
+    >>> client.transitions.return_value = [{"id": "3", "name": "Reopen Issue"}]
+    >>> client.transition_issue.side_effect = RuntimeError("permission denied")
+    >>> output = run_revert(["skip", "y"])
+    >>> "Failed to reopen SPARK-1234; reopen it manually: permission denied" in output
+    True
+    >>> client.transition_issue.assert_called_once_with("SPARK-1234", "3")
+    >>> client.transition_issue.side_effect = None
+
+    Active tickets require no reopening prompt or transition lookup.
+
+    >>> issue.fields.fixVersions = []
+    >>> for status in ("Open", "In Progress", "Reopened"):
+    ...     issue.fields.status.name = status
+    ...     output = run_revert([])
+    ...     client.transitions.assert_not_called()
+    ...     client.transition_issue.assert_not_called()
     """,
     "update_jira_for_revert": """
     Reverts update each referenced JIRA once and bypass the resolve/add path.
@@ -2715,37 +2819,37 @@ __test__ = {
     >>> from contextlib import redirect_stdout
     >>> from io import StringIO
     >>> from unittest.mock import Mock, call, patch
-    >>> remover, resolver, confirm = Mock(), Mock(), Mock()
+    >>> reverter, resolver, confirm = Mock(), Mock(), Mock()
     >>> def update(title, branches, is_revert=False):
-    ...     remover.reset_mock()
+    ...     reverter.reset_mock()
     ...     resolver.reset_mock()
     ...     confirm.reset_mock()
     ...     with (
-    ...         patch.dict(update_jira_for_pr.__globals__, remove_jira_fix_versions=remover,
+    ...         patch.dict(update_jira_for_pr.__globals__, revert_jira_issue=reverter,
     ...                    resolve_jira_issues=resolver, continue_maybe=confirm),
     ...         redirect_stdout(StringIO()),
     ...     ):
     ...         update_jira_for_pr("123", title, branches, [], is_revert=is_revert)
     >>> title = 'Revert "[SPARK-1234][SPARK-5678][SQL] Fix SPARK-1234"'
     >>> update(title, ["master", "branch-4.x"], is_revert=True)
-    >>> assert remover.call_args_list == [
+    >>> assert reverter.call_args_list == [
     ...     call(['master', 'branch-4.x'], 'SPARK-1234'),
     ...     call(['master', 'branch-4.x'], 'SPARK-5678')]
     >>> resolver.assert_not_called()
 
-    Backport-only runs use the same removal path. A missing JIRA id is entered interactively.
+    Backport-only runs use the same revert path. A missing JIRA id is entered interactively.
 
     >>> update('Revert "[SPARK-1234][SQL] Fix"', ["branch-4.2"], is_revert=True)
-    >>> remover.assert_called_once_with(["branch-4.2"], "SPARK-1234")
+    >>> reverter.assert_called_once_with(["branch-4.2"], "SPARK-1234")
     >>> update('Revert "Fix"', ["master"], is_revert=True)
-    >>> remover.assert_called_once_with(["master"], "")
+    >>> reverter.assert_called_once_with(["master"], "")
 
     Wrapped skip tags preserve the existing policy for MINOR, TRIVIAL, and FOLLOWUP changes.
 
     >>> for title in ('Revert "[MINOR][SQL] Fix"', 'Revert "[TRIVIAL][SQL] Fix"',
     ...               'Revert "[SPARK-1234][SQL][FOLLOWUP] Fix"'):
     ...     update(title, ["master"], is_revert=True)
-    ...     remover.assert_not_called()
+    ...     reverter.assert_not_called()
     ...     resolver.assert_not_called()
     ...     confirm.assert_not_called()
 
@@ -2753,7 +2857,7 @@ __test__ = {
 
     >>> for title in ('[SPARK-1234][SQL] Fix', 'Reapply "[SPARK-1234][SQL] Fix"'):
     ...     update(title, ["master"])
-    ...     remover.assert_not_called()
+    ...     reverter.assert_not_called()
     ...     resolver.assert_called_once_with(
     ...         title, ["master"],
     ...         "Issue resolved by pull request 123\\n[https://github.com/apache/spark/pull/123]",
