@@ -87,6 +87,15 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   protected ParquetRowGroupReader reader;
 
+  /**
+   * The Parquet reader {@link #reader} wraps, or null when a {@link ParquetRowGroupReader} was
+   * handed in rather than built here, which no file reader stands behind. Late materialization
+   * drives it directly, for the APIs a row-group reader does not describe:
+   * {@code setRequestedSchema}, {@code getRowRanges(int)} and
+   * {@code readFilteredRowGroup(int, RowRanges)}. The wrapper owns it and closes it.
+   */
+  protected ParquetFileReader fileReader;
+
   protected Configuration configuration;
 
   @Override
@@ -108,7 +117,6 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
         .builder(configuration, file)
         .withRange(split.getStart(), split.getStart() + split.getLength())
         .build();
-    ParquetFileReader fileReader;
     if (inputFile.isDefined() && fileFooter.isDefined() && inputStream.isDefined()) {
       fileReader = new ParquetFileReader(
           inputFile.get(), fileFooter.get(), options, inputStream.get());
@@ -180,7 +188,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       .builder(configuration, file)
       .withRange(0, length)
       .build();
-    ParquetFileReader fileReader = ParquetFileReader.open(
+    fileReader = ParquetFileReader.open(
       HadoopInputFile.fromPath(file, configuration), options);
     this.reader = new ParquetRowGroupReaderImpl(fileReader);
     this.fileSchema = fileReader.getFooter().getFileMetaData().getSchema();
@@ -278,16 +286,6 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
      * Reads the next row group from this reader. Returns null if there is no more row group.
      */
     PageReadStore readNextRowGroup() throws IOException;
-
-    /**
-     * Returns the underlying {@link ParquetFileReader}, or null if this reader does not wrap one
-     * (e.g. test implementations). Callers can use this to access lower-level APIs such as
-     * {@code setRequestedSchema}, {@code readRowGroup(int)} and
-     * {@code readFilteredRowGroup(int, RowRanges)} which are needed for late materialization.
-     */
-    default ParquetFileReader getUnderlyingReader() {
-      return null;
-    }
   }
 
   private static class ParquetRowGroupReaderImpl implements ParquetRowGroupReader {
@@ -300,11 +298,6 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     @Override
     public PageReadStore readNextRowGroup() throws IOException {
       return reader.readNextFilteredRowGroup();
-    }
-
-    @Override
-    public ParquetFileReader getUnderlyingReader() {
-      return reader;
     }
 
     @Override

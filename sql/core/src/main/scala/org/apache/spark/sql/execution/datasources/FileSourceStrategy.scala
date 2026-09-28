@@ -201,11 +201,11 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
     // would answer about an expression it will never be given.
     val offered = afterScanFilters.toSeq.filter { expr =>
       val refs = expr.references
-      expr.deterministic && refs.nonEmpty && refs.forall(dataAttrs.contains) &&
+      expr.deterministic && refs.nonEmpty && refs.subsetOf(dataAttrs) &&
         fsRelation.fileFormat.supportsStorageFilter(expr)
     }
     val storageKeyAttrs = AttributeSet(offered.flatMap(_.references))
-    if (readDataColumns.forall(storageKeyAttrs.contains)) Nil else offered
+    if (dataAttrs.subsetOf(storageKeyAttrs)) Nil else offered
   }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {

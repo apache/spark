@@ -23,6 +23,7 @@ import java.util.PrimitiveIterator
 import scala.jdk.CollectionConverters._
 
 import org.apache.parquet.bytes.ByteBufferInputStream
+import org.apache.parquet.filter2.columnindex.RowRanges
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.datasources.parquet.VectorizedRleValuesReaderTestUtils._
@@ -112,13 +113,13 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
     runAndAssert(defLevels, maxDef = 0, batchSize = 64, withDefLevels = false)
   }
 
-  test("PACKED: row-index filtering with contiguous included range") {
+  test("PACKED: row filtering with contiguous included range") {
     val n = 256
     val defLevels = Array.tabulate(n)(i => i & 1)
     runAndAssertFiltered(defLevels, maxDef = 1, includedPositions = (50 to 200).toArray)
   }
 
-  test("PACKED: row-index filtering with multiple disjoint ranges") {
+  test("PACKED: row filtering with multiple disjoint ranges") {
     val n = 256
     val defLevels = Array.tabulate(n)(i => if ((i / 3) % 2 == 0) 0 else 1)
     val included = ((10 to 30) ++ (80 to 120) ++ (200 to 240)).toArray
@@ -261,14 +262,30 @@ private object VectorizedRleValuesReaderSuite {
   }
 
   /**
-   * Variant of `runAndAssert` that passes a `rowIndexes` iterator so the reader only emits
-   * rows at the listed positions. Verifies that skipped value positions advance the value
-   * reader correctly and that included rows map to the expected values in order.
+   * Variant of `runAndAssert` that restricts the read to the listed positions, both ways a read
+   * state can be told which rows to include: one row index per row, which is what parquet hands out
+   * for filtering it did itself, and the ranges those positions form, which is what a reader that
+   * filtered them already holds. Both must include the same rows. Verifies that skipped value
+   * positions advance the value reader correctly and that included rows map to the expected values
+   * in order.
    */
   private def runAndAssertFiltered(
       defLevels: Array[Int],
       maxDef: Int,
       includedPositions: Array[Int]): Unit = {
+    readFilteredAndAssert(defLevels, maxDef, includedPositions,
+      ParquetTestAccess.newState(
+        intColumnDescriptor(maxDef), maxDef == 0, longIterator(includedPositions)))
+    readFilteredAndAssert(defLevels, maxDef, includedPositions,
+      ParquetTestAccess.newState(
+        intColumnDescriptor(maxDef), maxDef == 0, rowRanges = rowRangesOf(includedPositions)))
+  }
+
+  private def readFilteredAndAssert(
+      defLevels: Array[Int],
+      maxDef: Int,
+      includedPositions: Array[Int],
+      state: AnyRef): Unit = {
     val n = defLevels.length
     val bitWidth = if (maxDef == 0) 0 else 32 - Integer.numberOfLeadingZeros(maxDef)
     val encoded = if (bitWidth == 0) Array.emptyByteArray else encodeRle(defLevels, bitWidth)
@@ -280,8 +297,6 @@ private object VectorizedRleValuesReaderSuite {
     val valueReader = new VectorizedPlainValuesReader
     valueReader.initFromPage(
       nonNullCount, ByteBufferInputStream.wrap(ByteBuffer.wrap(plainBytes)))
-    val state = ParquetTestAccess.newState(
-      intColumnDescriptor(maxDef), maxDef == 0, longIterator(includedPositions))
     ParquetTestAccess.resetForNewPage(state, n, 0L)
 
     val size = includedPositions.length
@@ -368,4 +383,11 @@ private object VectorizedRleValuesReaderSuite {
       override def hasNext: Boolean = idx < values.length
       override def nextLong(): Long = { val v = values(idx).toLong; idx += 1; v }
     }
+
+  /** The ranges the given ascending positions form, coalesced by the builder. */
+  private def rowRangesOf(positions: Array[Int]): RowRanges = {
+    val builder = RowRanges.builder()
+    positions.foreach(p => builder.addSelectedRow(p.toLong))
+    builder.build()
+  }
 }

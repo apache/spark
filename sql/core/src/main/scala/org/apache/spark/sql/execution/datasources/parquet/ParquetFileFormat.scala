@@ -50,7 +50,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, Re
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.internal.SQLConf._
@@ -213,18 +213,8 @@ class ParquetFileFormat
     ParquetStorageFilter.isSupportedStorageFilter(expr)
 
   /** See `StorageFilterMetrics` for what each of these counts. */
-  override def storageFilterMetrics(sparkContext: SparkContext): Map[String, SQLMetric] = Map(
-    ParquetFileFormat.STORAGE_FILTER_ROW_GROUPS_SKIPPED ->
-      SQLMetrics.createMetric(sparkContext, "row groups skipped by storage filter"),
-    ParquetFileFormat.STORAGE_FILTER_ROWS_EXCLUDED_BY_ROW_GROUP ->
-      SQLMetrics.createMetric(sparkContext, "rows excluded by storage filter (whole row group)"),
-    ParquetFileFormat.STORAGE_FILTER_ROWS_EXCLUDED_WITHIN_ROW_GROUP ->
-      SQLMetrics.createMetric(sparkContext, "rows excluded by storage filter (within row group)"),
-    ParquetFileFormat.STORAGE_FILTER_BYTES_AVOIDED_BY_ROW_GROUP ->
-      SQLMetrics.createSizeMetric(
-        sparkContext, "bytes avoided by storage filter (whole row group)"),
-    ParquetFileFormat.STORAGE_FILTER_BYTES_AVOIDED_BY_PAGE_FILTERING ->
-      SQLMetrics.createSizeMetric(sparkContext, "bytes avoided by storage filter (page filtering)"))
+  override def storageFilterMetrics(sparkContext: SparkContext): Map[String, SQLMetric] =
+    StorageFilterMetrics.create(sparkContext).toMap
 
   override def buildReaderWithStorageFilters(
       sparkSession: SparkSession,
@@ -310,20 +300,10 @@ class ParquetFileFormat
         log"${MDC(SCHEMA, resultSchema.catalogString)}: the vectorized Parquet reader is disabled")
       None
     } else {
-      val metrics = StorageFilterMetrics(
-        rowGroupsSkipped =
-          storageFilterMetrics(ParquetFileFormat.STORAGE_FILTER_ROW_GROUPS_SKIPPED),
-        rowsExcludedByRowGroup =
-          storageFilterMetrics(ParquetFileFormat.STORAGE_FILTER_ROWS_EXCLUDED_BY_ROW_GROUP),
-        rowsExcludedWithinRowGroup =
-          storageFilterMetrics(ParquetFileFormat.STORAGE_FILTER_ROWS_EXCLUDED_WITHIN_ROW_GROUP),
-        bytesAvoidedByRowGroup =
-          storageFilterMetrics(ParquetFileFormat.STORAGE_FILTER_BYTES_AVOIDED_BY_ROW_GROUP),
-        bytesAvoidedByPageFiltering =
-          storageFilterMetrics(ParquetFileFormat.STORAGE_FILTER_BYTES_AVOIDED_BY_PAGE_FILTERING))
       // `create` requires every condition storageFiltersFor already pre-checked, so a violation
       // is a planner bug rather than something to work around here.
-      Some(ParquetStorageFilter.create(storageFilters, requiredSchema, metrics,
+      Some(ParquetStorageFilter.create(storageFilters, requiredSchema,
+        StorageFilterMetrics.fromMap(storageFilterMetrics),
         sqlConf.parquetStorageFilterPushdownMaxSplicedRowGroupBytes))
     }
 
@@ -588,14 +568,6 @@ class ParquetFileFormat
 
 object ParquetFileFormat extends Logging {
   val ROW_INDEX = "row_index"
-
-  // The keys the five storage-filter metrics are exposed under. They live here rather than in the
-  // scan, because what they count is this reader's vocabulary.
-  val STORAGE_FILTER_ROW_GROUPS_SKIPPED = "storageFilterRowGroupsSkipped"
-  val STORAGE_FILTER_ROWS_EXCLUDED_BY_ROW_GROUP = "storageFilterRowsExcludedByRowGroup"
-  val STORAGE_FILTER_ROWS_EXCLUDED_WITHIN_ROW_GROUP = "storageFilterRowsExcludedWithinRowGroup"
-  val STORAGE_FILTER_BYTES_AVOIDED_BY_ROW_GROUP = "storageFilterBytesAvoidedByRowGroup"
-  val STORAGE_FILTER_BYTES_AVOIDED_BY_PAGE_FILTERING = "storageFilterBytesAvoidedByPageFiltering"
 
   // A name for a temporary column that holds row indexes computed by the file format reader
   // until they can be placed in the _metadata struct.

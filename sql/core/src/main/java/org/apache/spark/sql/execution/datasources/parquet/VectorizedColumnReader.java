@@ -32,6 +32,7 @@ import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.page.*;
 import org.apache.parquet.column.values.RequiresPreviousReader;
 import org.apache.parquet.column.values.ValuesReader;
+import org.apache.parquet.filter2.columnindex.RowRanges;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
@@ -106,6 +107,7 @@ public class VectorizedColumnReader {
       ColumnDescriptor descriptor,
       boolean isRequired,
       PageReadStore pageReadStore,
+      RowRanges rowRanges,
       ZoneId convertTz,
       String datetimeRebaseMode,
       String datetimeRebaseTz,
@@ -114,8 +116,8 @@ public class VectorizedColumnReader {
       ParsedVersion writerVersion) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReadStore.getPageReader(descriptor);
-    this.readState = new ParquetReadState(descriptor, isRequired,
-      pageReadStore.getRowIndexes().orElse(null));
+    this.readState = ParquetReadState.forRead(
+      descriptor, isRequired, rowRanges, pageReadStore.getRowIndexes().orElse(null));
     this.logicalTypeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
     this.updaterFactory = new ParquetVectorUpdaterFactory(
       logicalTypeAnnotation,

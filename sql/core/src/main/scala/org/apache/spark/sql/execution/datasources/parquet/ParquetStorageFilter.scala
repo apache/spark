@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, BasePredicate, BloomFilterMightContain, BoundReference, Expression, Predicate}
-import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, TimeType, YearMonthIntervalType}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * The SQL metrics the reader updates while applying a [[ParquetStorageFilter]], created by
@@ -42,16 +43,57 @@ import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, 
  * excluded inside a kept row group may have been read as part of a page that held a survivor, or
  * not read at all because phase 2 skipped its page. An all-keys projection has no page filtering at
  * all, and [[rowsExcludedWithinRowGroup]] still counts every row the filter dropped.
- *
- * The byte counters are not only reported: the reader decides from them whether narrowing a row
- * group is worth it at all, which is why none of these is optional.
  */
 case class StorageFilterMetrics(
     rowGroupsSkipped: SQLMetric,
     rowsExcludedByRowGroup: SQLMetric,
     rowsExcludedWithinRowGroup: SQLMetric,
     bytesAvoidedByRowGroup: SQLMetric,
-    bytesAvoidedByPageFiltering: SQLMetric)
+    bytesAvoidedByPageFiltering: SQLMetric) {
+
+  /** These counters keyed for the scan, which carries them without naming any of them. */
+  def toMap: Map[String, SQLMetric] = Map(
+    StorageFilterMetrics.ROW_GROUPS_SKIPPED -> rowGroupsSkipped,
+    StorageFilterMetrics.ROWS_EXCLUDED_BY_ROW_GROUP -> rowsExcludedByRowGroup,
+    StorageFilterMetrics.ROWS_EXCLUDED_WITHIN_ROW_GROUP -> rowsExcludedWithinRowGroup,
+    StorageFilterMetrics.BYTES_AVOIDED_BY_ROW_GROUP -> bytesAvoidedByRowGroup,
+    StorageFilterMetrics.BYTES_AVOIDED_BY_PAGE_FILTERING -> bytesAvoidedByPageFiltering)
+}
+
+object StorageFilterMetrics {
+
+  // The keys these counters are exposed under, next to the fields they name. What they count is
+  // this reader's vocabulary, which is why the format creates them rather than the scan.
+  val ROW_GROUPS_SKIPPED = "storageFilterRowGroupsSkipped"
+  val ROWS_EXCLUDED_BY_ROW_GROUP = "storageFilterRowsExcludedByRowGroup"
+  val ROWS_EXCLUDED_WITHIN_ROW_GROUP = "storageFilterRowsExcludedWithinRowGroup"
+  val BYTES_AVOIDED_BY_ROW_GROUP = "storageFilterBytesAvoidedByRowGroup"
+  val BYTES_AVOIDED_BY_PAGE_FILTERING = "storageFilterBytesAvoidedByPageFiltering"
+
+  /** A fresh set of counters, with the labels the SQL UI shows. */
+  def create(sparkContext: SparkContext): StorageFilterMetrics = StorageFilterMetrics(
+    rowGroupsSkipped =
+      SQLMetrics.createMetric(sparkContext, "row groups skipped by storage filter"),
+    rowsExcludedByRowGroup =
+      SQLMetrics.createMetric(sparkContext, "rows excluded by storage filter (whole row group)"),
+    rowsExcludedWithinRowGroup =
+      SQLMetrics.createMetric(sparkContext, "rows excluded by storage filter (within row group)"),
+    bytesAvoidedByRowGroup = SQLMetrics.createSizeMetric(
+      sparkContext, "bytes avoided by storage filter (whole row group)"),
+    bytesAvoidedByPageFiltering = SQLMetrics.createSizeMetric(
+      sparkContext, "bytes avoided by storage filter (page filtering)"))
+
+  /**
+   * The counters the scan carries back, which are the ones [[create]] made: the map is this
+   * format's own transport, and a scan with storage filters on a Parquet relation has no other.
+   */
+  def fromMap(metrics: Map[String, SQLMetric]): StorageFilterMetrics = StorageFilterMetrics(
+    rowGroupsSkipped = metrics(ROW_GROUPS_SKIPPED),
+    rowsExcludedByRowGroup = metrics(ROWS_EXCLUDED_BY_ROW_GROUP),
+    rowsExcludedWithinRowGroup = metrics(ROWS_EXCLUDED_WITHIN_ROW_GROUP),
+    bytesAvoidedByRowGroup = metrics(BYTES_AVOIDED_BY_ROW_GROUP),
+    bytesAvoidedByPageFiltering = metrics(BYTES_AVOIDED_BY_PAGE_FILTERING))
+}
 
 /**
  * A runtime filter that the vectorized Parquet reader uses to drive late materialization: read
@@ -59,19 +101,32 @@ case class StorageFilterMetrics(
  * data-column pages that do not overlap any surviving row range.
  *
  * [[keyColumnIndices]] are indices into the scan's requested data schema identifying the leaf
- * columns referenced by the filter. [[boundExpression]] has its references rewritten to
- * [[BoundReference]]s pointing at positions 0..(keyColumnIndices.length - 1); the reader must
- * evaluate it against rows whose fields correspond to those key columns in that order.
+ * columns referenced by the filter. [[test]] expects a row whose fields are those key columns in
+ * that order: the predicate's references are rewritten to [[BoundReference]]s pointing at positions
+ * 0..(keyColumnIndices.length - 1) when the filter is built.
  */
 class ParquetStorageFilter private (
     val keyColumnIndices: Array[Int],
-    val boundExpression: Expression,
+    private var boundExpression: Expression,
     val metrics: StorageFilterMetrics,
     val maxSplicedRowGroupBytes: Long) extends Serializable {
 
   // Codegen-produced predicates can be awkward to serialize from driver to executor, so we defer
   // construction to first use on the executor.
-  @transient private lazy val predicate: BasePredicate = Predicate.create(boundExpression)
+  @transient private lazy val predicate: BasePredicate = {
+    val created = Predicate.create(boundExpression)
+    // A prepared bloom reaches the executor as a binary Literal inside this expression, up to
+    // `spark.sql.optimizer.runtime.bloomFilter.maxNumBits` of it, while `created` holds the
+    // deserialized filter instead. Dropping the expression lets the task reclaim those bytes for
+    // the rest of its life. Safe because every task attempt deserializes its own copy from the
+    // driver's bytes, and this lazy val is the only reader of the field.
+    //
+    // It does mean the filter must only ever be evaluated on an executor. Were the driver's copy
+    // to run this, it is the copy serialized to every attempt, and it would go out with nothing
+    // left to build a predicate from.
+    boundExpression = null
+    created
+  }
 
   def test(keyRow: InternalRow): Boolean = predicate.eval(keyRow)
 }
@@ -112,12 +167,16 @@ object ParquetStorageFilter {
       s"storage filter ${expr.prettyName} references ordinals " +
         s"${originalOrdinals.mkString("[", ", ", "]")} outside the ${requestedSchema.length} " +
         s"fields of ${requestedSchema.catalogString}")
-    val unsupported = originalOrdinals.map(requestedSchema.fields(_))
-      .filterNot(field => isSupportedKeyType(field.dataType))
+    val keyFields = originalOrdinals.map(requestedSchema.fields(_))
+    val unsupported = keyFields.filterNot(field => isSupportedKeyType(field.dataType))
     require(unsupported.isEmpty,
       "storage filter key columns must have a type the vectorized reader can copy, but " +
         unsupported.map(f => s"${f.name} ${f.dataType.catalogString}").mkString(", ") +
         " do not; see ParquetStorageFilter.isSupportedKeyType")
+    require(!keyFields.exists(_.name == ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME),
+      "a storage filter must not have a key column named " +
+        s"${ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME}: the reader writes row indexes " +
+        "over that column, so what it reads back depends on how its row group was read")
 
     val indexMap = originalOrdinals.zipWithIndex.toMap
     val remapped = expr.transform {
@@ -128,32 +187,12 @@ object ParquetStorageFilter {
   }
 
   /**
-   * Whether `dt` is usable as a storage-filter key column type. This is the single authority on
-   * that: [[isSupportedStorageFilter]] consults it for what the planner asks, and [[create]]
-   * re-checks it, so the reader's per-type value copier
-   * (`VectorizedParquetRecordReader.copierFor`) is only ever asked for a type listed here. Adding
-   * a type here without teaching `copierFor` about it turns a planning-time rejection into a task
-   * failure.
-   *
-   * Narrower than `AtomicType`, for two different reasons:
-   *  - `VariantType` cannot be supported: its Parquet representation is a group, not a primitive
-   *    leaf, so phase 1 has nothing flat to read it into. (It is unreachable anyway, since
-   *    `HashExpression.checkInputDataTypes` rejects variant, so no bloom can be built on one.)
-   *  - `GeometryType` and `GeographyType` could be supported. Both map to a primitive Parquet
-   *    BINARY and both are handled by `WritableColumnVector.isArray`, so the existing byte-array
-   *    copier would work. But no bloom can currently reference them: `HashExpression`'s codegen
-   *    type dispatch has no case for either, so hashing one fails at codegen. They are left out
-   *    until something can actually produce such a filter.
+   * Whether `dt` is usable as a storage-filter key column type, which is whether the reader's
+   * per-type value copier handles it. [[isSupportedStorageFilter]] asks this for the planner and
+   * [[create]] re-checks it, so `ValueCopier` is only ever asked for a type it has. It is the one
+   * list: see `ValueCopier` for which types are in it and why.
    */
-  def isSupportedKeyType(dt: DataType): Boolean = dt match {
-    case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType | _: LongType => true
-    case _: FloatType | _: DoubleType | _: DecimalType => true
-    case _: DateType | _: TimestampType | _: TimestampNTZType | _: TimeType => true
-    case _: YearMonthIntervalType | _: DayTimeIntervalType => true
-    // StringType also covers CharType and VarcharType, which extend it.
-    case _: StringType | _: BinaryType => true
-    case _ => false
-  }
+  def isSupportedKeyType(dt: DataType): Boolean = ValueCopier.supports(dt)
 
   /**
    * Whether the reader can evaluate `expr` as a storage filter, which is what

@@ -22,6 +22,7 @@ import java.time.ZoneId
 import java.util.PrimitiveIterator
 
 import org.apache.parquet.column.ColumnDescriptor
+import org.apache.parquet.filter2.columnindex.RowRanges
 import org.apache.parquet.schema.LogicalTypeAnnotation
 
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
@@ -35,7 +36,7 @@ import org.apache.spark.util.SparkClassUtils
  * without widening production visibility.
  *
  * Currently bridges:
- *   - `ParquetReadState` (constructor + `resetForNewBatch` + `resetForNewPage`)
+ *   - `ParquetReadState` (its factory + `resetForNewBatch` + `resetForNewPage`)
  *   - `VectorizedRleValuesReader.readBatch` (5-arg overload not exposed publicly)
  *   - `ParquetVectorUpdaterFactory` (constructor)
  *   - `VectorizedDeltaByteArrayReader` (no-arg constructor)
@@ -48,13 +49,15 @@ object ParquetTestAccess {
   private val stateCls = SparkClassUtils.classForName[Any](
     "org.apache.spark.sql.execution.datasources.parquet.ParquetReadState")
 
-  private val stateCtor = {
-    val c = stateCls.getDeclaredConstructor(
+  private val stateForRead = {
+    val m = stateCls.getDeclaredMethod(
+      "forRead",
       classOf[ColumnDescriptor],
       java.lang.Boolean.TYPE,
+      classOf[RowRanges],
       classOf[PrimitiveIterator.OfLong])
-    c.setAccessible(true)
-    c
+    m.setAccessible(true)
+    m
   }
 
   private val resetForNewBatchMethod = {
@@ -79,15 +82,18 @@ object ParquetTestAccess {
       .getOrElse(throw new NoSuchMethodException(
         "VectorizedRleValuesReader.readBatch/5"))
 
+  /**
+   * A read state over `descriptor`, told which rows to include the same way production tells it: as
+   * ranges when the caller holds them, else as the row indexes a page store handed out, else not at
+   * all, which means every row of the chunk.
+   */
   def newState(
       descriptor: ColumnDescriptor,
       isRequired: Boolean,
-      rowIndexes: PrimitiveIterator.OfLong = null): AnyRef = {
+      rowIndexes: PrimitiveIterator.OfLong = null,
+      rowRanges: RowRanges = null): AnyRef = {
     try {
-      stateCtor.newInstance(
-        descriptor,
-        Boolean.box(isRequired),
-        rowIndexes).asInstanceOf[AnyRef]
+      stateForRead.invoke(null, descriptor, Boolean.box(isRequired), rowRanges, rowIndexes)
     } catch {
       case e: ReflectiveOperationException => throw rethrow(e)
     }

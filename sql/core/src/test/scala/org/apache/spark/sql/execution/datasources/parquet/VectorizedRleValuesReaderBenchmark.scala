@@ -91,7 +91,7 @@ object VectorizedRleValuesReaderBenchmark extends BenchmarkBase {
     state
   }
 
-  // State variant with a fresh row-index iterator. `rowRanges` inside ParquetReadState is
+  // State variant with a fresh row-index iterator. The row indexes inside ParquetReadState are
   // iterated forward and never reset, so Group E measurements must construct a new state per
   // benchmark iteration. The iterator is built from `indexFactory` on each call.
   private def newReadStateWithRowIndexes(
