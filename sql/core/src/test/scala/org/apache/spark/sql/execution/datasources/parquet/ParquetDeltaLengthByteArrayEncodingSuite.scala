@@ -108,33 +108,37 @@ class ParquetDeltaLengthByteArrayEncodingSuite
     }
   }
 
-  test("value lengths larger than the rest of the page are rejected") {
-    // The second value claims 100 bytes but only 2 bytes are left in the page.
-    val e = intercept[ParquetDecodingException] {
-      reader.initFromPage(2, craftPage(lengths = Array(2, 100), data = "abcd"))
+  testWithStreams("value lengths larger than the rest of the page are rejected") { craftPage =>
+    // The second value claims more bytes than are left in the page. Int.MaxValue checks that the
+    // lengths are rejected before anything is allocated for them.
+    Seq(100, Int.MaxValue).foreach { len =>
+      val e = intercept[ParquetDecodingException] {
+        new VectorizedDeltaLengthByteArrayReader().initFromPage(2, craftPage(Array(2, len), "abcd"))
+      }
+      assert(e.getMessage.contains(
+        s"value lengths add up to ${2L + len} bytes, but only 4 are left"))
     }
-    assert(e.getMessage.contains("value lengths add up to 102 bytes, but only 4 are left"))
   }
 
-  test("negative value length is rejected") {
+  testWithStreams("negative value length is rejected") { craftPage =>
     val e = intercept[ParquetDecodingException] {
-      reader.initFromPage(3, craftPage(lengths = Array(2, -1, 3), data = "abcd"))
+      reader.initFromPage(3, craftPage(Array(2, -1, 3), "abcd"))
     }
     assert(e.getMessage.contains("negative value length: -1"))
   }
 
-  test("more value lengths than values in the page are rejected") {
+  testWithStreams("more value lengths than values in the page are rejected") { craftPage =>
     val e = intercept[ParquetDecodingException] {
-      reader.initFromPage(2, craftPage(lengths = Array(1, 1, 1), data = "abc"))
+      reader.initFromPage(2, craftPage(Array(1, 1, 1), "abc"))
     }
     assert(e.getMessage.contains("3 value lengths in a page of 2 values"))
   }
 
-  test("rows without a decoded value length are rejected") {
+  testWithStreams("rows without a decoded value length are rejected") { craftPage =>
     // The page has 3 values but only 2 value lengths, so the third row has no length.
     def newReader(): VectorizedDeltaLengthByteArrayReader = {
       val r = new VectorizedDeltaLengthByteArrayReader()
-      r.initFromPage(3, craftPage(lengths = Array(2, 2), data = "abcd"))
+      r.initFromPage(3, craftPage(Array(2, 2), "abcd"))
       r
     }
     val expected = "reading 3 values from row 0, but only 2 value lengths were decoded"
@@ -159,10 +163,9 @@ class ParquetDeltaLengthByteArrayEncodingSuite
   }
 
   testGeo("geo path rejects rows without a decoded value length") { geoType =>
-    val wkb = makePointWkb(1, 1)
-    val is = BytesInput.concat(
-      lengthsInput(Array(wkb.length)), BytesInput.from(wkb)).toInputStream
-    reader.initFromPage(2, is)
+    // A valid one-value page, read as a page of 2 values.
+    writeBinaryData(writer, Array(makePointWkb(1, 1)))
+    reader.initFromPage(2, writer.getBytes.toInputStream)
     val v = new OnHeapColumnVector(2, geoType)
     val e = intercept[ParquetDecodingException] {
       geoType match {
@@ -232,19 +235,27 @@ class ParquetDeltaLengthByteArrayEncodingSuite
     }
   }
 
-  /** Builds a raw DELTA_LENGTH_BYTE_ARRAY page from explicit lengths and value bytes. */
-  private def craftPage(lengths: Array[Int], data: String): ByteBufferInputStream = {
-    BytesInput.concat(
-      lengthsInput(lengths),
-      BytesInput.from(data.getBytes(StandardCharsets.UTF_8))).toInputStream
-  }
-
-  /** Encodes value lengths with DELTA_BINARY_PACKED, as in a DELTA_LENGTH_BYTE_ARRAY page. */
-  private def lengthsInput(lengths: Array[Int]): BytesInput = {
-    val lengthWriter = new DeltaBinaryPackingValuesWriterForInteger(
-      128, 4, 64 * 1024, 64 * 1024, new DirectByteBufferAllocator)
-    lengths.foreach(lengthWriter.writeInteger)
-    lengthWriter.getBytes
+  /**
+   * Runs `testFun` with a function that builds a raw DELTA_LENGTH_BYTE_ARRAY page from explicit
+   * value lengths and value bytes, once held in a single buffer and once split across multiple
+   * buffers, since `SingleBufferInputStream` and `MultiBufferInputStream` handle short and
+   * negative lengths differently.
+   */
+  private def testWithStreams(testName: String)(
+      testFun: ((Array[Int], String) => ByteBufferInputStream) => Unit): Unit = {
+    Seq("single buffer" -> false, "multiple buffers" -> true).foreach { case (name, split) =>
+      test(s"$testName ($name)") {
+        testFun { (lengths, data) =>
+          val lengthWriter = new DeltaBinaryPackingValuesWriterForInteger(
+            128, 4, 64 * 1024, 64 * 1024, new DirectByteBufferAllocator)
+          lengths.foreach(lengthWriter.writeInteger)
+          val bytes = BytesInput.concat(
+            lengthWriter.getBytes,
+            BytesInput.from(data.getBytes(StandardCharsets.UTF_8))).toByteArray
+          VectorizedPlainValuesReaderSuite.toStream(bytes, split)
+        }
+      }
+    }
   }
 
   private def writeData(writer: DeltaLengthByteArrayValuesWriter, values: Array[String]): Unit = {

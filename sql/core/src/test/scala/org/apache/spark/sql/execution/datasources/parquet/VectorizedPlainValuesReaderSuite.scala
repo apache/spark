@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.parquet.bytes.ByteBufferInputStream
 import org.apache.parquet.io.ParquetDecodingException
 
@@ -33,7 +35,9 @@ import org.apache.spark.sql.types.{GeographyType, GeometryType, StringType}
  */
 class VectorizedPlainValuesReaderSuite extends SparkFunSuite {
 
-  test("negative binary length is rejected when reading") {
+  import VectorizedPlainValuesReaderSuite._
+
+  testWithStreams("negative binary length is rejected when reading") { newReader =>
     val reader = newReader(page(4, "abcd", -1, "zzzz"))
     val v = new OnHeapColumnVector(2, StringType)
     val e = intercept[ParquetDecodingException] {
@@ -42,9 +46,9 @@ class VectorizedPlainValuesReaderSuite extends SparkFunSuite {
     assert(e.getMessage.contains("negative binary length: -1"))
   }
 
-  test("negative binary length is rejected when skipping") {
-    // Without the check, skipping the second value moved the position back to the start of
-    // the page, so the next read returned "abcd" again.
+  testWithStreams("negative binary length is rejected when skipping") { newReader =>
+    // Without the check, on a single buffer skipping the second value moved the position back
+    // to the start of the page, so the next read returned "abcd" again.
     val reader = newReader(page(4, "abcd", -12, "zzzz"))
     val v = new OnHeapColumnVector(1, StringType)
     reader.readBinary(1, v, 0)
@@ -54,19 +58,23 @@ class VectorizedPlainValuesReaderSuite extends SparkFunSuite {
     assert(e.getMessage.contains("negative binary length: -12"))
   }
 
-  test("binary length larger than the rest of the page is rejected") {
-    val expected = "binary length 100 is larger than the 2 bytes left in the page"
-    val e1 = intercept[ParquetDecodingException] {
-      newReader(page(100, "ab")).readBinary(1, new OnHeapColumnVector(1, StringType), 0)
+  testWithStreams("binary length larger than the rest of the page is rejected") { newReader =>
+    // Int.MaxValue checks that the length is rejected before anything is allocated for it: on
+    // multiple buffers, slice(len) allocates len bytes before it detects the end of the page.
+    Seq(100, Int.MaxValue).foreach { len =>
+      val expected = s"binary length $len is larger than the 2 bytes left in the page"
+      val e1 = intercept[ParquetDecodingException] {
+        newReader(page(len, "ab")).readBinary(1, new OnHeapColumnVector(1, StringType), 0)
+      }
+      assert(e1.getMessage.contains(expected))
+      val e2 = intercept[ParquetDecodingException] {
+        newReader(page(len, "ab")).skipBinary(1)
+      }
+      assert(e2.getMessage.contains(expected))
     }
-    assert(e1.getMessage.contains(expected))
-    val e2 = intercept[ParquetDecodingException] {
-      newReader(page(100, "ab")).skipBinary(1)
-    }
-    assert(e2.getMessage.contains(expected))
   }
 
-  test("geo paths reject invalid binary lengths") {
+  testWithStreams("geo paths reject invalid binary lengths") { newReader =>
     // The lengths are validated before the WKB is parsed, so the payload does not matter.
     Seq(GeometryType(0), GeographyType(4326)).foreach { geoType =>
       def read(bytes: Array[Byte]): Unit = {
@@ -85,7 +93,7 @@ class VectorizedPlainValuesReaderSuite extends SparkFunSuite {
     }
   }
 
-  test("fixed-width skips past the end of the page are rejected") {
+  testWithStreams("fixed-width skips past the end of the page are rejected") { newReader =>
     // An 8-byte page holds two 4-byte values or one 8-byte value.
     val eightBytes = page(1, 2)
     val cases: Seq[(String, VectorizedPlainValuesReader => Unit, Long)] = Seq(
@@ -106,7 +114,7 @@ class VectorizedPlainValuesReaderSuite extends SparkFunSuite {
     }
   }
 
-  test("skips within the page land on the next value") {
+  testWithStreams("skips within the page land on the next value") { newReader =>
     // Three binary values (including an empty one) followed by a sentinel int.
     val binaryReader = newReader(page(2, "ab", 0, 3, "cde", 7))
     binaryReader.skipBinary(3)
@@ -117,10 +125,22 @@ class VectorizedPlainValuesReaderSuite extends SparkFunSuite {
     assert(reader.readInteger() === 3)
   }
 
-  private def newReader(bytes: Array[Byte]): VectorizedPlainValuesReader = {
-    val reader = new VectorizedPlainValuesReader
-    reader.initFromPage(0, ByteBufferInputStream.wrap(ByteBuffer.wrap(bytes)))
-    reader
+  /**
+   * Runs `testFun` on a page held in a single buffer and on the same page split across multiple
+   * buffers, since `SingleBufferInputStream` and `MultiBufferInputStream` handle short and
+   * negative lengths differently.
+   */
+  private def testWithStreams(testName: String)(
+      testFun: (Array[Byte] => VectorizedPlainValuesReader) => Unit): Unit = {
+    Seq("single buffer" -> false, "multiple buffers" -> true).foreach { case (name, split) =>
+      test(s"$testName ($name)") {
+        testFun { bytes =>
+          val reader = new VectorizedPlainValuesReader
+          reader.initFromPage(0, toStream(bytes, split))
+          reader
+        }
+      }
+    }
   }
 
   /** Builds a PLAIN page from little-endian ints and raw UTF-8 strings. */
@@ -131,5 +151,22 @@ class VectorizedPlainValuesReaderSuite extends SparkFunSuite {
       case s: String => buf.put(s.getBytes(StandardCharsets.UTF_8))
     }
     java.util.Arrays.copyOf(buf.array(), buf.position())
+  }
+}
+
+object VectorizedPlainValuesReaderSuite {
+  /**
+   * Wraps `bytes` in a `ByteBufferInputStream`. With `split`, the bytes are split into 3-byte
+   * buffers, which are not aligned with the 4-byte length prefixes, so the stream is a
+   * `MultiBufferInputStream` and reads and skips cross buffer boundaries.
+   */
+  def toStream(bytes: Array[Byte], split: Boolean): ByteBufferInputStream = {
+    if (split) {
+      val buffers = bytes.grouped(3).map(ByteBuffer.wrap).toList
+      assert(buffers.length > 1, "the page must span multiple buffers")
+      ByteBufferInputStream.wrap(buffers.asJava)
+    } else {
+      ByteBufferInputStream.wrap(ByteBuffer.wrap(bytes))
+    }
   }
 }

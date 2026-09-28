@@ -38,8 +38,6 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
   private final VectorizedDeltaBinaryPackedReader lengthReader;
   private ByteBufferInputStream in;
   private WritableColumnVector lengthsVector;
-  // Number of value lengths decoded from the page, i.e. the number of rows that can be read.
-  private int lengthCount;
   private int currentRow = 0;
 
   VectorizedDeltaLengthByteArrayReader() {
@@ -50,7 +48,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
     lengthsVector = new OnHeapColumnVector(valueCount, IntegerType);
     lengthReader.initFromPage(valueCount, in);
-    lengthCount = lengthReader.getTotalValueCount();
+    int lengthCount = getTotalValueCount();
     if (lengthCount > valueCount) {
       throw new ParquetDecodingException("Corrupted DELTA_LENGTH_BYTE_ARRAY data: " +
           lengthCount + " value lengths in a page of " + valueCount + " values");
@@ -67,6 +65,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
    * left in the page, no read or skip of a value can run past the end of the page.
    */
   private void validateLengths() {
+    int lengthCount = getTotalValueCount();
     long totalLength = 0;
     for (int i = 0; i < lengthCount; i++) {
       int length = lengthsVector.getInt(i);
@@ -83,13 +82,17 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     }
   }
 
-  /** Returns the number of values in the page, i.e. the number of decoded value lengths. */
-  int getValueCount() {
-    return lengthCount;
+  /**
+   * True value count, i.e. the number of decoded value lengths. May be less than the
+   * `valueCount` passed to `initFromPage` because of nulls.
+   */
+  int getTotalValueCount() {
+    return lengthReader.getTotalValueCount();
   }
 
   /** Checks that the rows [startRow, startRow + total) have a decoded value length. */
   private void checkRows(int startRow, int total) {
+    int lengthCount = getTotalValueCount();
     if (startRow < 0 || (long) startRow + total > lengthCount) {
       throw new ParquetDecodingException("Corrupted DELTA_LENGTH_BYTE_ARRAY data: reading " +
           total + " values from row " + startRow + ", but only " + lengthCount +
@@ -166,11 +169,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     for (int i = 0; i < total; i++) {
       totalLength += lengthsVector.getInt(currentRow + i);
     }
-    try {
-      in.skipFully(totalLength);
-    } catch (IOException e) {
-      throw new ParquetDecodingException("Failed to skip " + totalLength + " bytes", e);
-    }
+    skipFully(in, totalLength);
     currentRow += total;
   }
 }

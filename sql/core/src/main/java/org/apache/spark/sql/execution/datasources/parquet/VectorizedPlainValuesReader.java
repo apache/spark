@@ -123,16 +123,9 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     }
   }
 
-  /**
-   * Skips exactly `n` bytes. `in.skip` silently skips fewer bytes when the page is too short,
-   * so a corrupt page must fail here, like `getBuffer` does on the read path.
-   */
+  /** Skips exactly `n` bytes, failing on a short page like `getBuffer` does on reads. */
   private void skipFully(long n) {
-    try {
-      in.skipFully(n);
-    } catch (IOException e) {
-      throw new ParquetDecodingException("Failed to skip " + n + " bytes", e);
-    }
+    VectorizedReaderBase.skipFully(in, n);
   }
 
   /**
