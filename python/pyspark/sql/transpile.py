@@ -35,6 +35,10 @@ keeps the option matrix small; prefer doing so. To bound plan growth,
 functions with more than three untyped parameters only emit the
 all-numeric and all-string variants.
 
+``len(s)`` lowers to Catalyst ``length`` for a string operand (SPARK-55214).
+Other ``len`` arguments (numbers, lists, ...) stay interpreted Python.
+``len(None)`` raises (via ``raise_error`` on NULL), matching CPython.
+
 A lambda is lowered only when its source names it directly and alone: bind it
 to a name (``f = lambda x: x + 1``, annotated if you like) and give it a line
 of its own. Passed straight to ``udf(...)``, wrapped in another call, returned
@@ -504,6 +508,15 @@ class CatalystTranspiler(AbstractTranspiler):
                     f"operands of `{type(op).__name__}` are not type-compatible "
                     "for this input-type variant"
                 )
+            case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
+                # ``len(s)`` is an int. Only strings are lowered (SPARK-55214);
+                # other argument categories raise so this variant is dropped.
+                if self._category(params, arg) != "string":
+                    raise UnsupportedOperationException(
+                        "`len` is only lowered for string operands; other "
+                        "types fall back to interpreted Python"
+                    )
+                return "numeric"
             case ast.Return(value=value) if value is not None:
                 return self._category(params, value)
             case ast.IfExp(body=if_body, orelse=if_orelse):
@@ -801,6 +814,26 @@ class CatalystTranspiler(AbstractTranspiler):
                         f"name {name!r} is not in the UDF's parameter list "
                         "and free variables / closures are not supported"
                     )
+            case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
+                # SPARK-55214: Python ``len`` on a str is the number of Unicode
+                # code points; Spark ``length`` on a string column is character
+                # length -- they match for well-formed UTF-8. ``len(None)``
+                # raises TypeError in Python, while Spark ``length(NULL)`` is
+                # NULL, so guard like value comparisons: raise on NULL, else
+                # ``length``. A caller that already proved non-null (``if x is
+                # not None: return len(x)``) takes the otherwise branch.
+                if self._category(params, arg) != "string":
+                    raise UnsupportedOperationException(
+                        "`len` is only lowered for string operands; other "
+                        "types fall back to interpreted Python"
+                    )
+                arg_col = self._convert_chunk(params, arg)
+                err = lit(
+                    "Python UDF transpiler: cannot call len() on NULL; "
+                    "Python would raise TypeError here. Add an "
+                    "`is not None` guard or filter NULLs upstream."
+                )
+                return when(arg_col.isNull(), raise_error(err)).otherwise(length(arg_col))
             case _:
                 raise UnsupportedOperationException(
                     f"AST node {type(body).__name__} is not supported by the "
