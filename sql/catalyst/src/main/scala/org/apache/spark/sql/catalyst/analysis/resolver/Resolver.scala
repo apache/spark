@@ -93,7 +93,8 @@ class Resolver(
     extends LogicalPlanResolver
     with ResolverMetricTracker
     with DelegatesResolutionToExtensions
-    with QueryErrorsBase {
+    with QueryErrorsBase
+    with RetainsOriginalJoinOutput {
   private val planLogger = new PlanLogger
   private val subqueryRegistry = new SubqueryRegistry
   private val scopes = new NameScopeStack(
@@ -238,9 +239,13 @@ class Resolver(
         recordProfile("resolve") {
           resolve(planAfterSubstitution)
         }
+      val resolvedPlanWithOriginalJoinOutput = retainOriginalJoinOutputAtBoundary(
+        plan = resolvedPlan,
+        outputExpressions = scopes.current.output
+      )
 
       recordProfile("rewrite") {
-        planRewriter.rewriteWithSubqueries(resolvedPlan)
+        planRewriter.rewriteWithSubqueries(resolvedPlanWithOriginalJoinOutput)
       }
     }
   }
@@ -390,7 +395,11 @@ class Resolver(
       cteRegistry.pushScope()
 
       val resolvedCtePlan = try {
-        resolve(cteRelation.plan)
+        val plan = resolve(cteRelation.plan)
+        retainOriginalJoinOutputAtBoundary(
+          plan = plan,
+          outputExpressions = scopes.current.output
+        )
       } finally {
         cteRegistry.popScope()
         scopes.popScope()
@@ -495,8 +504,13 @@ class Resolver(
    *  {{{ spark.sql("SELECT * FROM VALUES (1, 2)").select("col1").as("q1").select("col2"); }}}
    */
   private def resolveSubqueryAlias(unresolvedSubqueryAlias: SubqueryAlias): LogicalPlan = {
+    val resolvedChild = resolve(unresolvedSubqueryAlias.child)
+    val resolvedChildWithOriginalOutput = retainOriginalJoinOutputAtBoundary(
+      plan = resolvedChild,
+      outputExpressions = scopes.current.output
+    )
     val resolvedSubqueryAlias =
-      unresolvedSubqueryAlias.copy(child = resolve(unresolvedSubqueryAlias.child))
+      unresolvedSubqueryAlias.copy(child = resolvedChildWithOriginalOutput)
 
     val qualifier = resolvedSubqueryAlias.identifier.qualifier :+ resolvedSubqueryAlias.alias
     val output = scopes.current.output.map(attribute => attribute.withQualifier(qualifier))
@@ -650,7 +664,12 @@ class Resolver(
    * programs. In that case we simply recurse into the child plan.
    */
   private def handleResolvedCteRelationDef(cteRelationDef: CTERelationDef): LogicalPlan = {
-    cteRelationDef.copy(child = resolve(cteRelationDef.child))
+    val resolvedChild = resolve(cteRelationDef.child)
+    val resolvedChildWithOriginalOutput = retainOriginalJoinOutputAtBoundary(
+      plan = resolvedChild,
+      outputExpressions = scopes.current.output
+    )
+    cteRelationDef.copy(child = resolvedChildWithOriginalOutput)
   }
 
   /**

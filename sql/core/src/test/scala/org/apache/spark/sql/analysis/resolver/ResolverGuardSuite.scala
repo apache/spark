@@ -236,6 +236,75 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     val terminalSortByQuery =
       "VALUES (2, 20), (1, 10) AS t(a, b) |> SET a = -a SORT BY t.a"
     Seq(terminalOrderByQuery, terminalSortByQuery).foreach(query => checkResolverGuard(query))
+    val terminalJoinQuery =
+      "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 " +
+        "|> INNER JOIN VALUES (1, 20) AS u(c, d) ON t.a = u.c"
+    val terminalSemiJoinQuery =
+      "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 " +
+        "|> LEFT SEMI JOIN VALUES (2) AS u(c) ON a = u.c"
+    val terminalBoundaryCases = Seq(
+      (terminalJoinQuery, Array("a", "b", "c", "d"), Seq(Row(2, 10, 1, 20))),
+      (s"$terminalJoinQuery |> AS v", Array("a", "b", "c", "d"), Seq(Row(2, 10, 1, 20))),
+      (s"$terminalJoinQuery LIMIT 1", Array("a", "b", "c", "d"), Seq(Row(2, 10, 1, 20))),
+      (s"$terminalJoinQuery OFFSET 0", Array("a", "b", "c", "d"), Seq(Row(2, 10, 1, 20))),
+      (s"$terminalJoinQuery ORDER BY a", Array("a", "b", "c", "d"), Seq(Row(2, 10, 1, 20))),
+      (
+        s"$terminalJoinQuery |> TABLESAMPLE (100 PERCENT)",
+        Array("a", "b", "c", "d"),
+        Seq(Row(2, 10, 1, 20))
+      ),
+      (
+        s"WITH x AS (SELECT 1) $terminalJoinQuery",
+        Array("a", "b", "c", "d"),
+        Seq(Row(2, 10, 1, 20))
+      ),
+      (
+        s"WITH x AS ($terminalJoinQuery) SELECT * FROM x",
+        Array("a", "b", "c", "d"),
+        Seq(Row(2, 10, 1, 20))
+      ),
+      (
+        "WITH x AS (VALUES (1, 10) AS t(a, b) |> SET a = a + 1) SELECT * FROM x",
+        Array("a", "b"),
+        Seq(Row(2, 10))
+      ),
+      (
+        s"SELECT * FROM ($terminalJoinQuery LIMIT 1) AS v",
+        Array("a", "b", "c", "d"),
+        Seq(Row(2, 10, 1, 20))
+      ),
+      (s"$terminalSemiJoinQuery ORDER BY t.a", Array("a", "b"), Seq(Row(2, 10))),
+      (
+        s"$terminalJoinQuery |> SELECT a, t.a, c",
+        Array("a", "a", "c"),
+        Seq(Row(2, 1, 1))
+      )
+    )
+    terminalBoundaryCases.foreach { case (query, _, _) =>
+      withClue(s"Query: $query") {
+        checkResolverGuard(query)
+      }
+    }
+    val limitSelectQuery =
+      s"$terminalJoinQuery |> LIMIT 1 |> SELECT a, t.a, c"
+    def limitSelectPlan: LogicalPlan = {
+      spark.sessionState.sqlParser.parsePlan(limitSelectQuery).transformDown {
+        case pipeOperator: PipeOperator => pipeOperator.child
+      }
+    }
+    checkResolverGuard(limitSelectPlan, unsupportedReason = None)
+    withSQLConf(
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
+      terminalBoundaryCases.foreach { case (query, _, _) =>
+        withClue(s"Query: $query") {
+          assert(sql(query).queryExecution.analyzed.resolved)
+        }
+      }
+      val limitSelectResult = org.apache.spark.sql.classic.Dataset.ofRows(spark, limitSelectPlan)
+      assert(limitSelectResult.queryExecution.analyzed.resolved)
+    }
     val aggregateOrderByQuery =
       "SELECT a, 1, sum(b) FROM VALUES (1, 2) AS v(a, b) GROUP BY 1, 2 ORDER BY 1"
     withSQLConf(
@@ -258,6 +327,17 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
         assert(sortedResult.schema.fieldNames === Array("a", "b"))
         val sortedRows = sortedResult.queryExecution.executedPlan.executeCollectPublic()
         assert(sortedRows.toSet === Set(Row(-1, 10), Row(-2, 20)))
+
+        terminalBoundaryCases.foreach { case (query, expectedFields, expectedRows) =>
+          val joinResult = sql(query)
+          assert(joinResult.schema.fieldNames === expectedFields)
+          val joinRows = joinResult.queryExecution.executedPlan.executeCollectPublic()
+          assert(joinRows.toSeq === expectedRows)
+        }
+
+        val limitSelectResult = org.apache.spark.sql.classic.Dataset.ofRows(spark, limitSelectPlan)
+        assert(limitSelectResult.schema.fieldNames === Array("a", "a", "c"))
+        assert(limitSelectResult.collect().toSeq === Seq(Row(2, 1, 1)))
       }
     }
   }
