@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   LessThan => CatalystLessThan, Literal => CatalystLiteral, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter => LogicalFilter, Project}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
@@ -516,6 +517,9 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     withTempPath { file =>
       val path = file.getCanonicalPath
       def readData: DataFrame = spark.read.format(format).option("path", path).load()
+      def replan(read: DataFrame): DataFrame = {
+        Dataset.ofRows(spark, read.queryExecution.analyzed)
+      }
       def appendData(c: String, v: String): Unit = {
         Seq((c, v)).toDF("c", "v").write
           .format(format).option("path", path).mode("append").save()
@@ -535,10 +539,10 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       try {
         appendData("b", "y")
         withSQLConf(preserveConf: _*) {
-          checkAnswer(readData, Seq(Row("a", "x"), Row("b", "y")))
+          checkAnswer(replan(preserveRead), Seq(Row("a", "x"), Row("b", "y")))
         }
         withSQLConf(standardConf: _*) {
-          checkAnswer(readData, Seq(Row("a", "x"), Row("b", "y")))
+          checkAnswer(replan(standardRead), Seq(Row("a", "x"), Row("b", "y")))
         }
         assert(spark.sharedState.cacheManager.lookupCachedData(preserveRead).get
           .cachedRepresentation.cacheBuilder.storageLevel === MEMORY_ONLY)
