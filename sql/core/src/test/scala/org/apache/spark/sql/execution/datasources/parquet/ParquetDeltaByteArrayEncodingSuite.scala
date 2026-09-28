@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
 import org.apache.parquet.bytes.{ByteBufferInputStream, BytesInput, DirectByteBufferAllocator}
@@ -121,6 +122,53 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
       reader.readBinary(2, writableColumnVector, 0)
     }
     assert(e.getMessage.contains("prefix length 3"))
+  }
+
+  test("more prefix lengths than values in the page are rejected") {
+    val is = craftPage(prefixLengths = Array(0, 0, 0), suffixes = Array("a", "b", "c"))
+    val e = intercept[ParquetDecodingException] {
+      reader.initFromPage(2, is)
+    }
+    assert(e.getMessage.contains("3 prefix lengths in a page of 2 values"))
+  }
+
+  test("prefix length and suffix counts must match") {
+    // Without the check, the second row silently read a zero prefix length.
+    val e1 = intercept[ParquetDecodingException] {
+      reader.initFromPage(2, craftPage(prefixLengths = Array(0), suffixes = Array("ab", "cd")))
+    }
+    assert(e1.getMessage.contains("1 prefix lengths but 2 suffixes"))
+
+    reader = new VectorizedDeltaByteArrayReader()
+    val e2 = intercept[ParquetDecodingException] {
+      reader.initFromPage(2, craftPage(prefixLengths = Array(0, 0), suffixes = Array("ab")))
+    }
+    assert(e2.getMessage.contains("2 prefix lengths but 1 suffixes"))
+  }
+
+  test("rows without a decoded value report the row count, not the prefix length") {
+    // Both DELTA_BINARY_PACKED headers claim 0 values, but the prefix length header's first value
+    // is 5. Decoding 0 prefix lengths still writes that first value into the first slot, so
+    // reading a row before checking that it was decoded failed with a misleading
+    // "prefix length 5 is larger than the previous value's length 0".
+    def header(firstValueZigZag: Int): Array[Byte] =
+      // block size 128, 4 mini blocks, 0 values, first value
+      Array(0x80, 0x01, 0x04, 0x00, firstValueZigZag).map(_.toByte)
+    val bytes = header(firstValueZigZag = 10) ++ header(firstValueZigZag = 0)
+    val expected = "reading 1 values from row 0, but only 0 value lengths were decoded"
+
+    reader.initFromPage(1, ByteBufferInputStream.wrap(ByteBuffer.wrap(bytes)))
+    val e1 = intercept[ParquetDecodingException] {
+      reader.readBinary(1, new OnHeapColumnVector(1, StringType), 0)
+    }
+    assert(e1.getMessage.contains(expected))
+
+    reader = new VectorizedDeltaByteArrayReader()
+    reader.initFromPage(1, ByteBufferInputStream.wrap(ByteBuffer.wrap(bytes)))
+    val e2 = intercept[ParquetDecodingException] {
+      reader.skipBinary(1)
+    }
+    assert(e2.getMessage.contains(expected))
   }
 
   test("prefix length equal to the previous value's length is accepted") {
