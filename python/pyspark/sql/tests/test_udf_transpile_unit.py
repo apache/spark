@@ -2469,8 +2469,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 self.assertEqual(self._vals(func, rt, schema, rows), expected, f"case {i}")
 
     def test_udf_transpile_string_len(self):
-        # SPARK-55214: ``len(s)`` is the smallest string op not already covered
-        # by concat/repeat. Empty, ASCII, and concat inputs match Python; NULL
+        # SPARK-55214: Empty, ASCII, and concat inputs match Python; NULL
         # stays NULL (same unguarded caveat as ``x + 1``). ``len`` on a numeric
         # column has no string option that matches, so the UDF falls back and
         # Python raises TypeError.
