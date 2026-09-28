@@ -207,4 +207,10 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
     }
   }
 
+  @Override
+  public void skipFixedLenByteArray(int total, int len) {
+    // DELTA_BYTE_ARRAY encodes FIXED_LEN_BYTE_ARRAY values in the same way as BYTE_ARRAY values.
+    skipBinary(total);
+  }
+
 }

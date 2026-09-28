@@ -115,4 +115,25 @@ class ParquetColumnIndexSuite extends ParquetTest with SharedSparkSession {
       df => df.filter("(s._1 >= 500 and s._1 < 1000) or (s._1 >= 1500 and s._1 < 1600)")
     )
   }
+
+  test("SPARK-59828: reading unaligned pages - FIXED_LEN_BYTE_ARRAY with DELTA_BYTE_ARRAY") {
+    // Without a dictionary, the v2 writer encodes FIXED_LEN_BYTE_ARRAY as DELTA_BYTE_ARRAY.
+    // The pages of _2 are split by size, and those of _1 by row count because its
+    // DELTA_BINARY_PACKED values are tiny, so that the pages of the two columns are unaligned.
+    val df = spark.range(0, 2000).selectExpr("id as _1", "cast(id as decimal(38, 18)) as _2")
+    withTempPath { file =>
+      df.coalesce(1)
+        .write
+        .option("parquet.writer.version", "PARQUET_2_0")
+        .option("parquet.enable.dictionary", "false")
+        .option("parquet.page.size", "2048")
+        .option("parquet.page.row.count.limit", "500")
+        .parquet(file.getCanonicalPath)
+
+      val parquetDf = spark.read.parquet(file.getCanonicalPath)
+      actions.foreach { action =>
+        checkAnswer(action(parquetDf), action(df))
+      }
+    }
+  }
 }
