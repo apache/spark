@@ -1933,6 +1933,10 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
       metrics.shuffleWriteMetrics.incRecordsWritten(base + 9)
       metrics.incMemoryBytesSpilled(base + 10)
       metrics.incDiskBytesSpilled(base + 11)
+      // Merged bytes are already included in remote/local bytes read, so addTaskMetrics
+      // must not add them to shuffleRead again.
+      metrics.shuffleReadMetrics.incRemoteMergedBytesRead(base + 12)
+      metrics.shuffleReadMetrics.incLocalMergedBytesRead(base + 13)
       metrics
     }
 
