@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
   Resolver,
   ResolverGuard
 }
-import org.apache.spark.sql.catalyst.expressions.{Literal, PipeSetInput}
+import org.apache.spark.sql.catalyst.expressions.{Literal, PipeOperator, PipeSetInput}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
@@ -164,6 +164,52 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
       val dataFrame = sql(
         "SELECT x FROM VALUES (1, 2), (3, 0) AS t(x, y) |> SET x = x + 1")
       assert(dataFrame.orderBy("y").collect().map(_.getInt(0)) === Array(4, 2))
+    }
+  }
+
+  test("SPARK-59146: retained columns do not change terminal operator output") {
+    val terminalFilterQuery =
+      "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 |> WHERE t.a = 1"
+    val terminalFilter = sql(terminalFilterQuery)
+    assert(terminalFilter.schema.fieldNames === Array("a", "b"))
+    assert(terminalFilter.collect().toSeq === Seq(Row(2, 10)))
+
+    // Pipe WHERE is unsupported in single-pass, so isolate its supported Filter subtree.
+    val parsedFilter = spark.sessionState.sqlParser.parsePlan(terminalFilterQuery)
+      .asInstanceOf[Filter]
+    val filterWithoutPipeBoundary = parsedFilter.copy(
+      child = parsedFilter.child.asInstanceOf[PipeOperator].child)
+    val resolver = new Resolver(
+      catalogManager = spark.sessionState.catalogManager,
+      extensions = spark.sessionState.analyzer.singlePassResolverExtensions,
+      metadataResolverExtensions =
+        spark.sessionState.analyzer.singlePassMetadataResolverExtensions)
+    val resolvedFilter = resolver.lookupMetadataAndResolve(filterWithoutPipeBoundary)
+    assert(resolvedFilter.schema.fieldNames === Array("a", "b"))
+    val resolvedFilterRows =
+      spark.sessionState.executePlan(resolvedFilter).executedPlan.executeCollectPublic()
+    assert(resolvedFilterRows.toSeq === Seq(Row(2, 10)))
+
+    val terminalOrderByQuery =
+      "VALUES (2, 20), (1, 10) AS t(a, b) |> SET a = -a ORDER BY t.a"
+    val terminalSortByQuery =
+      "VALUES (2, 20), (1, 10) AS t(a, b) |> SET a = -a SORT BY t.a"
+    Seq(terminalOrderByQuery, terminalSortByQuery).foreach(query => checkResolverGuard(query))
+    Seq(false, true).foreach { singlePassEnabled =>
+      withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePassEnabled.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        val orderedResult = sql(terminalOrderByQuery)
+        assert(orderedResult.schema.fieldNames === Array("a", "b"))
+        val orderedRows = orderedResult.queryExecution.executedPlan.executeCollectPublic()
+        assert(orderedRows.toSeq === Seq(Row(-1, 10), Row(-2, 20)))
+
+        val sortedResult = sql(terminalSortByQuery)
+        assert(sortedResult.schema.fieldNames === Array("a", "b"))
+        val sortedRows = sortedResult.queryExecution.executedPlan.executeCollectPublic()
+        assert(sortedRows.toSet === Set(Row(-1, 10), Row(-2, 20)))
+      }
     }
   }
 

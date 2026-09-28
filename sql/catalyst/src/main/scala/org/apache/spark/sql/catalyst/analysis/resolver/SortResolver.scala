@@ -178,8 +178,6 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
       val resolvedChildWithMissingAttributes =
         insertMissingExpressions(resolvedChild, filteredMissingExpressions)
 
-      val isChildChangedByMissingExpressions = !resolvedChildWithMissingAttributes.eq(resolvedChild)
-
       val (finalChild, finalOrderExpressions) = resolvedChildWithMissingAttributes match {
         case project: Project if scopes.current.baseAggregate.isDefined =>
           rewriteNamedExpressionsInTopLcaProject[SortOrder](
@@ -197,7 +195,8 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
         order = finalOrderExpressions
       )
 
-      if (isChildChangedByMissingExpressions) {
+      // A missing expression may already be physically present as qualified-only output.
+      if (filteredMissingExpressions.nonEmpty) {
         retainOriginalOutput(
           operator = resolvedSort,
           missingExpressions = missingExpressions,
