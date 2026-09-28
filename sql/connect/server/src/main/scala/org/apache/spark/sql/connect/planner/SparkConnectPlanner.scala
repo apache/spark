@@ -118,6 +118,25 @@ class SparkConnectPlanner(
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
+  // Whether `withColumns` and `withColumnsRenamed` may try the eager analysis first.
+  private var eagerAnalysisEnabled = true
+
+  /**
+   * Transforms the relation without the eager analysis of `withColumns` and
+   * `withColumnsRenamed`. Declarative Pipelines use it to plan a flow: the eager analysis would
+   * resolve a read of another pipeline dataset against the table a previous run left in the
+   * catalog, and the flow would then lose its dependency on that dataset.
+   */
+  private def transformRelationWithoutEagerAnalysis(rel: proto.Relation): LogicalPlan = {
+    val previous = eagerAnalysisEnabled
+    eagerAnalysisEnabled = false
+    try {
+      transformRelation(rel)
+    } finally {
+      eagerAnalysisEnabled = previous
+    }
+  }
+
   /**
    * The root of the query plan is a relation and we apply the transformations to it. The resolved
    * logical plan will not get cached. If the result needs to be cached, use
@@ -1298,17 +1317,15 @@ class SparkConnectPlanner(
     }
 
     val child = transformRelation(rel.getInput)
-    try {
-      // Try the eager analysis first.
+    tryEagerAnalysis {
       Dataset
         .ofRows(session, child)
         .withColumnsRenamed(colNames, newColNames)
         .logicalPlan
-    } catch {
-      case _: AnalysisException | _: SparkException =>
-        Project(
-          Seq(UnresolvedStarWithColumnsRenames(existingNames = colNames, newNames = newColNames)),
-          child)
+    } {
+      Project(
+        Seq(UnresolvedStarWithColumnsRenames(existingNames = colNames, newNames = newColNames)),
+        child)
     }
   }
 
@@ -1329,21 +1346,35 @@ class SparkConnectPlanner(
       }.unzip3
 
     val child = transformRelation(rel.getInput)
-    try {
-      // Try the eager analysis first.
+    tryEagerAnalysis {
       Dataset
         .ofRows(session, child)
         .withColumns(colNames, exprs.map(expr => Column(expr)), metadata)
         .logicalPlan
-    } catch {
-      case _: AnalysisException | _: SparkException =>
-        Project(
-          Seq(
-            UnresolvedStarWithColumns(
-              colNames = colNames,
-              exprs = exprs,
-              explicitMetadata = Some(metadata))),
-          child)
+    } {
+      Project(
+        Seq(
+          UnresolvedStarWithColumns(
+            colNames = colNames,
+            exprs = exprs,
+            explicitMetadata = Some(metadata))),
+        child)
+    }
+  }
+
+  /**
+   * Tries the eager analysis first, and falls back to the lazily resolved plan when the eager
+   * analysis fails or is disabled (see [[transformRelationWithoutEagerAnalysis]]).
+   */
+  private def tryEagerAnalysis(eagerPlan: => LogicalPlan)(lazyPlan: => LogicalPlan): LogicalPlan = {
+    if (!eagerAnalysisEnabled) {
+      lazyPlan
+    } else {
+      try {
+        eagerPlan
+      } catch {
+        case _: AnalysisException | _: SparkException => lazyPlan
+      }
     }
   }
 
@@ -3017,7 +3048,7 @@ class SparkConnectPlanner(
       sessionHolder,
       command,
       responseObserver,
-      transformRelation,
+      transformRelationWithoutEagerAnalysis,
       transformExpression)
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(

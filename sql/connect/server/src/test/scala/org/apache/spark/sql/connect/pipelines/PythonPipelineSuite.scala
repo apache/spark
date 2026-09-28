@@ -556,6 +556,34 @@ class PythonPipelineSuite
         .contains(graphIdentifier("src")))
   }
 
+  test("SPARK-59663: withColumns and withColumnsRenamed keep the dependency on an internal " +
+    "dataset that already exists in the catalog") {
+    withTable("spark_catalog.default.src") {
+      // Simulate a pipeline re-run: the internal dataset `src` was materialized by a prior run.
+      sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
+      val graph = buildGraph("""
+          |from pyspark.sql.functions import lit
+          |
+          |@dp.materialized_view
+          |def src():
+          |  return spark.range(5)
+          |
+          |@dp.materialized_view
+          |def with_columns():
+          |  return spark.read.table("src").withColumn("x", lit(1))
+          |
+          |@dp.materialized_view
+          |def with_columns_renamed():
+          |  return spark.read.table("src").withColumnRenamed("id", "id2")
+          |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
+
+      Seq("with_columns", "with_columns_renamed").foreach { flowName =>
+        assert(graph.resolvedFlow(graphIdentifier(flowName)).inputs ==
+          Set(graphIdentifier("src")), s"flow $flowName lost its dependency on src")
+      }
+    }
+  }
+
   gridTest(
     "reading internal datasets outside query function that trigger " +
       "eager analysis or execution will fail")(
