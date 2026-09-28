@@ -129,8 +129,8 @@ class ArrowBatchTransformerTests(unittest.TestCase):
             result = ArrowBatchTransformer.concat_batches(iter(batches[:1]), **kwargs)
             self.assertIs(result, batches[0])
         other = pa.RecordBatch.from_pylist([{"y": 1}])
-        with self.assertRaisesRegex(PySparkValueError, "does not match"):
-            ArrowBatchTransformer.concat_batches(iter([other]), schema)
+        with self.assertRaises(pa.ArrowInvalid):
+            ArrowBatchTransformer.concat_batches(iter([batches[0], other]), schema)
 
     def test_concat_batches_drops_zero_row_batches(self):
         import pyarrow as pa
