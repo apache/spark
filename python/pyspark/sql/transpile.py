@@ -435,7 +435,9 @@ class CatalystTranspiler(AbstractTranspiler):
         # skip only when both are provably integral ("integer"); "numeric" is an
         # unknown sub-type that may resolve to a float column, so it keeps the guard.
         if (
-            _is_numeric_cat(lc)
+            lc is not None
+            and rc is not None
+            and _is_numeric_cat(lc)
             and _is_numeric_cat(rc)
             and not (lc == "integer" and rc == "integer")
         ):
