@@ -16,12 +16,15 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.nio.charset.StandardCharsets
 import java.util.Random
 
 import org.apache.commons.lang3.RandomStringUtils
-import org.apache.parquet.bytes.{ByteBufferInputStream, DirectByteBufferAllocator}
+import org.apache.parquet.bytes.{ByteBufferInputStream, BytesInput, DirectByteBufferAllocator}
 import org.apache.parquet.column.values.Utils
+import org.apache.parquet.column.values.delta.DeltaBinaryPackingValuesWriterForInteger
 import org.apache.parquet.column.values.deltalengthbytearray.DeltaLengthByteArrayValuesWriter
+import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
@@ -101,6 +104,83 @@ class ParquetDeltaLengthByteArrayEncodingSuite
     reader.readIntegers(length, writableColumnVector, 0)
     for (i <- 0 until length) {
       assert(values(i).length == writableColumnVector.getInt(i))
+    }
+  }
+
+  testWithStreams("value lengths larger than the rest of the page are rejected") { craftPage =>
+    // The second value claims more bytes than are left in the page. Int.MaxValue checks that the
+    // lengths are rejected before anything is allocated for them.
+    Seq(100, Int.MaxValue).foreach { len =>
+      val e = intercept[ParquetDecodingException] {
+        new VectorizedDeltaLengthByteArrayReader().initFromPage(2, craftPage(Array(2, len), "abcd"))
+      }
+      assert(e.getMessage.contains(
+        s"value lengths add up to ${2L + len} bytes, but only 4 are left"))
+    }
+  }
+
+  testWithStreams("negative value length is rejected") { craftPage =>
+    val e = intercept[ParquetDecodingException] {
+      reader.initFromPage(3, craftPage(Array(2, -1, 3), "abcd"))
+    }
+    assert(e.getMessage.contains("negative value length: -1"))
+  }
+
+  testWithStreams("more value lengths than values in the page are rejected") { craftPage =>
+    val e = intercept[ParquetDecodingException] {
+      reader.initFromPage(2, craftPage(Array(1, 1, 1), "abc"))
+    }
+    assert(e.getMessage.contains("3 value lengths in a page of 2 values"))
+  }
+
+  testWithStreams("rows without a decoded value length are rejected") { craftPage =>
+    // The page has 3 values but only 2 value lengths, so the third row has no length.
+    def newReader(): VectorizedDeltaLengthByteArrayReader = {
+      val r = new VectorizedDeltaLengthByteArrayReader()
+      r.initFromPage(3, craftPage(Array(2, 2), "abcd"))
+      r
+    }
+    val expected = "reading 3 values from row 0, but only 2 value lengths were decoded"
+    val e1 = intercept[ParquetDecodingException] {
+      newReader().readBinary(3, new OnHeapColumnVector(3, StringType), 0)
+    }
+    assert(e1.getMessage.contains(expected))
+    val e2 = intercept[ParquetDecodingException] {
+      newReader().skipBinary(3)
+    }
+    assert(e2.getMessage.contains(expected))
+
+    // getBytes is the path used by the DELTA_BYTE_ARRAY reader to read suffixes.
+    val r = newReader()
+    r.getBytes(0)
+    r.getBytes(1)
+    val e3 = intercept[ParquetDecodingException] {
+      r.getBytes(2)
+    }
+    assert(e3.getMessage.contains(
+      "reading 1 values from row 2, but only 2 value lengths were decoded"))
+  }
+
+  /**
+   * Runs `testFun` with a function that builds a raw DELTA_LENGTH_BYTE_ARRAY page from explicit
+   * value lengths and value bytes, once held in a single buffer and once split across multiple
+   * buffers, since `SingleBufferInputStream` and `MultiBufferInputStream` handle short and
+   * negative lengths differently.
+   */
+  private def testWithStreams(testName: String)(
+      testFun: ((Array[Int], String) => ByteBufferInputStream) => Unit): Unit = {
+    Seq("single buffer" -> false, "multiple buffers" -> true).foreach { case (name, split) =>
+      test(s"$testName ($name)") {
+        testFun { (lengths, data) =>
+          val lengthWriter = new DeltaBinaryPackingValuesWriterForInteger(
+            128, 4, 64 * 1024, 64 * 1024, new DirectByteBufferAllocator)
+          lengths.foreach(lengthWriter.writeInteger)
+          val bytes = BytesInput.concat(
+            lengthWriter.getBytes,
+            BytesInput.from(data.getBytes(StandardCharsets.UTF_8))).toByteArray
+          VectorizedPlainValuesReaderSuite.toStream(bytes, split)
+        }
+      }
     }
   }
 
