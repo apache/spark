@@ -43,6 +43,9 @@ private[spark] class ReplayListenerBus(
     maxLineLength: Int = ReplayListenerBus.DEFAULT_MAX_LINE_LENGTH)
   extends SparkListenerBus with Logging {
 
+  private[scheduler] val effectiveMaxLineLength =
+    ReplayListenerBus.normalizeMaxLineLength(maxLineLength)
+
   /**
    * Replay each event in the order maintained in the given stream. The stream is expected to
    * contain one JSON-encoded SparkListenerEvent per line.
@@ -108,7 +111,7 @@ private[spark] class ReplayListenerBus(
       }
 
       @tailrec private def fetchLine(): (String, Int) = {
-        val buffer = new BoundedLineBuffer(maxLineLength)
+        val buffer = new BoundedLineBuffer(effectiveMaxLineLength)
         var c = reader.read()
         if (c == -1) {
           null
@@ -123,7 +126,7 @@ private[spark] class ReplayListenerBus(
           if (maybeLine.isEmpty) {
             if (!warned) {
               logWarning(log"Skipped event log lines longer than " +
-                log"${MDC(MAX_SIZE, maxLineLength)} bytes in " +
+                log"${MDC(MAX_SIZE, effectiveMaxLineLength)} bytes in " +
                 log"${MDC(FILE_NAME, sourceName)}")
               warned = true
             }
@@ -207,7 +210,7 @@ private[spark] class ReplayListenerBus(
       case _: EOFException if maybeTruncated => false
       case jpe: JsonProcessingException =>
         logError(log"Exception parsing Spark event log: ${MDC(PATH, sourceName)} " +
-          log"at line ${MDC(LINE_NUM, lineNumber)}", jpe)
+          log"at line ${MDC(LINE_NUM, lineNumber)}")
         throw jpe
       case ioe: IOException =>
         throw ioe
@@ -232,16 +235,19 @@ private[spark] class HaltReplayException extends RuntimeException
 
 private[spark] object ReplayListenerBus {
 
-  /**
-   * Default UTF-8 line-length cap, matching spark.history.fs.eventLog.maxLineLength.
-   * Keep the maximum buffered character count close to the original 512 MiB / 2 cap.
-   */
-  val DEFAULT_MAX_LINE_LENGTH: Int = 256 * 1024 * 1024
+  /** Default UTF-8 content limit shared with the history server configuration. */
+  val DEFAULT_MAX_LINE_LENGTH: Int = History.EVENT_LOG_MAX_LINE_LENGTH.defaultValue.get.toInt
 
-  /** Resolves the byte limit, using Int.MaxValue for non-positive or larger values. */
+  // Bound StringBuilder growth so UTF-16 inflation stays below the JVM array-size limit.
+  val MAX_LINE_LENGTH: Int = 512 * 1024 * 1024
+
+  /** Resolves the byte limit, using 512 MiB for non-positive or larger values. */
   def maxLineLength(conf: SparkConf): Int = {
-    val configured = conf.get(History.EVENT_LOG_MAX_LINE_LENGTH)
-    if (configured <= 0 || configured > Int.MaxValue) Int.MaxValue else configured.toInt
+    normalizeMaxLineLength(conf.get(History.EVENT_LOG_MAX_LINE_LENGTH))
+  }
+
+  private def normalizeMaxLineLength(configured: Long): Int = {
+    if (configured <= 0 || configured > MAX_LINE_LENGTH) MAX_LINE_LENGTH else configured.toInt
   }
 
   type ReplayEventsFilter = (String) => Boolean

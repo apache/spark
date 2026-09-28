@@ -171,8 +171,9 @@ private[spark] object History {
         "the line ending. Longer lines are skipped with a warning, bounding the " +
         "memory replay can use when an event log is corrupt or unexpectedly large. Buffer " +
         "growth, UTF-16 storage and JSON parsing can require several times this limit in heap " +
-        "space. Values at or below 0, or above 2147483647, use the maximum supported limit of " +
-        "2147483647 bytes. " +
+        "space. Values at or below 0, or above 536870912, use the maximum supported limit of " +
+        "536870912 bytes (512 MiB). This cap avoids JVM array-size limits but does not " +
+        "guarantee sufficient heap space. " +
         "Introduced in 4.3.0; also available in 3.5.10, 4.0.5, 4.1.4 and 4.2.1; and in " +
         "all versions after 4.3.0.")
       .version("4.3.0")

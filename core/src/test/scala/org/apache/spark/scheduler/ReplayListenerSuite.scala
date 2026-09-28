@@ -170,10 +170,25 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     val conf = new SparkConf(false)
     assert(conf.get(History.EVENT_LOG_MAX_LINE_LENGTH) == 256L * 1024 * 1024)
     assert(ReplayListenerBus.maxLineLength(conf) == ReplayListenerBus.DEFAULT_MAX_LINE_LENGTH)
-    for (value <- Seq("0", "-1", "2147483647", "3g")) {
+    for (value <- Seq("0", "-1", "512m", "536870913", "576m", "600m", "1g",
+        "2147483647", "3g")) {
       conf.set(History.EVENT_LOG_MAX_LINE_LENGTH.key, value)
-      assert(ReplayListenerBus.maxLineLength(conf) == Int.MaxValue)
+      assert(ReplayListenerBus.maxLineLength(conf) == ReplayListenerBus.MAX_LINE_LENGTH)
     }
+  }
+
+  test("Replay constructor normalizes the effective line limit") {
+    val maximum = ReplayListenerBus.MAX_LINE_LENGTH
+    for (limit <- Seq(Int.MinValue, -1, 0, maximum, maximum + 1, Int.MaxValue)) {
+      assert(new ReplayListenerBus(limit).effectiveMaxLineLength == maximum)
+    }
+    for (limit <- Seq(1, 8192, ReplayListenerBus.DEFAULT_MAX_LINE_LENGTH, maximum - 1)) {
+      assert(new ReplayListenerBus(limit).effectiveMaxLineLength == limit)
+      val conf = new SparkConf(false).set(History.EVENT_LOG_MAX_LINE_LENGTH, limit.toLong)
+      assert(ReplayListenerBus.maxLineLength(conf) == limit)
+    }
+    assert(new ReplayListenerBus().effectiveMaxLineLength ==
+      ReplayListenerBus.DEFAULT_MAX_LINE_LENGTH)
   }
 
   test("Replay preserves physical line numbers after skipping long lines") {
@@ -208,8 +223,10 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
         }
         assert(errorClass.isInstance(error))
       }
-      assert(appender.loggingEvents.exists(_.getMessage.getFormattedMessage
-        .contains("Exception parsing Spark event log: json-errors at line 4")))
+      val diagnostics = appender.loggingEvents.filter(_.getMessage.getFormattedMessage
+        .contains("Exception parsing Spark event log: json-errors at line 4"))
+      assert(diagnostics.size == 1)
+      assert(diagnostics.head.getThrown == null)
     }
   }
 
