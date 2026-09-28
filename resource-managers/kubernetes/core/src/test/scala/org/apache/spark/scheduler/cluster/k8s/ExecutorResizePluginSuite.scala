@@ -73,6 +73,7 @@ class ExecutorResizePluginSuite
     when(podOperations.inNamespace(namespace)).thenReturn(podsWithNamespace)
     when(podsWithNamespace.withLabel(SPARK_APP_ID_LABEL, appId)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
+    when(labeledPods.withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")).thenReturn(labeledPods)
     when(labeledPods.list()).thenReturn(podList)
     when(kubernetesClient.top()).thenReturn(topOperations)
     when(topOperations.pods()).thenReturn(podMetricOperations)
@@ -157,6 +158,15 @@ class ExecutorResizePluginSuite
     plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
 
     verify(podMetricOperations, never()).metrics(anyString(), anyString())
+  }
+
+  test("SPARK-59840: Inactive executor pods are excluded from the listing") {
+    val plugin = createPlugin()
+    when(podList.getItems).thenReturn(Collections.emptyList())
+
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
+
+    verify(labeledPods).withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
   }
 
   test("Memory usage below threshold should not trigger resize") {
