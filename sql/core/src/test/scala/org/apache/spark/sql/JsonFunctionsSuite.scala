@@ -1023,21 +1023,32 @@ class JsonFunctionsSuite extends SharedSparkSession {
       )
     )
 
-    val df3 = Seq((Tuple1(1), "true")).toDF("a", "pretty")
-    val nonFoldableQuery = "to_json(a, map('pretty', pretty))"
-    checkError(
-      exception = intercept[AnalysisException] {
-        df3.selectExpr(nonFoldableQuery)
-      },
-      condition = "NON_FOLDABLE_ARGUMENT",
-      parameters = Map(
-        "funcName" -> "`to_json`",
-        "paramName" -> "`options`",
-        "paramType" -> "\"MAP<STRING, STRING>\""),
-      context = ExpectedContext(
-        fragment = nonFoldableQuery,
-        start = 0,
-        stop = nonFoldableQuery.length - 1))
+  }
+
+  test("SPARK-59801: JSON functions with non-foldable options") {
+    val df = Seq((Tuple1(1), """{"a":1}""", "true")).toDF("a", "json", "option")
+    val nonFoldableQueries = Seq(
+      "from_json" ->
+        "from_json(json, 'a INT', map('primitivesAsString', option))",
+      "to_json" -> "to_json(a, map('pretty', option))",
+      "schema_of_json" ->
+        """schema_of_json('{"a":1}', map('primitivesAsString', option))""")
+
+    nonFoldableQueries.foreach { case (functionName, query) =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.selectExpr(query)
+        },
+        condition = "NON_FOLDABLE_ARGUMENT",
+        parameters = Map(
+          "funcName" -> s"`$functionName`",
+          "paramName" -> "`options`",
+          "paramType" -> "\"MAP<STRING, STRING>\""),
+        context = ExpectedContext(
+          fragment = query,
+          start = 0,
+          stop = query.length - 1))
+    }
   }
 
   test("SPARK-19967 Support from_json in SQL") {

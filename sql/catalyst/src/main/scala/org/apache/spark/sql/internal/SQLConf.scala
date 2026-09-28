@@ -7560,9 +7560,12 @@ object SQLConf {
   val LEGACY_ALLOW_NON_FOLDABLE_OPTIONS =
     buildConf("spark.sql.legacy.allowNonFoldableOptions")
       .internal()
-      .doc("When true, allow non-foldable option maps in CSV, JSON, and XML SQL functions and " +
-        "evaluate them during analysis, which is the behavior in Spark 4.3 and earlier.")
+      .doc("When true, allow deterministic and row-independent non-foldable option maps in " +
+        "CSV, JSON, and XML SQL functions and evaluate them during analysis, which is the " +
+        "behavior in Spark 4.3 and earlier. Row-dependent, unevaluable, and nondeterministic " +
+        "option maps are always rejected.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 

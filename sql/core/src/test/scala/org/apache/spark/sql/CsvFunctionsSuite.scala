@@ -439,40 +439,41 @@ class CsvFunctionsSuite extends SharedSparkSession {
     checkAnswer(df1.selectExpr("to_csv(a)"), Row("1") :: Nil)
   }
 
-  test("to_csv with non-foldable options") {
-    val df = Seq(((1, 2), ",")).toDF("a", "delimiter")
-    val errorParameters = Map(
-      "funcName" -> "`to_csv`",
+  test("SPARK-59801: CSV functions with non-foldable options") {
+    val df = Seq(("1,2", (1, 2), ",")).toDF("csv", "a", "delimiter")
+
+    def errorParameters(functionName: String): Map[String, String] = Map(
+      "funcName" -> s"`$functionName`",
       "paramName" -> "`options`",
       "paramType" -> "\"MAP<STRING, STRING>\"")
 
-    checkError(
-      exception = intercept[AnalysisException] {
-        df.selectExpr("to_csv(a, map('delimiter', delimiter))")
-      },
-      condition = "NON_FOLDABLE_ARGUMENT",
-      parameters = errorParameters,
-      context = ExpectedContext(
-        fragment = "to_csv(a, map('delimiter', delimiter))",
-        start = 0,
-        stop = 37))
+    val nonFoldableQueries = Seq(
+      "from_csv" -> "from_csv(csv, 'a INT, b INT', map('delimiter', delimiter))",
+      "to_csv" -> "to_csv(a, map('delimiter', delimiter))",
+      "schema_of_csv" -> "schema_of_csv('1,2', map('delimiter', delimiter))")
+    nonFoldableQueries.foreach { case (functionName, query) =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.selectExpr(query)
+        },
+        condition = "NON_FOLDABLE_ARGUMENT",
+        parameters = errorParameters(functionName),
+        context = ExpectedContext(
+          fragment = query,
+          start = 0,
+          stop = query.length - 1))
+    }
 
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(
-          """SELECT transform(array('|'),
-            |  x -> to_csv(named_struct('a', 1, 'b', 2), map('delimiter', x)))
-            |""".stripMargin).collect()
-      },
-      condition = "NON_FOLDABLE_ARGUMENT",
-      parameters = errorParameters,
-      context = ExpectedContext(
-        fragment = "to_csv(named_struct('a', 1, 'b', 2), map('delimiter', x))",
-        start = 36,
-        stop = 92))
+    val runtimeReplaceableOptions = Seq(
+      "nvl(NULL, '|')",
+      "decode(encode('|', 'UTF-8'), 'UTF-8')")
+    runtimeReplaceableOptions.foreach { option =>
+      checkAnswer(
+        df.selectExpr(s"to_csv(a, map('delimiter', $option))"),
+        Row("1|2") :: Nil)
+    }
 
     val evaluableNonFoldableOptions = Seq(
-      "nvl(NULL, '|')",
       "elt(1, '|', ',')",
       "transform(array('|'), x -> x)[0]",
       "CASE WHEN length('|') = 1 THEN '|' ELSE raise_error('bad') END")
@@ -483,19 +484,69 @@ class CsvFunctionsSuite extends SharedSparkSession {
           df.selectExpr(query)
         },
         condition = "NON_FOLDABLE_ARGUMENT",
-        parameters = errorParameters,
+        parameters = errorParameters("to_csv"),
         context = ExpectedContext(
           fragment = query,
           start = 0,
           stop = query.length - 1))
     }
 
+    val lambdaQuery =
+      "to_csv(named_struct('a', 1, 'b', 2), map('delimiter', x))"
+    val outerReferenceQuery =
+      """SELECT (SELECT to_csv(named_struct('a', 1, 'b', 2),
+        |  map('delimiter', delimiter)))
+        |FROM VALUES ('|') t(delimiter)
+        |""".stripMargin
+
+    def checkUnsafeOptions(): Unit = {
+      Seq(
+        "to_csv(a, map('delimiter', delimiter))",
+        "to_csv(a, map('delimiter', uuid()))").foreach { query =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            df.selectExpr(query)
+          },
+          condition = "NON_FOLDABLE_ARGUMENT",
+          parameters = errorParameters("to_csv"),
+          context = ExpectedContext(
+            fragment = query,
+            start = 0,
+            stop = query.length - 1))
+      }
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""SELECT transform(array('|'),
+               |  x -> $lambdaQuery)
+               |""".stripMargin).collect()
+        },
+        condition = "NON_FOLDABLE_ARGUMENT",
+        parameters = errorParameters("to_csv"),
+        context = ExpectedContext(fragment = lambdaQuery))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(outerReferenceQuery).collect()
+        },
+        condition = "NON_FOLDABLE_ARGUMENT",
+        parameters = errorParameters("to_csv"),
+        context = ExpectedContext(
+          fragment = """to_csv(named_struct('a', 1, 'b', 2),
+            |  map('delimiter', delimiter))""".stripMargin,
+          start = 15,
+          stop = 81))
+    }
+
+    checkUnsafeOptions()
     withSQLConf(SQLConf.LEGACY_ALLOW_NON_FOLDABLE_OPTIONS.key -> "true") {
       evaluableNonFoldableOptions.foreach { option =>
         checkAnswer(
           df.selectExpr(s"to_csv(a, map('delimiter', $option))"),
           Row("1|2") :: Nil)
       }
+      checkUnsafeOptions()
     }
   }
 
