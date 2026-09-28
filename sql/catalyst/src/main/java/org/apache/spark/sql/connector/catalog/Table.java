@@ -107,20 +107,14 @@ public interface Table extends Relation {
   default Constraint[] constraints() { return new Constraint[0]; }
 
   /**
-   * Returns the write distribution this table declares as the default for writes into it, or null
-   * if it declares none.
+   * Returns the write distribution this table declares as the default for writes into it: one of
+   * {@link TableInfo#DISTRIBUTION_MODE_HASH}, {@link TableInfo#DISTRIBUTION_MODE_RANGE},
+   * {@link TableInfo#DISTRIBUTION_MODE_NONE}, or null if it declares none.
    * <p>
-   * A non-null value is one of {@link TableInfo#DISTRIBUTION_MODE_HASH},
-   * {@link TableInfo#DISTRIBUTION_MODE_RANGE} or {@link TableInfo#DISTRIBUTION_MODE_NONE}.
-   * <p>
-   * This is a <em>declared default</em> and nothing more. It says what a write into this table uses
-   * when the write itself does not ask for something else; an individual write may override it, and
-   * a table may narrow it (a hash distribution is meaningless on an unpartitioned table, say). What
-   * a given write actually requires is reported by
-   * {@link org.apache.spark.sql.connector.write.RequiresDistributionAndOrdering} on its
-   * {@code Write}, which stays authoritative. In particular this makes no claim about how the data
-   * already in the table is laid out -- for that, a scan reports its own {@code outputPartitioning}
-   * and {@code outputOrdering}.
+   * This is a declared default only. A write may override it and a table may narrow it; what a
+   * write actually requires is reported by
+   * {@link org.apache.spark.sql.connector.write.RequiresDistributionAndOrdering}. It says nothing
+   * about how existing data is laid out.
    *
    * @since 4.4.0
    */
@@ -128,8 +122,7 @@ public interface Table extends Relation {
 
   /**
    * Returns the write ordering this table declares as the default for writes into it, empty if it
-   * declares none. A declared default in exactly the sense described on
-   * {@link #writeDistributionMode()}.
+   * declares none. See {@link #writeDistributionMode()}.
    *
    * @since 4.4.0
    */

@@ -17,22 +17,20 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.sql.catalyst.expressions.{Literal => CatalystLiteral}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, TableCatalogCapability}
-import org.apache.spark.sql.connector.expressions.SortOrder
+import org.apache.spark.sql.connector.expressions.{Expression, IdentityTransform, Literal, SortOrder, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
- * This object contains utility methods for the create-time write distribution and ordering
- * requested by `CREATE`/`REPLACE TABLE ... DISTRIBUTED BY PARTITION / [LOCALLY] ORDERED BY`.
+ * Utility methods for the create-time write distribution and ordering requested by
+ * `CREATE`/`REPLACE TABLE ... DISTRIBUTED BY PARTITION / [LOCALLY] ORDERED BY`.
  */
 object WriteDistributionAndOrdering {
 
   /**
    * True when a CREATE/REPLACE TABLE statement asked for a write distribution or ordering.
-   *
-   * `UNORDERED` counts: it asks for no distribution, which is not the same as saying nothing. Only
-   * the catalog knows what it would otherwise have defaulted to, so Spark cannot treat the request
-   * as a no-op without guessing.
+   * `UNORDERED` counts as a request.
    */
   def isRequested(writeDistributionMode: String, writeOrdering: Seq[SortOrder]): Boolean = {
     writeDistributionMode != null || writeOrdering.nonEmpty
@@ -41,10 +39,6 @@ object WriteDistributionAndOrdering {
   /**
    * Rejects a create-time write distribution or ordering that the catalog has not advertised
    * support for, before anything is created or dropped.
-   *
-   * `TableInfo` carries the request as plain metadata, so a catalog that does not know about it
-   * would ignore it and hand back a table with none of the requested layout, and no indication of
-   * it. This is the only thing standing between the user and that silent drop.
    */
   def validateCatalogForWriteDistributionAndOrdering(
       catalog: TableCatalog,
@@ -60,14 +54,17 @@ object WriteDistributionAndOrdering {
     }
   }
 
-  /**
-   * Renders a requested sort key the way SQL spells it, for SHOW CREATE TABLE and DESCRIBE.
-   *
-   * This deliberately uses the expression's `describe` rather than the `SortOrder`'s own
-   * `toString`: the latter renders an identity transform as `identity(col)`, which the parser
-   * would read back as a transform *named* `identity` rather than as a plain column reference.
-   */
+  /** Renders a requested sort key as SQL, for SHOW CREATE TABLE and DESCRIBE. */
   def describeSortOrder(sortOrder: SortOrder): String = {
-    s"${sortOrder.expression().describe()} ${sortOrder.direction()} ${sortOrder.nullOrdering()}"
+    s"${toSQL(sortOrder.expression())} ${sortOrder.direction()} ${sortOrder.nullOrdering()}"
+  }
+
+  // `describe` prints a literal's internal value, e.g. `0` for DATE '1970-01-01', so literals are
+  // rendered through Catalyst to keep their type.
+  private def toSQL(e: Expression): String = e match {
+    case l: Literal[_] => CatalystLiteral(l.value, l.dataType).sql
+    case t: IdentityTransform => t.ref.describe
+    case t: Transform => t.arguments().map(toSQL).mkString(s"${t.name}(", ", ", ")")
+    case other => other.describe
   }
 }

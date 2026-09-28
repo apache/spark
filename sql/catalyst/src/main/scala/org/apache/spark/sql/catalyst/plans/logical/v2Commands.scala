@@ -646,10 +646,7 @@ trait V2CreateTablePlan extends LogicalPlan {
    */
   def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan
 
-  /**
-   * Creates a copy of this node with the new write ordering. Used to rewrite the ordering's
-   * transforms normalized according to the table schema, exactly as `withPartitioning` does.
-   */
+  /** Creates a copy of this node with the new write ordering. */
   def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan
 }
 
@@ -662,8 +659,7 @@ case class CreateTable(
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
     ignoreIfExists: Boolean,
-    // The requested write distribution mode, or null when the statement did not ask for one, and
-    // the requested write ordering. Only honored by catalogs that support them at create time.
+    // Null writeDistributionMode means the statement did not request one.
     writeDistributionMode: String = null,
     writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends UnaryCommand with V2CreateTablePlan {
@@ -728,8 +724,7 @@ case class CreateTableAsSelect(
     writeOptions: Map[String, String],
     ignoreIfExists: Boolean,
     isAnalyzed: Boolean = false,
-    // The requested write distribution mode, or null when the statement did not ask for one, and
-    // the requested write ordering. Only honored by catalogs that support them at create time.
+    // Null writeDistributionMode means the statement did not request one.
     writeDistributionMode: String = null,
     writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends V2CreateTableAsSelectPlan {
@@ -946,8 +941,7 @@ case class ReplaceTable(
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
     orCreate: Boolean,
-    // The requested write distribution mode, or null when the statement did not ask for one, and
-    // the requested write ordering. Only honored by catalogs that support them at create time.
+    // Null writeDistributionMode means the statement did not request one.
     writeDistributionMode: String = null,
     writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends UnaryCommand with V2CreateTablePlan {
@@ -980,8 +974,7 @@ case class ReplaceTableAsSelect(
     writeOptions: Map[String, String],
     orCreate: Boolean,
     isAnalyzed: Boolean = false,
-    // The requested write distribution mode, or null when the statement did not ask for one, and
-    // the requested write ordering. Only honored by catalogs that support them at create time.
+    // Null writeDistributionMode means the statement did not request one.
     writeDistributionMode: String = null,
     writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends V2CreateTableAsSelectPlan {
