@@ -2350,7 +2350,7 @@ class CachedTableSuite extends SharedSparkSession
 
   // SPARK-58814 CHAR/VARCHAR cache invariant coverage (scope freeze):
   // In scope: two bound identities (PreserveNative, SparkStandard) and the analyzer
-  // padding Project. Capture, identity, mutation matching, and replay of those.
+  // padding Project. This covers capture, identity, mutation matching, and replay for those cases.
   // Out of scope: Hive INSERT uncache-vs-recache, continuous-write invalidation,
   // AQE recacheByPlan, Legacy identity (SPARK-59751), CACHE TABLE pin of a SparkStandard
   // padding Project, view rename multi-entry capture.

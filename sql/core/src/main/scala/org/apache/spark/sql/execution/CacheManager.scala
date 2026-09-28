@@ -88,7 +88,7 @@ private[sql] case class TableCacheDescriptor(
  * further usage, or take [[Dataset]] and get its normalized plan. See `QueryExecution.normalize`
  * for more details about plan normalization.
  *
- * CHAR/VARCHAR cache lifecycle (SPARK-58814). Explicit Legacy identity is SPARK-59751.
+ * CHAR/VARCHAR cache lifecycle (SPARK-58814). Explicit Legacy identity is tracked in SPARK-59751.
  *
  * Capture: first-class CHAR/VARCHAR relations bind PreserveNative or SparkStandard in analysis.
  * The analyzer-generated read-side Project is part of that captured policy. None means no mode
@@ -105,7 +105,7 @@ private[sql] case class TableCacheDescriptor(
  * V2 identity, not ordinary sameResult. CACHE TABLE pin does not unwrap a padding Project:
  * that Project's child is a cleaned scan, and substituting it as the pinned relation makes
  * later reads miss the cache. Views do not split CHAR/VARCHAR identity on CACHE TABLE, so
- * view rename stays the pre-existing single-entry restore.
+ * view rename retains the pre-existing single-entry restoration behavior.
  *
  * In scope: defects that exist only because CHAR/VARCHAR has two bound identities or an
  * analyzer padding Project, and that can be fixed without changing general pin substitution.
