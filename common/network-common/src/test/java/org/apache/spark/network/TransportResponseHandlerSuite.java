@@ -22,11 +22,13 @@ import java.nio.ByteBuffer;
 
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelPipeline;
+import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.local.LocalChannel;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
@@ -36,6 +38,7 @@ import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallback;
+import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.ChunkFetchFailure;
 import org.apache.spark.network.protocol.ChunkFetchSuccess;
@@ -45,6 +48,11 @@ import org.apache.spark.network.protocol.RpcResponse;
 import org.apache.spark.network.protocol.StreamChunkId;
 import org.apache.spark.network.protocol.StreamFailure;
 import org.apache.spark.network.protocol.StreamResponse;
+import org.apache.spark.network.server.NoOpRpcHandler;
+import org.apache.spark.network.server.TransportChannelHandler;
+import org.apache.spark.network.server.TransportRequestHandler;
+import org.apache.spark.network.util.MapConfigProvider;
+import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.util.TransportFrameDecoder;
 
 public class TransportResponseHandlerSuite {
@@ -249,43 +257,72 @@ public class TransportResponseHandlerSuite {
 
   @Test
   public void desyncTearsDownConnectionAndFailsAllOutstandingRequests() throws Exception {
-    // Upstream impact of the streamId assert. In production, throwing from handle() propagates to
-    // TransportChannelHandler.exceptionCaught, which calls responseHandler.exceptionCaught (failing
-    // EVERY outstanding request on the channel) and then ctx.close(). This test simulates that
-    // sequence and shows the meaning for callers: when a stream-callback desync is detected, the
-    // whole (poisoned) connection is torn down and ALL its in-flight requests -- the mismatched
-    // stream AND any innocent concurrent chunk-fetch sharing the channel -- are failed. None
-    // receive data. The polled stream callback is failed with an IOException (which block fetches
-    // retry via RetryingBlockTransferor); the remaining callbacks are failed on teardown and their
-    // callers apply their own retry behavior where they support it.
-    Channel c = new LocalChannel();
-    c.pipeline().addLast(TransportFrameDecoder.HANDLER_NAME, new TransportFrameDecoder());
-    TransportResponseHandler handler = new TransportResponseHandler(c);
+    // Upstream impact of the streamId assert, driven through the production channel-handler path.
+    // A mismatched StreamResponse is written through a real TransportChannelHandler on an
+    // EmbeddedChannel: handle() throws, Netty routes the throwable to
+    // TransportChannelHandler.exceptionCaught, which fails EVERY remaining outstanding request on
+    // the channel and closes it. This shows the meaning for callers: the whole (poisoned)
+    // connection is torn down and all its in-flight requests -- the mismatched stream AND any
+    // innocent concurrent chunk fetch sharing the channel -- are failed retriably (the thrown
+    // exception carries an IOException cause, which RetryingBlockTransferor retries), and the
+    // channel is closed so the requests retry in order on a fresh connection. None receive data.
+    TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
+    TransportContext context = new TransportContext(conf, new NoOpRpcHandler());
+    try {
+      // No TransportFrameDecoder in the pipeline: the desync is detected in handle() before any
+      // interceptor/frame-decoder interaction, and the decoder would reject a non-ByteBuf inbound.
+      EmbeddedChannel channel = new EmbeddedChannel();
+      TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
+      TransportClient client = new TransportClient(channel, responseHandler);
+      TransportRequestHandler requestHandler = new TransportRequestHandler(
+        channel, client, new NoOpRpcHandler(), Long.MAX_VALUE, null);
+      TransportChannelHandler channelHandler = new TransportChannelHandler(
+        client, responseHandler, requestHandler, conf.connectionTimeoutMs(), false, false, context);
+      channel.pipeline().addLast("channelHandler", channelHandler);
 
-    // An innocent chunk fetch is in flight on the same connection.
-    StreamChunkId chunkId = new StreamChunkId(1, 0);
-    ChunkReceivedCallback chunkCb = mock(ChunkReceivedCallback.class);
-    handler.addFetchRequest(chunkId, chunkCb);
-    // ...and a stream fetch for "stream-A".
-    StreamCallback streamCb = mock(StreamCallback.class);
-    handler.addStreamCallback("stream-A", streamCb);
-    assertEquals(2, handler.numOutstandingRequests());
+      // An innocent chunk fetch is in flight on the same connection...
+      StreamChunkId chunkId = new StreamChunkId(1, 0);
+      ChunkReceivedCallback chunkCb = mock(ChunkReceivedCallback.class);
+      responseHandler.addFetchRequest(chunkId, chunkCb);
+      // ...and a stream fetch for "stream-A".
+      StreamCallback streamCb = mock(StreamCallback.class);
+      responseHandler.addStreamCallback("stream-A", streamCb);
+      assertEquals(2, responseHandler.numOutstandingRequests());
+      assertTrue(channel.isOpen());
 
-    // A StreamResponse for the wrong streamId arrives -> handle() throws (desync detected).
-    // The desynced (polled) stream callback is failed inline so its caller does not hang.
-    IllegalStateException thrown = assertThrows(IllegalStateException.class,
-      () -> handler.handle(new StreamResponse("stream-B", 1234L, null)));
-    assertTrue(thrown.getMessage().contains("desynced"));
-    verify(streamCb, times(1)).onFailure(eq("stream-A"), any());
-    verify(streamCb, never()).onComplete(any());
+      // A StreamResponse for the wrong streamId arrives through the real inbound pipeline.
+      channel.writeInbound(new StreamResponse("stream-B", 1234L, null));
 
-    // Netty then invokes exceptionCaught with the thrown cause; this is the teardown path that
-    // fails the connection's REMAINING outstanding requests (the innocent concurrent chunk fetch).
-    handler.exceptionCaught(thrown);
-    verify(chunkCb, times(1)).onFailure(eq(0), any());
+      // The desynced (polled) stream callback was failed inline with an IOException (not delivered
+      // to) so its caller does not hang.
+      ArgumentCaptor<Throwable> streamErr = ArgumentCaptor.forClass(Throwable.class);
+      verify(streamCb, times(1)).onFailure(eq("stream-A"), streamErr.capture());
+      verify(streamCb, never()).onComplete(any());
+      assertTrue(streamErr.getValue() instanceof IOException,
+        "polled stream callback should fail with an IOException, got: " + streamErr.getValue());
 
-    // Net result: no request on the poisoned connection received data; all were failed.
-    assertEquals(0, handler.numOutstandingRequests());
+      // exceptionCaught failed the innocent concurrent chunk fetch too. Its failure carries an
+      // IOException cause, so RetryingBlockTransferor treats it as retryable, not permanent.
+      ArgumentCaptor<Throwable> chunkErr = ArgumentCaptor.forClass(Throwable.class);
+      verify(chunkCb, times(1)).onFailure(eq(0), chunkErr.capture());
+      assertTrue(hasIOExceptionCause(chunkErr.getValue()),
+        "collateral fetch failure should carry an IOException cause, got: " + chunkErr.getValue());
+
+      // The poisoned connection was torn down and nothing is left outstanding.
+      assertFalse(channel.isOpen());
+      assertEquals(0, responseHandler.numOutstandingRequests());
+    } finally {
+      context.close();
+    }
+  }
+
+  private static boolean hasIOExceptionCause(Throwable t) {
+    for (Throwable cur = t; cur != null; cur = cur.getCause()) {
+      if (cur instanceof IOException) {
+        return true;
+      }
+    }
+    return false;
   }
 
   @Test
