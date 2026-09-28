@@ -98,19 +98,20 @@ private[memory] class ExecutionMemoryPool(
 
     // TODO: clean up this clunky method signature
 
-    // Add this task to the taskMemory map just so we can keep an accurate count of the number
-    // of active tasks, to let other tasks ramp down their memory in calls to `acquireMemory`
-    if (!memoryForTask.contains(taskAttemptId)) {
-      memoryForTask(taskAttemptId) = 0L
-      // This will later cause waiting tasks to wake up and check numTasks again
-      lock.notifyAll()
-    }
-
     // Keep looping until we're either sure that we don't want to grant this request (because this
     // task would have more than 1 / numActiveTasks of the memory) or we have enough free
     // memory to give it (we always let each task get at least 1 / (2 * numActiveTasks)).
     // TODO: simplify this to limit each task to its own slot
     while (true) {
+      // Add this task to the taskMemory map just so we can keep an accurate count of the number
+      // of active tasks, to let other tasks ramp down their memory in calls to `acquireMemory`.
+      // `releaseMemory` drops the entry once the task's balance reaches zero, which can happen
+      // while this task waits below, so the check runs on every pass (SPARK-59827).
+      if (!memoryForTask.contains(taskAttemptId)) {
+        memoryForTask(taskAttemptId) = 0L
+        // This will later cause waiting tasks to wake up and check numTasks again
+        lock.notifyAll()
+      }
       val numActiveTasks = memoryForTask.keys.size
       val curMem = memoryForTask(taskAttemptId)
 

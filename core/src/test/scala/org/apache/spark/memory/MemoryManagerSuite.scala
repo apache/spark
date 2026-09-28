@@ -238,6 +238,37 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     assert(ThreadUtils.awaitResult(t2Result2, 200.millis) === 0L)
   }
 
+  test("SPARK-59827: a waiting task keeps waiting after its memory entry is removed") {
+    val memoryManager = createMemoryManager(1000L)
+    val t1MemManager = new TaskMemoryManager(memoryManager, 1)
+    val t2MemManager = new TaskMemoryManager(memoryManager, 2)
+    val c1 = new TestMemoryConsumer(t1MemManager)
+    val c2 = new TestMemoryConsumer(t2MemManager)
+    val futureTimeout: Duration = 20.seconds
+
+    // t2 grabs 900 bytes while it is the only task, then t1 takes the remaining 100 bytes.
+    assert(t2MemManager.acquireExecutionMemory(900L, c2) === 900L)
+    assert(t1MemManager.acquireExecutionMemory(100L, c1) === 100L)
+    // t1 asks for 600 more. Nothing is free and 100 is below its 1 / 2N share of 250, so it
+    // blocks in the pool until other tasks release memory.
+    val t1Result2 = Future { t1MemManager.acquireExecutionMemory(600L, c1) }
+    Thread.sleep(300)
+    assert(!t1Result2.isCompleted)
+    // Another thread of t1 releases its 100 bytes. That drops t1's balance to zero, removes its
+    // entry from the pool and wakes the waiter, which must keep waiting rather than fail.
+    t1MemManager.releaseExecutionMemory(100L, c1)
+    Thread.sleep(300)
+    assert(!t1Result2.isCompleted)
+    // t2 frees 800 bytes and keeps 100, so two tasks stay active. The waiter's re-created entry
+    // counts as an ordinary active task, so its grant is capped at 1 / N (500 bytes) rather
+    // than the full 600 it asked for.
+    t2MemManager.releaseExecutionMemory(800L, c2)
+    assert(ThreadUtils.awaitResult(t1Result2, futureTimeout) === 500L)
+    assert(memoryManager.executionMemoryUsed === 600L)
+    assert(memoryManager.getExecutionMemoryUsageForTask(1) === 500L)
+    assert(memoryManager.getExecutionMemoryUsageForTask(2) === 100L)
+  }
+
   test("SPARK-35486: memory freed by self-spilling is taken by another task") {
     val memoryManager = createMemoryManager(1000L)
     val t1MemManager = new TaskMemoryManager(memoryManager, 1)
