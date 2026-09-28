@@ -109,6 +109,9 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
     ApproxTopK.checkExpressionNotNull(k, "k")
     // eval
     val stateEval = left.eval(input)
+    if (stateEval == null) {
+      return null
+    }
     val kEval = right.eval(input)
     val dataSketchBytes = stateEval.asInstanceOf[InternalRow].getBinary(0)
     val maxItemsTrackedVal = stateEval.asInstanceOf[InternalRow].getInt(1)
@@ -127,7 +130,9 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
   override protected def withNewChildrenInternal(newState: Expression, newK: Expression)
   : Expression = copy(state = newState, k = newK)
 
-  override def nullable: Boolean = false
+  // The sketch state is an ordinary nullable input column: `approx_top_k_estimate(NULL, k)`
+  // returns NULL rather than failing, so the result is nullable whenever the state is.
+  override def nullable: Boolean = state.nullable
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("approx_top_k_estimate")
