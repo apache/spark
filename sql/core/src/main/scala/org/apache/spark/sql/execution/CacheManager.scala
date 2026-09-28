@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, Project, ResolvedHint, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
-import org.apache.spark.sql.catalyst.util.{sideBySide, CharVarcharScanMode}
+import org.apache.spark.sql.catalyst.util.{sideBySide, CharVarcharScanMode, CharVarcharUtils}
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
@@ -505,16 +505,22 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   private def tryRebuildCacheEntry(spark: SparkSession, cd: CachedData): Option[CachedData] = {
     val mode = capturedCharVarcharScanMode(cd.plan)
-    val rebuildSession = sessionForCacheRebuild(spark, mode)
+    val rebuildSession = sessionForCacheRebuild(spark, mode, cd.plan)
     rebuildSession.withActive {
-      tryRefreshPlan(rebuildSession, cd.plan).map { refreshedPlan =>
-        val qe = QueryExecution.create(
-          rebuildSession,
-          refreshedPlan,
-          refreshPhaseEnabled = false)
-        val newKey = qe.normalized
-        val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
-        cd.copy(plan = newKey, cachedRepresentation = newCache)
+      try {
+        tryRefreshPlan(rebuildSession, cd.plan).map { refreshedPlan =>
+          val qe = QueryExecution.create(
+            rebuildSession,
+            refreshedPlan,
+            refreshPhaseEnabled = false)
+          val newKey = qe.normalized
+          val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
+          cd.copy(plan = newKey, cachedRepresentation = newCache)
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Failed to rebuild cache entry while attempting to recache", e)
+          None
       }
     }
   }
@@ -523,14 +529,30 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   // shared with the caller. CHAR/VARCHAR confs are set on that clone, never on `spark`.
   private def sessionForCacheRebuild(
       spark: SparkSession,
-      mode: Option[CharVarcharScanMode]): SparkSession = {
+      mode: Option[CharVarcharScanMode],
+      plan: LogicalPlan): SparkSession = {
     val base = getOrCloneSessionWithConfigsOff(spark)
     mode match {
       case None => base
       case Some(m) =>
         val session = if (base eq spark) spark.cloneSession() else base
-        CharVarcharScanMode.configure(session.sessionState.conf, m)
+        CharVarcharScanMode.configure(
+          session.sessionState.conf,
+          m,
+          nativeCharVarcharTypes = hasNativeCharVarcharTypes(plan))
         session
+    }
+  }
+
+  private def hasNativeCharVarcharTypes(plan: LogicalPlan): Boolean = {
+    plan.exists {
+      case r: DataSourceV2Relation =>
+        r.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))
+      case r: LogicalRelation =>
+        r.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))
+      case r: HiveTableRelation =>
+        r.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))
+      case _ => false
     }
   }
 
@@ -565,10 +587,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
             if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] =>
           refreshV2RelationTable(r, catalog, ident)
         case project @ Project(_, r @ ExtractV2CatalogAndIdentifier(catalog, ident))
-            if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] =>
-          refreshV2RelationTable(r, catalog, ident).map { refreshed =>
-            project.withNewChildren(Seq(refreshed))
-          }
+            if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] &&
+              r.charVarcharScanMode.exists(
+                ApplyCharTypePaddingHelper.isReadSidePaddingProject(project, r, _)) =>
+          // Drop the analyzer-generated padding Project. QueryExecution.create re-analyzes
+          // the refreshed relation so the Project matches the new schema and scan mode.
+          refreshV2RelationTable(r, catalog, ident)
         case _ =>
           Some(V2TableRefreshUtil.refresh(spark, plan))
       }
@@ -587,7 +611,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       ident: Identifier): Option[DataSourceV2Relation] = {
     val table = CatalogV2Util.getTable(catalog, ident, options = relation.options)
     if (relation.table.id == table.id) {
-      Some(relation.copy(table = table))
+      Some(
+        DataSourceV2Relation
+          .create(table, Some(catalog), Some(ident), relation.options)
+          .copy(charVarcharScanMode = relation.charVarcharScanMode))
     } else {
       None
     }

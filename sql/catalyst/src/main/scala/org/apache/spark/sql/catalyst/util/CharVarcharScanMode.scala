@@ -61,10 +61,20 @@ private[sql] object CharVarcharScanMode {
 
   /**
    * Configures `conf` so analysis binds `mode` and generates the matching read-side Project.
+   *
+   * Both flags are set so a cloned session cannot inherit the caller's PRESERVE value.
+   * SparkStandard defaults to PRESERVE=false; pass `nativeCharVarcharTypes = true` when the
+   * cached plan kept CHAR/VARCHAR data types (created with PRESERVE=true and STANDARD=true).
    */
-  def configure(conf: SQLConf, mode: CharVarcharScanMode): Unit = mode match {
+  def configure(
+      conf: SQLConf,
+      mode: CharVarcharScanMode,
+      nativeCharVarcharTypes: Boolean = false): Unit = mode match {
     case SparkStandard =>
       conf.setConfString(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key, "true")
+      conf.setConfString(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key,
+        nativeCharVarcharTypes.toString)
     case PreserveNative =>
       conf.setConfString(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key, "true")
       conf.setConfString(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key, "false")
