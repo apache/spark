@@ -242,7 +242,7 @@ private[spark] object BasePythonRunner extends Logging {
       bootTimestampMs: Long,
       initTimestampMs: Long,
       finishTimestampMs: Long,
-      processingDurationMs: Long,
+      pythonExecutionDurationMs: Long,
       memoryBytesSpilled: Long,
       diskBytesSpilled: Long)
 
@@ -260,7 +260,7 @@ private[spark] object BasePythonRunner extends Logging {
       metricValue("bootTimestampMs"),
       metricValue("initTimestampMs"),
       metricValue("finishTimestampMs"),
-      metricValue("processingDurationMs"),
+      metricValue("pythonExecutionDurationMs"),
       metricValue("memoryBytesSpilled"),
       metricValue("diskBytesSpilled"))
   }
@@ -918,7 +918,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       val bootTime = workerMetrics.bootTimestampMs
       val initTime = workerMetrics.initTimestampMs
       val finishTime = workerMetrics.finishTimestampMs
-      val processingTimeMs = workerMetrics.processingDurationMs
+      val pythonExecutionDurationMs = workerMetrics.pythonExecutionDurationMs
       // A reused Python worker records bootTime before waiting for this task, so it can precede
       // startTime. Use the later timestamp to exclude the worker's idle time from initialization.
       val pythonWorkerInitializationStartTime = math.max(startTime, bootTime)
@@ -944,7 +944,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       metrics.get("pythonBootTime").foreach(_.add(boot))
       metrics.get("pythonInitTime").foreach(_.add(init))
       metrics.get("pythonTotalTime").foreach(_.add(total))
-      metrics.get("pythonProcessingTime").foreach(_.add(processingTimeMs))
+      metrics.get("pythonProcessingTime").foreach(_.add(pythonExecutionDurationMs))
       context.taskMetrics().incMemoryBytesSpilled(workerMetrics.memoryBytesSpilled)
       context.taskMetrics().incDiskBytesSpilled(workerMetrics.diskBytesSpilled)
     }

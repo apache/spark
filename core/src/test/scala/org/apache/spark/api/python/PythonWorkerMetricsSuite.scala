@@ -25,7 +25,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 class PythonWorkerMetricsSuite extends SparkFunSuite {
   private val report =
     "{\"bootTimestampMs\":1250,\"initTimestampMs\":2500," +
-      "\"finishTimestampMs\":3750,\"processingDurationMs\":42," +
+      "\"finishTimestampMs\":3750,\"pythonExecutionDurationMs\":42," +
       "\"memoryBytesSpilled\":7,\"diskBytesSpilled\":9}"
   private val expected = BasePythonRunner.WorkerMetrics(1250L, 2500L, 3750L, 42L, 7L, 9L)
 
@@ -113,7 +113,7 @@ class PythonWorkerMetricsSuite extends SparkFunSuite {
   test("metric validation rejects non-int64 values after successful JSON decoding") {
     val invalidValues = Seq("null", "true", "\"42\"", "42.0", "[]", "{}",
       "9223372036854775808", "-9223372036854775809")
-    val metricFields = Seq("processingDurationMs" -> 42,
+    val metricFields = Seq("pythonExecutionDurationMs" -> 42,
       "memoryBytesSpilled" -> 7, "diskBytesSpilled" -> 9)
     for {
       (name, originalValue) <- metricFields
@@ -148,13 +148,14 @@ class PythonWorkerMetricsSuite extends SparkFunSuite {
 
   test("metric validation preserves int64 values exactly") {
     Seq(Long.MinValue, 9007199254740993L, Long.MaxValue).foreach { value =>
-      val json = report.replace("\"processingDurationMs\":42", "\"processingDurationMs\":" + value)
+      val json = report.replace(
+        "\"pythonExecutionDurationMs\":42", "\"pythonExecutionDurationMs\":" + value)
         .replace("\"memoryBytesSpilled\":7", "\"memoryBytesSpilled\":" + value)
         .replace("\"diskBytesSpilled\":9", "\"diskBytesSpilled\":" + value)
       val stream = framedStream(json)
       val decoded = BasePythonRunner.readWorkerMetrics(stream)
       assert(BasePythonRunner.validateWorkerMetrics(decoded) ==
-        expected.copy(processingDurationMs = value,
+        expected.copy(pythonExecutionDurationMs = value,
           memoryBytesSpilled = value, diskBytesSpilled = value))
       checkEndMarkers(stream)
     }

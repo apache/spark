@@ -129,7 +129,7 @@ from pyspark.worker_util import (
 
 
 def report_metrics(
-    outfile, boot, init, finish, processing_time_ms, memory_bytes_spilled, disk_bytes_spilled
+    outfile, boot, init, finish, execution_duration_ms, memory_bytes_spilled, disk_bytes_spilled
 ):
     """Write the worker metrics as a length-prefixed JSON report after METRICS_DATA."""
     payload = json.dumps(
@@ -137,7 +137,7 @@ def report_metrics(
             "bootTimestampMs": int(1000 * boot),
             "initTimestampMs": int(1000 * init),
             "finishTimestampMs": int(1000 * finish),
-            "processingDurationMs": processing_time_ms,
+            "pythonExecutionDurationMs": execution_duration_ms,
             "memoryBytesSpilled": memory_bytes_spilled,
             "diskBytesSpilled": disk_bytes_spilled,
         },
@@ -4553,13 +4553,13 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             serializer._flush_per_batch = True
         run_process = pipelined_process if is_pipelined else process
 
-        processing_start_time = time.time()
+        execution_start_time = time.time()
         with capture_outputs():
             if profiler:
                 profiler.profile(run_process)
             else:
                 run_process()
-        processing_time_ms = int(1000 * (time.time() - processing_start_time))
+        execution_duration_ms = int(1000 * (time.time() - execution_start_time))
 
         # Cleanup
         # Reset task context to None. This is a guard code to avoid residual context when worker
@@ -4575,7 +4575,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         boot_time,
         init_time,
         finish_time,
-        processing_time_ms,
+        execution_duration_ms,
         shuffle.MemoryBytesSpilled,
         shuffle.DiskBytesSpilled,
     )

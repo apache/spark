@@ -46,7 +46,7 @@ class WorkerMetricsProtocolTests(unittest.TestCase):
                 "bootTimestampMs": 1250,
                 "initTimestampMs": 2500,
                 "finishTimestampMs": 3750,
-                "processingDurationMs": 42,
+                "pythonExecutionDurationMs": 42,
                 "memoryBytesSpilled": 7,
                 "diskBytesSpilled": 9,
             },
@@ -174,11 +174,17 @@ def _worker_main(infile, outfile):
     original_report = worker.report_metrics
 
     def checked_report(
-        out, boot, init, finish, processing_time_ms, memory_bytes_spilled, disk_bytes_spilled
+        out, boot, init, finish, execution_duration_ms, memory_bytes_spilled, disk_bytes_spilled
     ):
         frame = io.BytesIO()
         original_report(
-            frame, boot, init, finish, processing_time_ms, memory_bytes_spilled, disk_bytes_spilled
+            frame,
+            boot,
+            init,
+            finish,
+            execution_duration_ms,
+            memory_bytes_spilled,
+            disk_bytes_spilled,
         )
         data = frame.getvalue()
         marker, length = struct.unpack("!ii", data[:8])
@@ -191,7 +197,7 @@ def _worker_main(infile, outfile):
             "bootTimestampMs": int(1000 * boot),
             "initTimestampMs": int(1000 * init),
             "finishTimestampMs": int(1000 * finish),
-            "processingDurationMs": processing_time_ms,
+            "pythonExecutionDurationMs": execution_duration_ms,
             "memoryBytesSpilled": memory_bytes_spilled,
             "diskBytesSpilled": disk_bytes_spilled,
         }
