@@ -65,6 +65,21 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
     assertReadWriteWithSkipN(writer, reader, randvalues)
   }
 
+  test("SPARK-59828: fixed-length byte arrays with skipN") {
+    // FIXED_LEN_BYTE_ARRAY values, e.g. decimal(38, 18), can also be DELTA_BYTE_ARRAY encoded.
+    val len = 16
+    val vals = Array.tabulate(1000)(i => f"$i%016d")
+    Utils.writeData(writer, vals)
+    reader.initFromPage(vals.length, writer.getBytes.toInputStream)
+    var i = 0
+    while (i < vals.length) {
+      val skipCount = (vals.length - i) / 2
+      assert(vals(i).getBytes() sameElements reader.readBinary(len).getBytes)
+      reader.skipFixedLenByteArray(skipCount, len)
+      i += skipCount + 1
+    }
+  }
+
   test("prefix length larger than the previous value is rejected") {
     // Craft a page by hand: a benign 2-byte first value, then a value whose prefix length
     // claims 65536 bytes of a 2-byte previous value.
