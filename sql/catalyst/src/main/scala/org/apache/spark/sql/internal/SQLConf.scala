@@ -7498,7 +7498,8 @@ object SQLConf {
       .doc(s"Configures a dedicated broadcast threshold for the right side of a single-column " +
         "null-aware anti join. This configuration takes effect only when " +
         s"${OPTIMIZE_NULL_AWARE_ANTI_JOIN.key} is enabled. A negative value allows the " +
-        "broadcast hash join optimization regardless of the estimated size. For a nonnegative " +
+        "broadcast hash join optimization regardless of the estimated size. Zero disables the " +
+        "optimization regardless of the applicable automatic broadcast threshold. For a positive " +
         "value, the applicable automatic broadcast threshold acts as a floor: " +
         s"${ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key} is used for runtime statistics when set, " +
         s"and ${AUTO_BROADCASTJOIN_THRESHOLD.key} is used otherwise. Once either threshold " +
@@ -7506,9 +7507,7 @@ object SQLConf {
         "eligibility decision controls aggregate pushdown, which runs before adaptive execution " +
         "and uses estimated statistics; join selection may reevaluate it with runtime " +
         "statistics. A lower adaptive threshold can leave a pushed-down join using a " +
-        s"nested-loop plan. Thus, zero alone does not disable the optimization. Set " +
-        s"${OPTIMIZE_NULL_AWARE_ANTI_JOIN.key} to false to disable it without changing automatic " +
-        "broadcast thresholds.")
+        "nested-loop plan.")
       .version("4.2.1")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)

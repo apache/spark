@@ -437,19 +437,25 @@ trait JoinSelectionHelper extends Logging {
       getBroadcastBuildSide(join, hintOnly = true, conf).orElse {
         if (noShufflePlannedBefore) getBroadcastBuildSide(join, hintOnly = false, conf) else None
       }
-    // `JoinSelection` always builds from the right for this shape. The applicable automatic
-    // broadcast threshold floors a nonnegative dedicated threshold. As before, threshold
-    // eligibility takes precedence over join hints. This same decision intentionally controls
-    // aggregate pushdown. If neither threshold admits the hash join, regular planning may still
-    // broadcast the right side for a nested-loop join. The thresholds limit hash relation
-    // construction, not all broadcasts.
+    // `JoinSelection` always builds from the right for this shape. A negative dedicated threshold
+    // is unbounded, zero disables the hash path, and a positive value is floored by the applicable
+    // automatic broadcast threshold. As before, threshold eligibility takes precedence over join
+    // hints. This same decision intentionally controls aggregate pushdown. If neither threshold
+    // admits the hash join, regular planning may still broadcast the right side for a nested-loop
+    // join. The thresholds limit hash relation construction, not all broadcasts.
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) =>
       val dedicatedThreshold = conf.nullAwareAntiJoinBroadcastThreshold
-      val canBroadcast = dedicatedThreshold < 0 ||
-        (dedicatedThreshold > 0 && {
+      val canBroadcast = if (dedicatedThreshold < 0) {
+        true
+      } else if (dedicatedThreshold == 0) {
+        false
+      } else {
+        val admittedByDedicatedThreshold = {
           val rightSize = j.right.stats.sizeInBytes
           rightSize >= 0 && rightSize <= dedicatedThreshold
-        }) || canBroadcastBySize(j.right, conf)
+        }
+        admittedByDedicatedThreshold || canBroadcastBySize(j.right, conf)
+      }
       if (canBroadcast) {
         Some(BuildRight)
       } else {

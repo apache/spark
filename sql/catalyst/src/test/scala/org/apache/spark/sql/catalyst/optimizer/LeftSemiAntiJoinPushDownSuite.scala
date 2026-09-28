@@ -174,14 +174,14 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     withSQLConf(
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
-      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "1") {
       comparePlans(Optimize.execute(originalQuery.analyze), pushedDownQuery.analyze)
       comparePlans(Optimize.execute(largeRightQuery.analyze), largeRightQuery.analyze)
     }
 
     withSQLConf(
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
       SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
       comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
     }

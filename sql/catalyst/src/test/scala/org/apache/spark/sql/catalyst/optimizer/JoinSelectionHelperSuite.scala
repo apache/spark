@@ -200,7 +200,8 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     }
   }
 
-  test("NAAJ broadcast threshold is floored by the automatic broadcast threshold") {
+  test("NAAJ broadcast threshold follows the three-way sentinel contract") {
+    val emptyRight = right.copy(rowCount = 0, size = Some(0))
     val betweenThresholdsRight = right.copy(
       rowCount = 8 * 1024 * 1024,
       size = Some(8 * 1024 * 1024))
@@ -215,10 +216,10 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
       SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
-      assert(getBroadcastHashJoinBuildSide(nullAwareAntiJoin(), SQLConf.get) === Some(BuildRight))
+      assert(getBroadcastHashJoinBuildSide(nullAwareAntiJoin(), SQLConf.get).isEmpty)
+      assert(getBroadcastHashJoinBuildSide(nullAwareAntiJoin(emptyRight), SQLConf.get).isEmpty)
       assert(getBroadcastHashJoinBuildSide(
-        nullAwareAntiJoin().copy(hint = JoinHint(hintBroadcast, None)),
-        SQLConf.get) === Some(BuildRight))
+        nullAwareAntiJoin().copy(hint = JoinHint(hintBroadcast, None)), SQLConf.get).isEmpty)
       assert(getBroadcastHashJoinBuildSide(
         nullAwareAntiJoin(largeRight).copy(
           hint = JoinHint(None, hintBroadcast)), SQLConf.get).isEmpty)
@@ -240,13 +241,6 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
         nullAwareAntiJoin(largeRight), SQLConf.get) === Some(BuildRight))
       assert(getBroadcastHashJoinBuildSide(
         nullAwareAntiJoin(overDedicatedThresholdRight), SQLConf.get).isEmpty)
-    }
-
-    withSQLConf(
-      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
-      assert(getBroadcastHashJoinBuildSide(nullAwareAntiJoin(), SQLConf.get).isEmpty)
     }
   }
 
@@ -299,7 +293,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1MB",
       SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
-      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "1") {
       assert(getBroadcastHashJoinBuildSide(
         nullAwareAntiJoin(runtimeRight), SQLConf.get) === Some(BuildRight))
     }

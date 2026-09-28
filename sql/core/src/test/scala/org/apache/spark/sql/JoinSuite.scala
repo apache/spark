@@ -1347,13 +1347,13 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
 
         withSQLConf(
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
-          SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+          SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "1") {
           checkNAAJ(leftHintedQuery, classOf[BroadcastHashJoinExec], BuildRight)
           checkNAAJ(unhintedQuery, classOf[BroadcastHashJoinExec], BuildRight)
         }
 
         withSQLConf(
-          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
           SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
           checkNAAJ(leftHintedQuery, classOf[BroadcastNestedLoopJoinExec], BuildLeft)
           checkNAAJ(rightHintedQuery, classOf[BroadcastNestedLoopJoinExec], BuildRight)
