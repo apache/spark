@@ -3693,7 +3693,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     }
   }
 
-  test("v2 table creation (global writeOrdering)") {
+  test("SPARK-34586: v2 table creation (global writeOrdering)") {
     val sql =
       s"""
          |CREATE TABLE IF NOT EXISTS mydb.table_name (
@@ -3733,7 +3733,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     }
   }
 
-  test("v2 table creation (hash distribution + local writeOrdering)") {
+  test("SPARK-34586: v2 table creation (hash distribution + local writeOrdering)") {
     val sql =
       s"""
          |CREATE TABLE IF NOT EXISTS mydb.table_name (
@@ -3779,7 +3779,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     }
   }
 
-  test("v2 table creation (local writeOrdering)") {
+  test("SPARK-34586: v2 table creation (local writeOrdering)") {
     val sql =
       s"""
          |CREATE TABLE IF NOT EXISTS mydb.table_name (
@@ -3824,7 +3824,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     }
   }
 
-  test("v2 CTAS with an explicit UNORDERED") {
+  test("SPARK-34586: v2 CTAS with an explicit UNORDERED") {
     val sql =
       s"""
          |CREATE TABLE IF NOT EXISTS testcat.mydb.table_name
@@ -3857,7 +3857,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     }
   }
 
-  test("v2 replace table (global writeOrdering)") {
+  test("SPARK-34586: v2 replace table (global writeOrdering)") {
     val sql =
       s"""
          |REPLACE TABLE testcat.tab (i INT, s STRING)
@@ -3889,7 +3889,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     }
   }
 
-  test("v2 RTAS (global writeOrdering)") {
+  test("SPARK-34586: v2 RTAS (global writeOrdering)") {
     val sql =
       s"""
          |REPLACE TABLE testcat.tab

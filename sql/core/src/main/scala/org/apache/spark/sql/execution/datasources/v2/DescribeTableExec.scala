@@ -227,11 +227,7 @@ case class DescribeTableExec(
     }
   }
 
-  /**
-   * Reports the write distribution and ordering the table declares as the default for writes into
-   * it, verbatim -- unlike SHOW CREATE TABLE, which has to spell them as clauses and so can only
-   * render the combinations the syntax has a spelling for.
-   */
+  /** Reports the table's declared write distribution and ordering verbatim. */
   private def addTableWriteDistributionAndOrdering(rows: ArrayBuffer[InternalRow]): Unit = {
     if (table.writeDistributionMode() != null || table.writeOrdering().nonEmpty) {
       rows += emptyRow()

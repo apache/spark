@@ -154,7 +154,9 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
     Both clauses are passed to the catalog, which has to support them: a catalog that does not
     advertise support for a write distribution and ordering rejects the statement rather than
     creating a table that silently lacks the requested layout. The built-in catalogs do not
-    support them.
+    support them. Both may also be combined with `CLUSTER BY`. Spark passes the clustering columns
+    and the requested distribution and ordering to the catalog without reconciling them, so the
+    catalog decides how they interact and may reject a combination it does not support.
 
     What the catalog records is a *default* for later writes, not a statement about the data
     already in the table: an individual write may override it, and rewriting existing data to match

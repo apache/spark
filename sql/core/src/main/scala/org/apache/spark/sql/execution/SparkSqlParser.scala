@@ -610,8 +610,7 @@ class SparkSqlAstBuilder extends AstBuilder {
 
       if (!ctx.createTableClauses().writeDistributionSpec.isEmpty ||
           !ctx.createTableClauses().writeOrderingSpec.isEmpty) {
-        // This builds a temp view, which has nowhere to record a write distribution or ordering,
-        // so honoring the clause is impossible; reject it rather than drop it silently.
+        // A temp view cannot record a write distribution or ordering.
         invalidStatement("CREATE TEMPORARY TABLE ... DISTRIBUTED BY/ORDERED BY", ctx)
       }
 

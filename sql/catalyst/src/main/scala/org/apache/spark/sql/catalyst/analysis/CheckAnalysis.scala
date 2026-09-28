@@ -992,11 +992,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                   "cols" -> badReferences.map(r => toSQLId(r)).mkString(", ")))
             }
 
-            // The same check for the write ordering. It has to live here rather than only in
-            // PreprocessTableCreation, which normalizes references: that rule can only rewrite a
-            // RewritableTransform, so a transform like `truncate(4, col)` would otherwise reach the
-            // connector with a column the table does not have, and it skips the ordering entirely
-            // when the schema is not defined.
+            // PreprocessTableCreation only normalizes RewritableTransform references, so the
+            // ordering is also checked here.
             val badOrderingReferences =
               create.writeOrdering.flatMap(_.expression().references()).toSet
                 .map((ref: NamedReference) => ref.fieldNames)
@@ -1009,7 +1006,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
             if (badOrderingReferences.nonEmpty) {
               create.failAnalysis(
-                errorClass = "UNSUPPORTED_FEATURE.WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
+                errorClass = "WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
                 messageParameters = Map(
                   "cols" -> badOrderingReferences.map(r => toSQLId(r)).mkString(", ")))
             }
