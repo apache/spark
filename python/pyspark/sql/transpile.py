@@ -19,13 +19,8 @@ Experimental tools for transpiling UDFS.
 
 Transpilation is only attempted when both
 ``spark.sql.experimental.optimizer.transpilePyUDFs=true`` and
-``spark.sql.ansi.enabled=true``. A third knob,
-``spark.sql.experimental.optimizer.transpileNullStrictness`` (``strict``
-by default), controls ordering-comparison null behavior: under ``strict``
-a NULL operand causes a runtime error matching Python's TypeError; under
-``loose`` NULL propagates as NULL, allowing more UDFs to transpile at the
-cost of minor semantic divergence on NULL inputs. The generated Catalyst expressions
-target ANSI-mode SQL semantics (overflow raises, divide-by-zero raises,
+``spark.sql.ansi.enabled=true``. The generated Catalyst expressions target
+ANSI-mode SQL semantics (overflow raises, divide-by-zero raises,
 etc.); running them under non-ANSI mode would silently diverge from the
 Python interpretation in ways we don't currently track. If you flip
 transpilation on with ANSI off the UDF will fall back to interpreted
@@ -166,11 +161,6 @@ class AbstractTranspiler(object):
     # Specify the "friendly" name a user can add to spark.sql.experimental.optimizer.pyTranspilers
     # to enable this transpiler.
     variety: str = ""
-
-    def __init__(self, null_strict: bool = True) -> None:
-        # When True, ordering comparisons on NULL raise an error (Python TypeError semantics).
-        # When False, NULL propagates as NULL (Spark three-valued logic).
-        self._null_strict = null_strict
 
     @classmethod
     def register(cls) -> None:
@@ -314,7 +304,8 @@ class CatalystTranspiler(AbstractTranspiler):
 
     variety = "catalyst"
 
-    def __init__(self) -> None:
+    def __init__(self, null_strict: bool = True) -> None:
+        self._null_strict = null_strict
         self._param_categories: dict[int, str] = {}
         self._category_cache: dict[int, str] = {}
         self._nonnull_params: frozenset = frozenset()
@@ -563,6 +554,12 @@ class CatalystTranspiler(AbstractTranspiler):
         value info, so it is documented, not guarded): Spark orders ``NaN``
         as greater than every value, whereas Python's ``NaN`` comparisons
         are all ``False``.
+
+        ``spark.sql.experimental.optimizer.transpileNullStrictness`` controls
+        this guard. Under ``strict`` (the default) a NULL operand raises,
+        matching Python's TypeError. Under ``loose`` the guard is skipped and
+        NULL propagates as NULL, allowing more UDFs to transpile at the cost of
+        that semantic difference on NULL inputs.
         """
         lc = self._category(params, left_node)
         rc = self._category(params, right_node)
@@ -577,8 +574,6 @@ class CatalystTranspiler(AbstractTranspiler):
         if self._is_nonnull_node(params, left_node) and self._is_nonnull_node(params, right_node):
             return op(left_col, right_col)
         if not self._null_strict:
-            # loose mode: let NULL propagate as NULL (Spark three-valued logic)
-            # instead of raising to match Python's TypeError.
             return op(left_col, right_col)
         null_guard = left_col.isNull() | right_col.isNull()
         err = lit(
@@ -1121,10 +1116,10 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
     configured_transpilers = session.conf.get("spark.sql.experimental.optimizer.pyTranspilers")
     if not configured_transpilers:
         return []
-    null_strictness = session.conf.get(
-        "spark.sql.experimental.optimizer.transpileNullStrictness", "strict"
+    null_strict = (
+        session.conf.get("spark.sql.experimental.optimizer.transpileNullStrictness", "strict")
+        != "loose"
     )
-    null_strict = null_strictness != "loose"
     transpiler_names = configured_transpilers.split(",")
     unknown_names = [name for name in transpiler_names if name not in AbstractTranspiler.varieties]
     if unknown_names:
