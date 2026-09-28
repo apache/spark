@@ -2469,21 +2469,28 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 self.assertEqual(self._vals(func, rt, schema, rows), expected, f"case {i}")
 
     def test_udf_transpile_string_len(self):
-        # SPARK-55214: Empty, ASCII, and concat inputs match Python; NULL
-        # stays NULL (same unguarded caveat as ``x + 1``). ``len`` on a numeric
-        # column has no string option that matches, so the UDF falls back and
-        # Python raises TypeError.
+        # SPARK-55214: Empty, ASCII, and concat inputs match Python.
+        # Unguarded ``len(NULL)`` raises like CPython (not Spark length's NULL).
+        # A proven-non-null branch still returns None for NULL rows. ``len`` on
+        # a numeric column has no matching string option, so the UDF falls back
+        # and Python raises TypeError.
         L = LongType()
         strlen = lambda x: len(x)  # noqa: E731
         len_concat = lambda a, b: len(a + b)  # noqa: E731
+        strlen_guarded = lambda x: len(x) if x is not None else None  # noqa: E731
         self.assertEqual(
-            self._vals(strlen, L, "a string", [("",), ("ab",), ("a",), (None,)]),
-            [0, 2, 1, None],
+            self._vals(strlen, L, "a string", [("",), ("ab",), ("a",)]),
+            [0, 2, 1],
         )
         self.assertEqual(
             self._vals(len_concat, L, "a string, b string", [("x", "yz"), ("", "ab")]),
             [3, 2],
         )
+        self.assertEqual(
+            self._vals(strlen_guarded, L, "a string", [("ab",), (None,)]),
+            [2, None],
+        )
+        self._raises(strlen, "a string", [(None,)], needle="len()")
         self._raises(strlen, "a long", [(5,)], needle="")
 
     def test_udf_transpile_string_operands_fall_back(self):
