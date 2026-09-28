@@ -18,10 +18,13 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.math.{BigDecimal => JBigDecimal}
+import java.nio.file.Files
 import java.time.{LocalDateTime, LocalTime}
 import java.util.Locale
 
 import scala.collection.mutable
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -35,6 +38,7 @@ import org.apache.parquet.example.data.Group
 import org.apache.parquet.example.data.simple.{SimpleGroup, SimpleGroupFactory}
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
+import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
@@ -2477,6 +2481,43 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           }
           checkAnswer(df, expected)
         }
+      }
+    }
+  }
+
+  test("SPARK-59832: vectorized reader fails on truncated definition levels") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(100).selectExpr("if(id < 0, null, cast(id as int)) as a").coalesce(1)
+        .write
+        .option(ParquetOutputFormat.ENABLE_DICTIONARY, "false")
+        .option("compression", "uncompressed")
+        .parquet(path)
+      val file = dir.listFiles().filter(_.getName.endsWith(".parquet")).head
+      val bytes = Files.readAllBytes(file.toPath)
+      // The definition levels of the only data page: the 4-byte length 3, then one RLE run
+      // with header 100 << 1 (varint 0xC8 0x01) and value 1.
+      val levels = Array[Byte](3, 0, 0, 0, 0xC8.toByte, 0x01, 1)
+      val offsets = bytes.indices.filter { i =>
+        bytes.slice(i, i + levels.length).sameElements(levels)
+      }
+      assert(offsets.size == 1)
+      // Shorten the run to 64 values (header 64 << 1 = varint 0x80 0x01).
+      bytes(offsets.head + 4) = 0x80.toByte
+      Files.write(file.toPath, bytes)
+      dir.listFiles().filter(_.getName.endsWith(".crc")).foreach(_.delete())
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        // Before the fix the read never returned, so run it with a timeout.
+        // scalastyle:off awaitresult
+        val e = intercept[SparkException] {
+          Await.result(
+            Future(spark.read.parquet(path).collect())(ExecutionContext.global), 1.minute)
+        }
+        // scalastyle:on awaitresult
+        val cause = Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null)
+          .collectFirst { case c: ParquetDecodingException => c }
+        assert(cause.exists(_.getMessage.contains("Corrupted RLE data")), e)
       }
     }
   }
