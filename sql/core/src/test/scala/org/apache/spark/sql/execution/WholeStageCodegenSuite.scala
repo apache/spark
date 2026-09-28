@@ -2002,6 +2002,26 @@ class WholeStageCodegenSuite extends SharedSparkSession
     checkAnswer(df, (0L until 10L).map(i => Row(i * i + 1, i * i + 2)))
   }
 
+  test("SPARK-33301: a split common subexpression under a keyed aggregate takes the buffer") {
+    // The same CASE WHEN in two aggregates is one subexpression, split into a `subExpr` method
+    // of its own. A `nullif` branch makes the CASE WHEN's split methods take the aggregate's
+    // buffer, so the `subExpr` method, which calls them, must take it too.
+    withTempView("t") {
+      spark.range(1000).selectExpr("id % 7 AS k", "CAST(id % 400 AS INT) AS v")
+        .createOrReplaceTempView("t")
+      val branches = "WHEN v = 0 THEN 0 WHEN v = 1 THEN nullif(nullif(v * 3, 1), 2) " +
+        (2 to 300).map(k => s"WHEN v = $k THEN v * $k").mkString(" ")
+      val caseWhen = s"CASE $branches ELSE 0 END"
+      val query = s"SELECT k, sum($caseWhen), max($caseWhen) FROM t GROUP BY k"
+      val df = sql(query)
+      assert(splitCaseWhenTakesRow(df))
+      val subExpr = "(?s)private void \\w*subExpr_\\d+\\([^)]*InternalRow [^{]*\\{" +
+        "(?:(?!\\nprivate ).)*caseWhen_\\d"
+      assert(genCode(df).exists(c => subExpr.r.findFirstIn(c.body).nonEmpty))
+      checkAnswer(df, withoutWholeStage(sql(query)))
+    }
+  }
+
   test("SPARK-33301: functions added in a discarded pass of subexpression elimination go") {
     // Subexpression elimination generates its subexpressions once without splitting and, when
     // that code is too large, again split, discarding the first; the methods the first pass
