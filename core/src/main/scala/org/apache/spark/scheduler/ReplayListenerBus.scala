@@ -38,10 +38,14 @@ import org.apache.spark.util.JsonProtocol
  * @param maxLineLength Maximum UTF-8 byte length of a single event log line, excluding its line
  *                      ending. Longer lines are drained, skipped and logged, bounding the
  *                      memory replay can use when an event log is corrupt or unexpectedly large.
+ *                      Values at or below zero or above MAX_LINE_LENGTH use MAX_LINE_LENGTH
+ *                      (512 MiB).
  */
 private[spark] class ReplayListenerBus(
     maxLineLength: Int = ReplayListenerBus.DEFAULT_MAX_LINE_LENGTH)
   extends SparkListenerBus with Logging {
+
+  def this() = this(ReplayListenerBus.DEFAULT_MAX_LINE_LENGTH)
 
   private[scheduler] val effectiveMaxLineLength =
     ReplayListenerBus.normalizeMaxLineLength(maxLineLength)
@@ -127,9 +131,10 @@ private[spark] class ReplayListenerBus(
             if (!warned) {
               logWarning(log"Skipped event log lines longer than " +
                 log"${MDC(MAX_SIZE, effectiveMaxLineLength)} bytes in " +
-                log"${MDC(FILE_NAME, sourceName)}")
+                log"${MDC(FILE_NAME, sourceName)}; first skipped line: ${MDC(LINE_NUM, index + 1)}")
               warned = true
             }
+            logDebug(s"Skipped event log line ${index + 1} in $sourceName")
             fetchLine()
           } else {
             (maybeLine.get, index)
@@ -216,7 +221,10 @@ private[spark] class ReplayListenerBus(
         throw ioe
       case e: Exception =>
         logError(log"Exception parsing Spark event log: ${MDC(PATH, sourceName)}", e)
-        logError(log"Malformed line #${MDC(LINE_NUM, lineNumber)}: ${MDC(LINE, currentLine)}\n")
+        val prefix = Option(currentLine).map(_.take(1024)).orNull
+        val length = Option(currentLine).fold(0)(_.length)
+        logError(log"Malformed line #${MDC(LINE_NUM, lineNumber)}: ${MDC(LINE, prefix)} " +
+          log"(line length: ${MDC(SIZE, length)} characters; showing at most 1024)\n")
         false
     }
   }
@@ -239,7 +247,7 @@ private[spark] object ReplayListenerBus {
   val DEFAULT_MAX_LINE_LENGTH: Int = History.EVENT_LOG_MAX_LINE_LENGTH.defaultValue.get.toInt
 
   // Bound StringBuilder growth so UTF-16 inflation stays below the JVM array-size limit.
-  val MAX_LINE_LENGTH: Int = 512 * 1024 * 1024
+  val MAX_LINE_LENGTH: Int = History.EVENT_LOG_MAX_LINE_LENGTH_LIMIT
 
   /** Resolves the byte limit, using 512 MiB for non-positive or larger values. */
   def maxLineLength(conf: SparkConf): Int = {
@@ -263,6 +271,8 @@ private[spark] object ReplayListenerBus {
 
     def length: Int = buffer.length()
 
+    def capacity: Int = buffer.capacity()
+
     def append(c: Char): Unit = {
       if (byteLength <= bufferLimit) {
         // The strict decoder emits valid surrogate pairs: count two bytes per half.
@@ -270,6 +280,10 @@ private[spark] object ReplayListenerBus {
         // Reserve one extra byte for a possible CR in the line ending.
         if (byteLength <= bufferLimit) {
           buffer.append(c)
+        } else {
+          // The line will be skipped; release the retained prefix while draining.
+          buffer.setLength(0)
+          buffer.trimToSize()
         }
       }
     }
