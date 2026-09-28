@@ -549,6 +549,37 @@ class ApproxTopKSuite extends SharedSparkSession {
     )
   }
 
+
+  private val nullSketchState =
+    """CAST(NULL AS STRUCT<sketch: BINARY, maxItemsTracked: INT,
+      |  itemDataType: INT, itemDataTypeDDL: STRING>)""".stripMargin
+
+  test("SPARK-59818: estimate of a foldable NULL state returns NULL") {
+    checkAnswer(sql(s"SELECT approx_top_k_estimate($nullSketchState, 5)"), Row(null))
+  }
+
+  test("SPARK-59818: estimate of a non-foldable NULL state returns NULL") {
+    withTempView("estimate_null_state") {
+      sql(
+        s"""SELECT approx_top_k_accumulate(expr) AS state
+           |FROM VALUES 0, 1, 1 AS tab(expr)
+           |UNION ALL
+           |SELECT $nullSketchState AS state""".stripMargin)
+        .createOrReplaceTempView("estimate_null_state")
+      val res = sql("SELECT approx_top_k_estimate(state, 2) FROM estimate_null_state")
+      checkAnswer(res, Seq(Row(Seq(Row(1, 2), Row(0, 1))), Row(null)))
+    }
+  }
+
+  test("SPARK-59818: estimate is nullable when its state is nullable") {
+    withTempView("estimate_nullable_state") {
+      sql(s"SELECT $nullSketchState AS state")
+        .createOrReplaceTempView("estimate_nullable_state")
+      val res = sql("SELECT approx_top_k_estimate(state, 2) FROM estimate_nullable_state")
+      assert(res.schema.fields.head.nullable)
+    }
+  }
+
   /////////////////////////////////
   // approx_top_k_combine
   /////////////////////////////////
@@ -1294,6 +1325,20 @@ class ApproxTopKSuite extends SharedSparkSession {
 
       val est = sql("SELECT approx_top_k_estimate(com) FROM combined")
       checkAnswer(est, Row(Seq(Row(null, 5))))
+    }
+  }
+
+  test("SPARK-59818: combine skips NULL sketches") {
+    withTempView("combine_null_state") {
+      sql(
+        s"""SELECT approx_top_k_accumulate(expr) AS state
+           |FROM VALUES 0, 1, 1 AS tab(expr)
+           |UNION ALL
+           |SELECT $nullSketchState AS state""".stripMargin)
+        .createOrReplaceTempView("combine_null_state")
+      val res = sql(
+        "SELECT approx_top_k_estimate(approx_top_k_combine(state), 2) FROM combine_null_state")
+      checkAnswer(res, Row(Seq(Row(1, 2), Row(0, 1))))
     }
   }
 }
