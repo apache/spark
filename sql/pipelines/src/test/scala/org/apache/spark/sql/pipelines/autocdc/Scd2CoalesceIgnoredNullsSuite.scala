@@ -71,7 +71,7 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
   private def coalesce(
       df: DataFrame,
       ignoreNullSelection: ColumnSelection): DataFrame =
-    processor(ignoreNullSelection).coalesceIgnoredNulls(df, ignoreNullSelection)
+    processor(ignoreNullSelection).coalesceIgnoredNulls(df)
 
   test("rows without version maps establish authorship using the current selection") {
     val selection = includeColumns("selected")

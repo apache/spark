@@ -23,6 +23,7 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{CreateMap, If, Literal, RaiseError}
+import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.{DataFrame, ExpressionUtils}
 import org.apache.spark.sql.expressions.{Window, WindowSpec}
@@ -1015,113 +1016,123 @@ case class Scd2BatchProcessor(
    * reconciliation so inherited tracked-history values determine the final SCD2 runs.
    */
   private[autocdc] def coalesceIgnoredNulls(
-      decomposedDf: DataFrame,
-      ignoreNullSelection: ColumnSelection): DataFrame = {
-    val resolver = decomposedDf.sparkSession.sessionState.conf.resolver
-    val userDataColumnSchema = AutoCdcSchemaUtils.excludeColumns(
-      schema = decomposedDf.schema,
-      columnNamesToExclude = changeArgs.keys.map(_.name) ++
-        Scd2BatchProcessor.reservedFrameworkColNames,
-      resolver = resolver
-    )
-    val activeIgnoreNullLeafPaths =
-      Scd2VersionMap.resolveIgnoreNullLeafPaths(userDataColumnSchema, ignoreNullSelection, resolver)
-
-    val cdcMetadataCol = F.col(AutoCdcReservedNames.cdcMetadataColName)
-    val versionMapCol = Scd2BatchProcessor.versionMapOf(cdcMetadataCol)
-
-    val currentRow = Scd2IntervalColumns(
-      recordStartAt = Scd2BatchProcessor.recordStartAtOf(cdcMetadataCol),
-      startAt = F.col(Scd2BatchProcessor.startAtColName),
-      endAt = F.col(Scd2BatchProcessor.endAtColName)
-    )
-    val nextRow = currentRow.leadBy(1, orderChronologicallyPerKeyWindow)
-
-    val isUpsertRepresentingRow = RowClassifier.isUpsertRepresentingRow(currentRow)
-    val withInitializedVersionMaps = initializeMissingVersionMaps(
-      rowsDf = decomposedDf,
-      eligibleSchema = userDataColumnSchema,
-      ignoreNullSelection = ignoreNullSelection,
-      isUpsertRepresentingRow = isUpsertRepresentingRow,
-      resolver = resolver
-    )
-
-    // Strictly preceding rows only, as a row may never inherit from itself.
-    val precedingRowsInKeyWindow =
-      orderChronologicallyPerKeyWindow.rowsBetween(Window.unboundedPreceding, -1)
-
-    // Project row-level context used to compute the leaf-level inheritance expressions below.
-    val (withRowInheritanceContextDf, rowInheritanceContext) =
-      RowInheritanceContext.projectOn(
-        df = withInitializedVersionMaps,
-        rowEndsInheritanceChain = F.coalesce(
-          // Any row that fully closes or represents a delete event (closing a preceding upsert
-          // event) ends any running inheritance chain.
-          RowClassifier.isTombstone(currentRow) ||
-            RowClassifier.isDecompositionTail(currentRow) ||
-            RowClassifier.rowClosesStrictlyBeforeNextRowIsVisible(currentRow.endAt, nextRow),
-          F.lit(false)
-        ),
-        isUpsertRepresentingRow = isUpsertRepresentingRow,
-        isFirstRowInKeyWindow =
-          F.row_number().over(orderChronologicallyPerKeyWindow) === 1
-      )
-
-    // Only leaves in the active ignore-null selection participate in reconciliation. The
-    // initialized version map determines whether each row authored its value; the selection
-    // determines whether that recorded authorship is relevant to this reconciliation.
-    val ignoreNullLeafInheritanceContexts =
-      activeIgnoreNullLeafPaths.zipWithIndex.map { case (path, index) =>
-        LeafInheritanceContext(
-          path = path,
-          index = index,
-          versionMap = versionMapCol,
-          rowInheritanceContext = rowInheritanceContext,
-          precedingRowsInKeyWindow = precedingRowsInKeyWindow
+      decomposedDf: DataFrame): DataFrame =
+    changeArgs.ignoreNullSelection match {
+      case None => decomposedDf
+      case Some(ignoreNullSelection) =>
+        val resolver = decomposedDf.sparkSession.sessionState.conf.resolver
+        val userDataColumnSchema = AutoCdcSchemaUtils.excludeColumns(
+          schema = decomposedDf.schema,
+          columnNamesToExclude = changeArgs.keys.map(_.name) ++
+            Scd2BatchProcessor.reservedFrameworkColNames,
+          resolver = resolver
         )
-      }
-    val ignoreNullContextsByTopLevelColumn =
-      ignoreNullLeafInheritanceContexts.groupBy(_.path.head)
+        val activeIgnoreNullLeafPaths =
+          Scd2VersionMap.resolveIgnoreNullLeafPaths(
+            userDataColumnSchema, ignoreNullSelection, resolver)
 
-    // Evaluate all values available to inherit in one window pass.
-    val withValuesToInheritDf = withRowInheritanceContextDf.withColumns(
-      ignoreNullLeafInheritanceContexts.map { context =>
-        context.valueToInheritIfAnyColName -> context.valueToInheritIfAny
-      }.toMap)
+        val cdcMetadataCol = F.col(AutoCdcReservedNames.cdcMetadataColName)
+        val versionMapCol = Scd2BatchProcessor.versionMapOf(cdcMetadataCol)
 
-    // Compute updated version maps after materializing new entries due to schema evolution.
-    val schemaEvolutionUpdatedVersionMap =
-      Scd2BatchProcessor.updateVersionMapWithSchemaEvolution(
-        versionMapCol,
-        ignoreNullLeafInheritanceContexts)
+        val currentRow = Scd2IntervalColumns(
+          recordStartAt = Scd2BatchProcessor.recordStartAtOf(cdcMetadataCol),
+          startAt = F.col(Scd2BatchProcessor.startAtColName),
+          endAt = F.col(Scd2BatchProcessor.endAtColName)
+        )
+        val nextRow = currentRow.leadBy(1, orderChronologicallyPerKeyWindow)
 
-    // Build one expression per original column, replacing the CDC metadata and selected user-data
-    // columns while preserving the original column order. Expressions are resolved against
-    // columns in [[withValuesToInheritDf]].
-    val outputColumns = decomposedDf.columns.map {
-      case colName if colName == AutoCdcReservedNames.cdcMetadataColName =>
-        // Update the version map after materializing schema-evolution-attributed columns.
-        cdcMetadataCol
-          .withField(
-            Scd2BatchProcessor.versionMapFieldName,
-            schemaEvolutionUpdatedVersionMap
+        val isUpsertRepresentingRow = RowClassifier.isUpsertRepresentingRow(currentRow)
+        val withInitializedVersionMaps = initializeMissingVersionMaps(
+          rowsDf = decomposedDf,
+          eligibleSchema = userDataColumnSchema,
+          ignoreNullSelection = ignoreNullSelection,
+          isUpsertRepresentingRow = isUpsertRepresentingRow,
+          resolver = resolver
+        )
+
+        // Strictly preceding rows only, as a row may never inherit from itself.
+        val precedingRowsInKeyWindow =
+          orderChronologicallyPerKeyWindow.rowsBetween(Window.unboundedPreceding, -1)
+
+        // Project row-level context used to compute the leaf-level inheritance
+        // expressions below.
+        val (withRowInheritanceContextDf, rowInheritanceContext) =
+          RowInheritanceContext.projectOn(
+            df = withInitializedVersionMaps,
+            rowEndsInheritanceChain = F.coalesce(
+              // Any row that fully closes or represents a delete event (closing a
+              // preceding upsert event) ends any running inheritance chain.
+              RowClassifier.isTombstone(currentRow) ||
+                RowClassifier.isDecompositionTail(currentRow) ||
+                RowClassifier.rowClosesStrictlyBeforeNextRowIsVisible(
+                  currentRow.endAt, nextRow),
+              F.lit(false)
+            ),
+            isUpsertRepresentingRow = isUpsertRepresentingRow,
+            isFirstRowInKeyWindow =
+              F.row_number().over(orderChronologicallyPerKeyWindow) === 1
           )
-          .as(colName, decomposedDf.schema(colName).metadata)
-      case colName
-          if ignoreNullContextsByTopLevelColumn.contains(colName) =>
-        // Rebuild only user-data columns containing an active ignore-null leaf.
-        val field = userDataColumnSchema(colName)
-        Scd2BatchProcessor.constructCoalescedIgnoreNullColumn(
-          Seq(colName), field.dataType, ignoreNullContextsByTopLevelColumn(colName)
-        ).as(colName, field.metadata)
-      case colName =>
-        // Pass through keys, framework columns, and user data outside the active selection.
-        F.col(QuotingUtils.quoteIdentifier(colName))
-    }
 
-    // Evaluate the replacements and drop the temporary inheritance columns.
-    withValuesToInheritDf.select(outputColumns.toImmutableArraySeq: _*)
-  }
+        // Only leaves in the active ignore-null selection participate in
+        // reconciliation. The initialized version map determines whether each row
+        // authored its value; the selection determines whether that recorded
+        // authorship is relevant to this reconciliation.
+        val ignoreNullLeafInheritanceContexts =
+          activeIgnoreNullLeafPaths.zipWithIndex.map { case (path, index) =>
+            LeafInheritanceContext(
+              path = path,
+              index = index,
+              versionMap = versionMapCol,
+              rowInheritanceContext = rowInheritanceContext,
+              precedingRowsInKeyWindow = precedingRowsInKeyWindow
+            )
+          }
+        val ignoreNullContextsByTopLevelColumn =
+          ignoreNullLeafInheritanceContexts.groupBy(_.path.head)
+
+        // Evaluate all values available to inherit in one window pass.
+        val withValuesToInheritDf = withRowInheritanceContextDf.withColumns(
+          ignoreNullLeafInheritanceContexts.map { context =>
+            context.valueToInheritIfAnyColName -> context.valueToInheritIfAny
+          }.toMap)
+
+        // Compute updated version maps after materializing new entries due to
+        // schema evolution.
+        val schemaEvolutionUpdatedVersionMap =
+          Scd2BatchProcessor.updateVersionMapWithSchemaEvolution(
+            versionMapCol,
+            ignoreNullLeafInheritanceContexts)
+
+        // Build one expression per original column, replacing the CDC metadata and
+        // selected user-data columns while preserving the original column order.
+        // Expressions are resolved against columns in [[withValuesToInheritDf]].
+        val outputColumns = decomposedDf.columns.map {
+          case colName if colName == AutoCdcReservedNames.cdcMetadataColName =>
+            // Update the version map after materializing schema-evolution entries.
+            cdcMetadataCol
+              .withField(
+                Scd2BatchProcessor.versionMapFieldName,
+                schemaEvolutionUpdatedVersionMap
+              )
+              .as(colName, decomposedDf.schema(colName).metadata)
+          case colName
+              if ignoreNullContextsByTopLevelColumn.contains(colName) =>
+            // Rebuild only user-data columns containing an active ignore-null leaf.
+            val field = userDataColumnSchema(colName)
+            Scd2BatchProcessor.constructCoalescedIgnoreNullColumn(
+              Seq(colName),
+              field,
+              ignoreNullContextsByTopLevelColumn(colName)
+            ).as(colName, field.metadata)
+          case colName =>
+            // Pass through keys, framework columns, and user data outside the
+            // active selection.
+            F.col(QuotingUtils.quoteIdentifier(colName))
+        }
+
+        // Evaluate the replacements and drop the temporary inheritance columns.
+        withValuesToInheritDf.select(outputColumns.toImmutableArraySeq: _*)
+    }
 
   /**
    * Convert surviving decomposition tails into tombstones.
@@ -1716,19 +1727,19 @@ object Scd2BatchProcessor {
    */
   private def constructCoalescedIgnoreNullColumn(
       path: Seq[String],
-      dataType: DataType,
+      field: StructField,
       contextsBeneath: Seq[LeafInheritanceContext]): Column = {
-    val reconstructed = dataType match {
+    val reconstructed = field.dataType match {
       case struct: StructType =>
         val contextsByChildName = contextsBeneath.groupBy(_.path(path.length))
         val rebuilt = F.struct(
-          struct.fields.toImmutableArraySeq.map { field =>
-            val childPath = path :+ field.name
+          struct.fields.toImmutableArraySeq.map { childField =>
+            val childPath = path :+ childField.name
             contextsByChildName
-              .get(field.name)
-              .map(constructCoalescedIgnoreNullColumn(childPath, field.dataType, _))
+              .get(childField.name)
+              .map(constructCoalescedIgnoreNullColumn(childPath, childField, _))
               .getOrElse(F.col(QuotingUtils.quoteNameParts(childPath)))
-              .as(field.name, field.metadata)
+              .as(childField.name, childField.metadata)
           }: _*
         )
         val anyInherits = contextsBeneath.map(_.inherits).reduce(_ || _)
@@ -1739,7 +1750,14 @@ object Scd2BatchProcessor {
         F.when(context.inherits, context.valueToInherit)
           .otherwise(F.col(QuotingUtils.quoteNameParts(path)))
     }
-    reconstructed.cast(dataType)
+    val nullabilityChecked =
+      if (field.nullable) {
+        reconstructed
+      } else {
+        ExpressionUtils.column(
+          AssertNotNull(ExpressionUtils.expression(reconstructed), path))
+      }
+    nullabilityChecked.cast(field.dataType)
   }
 
   /**
