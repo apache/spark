@@ -46,10 +46,8 @@ private[spark] trait SparkTestUtils {
       sourceFile: JavaSourceFromString,
       classpathUrls: Seq[URL]): File = {
     val compiler = ToolProvider.getSystemJavaCompiler
-
-    // Calling this outputs a class file in pwd. It's easier to just rename the files than
-    // build a custom FileManager that controls the output location.
-    val options = if (classpathUrls.nonEmpty) {
+    val compileDir = SparkFileUtils.createTempDir(namePrefix = "spark-javac")
+    val classpathOptions = if (classpathUrls.nonEmpty) {
       Seq(
         "-classpath",
         classpathUrls
@@ -60,17 +58,24 @@ private[spark] trait SparkTestUtils {
     } else {
       Seq.empty
     }
-    compiler.getTask(null, null, null, options.asJava, null, Arrays.asList(sourceFile)).call()
+    val options = Seq("-d", compileDir.getAbsolutePath) ++ classpathOptions
 
-    val fileName = className + ".class"
-    val result = new File(fileName)
-    assert(result.exists(), "Compiled file not found: " + result.getAbsolutePath())
-    val out = new File(destDir, fileName)
+    try {
+      val compiled = compiler
+        .getTask(null, null, null, options.asJava, null, Arrays.asList(sourceFile))
+        .call()
+      assert(compiled, s"Failed to compile $className")
 
-    Files.move(result.toPath, out.toPath)
-
-    assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath())
-    out
+      val fileName = className + ".class"
+      val result = SparkFileUtils.recursiveList(compileDir)
+        .find(file => file.isFile && file.getName == fileName)
+        .getOrElse(throw new AssertionError(s"Compiled file not found: $fileName"))
+      val out = new File(destDir, fileName)
+      Files.move(result.toPath, out.toPath)
+      out
+    } finally {
+      SparkFileUtils.deleteRecursively(compileDir)
+    }
   }
 
   /** Creates a compiled class with the given name. Class file will be placed in destDir. */

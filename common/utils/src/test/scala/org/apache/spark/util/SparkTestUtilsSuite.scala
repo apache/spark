@@ -17,6 +17,11 @@
 
 package org.apache.spark.util
 
+import java.util.concurrent.{CountDownLatch, Executors}
+
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration._
+
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 class SparkTestUtilsSuite extends AnyFunSuite with SparkTestUtils { // scalastyle:ignore funsuite
@@ -26,5 +31,27 @@ class SparkTestUtilsSuite extends AnyFunSuite with SparkTestUtils { // scalastyl
     val sourceFile = new JavaSourceFromString("Hello", "public class Hello {}")
     val result = createCompiledClass("Hello", dir, sourceFile, Seq(dir.toURI.toURL))
     assert(result.exists(), s"Compiled class file should exist at ${result.getPath}")
+  }
+
+  test("createCompiledClass supports concurrent compilation of the same class name") {
+    val executor = Executors.newFixedThreadPool(8)
+    implicit val executionContext: ExecutionContext =
+      ExecutionContext.fromExecutorService(executor)
+    val start = new CountDownLatch(1)
+    try {
+      val compiledClasses = (1 to 8).map { _ =>
+        Future {
+          val dir = SparkFileUtils.createTempDir()
+          val sourceFile = new JavaSourceFromString("Hello", "public class Hello {}")
+          start.await()
+          createCompiledClass("Hello", dir, sourceFile, Seq.empty)
+        }
+      }
+      start.countDown()
+
+      assert(Await.result(Future.sequence(compiledClasses), 30.seconds).forall(_.exists()))
+    } finally {
+      executor.shutdownNow()
+    }
   }
 }
