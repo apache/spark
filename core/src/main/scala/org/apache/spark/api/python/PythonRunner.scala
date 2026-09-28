@@ -29,6 +29,9 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Success, Try}
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.core.{JsonParser, JsonProcessingException}
+import com.fasterxml.jackson.databind.{DeserializationFeature, JsonNode, ObjectMapper}
+
 import org.apache.spark._
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.internal.{Logging, MessageWithContext}
@@ -210,37 +213,56 @@ private[spark] object BasePythonRunner extends Logging {
     }
   }
 
-  // Inputs used to derive the four existing Python SQL timing metrics.
-  private[python] case class WorkerTimingData(
+  private lazy val workerMetricsMapper = new ObjectMapper()
+    .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+    .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+    .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+
+  /** Read one JSON object after METRICS_DATA, leaving the next section to the caller. */
+  private[python] def readWorkerMetrics(stream: DataInputStream): JsonNode = {
+    val length = stream.readInt()
+    if (length <= 0) {
+      throw new SparkException(s"Invalid Python worker report length: $length")
+    }
+    val json = PythonWorkerUtils.readUTF(length, stream)
+    val report = try {
+      workerMetricsMapper.readTree(json)
+    } catch {
+      case e: JsonProcessingException =>
+        throw new SparkException("Malformed Python worker report JSON", e)
+    }
+    if (report == null || !report.isObject) {
+      throw new SparkException("Expected a Python worker JSON object")
+    }
+    report
+  }
+
+  // Values used to update the existing Python SQL metrics and task spill metrics.
+  private[python] case class WorkerMetrics(
       bootTimestampMs: Long,
       initTimestampMs: Long,
       finishTimestampMs: Long,
-      processingDurationMs: Long)
+      processingDurationMs: Long,
+      memoryBytesSpilled: Long,
+      diskBytesSpilled: Long)
 
-  /**
-   * Extract the task timings from a generic report. Keep timing names and expected metadata here
-   * so the JSON codec can carry additional metrics without knowing how they will be consumed.
-   */
-  private[python] def workerTimingData(
-      report: Map[String, PythonWorkerMetricsDecoder.Metric]): WorkerTimingData = {
-    def timingValue(name: String, unit: String): Long = {
-      val metric = report.getOrElse(name,
-        throw new SparkException(s"Missing Python worker timing metric: $name"))
-      if (metric.unit != unit) {
-        throw new SparkException(s"Invalid unit for Python worker timing metric: $name")
-      }
-      val value = metric.value
-      if (!value.isIntegralNumber || !value.canConvertToLong) {
-        throw new SparkException(s"Invalid int64 value for Python worker timing metric: $name")
+  /** Validate the current metric fields before updating them; additional fields are ignored. */
+  private[python] def validateWorkerMetrics(report: JsonNode): WorkerMetrics = {
+    def metricValue(name: String): Long = {
+      val value = report.get(name)
+      if (value == null || !value.isIntegralNumber || !value.canConvertToLong) {
+        throw new SparkException(s"Missing or invalid Python worker metric: $name")
       }
       value.longValue()
     }
 
-    WorkerTimingData(
-      timingValue("bootTimestampMs", "timestampMillis"),
-      timingValue("initTimestampMs", "timestampMillis"),
-      timingValue("finishTimestampMs", "timestampMillis"),
-      timingValue("processingDurationMs", "milliseconds"))
+    WorkerMetrics(
+      metricValue("bootTimestampMs"),
+      metricValue("initTimestampMs"),
+      metricValue("finishTimestampMs"),
+      metricValue("processingDurationMs"),
+      metricValue("memoryBytesSpilled"),
+      metricValue("diskBytesSpilled"))
   }
 
   /**
@@ -777,10 +799,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         PythonWorkerUtils.writeBroadcasts(broadcastVars, worker, env, dataOut)
 
         dataOut.writeInt(evalType)
-        // Advertise support per task, including when a Python worker is reused.
-        PythonWorkerUtils.writeConf(
-          runnerConf + (PythonWorkerMetricsDecoder.protocolVersionConfKey ->
-            PythonWorkerMetricsDecoder.protocolVersion), dataOut)
+        PythonWorkerUtils.writeConf(runnerConf, dataOut)
         PythonWorkerUtils.writeConf(evalConf, dataOut)
         writeCommand(dataOut)
 
@@ -893,30 +912,13 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
      */
     protected def read(): OUT
 
-    protected def handleTimingData(): Unit = {
-      // Timing data from worker
-      val bootTime = stream.readLong()
-      val initTime = stream.readLong()
-      val finishTime = stream.readLong()
-      val processingTimeMs = stream.readLong()
-      recordTimingAndSpills(bootTime, initTime, finishTime, processingTimeMs)
-    }
-
     protected def handleMetricsData(): Unit = {
-      // Check all required timing entries before updating any of the SQL metrics.
-      val timing = workerTimingData(PythonWorkerMetricsDecoder.read(stream))
-      recordTimingAndSpills(
-        timing.bootTimestampMs,
-        timing.initTimestampMs,
-        timing.finishTimestampMs,
-        timing.processingDurationMs)
-    }
-
-    private def recordTimingAndSpills(
-        bootTime: Long,
-        initTime: Long,
-        finishTime: Long,
-        processingTimeMs: Long): Unit = {
+      val report = BasePythonRunner.readWorkerMetrics(stream)
+      val workerMetrics = BasePythonRunner.validateWorkerMetrics(report)
+      val bootTime = workerMetrics.bootTimestampMs
+      val initTime = workerMetrics.initTimestampMs
+      val finishTime = workerMetrics.finishTimestampMs
+      val processingTimeMs = workerMetrics.processingDurationMs
       // A reused Python worker records bootTime before waiting for this task, so it can precede
       // startTime. Use the later timestamp to exclude the worker's idle time from initialization.
       val pythonWorkerInitializationStartTime = math.max(startTime, bootTime)
@@ -943,11 +945,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       metrics.get("pythonInitTime").foreach(_.add(init))
       metrics.get("pythonTotalTime").foreach(_.add(total))
       metrics.get("pythonProcessingTime").foreach(_.add(processingTimeMs))
-      // Both timing formats are followed by the original pair of binary spill counters.
-      val memoryBytesSpilled = stream.readLong()
-      val diskBytesSpilled = stream.readLong()
-      context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
-      context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
+      context.taskMetrics().incMemoryBytesSpilled(workerMetrics.memoryBytesSpilled)
+      context.taskMetrics().incDiskBytesSpilled(workerMetrics.diskBytesSpilled)
     }
 
     protected def handlePythonException(): PythonException = {
@@ -1453,9 +1452,6 @@ private[spark] class PythonRunner(
               batchesProcessed += 1
               totalDataReceived += length
               data
-            case SpecialLengths.TIMING_DATA =>
-              handleTimingData()
-              read()
             case SpecialLengths.METRICS_DATA =>
               handleMetricsData()
               read()
@@ -1480,13 +1476,12 @@ class PythonWorkerException(msg: String, cause: Throwable)
 private[spark] object SpecialLengths {
   val END_OF_DATA_SECTION = -1
   val PYTHON_EXCEPTION_THROWN = -2
-  val TIMING_DATA = -3
+  val METRICS_DATA = -3
   val END_OF_STREAM = -4
   val NULL = -5
   val START_ARROW_STREAM = -6
   val END_OF_MICRO_BATCH = -7
   val START_OF_INIT_MESSAGE = -8
-  val METRICS_DATA = -9
 }
 
 private[spark] object BarrierTaskContextMessageProtocol {

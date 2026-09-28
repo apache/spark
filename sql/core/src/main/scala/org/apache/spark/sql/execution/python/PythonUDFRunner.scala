@@ -129,9 +129,6 @@ abstract class BasePythonUDFRunner(
               batchesProcessed += 1
               totalDataReceived += length
               obj
-            case SpecialLengths.TIMING_DATA =>
-              handleTimingData()
-              read()
             case SpecialLengths.METRICS_DATA =>
               handleMetricsData()
               read()
