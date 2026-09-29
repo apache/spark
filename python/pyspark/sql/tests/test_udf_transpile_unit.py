@@ -1665,22 +1665,30 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual(list(range(5)), [r[0] for r in df.collect()])
 
     def test_udf_transpile_declines_inside_a_higher_order_function(self):
-        # SPARK-58626: a call inside a lambda is not lowered at all -- Spark applies a Python UDF
-        # over the whole array there and we leave that to it -- so the draw stays a single draw per
-        # call rather than one per read.
-        #
-        # `clamp` returns its input or 0.0, so a value in (0.0, 0.5] would be two draws: the
-        # condition saw one and the branch another.
+        # SPARK-58626: a call inside a lambda is not lowered at all. Master still runs such a
+        # query -- SPARK-27052 applies a Python UDF over the whole array -- but this branch
+        # predates that, so analysis rejects it, exactly as it does with transpilation off. The
+        # rejection fires before the optimizer's ConvertToCatalyst rule could lower anything, so
+        # this pins the user-facing behavior; ConvertToCatalystSuite pins the rule-level "not
+        # lowered".
+        from pyspark.errors import AnalysisException, QueryContextType
         from pyspark.sql.functions import array, col, lit, rand, transform
 
         clamp = lambda x: x if x > 0.5 else 0.0  # noqa: E731
         with self.sql_conf(_TRANSPILE_ON):
             c = self._transpiled_udf(clamp, DoubleType())
             arr = self.spark.range(500).select(array(lit(1.0), lit(2.0)).alias("a"))
-            hof = arr.select(transform(col("a"), lambda e: c(rand())).alias("v"))
-            self.assertGreater(self._eval_python_count(hof), 0, self._optimized_plan(hof))
-            vals = [v for r in hof.collect() for v in r["v"]]
-            self.assertTrue(vals and all(v == 0.0 or v > 0.5 for v in vals), vals)
+            with self.assertRaises(AnalysisException) as pe:
+                arr.select(transform(col("a"), lambda e: c(rand())).alias("v")).collect()
+            self.check_error(
+                exception=pe.exception,
+                errorClass="UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
+                messageParameters={"funcName": ".*"},
+                query_context_type=QueryContextType.DataFrame,
+                # HOF columns are built through PythonSQLUtils.fn, so the fragment is "fn".
+                fragment="fn",
+                matchPVals=True,
+            )
 
     def test_udf_transpile_declines_under_an_aggregate(self):
         # SPARK-58626: an Aggregate can't host the column -- a result expression no aggregate
@@ -1714,13 +1722,17 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertTrue(all(d != 0.0 for d in diffs), "each call draws for itself")
 
     def test_udf_transpile_position_can_rule_out_sharing(self):
-        # SPARK-58626: inside a lambda nothing is lowered, so nothing is pre-evaluated either -- the
-        # empty array below must NOT raise even though the argument divides by zero.
+        # SPARK-58626: inside a lambda nothing is lowered, so nothing is pre-evaluated either. On
+        # master (SPARK-27052) the query below runs and its empty array must NOT raise even though
+        # the argument divides by zero; this branch predates that, so analysis rejects the query
+        # instead -- the same guarantee stated as an error, since the argument is never evaluated
+        # at all.
         #
         # A conditional branch, by contrast, DOES get one evaluation, even though a bare Catalyst
         # `when` is lazy. Measured: the interpreted Python UDF this replaces evaluates its inputs
         # in a projection below the conditional and raises there too, so eager is the Python-parity
         # answer as well as the cheaper one. See transpile.py.
+        from pyspark.errors import AnalysisException, QueryContextType
         from pyspark.sql.functions import array, col, lit, rand, transform, when
 
         clamp = lambda x: x if x > 0.5 else 0.0  # noqa: E731
@@ -1746,8 +1758,19 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             df = self.spark.createDataFrame([(1.0, 0.0)], "a double, b double").select(
                 col("a"), col("b"), array().cast("array<double>").alias("arr")
             )
-            lazy = df.select(transform(col("arr"), lambda e: s(col("a") / col("b"), e)).alias("v"))
-            self.assertEqual([[]], [r[0] for r in lazy.collect()])
+            with self.assertRaises(AnalysisException) as pe:
+                df.select(
+                    transform(col("arr"), lambda e: s(col("a") / col("b"), e)).alias("v")
+                ).collect()
+            self.check_error(
+                exception=pe.exception,
+                errorClass="UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
+                messageParameters={"funcName": ".*"},
+                query_context_type=QueryContextType.DataFrame,
+                # HOF columns are built through PythonSQLUtils.fn, so the fragment is "fn".
+                fragment="fn",
+                matchPVals=True,
+            )
 
     def test_udf_transpile_shares_a_nondeterministic_argument_in_a_predicate(self):
         # SPARK-58626: a `where` keeps the shared column when the argument is nondeterministic.

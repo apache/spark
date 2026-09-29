@@ -42,7 +42,8 @@ import org.apache.spark.sql.types.LongType
  * that needs one there keeps the Python UDF.
  * Asserted on the plan where a deterministic argument gives the same answer either way, and on a
  * raised error under MERGE, where an argument that mods by zero only blows up if the column is
- * really there.
+ * really there. The lambda shape is asserted on its analysis error instead: this branch predates
+ * SPARK-27052, so a Python UDF inside a lambda is rejected rather than run.
  *
  * A nondeterministic argument is the case where the column is not an optimization: with no column
  * to read, a body reading the parameter twice would draw twice, so we leave the Python UDF.
@@ -210,14 +211,23 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
 
   test("keeps the Python UDF inside a higher-order function's lambda") {
     transpileOn {
-      // Lambdas are out of scope for lowering: Spark applies a Python UDF over the whole array
-      // there and this rule leaves that to it. The Python eval node is what says we did.
+      // Lambdas are out of scope for lowering. Master still runs such a query -- SPARK-27052
+      // applies a Python UDF over the whole array there -- but this branch predates that, so
+      // analysis rejects it, exactly as it does with transpilation off. The rejection fires
+      // before the optimizer's ConvertToCatalyst rule could lower anything, so this pins the
+      // user-facing behavior; ConvertToCatalystSuite's test of the same name pins the
+      // rule-level "not lowered".
       val square = udfWith(Multiply(param(0), param(0)), arity = 1)
-      val df = spark.range(0, 6).select(
-        transform(array(col("id")), _ => square(draw)).as("sq"))
-      val plan = df.queryExecution.optimizedPlan
-      assert(plan.exists(_.isInstanceOf[BaseEvalPython]), s"Expected a Python fallback:\n$plan")
-      assert(!plan.toString.contains("_udf_param_"), s"Expected no column:\n$plan")
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.range(0, 6).select(
+            transform(array(col("id")), _ => square(draw)).as("sq")).collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
+        sqlState = Some("0A000"),
+        parameters = Map("funcName" -> ".*"),
+        matchPVals = true,
+        queryContext = Array(ExpectedContext(fragment = "transform", callSitePattern = "")))
     }
   }
 
