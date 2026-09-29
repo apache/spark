@@ -99,6 +99,7 @@ class ExecutorResizeDriverPlugin extends DriverPlugin with Logging {
       .inNamespace(namespace)
       .withLabel(SPARK_APP_ID_LABEL, appId)
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+      .withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
       .list()
       .getItems.asScala
 
