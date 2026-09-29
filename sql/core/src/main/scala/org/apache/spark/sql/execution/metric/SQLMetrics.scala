@@ -140,14 +140,7 @@ object SQLMetrics {
   }
 
   def createMetric(sc: SparkContext, name: String): SQLMetric = {
-    createMetric(sc, name, initValue = 0)
-  }
-
-  private[sql] def createMetric(
-      sc: SparkContext,
-      name: String,
-      initValue: Long): SQLMetric = {
-    val acc = new SQLMetric(SUM_METRIC, initValue)
+    val acc = new SQLMetric(SUM_METRIC)
     acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
     acc
   }

@@ -281,12 +281,10 @@ object ExecuteExternalUDFExecSuite {
       cancelOnClose: Boolean)
     extends ExecuteExternalUDFExec(udf, resultAttr, child) {
 
-    override protected def withUDFWorkerSession(
-        taskContext: TaskContext,
-        securityScope: Option[WorkerSecurityScope])(
-        f: WorkerSession => Iterator[InternalRow]): Iterator[InternalRow] = {
+    override protected def createUDFWorkerSession(
+        securityScope: Option[WorkerSecurityScope]): WorkerSession = {
       require(securityScope.isEmpty, "scalar external UDF execution must not request a sandbox")
-      val session = new TestWorkerSession(
+      new TestWorkerSession(
         behavior,
         expectedInputSchema,
         expectedOutputSchema,
@@ -296,10 +294,6 @@ object ExecuteExternalUDFExecSuite {
         closeCount,
         terminalMetrics,
         cancelOnClose)
-      taskContext.addTaskCompletionListener[Unit] { _ =>
-        recordTerminalMetrics(session.close())
-      }
-      f(session)
     }
   }
 }
@@ -494,6 +488,10 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
     assert(!plan.metrics("bytesIn").isZero)
     Seq("bytesOut", "rowsIn", "rowsOut", "batchesIn").foreach { name =>
       assert(plan.metrics(name).isZero)
+    }
+    // toInfoUpdate is the raw value the live SQL UI sums; value hides a negative initial value.
+    Seq("rowsIn", "rowsOut", "batchesIn", "batchesOut").foreach { name =>
+      assert(plan.metrics(name).toInfoUpdate.update === Some(0L))
     }
   }
 

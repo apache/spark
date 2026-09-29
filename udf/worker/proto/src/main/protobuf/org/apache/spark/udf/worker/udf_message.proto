@@ -479,23 +479,52 @@ message CancelResponse {
     optional ExecutionError error = 2;
 }
 
-// Per-execution metrics accumulated by one Execute stream. Each field is
-// cumulative for the stream. Absence means unavailable; zero means measured
-// zero. Byte counts exclude gRPC, HTTP/2, and TLS framing. Timing values are
-// nanoseconds; wait times are not transfer times and MUST NOT be used as rate
-// denominators.
+// Per-execution metrics accumulated by one Execute stream, as measured by the
+// worker. Each field is cumulative for the stream. Absence means unavailable;
+// zero means measured zero. "In" counts data the worker received from the
+// engine and "out" counts data it returned. Byte counts are data payload
+// bytes and exclude gRPC, HTTP/2, and TLS framing. Timing values are
+// nanoseconds; the wait times [[receive_wall_nanos]] and [[send_wall_nanos]]
+// are not transfer times and MUST NOT be used as rate denominators.
 message ExecutionMetrics {
+    // Bytes of [[DataRequest.data]] payload received.
     optional uint64 bytes_in = 1;
+
+    // Bytes of [[DataResponse.data]] payload returned.
     optional uint64 bytes_out = 2;
+
+    // Rows in the received data payloads. Absent unless the rows of every
+    // received payload could be counted.
     optional uint64 rows_in = 3;
+
+    // Rows in the returned data payloads. Absent unless the rows of every
+    // returned payload could be counted.
     optional uint64 rows_out = 4;
+
+    // Number of [[DataRequest]] messages received.
     optional uint64 batches_in = 5;
+
+    // Number of [[DataResponse]] messages returned.
     optional uint64 batches_out = 6;
+
+    // Wall time spent handling [[Init]] before sending [[InitResponse]].
     optional uint64 init_wall_nanos = 7;
+
+    // Wall time from sending [[InitResponse]] until the stream's first
+    // terminal event: finish, cancellation, or an execution error.
     optional uint64 processing_wall_nanos = 8;
+
+    // Wall time spent waiting for the next request from the engine.
     optional uint64 receive_wall_nanos = 9;
+
+    // Wall time spent blocked sending responses to the engine.
     optional uint64 send_wall_nanos = 10;
+
+    // Wall time spent executing received data: decoding input, running the
+    // UDF, and encoding output. Excludes the wait times.
     optional uint64 work_wall_nanos = 11;
+
+    // CPU time consumed executing received data.
     optional uint64 work_cpu_nanos = 12;
 }
 

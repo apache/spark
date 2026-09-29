@@ -58,9 +58,9 @@ trait ExternalUDFExec extends UnaryExecNode {
   // ---------------------------------------------------------------------------
 
   /**
-   * Creates a [[WorkerSession]] via [[SparkEnv#getExternalUDFDispatcher]].
-   * Finalizes the session on task completion (which fires on both success and
-   * failure). [[WorkerSession#close]] is the single finalizer: it fetches the
+   * Creates a [[WorkerSession]] with [[createUDFWorkerSession]] and finalizes it
+   * on task completion (which fires on both success and failure).
+   * [[WorkerSession#close]] is the single finalizer: it fetches the
    * `FinishResponse` if processing completed, or cancels anything still in
    * flight and waits for the `CancelResponse`. For the UDF sessions used here,
    * exhausting the data iterator completes execution and surfaces execution or
@@ -74,9 +74,7 @@ trait ExternalUDFExec extends UnaryExecNode {
       securityScope: Option[WorkerSecurityScope] = None)(
       f: WorkerSession => Iterator[InternalRow]
   ): Iterator[InternalRow] = {
-    val dispatcher = SparkEnv.get.getExternalUDFDispatcher(
-      workerSpec)
-    val session = dispatcher.createSession(securityScope)
+    val session = createUDFWorkerSession(securityScope)
 
     // Finalize the session when the task ends. The completion listener fires on
     // both success and failure, and close() is the single finalizer that
@@ -109,6 +107,11 @@ trait ExternalUDFExec extends UnaryExecNode {
     f(session)
   }
 
+  protected def createUDFWorkerSession(
+      securityScope: Option[WorkerSecurityScope]): WorkerSession = {
+    SparkEnv.get.getExternalUDFDispatcher(workerSpec).createSession(securityScope)
+  }
+
   protected def recordTerminalMetrics(termination: Termination): Unit = {
     val reported = termination match {
       case Termination.Finished(response) if response.hasMetrics => Some(response.getMetrics)
@@ -133,8 +136,8 @@ private[externalUDF] object ExternalUDFMetrics {
   private val timingMetrics = Map(
     "initWallNanos" -> "external UDF worker initialization time",
     "processingWallNanos" -> "external UDF worker processing time",
-    "receiveWallNanos" -> "time awaiting external UDF worker requests",
-    "sendWallNanos" -> "time blocked returning external UDF worker responses",
+    "receiveWallNanos" -> "time the external UDF worker waited for requests",
+    "sendWallNanos" -> "time the external UDF worker was blocked sending responses",
     "workWallNanos" -> "external UDF worker execution time",
     "workCpuNanos" -> "external UDF worker CPU time")
 
@@ -142,7 +145,7 @@ private[externalUDF] object ExternalUDFMetrics {
     sizeMetrics.map { case (name, description) =>
       name -> SQLMetrics.createSizeMetric(sc, description)
     } ++ countMetrics.map { case (name, description) =>
-      name -> SQLMetrics.createMetric(sc, description, initValue = -1)
+      name -> SQLMetrics.createMetric(sc, description)
     } ++ timingMetrics.map { case (name, description) =>
       name -> SQLMetrics.createNanoTimingMetric(sc, description)
     }
