@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DescribeTablePartition, DropView, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews, UnresolvedInsert}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.execution.command.{ShowCatalogsCommand, ShowNamespacesCommand}
 import org.apache.spark.sql.pipelines.Language.Python
@@ -107,11 +108,7 @@ private[connect] object PipelinesHandler extends Logging {
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>
         logInfo(s"Define pipelines flow cmd received: $cmd")
         val resolvedFlow =
-          defineFlow(
-            cmd.getDefineFlow,
-            transformRelationFunc,
-            transformExpressionFunc,
-            sessionHolder)
+          defineFlow(cmd.getDefineFlow, transformExpressionFunc, sessionHolder)
         val identifierBuilder = ResolvedIdentifier.newBuilder()
         resolvedFlow.catalog.foreach(identifierBuilder.setCatalogName)
         resolvedFlow.database.foreach { ns =>
@@ -327,7 +324,6 @@ private[connect] object PipelinesHandler extends Logging {
 
   private def defineFlow(
       flow: proto.PipelineCommand.DefineFlow,
-      transformRelationFunc: Relation => LogicalPlan,
       transformExpressionFunc: proto.Expression => Expression,
       sessionHolder: SessionHolder): TableIdentifier = {
     if (flow.hasOnce) {
@@ -388,8 +384,13 @@ private[connect] object PipelinesHandler extends Logging {
           UntypedFlow(
             identifier = flowIdentifier,
             destinationIdentifier = destinationIdentifier,
-            func = FlowAnalysis.createFlowFunctionFromLogicalPlan(
-              transformRelationFunc(relationFlowDetails.getRelation)),
+            // Plan the relation when the flow is analyzed, when the reads of the datasets in the
+            // pipeline can be resolved, see `SparkConnectPlanner.transformPipelineFlowRelation`.
+            func = FlowAnalysis.createFlowFunction { resolveDatasetReads =>
+              new SparkConnectPlanner(sessionHolder).transformPipelineFlowRelation(
+                relationFlowDetails.getRelation,
+                resolveDatasetReads)
+            },
             sqlConf = flow.getSqlConfMap.asScala.toMap,
             once = false,
             queryContext = QueryContext(Option(defaultCatalog), Option(defaultDatabase)),
