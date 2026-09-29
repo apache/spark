@@ -96,7 +96,7 @@ public interface Table extends Relation {
   }
 
   /**
-   * Returns additional, display-only table properties, such as labels.
+   * Returns additional, display-only table properties.
    *
    * <p>Spark adds these entries to the non-reserved properties displayed by V2 table metadata
    * commands and {@code Catalog.getTableProperties}. Entries in {@link #properties()} take
