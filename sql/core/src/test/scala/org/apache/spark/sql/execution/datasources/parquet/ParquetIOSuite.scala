@@ -2485,7 +2485,13 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-59832: vectorized reader fails on truncated definition levels") {
+  /**
+   * Writes 100 non-null values of a nullable INT32 column to a single uncompressed PLAIN page,
+   * lets `corrupt` modify the bytes of its definition levels, and returns the error of reading
+   * the file with the vectorized reader.
+   */
+  private def readCorruptedDefinitionLevels(corrupt: (Array[Byte], Int) => Unit): Throwable = {
+    var error: Throwable = null
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       spark.range(100).selectExpr("if(id < 0, null, cast(id as int)) as a").coalesce(1)
@@ -2502,24 +2508,48 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
         bytes.slice(i, i + levels.length).sameElements(levels)
       }
       assert(offsets.size == 1)
-      // Shorten the run to 64 values (header 64 << 1 = varint 0x80 0x01).
-      bytes(offsets.head + 4) = 0x80.toByte
+      corrupt(bytes, offsets.head)
       Files.write(file.toPath, bytes)
       dir.listFiles().filter(_.getName.endsWith(".crc")).foreach(_.delete())
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-        // Before the fix the read never returned, so run it with a timeout.
+        // Before SPARK-59832 a truncated read never returned, so run it with a timeout.
         // scalastyle:off awaitresult
-        val e = intercept[SparkException] {
+        error = intercept[SparkException] {
           Await.result(
             Future(spark.read.parquet(path).collect())(ExecutionContext.global), 1.minute)
         }
         // scalastyle:on awaitresult
-        val cause = Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null)
-          .collectFirst { case c: ParquetDecodingException => c }
-        assert(cause.exists(_.getMessage.contains("Corrupted RLE data")), e)
       }
     }
+    error
+  }
+
+  private def causes(e: Throwable): Seq[Throwable] =
+    Iterator.iterate(e)(_.getCause).takeWhile(_ != null).toSeq
+
+  test("SPARK-59832: vectorized reader fails on truncated definition levels") {
+    // Shorten the run to 64 values (header 64 << 1 = varint 0x80 0x01).
+    val e = readCorruptedDefinitionLevels((bytes, offset) => bytes(offset + 4) = 0x80.toByte)
+    assert(causes(e).exists {
+      case c: ParquetDecodingException => c.getMessage.contains("Corrupted RLE data")
+      case _ => false
+    }, e)
+  }
+
+  test("SPARK-59832: invalid definition level length reports the column") {
+    val e = readCorruptedDefinitionLevels { (bytes, offset) =>
+      // Length Int.MaxValue, far more than the rest of the page.
+      Array(0xFF, 0xFF, 0xFF, 0x7F).zipWithIndex.foreach { case (b, i) =>
+        bytes(offset + i) = b.toByte
+      }
+    }
+    val pageError = causes(e).collectFirst {
+      case c: java.io.IOException if c.getMessage.startsWith("could not read page") => c
+    }
+    assert(pageError.exists(_.getMessage.contains("[a]")), e)
+    assert(pageError.exists(_.getCause.getMessage.contains(
+      s"Corrupted RLE data: invalid length ${Int.MaxValue}")), e)
   }
 }
 

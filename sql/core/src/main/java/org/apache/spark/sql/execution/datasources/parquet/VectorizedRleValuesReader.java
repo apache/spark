@@ -966,7 +966,6 @@ public final class VectorizedRleValuesReader extends ValuesReader
    */
   private int readIntLittleEndianPaddedOnBitWidth() throws IOException {
     return switch (bytesWidth) {
-      case 0 -> 0;
       case 1 -> in.read();
       case 2 -> {
         int ch2 = in.read();
@@ -992,50 +991,61 @@ public final class VectorizedRleValuesReader extends ValuesReader
    * values of the page, so reaching here also means reading past the end.
    */
   private void readNextGroup() {
-    try {
-      do {
-        if (bitWidth == 0 || in.available() <= 0) {
-          throw new ParquetDecodingException(
-            "Corrupted RLE data: reading past the end of the encoded values");
-        }
-        int header = readUnsignedVarInt();
-        this.mode = (header & 1) == 0 ? MODE.RLE : MODE.PACKED;
-        switch (mode) {
-          case RLE -> {
-            this.currentCount = header >>> 1;
-            this.currentValue = readIntLittleEndianPaddedOnBitWidth();
-          }
-          case PACKED -> {
-            int numGroups = header >>> 1;
-            // Validate before allocating the buffer, so a corrupted header can neither overflow
-            // `currentCount` nor make us allocate more than the remaining bytes can fill.
-            long totalBytes = (long) numGroups * bitWidth;
-            if (numGroups > Integer.MAX_VALUE / 8 || totalBytes > in.available()) {
-              throw new ParquetDecodingException("Corrupted RLE data: bit-packed run of " +
-                numGroups + " groups needs " + totalBytes + " bytes, but only " +
-                in.available() + " bytes are left");
-            }
-            this.currentCount = numGroups * 8;
+    do {
+      if (bitWidth == 0 || in.available() <= 0) {
+        throw new ParquetDecodingException(
+          "Corrupted RLE data: reading past the end of the encoded values");
+      }
+      readGroup();
+    } while (this.currentCount == 0);
+  }
 
-            if (this.currentBuffer.length < this.currentCount) {
-              this.currentBuffer = new int[this.currentCount];
-            }
-            currentBufferIdx = 0;
-            // Slice all packed bytes in one call (numGroups groups x bitWidth bytes each)
-            // instead of one slice per group, avoiding per-group ByteBuffer allocation.
-            ByteBuffer packed = in.slice((int) totalBytes);
-            int pos = packed.position();
-            int valueIndex = 0;
-            while (valueIndex < this.currentCount) {
-              this.packer.unpack8Values(packed, pos, this.currentBuffer, valueIndex);
-              pos += bitWidth;
-              valueIndex += 8;
-            }
+  /**
+   * Reads the next group, which may be empty.
+   */
+  private void readGroup() {
+    try {
+      int header = readUnsignedVarInt();
+      this.mode = (header & 1) == 0 ? MODE.RLE : MODE.PACKED;
+      switch (mode) {
+        case RLE -> {
+          this.currentCount = header >>> 1;
+          this.currentValue = readIntLittleEndianPaddedOnBitWidth();
+        }
+        case PACKED -> {
+          int numGroups = header >>> 1;
+          // Validate before allocating the buffer, so a corrupted header can neither overflow
+          // `currentCount` nor make us allocate more than the remaining bytes can fill.
+          if (numGroups > Integer.MAX_VALUE / 8) {
+            throw new ParquetDecodingException(
+              "Corrupted RLE data: bit-packed run of " + numGroups + " groups is too long");
+          }
+          if ((long) numGroups * bitWidth > in.available()) {
+            throw new ParquetDecodingException("Corrupted RLE data: bit-packed run of " +
+              numGroups + " groups needs " + (long) numGroups * bitWidth + " bytes, but only " +
+              in.available() + " bytes are left");
+          }
+          this.currentCount = numGroups * 8;
+
+          if (this.currentBuffer.length < this.currentCount) {
+            this.currentBuffer = new int[this.currentCount];
+          }
+          currentBufferIdx = 0;
+          // Slice all packed bytes in one call (numGroups groups x bitWidth bytes each)
+          // instead of one slice per group, avoiding per-group ByteBuffer allocation.
+          int totalBytes = numGroups * bitWidth;
+          ByteBuffer packed = in.slice(totalBytes);
+          int pos = packed.position();
+          int valueIndex = 0;
+          while (valueIndex < this.currentCount) {
+            this.packer.unpack8Values(packed, pos, this.currentBuffer, valueIndex);
+            pos += bitWidth;
+            valueIndex += 8;
           }
         }
-      } while (this.currentCount == 0);
+      }
     } catch (IOException e) {
-      throw new ParquetDecodingException("Failed to read from input stream", e);
+      throw new ParquetDecodingException("Corrupted RLE data: failed to read from input stream", e);
     }
   }
 

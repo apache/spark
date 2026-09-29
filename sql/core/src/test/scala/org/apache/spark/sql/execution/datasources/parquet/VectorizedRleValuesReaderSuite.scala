@@ -203,6 +203,7 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
       produced += toRead
     }
   }
+
   test("SPARK-59832: truncated dictionary ids fail instead of being partially read") {
     // A dictionary id page with 10 ids, read as if it had 20.
     streams(dictIdPage(Array.fill(10)(3), bitWidth = 4)).foreach { in =>
@@ -261,27 +262,44 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
   }
 
   test("SPARK-59832: truncated repetition levels fail in readBatchRepeated") {
-    val n = 100
+    // Every row is a top-level row (repetition level 0), but only 64 of 100 are encoded.
+    readRepeated(repLevels = Array.fill(64)(0), defLevels = Array.fill(100)(1), n = 100)
+  }
+
+  test("SPARK-59832: truncated definition levels fail in readBatchRepeated") {
+    // The repetition levels are complete, but only 64 of 100 definition levels are encoded.
+    // Before the fix the missing definition levels were silently left as 0.
+    readRepeated(repLevels = Array.fill(100)(0), defLevels = Array.fill(64)(1), n = 100)
+    // Skips the truncated levels to reach rows 80 to 90.
+    readRepeated(repLevels = Array.fill(100)(0), defLevels = Array.fill(64)(1), n = 100,
+      rowIndexes = longIterator((80 to 90).toArray))
+  }
+
+  private def readRepeated(
+      repLevels: Array[Int],
+      defLevels: Array[Int],
+      n: Int,
+      rowIndexes: PrimitiveIterator.OfLong = null): Unit = {
     val prim = Types.primitive(PrimitiveTypeName.INT32, Repetition.REPEATED).named("col")
     val descriptor = new ColumnDescriptor(Array("col"), prim, 1, 1)
     val repReader = new VectorizedRleValuesReader(1, false)
     repReader.initFromPage(
-      n, ByteBufferInputStream.wrap(ByteBuffer.wrap(encodeRle(Array.fill(64)(0), 1))))
+      n, ByteBufferInputStream.wrap(ByteBuffer.wrap(encodeRle(repLevels, 1))))
     val defReader = new VectorizedRleValuesReader(1, false)
     defReader.initFromPage(
-      n, ByteBufferInputStream.wrap(ByteBuffer.wrap(encodeRle(Array.fill(n)(1), 1))))
+      n, ByteBufferInputStream.wrap(ByteBuffer.wrap(encodeRle(defLevels, 1))))
     val valueReader = new VectorizedPlainValuesReader
     valueReader.initFromPage(
       n, ByteBufferInputStream.wrap(ByteBuffer.wrap(plainIntBytes(n)(valueAt))))
-    val state = ParquetTestAccess.newState(descriptor, false)
+    val state = ParquetTestAccess.newState(descriptor, false, rowIndexes)
     ParquetTestAccess.resetForNewPage(state, n, 0L)
     ParquetTestAccess.resetForNewBatch(state, n)
-    val repLevels = new OnHeapColumnVector(n, IntegerType)
-    val defLevels = new OnHeapColumnVector(n, IntegerType)
+    val repLevelsVec = new OnHeapColumnVector(n, IntegerType)
+    val defLevelsVec = new OnHeapColumnVector(n, IntegerType)
     val values = new OnHeapColumnVector(n, IntegerType)
     interceptCorrupted {
-      repReader.readBatchRepeated(state.asInstanceOf[ParquetReadState], repLevels, defReader,
-        defLevels, values, valueReader, integerUpdater)
+      ParquetTestAccess.readBatchRepeated(repReader, state, repLevelsVec, defReader,
+        defLevelsVec, values, valueReader, integerUpdater)
     }
   }
 
@@ -292,6 +310,7 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
     val reader = new VectorizedRleValuesReader(0)
     reader.initFromPage(5, ByteBufferInputStream.wrap(ByteBuffer.wrap(trailing)))
     val c = new OnHeapColumnVector(6, IntegerType)
+    c.putInts(0, 6, -1)
     reader.readIntegers(5, c, 0)
     assert((0 until 5).forall(c.getInt(_) == 0))
     interceptCorrupted(reader.readIntegers(1, c, 5))
@@ -319,7 +338,9 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
         interceptCorrupted(reader.readIntegers(10, c, 0))
       }
     }
-    // Truncated last group.
+    // Truncated last group. This was already rejected before (by `in.slice`), even when the
+    // bytes cover every value read. parquet-java and Arrow accept it, for compatibility with
+    // writers that do not pad the last group.
     check(bitWidth = 4, numGroups = 2, data = Array.fill[Byte](5)(0x11))
     // numGroups * 8 and numGroups * bitWidth overflow to 0.
     check(bitWidth = 8, numGroups = 1L << 29, data = encodeRle(Array.fill(10)(3), 8))
@@ -384,10 +405,16 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
 
 private object VectorizedRleValuesReaderSuite {
 
-  /** The page as a single buffer and split into 3-byte buffers. */
-  private def streams(bytes: Array[Byte]): Seq[() => ByteBufferInputStream] = Seq(
-    () => ByteBufferInputStream.wrap(ByteBuffer.wrap(bytes)),
-    () => ByteBufferInputStream.wrap(bytes.grouped(3).map(ByteBuffer.wrap).toList.asJava))
+  /**
+   * The page as a single buffer and split into 1-byte buffers. The split keeps any part of the
+   * page longer than 1 byte, including a slice of it, on a `MultiBufferInputStream`.
+   */
+  private def streams(bytes: Array[Byte]): Seq[() => ByteBufferInputStream] = {
+    assert(bytes.length > 1, "the page must span multiple buffers")
+    Seq(
+      () => ByteBufferInputStream.wrap(ByteBuffer.wrap(bytes)),
+      () => ByteBufferInputStream.wrap(bytes.grouped(1).map(ByteBuffer.wrap).toList.asJava))
+  }
 
   /** A dictionary id section: the bit width followed by the RLE/bit-packed ids. */
   private def dictIdPage(ids: Array[Int], bitWidth: Int): Array[Byte] =
