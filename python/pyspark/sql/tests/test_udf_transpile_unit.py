@@ -1668,7 +1668,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # SPARK-58626: a call inside a lambda is not lowered at all. Master still runs such a
         # query -- SPARK-27052 applies a Python UDF over the whole array -- but this branch
         # predates that, so analysis rejects it, exactly as it does with transpilation off. The
-        # rejection is what pins "not lowered" here: a lowered call would analyze and run.
+        # rejection fires before the optimizer's ConvertToCatalyst rule could lower anything, so
+        # this pins the user-facing behavior; ConvertToCatalystSuite pins the rule-level "not
+        # lowered".
         from pyspark.errors import AnalysisException, QueryContextType
         from pyspark.sql.functions import array, col, lit, rand, transform
 

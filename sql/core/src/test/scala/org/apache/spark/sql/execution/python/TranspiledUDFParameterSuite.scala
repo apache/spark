@@ -213,9 +213,10 @@ class TranspiledUDFParameterSuite extends QueryTest with SharedSparkSession {
     transpileOn {
       // Lambdas are out of scope for lowering. Master still runs such a query -- SPARK-27052
       // applies a Python UDF over the whole array there -- but this branch predates that, so
-      // analysis rejects it, exactly as it does with transpilation off. The rejection pins "not
-      // lowered" here: a lowered call would analyze, and with `func` null a surviving Python UDF
-      // would fail loudly rather than pass quietly.
+      // analysis rejects it, exactly as it does with transpilation off. The rejection fires
+      // before the optimizer's ConvertToCatalyst rule could lower anything, so this pins the
+      // user-facing behavior; ConvertToCatalystSuite's test of the same name pins the
+      // rule-level "not lowered".
       val square = udfWith(Multiply(param(0), param(0)), arity = 1)
       checkError(
         exception = intercept[AnalysisException] {
