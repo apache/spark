@@ -2025,7 +2025,8 @@ class MergeSubplansSuite extends PlanTest {
     val output = cols.map(c => fullOutput.find(_.name == c).get)
     val scan = TestV2Scan(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
     // These stand in for a plain scan produced by the column-pruning path, which is mergeable.
-    DataSourceV2ScanRelation(relation, scan, output, mergeableScan = true)
+    DataSourceV2ScanRelation(relation, scan, output, mergeableScan = true,
+      propagatesTableDistinctKeys = true)
   }
 
   /** A `DataSourceV2ScanRelation` over [[v2Table]] projecting only the given columns. */
@@ -2051,7 +2052,8 @@ class MergeSubplansSuite extends PlanTest {
     builder.asInstanceOf[SupportsPushDownRequiredColumns].pruneColumns(
       StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
     V2ScanPartitioningAndOrdering(
-      DataSourceV2ScanRelation(relation, builder.build(), output, mergeableScan = true))
+      DataSourceV2ScanRelation(relation, builder.build(), output, mergeableScan = true,
+        propagatesTableDistinctKeys = true))
       .asInstanceOf[DataSourceV2ScanRelation]
   }
 
