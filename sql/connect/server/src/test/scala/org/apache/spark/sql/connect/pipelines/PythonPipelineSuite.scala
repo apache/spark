@@ -556,8 +556,9 @@ class PythonPipelineSuite
         .contains(graphIdentifier("src")))
   }
 
-  test("SPARK-59663: withColumns and withColumnsRenamed keep the dependency on an internal " +
-    "dataset that already exists in the catalog") {
+  test(
+    "SPARK-59663: withColumns and withColumnsRenamed keep the dependency on an internal " +
+      "dataset that already exists in the catalog") {
     withTable("spark_catalog.default.src") {
       // Simulate a pipeline re-run: the internal dataset `src` was materialized by a prior run.
       sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
@@ -578,8 +579,10 @@ class PythonPipelineSuite
           |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
 
       Seq("with_columns", "with_columns_renamed").foreach { flowName =>
-        assert(graph.resolvedFlow(graphIdentifier(flowName)).inputs ==
-          Set(graphIdentifier("src")), s"flow $flowName lost its dependency on src")
+        assert(
+          graph.resolvedFlow(graphIdentifier(flowName)).inputs ==
+            Set(graphIdentifier("src")),
+          s"flow $flowName lost its dependency on src")
       }
     }
   }

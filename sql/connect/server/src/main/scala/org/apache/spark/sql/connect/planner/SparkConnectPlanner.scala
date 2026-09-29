@@ -122,10 +122,10 @@ class SparkConnectPlanner(
   private var eagerAnalysisEnabled = true
 
   /**
-   * Transforms the relation without the eager analysis of `withColumns` and
-   * `withColumnsRenamed`. Declarative Pipelines use it to plan a flow: the eager analysis would
-   * resolve a read of another pipeline dataset against the table a previous run left in the
-   * catalog, and the flow would then lose its dependency on that dataset.
+   * Transforms the relation without the eager analysis of `withColumns` and `withColumnsRenamed`.
+   * Declarative Pipelines use it to plan a flow: the eager analysis would resolve a read of
+   * another pipeline dataset against the table a previous run left in the catalog, and the flow
+   * would then lose its dependency on that dataset.
    */
   private def transformRelationWithoutEagerAnalysis(rel: proto.Relation): LogicalPlan = {
     val previous = eagerAnalysisEnabled
@@ -1366,7 +1366,8 @@ class SparkConnectPlanner(
    * Tries the eager analysis first, and falls back to the lazily resolved plan when the eager
    * analysis fails or is disabled (see [[transformRelationWithoutEagerAnalysis]]).
    */
-  private def tryEagerAnalysis(eagerPlan: => LogicalPlan)(lazyPlan: => LogicalPlan): LogicalPlan = {
+  private def tryEagerAnalysis(
+      eagerPlan: => LogicalPlan)(lazyPlan: => LogicalPlan): LogicalPlan = {
     if (!eagerAnalysisEnabled) {
       lazyPlan
     } else {
