@@ -205,7 +205,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   // `final` for the same reason as `writeReplace` above: unlike `readObject`, which is private and
   // therefore invoked once per class in the hierarchy, `readResolve` is inherited, so a subclass
   // defining one would silently replace this and stop registering the accumulator entirely.
-  final protected def readResolve(): Any = {
+  final protected def readResolve(): Any = Utils.tryOrIOException {
     if (atDriverSide) {
       atDriverSide = false
 
