@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, Projec
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.{sideBySide, CharVarcharScanMode, CharVarcharUtils}
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
@@ -616,14 +616,21 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     val rebuildSession = sessionForCacheRebuild(spark, policy)
     rebuildSession.withActive {
       try {
-        tryRefreshPlan(cd.plan).map { refreshedPlan =>
+        val keepCaptured = policy.mixedModes || policy.mixedPadding
+        tryRefreshPlan(rebuildSession, cd.plan, keepCaptured).map { refreshedPlan =>
           val qe = QueryExecution.create(
             rebuildSession,
             refreshedPlan,
             refreshPhaseEnabled = false)
-          // Keep the captured mode and padding Project as the cache key. qe.normalized re-runs
-          // analysis, which can drop or rebuild that Project under the caller session.
-          val newKey = QueryExecution.normalize(rebuildSession, refreshedPlan)
+          // Direct CHAR/VARCHAR caches keep captured types and padding as the key.
+          // qe.normalized re-runs analysis and can drop that Project under the caller session.
+          // Non-CHAR direct caches use qe.normalized so SPARK-54424 can adopt a new schema.
+          val newKey =
+            if (isDirectCharVarcharCache(cd.plan)) {
+              QueryExecution.normalize(rebuildSession, refreshedPlan)
+            } else {
+              qe.normalized
+            }
           val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
           cd.copy(plan = newKey, cachedRepresentation = newCache)
         }
@@ -641,8 +648,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       spark: SparkSession,
       policy: CacheRebuildPolicy): SparkSession = {
     val base = getOrCloneSessionWithConfigsOff(spark)
-    // Mixed bound modes must not share one configure() or one padding flag.
-    if (policy.mixedModes || (policy.mode.isEmpty && !policy.readSidePadding)) {
+    // Mixed bound modes or mixed padding must not share one configure() / padding flag.
+    if (policy.mixedModes || policy.mixedPadding ||
+        (policy.mode.isEmpty && !policy.readSidePadding)) {
       base
     } else {
       val session = if (base eq spark) spark.cloneSession() else base
@@ -662,42 +670,71 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private case class CacheRebuildPolicy(
       mode: Option[CharVarcharScanMode],
       mixedModes: Boolean,
+      mixedPadding: Boolean,
       nativeTypes: Boolean,
       readSidePadding: Boolean)
 
-  // One plan walk for rebuild session flags. Mixed bound modes skip a global configure so
-  // each relation keeps the mode already stored on that node.
+  // One plan walk for rebuild session flags. Mixed bound modes or mixed padding skip a
+  // global configure so each subtree keeps the mode and padding already stored on that node.
   private def cacheRebuildPolicy(plan: LogicalPlan): CacheRebuildPolicy = {
     var mode: Option[CharVarcharScanMode] = None
     var mixed = false
     var native = false
     var padding = false
+    var paddedChildren = List.empty[LogicalPlan]
+    var charRels = List.empty[LogicalPlan]
     plan.foreach {
       case r: DataSourceV2Relation =>
         r.charVarcharScanMode.foreach { m =>
           if (mode.exists(_ != m)) mixed = true else if (mode.isEmpty) mode = Some(m)
         }
         if (r.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))) native = true
+        if (isCharVarcharRelation(r)) charRels ::= r
       case r: LogicalRelation =>
         r.charVarcharScanMode.foreach { m =>
           if (mode.exists(_ != m)) mixed = true else if (mode.isEmpty) mode = Some(m)
         }
         if (r.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))) native = true
+        if (isCharVarcharRelation(r)) charRels ::= r
       case r: HiveTableRelation =>
         r.charVarcharScanMode.foreach { m =>
           if (mode.exists(_ != m)) mixed = true else if (mode.isEmpty) mode = Some(m)
         }
         if (r.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))) native = true
+        if (isCharVarcharRelation(r)) charRels ::= r
       case project @ Project(_, child)
           if ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, child) =>
         padding = true
+        child.foreach {
+          case r: DataSourceV2Relation => paddedChildren ::= r
+          case r: LogicalRelation => paddedChildren ::= r
+          case r: HiveTableRelation => paddedChildren ::= r
+          case _ =>
+        }
       case _ =>
     }
+    val mixedPadding =
+      charRels.exists(r => paddedChildren.exists(_ eq r)) &&
+        charRels.exists(r => !paddedChildren.exists(_ eq r))
     CacheRebuildPolicy(
       mode = if (mixed) None else mode,
       mixedModes = mixed,
+      mixedPadding = mixedPadding,
       nativeTypes = native,
       readSidePadding = padding)
+  }
+
+  private def isCharVarcharRelation(r: LogicalPlan): Boolean = r match {
+    case rel: DataSourceV2Relation =>
+      rel.charVarcharScanMode.isDefined ||
+        rel.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))
+    case rel: LogicalRelation =>
+      rel.charVarcharScanMode.isDefined ||
+        rel.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))
+    case rel: HiveTableRelation =>
+      rel.charVarcharScanMode.isDefined ||
+        rel.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))
+    case _ => false
   }
 
   /**
@@ -713,11 +750,34 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    *
    * @return the refreshed plan if refresh succeeds, None otherwise
    */
-  private def tryRefreshPlan(plan: LogicalPlan): Option[LogicalPlan] = {
+  private def tryRefreshPlan(
+      spark: SparkSession,
+      plan: LogicalPlan,
+      keepCapturedShape: Boolean): Option[LogicalPlan] = {
     try {
-      // Keep scan mode and any analyzer padding Project. Load Table from the catalog rather
-      // than the shared relation cache so a recache after write sees committed rows.
-      Some(refreshV2RelationTablesFromCatalog(plan))
+      if (keepCapturedShape) {
+        // Keep each relation's stored mode and policy Project; only refresh Table instances.
+        Some(V2TableRefreshUtil.refresh(spark, plan))
+      } else {
+        EliminateSubqueryAliases(plan) match {
+          case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
+              if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] =>
+            refreshV2RelationTable(r, catalog, ident)
+          case project @ Project(_, r @ ExtractV2CatalogAndIdentifier(catalog, ident))
+              if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] &&
+                ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, r) =>
+            refreshV2RelationTable(r, catalog, ident).map { refreshed =>
+              if (isCharVarcharRelation(r)) {
+                // Keep the captured padding Project; re-analysis would rebuild it from session conf.
+                project.copy(child = refreshed)
+              } else {
+                refreshed
+              }
+            }
+          case _ =>
+            Some(V2TableRefreshUtil.refresh(spark, plan))
+        }
+      }
     } catch {
       case NonFatal(e) =>
         logWarning(log"Failed to refresh plan while attempting to recache", e)
@@ -727,14 +787,34 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   // Load from the catalog, not the shared relation cache, so a recache after write sees
   // the committed rows instead of the copy pinned when the cache was created.
-  // Keep output types, scan mode, and padding Projects: DataSourceV2Relation.create rewrites
-  // CHAR/VARCHAR to annotated STRING, so a later analysis pass cannot restore the cache key.
-  private def refreshV2RelationTablesFromCatalog(plan: LogicalPlan): LogicalPlan = {
-    plan.transformWithSubqueries {
-      case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
-          if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] =>
-        val table = CatalogV2Util.getTable(catalog, ident, options = r.options)
-        if (r.table.id == table.id) r.copy(table = table) else r
+  // CHAR/VARCHAR scans keep captured output types: create() rewrites them to annotated STRING.
+  // Other direct caches rebuild output from the fresh table (SPARK-54424).
+  private def refreshV2RelationTable(
+      relation: DataSourceV2Relation,
+      catalog: TableCatalog,
+      ident: Identifier): Option[DataSourceV2Relation] = {
+    val table = CatalogV2Util.getTable(catalog, ident, options = relation.options)
+    if (relation.table.id != table.id) {
+      None
+    } else if (isCharVarcharRelation(relation)) {
+      Some(relation.copy(table = table))
+    } else {
+      Some(
+        DataSourceV2Relation
+          .create(table, Some(catalog), Some(ident), relation.options)
+          .copy(charVarcharScanMode = relation.charVarcharScanMode))
+    }
+  }
+
+  private def isDirectCharVarcharCache(plan: LogicalPlan): Boolean = {
+    EliminateSubqueryAliases(plan) match {
+      case r: DataSourceV2Relation => isCharVarcharRelation(r)
+      case r: LogicalRelation => isCharVarcharRelation(r)
+      case r: HiveTableRelation => isCharVarcharRelation(r)
+      case project @ Project(_, child)
+          if ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, child) =>
+        child.find(isCharVarcharRelation).isDefined
+      case _ => false
     }
   }
 

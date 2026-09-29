@@ -2566,6 +2566,49 @@ class CachedTableSuite extends SharedSparkSession
     roundTrip(cachePadding = true, recachePadding = false)
   }
 
+  test("composite PreserveNative cache keeps mixed read-side padding") {
+    val charTbl = "testcat.mixed_pad_char"
+    val varcharTbl = "testcat.mixed_pad_varchar"
+    val preserveConf = Seq(
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
+    def withPadding(enabled: Boolean): Seq[(String, String)] = {
+      preserveConf :+ (SQLConf.READ_SIDE_CHAR_PADDING.key -> enabled.toString)
+    }
+    def paddedTableNames(ds: Dataset[_]): Set[String] = {
+      ds.queryExecution.analyzed.collect {
+        case project @ Project(_, child: DataSourceV2Relation)
+            if ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, child) =>
+          child.identifier.map(_.name()).getOrElse("")
+      }.toSet
+    }
+    withTable(charTbl, varcharTbl, "mixed_pad_join") {
+      withSQLConf(withPadding(true): _*) {
+        sql(s"CREATE TABLE $charTbl (id int, data char(4)) USING foo")
+        sql(s"CREATE TABLE $varcharTbl (id int, data varchar(4)) USING foo")
+        sql(s"INSERT INTO $charTbl VALUES (1, 'a')")
+        sql(s"INSERT INTO $varcharTbl VALUES (1, 'a')")
+        sql(
+          s"""CACHE TABLE mixed_pad_join AS
+             |SELECT c.id, c.data AS cdata, v.data AS vdata
+             |FROM $charTbl c JOIN $varcharTbl v ON c.id = v.id""".stripMargin)
+        val cached = sql("SELECT * FROM mixed_pad_join")
+        assertCached(cached)
+        assert(paddedTableNames(cached) === Set("mixed_pad_char"))
+      }
+      withSQLConf(withPadding(false): _*) {
+        sql(s"INSERT INTO $charTbl VALUES (2, 'b')")
+        sql(s"INSERT INTO $varcharTbl VALUES (2, 'b')")
+      }
+      withSQLConf(withPadding(true): _*) {
+        val fresh = sql("SELECT * FROM mixed_pad_join")
+        assertCached(fresh)
+        assert(paddedTableNames(fresh) === Set("mixed_pad_char"))
+        checkAnswer(fresh.select("id"), Seq(Row(1), Row(2)))
+      }
+    }
+  }
+
   test("CHAR/VARCHAR scan modes do not split caches for non-CHAR relations") {
     val t = "testcat.int_only"
     val preserveConf = Seq(
