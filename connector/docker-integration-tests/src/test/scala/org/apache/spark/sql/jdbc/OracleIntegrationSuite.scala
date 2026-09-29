@@ -396,8 +396,8 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
       spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", new Properties()).collect()
     }
     assert(e.getMessage.contains(
-      "The 12312321321321312312312312123.0000000000 rounded half up from" +
-        " 12312321321321312312312312123 cannot be represented as Decimal(38, 10)"))
+      "The 12312321321321312312312312123.000000000000000000 rounded half up from" +
+        " 12312321321321312312312312123 cannot be represented as Decimal(38, 18)"))
 
     // custom schema can read data
     val props = new Properties()

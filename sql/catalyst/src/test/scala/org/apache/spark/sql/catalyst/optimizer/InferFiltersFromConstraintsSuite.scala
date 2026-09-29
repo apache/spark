@@ -451,4 +451,18 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     assert(joinFound, "Expected a Join node in the optimized plan")
   }
 
+  test("SPARK-59719: infer IsNotNull through null-intolerant CheckOverflow") {
+    val dt = DecimalType(18, 0)
+    val decimalRelation = LocalRelation($"d".decimal(18, 0))
+    val query = decimalRelation
+      .where(CheckOverflow($"d", dt, nullOnOverflow = true) > Literal.create(Decimal(0), dt))
+      .analyze
+    val optimized = Optimize.execute(query)
+    val correctAnswer = decimalRelation
+      .where(IsNotNull($"d") &&
+        (CheckOverflow($"d", dt, nullOnOverflow = true) > Literal.create(Decimal(0), dt)))
+      .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
 }

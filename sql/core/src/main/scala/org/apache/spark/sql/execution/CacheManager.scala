@@ -39,9 +39,14 @@ import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
-import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
+import org.apache.spark.sql.execution.datasources.{
+  FileIndex,
+  HadoopFsRelation,
+  LogicalRelation,
+  LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -255,8 +260,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       includeTimeTravel: Boolean): Boolean = {
 
     EliminateSubqueryAliases(plan) match {
-      case LogicalRelationWithTable(_, Some(catalogTable)) =>
-        isSameName(name, catalogTable.identifier.nameParts, resolver)
+      case LogicalRelationWithTable(relation, Some(catalogTable)) =>
+        isSameName(name, catalogTable.identifier.nameParts, resolver) &&
+          (includeTimeTravel || !isTimeTravelRelation(relation))
 
       case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec) =>
         val nameInCache = v2Ident.toQualifiedNameParts(catalog)
@@ -270,6 +276,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
       case _ => false
     }
+  }
+
+  private def isTimeTravelRelation(relation: BaseRelation): Boolean = relation match {
+    case hadoopFsRelation: HadoopFsRelation => hadoopFsRelation.location.isTimeTravel
+    case _ => false
   }
 
   private def isSameName(
@@ -582,8 +593,24 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * `HadoopFsRelation` node(s) as part of its logical plan.
    */
   def recacheByPath(spark: SparkSession, resourcePath: Path, fs: FileSystem): Unit = {
+    recacheByPath(spark, resourcePath, fs, includeTimeTravel = true)
+  }
+
+  /**
+   * Tries to re-cache matching entries whose logical plans contain a file-backed relation under
+   * `resourcePath`. If `includeTimeTravel` is false, immutable time-travel relations are ignored
+   * when deciding whether an entry must be re-cached; another matching live relation in the same
+   * plan can still trigger re-caching.
+   */
+  def recacheByPath(
+      spark: SparkSession,
+      resourcePath: Path,
+      fs: FileSystem,
+      includeTimeTravel: Boolean): Unit = {
     val qualifiedPath = fs.makeQualified(resourcePath)
-    recacheByCondition(spark, _.plan.exists(lookupAndRefresh(_, fs, qualifiedPath)))
+    recacheByCondition(
+      spark,
+      _.plan.exists(lookupAndRefresh(_, fs, qualifiedPath, includeTimeTravel)))
   }
 
   /**
@@ -592,33 +619,45 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * in the plan. If found, we refresh the metadata and return true. Otherwise, this method returns
    * false.
    */
-  private def lookupAndRefresh(plan: LogicalPlan, fs: FileSystem, qualifiedPath: Path): Boolean = {
+  private def lookupAndRefresh(
+      plan: LogicalPlan,
+      fs: FileSystem,
+      qualifiedPath: Path,
+      includeTimeTravel: Boolean): Boolean = {
     plan match {
       case lr: LogicalRelation => lr.relation match {
         case hr: HadoopFsRelation =>
-          refreshFileIndexIfNecessary(hr.location, fs, qualifiedPath)
+          refreshFileIndexIfNecessary(hr.location, fs, qualifiedPath, includeTimeTravel)
         case _ => false
       }
 
-      case ExtractV2Table(fileTable: FileTable) =>
-        refreshFileIndexIfNecessary(fileTable.fileIndex, fs, qualifiedPath)
+      case relation @ ExtractV2Table(fileTable: FileTable)
+          if includeTimeTravel || relation.timeTravelSpec.isEmpty =>
+        refreshFileIndexIfNecessary(
+          fileTable.fileIndex,
+          fs,
+          qualifiedPath,
+          includeTimeTravel)
 
       case _ => false
     }
   }
 
   /**
-   * Refresh the given [[FileIndex]] if any of its root paths is a subdirectory
-   * of the `qualifiedPath`.
-   * @return whether the [[FileIndex]] is refreshed.
+   * Refresh the given [[FileIndex]] if one of its root paths is a subdirectory of
+   * `qualifiedPath` and either `includeTimeTravel` is true or the index is not an immutable
+   * time-travel snapshot.
+   * @return whether the [[FileIndex]] was refreshed.
    */
   private def refreshFileIndexIfNecessary(
       fileIndex: FileIndex,
       fs: FileSystem,
-      qualifiedPath: Path): Boolean = {
-    val needToRefresh = fileIndex.rootPaths
-      .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
-      .exists(isSubDir(qualifiedPath, _))
+      qualifiedPath: Path,
+      includeTimeTravel: Boolean): Boolean = {
+    val needToRefresh = (includeTimeTravel || !fileIndex.isTimeTravel) &&
+      fileIndex.rootPaths
+        .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
+        .exists(isSubDir(qualifiedPath, _))
     if (needToRefresh) fileIndex.refresh()
     needToRefresh
   }

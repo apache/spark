@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution;
 
 import java.io.IOException;
-import java.util.LinkedList;
+import java.util.ArrayDeque;
+import java.util.Queue;
 
 import scala.collection.Iterator;
 
@@ -31,7 +32,14 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
  * (whole stage codegen).
  */
 public abstract class BufferedRowIterator {
-  protected LinkedList<InternalRow> currentRows = new LinkedList<>();
+  // ArrayDeque never shrinks its backing array, so a wide fan-out batch (e.g. a large explode)
+  // would otherwise pin the grown array for the rest of the task. Once a batch's high-water mark
+  // exceeds this size, the drained deque is replaced with a fresh one. Checked once per batch,
+  // not per row.
+  private static final int SHRINK_BUFFER_THRESHOLD = 1024;
+
+  protected Queue<InternalRow> currentRows = new ArrayDeque<>();
+  private boolean shrinkBuffer = false;
   // used when there is no column in output
   // Keep it public for codegen to access.
   public UnsafeRow unsafeRow = new UnsafeRow(0);
@@ -41,7 +49,11 @@ public abstract class BufferedRowIterator {
 
   public boolean hasNext() throws IOException {
     if (currentRows.isEmpty()) {
+      if (shrinkBuffer) {
+        currentRows = new ArrayDeque<>();
+      }
       processNext();
+      shrinkBuffer = currentRows.size() > SHRINK_BUFFER_THRESHOLD;
     }
     return !currentRows.isEmpty();
   }

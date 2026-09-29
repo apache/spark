@@ -165,6 +165,19 @@ private[spark] object History {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("1m")
 
+  val EVENT_LOG_MAX_LINE_LENGTH =
+    ConfigBuilder("spark.history.fs.eventLog.maxLineLength")
+      .doc("Maximum length of a single event log line during replay. Lines longer than " +
+        "this are skipped with a warning instead of being read into memory, bounding the " +
+        "memory replay can use when an event log is corrupt or unexpectedly large. Setting " +
+        "this to 0 or a negative value disables the limit. " +
+        "Introduced in 4.3.0; also available in 3.5.10, 4.0.5, 4.1.4 and 4.2.1; and in " +
+        "all versions after 4.3.0.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("512m")
+
   private[spark] val EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN =
     ConfigBuilder("spark.history.fs.eventLog.rolling.maxFilesToRetain")
       .doc("The maximum number of event log files which will be retained as non-compacted. " +

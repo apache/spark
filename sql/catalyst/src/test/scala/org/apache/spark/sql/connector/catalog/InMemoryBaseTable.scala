@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
+import org.apache.spark.sql.connector.catalog.functions.FlipLowBitFunction
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.{Literal => V2Literal}
@@ -214,6 +215,7 @@ abstract class InMemoryBaseTable(
     case _: ClusterByTransform =>
     case NamedTransform("truncate", Seq(_: NamedReference, _: V2Literal[_])) =>
     case NamedTransform("signed_zeros", Seq(_: NamedReference)) =>
+    case NamedTransform("flip_low_bit", Seq(_: NamedReference)) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
@@ -339,6 +341,14 @@ abstract class InMemoryBaseTable(
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (value: Long, LongType) =>
             if (value == 1L) -0.0d else if (value == 2L) 0.0d else value.toDouble
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+        }
+      // The key is whatever the function itself computes, so the two cannot drift. The other
+      // transforms above repeat their function's arithmetic and keep it in step by comment only.
+      case NamedTransform("flip_low_bit", Seq(ref: NamedReference)) =>
+        extractor(ref.fieldNames, cleanedSchema, row) match {
+          case (value: Long, LongType) => FlipLowBitFunction.produceResult(InternalRow(value))
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }

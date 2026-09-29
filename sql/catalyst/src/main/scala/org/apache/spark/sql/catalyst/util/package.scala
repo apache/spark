@@ -129,6 +129,16 @@ package object util extends Logging {
       )
     case c: Cast if !c.containsTag(Cast.USER_SPECIFIED_CAST) =>
       PrettyAttribute(usePrettyExpression(c.child, shouldTrimTempResolvedColumn).sql, c.dataType)
+    case j: RoutedSqlJsonExpression =>
+      // Column names are for display and never reparsed, so render the clean clause-free form, not
+      // the canonical `sql` that appends a round-trip-only default clause. Render children in place
+      // rather than substituting the node's children, so the raw-vs-quoted splice decisions (which
+      // key off each child's identity) are unchanged and no synthetic `FORMAT JSON` leaks in.
+      PrettyAttribute(
+        j.sqlString(
+          forceBuiltinOwnership = false,
+          usePrettyExpression(_, shouldTrimTempResolvedColumn).sql),
+        j.dataType)
     case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
     // Present a transpiled UDF exactly like the UDF it wraps, so auto-generated
     // column names stay `f(a)` whether or not transpilation engages (the node

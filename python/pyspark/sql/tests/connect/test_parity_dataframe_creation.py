@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from pyspark.sql.tests.test_creation import DataFrameCreationTestsMixin
+from pyspark.sql.tests.test_dataframe_creation import DataFrameCreationTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 

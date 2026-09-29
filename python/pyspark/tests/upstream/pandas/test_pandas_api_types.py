@@ -340,6 +340,9 @@ class PandasApiTypesObjectTests(_PandasApiTypesTestBase):
         predicates = self._predicates()
         # pandas/numpy-version-specific expected cells; empty at the pandas 2.3 baseline.
         overrides: dict[tuple[str, str], str] = {}
+        if LooseVersion(np.__version__) < LooseVersion("1.25.0"):
+            # Spark's minimum profile pins NumPy 1.23.2; the compatibility sweep used 1.26.4.
+            overrides[("np.dtype('int64')", COL_INPUT_TYPE)] = "dtype[int64]"
         if sys.version_info >= (3, 12):
             # slice became hashable in Python 3.12, and is_hashable is exactly "does hash()
             # raise", so this cell follows the interpreter. The golden holds the 3.11 answer.

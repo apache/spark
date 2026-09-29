@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionResolution,
   ResolvedStar,
+  RoutedSqlJsonStarOwner,
   Star,
   UnresolvedFunction,
   UnresolvedStar
@@ -61,30 +62,35 @@ trait FunctionResolverUtils {
       case _ => false
     }
 
-    // Whether the call resolves to the builtin `count` (distinct-agnostic). This owner probe can
-    // hit an external FunctionCatalog.functionExists lookup on a persistent-first SQL PATH, so
-    // compute it once and reuse it for both the count(*) normalization and the count(tbl.*) guard.
-    // Lazy so the non-star and SQL/JSON direct-star paths never pay for it.
+    // Distinct-agnostic probe for the builtin `count`. Lazy so only the count(*)/count(tbl.*) paths
+    // pay for the (possibly external) lookup; reused by the rewrite and the single-table guard.
     lazy val resolvesToCountBuiltin =
       functionResolution.functionNameResolvesToBuiltin(unresolvedFunction.nameParts, "count")
 
-    if (functionContainsDirectStarInArguments &&
-        functionResolution.resolvesToStarDisallowedSqlJsonFunction(unresolvedFunction.nameParts)) {
-      // A direct star argument -- a bare `*` or a qualified `t.*` -- is rejected in a routed
-      // SQL/JSON function; a star nested in another expression (json_array(array(*))) is expanded
-      // there and count(*) is rewritten to count(1), so both stay valid arguments.
-      throw QueryCompilationErrors.invalidStarUsageError(
-        s"expression `${unresolvedFunction.prettyName}`", extractStar(unresolvedFunction.arguments))
-    } else if (!functionContainsDirectStarInArguments) {
+    if (!functionContainsDirectStarInArguments) {
       unresolvedFunction
-    } else if (!unresolvedFunction.isDistinct && resolvesToCountBuiltin &&
-        hasSingleSimpleStarArgument(unresolvedFunction)) {
-      normalizeCountExpression(unresolvedFunction)
     } else {
-      assertSingleTableStarNotInCountFunction(unresolvedFunction, resolvesToCountBuiltin)
-      unresolvedFunction.copy(
-        arguments = expressionResolver.expandStarExpressions(unresolvedFunction.arguments)
-      )
+      // Resolve the routed SQL/JSON owner once and mirror the fixed-point analyzer.
+      functionResolution.selectRoutedSqlJsonDirectStarOwner(unresolvedFunction.nameParts) match {
+        case RoutedSqlJsonStarOwner.RejectStockBuiltin =>
+          throw QueryCompilationErrors.invalidStarUsageError(
+            s"expression `${unresolvedFunction.prettyName}`",
+            extractStar(unresolvedFunction.arguments))
+        case RoutedSqlJsonStarOwner.BindShadowOwner(candidate) =>
+          unresolvedFunction.copy(
+            arguments = expressionResolver.expandStarExpressions(unresolvedFunction.arguments),
+            boundOwner = Some(candidate))
+        case RoutedSqlJsonStarOwner.NoBinding =>
+          if (!unresolvedFunction.isDistinct && resolvesToCountBuiltin &&
+              hasSingleSimpleStarArgument(unresolvedFunction)) {
+            normalizeCountExpression(unresolvedFunction)
+          } else {
+            assertSingleTableStarNotInCountFunction(unresolvedFunction, resolvesToCountBuiltin)
+            unresolvedFunction.copy(
+              arguments = expressionResolver.expandStarExpressions(unresolvedFunction.arguments)
+            )
+          }
+      }
     }
   }
 

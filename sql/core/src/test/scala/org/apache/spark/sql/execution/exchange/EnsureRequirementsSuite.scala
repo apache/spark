@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = AttributeReference("a", IntegerType)()
@@ -1070,10 +1070,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: KeyedPartitioning, _, _),
-                _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _), _),
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, right: KeyedPartitioning, _, _),
-                _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _), _),
             _) =>
           assert(left.expressions === Seq(bucket(4, exprB), bucket(8, exprC)))
           assert(right.expressions === Seq(bucket(4, exprC), bucket(8, exprB)))
@@ -1094,10 +1094,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: PartitioningCollection, _, _),
-                _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _), _),
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, right: KeyedPartitioning, _, _),
-                _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _), _),
             _) =>
           assert(left.partitionings.length == 2)
           assert(left.partitionings.head.isInstanceOf[KeyedPartitioning])
@@ -1129,10 +1129,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: PartitioningCollection, _, _),
-                _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _), _),
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, right: PartitioningCollection, _, _),
-                _, _, _, _, _), _),
+                _, _, _, _, _, _, _, _), _),
             _) =>
           assert(left.partitionings.length == 2)
           assert(left.partitionings.head.isInstanceOf[KeyedPartitioning])
@@ -1540,6 +1540,59 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59688: a cogroup does not pair two key spaces as they stand") {
+    val idL = AttributeReference("idL", LongType)()
+    val idR = AttributeReference("idR", LongType)()
+    // `flip_low_bit` permutes its key space, so the two sides report the same key list, [0, 1],
+    // while a key stands for different rows on each. A cogroup has no reduce branch:
+    // `checkKeyGroupCompatible` declines for anything that is not a `ShuffledJoin`, so
+    // `pickCoPartitionTarget` pairs the children on `isCompatibleWith` alone. Reading that pair as
+    // it stands would hand the user's function rows that do not belong together, and unlike a join
+    // there is no equi-predicate to drop them again.
+    val keys = Seq(InternalRow(0L), InternalRow(1L))
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(idL), keys))
+    val right = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(FlipLowBitFunction, Seq(idR))), keys))
+    assert(left.outputPartitioning.satisfies(ClusteredDistribution(Seq(idL))) &&
+      right.outputPartitioning.satisfies(ClusteredDistribution(Seq(idR))),
+      "test setup: each side answers its own clustering, so only the pairing is in question")
+
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val cogroup = FlatMapCoGroupsInPandasExec(
+      Seq(idL), Seq(idR), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      val result = EnsureRequirements.apply(cogroup)
+      val shuffles = result.collect { case s: ShuffleExchangeExec => s }
+      assert(shuffles.size == 1,
+        s"one side must be laid out on the other rather than read as it stands:\n$result")
+      // Which side, and onto what: the transform side is the one laid out, on the identity side's
+      // keys, so the answer is not merely "something was shuffled".
+      assert(shuffles.head.outputPartitioning match {
+        case k: KeyedPartitioning => k.expressions == Seq(idR) && k.numPartitions == keys.size
+        case _ => false
+      }, s"the transform side must be laid out on the identity side's keys, got " +
+        s"${shuffles.head.outputPartitioning}\n$result")
+      assert(EnsureRequirements.apply(result) == result, "and the rule must be idempotent")
+
+      // Positive control: this path still pairs a side with one that holds the same key space, so
+      // the refusal above is the two key spaces' doing rather than the pairing always failing.
+      val sameSpace = cogroup.copy(left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+        Seq(TransformExpression(FlipLowBitFunction, Seq(idL))), keys)))
+      assert(EnsureRequirements.apply(sameSpace).collect {
+        case s: ShuffleExchangeExec => s
+      }.isEmpty, "two sides holding one key space must still be read as they stand")
+    }
+  }
+
   test("SPARK-59256: a collection is ranked on its best member, not on whichever came first") {
     val id = AttributeReference("id", IntegerType)()
     val t1 = AttributeReference("t1", IntegerType)()
@@ -1737,7 +1790,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       val plannedLeft = EnsureRequirements.apply(leftOuter)
       assert(plannedLeft.collect { case s: ShuffleExchangeExec => s }.isEmpty,
         "every pairing agrees on the keys, so neither side is shuffled whichever one wins")
-      assert(groupPartitionsNodes(plannedLeft).map(_.expectedPartitionKeys.map(_.size)) ===
+      assert(groupPartitionsNodes(plannedLeft).map(_.expectedKeyCount) ===
         Seq(Some(6), Some(6)),
         "the join runs on the surviving side's best member, not on the dropped side's")
 
@@ -1747,7 +1800,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       val plannedRight = EnsureRequirements.apply(rightOuter)
       assert(plannedRight.collect { case s: ShuffleExchangeExec => s }.isEmpty,
         "and neither side is shuffled here either")
-      assert(groupPartitionsNodes(plannedRight).map(_.expectedPartitionKeys.map(_.size)) ===
+      assert(groupPartitionsNodes(plannedRight).map(_.expectedKeyCount) ===
         Seq(Some(8), Some(8)),
         "the surviving side is the right one now, so its best member decides")
     }
@@ -1774,19 +1827,27 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val right = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyedPartitioning(Seq(days(aR), years(bR)), rightKeys))
 
-    // No `withSQLConf` on purpose. `pushPartValues` is on by default, which is all the push branch
-    // needs, so this is what a user gets out of the box.
-    val smj = SortMergeJoinExec(Seq(xL, yL), Seq(aR, bR), Inner, None, left, right)
-    val planned = EnsureRequirements.apply(smj)
+    // `pushPartValues` stays at its default (on), which is all the push branch needs.
+    def assertPairingPushesKeys(expected: Int, clue: String): Unit = {
+      val smj = SortMergeJoinExec(Seq(xL, yL), Seq(aR, bR), Inner, None, left, right)
+      val planned = EnsureRequirements.apply(smj)
 
-    // Without the pairing, the left's first member is taken and its `days(yL)` is matched against
-    // `days(aR)`, which names the other join key, so the join declines and both sides are shuffled
-    // onto the default partitioning.
-    assert(planned.collect { case s: ShuffleExchangeExec => s }.isEmpty,
-      "the second member pairs with the other side, so neither side is shuffled")
-    assert(groupPartitionsNodes(planned).map(_.expectedPartitionKeys.map(_.size)) ===
-      Seq(Some(3), Some(3)),
-      "both sides are pushed the union of the two key sets")
+      // Without the pairing, the left's first member is taken and its `days(yL)` is matched
+      // against `days(aR)`, which names the other join key, so the join declines and both sides
+      // are shuffled onto the default partitioning.
+      assert(planned.collect { case s: ShuffleExchangeExec => s }.isEmpty,
+        "the second member pairs with the other side, so neither side is shuffled")
+      assert(groupPartitionsNodes(planned).map(_.expectedKeyCount) ===
+        Seq(Some(expected), Some(expected)), clue)
+    }
+
+    // The unset arm is what pins the shipped default: an explicit true would keep passing if
+    // `createWithDefault(true)` were reverted. It pushes the intersection of the two key sets;
+    // the pinned-off rollback arm pushes their union.
+    assertPairingPushesKeys(1, "the unset default pushes the intersection of the key sets")
+    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false") {
+      assertPairingPushesKeys(3, "filtering off pushes the union of the key sets")
+    }
   }
 
   test("SPARK-59256: no agreeing pair leaves the join alone however many members each side has") {
@@ -1832,7 +1893,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         KeyedPartitioning(Seq(exprKey), Seq(InternalRow(1), InternalRow(2), InternalRow(3))))
     // `requiredNumPartitions` is a hard requirement - `Partitioning.satisfies` refuses to satisfy a
     // distribution whose partition count differs, and neither `keysSatisfy` nor
-    // `nonGroupedSatisfies` checks it on its own. A stateful streaming operator asks for this shape
+    // `satisfies0` checks it on its own. A stateful streaming operator asks for this shape
     // through `StatefulOperatorPartitioning.getCompatibleDistribution`.
     val parent = parentRequiring(
       child,
@@ -1856,13 +1917,13 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     assert(EnsureRequirements.apply(parent).children.head eq child)
   }
 
-  test("SPARK-58968: a partitioning that covers no operation key is shuffled, not projected") {
+  test("SPARK-58968: a partitioning that covers no cluster key is shuffled, not projected") {
     val exprKey = AttributeReference("k", IntegerType)()
     // Nothing at `KeyedPartitioning` construction requires a partition expression to reference a
     // column. A DSv2 scan cannot report one that does not, because `supportsExpressions` refuses
     // it, but no other producer is held to that, so a reference-free expression is possible here.
     //
-    // Such a partitioning has no attributes to check against the operation keys, which makes
+    // Such a partitioning has no attributes to check against the cluster keys, which makes
     // `keysSatisfy` vacuously true, and it covers no position to project onto. Projecting to
     // no position at all would put every row on a single partition, so the child has to be
     // shuffled.
@@ -1911,9 +1972,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   }
 
   test("SPARK-58968: a transform position is kept when its reference is a cluster key") {
-    // `clusterKeyPositions` keeps a position two ways. The other tests all keep plain attributes,
-    // which the expression-level test matches on its own, so this is the one that turns on the
-    // reference-level test: `bucket(4, a)` is not a cluster key, its reference `a` is.
+    // `positionsCoveringClusterKeys` keeps a position two ways. The other tests all keep plain
+    // attributes, which the expression-level test matches on its own, so this is the one that
+    // turns on the reference-level test: `bucket(4, a)` is not a cluster key, its reference `a` is.
     //
     // It is also the shape the soundness argument is about. `keysSatisfy`'s subset branch requires
     // every expression to have a single reference, so a kept expression is a function of one
@@ -1979,7 +2040,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       "groups") {
     val exprN = AttributeReference("n", IntegerType)()
     val exprI = AttributeReference("i", IntegerType)()
-    // Three partitions on (n, i), and projecting to the operation key [i] leaves two, which is
+    // Three partitions on (n, i), and projecting to the cluster key [i] leaves two, which is
     // what the distribution asks for. It mirrors the test below, where the projected count misses
     // the requirement and we shuffle. Here it matches and the node is the right answer.
     val keys = Seq(InternalRow(1, 1), InternalRow(2, 1), InternalRow(3, 2))
@@ -1992,7 +2053,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
       val newChild = EnsureRequirements.apply(parent).children.head
       assert(groupPartitionsNodes(newChild).map(_.joinKeyPositions) ==
-        Seq(Some(Seq(1))), "expected a node projecting to the operation key [i]")
+        Seq(Some(Seq(1))), "expected a node projecting to the cluster key [i]")
       assert(newChild.collect { case s: ShuffleExchangeExec => s }.isEmpty, "no shuffle needed")
       assert(newChild.outputPartitioning.numPartitions == 2)
     }
@@ -2019,7 +2080,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   test("SPARK-58968: a projection that would break requiredNumPartitions falls back to a shuffle") {
     val exprN = AttributeReference("n", IntegerType)()
     val exprI = AttributeReference("i", IntegerType)()
-    // Partitioned by (n, i) with three partitions. Projecting to the operation key [i] leaves two.
+    // Partitioned by (n, i) with three partitions. Projecting to the cluster key [i] leaves two.
     val keys = Seq(InternalRow(1, 1), InternalRow(2, 1), InternalRow(3, 2))
     val child = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyedPartitioning(Seq(exprN, exprI), keys))
@@ -2158,13 +2219,13 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58968: the candidate covering the most operation keys wins") {
+  test("SPARK-58968: the candidate covering the most cluster keys wins") {
     // Partition keys are (a, <second key column>, y). Projecting to the first position alone
     // leaves 2 partitions, projecting to the first two leaves 3.
     val keys = Seq(
       InternalRow(1, 1, 1), InternalRow(1, 1, 2), InternalRow(1, 2, 3), InternalRow(2, 2, 4))
     // Two members of one collection name the second key column differently. `x` is not a cluster
-    // key and `b` is, so they disagree on how many operation keys they cover, one against two.
+    // key and `b` is, so they disagree on how many cluster keys they cover, one against two.
     // Only the wider one keeps partitions that share an `a` but differ in `b` apart, which is why
     // the widest coverage is picked rather than the first member. `copy` keeps the `partitionKeys`
     // reference `PartitioningCollection` requires its members to share.
@@ -2179,14 +2240,14 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       val newChild = EnsureRequirements.apply(parent).children.head
       val gpes = groupPartitionsNodes(newChild)
       assert(gpes.map(_.joinKeyPositions) == Seq(Some(Seq(0, 1))),
-        "the projection must come from the member covering both operation keys")
+        "the projection must come from the member covering both cluster keys")
       assert(gpes.map(_.groupedPartitions.size) == Seq(3))
     }
   }
 
   test("SPARK-58968: the candidate whose projection leaves the most partitions wins") {
     // The first key column has 2 distinct values, the second 3. Both members below cover one
-    // operation key, so the coverage prefilter keeps both and the projected counts decide.
+    // cluster key, so the coverage prefilter keeps both and the projected counts decide.
     val keys = Seq(
       InternalRow(1, 5, 1), InternalRow(1, 6, 2), InternalRow(2, 7, 3), InternalRow(2, 7, 4))
     // The member leaving fewer partitions comes first, so taking the first, or the fewest, gives
@@ -2209,7 +2270,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
   test("SPARK-58968: equally covering candidates follow the child's own order") {
     // Projecting to either of the first two key columns leaves 2 partitions, so the two members
-    // below cover one operation key each and their projections are equally good. Nothing ranks
+    // below cover one cluster key each and their projections are equally good. Nothing ranks
     // them. The choice is still visible in the plan, because they project to different keys, so it
     // follows the order the child reports its partitionings in.
     val keys = Seq(
@@ -2333,43 +2394,31 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58996: only a local sort is looked through when reusing GroupPartitionsExec") {
+  test("SPARK-58996: only a local sort is looked through when peeling GroupPartitionsExec") {
     // A global `SortExec` requires `OrderedDistribution`, which a `KeyedPartitioning` can satisfy
     // (behind `spark.sql.sources.v2.bucketing.sorting.enabled`) through a `GroupPartitionsExec`
-    // built to emit the partition keys in sorted order. Reusing that node for a join would
-    // overwrite its `expectedPartitionKeys` and clear `distributePartitions`, destroying the
+    // built to emit the partition keys in sorted order. Peeling that node off would destroy the
     // ordering it exists to provide. Only a local sort may be looked through.
     val leaf = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(2))))
     val gpe = GroupPartitionsExec(leaf)
     val ordering = Seq(SortOrder(exprA, Ascending))
-    def mark(g: GroupPartitionsExec): GroupPartitionsExec = g.copy(distributePartitions = true)
 
-    // A bare GroupPartitionsExec is rewritten in place.
-    EnsureRequirements.rewriteGroupPartitions(gpe)(mark) match {
-      case Some(g: GroupPartitionsExec) => assert(g.distributePartitions)
-      case other => fail(s"expected a rewritten GroupPartitionsExec, got $other")
-    }
+    // A bare GroupPartitionsExec is peeled off.
+    assert(EnsureRequirements.peelGroupPartitions(gpe) === leaf)
 
-    // A local sort is looked through and the GroupPartitionsExec below it is rewritten.
+    // A local sort is looked through and the GroupPartitionsExec below it is peeled off too.
     val localSort = SortExec(ordering, global = false, gpe)
-    EnsureRequirements.rewriteGroupPartitions(localSort)(mark) match {
-      case Some(SortExec(_, false, g: GroupPartitionsExec, _)) => assert(g.distributePartitions)
-      case other => fail(s"expected the local sort to be looked through, got $other")
-    }
+    assert(EnsureRequirements.peelGroupPartitions(localSort) === leaf)
 
-    // A grouping stacked over another is dropped and the node below is rewritten.
-    EnsureRequirements.rewriteGroupPartitions(GroupPartitionsExec(localSort))(mark) match {
-      case Some(SortExec(_, false, g: GroupPartitionsExec, _)) =>
-        assert(g.distributePartitions, "the stacked grouping must be dropped and the node " +
-          "below it rewritten")
-      case other => fail(s"expected the stacked grouping to be dropped, got $other")
-    }
+    // A grouping stacked over another is peeled off with everything below it.
+    assert(EnsureRequirements.peelGroupPartitions(GroupPartitionsExec(localSort)) === leaf,
+      "a stacked grouping must be peeled off down to the pre-alignment plan")
 
-    // A global sort is not looked through, so the caller wraps instead of reusing.
+    // A global sort stops the descent, so the plan comes back untouched.
     val globalSort = SortExec(ordering, global = true, gpe)
-    assert(EnsureRequirements.rewriteGroupPartitions(globalSort)(mark).isEmpty,
-      "a GroupPartitionsExec below a global sort must never be reused")
+    assert(EnsureRequirements.peelGroupPartitions(globalSort) === globalSort,
+      "a GroupPartitionsExec below a global sort must never be peeled off")
   }
 
   test("SPARK-58996: withJoinKeyPositions reuses only a topmost GroupPartitionsExec") {
@@ -2402,27 +2451,37 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59289: an aligned grouping is wrapped by withJoinKeyPositions, not rebuilt") {
+    // The rebuild reads `g.child` and reproduces a plain grouping, which is neither a merged key
+    // count, nor a reducer, nor a replication. So a node carrying one of those is wrapped instead:
+    // the positions index what it reports, and that is what the node built over it projects.
+    //
+    // The rebuild is this change's: the base replaced a node's positions with a `copy`, which
+    // re-derives nothing and so had no case to tell apart. A re-run can hand this site an aligned
+    // node, and a planner crash would be the wrong answer where a sound plan is available.
+    val leaf = DummySparkPlan(outputPartitioning =
+      KeyedPartitioning(Seq(exprA, exprB), Seq(InternalRow(1, 1), InternalRow(1, 1))))
+    val aligned = GroupPartitionsExec(leaf, expectedPartitionKeys = Some(Seq(
+      (InternalRowComparableWrapper(InternalRow(1, 1), Seq(exprA, exprB)), 2))))
+    assert(aligned.expectedKeyCount.isDefined, "test setup: this is an aligned node")
+
+    EnsureRequirements.withJoinKeyPositions(aligned, Seq(0)) match {
+      case g: GroupPartitionsExec =>
+        assert(g.joinKeyPositions === Some(Seq(0)))
+        assert(g.child eq aligned, "the aligned node keeps its merge and stays below the new one")
+      case other => fail(s"expected a wrapping GroupPartitionsExec, got $other")
+    }
+  }
+
   test("SPARK-58996: reusing a GroupPartitionsExec keeps its tags") {
     // Tags are instance state that a `copy` does not carry, so every rewrite must copy them
-    // back onto the new node.
+    // back onto the new node. The join path no longer rewrites a node, it peels the old one off
+    // and builds a fresh one, so only the non-join path is left to check.
     val tag = TreeNodeTag[String]("test tag")
     val leaf = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(2))))
     val gpe = GroupPartitionsExec(leaf)
     gpe.setTagValue(tag, "kept")
-    val ordering = Seq(SortOrder(exprA, Ascending))
-
-    // The join path: a bare node and one behind a local sort.
-    EnsureRequirements.rewriteGroupPartitions(gpe)(_.copy(distributePartitions = true)) match {
-      case Some(g: GroupPartitionsExec) => assert(g.getTagValue(tag) === Some("kept"))
-      case other => fail(s"expected a rewritten GroupPartitionsExec, got $other")
-    }
-    EnsureRequirements.rewriteGroupPartitions(SortExec(ordering, global = false, gpe))(
-      _.copy(distributePartitions = true)) match {
-      case Some(SortExec(_, false, g: GroupPartitionsExec, _)) =>
-        assert(g.getTagValue(tag) === Some("kept"))
-      case other => fail(s"expected the local sort to be looked through, got $other")
-    }
 
     // The non-join path: a topmost node is rewritten in place.
     EnsureRequirements.withJoinKeyPositions(gpe, Seq(0)) match {
@@ -2546,10 +2605,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // is legitimate. See the aggregate and window cases in `KeyGroupedPartitioningSuite`.
     //
     // With one child the multi-child block never runs, so this does not exercise
-    // `rewriteGroupPartitions`: it pins the intentional non-idempotence of the children loop's
+    // the peel: it pins the intentional non-idempotence of the children loop's
     // wrap for single-child operators. If that wrap were "generalized" into a reuse of the node
     // below, the returned child would stay non-grouped and this assertion would fail, which is
-    // exactly what the `rewriteGroupPartitions` scaladoc argues must not happen.
+    // exactly what the `peelGroupPartitions` scaladoc argues must not happen.
     val leaf = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(
         Seq(exprA), Seq(InternalRow(1), InternalRow(1), InternalRow(2))))
@@ -2732,7 +2791,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           assert(planned.collect { case s: ShuffleExchangeExec => s }.isEmpty,
             s"$joinType: a marked pair keeps its storage-partitioned join either way:\n" +
               planned.treeString)
-          assert(groupPartitionsNodes(planned).map(_.expectedPartitionKeys.map(_.size)) ===
+          assert(groupPartitionsNodes(planned).map(_.expectedKeyCount) ===
             Seq(Some(3), Some(3)),
             s"$joinType: both sides are pushed the marked side's three keys:\n" +
               planned.treeString)
@@ -2741,6 +2800,185 @@ class EnsureRequirementsSuite extends SharedSparkSession {
               planned.treeString)
         }
       }
+    }
+  }
+
+  test("SPARK-59289: a grouped side is paired on its own key order, not a sorted one") {
+    // Both sides are grouped, so neither gets a node to reorder anything, and the left's keys are
+    // not sorted. Planning the pairing against `toGrouped`, which sorts, would claim an order the
+    // left does not have: the two would look compatible, the left would keep its own report and
+    // the right would keep the sorted one, and the join would carry two `KeyedPartitioning`s over
+    // different keys. `toGrouped` is therefore only for a source that is not grouped.
+    val unsorted = Seq(InternalRow(3), InternalRow(4), InternalRow(1), InternalRow(2))
+    val sorted = Seq(InternalRow(1), InternalRow(2), InternalRow(3), InternalRow(4))
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA), unsorted))
+    val right = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB), sorted))
+    val smj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, Inner, None, left, right)
+
+    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
+      val planned = EnsureRequirements.apply(smj)
+      val declared = planned.children.map { child =>
+        child.outputPartitioning.asInstanceOf[Expression]
+          .collectFirst { case k: KeyedPartitioning => k.partitionKeys }
+      }
+      assert(declared.forall(_.isDefined), s"both sides stay keyed:\n${planned.treeString}")
+      assert(declared.head == declared(1),
+        s"both sides must declare one key sequence:\n${planned.treeString}")
+    }
+  }
+
+  test("SPARK-59289: pushing join key positions into a node re-derives its grouping") {
+    // The positions are an input to the node's grouping, so `withJoinKeyPositions` rebuilds through
+    // the factory. A `copy` would keep the grouping the old positions produced, and nothing about
+    // the node would look wrong.
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2))
+    val leaf = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA, exprB), keys))
+    val coalescing = GroupPartitionsExec(leaf)
+    assert(coalescing.outputPartitioning.numPartitions == 2, "test setup: nothing merged yet")
+
+    val projected = EnsureRequirements.withJoinKeyPositions(coalescing, Seq(0))
+    assert(projected.outputPartitioning.numPartitions == 1,
+      "projecting [a, b] onto [a] merges the two partitions that share a = 1")
+  }
+
+  test("SPARK-59289: single-partition children still honour a required partition count") {
+    // Both sides are already `SinglePartition` and small, so there is no co-partitioning to
+    // arrange. Each child still has to satisfy its own requirement, and a stateful operator's
+    // `ClusteredDistribution` carries a partition count that one partition does not meet.
+    val logicalPlan = StatsTestPlan(Nil, 1L, AttributeMap.empty, Some(1L))
+    val left = DummySparkPlan(outputPartitioning = SinglePartition)
+    left.setLogicalLink(logicalPlan)
+    val right = DummySparkPlan(outputPartitioning = SinglePartition)
+    right.setLogicalLink(logicalPlan)
+    val parent = DummySparkPlan(
+      children = Seq(left, right),
+      requiredChildDistribution = Seq(
+        ClusteredDistribution(Seq(exprA), requiredNumPartitions = Some(5)),
+        ClusteredDistribution(Seq(exprC), requiredNumPartitions = Some(5))),
+      requiredChildOrdering = Seq(Nil, Nil))
+
+    val planned = EnsureRequirements.apply(parent)
+    assert(ValidateRequirements.validate(planned),
+      s"each child must satisfy its own distribution:\n${planned.treeString}")
+  }
+
+  test("SPARK-59289: a local sort with no grouping under it is left alone") {
+    // `peelGroupPartitions` peels the local sorts this rule added over a grouping. A sort with no
+    // grouping beneath it is the user's `sortWithinPartitions`, and the ordering step only puts
+    // back the ordering the operator required, so peeling it would lose that ordering for good.
+    val keys = Seq(InternalRow(1), InternalRow(2))
+    val leaf = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA), keys))
+    val userSort = SortExec(Seq(SortOrder(exprB, Ascending)), global = false, leaf)
+    assert(EnsureRequirements.peelGroupPartitions(userSort) === userSort)
+
+    // Over a grouping it is this rule's own, and both come off.
+    val ruleSort = SortExec(Seq(SortOrder(exprB, Ascending)), global = false,
+      GroupPartitionsExec(leaf))
+    assert(EnsureRequirements.peelGroupPartitions(ruleSort) === leaf)
+  }
+
+  test("SPARK-59289: a partitioning is never projected onto no position") {
+    // The co-partitioned path takes its projection positions from `KeyedShuffleSpec.keyPositions`,
+    // which maps an expression's single *reference* onto the clustering. `keysSatisfy` also
+    // accepts an expression that *is* a cluster key, through
+    // `KeyedPartitioning.positionsCoveringClusterKeys`. This is the shape where the two disagree:
+    // the join keys name `years(ts)`, so the spec is built, and then no position covers a cluster
+    // key.
+    //
+    // Projecting onto no position coalesces every partition into one. Before the guard in
+    // `createShuffleSpec` this planned as a storage-partitioned join over a single partition per
+    // side, two `GroupPartitionsExec`s and no shuffle, which is correct and ruinous. The spec now
+    // comes back unprojected, `areKeysCompatible` refuses it, and the join takes the shuffle.
+    val exprTs = AttributeReference("ts", IntegerType)()
+    val transform = years(exprTs)
+    val keys = Seq(InternalRow(1), InternalRow(2))
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(transform), keys))
+    val right = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(transform), keys))
+    val smj = SortMergeJoinExec(transform :: Nil, transform :: Nil, Inner, None, left, right)
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val planned = EnsureRequirements.apply(smj)
+      assert(groupPartitionsNodes(planned).isEmpty,
+        "a grouping here could only be the one that collapses both sides onto a single partition")
+      assert(planned.collect { case s: ShuffleExchangeExec => s }.size == 2,
+        "neither side can serve the distribution, so both are shuffled")
+    }
+  }
+
+  test("SPARK-59289: a second pass leaves a pairing this rule already made alone") {
+    val aL = AttributeReference("aL", IntegerType)()
+    val bL = AttributeReference("bL", IntegerType)()
+    val bR = AttributeReference("bR", IntegerType)()
+    // The left is keyed on (aL, bL) and the join is on bL alone, so the left's spec projects onto
+    // position 1, and the right, which reports nothing, is shuffled onto that layout. The first
+    // pass therefore ends with a projecting grouping node over the left and a keyed shuffle over
+    // the right. That is the shape the second pass used to re-pair: peeling the node hands the
+    // pairing a raw left that projects again, so it stopped being co-partitioned as it stands and
+    // both sides were aligned to a merged key set they already held.
+    val leftKeys = Seq(InternalRow(1, 10), InternalRow(2, 20))
+    val left = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning = KeyedPartitioning(Seq(aL, bL), leftKeys))
+    val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(3))
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+      val smj = SortMergeJoinExec(Seq(bL), Seq(bR), Inner, None, left, right)
+      val planned = EnsureRequirements.apply(smj)
+      assert(groupPartitionsNodes(planned).map(_.joinKeyPositions) === Seq(Some(Seq(1))),
+        "test setup: the left keeps its own layout with a projection")
+      assert(planned.collect { case s: ShuffleExchangeExec => s }.size == 1,
+        "test setup: the right is shuffled onto it")
+
+      assert(EnsureRequirements.apply(planned) == planned,
+        "the rule must leave a plan it has already paired alone")
+    }
+  }
+
+  test("SPARK-59289: pushed positions compose with the ones a node already carries") {
+    val aL = AttributeReference("aL", IntegerType)()
+    val cL = AttributeReference("cL", IntegerType)()
+    val tsL = AttributeReference("tsL", IntegerType)()
+    val tsR = AttributeReference("tsR", IntegerType)()
+    val aR = AttributeReference("aR", IntegerType)()
+    // Partitioned by [bucket(4, cL), years(tsL), aL] and clustered on [years(tsL), aL], so the two
+    // position derivations disagree twice over. `positionsCoveringClusterKeys` keeps 1 and 2,
+    // because `years(tsL)` *is* a clustering key while `cL` is not named at all.
+    // `KeyedShuffleSpec.keyPositions` reads an expression's reference instead, so over the
+    // projected report [years(tsL), aL] it keeps only position 1, `tsL` being no clustering key of
+    // its own.
+    //
+    // The right side reports nothing, so the pairing declines and the shuffle step pushes that 1
+    // into the node the per-child step already built. Read as a raw position it means
+    // `years(tsL)`, and the join would run grouped on the wrong column. Composed through the
+    // node's own [1, 2] it means `aL`, which is what the clustering asked for.
+    // Projecting onto 1 and 2 merges the first two, so the source does not satisfy as it stands
+    // and the per-child step really does put a projecting node there.
+    val keys = Seq(InternalRow(1, 1, 1), InternalRow(2, 1, 1), InternalRow(3, 2, 2))
+    val left = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning =
+        KeyedPartitioning(Seq(bucket(4, cL), years(tsL), aL), keys))
+    val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(3))
+    val parent = DummySparkPlan(
+      children = Seq(left, right),
+      requiredChildDistribution = Seq(
+        ClusteredDistribution(Seq(years(tsL), aL)), ClusteredDistribution(Seq(tsR, aR))),
+      requiredChildOrdering = Seq(Nil, Nil))
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val planned = EnsureRequirements.apply(parent)
+      val reported = planned.children.head.outputPartitioning.asInstanceOf[Expression]
+        .collectFirst { case k: KeyedPartitioning => k.expressions }
+      assert(reported.contains(Seq(aL)),
+        s"the left must end up grouped on aL, not on years(tsL), got $reported")
     }
   }
 

@@ -219,6 +219,61 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     }
   }
 
+  test("mixed partitioning: DPP on the identity col next to a bucket transform -> " +
+    "PartitionPredicate") {
+    val fact = s"$catalogName.fact_mixed"
+    val dim = s"$catalogName.dim_mixed"
+    withTable(fact, dim) {
+      sql(s"CREATE TABLE $fact (id INT, part INT) USING $v2Source " +
+        "PARTITIONED BY (part, bucket(4, id))")
+      for (i <- 0 until 5) {
+        sql(s"INSERT INTO $fact VALUES ($i, $i)")
+      }
+      sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (2, 'two')")
+
+      withDPPConf {
+        val df = sql(
+          s"""SELECT f.id, f.part FROM $fact f JOIN $dim d
+             |ON f.part = d.dim_id WHERE d.dim_val = 'two'""".stripMargin)
+        checkAnswer(df, Row(2, 2))
+
+        assertDPPRuntimeFilters(df)
+        assertPushedPartitionPredicates(df, 1)
+        assertScanReturnsPartitionKeys(df, Set("2/2"))
+        assertReferencedPartitionFieldOrdinals(df, Array(0), Array("part", "bucket(4, id)"))
+      }
+    }
+  }
+
+  test("mixed partitioning: DPP on the source col of a bucket transform -> " +
+    "no PartitionPredicate") {
+    val fact = s"$catalogName.fact_mixed2"
+    val dim = s"$catalogName.dim_mixed2"
+    withTable(fact, dim) {
+      sql(s"CREATE TABLE $fact (id INT, part INT) USING $v2Source " +
+        "PARTITIONED BY (part, bucket(4, id))")
+      for (i <- 0 until 5) {
+        sql(s"INSERT INTO $fact VALUES ($i, $i)")
+      }
+      sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (2, 'two')")
+
+      withDPPConf {
+        val df = sql(
+          s"""SELECT f.id, f.part FROM $fact f JOIN $dim d
+             |ON f.id = d.dim_id WHERE d.dim_val = 'two'""".stripMargin)
+        checkAnswer(df, Row(2, 2))
+
+        // Spark cannot evaluate `id IN (...)` against the bucket value, so no PartitionPredicate
+        // is derived and the scan keeps every partition.
+        assertDPPRuntimeFilters(df)
+        assertPushedPartitionPredicates(df, 0)
+        assertScanReturnsPartitionKeys(df, Set("0/0", "1/1", "2/2", "3/3", "4/0"))
+      }
+    }
+  }
+
   test("case 3: scalar subquery translatable, rejected in 1st pass -> PartitionPredicate") {
     val tbl = s"$catalogName.tbl"
     val dim = s"$catalogName.dim"

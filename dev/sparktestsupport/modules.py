@@ -612,25 +612,8 @@ pyspark_core = Module(
         "pyspark.tests.test_taskcontext",
         "pyspark.tests.test_util",
         "pyspark.tests.test_worker",
-        "pyspark.tests.test_eval_type_handlers",
         "pyspark.tests.test_stage_sched",
         "pyspark.tests.test_zero_copy_byte_stream",
-        # unittests for upstream projects
-        "pyspark.tests.upstream.numpy.test_numpy_ufunc_type_coercion",
-        "pyspark.tests.upstream.pandas.test_pandas_api_types",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_default",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_non_default",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_default",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_non_default",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_dataframe_from_pandas",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_coercion",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_inference",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_table_cast",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_table_to_pandas",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_type_coercion",
     ],
 )
 
@@ -669,6 +652,8 @@ pyspark_sql = Module(
         "pyspark.sql.observation",
         "pyspark.sql.tvf",
         # unittests
+        "pyspark.eval_handlers.tests.test_arrow_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_base_eval_type_handlers",
         "pyspark.sql.tests.test_artifact",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
@@ -678,7 +663,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_dataframe",
         "pyspark.sql.tests.test_pipelined_shuffle",
         "pyspark.sql.tests.test_collection",
-        "pyspark.sql.tests.test_creation",
+        "pyspark.sql.tests.test_dataframe_creation",
         "pyspark.sql.tests.test_conversion",
         "pyspark.sql.tests.test_dataframe_query_context",
         "pyspark.sql.tests.test_listener",
@@ -930,20 +915,35 @@ pyspark_ml = Module(
     ],
 )
 
-pyspark_install = Module(
-    name="pyspark-install",
+pyspark_periodic = Module(
+    name="pyspark-periodic",
     dependencies=[],
     source_file_regexes=[
-        # Python package tests will be triggered with this module
+        # This module contains tests that are not sensitive to pyspark code changes.
+        # We run these on scheduled CIs and pre-merge CIs, not post-merge CIs.
         # Any changes in python/ should trigger this module
-        # This module won't be executed for post-commit CIs so it's cheap
         "python/",
-        "python/pyspark/install.py",
-        "python/pyspark/tests/test_install_spark.py",
     ],
     python_test_goals=[
         "pyspark.tests.test_import_spark",
         "pyspark.tests.test_install_spark",
+        # unittests for upstream projects
+        "pyspark.tests.upstream.numpy.test_numpy_ufunc_type_coercion",
+        "pyspark.tests.upstream.pandas.test_pandas_api_types",
+        "pyspark.tests.upstream.pandas.test_pandas_series_astype",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_non_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_non_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_dataframe_from_pandas",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_coercion",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_inference",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_table_cast",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_table_to_pandas",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_type_coercion",
     ],
 )
 
@@ -1254,6 +1254,7 @@ pyspark_connect = Module(
     dependencies=[pyspark_sql, connect],
     source_file_regexes=[
         "python/pyspark/sql/connect",
+        "sbin/start-connect-server.sh",
     ],
     python_test_goals=[
         # sql doctests
@@ -1285,7 +1286,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_collection",
         "pyspark.sql.tests.connect.test_connect_column",
-        "pyspark.sql.tests.connect.test_connect_creation",
+        "pyspark.sql.tests.connect.test_connect_dataframe_creation",
         "pyspark.sql.tests.connect.test_connect_readwriter",
         "pyspark.sql.tests.connect.test_connect_retry",
         "pyspark.sql.tests.connect.test_connect_session",
@@ -1308,7 +1309,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_dataframe",
         "pyspark.sql.tests.connect.test_parity_dataframe_query_context",
         "pyspark.sql.tests.connect.test_parity_collection",
-        "pyspark.sql.tests.connect.test_parity_creation",
+        "pyspark.sql.tests.connect.test_parity_dataframe_creation",
         "pyspark.sql.tests.connect.test_parity_observation",
         "pyspark.sql.tests.connect.test_parity_repartition",
         "pyspark.sql.tests.connect.test_parity_stat",

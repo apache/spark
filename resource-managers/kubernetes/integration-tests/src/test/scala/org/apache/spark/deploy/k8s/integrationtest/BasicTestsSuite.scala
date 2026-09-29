@@ -185,6 +185,23 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
         }
       })
   }
+
+  test("SPARK-59798: Support spark.executor.extraLibraryPath", k8sTestTag) {
+    sparkAppConf
+      .set("spark.executor.extraLibraryPath", "/opt/lib1:/opt/lib2")
+      .set("spark.executor.extraJavaOptions", "-XshowSettings:properties")
+      .set("spark.kubernetes.executor.deleteOnTermination", "false")
+    runSparkApplicationAndVerifyCompletion(
+      appResource = containerLocalSparkDistroExamplesJar,
+      mainClass = SPARK_PI_MAIN_CLASS,
+      expectedDriverLogOnCompletion = Seq("Pi is roughly 3"),
+      // The executor JVM prepends LD_LIBRARY_PATH to java.library.path
+      expectedExecutorLogOnCompletion = Seq("java.library.path = /opt/lib1"),
+      appArgs = Array.empty[String],
+      driverPodChecker = doBasicDriverPodCheck,
+      executorPodChecker = doBasicExecutorPodCheck,
+      isJVM = true)
+  }
 }
 
 private[spark] object BasicTestsSuite extends SparkFunSuite {

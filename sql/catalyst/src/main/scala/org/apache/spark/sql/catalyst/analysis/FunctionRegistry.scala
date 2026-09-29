@@ -966,8 +966,8 @@ object FunctionRegistry {
 
   /**
    * Names of the clause-free SQL/JSON functions that `AstBuilder` routes through
-   * function resolution. This is the shared list backing the star guard in
-   * [[FunctionResolution.resolvesToStarDisallowedSqlJsonFunction]], which derives its set from here
+   * function resolution. This is the shared list backing the star owner check in
+   * [[FunctionResolution.selectRoutedSqlJsonDirectStarOwner]], which derives its set from here
    * so a newly routed function is covered automatically. It is NOT a single source of truth for
    * the whole feature: two sibling lists still need a matching manual entry when a function is
    * added or removed --

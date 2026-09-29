@@ -25,7 +25,7 @@ import threading
 from typing import TYPE_CHECKING, Callable, Dict, Generic, Optional, Tuple, Type, TypeVar, Union
 
 from pyspark.errors import PySparkRuntimeError
-from pyspark.serializers import CPickleSerializer, read_int
+from pyspark.serializers import CloudPickleSerializer, CPickleSerializer, read_int
 
 if TYPE_CHECKING:
     from socketserver import BaseRequestHandler
@@ -39,6 +39,10 @@ T = TypeVar("T")
 U = TypeVar("U", bound=Union["SupportsIAdd", int, float, complex])
 
 pickleSer = CPickleSerializer()
+
+# Safe serializer for special accumulators. The client will unpickle the metrics from the server
+# unconditionally, so we need to restrict the allowed classes.
+specialAccumulatorSer = CloudPickleSerializer(allowed_names=[("pstats", "Stats")])
 
 # Holds accumulators registered on the current machine, keyed by ID. This is then used to send
 # the local accumulator updates back to the driver program at the end of a task.

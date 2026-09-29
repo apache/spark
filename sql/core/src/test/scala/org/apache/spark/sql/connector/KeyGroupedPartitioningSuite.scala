@@ -24,6 +24,7 @@ import org.apache.spark.rdd.SortedMergeCoalescedRDD
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, ExprId, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
@@ -44,8 +45,9 @@ import org.apache.spark.sql.execution.{
   SparkPlan,
   UnionExec,
   WholeStageCodegenExec}
+import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
-import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.execution.ui.SparkPlanGraphNode
@@ -246,8 +248,12 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
         s"(6, 50.0, cast('2023-02-01' as timestamp))")
 
     Seq(true, false).foreach { pushDownValues =>
-      Seq(("true", 15), ("false", 6)).foreach {
-        case (enable, expected) =>
+      // (partially clustered, partition filtering, expected alignment of both legs): without
+      // filtering both legs pad up to the union of the two sides' keys, and filtering narrows
+      // the joined groups to their intersection, which dynamic filtering also shrinks here.
+      Seq(("true", "false", 15), ("true", "true", 9),
+          ("false", "false", 6), ("false", "true", 3)).foreach {
+        case (enable, filter, expected) =>
           withSQLConf(
               SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
               SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
@@ -255,7 +261,8 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
               SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
               SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10",
               SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
-              SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
+              SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable,
+              SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter) {
 
             // When partition values are pushed down, storage-partitioned join fills the missing
             // partitions & splits after dynamic filtering with empty partitions & splits.
@@ -269,8 +276,11 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
             val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
             assert(scans.map(_.outputPartitioning.numPartitions) === Seq(14, 6))
             if (pushDownValues) {
+              // Filtering only narrows the pushed-down key groups, so it never brings a shuffle
+              // back to either leg.
               assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
-              assert(groupPartitions.forall(_.outputPartitioning.numPartitions === expected))
+              assert(groupPartitions.map(_.outputPartitioning.numPartitions).toSet ===
+                Set(expected))
             } else {
               assert(shuffles.nonEmpty,
                 "should contain shuffle when not pushing down partition values")
@@ -883,6 +893,14 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  /** The first node under `plan` that is not a codegen wrapper or the scan's projection. */
+  protected def unwrapWrappers(plan: SparkPlan): SparkPlan = plan match {
+    case w: WholeStageCodegenExec => unwrapWrappers(w.child)
+    case i: InputAdapter => unwrapWrappers(i.child)
+    case p: ProjectExec => unwrapWrappers(p.child)
+    case other => other
+  }
+
   /** Every `KeyedPartitioning` these nodes report, flattening partitioning collections. */
   protected def keyedPartitioningsOf(
       nodes: Seq[SparkPlan]): Seq[physical.KeyedPartitioning] = {
@@ -1344,7 +1362,13 @@ class KeyGroupedPartitioningSuite
         attr: AttributeReference,
         otherAttr: AttributeReference,
         reducer: Reducer[_, _]): GroupPartitionsExec = {
-      val child = new LocalTableScanExec(Seq(attr), Nil, None, false)
+      // A `GroupPartitionsExec` is only built over a child that reports a `KeyedPartitioning`,
+      // and it derives its grouping from that child at construction, so the scan is wrapped in
+      // one. The key list is empty, which keeps the grouping trivial: this test is about the
+      // reducers' exprIds, not about what the node does to any partition.
+      val child = ShuffleExchangeExec(
+        KeyedPartitioning(Seq(attr), Nil),
+        new LocalTableScanExec(Seq(attr), Nil, None, false))
       val reduced = TransformExpression(BucketFunction, Seq(otherAttr), Some(2))
       GroupPartitionsExec(child,
         reducers = Some(Seq(Some(physical.KeyReducer(reducer, reduced)))))
@@ -1369,13 +1393,49 @@ class KeyGroupedPartitioningSuite
         attr: AttributeReference,
         dt: AttributeReference,
         otherAttr: AttributeReference): GroupPartitionsExec = {
-      val child = new LocalTableScanExec(Seq(attr, dt), Nil, None, false)
+      val child = ShuffleExchangeExec(
+        KeyedPartitioning(Seq(attr, dt), Nil),
+        new LocalTableScanExec(Seq(attr, dt), Nil, None, false))
       val reduced = TransformExpression(BucketFunction, Seq(otherAttr), Some(2))
       GroupPartitionsExec(child,
         reducers = Some(Seq(None, Some(physical.KeyReducer(BucketReducer(2), reduced)))))
     }
     assert(mixedKeyGroupPartitions(a1, dt1, o1).canonicalized ==
       mixedKeyGroupPartitions(a2, dt2, o2).canonicalized)
+  }
+
+  test("SPARK-59688: an identity side and a compatible transform whose reported keys coincide") {
+    withFunction(FlipLowBitFunction) {
+      // `flip_low_bit` maps 0 to 1 and 1 to 0, so with ids 0 and 1 in both tables the two scans
+      // report the same partition key list, [0, 1] of LongType, while the rows behind a key differ:
+      // the identity side's key 0 holds id 0, the transform side's holds id 1. The identity side's
+      // raw keys have to be reduced onto `flip_low_bit` before the partitions can be paired up.
+      val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+      createTable("t1", cols, Array(identity("id")))
+      sql("INSERT INTO testcat.ns.t1 VALUES (0, 'a'), (1, 'b')")
+
+      createTable("t2", cols, Array(Expressions.apply("flip_low_bit", Expressions.column("id"))))
+      sql("INSERT INTO testcat.ns.t2 VALUES (0, 'x'), (1, 'y')")
+
+      val df = sql(
+        "SELECT t1.id, t1.data, t2.data FROM testcat.ns.t1 JOIN testcat.ns.t2 ON t1.id = t2.id")
+
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        checkAnswer(df, Seq(Row(0L, "a", "x"), Row(1L, "b", "y")))
+        val plan = stripAQEPlan(df.queryExecution.executedPlan)
+        assert(collectShuffles(plan).isEmpty, "storage-partitioned join should not shuffle")
+        val groupPartitions = collectGroupPartitions(plan)
+        assert(groupPartitions.size == 2,
+          "both sides should be regrouped onto the merged partition keys")
+        assert(groupPartitions.count(_.reducers.exists(_.exists(_.isDefined))) == 1,
+          "and exactly one side should reduce, the identity one onto `flip_low_bit`")
+        // The join subtree, not the whole plan: `ValidateRequirements` walks children and a query
+        // stage is a leaf, so validating an AQE plan checks nothing.
+        val joins = collect(plan) { case smj: SortMergeJoinExec => smj }
+        assert(joins.size == 1, s"test setup: one join to validate:\n$plan")
+        assert(ValidateRequirements.validate(joins.head), "the plan that leaves must hold up")
+      }
+    }
   }
 
   test("SPARK-59121: two sides reduced together are not reduced a second time") {
@@ -3008,37 +3068,38 @@ class KeyGroupedPartitioningSuite
         "(2, 'ww', cast('2020-01-01' as timestamp))")
 
     Seq(true, false).foreach { pushDownValues =>
-      Seq(true, false).foreach { partiallyClustered =>
-        withSQLConf(
-          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
-          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
-          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
-            partiallyClustered.toString,
-          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
-          val df = sql(
-            s"""
-               |${selectWithMergeJoinHint("t1", "t2")}
-               |t1.id AS id, t1.data AS t1data, t2.data AS t2data
-               |FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2
-               |ON t1.id = t2.id AND t1.data = t2.data ORDER BY t1.id, t1data, t2data
-               |""".stripMargin)
-          val shuffles = collectShuffles(df.queryExecution.executedPlan)
-          assert(shuffles.isEmpty, "SPJ should be triggered")
+      // (partially clustered, partition filtering, expected alignment): without filtering both
+      // legs pad up to the union of the two sides' keys, filtering narrows it to their
+      // intersection.
+      Seq((true, false, 8), (true, true, 6), (false, false, 4), (false, true, 2)).foreach {
+        case (partiallyClustered, filter, expected) =>
+          withSQLConf(
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+              partiallyClustered.toString,
+            SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString,
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+            val df = sql(
+              s"""
+                 |${selectWithMergeJoinHint("t1", "t2")}
+                 |t1.id AS id, t1.data AS t1data, t2.data AS t2data
+                 |FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2
+                 |ON t1.id = t2.id AND t1.data = t2.data ORDER BY t1.id, t1data, t2data
+                 |""".stripMargin)
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            assert(shuffles.isEmpty, "SPJ should be triggered")
 
-          val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
-            .map(_.outputPartitioning.numPartitions)
-          if (partiallyClustered) {
-            assert(groupPartitions == Seq(8, 8))
-          } else {
-            assert(groupPartitions == Seq(4, 4))
+            val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+              .map(_.outputPartitioning.numPartitions)
+            assert(groupPartitions === Seq(expected, expected))
+            checkAnswer(df, Seq(
+              Row(3, "dd", "dd"),
+              Row(3, "dd", "dd"),
+              Row(3, "dd", "dd"),
+              Row(3, "dd", "dd")
+            ))
           }
-          checkAnswer(df, Seq(
-            Row(3, "dd", "dd"),
-            Row(3, "dd", "dd"),
-            Row(3, "dd", "dd"),
-            Row(3, "dd", "dd")
-          ))
-        }
       }
     }
   }
@@ -5166,28 +5227,36 @@ class KeyGroupedPartitioningSuite
         "(2, 'cc', cast('2021-01-01' as timestamp)), " +
         "(3, 'cc', cast('2022-01-01' as timestamp))")
 
-      val df = sql(
-        s"""
-           |SELECT i.id, i.arrive_time, p.item_id, d.item_id
-           |FROM testcat.ns.$items i
-           |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
-           |JOIN testcat.ns.$details d ON d.item_id = i.id
-           |""".stripMargin)
+      // (partition filtering, expected alignment of the four join legs): without filtering both
+      // sides pad up to the union of their keys, filtering narrows it to their intersection.
+      Seq(Seq(3, 6, 6, 3) -> false, Seq(1, 2, 2, 1) -> true).foreach {
+        case (expected, filter) =>
+          withSQLConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString) {
+            val df = sql(
+              s"""
+                 |SELECT i.id, i.arrive_time, p.item_id, d.item_id
+                 |FROM testcat.ns.$items i
+                 |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
+                 |JOIN testcat.ns.$details d ON d.item_id = i.id
+                 |""".stripMargin)
 
-      checkAnswer(df, Seq(
-        Row(2, Timestamp.valueOf("2021-01-01 00:00:00"), 2, 2),
-        Row(2, Timestamp.valueOf("2022-01-01 00:00:00"), 2, 2)))
-      val shuffles = collectShuffles(df.queryExecution.executedPlan)
-      assert(shuffles.isEmpty, "should not contain any shuffle")
-      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
-      // Expect 6 partitions in the inner join node legs because partitioning uses 2 attributes.
-      // Expect 3 partitions in the outer join node legs because partitioning uses 1 attributes.
-      assert(groupPartitions.map(_.outputPartitioning.numPartitions) === Seq(3, 6, 6, 3))
+            checkAnswer(df, Seq(
+              Row(2, Timestamp.valueOf("2021-01-01 00:00:00"), 2, 2),
+              Row(2, Timestamp.valueOf("2022-01-01 00:00:00"), 2, 2)))
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            assert(shuffles.isEmpty, "should not contain any shuffle")
+            val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+            // Unfiltered: 6 partitions in the inner join node legs because partitioning uses 2
+            // attributes, 3 in the outer join node legs because partitioning uses 1 attribute.
+            assert(groupPartitions.map(_.outputPartitioning.numPartitions) === expected)
+          }
+      }
     }
   }
 
   test("SPARK-55535: Multi table join partial clustering") {
-    withSQLConf(SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
       val items_partitions = Array(identity("id"))
       createTable(items, itemsColumns, items_partitions)
 
@@ -5211,25 +5280,32 @@ class KeyGroupedPartitioningSuite
         "(2, 'cc', cast('2021-01-01' as timestamp)), " +
         "(4, 'cc', cast('2022-01-01' as timestamp))")
 
-      val df = sql(
-        s"""
-           |SELECT i.id, i.price, p.price, d.description
-           |FROM testcat.ns.$items i
-           |JOIN testcat.ns.$purchases p ON p.item_id = i.id
-           |JOIN testcat.ns.$details d ON d.item_id = i.id
-           |""".stripMargin)
+      // (partition filtering, expected alignment of the four join legs): without filtering both
+      // sides pad up to the union of their keys, filtering narrows it to their intersection.
+      Seq(Seq(6, 5, 5, 6) -> false, Seq(2, 2, 2, 2) -> true).foreach {
+        case (expected, filter) =>
+          withSQLConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString) {
+            val df = sql(
+              s"""
+                 |SELECT i.id, i.price, p.price, d.description
+                 |FROM testcat.ns.$items i
+                 |JOIN testcat.ns.$purchases p ON p.item_id = i.id
+                 |JOIN testcat.ns.$details d ON d.item_id = i.id
+                 |""".stripMargin)
 
-      checkAnswer(df, Seq(
-        Row(2, 30.0, 10.0, "cc"),
-        Row(2, 40.0, 10.0, "cc")))
-      val shuffles = collectShuffles(df.queryExecution.executedPlan)
-      assert(shuffles.isEmpty, "should not contain any shuffle")
-      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
-      // Expect 5 partitions in the inner join node legs because 4 from the partially clustered
-      // items table and 1 new from clustered purchases table.
-      // Expect 6 partitions in the outer join node legs because 5 from the partially clustered
-      // inner join result and 1 new from clustered details table.
-      assert(groupPartitions.map(_.outputPartitioning.numPartitions) === Seq(6, 5, 5, 6))
+            checkAnswer(df, Seq(
+              Row(2, 30.0, 10.0, "cc"),
+              Row(2, 40.0, 10.0, "cc")))
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            assert(shuffles.isEmpty, "should not contain any shuffle")
+            val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+            // Unfiltered: 5 partitions in the inner join node legs because 4 come from the
+            // partially clustered items table and 1 new from the clustered purchases table; 6
+            // in the outer join node legs because 5 come from the partially clustered inner
+            // join result and 1 new from the clustered details table.
+            assert(groupPartitions.map(_.outputPartitioning.numPartitions) === expected)
+          }
+      }
     }
   }
 
@@ -5333,25 +5409,32 @@ class KeyGroupedPartitioningSuite
     val purchases_partitions = Array(bucket(6, "item_id"), years("time"))
     createTable(purchases, purchasesColumns, purchases_partitions)
     sql(s"INSERT INTO testcat.ns.$purchases VALUES (2, 10.0, cast('2021-01-01' as timestamp))")
-    withSQLConf(
-      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
-      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-      val df = sql(
-        s"""
-           |${selectWithMergeJoinHint("i", "p")}
-           |*
-           |FROM testcat.ns.$items i
-           |JOIN testcat.ns.$purchases p ON p.item_id = i.id
-           |""".stripMargin)
-      val simpleAndExtendedKeyword =
-        "GroupPartitions JoinKeyPositions: [0] ExpectedPartitionKeys: 2 " +
-        "Reducers: [BucketReducer(2)] DistributePartitions: false SortedMerge: false"
-      val formattedKeyword =
-        "Arguments: JoinKeyPositions: [0], ExpectedPartitionKeys: 2, " +
-        "Reducers: [BucketReducer(2)], DistributePartitions: false, SortedMerge: false"
-      checkKeywordsExistsInExplain(df, SimpleMode, simpleAndExtendedKeyword)
-      checkKeywordsExistsInExplain(df, ExtendedMode, simpleAndExtendedKeyword)
-      checkKeywordsExistsInExplain(df, FormattedMode, formattedKeyword)
+    // (partition filter, explained key count): `items`'s bucket(4, 1) = 1 reduces to 1 % 2 = 1
+    // and `purchases`'s bucket(6, 2) = 2 reduces to 2 % 2 = 0. The two reduced key sets are
+    // disjoint, so the node explains their union without the filter and their empty
+    // intersection with it. Nothing else in the explained string depends on the setting.
+    Seq(2 -> false, 0 -> true).foreach { case (expectedKeys, filter) =>
+      withSQLConf(
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString) {
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("i", "p")}
+             |*
+             |FROM testcat.ns.$items i
+             |JOIN testcat.ns.$purchases p ON p.item_id = i.id
+             |""".stripMargin)
+        val simpleAndExtendedKeyword =
+          s"GroupPartitions JoinKeyPositions: [0] ExpectedPartitionKeys: $expectedKeys " +
+          "Reducers: [BucketReducer(2)] DistributePartitions: false SortedMerge: false"
+        val formattedKeyword =
+          s"Arguments: JoinKeyPositions: [0], ExpectedPartitionKeys: $expectedKeys, " +
+          "Reducers: [BucketReducer(2)], DistributePartitions: false, SortedMerge: false"
+        checkKeywordsExistsInExplain(df, SimpleMode, simpleAndExtendedKeyword)
+        checkKeywordsExistsInExplain(df, ExtendedMode, simpleAndExtendedKeyword)
+        checkKeywordsExistsInExplain(df, FormattedMode, formattedKeyword)
+      }
     }
   }
 
@@ -5517,26 +5600,32 @@ class KeyGroupedPartitioningSuite
       s"(0, 44.0, cast('2020-01-15' as timestamp)), " +
       s"(1, 46.5, cast('2021-02-08' as timestamp))")
 
-    withSQLConf(
-      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-      Seq(
-        s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id",
-        s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.id = p.item_id"
-      ).foreach { joinString =>
-        val df = sql(
-          s"""
-             |${selectWithMergeJoinHint("i", "p")} id, item_id
-             |FROM $joinString
-             |ORDER BY id, item_id
-             |""".stripMargin)
+    // (partition filtering, expected alignment): the union of both sides' reduced keys, or
+    // their intersection.
+    Seq(4 -> false, 3 -> true).foreach { case (expected, filter) =>
+      withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString) {
+        Seq(
+          s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id",
+          s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.id = p.item_id"
+        ).foreach { joinString =>
+          val df = sql(
+            s"""
+               |${selectWithMergeJoinHint("i", "p")} id, item_id
+               |FROM $joinString
+               |ORDER BY id, item_id
+               |""".stripMargin)
 
-        val shuffles = collectShuffles(df.queryExecution.executedPlan)
-        assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
-        val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
-        assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 4))
+          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+          val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+          assert(groupPartitions.map(_.outputPartitioning.numPartitions).toSet ===
+            Set(expected))
 
-        checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(3, 3)))
+          checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(3, 3)))
+        }
       }
     }
   }
@@ -5553,19 +5642,17 @@ class KeyGroupedPartitioningSuite
     val plan = df.queryExecution.executedPlan
     val scans = collectScans(plan)
     assert(scans.size === 1)
-    // With the config disabled (default), ordering derivation is suppressed.
-    assert(scans.head.outputOrdering.isEmpty)
-    // When enabled, the scan derives an ascending sort on the partition key `id`.
-    // identity transforms are unwrapped to AttributeReferences by V2ExpressionUtils.
-    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true") {
-      val scansEnabled = collectScans(df.queryExecution.executedPlan)
-      assert(scansEnabled.size === 1)
-      val ordering = scansEnabled.head.outputOrdering
-      assert(ordering.length === 1)
-      assert(ordering.head.direction === Ascending)
-      val keyExpr = ordering.head.child
-      assert(keyExpr.isInstanceOf[AttributeReference])
-      assert(keyExpr.asInstanceOf[AttributeReference].name === "id")
+    // The scan derives an ascending sort on the partition key `id`. identity transforms are
+    // unwrapped to AttributeReferences by V2ExpressionUtils.
+    val ordering = scans.head.outputOrdering
+    assert(ordering.length === 1)
+    assert(ordering.head.direction === Ascending)
+    val keyExpr = ordering.head.child
+    assert(keyExpr.isInstanceOf[AttributeReference])
+    assert(keyExpr.asInstanceOf[AttributeReference].name === "id")
+    // With the config disabled, ordering derivation is suppressed.
+    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "false") {
+      assert(scans.head.outputOrdering.isEmpty)
     }
   }
 
@@ -6131,7 +6218,7 @@ class KeyGroupedPartitioningSuite
 
   test("SPARK-58988: v2 bucketed table with subset join keys joining v1 table") {
     // The v2 table is partitioned by an extra identity key `dt` plus `bucket(16, c1)`, while the
-    // join is only on `c1`. allowKeysSubsetOfPartitionKeys lets the operation key `c1` be a subset
+    // join is only on `c1`. allowKeysSubsetOfPartitionKeys lets the cluster key `c1` be a subset
     // of the partition keys `[dt, bucket(16, c1)]`, so EnsureRequirements projects the keyed side
     // to `[bucket(16, c1)]`. v2BucketingShuffleEnabled then re-shuffles only the v1 side using that
     // projected KeyedPartitioning. ShuffledJoin wraps the two output partitionings into a
@@ -6221,7 +6308,7 @@ class KeyGroupedPartitioningSuite
     // Every partition holds a distinct k1, so rows sharing (k1, k2, k3) share a partition and the
     // left member satisfies the window's distribution as it is. Projecting the right member to
     // (k2, k3) would merge the two partitions holding (9, 9) instead, for nothing. The member that
-    // needs no node has to win even though the other one covers more operation keys.
+    // needs no node has to win even though the other one covers more cluster keys.
     val cols = Array(
       Column.create("k1", IntegerType),
       Column.create("k2", IntegerType),
@@ -6383,13 +6470,6 @@ class KeyGroupedPartitioningSuite
 
     // A stage boundary below the sort shows up as codegen wrappers around the grouping, and the
     // scan's projection sits between a limit node and the scan it reads.
-    def unwrap(plan: SparkPlan): SparkPlan = plan match {
-      case w: WholeStageCodegenExec => unwrap(w.child)
-      case i: InputAdapter => unwrap(i.child)
-      case p: ProjectExec => unwrap(p.child)
-      case other => other
-    }
-
     // One limit node is left, with one local sort in the whole plan and no global one.
     def assertFinalAloneWithOneLocalSort(plan: SparkPlan): Unit = {
       val limits = limitModes(plan)
@@ -6428,7 +6508,7 @@ class KeyGroupedPartitioningSuite
       assertFinalAloneWithOneLocalSort(byKeyPlan)
       finalChild(byKeyPlan) match {
         case g: GroupPartitionsExec =>
-          assert(unwrap(g.child).isInstanceOf[SortExec],
+          assert(unwrapWrappers(g.child).isInstanceOf[SortExec],
             s"expected the sort that fed the partial node below the grouping:\n$byKeyPlan")
         case other =>
           fail(s"expected the final limit to read the grouping, got $other:\n$byKeyPlan")
@@ -6441,7 +6521,7 @@ class KeyGroupedPartitioningSuite
       checkAnswer(byPrice, Seq(Row(1L, "aa", 10.0f), Row(2L, "cc", 30.0f)))
       val byPricePlan = byPrice.queryExecution.executedPlan
       assertFinalAloneWithOneLocalSort(byPricePlan)
-      assert(unwrap(finalChild(byPricePlan)).isInstanceOf[SortExec],
+      assert(unwrapWrappers(finalChild(byPricePlan)).isInstanceOf[SortExec],
         s"expected the sort above the grouping to be the one left:\n$byPricePlan")
 
       // A source that reports the ordering the window needs leaves the partial node without a sort
@@ -6455,11 +6535,522 @@ class KeyGroupedPartitioningSuite
       assert(limitModes(reportedPlan) == Seq(Final, Partial),
         s"expected both limit nodes, got ${limitModes(reportedPlan)}:\n$reportedPlan")
       assert(collectFirst(reportedPlan) {
-        case w: WindowGroupLimitExec if w.mode == Partial => unwrap(w.child)
+        case w: WindowGroupLimitExec if w.mode == Partial => unwrapWrappers(w.child)
       }.exists(_.isInstanceOf[BatchScanExec]),
         s"expected the partial node to read the scan, with no sort of its own:\n$reportedPlan")
-      assert(unwrap(finalChild(reportedPlan)).isInstanceOf[SortExec],
+      assert(unwrapWrappers(finalChild(reportedPlan)).isInstanceOf[SortExec],
         s"expected the sort above the grouping to be the one left:\n$reportedPlan")
+    }
+  }
+
+  test("SPARK-59564: combine adjacent aggregates across a GroupPartitionsExec") {
+    // (1, 'aa') is stored in two splits, so the table's reported KeyedPartitioning is not grouped
+    // and EnsureRequirements coalesces the two splits with a GroupPartitionsExec to satisfy the
+    // final aggregate's clustered distribution. The partial and final aggregates are therefore not
+    // adjacent, and the rule has to look through the grouping to reach the pair.
+    val partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'aa', 20.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'bb', 30.0, cast('2020-01-01' as timestamp))")
+
+    // Grouping on the partition keys themselves keeps the partial aggregate from projecting any of
+    // them away, which is what lets the grouping be re-parented onto the scan it was reading.
+    val query = s"SELECT id, name, count(*) FROM testcat.ns.$items GROUP BY id, name"
+    val expected = Seq(Row(1L, "aa", 2L), Row(2L, "bb", 1L))
+
+    def aggregates(plan: SparkPlan): Seq[BaseAggregateExec] =
+      collect(plan) { case agg: BaseAggregateExec => agg }
+
+    // The same pair over a `collect_set`, whose answer is order-insensitive, so the two plans can
+    // be compared.
+    val objectHashQuery =
+      s"SELECT id, name, sort_array(collect_set(price)) FROM testcat.ns.$items GROUP BY id, name"
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val objectHashExpected = withSQLConf(
+          SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        val plan = sql(query).queryExecution.executedPlan
+        val aggs = aggregates(plan)
+        assert(aggs.size == 2, s"expected the pair to be planned separately:\n$plan")
+        assert(collectAllGroupPartitions(plan).nonEmpty,
+          s"the grouping is what makes the pair non-adjacent:\n$plan")
+        sql(objectHashQuery).collect()
+      }
+
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        val aggs = aggregates(plan)
+        assert(aggs.size == 1, s"expected one combined aggregate, got ${aggs.size}:\n$plan")
+        assert(aggs.head.aggregateExpressions.forall(_.mode == Complete),
+          s"expected the combined aggregate to be complete:\n$plan")
+        // The grouping stays, and reads the scan the partial aggregate was reading: the combine
+        // only drops the partial aggregate, which was the grouping's child.
+        val grouping = collectAllGroupPartitions(plan)
+        assert(grouping.size == 1, s"expected the grouping to stay, got ${grouping.size}:\n$plan")
+        assert(unwrapWrappers(grouping.head.child).isInstanceOf[BatchScanExec],
+          s"expected the grouping to read the scan:\n$plan")
+        assert(ValidateRequirements.validate(plan), s"the combined plan has to hold up:\n$plan")
+
+        // `ReplaceHashWithSortAgg` plans the combined aggregate sort-based once the regrouping
+        // reports an ordering that satisfies the grouping, which the ordering the source derives
+        // gives it, so the kind is the planner's to pick here.
+        val objectHash = sql(objectHashQuery)
+        checkAnswer(objectHash, objectHashExpected)
+        val objectHashPlan = objectHash.queryExecution.executedPlan
+        val objectHashAggs = aggregates(objectHashPlan)
+        assert(objectHashAggs.size == 1 &&
+          objectHashAggs.head.aggregateExpressions.forall(_.mode == Complete),
+          s"expected one combined aggregate in complete mode:\n$objectHashPlan")
+        assert(unwrapWrappers(collectAllGroupPartitions(objectHashPlan).head.child)
+          .isInstanceOf[BatchScanExec],
+          s"expected the grouping to read the scan:\n$objectHashPlan")
+      }
+
+      // AQE runs the rule from its stage-preparation rules, on a plan whose grouping was inserted
+      // by the stage-preparation `EnsureRequirements` rather than by the initial planning pass, and
+      // re-runs `EnsureRequirements` over the folded plan.
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        val aggs = aggregates(plan)
+        assert(aggs.size == 1, s"expected one combined aggregate, got ${aggs.size}:\n$plan")
+        assert(aggs.head.aggregateExpressions.forall(_.mode == Complete),
+          s"expected the combined aggregate to be complete:\n$plan")
+        val grouping = collectAllGroupPartitions(plan)
+        assert(grouping.size == 1, s"expected the grouping to stay, got ${grouping.size}:\n$plan")
+        assert(unwrapWrappers(grouping.head.child).isInstanceOf[BatchScanExec],
+          s"expected the grouping to read the scan:\n$plan")
+        assert(ValidateRequirements.validate(plan), s"the combined plan has to hold up:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-59564: combine across a grouping the partial aggregate narrowed") {
+    // (1, 'aa') and (2, 'aa') are two splits sharing `name`. Grouping by `name` alone makes the
+    // partial aggregate project `id` away, collapsing the scan's KP([id, name]) to
+    // KP([name], isCollapsed = true), and the grouping coalesces the two splits on that narrowed
+    // key. That key sits at position 0 of the narrowing but at position 1 of the scan's, so
+    // re-parenting the grouping has to translate the positions it projects: keeping them would have
+    // it group by `id`, where the two 'aa' rows land in different partitions and the final
+    // aggregate returns a row per partition, a wrong answer rather than a slower plan.
+    //
+    // `max(id)` is what makes the shape: it keeps `id` in the scan's output, so the scan reports
+    // the full KP([id, name]) and the narrowing happens at the partial aggregate, the node the fold
+    // takes away. The narrowed key being collapsed is what `allowKeysSubsetOfPartitionKeys` is
+    // needed for, the same way the SPARK-46367 test does.
+    val partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'aa', 20.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 'cc', 30.0, cast('2020-01-01' as timestamp))")
+
+    val query = s"SELECT name, max(id), count(*) FROM testcat.ns.$items GROUP BY name"
+    val expected = Seq(Row("aa", 2L, 2L), Row("cc", 3L, 1L))
+
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        assert(collectAllGroupPartitions(df.queryExecution.executedPlan).nonEmpty,
+          s"expected the grouping the pair is separated by:\n${df.queryExecution.executedPlan}")
+      }
+
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 1, s"expected one combined aggregate, got ${aggs.size}:\n$plan")
+        assert(aggs.head.aggregateExpressions.forall(_.mode == Complete),
+          s"expected the combined aggregate to be complete:\n$plan")
+        // The grouping stays, reading the scan with `name` translated to the position it holds
+        // there, which is what keeps the coalescing the same one it did before.
+        val grouping = collectAllGroupPartitions(plan)
+        assert(grouping.size == 1, s"expected the grouping to stay, got ${grouping.size}:\n$plan")
+        assert(grouping.head.joinKeyPositions == Some(Seq(1)),
+          s"expected `name` translated to position 1 of the scan:\n$plan")
+        assert(unwrapWrappers(grouping.head.child).isInstanceOf[BatchScanExec],
+          s"expected the grouping to read the scan:\n$plan")
+        assert(ValidateRequirements.validate(plan), s"the combined plan has to hold up:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-59564: combine where the scan reports the narrowed partitioning itself") {
+    // Nothing references `id`, so the pruning takes it out of the scan's output and the scan
+    // reports the keyed partitioning projected down to `name` on its own: the scan narrows, rather
+    // than the partial aggregate under it. The grouping was therefore planned against that same
+    // space, and re-parenting it changes no position, unlike the case above.
+    val partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'aa', 20.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 'cc', 30.0, cast('2020-01-01' as timestamp))")
+
+    val query = s"SELECT name, count(*) FROM testcat.ns.$items GROUP BY name"
+    val expected = Seq(Row("aa", 2L), Row("cc", 1L))
+
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        val plan = sql(query).queryExecution.executedPlan
+        val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 2, s"expected the pair to be planned separately:\n$plan")
+        // The scan reports `name` alone, and its keyed partitioning with it.
+        val scan = collect(plan) { case s: BatchScanExec => s }.head
+        assert(scan.output.map(_.name) == Seq("name"),
+          s"expected `id` to be pruned out of the scan:\n$plan")
+        scan.outputPartitioning match {
+          case kp: KeyedPartitioning =>
+            assert(kp.expressions == scan.output,
+              s"expected the scan to report the narrowed keyed partitioning:\n$plan")
+          case other => fail(s"expected a keyed partitioning, got $other:\n$plan")
+        }
+        assert(collectAllGroupPartitions(plan).nonEmpty,
+          s"expected the grouping the pair is separated by:\n$plan")
+      }
+
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 1, s"expected one combined aggregate, got ${aggs.size}:\n$plan")
+        assert(aggs.head.aggregateExpressions.forall(_.mode == Complete),
+          s"expected the combined aggregate to be complete:\n$plan")
+        val grouping = collectAllGroupPartitions(plan)
+        assert(grouping.size == 1, s"expected the grouping to stay, got ${grouping.size}:\n$plan")
+        // Nothing to translate: the positions index the space the scan reports already.
+        assert(grouping.head.joinKeyPositions.isEmpty,
+          s"expected the grouping to keep the positions it was planned with:\n$plan")
+        assert(unwrapWrappers(grouping.head.child).isInstanceOf[BatchScanExec],
+          s"expected the grouping to read the scan:\n$plan")
+        assert(ValidateRequirements.validate(plan), s"the combined plan has to hold up:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-59564: the fold projects what the planner projects without a partial aggregate") {
+    // With `bypassPartialAggregation`, the planner runs one `Complete` aggregate and has
+    // `EnsureRequirements` satisfy its distribution, which for a grouping on part of the partition
+    // keys gives a `GroupPartitionsExec` over the scan. That plan is what the fold has to reproduce
+    // when the partial aggregation is planned and then taken away, so the positions come from the
+    // planner rather than from this rule's own arithmetic.
+    val partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'aa', 20.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 'cc', 30.0, cast('2020-01-01' as timestamp))")
+
+    val query = s"SELECT name, max(id), count(*) FROM testcat.ns.$items GROUP BY name"
+    val expected = Seq(Row("aa", 2L, 2L), Row("cc", 3L, 1L))
+
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      def projections(plan: SparkPlan): Seq[Option[Seq[Int]]] =
+        collectAllGroupPartitions(plan).map(_.joinKeyPositions)
+
+      // Plan and collect inside each block: `executedPlan` is lazy, so asking for it outside would
+      // plan under the default config and the toggle would do nothing.
+      val planned = withSQLConf(SQLConf.BYPASS_PARTIAL_AGGREGATION.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 1 && aggs.head.aggregateExpressions.forall(_.mode == Complete),
+          s"expected the planner to run one complete aggregate:\n$plan")
+        assert(projections(plan).nonEmpty,
+          s"expected the planner to satisfy the distribution with a grouping:\n$plan")
+        projections(plan)
+      }
+
+      val folded = withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        // The combined answer is asserted by the narrowed-grouping test, which runs the same query.
+        // This one is about the plan the fold leaves, so that a wrong projection fails here rather
+        // than being caught by the answer.
+        val plan = sql(query).queryExecution.executedPlan
+        assert(collect(plan) { case agg: BaseAggregateExec => agg }.size == 1,
+          s"expected one combined aggregate:\n$plan")
+        projections(plan)
+      }
+
+      assert(folded == planned,
+        s"expected the fold to project what the planner does without a partial: $planned")
+    }
+  }
+
+  test("SPARK-59564: combine adjacent sort aggregates across a GroupPartitionsExec") {
+    // `max` over a string column cannot be planned as a hash aggregate, so the pair is a pair of
+    // SortAggregateExecs, each of which needs its input ordered by the grouping keys. The ordering
+    // the scan derives from its partition keys is that grouping, and the regrouping reports the key
+    // ordering it keeps, so neither aggregate holds a sort of its own and none lands between the
+    // pair: the fold takes the partial aggregate away and the regrouping reads the scan.
+    val partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'aa', 20.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'bb', 30.0, cast('2020-01-01' as timestamp))")
+
+    val query =
+      s"SELECT id, name, max(cast(price as string)) FROM testcat.ns.$items GROUP BY id, name"
+    val expected = Seq(Row(1L, "aa", "20.0"), Row(2L, "bb", "30.0"))
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        val plan = sql(query).queryExecution.executedPlan
+        val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 2 && aggs.forall(_.isInstanceOf[SortAggregateExec]),
+          s"expected a pair of sort aggregates:\n$plan")
+        assert(collectAllGroupPartitions(plan).nonEmpty,
+          s"the grouping is what makes the pair non-adjacent:\n$plan")
+        // The source orders both, so neither aggregate holds a sort.
+        assert(collect(plan) { case sort: SortExec => sort }.isEmpty,
+          s"expected no sort feeding the pair:\n$plan")
+      }
+
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 1, s"expected one combined aggregate, got ${aggs.size}:\n$plan")
+        assert(aggs.head.aggregateExpressions.forall(_.mode == Complete),
+          s"expected the combined aggregate to be complete:\n$plan")
+        assert(collect(plan) { case sort: SortExec => sort }.isEmpty,
+          s"expected no sort left in the pair:\n$plan")
+        val grouping = collectAllGroupPartitions(plan)
+        assert(grouping.size == 1, s"expected the grouping to stay:\n$plan")
+        assert(unwrapWrappers(grouping.head.child).isInstanceOf[BatchScanExec],
+          s"expected the grouping to read the scan:\n$plan")
+        assert(ValidateRequirements.validate(plan), s"the combined plan has to hold up:\n$plan")
+      }
+
+      // The sort handling is for the shape both orderings off leaves: the partial aggregate holds a
+      // sort of its own and the regrouping reports none, so the final aggregate needs one as well,
+      // and the fold takes the partial aggregate's sort with the aggregate.
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
+        withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+          val plan = sql(query).queryExecution.executedPlan
+          // Two sorts, one for the partial aggregate and one the final one reads.
+          assert(collect(plan) { case sort: SortExec => sort }.size == 2,
+            s"expected two sorts feeding the pair:\n$plan")
+        }
+
+        withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+          val df = sql(query)
+          checkAnswer(df, expected)
+          val plan = df.queryExecution.executedPlan
+          val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+          assert(aggs.size == 1, s"expected one combined aggregate, got ${aggs.size}:\n$plan")
+          assert(aggs.head.aggregateExpressions.forall(_.mode == Complete),
+            s"expected the combined aggregate to be complete:\n$plan")
+          val sorts = collect(plan) { case sort: SortExec => sort }
+          assert(sorts.size == 1 && !sorts.head.global,
+            s"expected the sort above the grouping to be the one left:\n$plan")
+          assert(unwrapWrappers(sorts.head.child).isInstanceOf[GroupPartitionsExec],
+            s"expected the sort to read the grouping:\n$plan")
+          assert(collectAllGroupPartitions(plan).size == 1,
+            s"expected the grouping to stay:\n$plan")
+          assert(ValidateRequirements.validate(plan), s"the combined plan has to hold up:\n$plan")
+        }
+      }
+
+      // The bail's shape has a sort between the pair, which needs the regrouping not to report the
+      // ordering it kept: the derived ordering still leaves the partial aggregate no sort to give
+      // up, so the pair is left alone rather than handing the sort the whole scan.
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "false",
+          SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 2,
+          s"the derived ordering leaves the partial aggregate no sort to give up either:\n$plan")
+        // One sort, the one the grouping forced above itself, and the partial aggregate reads the
+        // scan directly.
+        val sorts = collect(plan) { case sort: SortExec => sort }
+        assert(sorts.size == 1 && !sorts.head.global, s"expected one local sort:\n$plan")
+        assert(unwrapWrappers(sorts.head.child).isInstanceOf[GroupPartitionsExec],
+          s"expected the sort to read the grouping:\n$plan")
+        assert(aggs.exists { agg =>
+          unwrapWrappers(agg.child).isInstanceOf[BatchScanExec]
+        }, s"expected the partial aggregate to read the scan, with no sort of its own:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-59564: combine adjacent sort aggregates across a narrowed grouping") {
+    // `max(cast(id as string))` cannot be planned as a hash aggregate, and keeps `id` in the scan's
+    // output, so the grouping is handed the full keyed partitioning and the positions it projects
+    // have to be translated onto `name`. The sort feeding the partial aggregate stays under it: the
+    // ordering the scan derives is `(id, name)`, which does not order `name`, while the regrouping
+    // reports the key ordering it kept, which does, so nothing lands between the pair.
+    val partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'aa', 20.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 'cc', 30.0, cast('2020-01-01' as timestamp))")
+
+    val query = s"SELECT name, max(cast(id as string)) FROM testcat.ns.$items GROUP BY name"
+    val expected = Seq(Row("aa", "2"), Row("cc", "3"))
+
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        val plan = sql(query).queryExecution.executedPlan
+        val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 2 && aggs.forall(_.isInstanceOf[SortAggregateExec]),
+          s"expected a pair of sort aggregates:\n$plan")
+        assert(collectAllGroupPartitions(plan).nonEmpty,
+          s"expected the grouping the pair is separated by:\n$plan")
+        // One sort, the one the partial aggregate reads.
+        assert(collect(plan) { case sort: SortExec => sort }.size == 1,
+          s"expected one sort feeding the pair:\n$plan")
+      }
+
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 1, s"expected one combined aggregate, got ${aggs.size}:\n$plan")
+        assert(aggs.head.aggregateExpressions.forall(_.mode == Complete),
+          s"expected the combined aggregate to be complete:\n$plan")
+        val grouping = collectAllGroupPartitions(plan)
+        assert(grouping.size == 1, s"expected the grouping to stay, got ${grouping.size}:\n$plan")
+        assert(grouping.head.joinKeyPositions == Some(Seq(1)),
+          s"expected `name` translated to position 1 of the scan:\n$plan")
+        // The sort the partial aggregate read stays under the regrouping, which is what orders the
+        // rows the combined aggregate reads.
+        val sorts = collect(plan) { case sort: SortExec => sort }
+        assert(sorts.size == 1 && !sorts.head.global,
+          s"expected one local sort:\n$plan")
+        assert(unwrapWrappers(grouping.head.child).isInstanceOf[SortExec],
+          s"expected the sort to stay under the grouping:\n$plan")
+        assert(ValidateRequirements.validate(plan), s"the combined plan has to hold up:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-59564: keep the pair where the source already orders the aggregate's input") {
+    // The source reports the ordering the sort aggregate needs, so the partial aggregate holds no
+    // sort of its own. With the regrouping reporting no ordering, a sort still lands between the
+    // pair: removing the partial aggregate would then hand that sort the whole scan instead of the
+    // partial aggregate's output, which is the trade
+    // `spark.sql.execution.pushDownLocalSort.throughCardinalityReducer` declines by default. The
+    // grouping report is what the bail's shape needs, so it is turned off here; the same pair over
+    // an unordered source keeps its own sort below the partial aggregate and is the shape the sort
+    // aggregate test above combines.
+    val partitions = Array(identity("id"), identity("name"))
+    val orderedItems = "ordered_aggregate_items"
+    createTable(orderedItems, itemsColumns, partitions,
+      ordering = Array(
+        sort(column("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+        sort(column("name"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+        sort(column("price"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)))
+    sql(s"INSERT INTO testcat.ns.$orderedItems VALUES " +
+      "(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'aa', 20.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'bb', 30.0, cast('2020-01-01' as timestamp))")
+
+    val query =
+      s"SELECT id, name, max(cast(price as string)) FROM testcat.ns.$orderedItems GROUP BY id, name"
+    val expected = Seq(Row(1L, "aa", "20.0"), Row(2L, "bb", "30.0"))
+
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        checkAnswer(sql(query), expected)
+      }
+
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 2, s"expected the pair to be kept, got ${aggs.size}:\n$plan")
+        // One sort, the one the grouping forced above itself, and the partial aggregate reads the
+        // scan directly.
+        val sorts = collect(plan) { case sort: SortExec => sort }
+        assert(sorts.size == 1 && !sorts.head.global, s"expected one local sort:\n$plan")
+        assert(unwrapWrappers(sorts.head.child).isInstanceOf[GroupPartitionsExec],
+          s"expected the sort to read the grouping:\n$plan")
+        assert(collect(plan) { case agg: BaseAggregateExec => agg }.exists { agg =>
+          unwrapWrappers(agg.child).isInstanceOf[BatchScanExec]
+        }, s"expected the partial aggregate to read the scan, with no sort of its own:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-59564: keep the sort below the partial aggregate where no sort is crossed") {
+    // A hash pair needs no ordering above it, so no sort lands between the aggregates and the one
+    // the partial aggregate reads is the only one in the pair. Folding takes that aggregate away
+    // and leaves the sort where it is, under the regrouping.
+    //
+    // `SORT BY` in the subquery is that sort. It survives the optimizer because a `sum` over a
+    // float is order sensitive, and the aggregate is a hash aggregate, so nothing above the pair
+    // asks for an ordering and none is inserted between them.
+    val partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'aa', 20.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'bb', 30.0, cast('2020-01-01' as timestamp))")
+
+    val query = s"SELECT id, name, sum(price) FROM " +
+      s"(SELECT * FROM testcat.ns.$items SORT BY price) GROUP BY id, name"
+    val expected = Seq(Row(1L, "aa", 30.0d), Row(2L, "bb", 30.0d))
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        val plan = sql(query).queryExecution.executedPlan
+        val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 2 && aggs.forall(_.isInstanceOf[HashAggregateExec]),
+          s"expected a pair of hash aggregates:\n$plan")
+        assert(collectAllGroupPartitions(plan).nonEmpty,
+          s"the grouping is what makes the pair non-adjacent:\n$plan")
+        // One sort, the one the partial aggregate reads.
+        assert(collect(plan) { case sort: SortExec => sort }.size == 1,
+          s"expected one sort feeding the partial aggregate:\n$plan")
+      }
+
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 1, s"expected one combined aggregate, got ${aggs.size}:\n$plan")
+        assert(aggs.head.aggregateExpressions.forall(_.mode == Complete),
+          s"expected the combined aggregate to be complete:\n$plan")
+        val sorts = collect(plan) { case sort: SortExec => sort }
+        assert(sorts.size == 1 && !sorts.head.global, s"expected one local sort:\n$plan")
+        val grouping = collectAllGroupPartitions(plan)
+        assert(grouping.size == 1, s"expected the grouping to stay, got ${grouping.size}:\n$plan")
+        assert(unwrapWrappers(grouping.head.child).isInstanceOf[SortExec],
+          s"expected the sort to stay under the grouping:\n$plan")
+        assert(ValidateRequirements.validate(plan), s"the combined plan has to hold up:\n$plan")
+      }
     }
   }
 
@@ -6624,12 +7215,12 @@ class KeyGroupedPartitioningSuite
       val groupPartitions =
         collectAllGroupPartitions(sql(query).queryExecution.executedPlan)
       assert(groupPartitions.map(_.joinKeyPositions) == Seq(Some(Seq(0))),
-        "the GroupPartitionsExec must project to the operation key [id], not only coalesce the " +
+        "the GroupPartitionsExec must project to the cluster key [id], not only coalesce the " +
           "duplicate (id, name) splits")
     }
   }
 
-  test("SPARK-58968: no GroupPartitionsExec when projecting to the operation keys coalesces " +
+  test("SPARK-58968: no GroupPartitionsExec when projecting to the cluster keys coalesces " +
       "nothing") {
     // Every id has exactly one name, so projecting KeyedPartitioning([id, name]) down to [id]
     // leaves the same number of partitions. Every id already lives on a single partition, so the
@@ -6764,45 +7355,50 @@ class KeyGroupedPartitioningSuite
       createTable("t3", cols, partitions)
       sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1'), (2, 'c2'), (3, 'c3'), (4, 'c4'), (5, 'c5')")
 
-      Seq(true, false).foreach { pushPartValues =>
-        withSQLConf(
-            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-            SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
-            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushPartValues.toString) {
-          val df = sql(
-            """SELECT /*+ MERGE(u, t3) */ u.id, u.data, t3.data AS t3data
-              |FROM (
-              |  SELECT id, data FROM testcat.ns.t1
-              |  UNION ALL
-              |  SELECT id, data FROM testcat.ns.t2
-              |) u
-              |JOIN testcat.ns.t3 ON u.id = t3.id
-              |""".stripMargin)
-          val plan = df.queryExecution.executedPlan
+      // (pushPartValues, partition filtering, expected alignment of both legs; a shuffled leg
+      // has none): filtering narrows the 5-key superset to the [1,2,3] intersection.
+      Seq((true, false, 5), (true, true, 3), (false, false, 0), (false, true, 0)).foreach {
+        case (pushPartValues, filter, expected) =>
+          withSQLConf(
+              SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+              SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+              SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushPartValues.toString,
+              SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString) {
+            val df = sql(
+              """SELECT /*+ MERGE(u, t3) */ u.id, u.data, t3.data AS t3data
+                |FROM (
+                |  SELECT id, data FROM testcat.ns.t1
+                |  UNION ALL
+                |  SELECT id, data FROM testcat.ns.t2
+                |) u
+                |JOIN testcat.ns.t3 ON u.id = t3.id
+                |""".stripMargin)
+            val plan = df.queryExecution.executedPlan
 
-          // The merged descriptor is ungrouped regardless of the pushPartValues flag, since
-          // key 2 is duplicated across the two children.
-          val union = collect(plan) { case u: UnionExec => u }.head
-          val kp = union.outputPartitioning.asInstanceOf[physical.KeyedPartitioning]
-          assert(!kp.isGrouped, "overlapping child keys merge with duplicates")
+            // The merged descriptor is ungrouped regardless of the pushPartValues flag, since
+            // key 2 is duplicated across the two children.
+            val union = collect(plan) { case u: UnionExec => u }.head
+            val kp = union.outputPartitioning.asInstanceOf[physical.KeyedPartitioning]
+            assert(!kp.isGrouped, "overlapping child keys merge with duplicates")
 
-          val shuffles = collectShuffles(plan)
-          val groupPartitions = collectGroupPartitions(plan)
-          if (pushPartValues) {
-            assert(shuffles.isEmpty, "no shuffle: superset of keys pushed to both legs")
-            assert(groupPartitions.nonEmpty &&
-              groupPartitions.forall(_.outputPartitioning.numPartitions === 5),
-              "both legs aligned to the 5-key superset")
-          } else {
-            assert(shuffles.length == 2,
-              "both legs shuffled when keys mismatch and pushPartValues is off")
-            assert(groupPartitions.isEmpty,
-              "GroupPartitionsExec is dropped once a shuffle is inserted")
+            val shuffles = collectShuffles(plan)
+            val groupPartitions = collectGroupPartitions(plan)
+            if (pushPartValues) {
+              // Narrowing the pushed-down key groups never brings a shuffle back.
+              assert(shuffles.isEmpty, "no shuffle: keys pushed to both legs, filtered or not")
+              assert(groupPartitions.nonEmpty &&
+                groupPartitions.forall(_.outputPartitioning.numPartitions === expected),
+                s"both legs aligned to the $expected-key list")
+            } else {
+              assert(shuffles.length == 2,
+                "both legs shuffled when keys mismatch and pushPartValues is off")
+              assert(groupPartitions.isEmpty,
+                "GroupPartitionsExec is dropped once a shuffle is inserted")
+            }
+            // Inner join: keys 4 and 5 have no match on the union side.
+            checkAnswer(df, Seq(
+              Row(1, "a1", "c1"), Row(2, "a2", "c2"), Row(2, "b2", "c2"), Row(3, "b3", "c3")))
           }
-          // Inner join: keys 4 and 5 have no match on the union side.
-          checkAnswer(df, Seq(
-            Row(1, "a1", "c1"), Row(2, "a2", "c2"), Row(2, "b2", "c2"), Row(3, "b3", "c3")))
-        }
       }
     }
   }
@@ -6823,27 +7419,35 @@ class KeyGroupedPartitioningSuite
       createTable("t3", cols, partitions)
       sql("INSERT INTO testcat.ns.t3 VALUES (2, 'c2'), (3, 'c3')")
 
-      withSQLConf(
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
-        val df = sql(
-          """SELECT /*+ MERGE(u, t3) */ u.id, u.data, t3.data AS t3data
-            |FROM (
-            |  SELECT id, data FROM testcat.ns.t1
-            |  UNION ALL
-            |  SELECT id, data FROM testcat.ns.t2
-            |) u
-            |JOIN testcat.ns.t3 ON u.id = t3.id
-            |""".stripMargin)
-        val plan = df.queryExecution.executedPlan
+      // (partition filtering, expected alignment of both legs): the [1,2,3,4] superset, or the
+      // [2,3] intersection when filtering drops the groups t3 cannot match.
+      Seq(4 -> false, 2 -> true).foreach {
+        case (expected, filter) =>
+          withSQLConf(
+              SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+              SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+              SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString) {
+            val df = sql(
+              """SELECT /*+ MERGE(u, t3) */ u.id, u.data, t3.data AS t3data
+                |FROM (
+                |  SELECT id, data FROM testcat.ns.t1
+                |  UNION ALL
+                |  SELECT id, data FROM testcat.ns.t2
+                |) u
+                |JOIN testcat.ns.t3 ON u.id = t3.id
+                |""".stripMargin)
+            val plan = df.queryExecution.executedPlan
 
-        assert(collectShuffles(plan).isEmpty, "no shuffle: superset pushed to the t3 leg")
-        assert(collectGroupPartitions(plan).nonEmpty &&
-          collectGroupPartitions(plan).forall(_.outputPartitioning.numPartitions === 4),
-          "both legs aligned to the 4-key superset")
-        // Inner join: only ids 2 and 3 match.
-        checkAnswer(df, Seq(
-          Row(2, "a2", "c2"), Row(2, "b2", "c2"), Row(3, "b3", "c3")))
+            // Narrowing the pushed-down key groups never brings a shuffle back.
+            assert(collectShuffles(plan).isEmpty, "no shuffle: keys pushed to the t3 leg")
+            val groupPartitions = collectGroupPartitions(plan)
+            assert(groupPartitions.nonEmpty &&
+              groupPartitions.forall(_.outputPartitioning.numPartitions === expected),
+              s"both legs aligned to the $expected-key list")
+            // Inner join: only ids 2 and 3 match.
+            checkAnswer(df, Seq(
+              Row(2, "a2", "c2"), Row(2, "b2", "c2"), Row(3, "b3", "c3")))
+          }
       }
     }
   }
@@ -8312,6 +8916,176 @@ class KeyGroupedPartitioningSuite
         assert(shuffles.size == 2, s"expected 2 exchanges, got ${shuffles.size}:\n$plan")
         assert(shuffles.exists(_.outputPartitioning.isInstanceOf[physical.RangePartitioning]),
           s"a range exchange must precede the global sort, got:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-59289: a grouping over a keyed shuffle stage survives an AQE round") {
+    // `GroupPartitionsExec` carries its grouping and its reported partitioning as constructor
+    // fields, so a child rewrite no longer re-derives them. AQE is where a child gets rewritten
+    // under a node that is already planned, so this runs the shape under it with every shuffle
+    // read rule on: the second join's grouping sits over the first join, whose own right leg is
+    // a keyed shuffle stage.
+    //
+    // What this does NOT do is get a rewrite applied to that stage, and the reason is structural.
+    // `CoalesceShufflePartitions` only coalesces a group whose leaves are all query stages, and
+    // `OptimizeShuffleWithLocalRead` needs the stage to be a broadcast join's own probe side. A
+    // storage-partitioned join always keeps one side as a scan, which is neither. So this test
+    // still passes with the gate in `GroupPartitionsExec.outputPartitioning` removed: it is
+    // coverage of the SPJ-under-AQE shape, and the gate itself is pinned by
+    // `GroupPartitionsExecSuite`'s "the keyed claim goes when the child no longer reports what
+    // was planned", which does fail without it.
+    val cols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+    createTable("aqeka", cols, Array(identity("id")))
+    createTable("aqekb", cols, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.aqeka VALUES (1, 'a1'), (2, 'a2'), (3, 'a3'), (4, 'a4')")
+    sql("INSERT INTO testcat.ns.aqekb VALUES (1, 'b1'), (2, 'b2'), (3, 'b3')")
+
+    withTable("aqept") {
+      sql("CREATE TABLE aqept (id INT, data STRING) USING parquet")
+      sql("INSERT INTO aqept VALUES (1,'p1'),(2,'p2'),(3,'p3'),(4,'p4'),(5,'p5')")
+
+      val query =
+        """
+          |SELECT j.id, b.data
+          |FROM (
+          |  SELECT a.id AS id FROM testcat.ns.aqeka a JOIN aqept t ON a.id = t.id
+          |) j
+          |JOIN testcat.ns.aqekb b ON j.id = b.id
+          |""".stripMargin
+      val expected = Seq(Row(1, "b1"), Row(2, "b2"), Row(3, "b3"))
+
+      // The broadcast threshold is off so both joins stay shuffle joins, which is what keeps the
+      // keyed shuffle and the grouping in the plan at all.
+      Seq(false, true).foreach { aqeEnabled =>
+        withSQLConf(
+            SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString,
+            SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+            SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+            SQLConf.LOCAL_SHUFFLE_READER_ENABLED.key -> "true",
+            "spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+          val df = sql(query)
+          checkAnswer(df, expected)
+          val plan = df.queryExecution.executedPlan
+          assert(ValidateRequirements.validate(plan),
+            s"aqe=$aqeEnabled: the executed plan must satisfy every required distribution:\n$plan")
+
+          // The shape the test exists for. Without these the assertions above would pass on a
+          // plan that had lost the storage-partitioned join entirely.
+          val groupings = collectAllGroupPartitions(plan)
+          assert(groupings.size == 2,
+            s"aqe=$aqeEnabled: the second join groups both of its sides:\n$plan")
+          groupings.foreach { grouping =>
+            assert(grouping.outputPartitioning.isInstanceOf[physical.KeyedPartitioning],
+              s"aqe=$aqeEnabled: each still claims the layout it was planned for:\n$plan")
+          }
+          val keyed = collectAllShuffles(plan)
+            .filter(_.outputPartitioning.isInstanceOf[physical.KeyedPartitioning])
+          assert(keyed.size == 1,
+            s"aqe=$aqeEnabled: one keyed shuffle, under the grouping:\n$plan")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59289: a second pass leaves a storage-partitioned join this rule planned alone") {
+    // `EnsureRequirements` runs again on a plan it produced: it sits in the preparation batch
+    // `AdaptiveSparkPlanExec` re-applies to every re-planned query stage. This PR decides the
+    // co-partitioned child once, so a second pass has to recognise its own work rather than peel
+    // it apart and rebuild something else, and `keepArrivedPairing` is that recognition. It is an
+    // explicit decision here, not a property of reusing a node the old code found at depth, so it
+    // gets asserted rather than measured.
+    //
+    // One query per way the rule can plan a storage-partitioned join, including a partially
+    // clustered one so the replicating path runs. Each case also pins the shape it exercises:
+    // idempotency over a plan the rule left alone proves nothing.
+    val rule = new EnsureRequirements()
+    val idCols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+    val deptCols = Array(Column.create("id", IntegerType), Column.create("dept", IntegerType),
+      Column.create("data", StringType))
+    createTable("ip1", idCols, Array(identity("id")))
+    createTable("ip2", idCols, Array(identity("id")))
+    createTable("ip3", idCols, Array(identity("id")))
+    createTable("ip4", deptCols, Array(identity("id"), identity("dept")))
+    sql("INSERT INTO testcat.ns.ip1 VALUES (1, 'x1'), (2, 'x2'), (3, 'x3')")
+    sql("INSERT INTO testcat.ns.ip2 VALUES (1, 'y1'), (2, 'y2'), (3, 'y3')")
+    // Key 1 twice, so it holds two splits and the side is not grouped. `createTable` puts one row
+    // per split, and that is what partially clustered distribution replicates the other side
+    // against. The key sets also differ ({1,2,3} vs {1,2,4}), which is what the push branch is for.
+    sql("INSERT INTO testcat.ns.ip3 VALUES (1, 'z1'), (1, 'z1b'), (2, 'z2'), (4, 'z4')")
+    sql("INSERT INTO testcat.ns.ip4 VALUES (1, 10, 'w1'), (2, 20, 'w2'), (3, 30, 'w3')")
+
+    withTable("ippt") {
+      sql("CREATE TABLE ippt (id INT, data STRING) USING parquet")
+      sql("INSERT INTO ippt VALUES (1,'p1'),(2,'p2'),(3,'p3')")
+
+      val common = Seq(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1")
+
+      val cases = Seq(
+        ("aligned as they stand",
+          Seq.empty[(String, String)],
+          "SELECT a.id FROM testcat.ns.ip1 a JOIN testcat.ns.ip2 b ON a.id = b.id",
+          (p: SparkPlan) =>
+            assert(collectAllShuffles(p).isEmpty && collectAllGroupPartitions(p).isEmpty,
+              "the two sides already line up, so the rule adds nothing")),
+        ("pushed common partition values",
+          Seq(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true"),
+          "SELECT a.id FROM testcat.ns.ip1 a JOIN testcat.ns.ip3 b ON a.id = b.id",
+          (p: SparkPlan) => {
+            assert(collectAllShuffles(p).isEmpty, "the merged keys are pushed, not shuffled")
+            assert(collectAllGroupPartitions(p).size == 2, "one grouping a side")
+          }),
+        ("partially clustered",
+          Seq(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true"),
+          "SELECT a.id FROM testcat.ns.ip1 a JOIN testcat.ns.ip3 b ON a.id = b.id",
+          (p: SparkPlan) =>
+            assert(collectAllGroupPartitions(p).exists(_.distributePartitions),
+              "one side keeps its splits while the other is replicated across them")),
+        ("one side shuffled onto the other's keys",
+          Seq(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true"),
+          "SELECT a.id FROM testcat.ns.ip1 a JOIN ippt t ON a.id = t.id",
+          (p: SparkPlan) =>
+            assert(collectAllShuffles(p).count(
+              _.outputPartitioning.isInstanceOf[physical.KeyedPartitioning]) == 1,
+              "the plain side is shuffled onto the keyed one")),
+        ("join keys a subset of the partition keys",
+          Seq(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false"),
+          // `dept` is selected so column pruning keeps it: without it the scan reports a layout
+          // already narrowed to `id` and there is no subset left for the rule to project.
+          "SELECT a.id, a.dept FROM testcat.ns.ip4 a JOIN testcat.ns.ip1 b ON a.id = b.id",
+          (p: SparkPlan) =>
+            assert(collectAllGroupPartitions(p).exists(_.joinKeyPositions.isDefined),
+              s"the two-key side is projected onto the join key:\n${p.treeString}")),
+        // The shape `keepArrivedPairing` exists for, and the only one of these that needs it: a
+        // projecting grouping over the keyed side and a keyed shuffle over the other. On a second
+        // pass the peel hands the pairing a raw left that projects again, so it stops looking
+        // co-partitioned as it stands, and both sides get aligned to a key set they already hold.
+        ("a projecting grouping beside a keyed shuffle",
+          Seq(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false"),
+          "SELECT a.id, a.dept FROM testcat.ns.ip4 a JOIN ippt t ON a.id = t.id",
+          (p: SparkPlan) => {
+            assert(collectAllGroupPartitions(p).exists(_.joinKeyPositions.isDefined),
+              s"the keyed side keeps its own layout with a projection:\n${p.treeString}")
+            assert(collectAllShuffles(p).count(
+              _.outputPartitioning.isInstanceOf[physical.KeyedPartitioning]) == 1,
+              s"and the plain side is shuffled onto it:\n${p.treeString}")
+          }))
+
+      cases.foreach { case (name, confs, query, checkShape) =>
+        withSQLConf(common ++ confs: _*) {
+          val planned = rule.apply(sql(query).queryExecution.sparkPlan)
+          checkShape(planned)
+          assert(rule.apply(planned) == planned,
+            s"$name: a second pass must leave this rule's own plan alone:\n${planned.treeString}")
+        }
       }
     }
   }

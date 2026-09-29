@@ -102,6 +102,14 @@ comparison_operator
 
 ### Notes
 
+* **Structured Streaming - micro-batch mode.** Micro-batch queries support stream-static
+  `ASOF JOIN`,
+  with the streaming relation on the left and the static relation on the right. Static-stream
+  and stream-stream `ASOF JOIN` are not supported because a streaming right side requires state
+  to account for future, closer matches.
+
+* **Structured Streaming - real-time mode.** `ASOF JOIN` is not supported in real-time mode.
+
 * **Direction of match.** Let *L* be the operand of `MATCH_CONDITION` that references
   the left table and *R* the operand that references the right table. The operator
   determines which row on the right is closest:

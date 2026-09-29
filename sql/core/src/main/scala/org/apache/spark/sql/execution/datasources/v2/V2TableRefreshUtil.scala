@@ -128,7 +128,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
   }
 
   private def containsCommand(plan: LogicalPlan): Boolean = {
-    plan.find(_.isInstanceOf[Command]).isDefined
+    plan.exists(_.isInstanceOf[Command])
   }
 
   private def validateTableIdentity(currentTable: Table, relation: DataSourceV2Relation): Unit = {
