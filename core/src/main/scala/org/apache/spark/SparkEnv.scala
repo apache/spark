@@ -51,7 +51,8 @@ import org.apache.spark.shuffle.{ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.shuffle.streaming.MultiShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.udf.worker.UDFWorkerSpecification
-import org.apache.spark.udf.worker.core.{UDFDispatcherFactory, UDFDispatcherManager, WorkerDispatcher}
+import org.apache.spark.udf.worker.core.{UDFDispatcherFactory, UDFDispatcherManager,
+  WorkerDispatcher, WorkerLogger}
 import org.apache.spark.util.{RpcUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkUDFWorkerLogger
@@ -222,20 +223,12 @@ class SparkEnv (
    * using the new UDF framework proposed in SPARK-55278.
    * Initialized on first use via [[getExternalUDFDispatcher]].
    */
-  @volatile private var udfDispatcherManager: Option[UDFDispatcherManager] = None
+  // Guarded by this SparkEnv's monitor, together with isStopped.
+  private var udfDispatcherManager: Option[UDFDispatcherManager] = None
 
   private def createUDFDispatcherManager(): UDFDispatcherManager = {
-    val factory = new UDFDispatcherFactory {
-      override def createDispatcher(
-          workerSpec: UDFWorkerSpecification,
-          logger: org.apache.spark.udf.worker.core.WorkerLogger
-      ): WorkerDispatcher = {
-        // TODO [SPARK-55278]: Wire in the correct dispatcher factory
-        throw new UnsupportedOperationException(
-          "No UDF dispatcher factory configured. " +
-            "Set up a concrete factory for SPARK-55278.")
-      }
-    }
+    val factory = SparkEnv.resolveUDFDispatcherFactory(
+      conf, SparkContext.isDriver(executorId))
     new UDFDispatcherManager(factory, new SparkUDFWorkerLogger())
   }
 
@@ -246,15 +239,14 @@ class SparkEnv (
    */
   private[spark] def getExternalUDFDispatcher(
       workerSpec: UDFWorkerSpecification): WorkerDispatcher = {
-    val manager : UDFDispatcherManager = udfDispatcherManager.getOrElse {
-      synchronized {
-        // Get or Else synchronized to protect
-        // against concurrent creation requests.
-        udfDispatcherManager.getOrElse {
-          val created = createUDFDispatcherManager()
-          udfDispatcherManager = Some(created)
-          created
-        }
+    val manager = synchronized {
+      if (isStopped) {
+        throw new IllegalStateException("SparkEnv is stopped")
+      }
+      udfDispatcherManager.getOrElse {
+        val created = createUDFDispatcherManager()
+        udfDispatcherManager = Some(created)
+        created
       }
     }
     manager.getDispatcher(workerSpec)
@@ -283,9 +275,15 @@ class SparkEnv (
     new AtomicReference[VersionedCredentials]()
 
   private[spark] def stop(): Unit = {
-
-    if (!isStopped) {
-      isStopped = true
+    val shouldStop = synchronized {
+      if (isStopped) {
+        false
+      } else {
+        isStopped = true
+        true
+      }
+    }
+    if (shouldStop) {
       pythonWorkers.values.foreach(_.stop())
       udfDispatcherManager.foreach(_.close())
       mapOutputTracker.stop()
@@ -526,6 +524,50 @@ object SparkEnv extends Logging {
 
   private[spark] val driverSystemName = "sparkDriver"
   private[spark] val executorSystemName = "sparkExecutor"
+
+  /**
+   * :: Experimental ::
+   * Resolves the [[UDFDispatcherFactory]] used to create dispatchers for external UDF
+   * workers (SPARK-55278), from `spark.udf.worker.dispatcherFactory`.
+   *
+   * The factory is loaded reflectively rather than named here: `core` depends on
+   * `udf-worker-proto` and `udf-worker-core` only, so that neither it nor its consumers
+   * carry a gRPC dependency. Every concrete dispatcher therefore lives in a module that
+   * core cannot reference at compile time, and the implementation has to be selected by
+   * configuration.
+   *
+   * When the config is unset the returned factory throws on first use rather than at
+   * SparkEnv creation, so applications that never run an external UDF are unaffected.
+   */
+  private[spark] def resolveUDFDispatcherFactory(
+      conf: SparkConf,
+      isDriver: Boolean): UDFDispatcherFactory = {
+    conf.get(UDF.DISPATCHER_FACTORY) match {
+      case Some(className) =>
+        // Validate before constructing so that a misconfigured class is reported against
+        // the config key, rather than as a ClassCastException from the call site.
+        val cls = Utils.classForName[AnyRef](className, initialize = false)
+        if (!classOf[UDFDispatcherFactory].isAssignableFrom(cls)) {
+          throw new SparkException(
+            s"${UDF.DISPATCHER_FACTORY.key} is set to $className, which does not implement " +
+              s"${classOf[UDFDispatcherFactory].getName}.")
+        }
+        Utils.instantiateSerializerOrShuffleManager[UDFDispatcherFactory](
+          className, conf, isDriver)
+
+      case None =>
+        new UDFDispatcherFactory {
+          override def createDispatcher(
+              workerSpec: UDFWorkerSpecification,
+              logger: WorkerLogger): WorkerDispatcher = {
+            throw new UnsupportedOperationException(
+              "No UDF dispatcher factory is configured, so external UDF workers cannot be " +
+                s"created. Set ${UDF.DISPATCHER_FACTORY.key} to the name of a " +
+                s"${classOf[UDFDispatcherFactory].getName} implementation.")
+          }
+        }
+    }
+  }
 
   def set(e: SparkEnv): Unit = {
     env = e
