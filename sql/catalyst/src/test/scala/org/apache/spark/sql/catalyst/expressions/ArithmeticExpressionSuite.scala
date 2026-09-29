@@ -574,6 +574,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         checkExceptionInExpression[ArithmeticException](
           Pmod(left, Literal(convert(0))), "Remainder by zero")
       }
+      // Negative divisor (n < 0): `pmod` is only guaranteed non-negative for a positive divisor.
+      // These cases have negative dividends, so the expected values are <= 0 (released behavior).
+      // They guard the r < 0, n < 0 path where `r + n` still needs `% n` -- dropping it goes out
+      // of range (pmod(-3, -5) would be -8).
+      checkEvaluation(Pmod(Literal(convert(-3)), Literal(convert(-5))), convert(-3))
+      checkEvaluation(Pmod(Literal(convert(-7)), Literal(convert(-3))), convert(-1))
     }
     checkEvaluation(Pmod(Literal(-7), Literal(3)), 2)
     checkEvaluation(Pmod(Literal(7.2D), Literal(4.1D)), 3.1000000000000005)
@@ -582,15 +588,11 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Pmod(positiveShort, negativeShort), positiveShort.toShort)
     checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
     checkEvaluation(Pmod(positiveLong, negativeLong), positiveLong)
-    // Negative divisor (n < 0): `pmod` is only guaranteed non-negative for a positive divisor.
-    // These cases have negative dividends, so the expected values are <= 0 (released behavior).
-    // They guard the r < 0, n < 0 path where `r + n` still needs `% n` -- dropping it goes out
-    // of range (pmod(-3, -5) would be -8).
-    checkEvaluation(Pmod(Literal(-3), Literal(-5)), -3)
-    checkEvaluation(Pmod(Literal(-7), Literal(-3)), -1)
-    checkEvaluation(Pmod(Literal(-3L), Literal(-5L)), -3L)
-    checkEvaluation(Pmod(Literal((-3).toShort), Literal((-5).toShort)), (-3).toShort)
-    checkEvaluation(Pmod(Literal((-7).toByte), Literal((-3).toByte)), (-1).toByte)
+    // Pre-existing Int/Long wrap-around, pinned so the released results stay exact: the retained
+    // `(r + n) % n` overflows for n < -2^30 / n < -2^62. Without overflow `(r + n) % n == r`, so
+    // these are the only inputs that tell the two apart.
+    checkEvaluation(Pmod(Literal(-1), Literal(Int.MinValue)), Int.MaxValue)
+    checkEvaluation(Pmod(Literal(-1L), Literal(Long.MinValue)), Long.MaxValue)
 
     Seq("true", "false").foreach { failOnError =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
