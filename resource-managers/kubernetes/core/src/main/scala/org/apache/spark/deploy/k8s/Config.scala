@@ -240,14 +240,14 @@ private[spark] object Config extends Logging {
   object ExecutorRollPolicy extends Enumeration {
     val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS,
       PEAK_JVM_ONHEAP_MEMORY, PEAK_JVM_OFFHEAP_MEMORY, TOTAL_SHUFFLE_WRITE, DISK_USED,
-      OUTLIER, OUTLIER_NO_FALLBACK = Value
+      ACTIVE_TASKS, OUTLIER, OUTLIER_NO_FALLBACK = Value
   }
 
   val EXECUTOR_ROLL_POLICY =
     ConfigBuilder("spark.kubernetes.executor.rollPolicy")
       .doc("Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME, " +
         "TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS, PEAK_JVM_ONHEAP_MEMORY, " +
-        "PEAK_JVM_OFFHEAP_MEMORY, OUTLIER (default), and OUTLIER_NO_FALLBACK. " +
+        "PEAK_JVM_OFFHEAP_MEMORY, ACTIVE_TASKS, OUTLIER (default), and OUTLIER_NO_FALLBACK. " +
         "When executor roll happens, Spark uses this policy to choose " +
         "an executor and decommission it. The built-in policies are based on executor summary." +
         "ID policy chooses an executor with the smallest executor ID. " +
@@ -261,6 +261,8 @@ private[spark] object Config extends Logging {
         "off-heap memory. " +
         "TOTAL_SHUFFLE_WRITE policy chooses an executor with the biggest total shuffle write. " +
         "DISK_USED policy chooses an executor with the biggest used disk size. " +
+        "ACTIVE_TASKS policy chooses an executor with the smallest number of active tasks. " +
+        "If there is a tie, it chooses an executor with the smallest add-time. " +
         "OUTLIER policy chooses an executor with outstanding statistics which is bigger than" +
         "at least two standard deviation from the mean in average task time, " +
         "total task time, total task GC time, and the number of failed tasks if exists. " +

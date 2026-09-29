@@ -2109,6 +2109,8 @@ See the [configuration page](configuration.html) for information on Spark config
     TOTAL_DURATION policy chooses an executor with the biggest total task time.
     AVERAGE_DURATION policy chooses an executor with the biggest average task time.
     FAILED_TASKS policy chooses an executor with the most number of failed tasks.
+    ACTIVE_TASKS policy chooses an executor with the smallest number of active tasks.
+    If there is a tie, it chooses an executor with the smallest add-time.
     OUTLIER policy chooses an executor with outstanding statistics which is bigger than
     at least two standard deviation from the mean in average task time,
     total task time, total task GC time, and the number of failed tasks if exists.
