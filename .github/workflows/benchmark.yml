@@ -84,7 +84,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Cache SBT and Maven
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             build/apache-maven-*
@@ -94,7 +94,7 @@ jobs:
           restore-keys: |
             build-
       - name: Cache Coursier local repository
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/coursier
           key: benchmark-coursier-${{ inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -102,7 +102,7 @@ jobs:
             benchmark-coursier-${{ inputs.jdk }}
       - name: Cache TPC-DS generated data
         id: cache-tpcds-sf-1
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ./tpcds-sf-1
@@ -160,7 +160,7 @@ jobs:
       with:
         fetch-depth: 0
     - name: Cache SBT and Maven
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           build/apache-maven-*
@@ -170,7 +170,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ~/.cache/coursier
         key: benchmark-coursier-${{ inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -184,7 +184,7 @@ jobs:
     - name: Cache TPC-DS generated data
       if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, 'LZ4TPCDSDataBenchmark') || contains(inputs.class, 'ZStandardTPCDSDataBenchmark') || contains(inputs.class, '*')
       id: cache-tpcds-sf-1
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           ./tpcds-sf-1

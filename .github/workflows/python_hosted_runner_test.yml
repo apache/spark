@@ -93,7 +93,7 @@ jobs:
       - name: Cache SBT and Maven
         # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
         if: ${{ runner.os != 'macOS' }}
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             build/apache-maven-*
@@ -105,7 +105,7 @@ jobs:
       - name: Cache Coursier local repository
         # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
         if: ${{ runner.os != 'macOS' }}
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/coursier
           key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -204,7 +204,7 @@ jobs:
       - name: Cache SBT and Maven
         # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
         if: ${{ runner.os != 'macOS' }}
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             build/apache-maven-*
@@ -216,7 +216,7 @@ jobs:
       - name: Cache Coursier local repository
         # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
         if: ${{ runner.os != 'macOS' }}
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/coursier
           key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
