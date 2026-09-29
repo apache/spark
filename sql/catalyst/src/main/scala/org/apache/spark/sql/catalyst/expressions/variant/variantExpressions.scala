@@ -242,7 +242,7 @@ object VariantArrayLength extends ExpressionBuilder {
   }
 
   def variantArrayLength(input: VariantVal, parsedPath: Array[VariantPathSegment]): Integer = {
-    val v = VariantGet.getVariantWithoutCopy(input, parsedPath)
+    val v = VariantGet.getSubVariant(input, parsedPath)
     if (v != null && v.getType == Type.ARRAY) {
       v.arraySize()
     } else {
@@ -683,7 +683,7 @@ case object VariantGet {
       parsedPath: Array[VariantPathSegment],
       dataType: DataType,
       castArgs: VariantCastArgs): Any = {
-    val v = getVariantWithoutCopy(input, parsedPath)
+    val v = getSubVariant(input, parsedPath)
     if (v == null) {
       null
     } else {
@@ -694,7 +694,7 @@ case object VariantGet {
   /**
    * Returns the sub-variant at `parsedPath` without copying its value or metadata.
    */
-  def getVariantWithoutCopy(
+  def getSubVariant(
       input: VariantVal,
       parsedPath: Array[VariantPathSegment]): Variant = {
     var v = new Variant(input.getValue, input.getMetadata)
