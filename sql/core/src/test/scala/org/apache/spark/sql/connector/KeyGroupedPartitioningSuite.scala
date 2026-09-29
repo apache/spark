@@ -10080,9 +10080,9 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59671: an ungrouped sort branch leaves AQE's shuffle coalescing alone") {
     // The sort branch keeps the scan's splits as they stand: the catalog hands the partition keys
     // over sorted, so no node settles them and the layout stays ungrouped under the sort. An
-    // ordering reads the keys without pairing anything, so that layout answers for itself --
-    // before this, the finished plan failed validation on it and AQE kept the aggregate branch's
-    // shuffle read uncoalesced: the stage-wide symptom this PR is motivated by.
+    // ordering reads the keys without pairing anything, so that layout answers for itself.
+    // Before this, the finished plan failed validation on it and AQE kept the aggregate
+    // branch's shuffle read uncoalesced: the stage-wide symptom this PR is motivated by.
     val idCols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
     createTable("sot", idCols, Array(identity("id")))
     // Key 1 across two splits, so the layout the sort reads is ungrouped.
@@ -10124,6 +10124,53 @@ class KeyGroupedPartitioningSuite
         assert(collectAllGroupPartitions(plan).isEmpty,
           s"test setup: nothing settles the sort branch's keys:\n$plan")
       }
+    }
+  }
+
+  test("SPARK-59671: an aggregate over a left outer join's spread side groups it") {
+    // A left outer join reports its left side verbatim, and the producer's duplication gate
+    // makes that side the spread one: its layout holds a key's rows across partitions and
+    // carries the alignment stamp. The stamp vouches for the pair the join consumed and for
+    // nothing else, so the aggregate above must not read the layout as clustered: it gets a
+    // grouping node first, or key 1's two splits come out as two groups.
+    val idCols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+    createTable("lo1", idCols, Array(identity("id")))
+    createTable("lo2", idCols, Array(identity("id")))
+    // The left side holds three splits against two, so the heuristic replicates the right and
+    // the left spreads, the only side a LeftOuter may duplicate.
+    sql("INSERT INTO testcat.ns.lo1 VALUES (1, 'l1a')")
+    sql("INSERT INTO testcat.ns.lo1 VALUES (1, 'l1b')")
+    sql("INSERT INTO testcat.ns.lo1 VALUES (2, 'l2')")
+    sql("INSERT INTO testcat.ns.lo2 VALUES (1, 'r1'), (2, 'r2')")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+      val df = sql(
+        s"""
+           |SELECT id, count(*) FROM (
+           |  ${selectWithMergeJoinHint("l", "r")} l.id AS id
+           |  FROM testcat.ns.lo1 l LEFT OUTER JOIN testcat.ns.lo2 r ON l.id = r.id
+           |) GROUP BY id
+           |""".stripMargin)
+      checkAnswer(df, Seq(Row(1, 2L), Row(2, 1L)))
+
+      // The shape: the join reports its spread side verbatim, stamp included, and a grouping
+      // node settles it before the aggregate reads it.
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val joins = collect(plan) { case j: ShuffledJoin => j }
+      assert(joins.size == 1, s"test setup: one storage-partitioned join:\n$plan")
+      assert(keyedPartitioningsOf(Seq(joins.head)).exists(k =>
+        !k.isGrouped && k.ungroupingOrigin.contains(SPREADS_SPLITS)),
+        s"test setup: the join reports its spread side verbatim:\n$plan")
+      assert(collectAllGroupPartitions(plan).exists(g =>
+        g.child.collectFirst { case _: SortMergeJoinExec => () }.isDefined &&
+          (g.outputPartitioning match {
+            case k: KeyedPartitioning => k.isGrouped && k.ungroupingOrigin.isEmpty
+            case _ => false
+          })),
+        s"the aggregate's side is grouped over the join:\n$plan")
     }
   }
 }

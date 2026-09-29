@@ -2040,7 +2040,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val exprKey = AttributeReference("k", IntegerType)()
     // The keys arrive out of order for the ascending ordering the operator reads, and key 1 holds
     // two splits. The spread that settles the order keeps the splits, so the layout it reports
-    // stays ungrouped -- on purpose, and for the ordering only.
+    // stays ungrouped, on purpose and for the ordering only.
     val child = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyedPartitioning(Seq(exprKey),
         Seq(InternalRow(2), InternalRow(1), InternalRow(1))))

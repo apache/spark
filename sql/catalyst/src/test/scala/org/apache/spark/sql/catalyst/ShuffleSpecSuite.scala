@@ -217,28 +217,36 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       .ungroupingOrigin.isEmpty), "two roles agree on nothing")
   }
 
-  test("SPARK-59671: an ordering reads the keys, a clustering reads the roles") {
+  test("SPARK-59671: an ordering reads sorted keys, a clustering reads the pairing") {
     val a = AttributeReference("a", IntegerType)()
-    val keys = Seq(InternalRow(1), InternalRow(1), InternalRow(2))
-    def stamped(role: Option[UngroupingOrigin]): KeyedPartitioning =
-      KeyedPartitioning(Seq(a), keys).withLayout(_.copy(ungroupingOrigin = role))
+    def layout(keys: Seq[Int], role: Option[UngroupingOrigin]): KeyedPartitioning =
+      KeyedPartitioning(Seq(a), keys.map(InternalRow(_)))
+        .withLayout(_.copy(ungroupingOrigin = role))
+    val sorted = Seq(1, 1, 2)
     val ordering = OrderedDistribution(Seq(SortOrder(a, Ascending)))
     val clustered = ClusteredDistribution(Seq(a))
 
     withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
-      // An ordering pairs no partition with another, so it asks no settling: an unstamped layout
-      // serves it as it stands, and so does the spread a producer built for one.
-      assert(stamped(None).satisfies(ordering))
-      assert(stamped(Some(SPREADS_FOR_ORDERING)).satisfies(ordering))
+      // An ordering pairs no partition with another, so it asks no settling, but it does ask
+      // the keys to ascend, which a grouped layout has by construction and an ungrouped one
+      // only where something sorted it.
+      assert(layout(sorted, None).satisfies(ordering))
+      assert(layout(sorted, Some(SPREADS_FOR_ORDERING)).satisfies(ordering))
+      assert(!layout(Seq(1, 2, 1, 2), None).satisfies(ordering),
+        "an ungrouped layout nothing sorted does not claim an ordering")
+      assert(!layout(Seq(2, 1), None).satisfies(ordering),
+        "a grouped layout whose keys do not ascend does not claim an ordering")
       // The two pairing roles were built for a clustering, not for an ordering.
-      assert(!stamped(Some(SPREADS_SPLITS)).satisfies(ordering))
-      assert(!stamped(Some(REPEATS_GROUP)).satisfies(ordering))
-      // A clustering pairs partitions index by index, so it reads the roles: the two alignment
-      // sides serve it, and neither an unstamped layout nor an ordering spread does.
-      assert(!stamped(None).satisfies(clustered))
-      assert(!stamped(Some(SPREADS_FOR_ORDERING)).satisfies(clustered))
-      assert(stamped(Some(SPREADS_SPLITS)).satisfies(clustered))
-      assert(stamped(Some(REPEATS_GROUP)).satisfies(clustered))
+      assert(!layout(sorted, Some(SPREADS_SPLITS)).satisfies(ordering))
+      assert(!layout(sorted, Some(REPEATS_GROUP)).satisfies(ordering))
+      // A clustering asks that a key's rows share a partition, which no ungrouped layout gives
+      // on its own: an alignment side's stamp is read where the pair is judged
+      // (`specsForPairing`, pinned above), not here.
+      Seq(None, Some(SPREADS_FOR_ORDERING), Some(SPREADS_SPLITS), Some(REPEATS_GROUP)).foreach {
+        role => assert(!layout(sorted, role).satisfies(clustered))
+      }
+      assert(layout(Seq(1, 2), None).satisfies(clustered),
+        "a grouped layout answers a clustering as it stands")
     }
   }
 

@@ -45,24 +45,32 @@ object ValidateRequirements extends Logging {
     assert(requiredChildDistributions.length == children.length)
     assert(requiredChildOrderings.length == children.length)
 
+    // A `ClusteredDistribution` is the one distribution an operator can owe its children
+    // together rather than one by one, so an operator whose children all owe one is judged on
+    // their mutual layout: the pairing below decides it, and the per-child distribution clause
+    // is skipped for it. Nothing is lost by the skip: `specsForPairing` admits a member only
+    // on its own answer, which is the clause's plus the alignment stamp a producer vouched for,
+    // and a side offering nothing fails the pairing by itself. Every other child, an operator
+    // with a single clustered child included, answers the clause for itself: a stamped layout
+    // is one side of a pair, and a consumer that is not the pairing's other side owes it the
+    // node that settles it. That is every such operator, not only a join: a cogroup zips
+    // corresponding partitions too.
+    val clusteredMultiChild = children.length > 1 &&
+      requiredChildDistributions.forall(_.isInstanceOf[ClusteredDistribution])
+
     val satisfied = children.zip(requiredChildDistributions.zip(requiredChildOrderings)).forall {
       case (child, (distribution, ordering))
-          if !child.outputPartitioning.satisfies(distribution)
+          if (!clusteredMultiChild && !child.outputPartitioning.satisfies(distribution))
             || !SortOrder.orderingSatisfies(child.outputOrdering, ordering) =>
         logDebug(s"ValidateRequirements failed: $distribution, $ordering\n$plan")
         false
       case _ => true
     }
 
-    // A `ClusteredDistribution` is the one distribution an operator can owe its children
-    // together, so an operator whose children all owe one is judged on their mutual layout, and
-    // every other child answers for itself. That is every such operator, not only a join: a
-    // cogroup, for instance, zips corresponding partitions too.
-    if (satisfied && children.length > 1 &&
-      requiredChildDistributions.forall(_.isInstanceOf[ClusteredDistribution])) {
+    if (satisfied && clusteredMultiChild) {
       // Check the co-partitioning requirement. A pair aligned without grouping is one each
-      // side's layout answers for (`UngroupingOrigin`), so a pair no producer built is one whose
-      // sides do not answer for themselves and never reaches here.
+      // side's layout answers for (`UngroupingOrigin`), so a pair no producer built is one
+      // whose sides offer nothing to pair and fails here.
       if (satisfiesForPairing(children, requiredChildDistributions)) {
         true
       } else {
