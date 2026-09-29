@@ -339,10 +339,11 @@ class ChangelogResolutionSuite extends SharedSparkSession {
 
   test("refreshing cached CDC data preserves CDC reads and ordinary table cache isolation") {
     val tableName = s"$cdcCatalogName.test_table"
+    val cdcQuery = s"SELECT * FROM $tableName CHANGES FROM VERSION 1 TO VERSION 10"
     sql(s"INSERT INTO $tableName VALUES (100, 'current')")
     val cat = cdcCatalog
     cat.addChangeRows(ident, Seq(changeRow(1L, 1L)))
-    val cached = sql(s"SELECT * FROM $tableName CHANGES FROM VERSION 1 TO VERSION 10").cache()
+    val cached = sql(cdcQuery).cache()
     val cacheManager = spark.sharedState.cacheManager
     try {
       checkAnswer(cached.select("id"), Seq(Row(1L)))
@@ -355,15 +356,17 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       assert(cacheManager.numCachedEntries == 1)
       assert(cacheManager.lookupCachedData(spark.table(tableName)).isEmpty)
       checkAnswer(spark.table(tableName).select("id"), Seq(Row(100L)))
-      // This connector uses object identity, so find the rebuilt cache entry with the
-      // freshly loaded changelog. Equality across catalog loads is connector-defined.
-      val refreshedPlan = cached.queryExecution.analyzed transform {
-        case r: DataSourceV2Relation if r.table.isInstanceOf[ChangelogTable] =>
-          val table = r.table.asInstanceOf[ChangelogTable]
-          r.copy(table = table.copy(changelog = cat.lastLoadedChangelog.get))
-      }
-      assert(cacheManager.lookupCachedData(spark, refreshedPlan).isDefined)
-      checkAnswer(Dataset.ofRows(spark, refreshedPlan).select("id"), Seq(Row(1L), Row(2L)))
+
+      assert(cacheManager.lookupCachedData(cached).isDefined)
+      checkAnswer(cached.select("id"), Seq(Row(1L), Row(2L)))
+
+      val fresh = sql(cdcQuery)
+      assert(cacheManager.lookupCachedData(fresh).isDefined)
+      checkAnswer(fresh.select("id"), Seq(Row(1L), Row(2L)))
+
+      val differentRange = sql(
+        s"SELECT * FROM $tableName CHANGES FROM VERSION 2 TO VERSION 10")
+      assert(cacheManager.lookupCachedData(differentRange).isEmpty)
     } finally {
       spark.catalog.clearCache()
     }
@@ -767,7 +770,6 @@ class ChangelogResolutionSuite extends SharedSparkSession {
 class ChangelogStateOptionsCatalog extends InMemoryChangelogCatalog {
   var changelogKeys: Option[java.util.Set[String]] = None
   var rejectCurrentTableLoads: Boolean = false
-  var lastLoadedChangelog: Option[Changelog] = None
 
   override def changelogStateOptionKeys(): java.util.Set[String] = {
     changelogKeys.getOrElse(super.changelogStateOptionKeys())
@@ -776,15 +778,6 @@ class ChangelogStateOptionsCatalog extends InMemoryChangelogCatalog {
   override def loadTable(ident: Identifier): Table = {
     assert(!rejectCurrentTableLoads, "CDC must not load the current ordinary table")
     super.loadTable(ident)
-  }
-
-  override def loadChangelog(
-      ident: Identifier,
-      context: ChangelogContext,
-      stateOptions: CaseInsensitiveStringMap): Changelog = {
-    val changelog = super.loadChangelog(ident, context, stateOptions)
-    lastLoadedChangelog = Some(changelog)
-    changelog
   }
 }
 

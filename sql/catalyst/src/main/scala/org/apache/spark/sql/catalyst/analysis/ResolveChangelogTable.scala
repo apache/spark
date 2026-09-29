@@ -35,8 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogContext}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.connector.catalog.Changelog
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor}
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
@@ -123,7 +122,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case rel @ DataSourceV2Relation(table: ChangelogTable, _, _, _, _, _) if !table.resolved =>
       val changelog = table.changelog
-      val req = evaluateRequirements(changelog, table.changelogContext)
+      val req = evaluateRequirements(table)
 
       val resolvedRel = rel.copy(table = table.copy(resolved = true))
       var updatedRel: LogicalPlan = resolvedRel
@@ -147,7 +146,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     case rel @ StreamingRelationV2(_, _, table: ChangelogTable, _, _, _, _, _, _)
         if !table.resolved =>
       val changelog = table.changelog
-      val req = evaluateRequirements(changelog, table.changelogContext)
+      val req = evaluateRequirements(table)
       val resolvedRel = rel.copy(table = table.copy(resolved = true))
       var updatedRel: LogicalPlan = resolvedRel
       if (req.requiresCarryOverRemoval || req.requiresUpdateDetection) {
@@ -175,7 +174,8 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
 
   /**
    * Captures which post-processing passes a CDC query requires, derived from the
-   * user-provided [[ChangelogContext]] and the connector-declared [[Changelog]]
+   * user-provided [[org.apache.spark.sql.connector.catalog.ChangelogContext]] and the
+   * connector-declared [[Changelog]]
    * capability flags.
    */
   private case class PostProcessingRequirements(
@@ -192,30 +192,12 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    * unsupported or contradictory combinations (currently: `computeUpdates` with
    * surfaced carry-overs but no carry-over removal).
    */
-  private def evaluateRequirements(
-      changelog: Changelog,
-      context: ChangelogContext): PostProcessingRequirements = {
-    val requiresCarryOverRemoval =
-      context.deduplicationMode() != ChangelogContext.DeduplicationMode.NONE &&
-        changelog.containsCarryoverRows()
-    val requiresUpdateDetection =
-      context.computeUpdates() && changelog.representsUpdateAsDeleteAndInsert()
-    val requiresNetChanges =
-      context.deduplicationMode() == ChangelogContext.DeduplicationMode.NET_CHANGES &&
-        changelog.containsIntermediateChanges()
-
-    // If carry-overs are surfaced and update detection is enabled without carry-over
-    // removal, carry-overs would be falsely classified as updates, leading to wrong
-    // results. Hence we throw.
-    if (requiresUpdateDetection &&
-        changelog.containsCarryoverRows() &&
-        context.deduplicationMode() == ChangelogContext.DeduplicationMode.NONE) {
-      throw QueryCompilationErrors.cdcUpdateDetectionRequiresCarryOverRemoval(
-        changelog.name())
-    }
-
+  private def evaluateRequirements(table: ChangelogTable): PostProcessingRequirements = {
+    table.validatePostProcessingOptions()
     PostProcessingRequirements(
-      requiresCarryOverRemoval, requiresUpdateDetection, requiresNetChanges)
+      table.requiresCarryOverRemoval,
+      table.requiresUpdateDetection,
+      table.requiresNetChanges)
   }
 
   // ---------------------------------------------------------------------------

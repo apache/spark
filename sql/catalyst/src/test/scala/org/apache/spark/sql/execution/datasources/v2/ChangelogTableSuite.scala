@@ -17,13 +17,18 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.{ChangelogContext, ChangelogProperties, Column, InMemoryChangelog}
+import org.apache.spark.sql.connector.catalog.{
+  ChangelogContext, ChangelogProperties, Column, Identifier, InMemoryChangelog,
+  InMemoryChangelogCatalog}
 import org.apache.spark.sql.connector.catalog.ChangelogContext.DeduplicationMode
 import org.apache.spark.sql.connector.catalog.ChangelogRange.UnboundedRange
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class ChangelogTableSuite extends SparkFunSuite {
 
@@ -76,12 +81,42 @@ class ChangelogTableSuite extends SparkFunSuite {
     table().validateRefresh(table())
   }
 
-  test("raw changelog refresh ignores references unused by post-processing") {
+  test("raw changelog refresh ignores metadata unused by post-processing") {
     val changed = properties.copy(
+      containsCarryoverRows = false,
+      containsIntermediateChanges = false,
+      representsUpdateAsDeleteAndInsert = false,
       rowIdNames = Seq("other_id"),
       rowVersionName = Some("other_version"))
     table(mode = DeduplicationMode.NONE, computeUpdates = false).validateRefresh(
       table(changed, mode = DeduplicationMode.NONE, computeUpdates = false))
+  }
+
+  test("carryover-only changelog refresh ignores unused intermediate and update metadata") {
+    val changed = properties.copy(
+      containsIntermediateChanges = false,
+      representsUpdateAsDeleteAndInsert = false)
+    table(mode = DeduplicationMode.DROP_CARRYOVERS, computeUpdates = false).validateRefresh(
+      table(
+        changed,
+        mode = DeduplicationMode.DROP_CARRYOVERS,
+        computeUpdates = false))
+  }
+
+  test("changelog refresh rejects newly invalid post-processing options") {
+    val withoutCarryovers = properties.copy(containsCarryoverRows = false)
+    val captured = table(
+      withoutCarryovers,
+      mode = DeduplicationMode.NONE,
+      computeUpdates = true)
+
+    checkError(
+      intercept[AnalysisException] {
+        captured.validateRefresh(
+          table(mode = DeduplicationMode.NONE, computeUpdates = true))
+      },
+      condition = "INVALID_CDC_OPTION.UPDATE_DETECTION_REQUIRES_CARRY_OVER_REMOVAL",
+      parameters = Map("changelogName" -> "changes"))
   }
 
   test("update-only changelog refresh ignores unused row-version references") {
@@ -109,5 +144,31 @@ class ChangelogTableSuite extends SparkFunSuite {
   test("unresolved changelog refresh permits metadata changes before post-processing") {
     table(resolved = false).validateRefresh(
       table(properties.copy(rowIdNames = Seq("other_id"))))
+  }
+
+  test("catalog-backed changelog relations compare by context, identifier, and options") {
+    val catalog = new InMemoryChangelogCatalog
+    catalog.initialize("catalog", CaseInsensitiveStringMap.empty())
+    val identifier = Identifier.of(Array("ns"), "table")
+    val options = new CaseInsensitiveStringMap(Map("state" -> "base").asJava)
+
+    def relation(
+        changelogTable: ChangelogTable = table(),
+        ident: Identifier = identifier,
+        relationOptions: CaseInsensitiveStringMap = options): DataSourceV2Relation = {
+      DataSourceV2Relation.create(
+        changelogTable, Some(catalog), Some(ident), relationOptions)
+    }
+
+    val base = relation()
+    val equivalent = relation()
+    assert(base.sameResult(equivalent))
+    assert(base.semanticHash() == equivalent.semanticHash())
+    assert(!base.sameResult(
+      relation(table(mode = DeduplicationMode.DROP_CARRYOVERS))))
+    assert(!base.sameResult(
+      relation(ident = Identifier.of(Array("ns"), "other_table"))))
+    assert(!base.sameResult(relation(
+      relationOptions = new CaseInsensitiveStringMap(Map("state" -> "other").asJava))))
   }
 }

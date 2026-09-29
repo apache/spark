@@ -126,6 +126,16 @@ case class DataSourceV2Relation(
     copy(output = output.map(_.newInstance()))
   }
 
+  override protected def doCanonicalize(): LogicalPlan = {
+    val canonicalized = super.doCanonicalize().asInstanceOf[DataSourceV2Relation]
+    canonicalized.table match {
+      case changelog: ChangelogTable
+          if canonicalized.catalog.isDefined && canonicalized.identifier.isDefined =>
+        canonicalized.copy(table = changelog.canonicalizedForPlanComparison)
+      case _ => canonicalized
+    }
+  }
+
   override lazy val metadataOutput: Seq[AttributeReference] = table match {
     case hasMeta: SupportsMetadataColumns =>
       metadataOutputWithOutConflicts(
