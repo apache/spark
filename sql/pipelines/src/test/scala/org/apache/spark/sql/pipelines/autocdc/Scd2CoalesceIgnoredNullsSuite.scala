@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.DataFrame
@@ -293,14 +294,8 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
       StructField("id", IntegerType, nullable = false),
       StructField("profile", profileType, nullable = false, profileMetadata)
     ))
-    val authoredMap = versionMap(
-      Seq("profile", "address", "city") -> true,
-      Seq("profile", "address", "zip") -> true,
-      Seq("profile", "note") -> true)
-    val unauthoredZipMap = versionMap(
-      Seq("profile", "address", "city") -> true,
-      Seq("profile", "address", "zip") -> false,
-      Seq("profile", "note") -> true)
+    val authoredMap = versionMap()
+    val unauthoredZipMap = versionMap(Seq("profile", "address", "zip") -> false)
     val input = targetTableOf(schema)(
       Row(1, Row(Row("city-1", "zip-1"), "note-1"),
         10L, null, cdcMetadata(10L, authoredMap)),
@@ -319,6 +314,35 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
         Row(1, Row(Row("city-2", "zip-1"), "note-2"),
           20L, null, cdcMetadata(20L, unauthoredZipMap))
       )
+    )
+  }
+
+  test("inheriting into a stored null struct fails when a non-nullable field is authored null") {
+    // Seq 20 stores profile = null, and its version map records profile.city as an authored null.
+    // profile.note was added by schema evolution, so it has no entry and inherits "note-1" from
+    // seq 10. Holding that inherited value requires a non-null profile struct, but city's
+    // authored null cannot be stored in a non-nullable field, so coalescing fails. This represents
+    // a schema misconfiguration issue, where the user is choosing a schema that simply cannot
+    // represent the coalesced result for this set and order of change events. This test locks in
+    // the error contract.
+    val profileType = new StructType()
+      .add("city", StringType, nullable = false)
+      .add("note", StringType)
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("profile", profileType)
+    val input = targetTableOf(schema)(
+      Row(1, Row("city-1", "note-1"), 10L, null, cdcMetadata(10L, versionMap())),
+      Row(1, null, 20L, null,
+        cdcMetadata(20L, versionMap(Seq("profile", "city") -> true)))
+    )
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        coalesce(input, includeColumns("profile")).collect()
+      },
+      condition = "NOT_NULL_ASSERT_VIOLATION",
+      parameters = Map("walkedTypePath" -> "\nprofile\ncity\n")
     )
   }
 
@@ -602,12 +626,12 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("coalescing is eventually consistent for existing rows when " +
-      "ignore-null selection changes") {
+  test("a wider affected window corrects stale carry-in after selection changes") {
     // Demonstrates the "Eventual consistency of the carry-in anchor" contract of
     // [[Scd2BatchProcessor.coalesceIgnoredNulls]]: a leaf temporarily dropped from the ignore-null
-    // selection is not reconciled, so a later narrow affected window propagates a stale carry-in
-    // until a wider window pulls in the authoring row.
+    // selection is not reconciled, so a later narrow affected window propagates a stale carry-in.
+    // A window that includes the authoring row corrects it; this test constructs that window
+    // directly rather than proving one will occur.
 
     // "other" is authored and non-null in every row, so coalescing never changes it. It exists
     // only so the selection can move off "value" without becoming an (invalid) empty list.
@@ -677,9 +701,9 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
     )
 
     // -- Correction -------------------------------------------------------------------
-    // A future batch's affected window expands to include seq 2. Now seq 2 is the
-    // first authored row in the window: its "new" propagates forward and the stale
-    // carry-in is corrected.
+    // Suppose a later batch's affected window includes seq 2. Now seq 2 is the first
+    // authored row in the window: its "new" propagates forward and the stale carry-in is
+    // corrected.
     val correctionInput = targetTableOf(schema)(
       Row(1, "new", "x", 2L, 3L, cdcMetadata(2L, emptyMap)),
       Row(1, "old", "x", 3L, 4L, cdcMetadata(3L, unauthoredMap)),
