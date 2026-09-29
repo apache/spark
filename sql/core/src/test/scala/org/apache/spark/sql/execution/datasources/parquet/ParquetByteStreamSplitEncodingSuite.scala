@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.nio.ByteBuffer
+import java.nio.{ByteBuffer, ByteOrder}
 import java.util.Random
 
 import scala.reflect.ClassTag
@@ -26,6 +26,7 @@ import org.apache.parquet.column.values.ValuesWriter
 import org.apache.parquet.column.values.bytestreamsplit.ByteStreamSplitValuesWriter._
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
+import org.scalactic.source.Position
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
@@ -80,6 +81,9 @@ abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFun
   /** A single representative value. */
   protected def singleTestValue: T
 
+  /** The little-endian bytes of a value, as a reader of any width assembles them. */
+  protected def toBytes(v: T): Array[Byte]
+
   /** Override for types that need bitwise comparison (Float, Double). */
   protected def assertEqual(expected: T, actual: T, msg: String): Unit = {
     assert(expected === actual, msg)
@@ -89,8 +93,9 @@ abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFun
 
   private def newReader(
       page: Array[Byte], count: Int,
-      useDirect: Boolean = false): VectorizedByteStreamSplitValuesReader = {
-    val reader = new VectorizedByteStreamSplitValuesReader(typeWidth)
+      useDirect: Boolean = false,
+      exactValueCount: Boolean = false): VectorizedByteStreamSplitValuesReader = {
+    val reader = new VectorizedByteStreamSplitValuesReader(typeWidth, exactValueCount)
     val buf = if (useDirect) {
       val b = ByteBuffer.allocateDirect(page.length)
       b.put(page); b.flip(); b
@@ -117,37 +122,64 @@ abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFun
 
   private type Reader = VectorizedByteStreamSplitValuesReader
   private type BatchOp = (Reader, Int, WritableColumnVector) => Unit
+  /** Checks the value at a row of the column vector against the little-endian bytes. */
+  private type Check = (WritableColumnVector, Int, Array[Byte]) => Unit
+
+  private def littleEndian(bytes: Array[Byte]): Long =
+    bytes.indices.map(i => (bytes(i) & 0xFFL) << (8 * i)).sum
+
+  private def checkBinary: Check = (c, i, b) => assert(c.getBinary(i).toSeq === b.toSeq)
 
   /**
    * Every batch read and skip of the reader that applies to this value width, with a column
-   * vector type it can write into. The 4-byte and 8-byte reads assemble exactly 4 and 8
-   * streams, so they only apply to pages of that width.
+   * vector type it can write into and, for reads, a check of the values it wrote. The 4-byte
+   * and 8-byte reads assemble exactly 4 and 8 streams, so they only apply to pages of that
+   * width.
    */
-  private lazy val batchOps: Seq[(String, DataType, BatchOp)] =
-    Seq[(String, DataType, Int, BatchOp)](
-      ("readBytes", ByteType, 4, (r, n, c) => r.readBytes(n, c, 0)),
-      ("readShorts", ShortType, 4, (r, n, c) => r.readShorts(n, c, 0)),
-      ("readIntegers", IntegerType, 4, (r, n, c) => r.readIntegers(n, c, 0)),
-      ("readIntegersAsLongs", LongType, 4, (r, n, c) => r.readIntegersAsLongs(n, c, 0)),
-      ("readIntegersAsDoubles", DoubleType, 4, (r, n, c) => r.readIntegersAsDoubles(n, c, 0)),
-      ("readFloats", FloatType, 4, (r, n, c) => r.readFloats(n, c, 0)),
-      ("readFloatsAsDoubles", DoubleType, 4, (r, n, c) => r.readFloatsAsDoubles(n, c, 0)),
-      ("readLongs", LongType, 8, (r, n, c) => r.readLongs(n, c, 0)),
-      ("readLongsAsInts", IntegerType, 8, (r, n, c) => r.readLongsAsInts(n, c, 0)),
-      ("readDoubles", DoubleType, 8, (r, n, c) => r.readDoubles(n, c, 0)),
-      ("readBinary", BinaryType, typeWidth, (r, n, c) => r.readBinary(n, c, 0)),
+  private lazy val batchOps: Seq[(String, DataType, BatchOp, Option[Check])] =
+    Seq[(String, DataType, Int, BatchOp, Option[Check])](
+      ("readBytes", ByteType, 4, (r, n, c) => r.readBytes(n, c, 0),
+        Some((c, i, b) => assert(c.getByte(i) === littleEndian(b).toByte))),
+      ("readShorts", ShortType, 4, (r, n, c) => r.readShorts(n, c, 0),
+        Some((c, i, b) => assert(c.getShort(i) === littleEndian(b).toShort))),
+      ("readIntegers", IntegerType, 4, (r, n, c) => r.readIntegers(n, c, 0),
+        Some((c, i, b) => assert(c.getInt(i) === littleEndian(b).toInt))),
+      ("readIntegersAsLongs", LongType, 4, (r, n, c) => r.readIntegersAsLongs(n, c, 0),
+        Some((c, i, b) => assert(c.getLong(i) === littleEndian(b).toInt.toLong))),
+      ("readIntegersAsDoubles", DoubleType, 4, (r, n, c) => r.readIntegersAsDoubles(n, c, 0),
+        Some((c, i, b) => assert(c.getDouble(i) === littleEndian(b).toInt.toDouble))),
+      ("readFloats", FloatType, 4, (r, n, c) => r.readFloats(n, c, 0),
+        Some((c, i, b) =>
+          assert(java.lang.Float.floatToRawIntBits(c.getFloat(i)) === littleEndian(b).toInt))),
+      ("readFloatsAsDoubles", DoubleType, 4, (r, n, c) => r.readFloatsAsDoubles(n, c, 0),
+        Some((c, i, b) => {
+          val expected = java.lang.Float.intBitsToFloat(littleEndian(b).toInt).toDouble
+          assert(java.lang.Double.doubleToRawLongBits(c.getDouble(i)) ===
+            java.lang.Double.doubleToRawLongBits(expected))
+        })),
+      ("readLongs", LongType, 8, (r, n, c) => r.readLongs(n, c, 0),
+        Some((c, i, b) => assert(c.getLong(i) === littleEndian(b)))),
+      ("readLongsAsInts", IntegerType, 8, (r, n, c) => r.readLongsAsInts(n, c, 0),
+        Some((c, i, b) => assert(c.getInt(i) === littleEndian(b).toInt))),
+      ("readDoubles", DoubleType, 8, (r, n, c) => r.readDoubles(n, c, 0),
+        Some((c, i, b) =>
+          assert(java.lang.Double.doubleToRawLongBits(c.getDouble(i)) === littleEndian(b)))),
+      ("readBinary", BinaryType, typeWidth, (r, n, c) => r.readBinary(n, c, 0),
+        Some(checkBinary)),
       ("readFixedLenByteArray", BinaryType, typeWidth,
-        (r, n, c) => r.readFixedLenByteArray(n, typeWidth, c, 0)),
-      ("skipBytes", ByteType, typeWidth, (r, n, _) => r.skipBytes(n)),
-      ("skipShorts", ShortType, typeWidth, (r, n, _) => r.skipShorts(n)),
-      ("skipIntegers", IntegerType, typeWidth, (r, n, _) => r.skipIntegers(n)),
-      ("skipLongs", LongType, typeWidth, (r, n, _) => r.skipLongs(n)),
-      ("skipFloats", FloatType, typeWidth, (r, n, _) => r.skipFloats(n)),
-      ("skipDoubles", DoubleType, typeWidth, (r, n, _) => r.skipDoubles(n)),
-      ("skipBinary", BinaryType, typeWidth, (r, n, _) => r.skipBinary(n)),
+        (r, n, c) => r.readFixedLenByteArray(n, typeWidth, c, 0), Some(checkBinary)),
+      ("skipBytes", ByteType, typeWidth, (r, n, _) => r.skipBytes(n), None),
+      ("skipShorts", ShortType, typeWidth, (r, n, _) => r.skipShorts(n), None),
+      ("skipIntegers", IntegerType, typeWidth, (r, n, _) => r.skipIntegers(n), None),
+      ("skipLongs", LongType, typeWidth, (r, n, _) => r.skipLongs(n), None),
+      ("skipFloats", FloatType, typeWidth, (r, n, _) => r.skipFloats(n), None),
+      ("skipDoubles", DoubleType, typeWidth, (r, n, _) => r.skipDoubles(n), None),
+      ("skipBinary", BinaryType, typeWidth, (r, n, _) => r.skipBinary(n), None),
       ("skipFixedLenByteArray", BinaryType, typeWidth,
-        (r, n, _) => r.skipFixedLenByteArray(n, typeWidth))
-    ).collect { case (name, dt, width, op) if width == typeWidth => (name, dt, op) }
+        (r, n, _) => r.skipFixedLenByteArray(n, typeWidth), None)
+    ).collect {
+      case (name, dt, width, op, check) if width == typeWidth => (name, dt, op, check)
+    }
 
   /** Every single-value read of the reader that applies to this value width. */
   private lazy val singleOps: Seq[(String, Reader => Any)] = Seq[(String, Int, Reader => Any)](
@@ -160,9 +192,11 @@ abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFun
     ("readBinary(len)", typeWidth, _.readBinary(typeWidth))
   ).collect { case (name, width, op) if width == typeWidth => (name, op) }
 
-  private def assertCorrupted(msg: String)(f: => Any): Unit = {
-    val e = intercept[ParquetDecodingException](f)
-    assert(e.getMessage.contains("Corrupted BYTE_STREAM_SPLIT page"), msg)
+  private def assertCorrupted(clue: String)(f: => Any)(implicit pos: Position): Unit = {
+    withClue(clue) {
+      val e = intercept[ParquetDecodingException](f)
+      assert(e.getMessage.contains("Corrupted BYTE_STREAM_SPLIT page"))
+    }
   }
 
   // --- tests ---
@@ -221,21 +255,26 @@ abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFun
   }
 
   test("batch reads and skips that end exactly at the end of the page") {
-    val data = Array.tabulate(10)(i => sequentialValue(i))
+    val data = Array.fill(10)(nextRandom)
     val page = encode(data)
-    for ((name, dt, op) <- batchOps) {
-      val cv = new OnHeapColumnVector(data.length, dt)
-      try {
-        val reader = newReader(page, data.length)
-        skipBatch(reader, 4)
-        op(reader, 6, cv)
-        // Nothing is left, but empty reads and skips are still allowed.
-        op(reader, 0, cv)
-        skipBatch(reader, 0)
-        readBatch(reader, 0, cv, 0)
-        assertCorrupted(name)(readSingle(reader))
-      } finally {
-        cv.close()
+    for ((name, dt, op, check) <- batchOps) {
+      withClue(name) {
+        val cv = new OnHeapColumnVector(data.length, dt)
+        try {
+          val reader = newReader(page, data.length)
+          skipBatch(reader, 4)
+          op(reader, 6, cv)
+          check.foreach { f =>
+            for (i <- 0 until 6) withClue(s"row $i")(f(cv, i, toBytes(data(4 + i))))
+          }
+          // Nothing is left, but empty reads and skips are still allowed.
+          op(reader, 0, cv)
+          skipBatch(reader, 0)
+          readBatch(reader, 0, cv, 0)
+          assertCorrupted(name)(readSingle(reader))
+        } finally {
+          cv.close()
+        }
       }
     }
   }
@@ -243,14 +282,20 @@ abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFun
   test("batch reads and skips past the end of the page fail") {
     val data = Array.tabulate(10)(i => sequentialValue(i))
     val page = encode(data)
-    for ((name, dt, op) <- batchOps) {
+    for ((name, dt, op, _) <- batchOps) {
       val cv = new OnHeapColumnVector(data.length, dt)
       try {
         assertCorrupted(name)(op(newReader(page, data.length), 11, cv))
         val reader = newReader(page, data.length)
         skipBatch(reader, 4)
         assertCorrupted(name)(op(reader, 7, cv))
-        assertCorrupted(name)(op(newReader(page, data.length), -1, cv))
+        // offset + total would overflow to a negative number.
+        val reader2 = newReader(page, data.length)
+        skipBatch(reader2, 1)
+        assertCorrupted(name)(op(reader2, Int.MaxValue, cv))
+        withClue(name) {
+          intercept[IllegalArgumentException](op(newReader(page, data.length), -1, cv))
+        }
       } finally {
         cv.close()
       }
@@ -288,12 +333,17 @@ abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFun
   }
 
   test("more encoded values than the page value count fails") {
-    val data = Array.tabulate(10)(i => sequentialValue(i))
-    assertCorrupted("page value count 9")(newReader(encode(data), data.length - 1))
+    val page = encode(Array.tabulate(10)(i => sequentialValue(i)))
+    for (exact <- Seq(false, true)) {
+      assertCorrupted(s"exactValueCount = $exact") {
+        newReader(page, 9, exactValueCount = exact)
+      }
+    }
   }
 
   test("fewer encoded values than the page value count (nulls) is allowed") {
-    // For a nullable column the page value count includes nulls, which are not encoded.
+    // For a column with definition levels the page value count includes nulls, which are
+    // not encoded.
     val data = Array.tabulate(10)(i => sequentialValue(i))
     val reader = newReader(encode(data), data.length + 5)
     val cv = new OnHeapColumnVector(data.length, sparkType)
@@ -304,6 +354,24 @@ abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFun
     } finally {
       cv.close()
     }
+  }
+
+  test("fewer encoded values than the exact page value count fails") {
+    // Without definition levels every row has a value, so the page value count is exact.
+    val data = Array.tabulate(10)(i => sequentialValue(i))
+    val page = encode(data)
+    assertCorrupted("one value short")(newReader(page, 11, exactValueCount = true))
+    assertCorrupted("empty page")(newReader(Array.emptyByteArray, 1, exactValueCount = true))
+
+    val reader = newReader(page, data.length, exactValueCount = true)
+    val cv = new OnHeapColumnVector(data.length, sparkType)
+    try {
+      readBatch(reader, data.length, cv, 0)
+      for (i <- data.indices) assertEqual(data(i), getFromVector(cv, i), s"mismatch at $i")
+    } finally {
+      cv.close()
+    }
+    newReader(Array.emptyByteArray, 0, exactValueCount = true)
   }
 
   test("empty page") {
@@ -335,6 +403,9 @@ private object BssWriterHelper {
 
 class ParquetByteStreamSplitEncodingIntegerSuite
     extends ParquetByteStreamSplitEncodingSuite[Int] {
+
+  override protected def toBytes(v: Int): Array[Byte] =
+    ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(v).array()
 
   override protected def typeWidth: Int = 4
   override protected def sparkType: DataType = IntegerType
@@ -370,6 +441,9 @@ class ParquetByteStreamSplitEncodingIntegerSuite
 class ParquetByteStreamSplitEncodingLongSuite
     extends ParquetByteStreamSplitEncodingSuite[Long] {
 
+  override protected def toBytes(v: Long): Array[Byte] =
+    ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(v).array()
+
   override protected def typeWidth: Int = 8
   override protected def sparkType: DataType = LongType
 
@@ -403,6 +477,9 @@ class ParquetByteStreamSplitEncodingLongSuite
 
 class ParquetByteStreamSplitEncodingFloatSuite
     extends ParquetByteStreamSplitEncodingSuite[Float] {
+
+  override protected def toBytes(v: Float): Array[Byte] =
+    ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putFloat(v).array()
 
   override protected def typeWidth: Int = 4
   override protected def sparkType: DataType = FloatType
@@ -445,6 +522,9 @@ class ParquetByteStreamSplitEncodingFloatSuite
 class ParquetByteStreamSplitEncodingDoubleSuite
     extends ParquetByteStreamSplitEncodingSuite[Double] {
 
+  override protected def toBytes(v: Double): Array[Byte] =
+    ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putDouble(v).array()
+
   override protected def typeWidth: Int = 8
   override protected def sparkType: DataType = DoubleType
 
@@ -480,6 +560,52 @@ class ParquetByteStreamSplitEncodingDoubleSuite
   override protected def assertEqual(expected: Double, actual: Double, msg: String): Unit = {
     assert(java.lang.Double.doubleToRawLongBits(expected) ===
       java.lang.Double.doubleToRawLongBits(actual), msg)
+  }
+}
+
+/** Runs the shared test matrix for FIXED_LEN_BYTE_ARRAY with an odd width. */
+class ParquetByteStreamSplitEncodingFLBAWidth5Suite
+    extends ParquetByteStreamSplitEncodingSuite[Array[Byte]] {
+
+  override protected def typeWidth: Int = 5
+  override protected def sparkType: DataType = BinaryType
+  override protected def toBytes(v: Array[Byte]): Array[Byte] = v
+
+  override protected def encode(data: Array[Array[Byte]]): Array[Byte] =
+    BssWriterHelper.encode(
+      new FixedLenByteArrayByteStreamSplitValuesWriter(
+        typeWidth, data.length, data.length * typeWidth, new DirectByteBufferAllocator())
+    )(w => data.foreach(b => w.writeBytes(Binary.fromConstantByteArray(b))))
+
+  override protected def readBatch(
+      r: VectorizedByteStreamSplitValuesReader,
+      total: Int, cv: WritableColumnVector, rowId: Int): Unit =
+    r.readFixedLenByteArray(total, typeWidth, cv, rowId)
+
+  override protected def skipBatch(
+      r: VectorizedByteStreamSplitValuesReader, total: Int): Unit =
+    r.skipFixedLenByteArray(total, typeWidth)
+
+  override protected def readSingle(r: VectorizedByteStreamSplitValuesReader): Array[Byte] =
+    r.readBinary(typeWidth).getBytes
+
+  override protected def getFromVector(cv: WritableColumnVector, rowId: Int): Array[Byte] =
+    cv.getBinary(rowId)
+
+  override protected def nextRandom: Array[Byte] = {
+    val b = new Array[Byte](typeWidth); random.nextBytes(b); b
+  }
+  override protected def sequentialValue(i: Int): Array[Byte] =
+    ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(i * 7L).array()
+      .take(typeWidth)
+  override protected def extremeValues: Array[Array[Byte]] = Array(
+    Array.fill[Byte](typeWidth)(0), Array.fill[Byte](typeWidth)(-1),
+    Array.fill[Byte](typeWidth)(Byte.MinValue), Array.fill[Byte](typeWidth)(Byte.MaxValue))
+  override protected def singleTestValue: Array[Byte] = Array[Byte](1, 2, 3, 4, 5)
+
+  override protected def assertEqual(
+      expected: Array[Byte], actual: Array[Byte], msg: String): Unit = {
+    assert(expected.toSeq === actual.toSeq, msg)
   }
 }
 
@@ -628,49 +754,6 @@ class ParquetByteStreamSplitEncodingFLBASuite extends SparkFunSuite {
       for (i <- 0 until 50) {
         assert(cv.getBinary(20 + i).toSeq === data(50 + i).toSeq, s"mismatch at index ${50 + i}")
       }
-    } finally {
-      cv.close()
-    }
-  }
-
-  test("FLBA reads and skips past the end of the page fail - odd width 5") {
-    val typeWidth = 5
-    val data = Array.fill(10)(Array.fill(typeWidth)(random.nextInt(256).toByte))
-    val page = writeFLBA(data, typeWidth)
-    def newReader(
-        p: Array[Byte] = page,
-        count: Int = data.length): VectorizedByteStreamSplitValuesReader = {
-      val reader = new VectorizedByteStreamSplitValuesReader(typeWidth)
-      reader.initFromPage(count, ByteBufferInputStream.wrap(ByteBuffer.wrap(p)))
-      reader
-    }
-    def assertCorrupted(f: => Any): Unit = {
-      val e = intercept[ParquetDecodingException](f)
-      assert(e.getMessage.contains("Corrupted BYTE_STREAM_SPLIT page"))
-    }
-    val cv = new OnHeapColumnVector(data.length, BinaryType)
-    try {
-      // Exact fit: skip 4, read the remaining 6 in a batch.
-      val reader = newReader()
-      reader.skipFixedLenByteArray(4, typeWidth)
-      reader.readFixedLenByteArray(6, typeWidth, cv, 0)
-      for (i <- 0 until 6) {
-        assert(cv.getBinary(i).toSeq === data(4 + i).toSeq, s"mismatch at index ${4 + i}")
-      }
-      assertCorrupted(reader.readBinary(typeWidth))
-      assertCorrupted(reader.skipFixedLenByteArray(1, typeWidth))
-
-      assertCorrupted(newReader().readFixedLenByteArray(11, typeWidth, cv, 0))
-      assertCorrupted(newReader().skipFixedLenByteArray(11, typeWidth))
-      val r2 = newReader()
-      r2.skipFixedLenByteArray(9, typeWidth)
-      assert(r2.readBinary(typeWidth).getBytes.toSeq === data(9).toSeq)
-      assertCorrupted(r2.readBinary(typeWidth))
-
-      for (extra <- 1 until typeWidth) {
-        assertCorrupted(newReader(page ++ Array.fill[Byte](extra)(1), 11))
-      }
-      assertCorrupted(newReader(count = data.length - 1))
     } finally {
       cv.close()
     }

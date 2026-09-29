@@ -193,4 +193,35 @@ class ParquetColumnIndexSuite extends ParquetTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-59831: reading unaligned pages - BYTE_STREAM_SPLIT") {
+    // BYTE_STREAM_SPLIT is enabled for the floating point columns, whose pages are split by
+    // size. The pages of _1 are split by size with v1 pages, where it is PLAIN encoded, and by
+    // row count with v2 pages, where its DELTA_BINARY_PACKED values are tiny. Either way they
+    // are unaligned with the BYTE_STREAM_SPLIT pages, so the rows outside the row ranges are
+    // skipped within those pages. _2 and _3 are required, and _4 and _5 have nulls.
+    val df = spark.range(0, 2000).selectExpr(
+      "id as _1",
+      "cast(id as float) as _2",
+      "cast(id as double) as _3",
+      "if(id >= 400 and id < 450, null, cast(id as float)) as _4",
+      "if(id % 3 = 0, null, cast(id as double)) as _5")
+    Seq("PARQUET_1_0", "PARQUET_2_0").foreach { version =>
+      withTempPath { file =>
+        df.coalesce(1)
+          .write
+          .option("parquet.writer.version", version)
+          .option("parquet.enable.dictionary", "false")
+          .option("parquet.enable.bytestreamsplit", "true")
+          .option("parquet.page.size", "1024")
+          .option("parquet.page.row.count.limit", "500")
+          .parquet(file.getCanonicalPath)
+
+        val parquetDf = spark.read.parquet(file.getCanonicalPath)
+        actions.foreach { action =>
+          checkAnswer(action(parquetDf), action(df))
+        }
+      }
+    }
+  }
 }

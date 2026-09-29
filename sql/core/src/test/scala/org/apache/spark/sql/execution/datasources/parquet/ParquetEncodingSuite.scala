@@ -454,6 +454,101 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
     }
   }
 
+  test("SPARK-59831: BYTE_STREAM_SPLIT round-trip with v1 and v2 pages, nulls and arrays") {
+    // Required columns (max definition level 0) exercise the exact page value count check,
+    // and optional and repeated columns the upper bound check, on many pages of both page
+    // versions.
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int32 int_col;
+        |  required int64 long_col;
+        |  required float float_col;
+        |  required double double_col;
+        |  required fixed_len_byte_array(5) flba_col;
+        |  optional int32 int_nullable;
+        |  optional double double_nullable;
+        |  optional group arr (LIST) {
+        |    repeated group list {
+        |      optional float element;
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+    val size = 5000
+    def flba(i: Int): Array[Byte] = {
+      val v = i * 7919L
+      Array.tabulate[Byte](5)(b => (v >> (8 * b)).toByte)
+    }
+    def arr(i: Int): Seq[java.lang.Float] = i % 7 match {
+      case 0 => null
+      case 1 => Seq.empty
+      case _ => Seq(i * 0.25f, if (i % 2 == 0) null else -i * 0.25f)
+    }
+    val expected = (0 until size).map { i =>
+      Row(i * 7919, i * 1000003L * (if (i % 2 == 0) 1 else -1), i * 0.1f, i * -0.001, flba(i),
+        if (i % 3 == 0) null else i * 7, if (i % 5 == 0) null else i * 0.5, arr(i))
+    }
+
+    Seq(ParquetProperties.WriterVersion.PARQUET_1_0,
+        ParquetProperties.WriterVersion.PARQUET_2_0).foreach { version =>
+      withTempDir { dir =>
+        val path = new Path(dir.toURI.toString, "bss.parquet")
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val builder = ExampleParquetWriter.builder(path)
+          .withType(schema)
+          .withDictionaryEncoding(false)
+          .withPageRowCountLimit(300)
+          .withWriterVersion(version)
+          .withConf(hadoopConf)
+        schema.getColumns.asScala.foreach { column =>
+          builder.withByteStreamSplitEncoding(column.getPath.mkString("."), true)
+        }
+        val writer = builder.build()
+        try {
+          (0 until size).foreach { i =>
+            val record = new SimpleGroup(schema)
+            record.add("int_col", i * 7919)
+            record.add("long_col", i * 1000003L * (if (i % 2 == 0) 1 else -1))
+            record.add("float_col", i * 0.1f)
+            record.add("double_col", i * -0.001)
+            record.add("flba_col", Binary.fromConstantByteArray(flba(i)))
+            if (i % 3 != 0) record.add("int_nullable", i * 7)
+            if (i % 5 != 0) record.add("double_nullable", i * 0.5)
+            val values = arr(i)
+            if (values != null) {
+              val list = record.addGroup("arr")
+              values.foreach { v =>
+                val element = list.addGroup("list")
+                if (v != null) element.add("element", v.floatValue())
+              }
+            }
+            writer.write(record)
+          }
+        } finally {
+          writer.close()
+        }
+
+        val footer = readAllFootersWithoutSummaryFiles(
+          path.getParent, hadoopConf).head.getParquetMetadata
+        val columnChunks = footer.getBlocks.asScala.head.getColumns.asScala
+        assert(columnChunks.length === 8)
+        columnChunks.foreach { chunk =>
+          assert(chunk.getEncodings.contains(Encoding.BYTE_STREAM_SPLIT),
+            s"Column ${chunk.getPath} should use BYTE_STREAM_SPLIT encoding")
+        }
+
+        withMemoryModes { offHeapMode =>
+          withSQLConf(
+            SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapMode,
+            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+            SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+            checkAnswer(spark.read.parquet(path.toString), expected)
+          }
+        }
+      }
+    }
+  }
+
   test("PLAIN-encoded FIXED_LEN_BYTE_ARRAY round-trip (dictionary disabled)") {
     // Regression test: the FixedLenByteArrayUpdater batch read path must not use
     // the length-prefixed readBinary(total, c, rowId) method which is designed for
