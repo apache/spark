@@ -263,6 +263,9 @@ private[spark] object Config extends Logging {
         "DISK_USED policy chooses an executor with the biggest used disk size. " +
         "ACTIVE_TASKS policy chooses an executor with the smallest number of active tasks. " +
         "If there is a tie, it chooses an executor with the smallest add-time. " +
+        "It is recommended to use it with " +
+        "spark.kubernetes.executor.minTasksPerExecutorBeforeRolling " +
+        "because newly started executors usually have no active tasks. " +
         "OUTLIER policy chooses an executor with outstanding statistics which is bigger than" +
         "at least two standard deviation from the mean in average task time, " +
         "total task time, total task GC time, and the number of failed tasks if exists. " +

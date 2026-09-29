@@ -136,6 +136,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
       case ExecutorRollPolicy.DISK_USED =>
         listWithoutDriver.sortBy(_.diskUsed).reverse
       case ExecutorRollPolicy.ACTIVE_TASKS =>
+        // Active task counts often tie (e.g., all busy or all idle), so break ties by add-time.
         listWithoutDriver.sortBy(e => (e.activeTasks, e.addTime.getTime))
       case ExecutorRollPolicy.OUTLIER =>
         // If there is no outlier we fallback to TOTAL_DURATION policy.
