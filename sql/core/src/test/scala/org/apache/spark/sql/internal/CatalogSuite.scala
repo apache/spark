@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.classic.Catalog
 import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableSessionCatalog}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, InMemoryBaseTable, InMemoryCatalog, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1199,6 +1199,32 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val props = spark.catalog.getTableProperties(t).asScala.toMap
     assert(props.get("catalog_api_ext_k").contains("catalog_api_ext_v"))
     spark.catalog.dropTable(t)
+  }
+
+  test("catalog API: getTableProperties includes V2 display-only properties") {
+    val catalogName = "display_catalog"
+    withSQLConf(s"spark.sql.catalog.$catalogName" -> classOf[InMemoryCatalog].getName) {
+      val t = s"$catalogName.ns.table"
+      withTable(t) {
+        sql(s"CREATE TABLE $t (id INT) USING _ TBLPROPERTIES ('persisted' = 'stored')")
+        val catalog = spark.sessionState.catalogManager.catalog(catalogName).asTableCatalog
+        val table = catalog.loadTable(Identifier.of(Array("ns"), "table"))
+          .asInstanceOf[InMemoryBaseTable]
+        table.setDisplayProperties(Map(
+          "catalog-label" -> "catalog-value",
+          "persisted" -> "display-value",
+          TableCatalog.PROP_EXTERNAL -> "true",
+          TableCatalog.PROP_COMMENT -> "display comment").asJava)
+
+        assert(spark.catalog.getTableProperties(t).asScala.toMap ===
+          Map("catalog-label" -> "catalog-value", "persisted" -> "stored"))
+        assert(spark.catalog.getTable(t).tableType === "MANAGED")
+        assert(spark.catalog.getTable(t).description == null)
+        val ddl = spark.catalog.getCreateTableString(t)
+        assert(ddl.contains("'persisted' = 'stored'"))
+        assert(!ddl.contains("catalog-label"))
+      }
+    }
   }
 
   test("catalog API: getCreateTableString") {

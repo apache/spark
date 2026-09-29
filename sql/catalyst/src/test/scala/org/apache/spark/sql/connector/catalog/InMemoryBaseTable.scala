@@ -87,33 +87,25 @@ abstract class InMemoryBaseTable(
     tableColumns = newColumns
   }
 
-  override def version(): String = tableVersion.toString
-
   override def displayProperties(): util.Map[String, String] = {
-    Option(tableDisplayProperties).getOrElse(properties)
+    Option(tableDisplayProperties).getOrElse(super.displayProperties())
   }
 
   def setDisplayProperties(displayProperties: util.Map[String, String]): Unit = {
-    tableDisplayProperties = displayProperties
+    tableDisplayProperties = new util.HashMap[String, String](displayProperties)
   }
+
+  override def version(): String = tableVersion.toString
 
   def setVersion(version: String): Unit = {
     tableVersion = version.toInt
   }
 
   /**
-   * Copies version and validated version from another table.
-   *
-   * Some test catalogs (e.g. [[NullColumnIdInMemoryTableCatalog]],
-   * [[NullTableIdAndNullColumnIdInMemoryTableCatalog]]) create a new table object
-   * that overrides specific behavior (such as nulling out column IDs). The new
-   * object's version counter starts at 0. Without this call, the version counter
-   * resets every time the catalog creates such a replacement table, breaking the
-   * monotonic-version assumption that downstream consumers rely on (e.g.
-   * [[InMemoryTable]].copy, validated-version propagation, and the join-refresh
-   * tests in [[DSv2IncrementallyConstructedQueryTests]]).
+   * Copies version, validated version and display-only metadata into a replacement table.
    */
-  def setVersionAndValidatedVersionFrom(sourceTable: InMemoryBaseTable): Unit = {
+  def copyTableStateFrom(sourceTable: InMemoryBaseTable): Unit = {
+    setDisplayProperties(sourceTable.displayProperties())
     setVersion(sourceTable.version())
     if (sourceTable.validatedVersion() != null) {
       setValidatedVersion(sourceTable.validatedVersion())

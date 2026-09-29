@@ -168,8 +168,11 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   }
 
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
-    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
+    val table = createTable(
+      ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
       Distributions.unspecified(), Array.empty, None, None, tableInfo.constraints())
+    table.asInstanceOf[InMemoryBaseTable].setDisplayProperties(tableInfo.displayProperties())
+    table
   }
 
   // scalastyle:off argcount
@@ -276,6 +279,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
           s"Unsupported InMemoryBaseTable subclass: ${other.getClass.getName}")
     }
     newTable.setVersion(currentVersion)
+    newTable.setDisplayProperties(table.displayProperties())
     changes.foreach {
       case a: TableChange.AddConstraint =>
         newTable.setValidatedVersion(a.validatedTableVersion())

@@ -31,11 +31,8 @@ case class ShowTablePropertiesExec(
     propertyKey: Option[String]) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
-    import scala.jdk.CollectionConverters._
-
     // The reserved properties are accessible through DESCRIBE
-    val properties = conf.redactOptions(catalogTable.displayProperties.asScala.toMap)
-      .filter { case (k, _) => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(k) }
+    val properties = conf.redactOptions(CatalogV2Util.tablePropertiesForDisplay(catalogTable))
     propertyKey match {
       case Some(p) =>
         val propValue = properties

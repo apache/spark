@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import java.util
+
 import scala.collection.mutable
 
 import org.mockito.ArgumentCaptor
@@ -34,6 +36,29 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CatalogV2UtilSuite extends SparkFunSuite {
+
+  test("tablePropertiesForDisplay preserves properties when a mock has no display properties") {
+    val table = mock(classOf[Table])
+    when(table.properties()).thenReturn(util.Map.of(
+      "persisted", "stored", TableCatalog.PROP_EXTERNAL, "true"))
+
+    assert(CatalogV2Util.tablePropertiesForDisplay(table) === Map("persisted" -> "stored"))
+  }
+
+  test("tablePropertiesForDisplay ignores reserved display keys and preserves stored values") {
+    val displayProperties = new util.HashMap[String, String]()
+    CatalogV2Util.TABLE_RESERVED_PROPERTIES.foreach(displayProperties.put(_, "display-value"))
+    displayProperties.put("persisted", "display-value")
+    displayProperties.put("catalog-label", "catalog-value")
+    val table = new DelegatingTable(new TableInfo.Builder()
+      .withProperties(util.Map.of("persisted", "stored"))
+      .withDisplayProperties(displayProperties)
+      .build(), "table")
+
+    assert(CatalogV2Util.tablePropertiesForDisplay(table) ===
+      Map("persisted" -> "stored", "catalog-label" -> "catalog-value"))
+    assert(table.properties() === util.Map.of("persisted", "stored"))
+  }
 
   private def catalogWithStateOptions(keys: java.util.Set[String]): TableCatalog = {
     val catalog = mock(classOf[TableCatalog])

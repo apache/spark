@@ -383,6 +383,12 @@ class Catalog:
 
         .. versionadded:: 4.2.0
 
+        Notes
+        -----
+        For V2 tables, this includes catalog-provided display-only properties. These entries
+        may be transient and unsuitable for copying into ``CREATE TABLE`` or ``ALTER TABLE``.
+        Use :meth:`getCreateTableString` to obtain the table's DDL.
+
         Parameters
         ----------
         tableName : str

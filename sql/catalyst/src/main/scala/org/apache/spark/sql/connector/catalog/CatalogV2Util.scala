@@ -677,6 +677,12 @@ private[sql] object CatalogV2Util {
     builder
   }
 
+  /** Returns non-reserved table properties with additional display-only metadata. */
+  def tablePropertiesForDisplay(table: Table): Map[String, String] = {
+    (table.displayProperties().asScala.toMap ++ table.properties().asScala)
+      .filterNot { case (key, _) => TABLE_RESERVED_PROPERTIES.contains(key) }
+  }
+
   def convertTableProperties(t: TableSpec): Map[String, String] = {
     val props = convertTableProperties(
       t.properties, t.options, t.serde, t.location, t.comment,

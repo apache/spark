@@ -846,6 +846,10 @@ abstract class Catalog {
   /**
    * Returns all table properties as a map (same as `SHOW TBLPROPERTIES`).
    *
+   * For V2 tables, this includes catalog-provided display-only properties. These entries may be
+   * transient and unsuitable for copying into `CREATE TABLE` or `ALTER TABLE`. Use
+   * `getCreateTableString` to obtain the table's DDL.
+   *
    * @param tableName
    *   table or view name; may be qualified with catalog and database (namespace).
    * @since 4.2.0

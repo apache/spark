@@ -71,6 +71,7 @@ class InMemoryRowLevelOperationTableCatalog
     val schema = CatalogV2Util.v2ColumnsToStructType(tableInfo.columns)
     val table = new InMemoryRowLevelOperationTable(
       tableName, schema, tableInfo.partitions, tableInfo.properties, tableInfo.constraints())
+    table.setDisplayProperties(tableInfo.displayProperties())
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
@@ -99,7 +100,7 @@ class InMemoryRowLevelOperationTableCatalog
       constraints = constraints,
       tableId = table.id)
     newTable.alterTableWithData(table.data, schema)
-    newTable.setVersionAndValidatedVersionFrom(table)
+    newTable.copyTableStateFrom(table)
 
     tables.put(ident, newTable)
 
@@ -141,7 +142,7 @@ class PartialSchemaEvolutionCatalog extends InMemoryRowLevelOperationTableCatalo
       properties = properties,
       constraints = table.constraints)
     newTable.alterTableWithData(table.data, table.schema)
-    newTable.setVersionAndValidatedVersionFrom(table)
+    newTable.copyTableStateFrom(table)
     tables.put(ident, newTable)
     newTable
   }

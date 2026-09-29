@@ -77,6 +77,50 @@ class CatalogSuite extends SparkFunSuite {
     assert(loaded.getClass == catalog.getClass)
   }
 
+  test("TableInfo and DelegatingTable carry display-only properties separately") {
+    val displayProperties = new util.HashMap[String, String]()
+    displayProperties.put("catalog-label", "catalog-value")
+    val info = new TableInfo.Builder()
+      .withProperties(util.Map.of("persisted", "stored"))
+      .withDisplayProperties(displayProperties)
+      .build()
+    displayProperties.put("catalog-label", "changed")
+    val table = new DelegatingTable(info, "table")
+
+    assert(table.displayProperties() === util.Map.of("catalog-label", "catalog-value"))
+    assert(table.properties() === util.Map.of("persisted", "stored"))
+    intercept[UnsupportedOperationException] {
+      table.displayProperties().put("catalog-label", "changed")
+    }
+    val defaultTable = new DelegatingTable(new TableInfo.Builder().build(), "default")
+    assert(defaultTable.displayProperties().isEmpty)
+  }
+
+  gridTest("display properties survive copies, pinning and alterations")(
+      Seq("copyOnLoad", "rowLevel")) { mode =>
+    val catalog = if (mode == "rowLevel") {
+      new InMemoryRowLevelOperationTableCatalog
+    } else {
+      new InMemoryTableCatalog
+    }
+    catalog.initialize("test", new CaseInsensitiveStringMap(util.Map.of("copyOnLoad", "true")))
+    val table = catalog.createTable(testIdent, new TableInfo.Builder()
+      .withColumns(columns)
+      .withProperties(util.Map.of("persisted", "stored"))
+      .withDisplayProperties(util.Map.of("catalog-label", "catalog-value"))
+      .build())
+    val loaded = catalog.loadTable(testIdent)
+    assert(loaded ne table)
+    assert(loaded.displayProperties() === util.Map.of("catalog-label", "catalog-value"))
+    catalog.pinTable(testIdent, "snapshot")
+
+    catalog.alterTable(testIdent, TableChange.setProperty("persisted", "updated"))
+    assert(CatalogV2Util.tablePropertiesForDisplay(catalog.loadTable(testIdent)) ===
+      Map("persisted" -> "updated", "catalog-label" -> "catalog-value"))
+    assert(CatalogV2Util.tablePropertiesForDisplay(catalog.loadTable(testIdent, "snapshot")) ===
+      Map("persisted" -> "stored", "catalog-label" -> "catalog-value"))
+  }
+
   test("listTables") {
     val catalog = newCatalog()
     val ident1 = Identifier.of(Array("ns"), "test_table_1")
