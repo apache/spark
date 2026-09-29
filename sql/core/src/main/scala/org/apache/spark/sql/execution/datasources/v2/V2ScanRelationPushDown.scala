@@ -1021,7 +1021,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         pushedFilters = sHolder.pushedFilterExpressions,
         // The one site that grants mergeability: a plain scan carrying only reproducible pushdowns
         // (column pruning + deterministic filters) may be fused. See hasBlockingPushdown.
-        mergeableScan = !hasBlockingPushdown(sHolder))
+        mergeableScan = !hasBlockingPushdown(sHolder),
+        propagatesTableDistinctKeys = sHolder.pushedSample.forall(!_.withReplacement))
 
       val finalFilters = normalizedFilters.map(projectionFunc)
       // bottom-most filters are put in the left of the list.

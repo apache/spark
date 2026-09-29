@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils
 
 class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDLCommandTestUtils {
@@ -125,6 +126,26 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
       assert(constraint.name() == "pk1")
       assert(constraint.toDDL ==
         "CONSTRAINT pk1 PRIMARY KEY (id1, id2) NOT ENFORCED NORELY")
+    }
+  }
+
+  test("RELY primary key eliminates redundant DISTINCT") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id bigint, CONSTRAINT pk PRIMARY KEY (id) RELY) $defaultUsing")
+
+      val optimizedPlan = sql(s"SELECT DISTINCT id FROM $t").queryExecution.optimizedPlan
+
+      assert(!optimizedPlan.exists(_.isInstanceOf[Aggregate]), optimizedPlan.toString)
+    }
+  }
+
+  test("NORELY primary key does not eliminate DISTINCT") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id bigint, CONSTRAINT pk PRIMARY KEY (id)) $defaultUsing")
+
+      val optimizedPlan = sql(s"SELECT DISTINCT id FROM $t").queryExecution.optimizedPlan
+
+      assert(optimizedPlan.exists(_.isInstanceOf[Aggregate]), optimizedPlan.toString)
     }
   }
 }

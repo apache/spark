@@ -23,6 +23,7 @@ import org.apache.spark.sql.connector.catalog.{
   InMemoryTableWithLegacyJoinAndSampleCatalog,
   InMemoryTableWithLegacyTableSampleCatalog,
   InMemoryTableWithTableSampleCatalog}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
 
 class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
@@ -62,6 +63,26 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
     withSampleTable { table =>
       val df = sql(s"SELECT * FROM $table TABLESAMPLE (50 PERCENT)")
       checkSamplePushed(df, pushed = true)
+    }
+  }
+
+  test("pushed samples preserve primary keys only without replacement") {
+    registerCatalog(sampleCatalog, classOf[InMemoryTableWithTableSampleCatalog])
+    val tableName = s"$sampleCatalog.ns.pk_sample_tbl"
+    sql(s"CREATE TABLE $tableName (id bigint, data string, " +
+      s"CONSTRAINT pk PRIMARY KEY (id) RELY) USING _")
+    try {
+      def scan(df: org.apache.spark.sql.DataFrame): DataSourceV2ScanRelation = {
+        df.queryExecution.optimizedPlan
+          .collectFirst { case relation: DataSourceV2ScanRelation => relation }.get
+      }
+
+      val table = spark.table(tableName)
+      assert(scan(table).distinctKeys.nonEmpty)
+      assert(scan(table.sample(withReplacement = false, fraction = 0.5)).distinctKeys.nonEmpty)
+      assert(scan(table.sample(withReplacement = true, fraction = 1.0)).distinctKeys.isEmpty)
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $tableName")
     }
   }
 

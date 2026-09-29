@@ -22,7 +22,7 @@ import java.util.{Collections, Optional, OptionalLong}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, SortOrder, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, ExpressionSet, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
@@ -32,6 +32,8 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.{fromAttributes, toAttr
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
+import org.apache.spark.sql.connector.catalog.constraints.{Constraint, PrimaryKey}
+import org.apache.spark.sql.connector.catalog.constraints.Constraint.ValidationStatus
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
@@ -122,6 +124,9 @@ case class DataSourceV2Relation(
 
   import DataSourceV2Implicits._
 
+  override protected[sql] lazy val knownDistinctKeys: Set[ExpressionSet] =
+    DataSourceV2Relation.trustedPrimaryKeys(table, output)
+
   override def newInstance(): DataSourceV2Relation = {
     copy(output = output.map(_.newInstance()))
   }
@@ -188,7 +193,23 @@ case class DataSourceV2ScanRelation(
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None,
     pushedFilters: Seq[Expression] = Seq.empty,
-    mergeableScan: Boolean = false) extends LeafNode with NamedRelation {
+    mergeableScan: Boolean = false,
+    propagatesTableDistinctKeys: Boolean = false) extends LeafNode with NamedRelation {
+
+  override protected[sql] lazy val knownDistinctKeys: Set[ExpressionSet] = {
+    if (propagatesTableDistinctKeys) {
+      val relationDataTypes = AttributeMap(relation.output.map(a => a -> a.dataType))
+      DataSourceV2Relation.trustedPrimaryKeys(relation.table, output).filter { key =>
+        key.forall {
+          case attribute: Attribute =>
+            relationDataTypes.get(attribute).contains(attribute.dataType)
+          case _ => false
+        }
+      }
+    } else {
+      Set.empty
+    }
+  }
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).
@@ -465,6 +486,43 @@ object DataSourceV2Relation {
 
   private val EMPTY_V2_COLUMN_STATS =
     Collections.emptyMap[NamedReference, ColumnStatistics]()
+
+  private[v2] def trustedPrimaryKeys(
+      table: Table,
+      output: Seq[Attribute]): Set[ExpressionSet] = {
+    Option(table.constraints()).toSeq.flatten.collect {
+      case primaryKey: PrimaryKey if isTrusted(primaryKey) => primaryKey
+    }.flatMap { primaryKey =>
+      val columns = primaryKey.columns()
+      val fieldNames = Option(columns).toSeq.flatten.map { column =>
+        Option(column).flatMap(c => Option(c.fieldNames())).collect {
+          case Array(fieldName) if fieldName != null => fieldName
+        }
+      }
+      if (fieldNames.isEmpty || fieldNames.exists(_.isEmpty)) {
+        None
+      } else {
+        val resolvedColumns = fieldNames.flatten.map { fieldName =>
+          val matches = output.filter(attr => SQLConf.get.resolver(attr.name, fieldName))
+          matches match {
+            case Seq(attribute) => Some(attribute)
+            case _ => None
+          }
+        }
+        if (resolvedColumns.forall(_.isDefined) &&
+            resolvedColumns.flatten.map(_.exprId).distinct.length == fieldNames.length) {
+          Some(ExpressionSet(resolvedColumns.flatten))
+        } else {
+          None
+        }
+      }
+    }.toSet
+  }
+
+  private def isTrusted(constraint: Constraint): Boolean = {
+    constraint.validationStatus() == ValidationStatus.VALID ||
+      (constraint.validationStatus() == ValidationStatus.UNVALIDATED && constraint.rely())
+  }
 
   def create(
       table: Table,
