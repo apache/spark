@@ -190,6 +190,11 @@ trait FileFormat {
    * Scalar subqueries inside `storageFilters` are expected to have been materialized before this
    * method is called, so that the returned reader can be safely serialized to executors.
    *
+   * They also arrive bound to `requiredSchema`, as `BoundReference`s over the row a reader
+   * assembles from it, so that the reader evaluates one per row without resolving anything by name.
+   * `supportsStorageFilter` is asked about the unbound expression instead, where the names and the
+   * metadata are still there, so that is where a format decides what it can evaluate.
+   *
    * `storageFilterMetrics` is the SQL metrics the reader updates during execution, keyed the way
    * this format's own `storageFilterMetrics` created them, since that is where a scan gets them. A
    * format is free to ignore them, and free to require its own, so a caller that passes anything

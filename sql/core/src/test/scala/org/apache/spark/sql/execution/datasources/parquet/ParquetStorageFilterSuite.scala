@@ -2102,6 +2102,27 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       "and it must not claim support either")
   }
 
+  test("a scan whose format declines falls back to the ordinary reader and returns every row") {
+    // The check above is that the default answers None. This is the other half, that `inputRDD`
+    // then builds the ordinary reader and the scan still produces its rows. A `ParquetFileFormat`
+    // subclass is the shape that reaches it, since it inherits the override and declines by class,
+    // and its ordinary builder is the one an extension would have customized.
+    withTempDir { dir =>
+      val rows = (1L to 200L).map(i => (i, s"v_$i"))
+      val path = writeParquetFile(dir, rows, rowGroupSize = 256L)
+      withSQLConf(SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        val scan = scanOf(spark.read.parquet(path).select("k", "v").queryExecution.executedPlan)
+        val keyAttr = scan.output.find(_.name == "k").get
+        val declining = scan.copy(
+          relation = scan.relation.copy(fileFormat = new ParquetFileFormat() {})(spark),
+          storageFilters = Seq(GreaterThanOrEqual(keyAttr, Literal(195L))))
+        val collected = executePlanCollect(declining).toSet
+        assert(collected == rows.toSet,
+          s"a declining format reads the file plainly; got ${collected.size} of ${rows.size} rows")
+      }
+    }
+  }
+
   Seq(false, true).foreach { aqe =>
     test(s"FileSourceStrategy extraction preserves query results (AQE = $aqe)") {
       // AQE is on by default in production, and it is where the bloom subquery is planned by
