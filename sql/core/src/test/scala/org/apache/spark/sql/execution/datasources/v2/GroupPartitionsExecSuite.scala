@@ -21,7 +21,7 @@ import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder, TransformExpression}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyReducer, Partitioning, PartitioningCollection, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyReducer, Partitioning, PartitioningCollection, REPEATS_GROUP, SPREADS_SPLITS, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, DaysFunctionWithToYearsReducerWithLongResult, DaysToYearsReducerWithLongResult, Reducer, YearsFunctionWithToYearsReducerWithLongResult}
 import org.apache.spark.sql.execution.{DummySparkPlan, LeafExecNode, SafeForKWayMerge}
@@ -50,7 +50,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       val childKp = KeyedPartitioning(Seq(exprA, exprB), keys)
         .withLayout(_.copy(isCollapsed = childCollapsed))
       GroupPartitionsExec(DummySparkPlan(outputPartitioning = childKp), joinKeyPositions,
-        expected, distributePartitions = distribute)
+        expected, ungroupingOrigin = Option.when(distribute)(SPREADS_SPLITS))
         .outputPartitioning.asInstanceOf[KeyedPartitioning]
     }
     def keyOf(a: Int): InternalRowComparableWrapper =
@@ -590,7 +590,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(2))))
     val gpe = GroupPartitionsExec(child,
       expectedPartitionKeys = Some(Seq(keyOf(1) -> 1, keyOf(2) -> 3, keyOf(3) -> 1)),
-      distributePartitions = true)
+      ungroupingOrigin = Some(SPREADS_SPLITS))
     gpe.execute()
 
     assert(gpe.metrics("numInputPartitions").value === 3)
@@ -599,6 +599,32 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(gpe.metrics("numPrunedPartitions").value === 0)
     assert(gpe.metrics("numCoalescedPartitions").value === 0, "distribute never coalesces")
     assert(!gpe.metrics.contains("numReplicatedPartitionReads"), "distribute never replicates")
+  }
+
+  test("SPARK-59671: the output claim is the node's own, never inherited") {
+    // The child's origin describes the shape its producer built. A node that groups those
+    // partitions settles them: its output carries only the claim its own producer stamped it
+    // with, none here, so no stale stamp above turns away a sound pair of grouped sides.
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    val child = ExecutableKeyedLeaf(
+      KeyedPartitioning(Seq(exprA), Seq(row(1), row(1), row(2)))
+        .withLayout(_.copy(ungroupingOrigin = Some(SPREADS_SPLITS))))
+
+    val grouped = GroupPartitionsExec(child)
+    val groupedOut = grouped.outputPartitioning.asInstanceOf[KeyedPartitioning]
+    assert(groupedOut.isGrouped && groupedOut.ungroupingOrigin.isEmpty)
+    assert(groupedOut.partitionKeys.map(_.row) == Seq(row(1), row(2)))
+
+    // A stamped node stamps its own output whatever the child claimed, and its routing follows
+    // the stamp: a repeating side groups first.
+    val restamped = GroupPartitionsExec(child,
+      expectedPartitionKeys = Some(Seq(keyOf(1) -> 2, keyOf(2) -> 1)),
+      ungroupingOrigin = Some(REPEATS_GROUP))
+    assert(!restamped.distributePartitions, "a repeating side groups first")
+    val restampedOut = restamped.outputPartitioning.asInstanceOf[KeyedPartitioning]
+    assert(!restampedOut.isGrouped)
+    assert(restampedOut.ungroupingOrigin.contains(REPEATS_GROUP))
   }
 
   test("SPARK-59310: alignment prunes unmatched keys, pads missing ones") {
