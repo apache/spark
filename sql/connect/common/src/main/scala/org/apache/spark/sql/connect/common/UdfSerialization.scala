@@ -82,11 +82,7 @@ private[spark] object UdfSerialization {
     SuidTransition(
       "org.apache.spark.sql.types.Decimal",
       1715621871942419369L,
-      6398599065815978361L),
-    SuidTransition(
-      "org.apache.spark.sql.types.Decimal$",
-      4103410110050351305L,
-      622493820172246208L),
+      4401554505066564464L),
     SuidTransition(
       "org.apache.spark.sql.types.DoubleType$",
       8550059415794444422L,
@@ -111,10 +107,6 @@ private[spark] object UdfSerialization {
       "org.apache.spark.sql.types.ShortType$",
       4196314124164507241L,
       -1640260345880352154L),
-    SuidTransition(
-      "org.apache.spark.sql.types.StringHelper$",
-      -2950363081197529498L,
-      5684776218413467458L),
     SuidTransition(
       "org.apache.spark.sql.types.StringType",
       2313622123462496566L,
