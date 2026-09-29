@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.ScalarSubquery
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, UnresolvedCTERelation, UnresolvedWith}
+import org.apache.spark.sql.catalyst.expressions.{Literal, ScalarSubquery}
+import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, Limit, LocalLimit, LogicalPlan, Project, SubqueryAlias, UnresolvedCTERelation, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreeNodeTag}
 
@@ -153,13 +153,85 @@ class HintResolutionRunnerSuite extends SparkFunSuite {
     assert(relationNames(resultAlias) == Seq("inner_renamed"))
   }
 
-  test("CTE rules see the definition body and not the SubqueryAlias wrapper") {
-    var observedRoots = Seq.empty[Class[_]]
+  test("CTE definition keeps its name and options") {
+    val plan = UnresolvedWith(
+      child = UnresolvedRelation(Seq("main")).select($"col1"),
+      cteRelations = Seq(
+        UnresolvedCTERelation(
+          name = "cte",
+          plan = SubqueryAlias("cte", UnresolvedRelation(Seq("inner")).select($"col1")),
+          maxDepth = Some(10),
+          materialized = Some(true)
+        )
+      ),
+      allowRecursion = true
+    )
+
+    val result = runner.resolveWithSubqueries(plan).asInstanceOf[UnresolvedWith]
+
+    assert(result.allowRecursion)
+    assert(result.cteRelations.map(_.name) == Seq("cte"))
+    assert(result.cteRelations.head.maxDepth.contains(10))
+    assert(result.cteRelations.head.materialized.contains(true))
+  }
+
+  test("rules see one WithCTE root with the CTE definitions as children") {
+    var observedRoots = Seq.empty[LogicalPlan]
 
     val observingRule = new Rule[LogicalPlan] {
       override def apply(plan: LogicalPlan): LogicalPlan = {
-        observedRoots :+= plan.getClass
+        observedRoots :+= plan
         plan
+      }
+    }
+
+    val plan = UnresolvedWith(
+      child = UnresolvedRelation(Seq("main")).select($"col1"),
+      cteRelations = Seq(
+        cteRelation("first", UnresolvedRelation(Seq("inner")).select($"col1")),
+        cteRelation("second", UnresolvedRelation(Seq("inner")).select($"col1"))
+      )
+    )
+
+    val result = new HintResolutionRunner(Seq(observingRule)).resolveWithSubqueries(plan)
+
+    // The rule does not change the plan, so the fixed-point batch stops after one iteration and
+    // the rule is invoked once, regardless of the number of CTE definitions. This matches the
+    // fixed-point Analyzer, whose "Hints" batch runs on the WithCTE produced by CTESubstitution.
+    assert(observedRoots.size == 1)
+    val withCte = observedRoots.head.asInstanceOf[WithCTE]
+    assert(withCte.cteDefs.map(_.child.asInstanceOf[SubqueryAlias].alias) == Seq("first", "second"))
+    assert(result == plan)
+  }
+
+  test("root-sensitive rules are applied on the containing plan only") {
+    val limitRoot = new Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan match {
+        case limit: GlobalLimit => limit
+        case other => Limit(Literal(1), other)
+      }
+    }
+
+    val cteBody = UnresolvedRelation(Seq("inner")).select($"col1")
+    val plan = UnresolvedWith(
+      child = UnresolvedRelation(Seq("main")).select($"col1"),
+      cteRelations = Seq(cteRelation("cte", cteBody))
+    )
+
+    val result = new HintResolutionRunner(Seq(limitRoot)).resolveWithSubqueries(plan)
+
+    // The fixed-point Analyzer hands the rule a WithCTE root, so the limit ends up on top of it
+    // and the CTE definitions are left as they are.
+    val limit = result.asInstanceOf[GlobalLimit]
+    val unresolvedWith = limit.child.asInstanceOf[LocalLimit].child.asInstanceOf[UnresolvedWith]
+    assert(unresolvedWith.child == plan.child)
+    assert(unresolvedWith.cteRelations.head.plan.child == cteBody)
+  }
+
+  test("a rule that replaces the SubqueryAlias of a CTE definition is rejected") {
+    val replaceAlias = new Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+        case alias: SubqueryAlias => alias.child
       }
     }
 
@@ -168,13 +240,10 @@ class HintResolutionRunnerSuite extends SparkFunSuite {
       cteRelations = Seq(cteRelation("cte", UnresolvedRelation(Seq("inner")).select($"col1")))
     )
 
-    new HintResolutionRunner(Seq(observingRule)).resolveWithSubqueries(plan)
-
-    // The rules are handed the body of the definition. The wrapper stays out of their reach,
-    // because UnresolvedCTERelation.plan is typed as SubqueryAlias and a rewritten wrapper could
-    // not be written back. See the HintResolutionRunner scaladoc.
-    assert(observedRoots.contains(classOf[Project]))
-    assert(!observedRoots.contains(classOf[SubqueryAlias]))
+    val exception = intercept[SparkException] {
+      new HintResolutionRunner(Seq(replaceAlias)).resolveWithSubqueries(plan)
+    }
+    assert(exception.getMessage.contains("replaced the SubqueryAlias of CTE cte"))
   }
 
   test("containing plan's hint batch sees unprocessed subqueries") {

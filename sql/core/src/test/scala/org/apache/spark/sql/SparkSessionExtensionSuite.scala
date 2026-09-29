@@ -518,6 +518,73 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
   }
 
   /**
+   * Limits an [[Aggregate]] handed to it as the root, and leaves [[Aggregate]]s deeper in the plan
+   * alone. The result of a query therefore depends on which roots the rule was handed.
+   */
+  case class LimitAggregateRoot(spark: SparkSession) extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan match {
+      case aggregate: Aggregate => Limit(Literal(1), aggregate)
+      case other => other
+    }
+  }
+
+  test("SPARK-59574: root-sensitive hint rule sees a CTE query as one plan") {
+    // (singlePass, dualRun, tentative)
+    Seq((false, false, false), (true, false, false), (false, true, false), (false, false, true))
+      .foreach { case (singlePass, dualRun, tentative) =>
+        withSession(Seq(_.injectHintResolutionRule(LimitAggregateRoot))) { session =>
+          session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+          session.conf.set(
+            SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key,
+            dualRun.toString)
+          session.conf.set(
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key,
+            tentative.toString)
+
+          // Both analyzers hand the rule the whole CTE query, whose root is not an Aggregate, so
+          // the CTE definition keeps both of its groups. Handing the rule the definition on its
+          // own would limit it to one.
+          val query =
+            """WITH a AS (SELECT id, count(*) AS c FROM VALUES (1), (2) AS t(id) GROUP BY id)
+              |SELECT count(*) FROM a""".stripMargin
+          assert(
+            session.sql(query).head().getLong(0) === 2,
+            s"unexpected result for singlePass=$singlePass, dualRun=$dualRun, " +
+              s"tentative=$tentative"
+          )
+        }
+      }
+  }
+
+  test("SPARK-59574: CTE definitions do not multiply hint rule invocations") {
+    val invocations = Seq(false, true).map { singlePass =>
+      var count = 0
+      case class CountInvocations(spark: SparkSession) extends Rule[LogicalPlan] {
+        override def apply(plan: LogicalPlan): LogicalPlan = {
+          count += 1
+          plan
+        }
+      }
+
+      withSession(Seq(_.injectHintResolutionRule(CountInvocations))) { session =>
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+        session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+
+        session.sql(
+          """WITH a AS (SELECT 1 AS id), b AS (SELECT 2 AS id), c AS (SELECT 3 AS id)
+            |SELECT * FROM a UNION ALL SELECT * FROM b UNION ALL SELECT * FROM c""".stripMargin
+        ).queryExecution.analyzed
+      }
+      count
+    }
+
+    assert(
+      invocations.head == invocations.last,
+      s"fixed-point and single-pass invoked the rule ${invocations.mkString(" and ")} times"
+    )
+  }
+
+  /**
    * Hint resolution rules run before relation metadata is resolved, which is what allows an
    * extension to rewrite a path-based relation - for example to attach storage credentials to it
    * before the files are listed. Redirecting the relation to another directory makes that
