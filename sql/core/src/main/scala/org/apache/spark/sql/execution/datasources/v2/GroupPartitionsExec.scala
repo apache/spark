@@ -759,8 +759,10 @@ private[sql] object GroupPartitionsExec {
     // A `copy` of the child's layout rather than a fresh one, so the marker and anything the
     // layout grows later are carried without this having to name them. The origin is the one
     // field not carried: the output claims what this node's own producer stamped, never what
-    // the child's claimed. Built here, where the child is in scope, so
-    // `computeOutputPartitioning` has nothing left to re-apply.
+    // the child's claimed, and only while the shape holds the claim -- a grouping that settles
+    // every key leaves nothing repeating, so it spends the claim the way `toGrouped` does.
+    // Built here, where the child is in scope, so `computeOutputPartitioning` has nothing left
+    // to re-apply.
     PartitionGrouping(
       partitions,
       childKp.layout.copy(
@@ -768,7 +770,7 @@ private[sql] object GroupPartitionsExec {
         dataTypes = reducedDataTypes,
         isGrouped = isGrouped,
         isCollapsed = isCollapsed,
-        ungroupingOrigin = ungroupingOrigin),
+        ungroupingOrigin = if (isGrouped) None else ungroupingOrigin),
       isIdentity, numPrunedPartitions, numReplicatedPartitionReads)
   }
 }

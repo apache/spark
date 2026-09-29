@@ -21,7 +21,7 @@ import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder, TransformExpression}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyReducer, Partitioning, PartitioningCollection, REPEATS_GROUP, SPREADS_SPLITS, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyReducer, OrderedDistribution, Partitioning, PartitioningCollection, REPEATS_GROUP, SPREADS_SPLITS, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, DaysFunctionWithToYearsReducerWithLongResult, DaysToYearsReducerWithLongResult, Reducer, YearsFunctionWithToYearsReducerWithLongResult}
 import org.apache.spark.sql.execution.{DummySparkPlan, LeafExecNode, SafeForKWayMerge}
@@ -625,6 +625,26 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val restampedOut = restamped.outputPartitioning.asInstanceOf[KeyedPartitioning]
     assert(!restampedOut.isGrouped)
     assert(restampedOut.ungroupingOrigin.contains(REPEATS_GROUP))
+  }
+
+  test("SPARK-59671: an alignment that settles every key spends its stamp") {
+    // A stamp says why the keys repeat on purpose; a grouping where every key got one slot
+    // leaves nothing repeating, so the layout reports no claim even though the node was stamped
+    // for one -- and it keeps the ordering claim a grouped layout has always had.
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2))))
+    val gpe = GroupPartitionsExec(child,
+      expectedPartitionKeys = Some(Seq(keyOf(1) -> 1, keyOf(2) -> 1)),
+      ungroupingOrigin = Some(SPREADS_SPLITS))
+    assert(gpe.ungroupingOrigin.contains(SPREADS_SPLITS),
+      "the node keeps the stamp it was handed, and the routing it derives")
+    val out = gpe.outputPartitioning.asInstanceOf[KeyedPartitioning]
+    assert(out.isGrouped && out.ungroupingOrigin.isEmpty)
+    withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
+      assert(out.satisfies(OrderedDistribution(Seq(SortOrder(exprA, Ascending)))),
+        "a grouped layout keeps its ordering claim")
+    }
   }
 
   test("SPARK-59310: alignment prunes unmatched keys, pads missing ones") {
