@@ -119,7 +119,7 @@ comparison_operator
   * *L* `<=` *R*: the smallest *R* not less than *L* (first-following).
   * *L* `<` *R*: the smallest *R* strictly greater than *L* (first strictly-following).
 
-* **NULL.** A `NULL` in either operand never satisfies the `MATCH_CONDITION`
+* **NULL.** A `NULL` operand on either side never satisfies the `MATCH_CONDITION`
   comparison. Left rows whose operand is `NULL` are dropped under `INNER ASOF` and
   retained with `NULL` right-side columns under `LEFT ASOF`. A `NULL` element of an
   `ARRAY` operand, or a `NULL` field of a `STRUCT` operand, does not block a match. It
