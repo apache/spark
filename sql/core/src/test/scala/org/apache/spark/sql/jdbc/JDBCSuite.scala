@@ -3290,6 +3290,56 @@ class JDBCSuite extends SharedSparkSession {
     assert(!dialect.isSyntaxErrorBestEffort(new SQLException("Connection reset", "08001")))
   }
 
+  test("SPARK-59852: H2Dialect classifies only syntax error SQLSTATEs as syntax errors") {
+    val dialect = H2Dialect()
+    assert(dialect.isSyntaxErrorBestEffort(new SQLException("syntax error", "42000")))
+    assert(dialect.isSyntaxErrorBestEffort(new SQLException("syntax error, expected", "42001")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("table already exists", "42S01")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("table not found", "42S02")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("column not found", "42S22")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("error without SQLSTATE")))
+  }
+
+  test("SPARK-59852: DerbyDialect classifies only syntax error SQLSTATEs as syntax errors") {
+    val dialect = DerbyDialect()
+    assert(dialect.isSyntaxErrorBestEffort(new SQLException("syntax error", "42X01")))
+    assert(dialect.isSyntaxErrorBestEffort(new SQLException("lexical error", "42X02")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("syntax or access rule", "42000")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("table not found", "42X05")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("column not found", "42X04")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("no privilege", "42502")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("error without SQLSTATE")))
+  }
+
+  test("SPARK-59852: a missing H2 table or column is not reported as a syntax error") {
+    Seq(
+      ("dbtable", "TEST.NO_SUCH_TABLE", "42S02"),
+      ("query", "SELECT NO_SUCH_COL FROM TEST.PEOPLE", "42S22")).foreach {
+      case (option, value, sqlState) =>
+        val e = intercept[SQLException] {
+          spark.read.format("jdbc")
+            .option("url", urlWithUserAndPass)
+            .option(option, value)
+            .load()
+        }
+        assert(e.getSQLState === sqlState)
+    }
+
+    checkError(
+      exception = intercept[SparkException] {
+        spark.read.format("jdbc")
+          .option("url", urlWithUserAndPass)
+          .option("query", "SELECT * FORM TEST.PEOPLE")
+          .load()
+      },
+      condition = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+      parameters = Map(
+        "jdbcQuery" -> "SELECT \\* FROM \\(SELECT \\* FORM TEST.PEOPLE\\).*",
+        "externalEngineError" -> "[\\s\\S]+",
+        "externalEngineSqlState" -> "42001"),
+      matchPVals = true)
+  }
+
   test("SPARK-45425: Mapped TINYINT to ShortType for MsSqlServerDialect") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     val metadata = new MetadataBuilder().putLong("scale", 1)
