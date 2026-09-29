@@ -996,9 +996,9 @@ case class Scd2BatchProcessor(
 
   /**
    * Replaces unauthored leaf values with values inherited from the nearest preceding authoring
-   * row for the same key in `decomposedDf`, and materializes version map entries for
-   * schema-evolved leaves that would otherwise lose their unauthored signal after inheriting a
-   * non-null value.
+   * row for the same key in `decomposedDf` (or, absent one, from the carry-in anchor described
+   * below), and materializes version map entries for schema-evolved leaves that would otherwise
+   * lose their unauthored signal after inheriting a non-null value.
    *
    * An existing non-null version map is the row's established authorship record. Its semantic
    * contents are frozen across ignore-null selection changes: the active selection determines
@@ -1022,18 +1022,19 @@ case class Scd2BatchProcessor(
    *
    *  1. The active ignore-null selection. Only leaves in the active selection are eligible for
    *     coalescing; an unauthored leaf outside it is not reconciled in this pass.
-   *  2. The affected window of rows pulled in for reconciliation. It is computed independently
-   *     of the selection, from anchor-row deduction (the earliest existing row bisected by an
-   *     incoming event, or the earliest event in the microbatch).
+   *  2. The affected window of rows pulled in for reconciliation, which is computed independently
+   *     of the ignore-null selection.
    *
    * The first upsert-representing row in the affected window supplies its stored value as
    * carry-in, even when its version map records that value as unauthored, because its
    * predecessor is outside the window. If the leaf was temporarily dropped from the selection,
    * that stored value may not have been reconciled against the latest authoring row.
    *
-   * Correction for that anchor row is eventually consistent: once the affected window expands to
-   * include a preceding row that authored the leaf, the stale carry-in is replaced and all
-   * downstream unauthored rows inherit the correct value.
+   * The stale carry-in is eventually consistent: a later reconciliation replaces it, and all
+   * downstream unauthored rows inherit the correct value, once that reconciliation's affected
+   * window includes a preceding row that authored the leaf. That is the only condition for
+   * correction, and nothing forces it to occur; a key that only receives in-order events can
+   * retain the stale value indefinitely.
    */
   private[autocdc] def coalesceIgnoredNulls(
       decomposedDf: DataFrame): DataFrame =
@@ -1744,6 +1745,10 @@ object Scd2BatchProcessor {
    *
    * The supplied contexts must be nonempty and cover `path`. Struct fields without a context are
    * passed through unchanged.
+   *
+   * A non-nullable field raises `NOT_NULL_ASSERT_VIOLATION` when coalescing cannot supply it a
+   * non-null value: for example, when no preceding row authored it, when a delete boundary reset
+   * its inheritance, or when its null parent struct is rebuilt because a sibling leaf inherits.
    */
   private def constructCoalescedIgnoreNullColumn(
       path: Seq[String],
@@ -1752,7 +1757,7 @@ object Scd2BatchProcessor {
     val reconstructed = field.dataType match {
       case struct: StructType =>
         // If this field is a struct, recursively reconstruct all of its children by applying their
-        // resolved values after ignore-null coalescing. 
+        // resolved values after ignore-null coalescing.
         val contextsByChildName = contextsBeneath.groupBy(_.path(path.length))
         val rebuilt = F.struct(
           struct.fields.toImmutableArraySeq.map { childField =>
@@ -1773,7 +1778,7 @@ object Scd2BatchProcessor {
       case _ =>
         // If this field is not a struct (and therefore must be a leaf), either directly apply the
         // resolved value to inherit if the leaf should be inheriting, otherwise pass its value
-        // through as-is. 
+        // through as-is.
         val context = contextsBeneath.head
         F.when(context.inherits, context.valueToInherit)
           .otherwise(F.col(QuotingUtils.quoteNameParts(path)))
@@ -1784,7 +1789,7 @@ object Scd2BatchProcessor {
       } else {
         // If the field was marked as non-nullable but coalescing deduces it will resolve to a
         // null, throw an explicit exception. Pushing `AssertNotNull` into the plan for a
-        // non-nullable field also prevents Spark from preemptively complaining during analysis. 
+        // non-nullable field also prevents Spark from preemptively complaining during analysis.
         ExpressionUtils.column(
           AssertNotNull(ExpressionUtils.expression(reconstructed), path))
       }
@@ -2225,7 +2230,7 @@ private[autocdc] object LeafInheritanceContext {
     // If this first row is an existing upsert, it cannot itself be re-coalesced in this sweep:
     // its predecessor is outside the affected window, so its stored value is the only safe
     // carry-in. With an unchanged selection that value is already correct. After a selection
-    // change, correcting the anchor is deferred until reconciliation includes preceding
+    // change, the anchor can only be corrected by a reconciliation that includes preceding
     // history. See the "Eventual consistency of the carry-in anchor" section in the
     // [[coalesceIgnoredNulls]] scaladoc.
     val rowEstablishesCarryIn = rowInheritanceContext.isFirstUpsertRepresentingRow
