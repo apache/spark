@@ -293,7 +293,7 @@ private[spark] object Config extends Logging {
 
   val EXECUTOR_RESIZE_THRESHOLD =
     ConfigBuilder("spark.kubernetes.executor.resizeThreshold")
-      .doc("The threshold to resize.")
+      .doc("The threshold to resize. It should be in (0, 1).")
       .version("4.2.0")
       .doubleConf
       .checkValue(v => 0 < v && v < 1, "The threshold should be in (0, 1)")
@@ -301,7 +301,7 @@ private[spark] object Config extends Logging {
 
   val EXECUTOR_RESIZE_FACTOR =
     ConfigBuilder("spark.kubernetes.executor.resizeFactor")
-      .doc("The factor to resize.")
+      .doc("The factor to resize. It should be in (0, 1].")
       .version("4.2.0")
       .doubleConf
       .checkValue(v => 0 < v && v <= 1, "The factor should be in (0, 1]")
