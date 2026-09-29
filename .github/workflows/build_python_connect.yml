@@ -35,7 +35,7 @@ jobs:
       - name: Checkout Spark repository
         uses: actions/checkout@v7
       - name: Cache SBT and Maven
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             build/apache-maven-*
@@ -45,7 +45,7 @@ jobs:
           restore-keys: |
             build-spark-connect-python-only-${{ runner.os }}-
       - name: Cache Coursier local repository
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/coursier
           key: coursier-build-spark-connect-python-only-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
