@@ -599,7 +599,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
             self._create_udtf: Callable = create_udtf
             self._udtf = create_udtf()
             self._prev_arguments: list = list()
-            self._partition_child_indexes: list = udtf_info.partition_child_indexes
+            self._partition_child_indexes: list = partition_child_indexes
             self._eval_raised_skip_rest_of_input_table: bool = False
 
         def eval(self, *args, **kwargs) -> Iterator:
