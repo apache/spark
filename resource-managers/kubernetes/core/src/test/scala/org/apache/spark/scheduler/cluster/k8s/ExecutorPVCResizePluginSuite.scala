@@ -315,6 +315,7 @@ class ExecutorPVCResizePluginSuite
     when(podList.getItems).thenReturn(Collections.singletonList(pod))
     plugin.receive(PVCDiskUsageReport("1", 0.5))
     plugin.receive(PVCDiskUsageReport("2", 0.5)) // No pod for executor 2
+    assert(plugin.latestReports.keySet() === java.util.Set.of("1", "2"))
 
     plugin.checkAndResizePVCs()
 
