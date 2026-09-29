@@ -484,11 +484,18 @@ class AbstractTranspiler(object):
         """Lower ``function_ast`` to a :class:`Column`, or return ``None`` to decline.
 
         The override point for ``spark.sql.experimental.optimizer.pyTranspilers``.
+        Raising also declines: the caller drops that variant and records the
+        message, so a lowering can bail out mid-walk instead of unwinding by hand.
 
         ``params`` is the CALLER-FACING parameter list: a receiver already bound, as
         on a method or callable instance, has been removed, so ``params[i]`` is the
         name bound to placeholder ``_udf_param_i`` with no offsetting needed. It is
         also the list ``param_categories`` is keyed by.
+
+        ``param_categories`` maps public parameter index to the input-type category
+        assumed for this variant. ``func`` is the callable itself, which the built-in
+        transpiler uses to check that a name like ``round`` has not been rebound; it
+        is optional so a transpiler that doesn't need it can ignore it.
         """
         pass
 
@@ -792,11 +799,15 @@ class CatalystTranspiler(AbstractTranspiler):
                 return False
 
     def _param_index(self, params: List[str], name: str) -> int:
-        """Public-parameter index of ``name``, accounting for a leading ``self``."""
-        index = params.index(name)
-        if params and params[0] == "self":
-            index -= 1
-        return index
+        """Placeholder index of ``name``.
+
+        ``params`` is caller-facing -- a bound receiver is already gone by the time
+        it reaches us -- so this is a plain lookup. It used to subtract one for a
+        leading ``self``, which double-counted the receiver once the caller started
+        stripping it, and mis-indexed a plain function whose first parameter just
+        happens to be named ``self``.
+        """
+        return params.index(name)
 
     def _narrow(self, params: List[str], category: str, *nodes: ast.AST) -> None:
         """Require every parameter whose *value* reaches ``nodes`` to be ``category``.
