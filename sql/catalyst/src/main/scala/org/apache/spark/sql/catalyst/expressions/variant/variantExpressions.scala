@@ -395,7 +395,9 @@ sealed trait VariantPathArg
 
 case class FoldableVariantPath(segments: Array[VariantPathSegment], pathStr: String)
     extends VariantPathArg {
-  // Java segments are not Serializable. Rebuild this cache once per executor task.
+  // Retain the original path for insert/set/append error messages. `VariantBuilder.PathSegment`
+  // is not `Serializable`, so the Java form is `@transient` and re-derived once per executor task
+  // after deserialization.
   @transient lazy val javaSegments: Array[VariantBuilder.PathSegment] =
     VariantExpressionEvalUtils.toJavaSegments(segments)
 }
@@ -403,21 +405,39 @@ case class FoldableVariantPath(segments: Array[VariantPathSegment], pathStr: Str
 case class DynamicVariantPath(expr: Expression) extends VariantPathArg
 
 object VariantPathArg {
+  private def parseFoldableExpression(
+      child: Expression,
+      functionName: String,
+      allowRoot: Boolean): Option[FoldableVariantPath] = {
+    val value = child.eval()
+    if (value == null) {
+      None
+    } else {
+      val pathStr = value.asInstanceOf[UTF8String].toString
+      Some(FoldableVariantPath(
+        VariantExpressionEvalUtils.parseVariantPath(pathStr, functionName, allowRoot), pathStr))
+    }
+  }
+
   def fromExpression(
       child: Expression,
       functionName: String,
       allowRoot: Boolean = false): Option[VariantPathArg] = {
     if (child.foldable) {
-      val value = child.eval()
-      if (value == null) {
-        None
-      } else {
-        val pathStr = value.asInstanceOf[UTF8String].toString
-        Some(FoldableVariantPath(
-          VariantExpressionEvalUtils.parseVariantPath(pathStr, functionName, allowRoot), pathStr))
-      }
+      parseFoldableExpression(child, functionName, allowRoot)
     } else {
       Some(DynamicVariantPath(child))
+    }
+  }
+
+  def foldableFromExpression(
+      child: Expression,
+      functionName: String,
+      allowRoot: Boolean = false): Option[FoldableVariantPath] = {
+    if (child.foldable) {
+      parseFoldableExpression(child, functionName, allowRoot)
+    } else {
+      None
     }
   }
 }
@@ -429,9 +449,7 @@ object VariantManipulationExpressionUtils extends QueryErrorsBase {
       path: Expression,
       functionName: String,
       allowRoot: Boolean = false): Option[FoldableVariantPath] =
-    VariantPathArg.fromExpression(path, functionName, allowRoot).collect {
-      case parsed: FoldableVariantPath => parsed
-    }
+    VariantPathArg.foldableFromExpression(path, functionName, allowRoot)
 
   def checkValueType(dataType: DataType): TypeCheckResult = {
     if (dataType == NullType || VariantGet.checkDataType(dataType, allowStructsAndMaps = false)) {
@@ -444,14 +462,14 @@ object VariantManipulationExpressionUtils extends QueryErrorsBase {
     }
   }
 
-  def assignResult(ev: ExprCode, call: String, failOnError: Boolean): String = {
-    if (failOnError) {
-      s"${ev.value} = $call;"
-    } else {
+  def assignVariantResult(ev: ExprCode, call: String, nullable: Boolean): String = {
+    if (nullable) {
       s"""
          |${ev.value} = $call;
          |${ev.isNull} = ${ev.value} == null;
        """.stripMargin
+    } else {
+      s"${ev.value} = $call;"
     }
   }
 }
@@ -1207,8 +1225,7 @@ case class VariantInsert(
     value: Expression,
     failOnError: Boolean = true)
     extends TernaryExpression
-    with ExpectsInputTypes
-    with QueryErrorsBase {
+    with ExpectsInputTypes {
 
   override def first: Expression = input
   override def second: Expression = path
@@ -1265,7 +1282,8 @@ case class VariantInsert(
         s"""$cls.insertAtPath($vVal, $pVal, $valVal, $fromArg, "$prettyName", $failOnError)"""
     }
     nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal) =>
-      VariantManipulationExpressionUtils.assignResult(ev, call(vVal, pVal, valVal), failOnError))
+      VariantManipulationExpressionUtils.assignVariantResult(
+        ev, call(vVal, pVal, valVal), nullable))
   }
 
   override def prettyName: String = if (failOnError) "variant_insert" else "try_variant_insert"
@@ -1443,8 +1461,8 @@ case class VariantSet(
             .stripMargin
     }
     nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal, createVal) =>
-      VariantManipulationExpressionUtils.assignResult(
-        ev, call(vVal, pVal, valVal, createVal), failOnError))
+      VariantManipulationExpressionUtils.assignVariantResult(
+        ev, call(vVal, pVal, valVal, createVal), nullable))
   }
 
   override def prettyName: String = if (failOnError) "variant_set" else "try_variant_set"
@@ -1562,8 +1580,7 @@ case class VariantArrayAppend(
     value: Expression,
     failOnError: Boolean = true)
     extends TernaryExpression
-    with ExpectsInputTypes
-    with QueryErrorsBase {
+    with ExpectsInputTypes {
 
   override def first: Expression = input
   override def second: Expression = path
@@ -1620,7 +1637,8 @@ case class VariantArrayAppend(
         s"""$cls.arrayAppendAtPath($vVal, $pVal, $valVal, $fromArg, "$prettyName", $failOnError)"""
     }
     nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal) =>
-      VariantManipulationExpressionUtils.assignResult(ev, call(vVal, pVal, valVal), failOnError))
+      VariantManipulationExpressionUtils.assignVariantResult(
+        ev, call(vVal, pVal, valVal), nullable))
   }
 
   override def prettyName: String =
