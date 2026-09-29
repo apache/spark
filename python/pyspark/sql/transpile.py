@@ -35,6 +35,10 @@ keeps the option matrix small; prefer doing so. To bound plan growth,
 functions with more than three untyped parameters only emit the
 all-numeric and all-string variants.
 
+``len(s)`` lowers to Catalyst ``length`` for a string operand (SPARK-55214).
+Other ``len`` arguments (numbers, lists, ...) stay interpreted Python.
+``len(None)`` raises (via ``raise_error`` on NULL), matching CPython.
+
 A lambda is lowered only when its source names it directly and alone: bind it
 to a name (``f = lambda x: x + 1``, annotated if you like) and give it a line
 of its own. Passed straight to ``udf(...)``, wrapped in another call, returned
@@ -107,6 +111,7 @@ from pyspark.sql.functions import (
     coalesce,
     col,
     concat,
+    length,
     lit,
     pmod,
     raise_error,
@@ -208,10 +213,34 @@ def _is_definitely_boolean(node: ast.AST) -> bool:
             return False
 
 
+def _truthiness_col(cat: Optional[str], c: Column) -> Optional[Column]:
+    """Return a boolean Column expressing Python's ``bool(c)`` for the given category.
+
+    Returns ``None`` for unsupported or unknown categories (caller falls back).
+
+    Semantics (NULL-as-False throughout, matching Python's ``None`` is falsy):
+      "bool"    -> coalesce(c, False)
+      "string"  -> coalesce(length(c) > 0, False)  -- empty string is falsy
+      "numeric" -> coalesce(c != 0, False)           -- zero is falsy
+                   NaN != 0 is True in Spark so float NaN is truthy, matching Python.
+    """
+    if cat == "bool":
+        return coalesce(c, lit(False))
+    if cat == "string":
+        return coalesce(length(c) > lit(0), lit(False))
+    if cat == "numeric":
+        return coalesce(c != lit(0), lit(False))
+    return None
+
+
 class CatalystTranspiler(AbstractTranspiler):
     """Transpiler that attempts to convert a Python UDF into native Spark SQL expressions."""
 
     variety = "catalyst"
+
+    def __init__(self) -> None:
+        self._param_categories: dict[int, str] = {}
+        self._category_cache: dict[int, str] = {}
 
     # TODO (SPARK-55218): handle implicit-None return bodies like
     # ``def f(x): x + x`` -- no return statement means return None;
@@ -280,22 +309,27 @@ class CatalystTranspiler(AbstractTranspiler):
         body_node: Optional[ast.AST],
         else_node: Optional[ast.AST],
     ) -> Column:
-        # We cannot soundly lower a generic Python truthiness test here.
-        # Python truthiness depends on the runtime input type and value:
-        # for example, 0, 0.0, "", empty collections, and None are all
-        # falsy, while most other values are truthy. The transpiler does
-        # not have enough input type information at this point to decide
-        # whether ``test_col`` is a boolean expression or a bare value
-        # whose truthiness would need Python-specific handling. Emitting
-        # ``when(coalesce(test_col, false), ...)`` is therefore unsound:
-        # it can either fail Spark analysis for non-boolean columns or
-        # silently diverge from Python semantics. Fail closed so the UDF
-        # falls back to interpreted Python execution instead.
-        if not _is_definitely_boolean(test_node):
-            raise UnsupportedOperationException(
-                f"bare truthiness tests ({ast.dump(test_node)}) in if-expressions are "
-                " not currently supported by the transpiler"
-            )
+        # Determine the boolean guard for the CASE WHEN.
+        # Two paths:
+        # 1. The test is statically known to be a boolean expression
+        #    (comparison, `not`, boolean op, literal True/False/None):
+        #    wrap with coalesce so NULL is treated as False.
+        # 2. The test is a bare value (parameter name, numeric/string
+        #    constant): lower using Python's type-specific truthiness
+        #    rules (0/""/None are falsy, everything else truthy) based on
+        #    the operand's inferred category.
+        if _is_definitely_boolean(test_node):
+            safe_test = coalesce(test_col, lit(False))
+        else:
+            cat = self._safe_category(params, test_node)
+            _maybe_test = _truthiness_col(cat, test_col)
+            if _maybe_test is None:
+                raise UnsupportedOperationException(
+                    f"bare truthiness test ({ast.dump(test_node)}) in if/ternary: "
+                    "the operand's category is unknown or unsupported, so the "
+                    "transpiler falls back to interpreted Python"
+                )
+            safe_test = _maybe_test
         # When the two branches resolve to concrete but different categories
         # (e.g. numeric vs string), the lowered ``when(...).otherwise(...)`` is a
         # CASE WHEN whose branch values share no common type under ANSI. That node
@@ -312,7 +346,6 @@ class CatalystTranspiler(AbstractTranspiler):
                 f"{else_cat}); the lowered CASE WHEN has no common type under ANSI, "
                 "so the transpiler falls back to interpreted Python"
             )
-        safe_test = coalesce(test_col, lit(False))
         return when(safe_test, body_col).otherwise(else_col)
 
     def _lower_eq(
@@ -427,6 +460,15 @@ class CatalystTranspiler(AbstractTranspiler):
         operands are type-incompatible, so the caller drops that variant and the
         JVM picks another option / falls back to the Python UDF.
         """
+        cache_key = id(node)
+        cached = self._category_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        category = self._category_uncached(params, node)
+        self._category_cache[cache_key] = category
+        return category
+
+    def _category_uncached(self, params: List[str], node: ast.AST) -> str:
         match node:
             case ast.Constant(value=v):
                 # bool subclasses int, so classify it first: int/float -> numeric,
@@ -467,6 +509,15 @@ class CatalystTranspiler(AbstractTranspiler):
                     f"operands of `{type(op).__name__}` are not type-compatible "
                     "for this input-type variant"
                 )
+            case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
+                # ``len(s)`` is an int. Only strings are lowered (SPARK-55214);
+                # other argument categories raise so this variant is dropped.
+                if self._category(params, arg) != "string":
+                    raise UnsupportedOperationException(
+                        "`len` is only lowered for string operands; other "
+                        "types fall back to interpreted Python"
+                    )
+                return "numeric"
             case ast.Return(value=value) if value is not None:
                 return self._category(params, value)
             case ast.IfExp(body=if_body, orelse=if_orelse):
@@ -764,6 +815,26 @@ class CatalystTranspiler(AbstractTranspiler):
                         f"name {name!r} is not in the UDF's parameter list "
                         "and free variables / closures are not supported"
                     )
+            case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
+                # SPARK-55214: Python ``len`` on a str is the number of Unicode
+                # code points; Spark ``length`` on a string column is character
+                # length -- they match for well-formed UTF-8. ``len(None)``
+                # raises TypeError in Python, while Spark ``length(NULL)`` is
+                # NULL, so guard like value comparisons: raise on NULL, else
+                # ``length``. A caller that already proved non-null (``if x is
+                # not None: return len(x)``) takes the otherwise branch.
+                if self._category(params, arg) != "string":
+                    raise UnsupportedOperationException(
+                        "`len` is only lowered for string operands; other "
+                        "types fall back to interpreted Python"
+                    )
+                arg_col = self._convert_chunk(params, arg)
+                err = lit(
+                    "Python UDF transpiler: cannot call len() on NULL; "
+                    "Python would raise TypeError here. Add an "
+                    "`is not None` guard or filter NULLs upstream."
+                )
+                return when(arg_col.isNull(), raise_error(err)).otherwise(length(arg_col))
             case _:
                 raise UnsupportedOperationException(
                     f"AST node {type(body).__name__} is not supported by the "
@@ -785,6 +856,9 @@ class CatalystTranspiler(AbstractTranspiler):
         # Per-variant input-type assumption ({public_param_index -> category}),
         # read by ``_category`` to choose str vs numeric operators.
         self._param_categories = param_categories or {}
+        # Category inference depends on the per-variant assumptions above. Cache
+        # each AST node only for this lowering so recursive conversion stays linear.
+        self._category_cache = {}
         function_body = function_ast.body
         if len(function_body) != 1:
             raise UnsupportedOperationException(

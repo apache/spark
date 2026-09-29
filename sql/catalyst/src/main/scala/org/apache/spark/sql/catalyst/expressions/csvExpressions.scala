@@ -85,7 +85,7 @@ case class CsvToStructs(
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
       schema = ExprUtils.evalSchemaExpr(schema),
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "from_csv"),
       child = child,
       timeZoneId = None)
 
@@ -168,7 +168,7 @@ case class SchemaOfCsv(
 
   def this(child: Expression, options: Expression) = this(
     child = child,
-    options = ExprUtils.convertToMapData(options))
+    options = ExprUtils.convertToMapData(options, "schema_of_csv"))
 
   override def nullable: Boolean = false
 
@@ -256,7 +256,7 @@ case class StructsToCsv(
 
   def this(child: Expression, options: Expression) =
     this(
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "to_csv"),
       child = child,
       timeZoneId = None)
 

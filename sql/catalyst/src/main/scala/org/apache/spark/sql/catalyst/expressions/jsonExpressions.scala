@@ -1904,7 +1904,7 @@ case class JsonToStructs(
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
       schema = ExprUtils.evalTypeExpr(schema),
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "from_json"),
       child = child,
       timeZoneId = None)
 
@@ -2019,7 +2019,7 @@ case class StructsToJson(
   def this(child: Expression) = this(Map.empty, child, None)
   def this(child: Expression, options: Expression) =
     this(
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "to_json"),
       child = child,
       timeZoneId = None)
 
@@ -2090,7 +2090,7 @@ case class SchemaOfJson(
 
   def this(child: Expression, options: Expression) = this(
       child = child,
-      options = ExprUtils.convertToMapData(options))
+      options = ExprUtils.convertToMapData(options, "schema_of_json"))
 
   override def nullable: Boolean = false
 

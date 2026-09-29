@@ -94,7 +94,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Cache SBT and Maven
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             build/apache-maven-*
@@ -104,7 +104,7 @@ jobs:
           restore-keys: |
             build-
       - name: Cache Coursier local repository
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/coursier
           key: benchmark-coursier-${{ inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -112,7 +112,7 @@ jobs:
             benchmark-coursier-${{ inputs.jdk }}
       - name: Cache TPC-DS generated data
         id: cache-tpcds-sf-1
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ./tpcds-sf-1
@@ -182,7 +182,7 @@ jobs:
           fi
         fi
     - name: Cache SBT and Maven
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           build/apache-maven-*
@@ -192,7 +192,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ~/.cache/coursier
         key: benchmark-coursier-${{ inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -206,7 +206,7 @@ jobs:
     - name: Cache TPC-DS generated data
       if: inputs.generate-tpcds
       id: cache-tpcds-sf-1
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           ./tpcds-sf-1
