@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface, SqlStatementSplitResult}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Project, Range, Sort, SortHint, Statistics, UnresolvedHint}
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.classic.ClassicConversions._
@@ -42,10 +42,10 @@ import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, AQEShuffleReadExec, QueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, AQEShuffleReadExec, AQEShuffleReadRule, QueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.datasources.{FileFormat, WriteFilesExec, WriteFilesExecBase, WriteFilesSpec}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ENSURE_REQUIREMENTS, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -642,6 +642,265 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
         assert(collectFirst(df.queryExecution.executedPlan) {
           case _: SortExec => true
         }.isDefined)
+      }
+    }
+  }
+
+  /**
+   * Prepares a plan whose `UnionExec` was made by an injected rule, then turns
+   * `UNION_OUTPUT_PARTITIONING` off and reads that node again. A union the `StampUnionDecisions`
+   * barrier following the hook reached keeps answering from the decision it was prepared with; one
+   * that reached no barrier and no snapshot pass has nothing to answer from, so this read derives
+   * an answer from the conf as it is now and comes back `UnknownPartitioning`. `UnionCodegenSuite`
+   * covers the stamping itself by calling the rule directly, so it stays green if one of the
+   * post-hook listings is dropped; these pin the post-hook stamping in each pipeline.
+   */
+  private def checkInjectedUnionIsStamped(
+      extensions: Seq[SparkSessionExtensionsProvider], aqeEnabled: Boolean): Unit = {
+    withSession(extensions) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, aqeEnabled)
+      // The union ends up over the projection above a repartition by `k`, so it has a concrete
+      // partitioning to pass through. A filter would not do: `PushPredicateThroughNonJoin` pushes
+      // it below the exchange.
+      val df = session.range(0, 20, 1, 2).selectExpr("id % 5 AS k", "id AS v")
+        .repartition(4, col("k")).selectExpr("k", "v + 1 AS w")
+      // Also what makes the final adaptive plan available in the two AQE cases. `w` is `id + 1`, so
+      // a union that dropped or duplicated a row would show up here.
+      assert(df.collect().map(_.getLong(1)).sorted.toSeq == (1L to 20L).toSeq,
+        "the injected union must not drop or duplicate rows")
+
+      val unions = collect(df.queryExecution.executedPlan) { case u: UnionExec => u }
+      assert(unions.size == 1, s"expected the one union the rule adds, got ${unions.size}")
+      val union = unions.head
+      val prepared = union.outputPartitioning
+      assert(!prepared.isInstanceOf[UnknownPartitioning],
+        s"this union must be prepared partitioning-aware, got $prepared")
+
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, false)
+      assert(union.outputPartitioning == prepared,
+        "no barrier stamped the union the rule added, so this conf change decided it: " +
+          s"${union.outputPartitioning}")
+    }
+  }
+
+  test("SPARK-59122: the barrier after the injected columnar rules stamps a union they added") {
+    checkInjectedUnionIsStamped(
+      create(_.injectColumnar(_ => WrapRootInUnionColumnarRule)), aqeEnabled = false)
+  }
+
+  test("SPARK-59122: a union an injected query stage prep rule adds is stamped before execution") {
+    // The barrier in `postStageCreationRules` stands behind the one after the prep rules, so the
+    // conf flip in `checkInjectedUnionIsStamped` cannot tell them apart. What only the earlier one
+    // can do is have the answer ready for the stage optimizers, which run in between and read it:
+    // `CoalesceShufflePartitions` asks whether a union's children have to be coalesced as one
+    // group. `ObserveUnionPartitioning` reads the node from there, so removing the earlier barrier
+    // fails this case.
+    val seen = ListBuffer.empty[Partitioning]
+    checkInjectedUnionIsStamped(
+      create { extensions =>
+        extensions.injectQueryStagePrepRule(_ => WrapRootInUnion)
+        extensions.injectQueryStageOptimizerRule(_ => ObserveUnionPartitioning(seen))
+      }, aqeEnabled = true)
+    assert(seen.nonEmpty, "the stage optimizers must have seen the union")
+    assert(!seen.exists(_.isInstanceOf[UnknownPartitioning]),
+      s"the barrier after the prep rules must decide before the stage optimizers read: $seen")
+  }
+
+  test("SPARK-59122: the barrier in AQE post stage creation stamps a union added there") {
+    // With AQE on, the columnar rules reach this plan only through `postStageCreationRules`: the
+    // root of the plan `QueryExecution.preparations` hands them is `AdaptiveSparkPlanExec`, which
+    // `WrapRootInUnion` leaves alone. An injected stage-optimizer rule runs ahead of the same
+    // barrier, so it needs no case of its own.
+    checkInjectedUnionIsStamped(
+      create(_.injectColumnar(_ => WrapRootInUnionColumnarRule)), aqeEnabled = true)
+  }
+
+  test("SPARK-59122: a union one injected prep rule adds is recorded before the next one reads") {
+    // The barrier sits after the whole injected list, so between two of them a fresh union used to
+    // have no record and answered live. A rule planning requirements over it could then elide an
+    // exchange over a concrete partitioning while the barrier stamped the preparation's value and
+    // execution concatenated, which puts one group in two partitions.
+    // `SnapshotUnionPreparationConf.before` lists a snapshot pass ahead of each injected rule.
+    val seen = ListBuffer.empty[Partitioning]
+    checkInjectedUnionIsStamped(
+      create { extensions =>
+        extensions.injectQueryStagePrepRule(_ => WrapRootInUnion)
+        extensions.injectQueryStagePrepRule(_ => ObserveUnionPartitioning(seen))
+      }, aqeEnabled = true)
+    assert(seen.nonEmpty, "the second prep rule must have seen the union")
+    assert(!seen.exists(_.isInstanceOf[UnknownPartitioning]),
+      s"the snapshot pass between the two rules must have recorded the conf: $seen")
+  }
+
+  test("SPARK-59122: a union an injected post planner strategy rule adds is recorded next") {
+    // These rules run before `ensureRequirements`, so a reader among them can still drop an
+    // exchange over a union another of them created, which makes this the injected list where the
+    // window costs wrong rows rather than a lost fusion.
+    val seen = ListBuffer.empty[Partitioning]
+    checkInjectedUnionIsStamped(
+      create { extensions =>
+        extensions.injectQueryPostPlannerStrategyRule(_ => WrapRootInUnion)
+        extensions.injectQueryPostPlannerStrategyRule(_ => ObserveUnionPartitioning(seen))
+      }, aqeEnabled = true)
+    assert(seen.nonEmpty, "the second post planner strategy rule must have seen the union")
+    assert(!seen.exists(_.isInstanceOf[UnknownPartitioning]),
+      s"the snapshot pass between the two rules must have recorded the conf: $seen")
+  }
+
+  test("SPARK-59122: a union one injected stage optimizer rule adds is recorded before the next") {
+    // These rules are folded over inside `optimizeQueryStage`, which has no list to put a pass
+    // into, so the record is written on each rule result that changed the plan. What this case
+    // reads is the next rule; the `ValidateRequirements` check in the same fold answers from the
+    // same write, and reaching it takes an injected rule that is itself an `AQEShuffleReadRule`,
+    // since the built-in ones are listed ahead of the injected list.
+    val seen = ListBuffer.empty[Partitioning]
+    withSession(create { extensions =>
+      extensions.injectQueryStageOptimizerRule(_ => WrapRootInUnion)
+      extensions.injectQueryStageOptimizerRule(_ => ObserveUnionPartitioning(seen))
+    }) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      val df = session.range(0, 20, 1, 2).selectExpr("id % 5 AS k", "id AS v")
+        .repartition(4, col("k")).selectExpr("k", "v + 1 AS w")
+      assert(df.collect().map(_.getLong(1)).sorted.toSeq == (1L to 20L).toSeq,
+        "the injected union must not drop or duplicate rows")
+      // These rules run on each stage's plan as well, and the union the first one adds inside the
+      // shuffle stands over a range, which has nothing to pass through either way.
+      assert(seen.exists(!_.isInstanceOf[UnknownPartitioning]),
+        s"the union over the shuffle read must answer from the recorded conf: $seen")
+    }
+  }
+
+  test("SPARK-59122: a union one injected columnar rule adds is recorded before the next") {
+    // The injected columnar rules share one `ApplyColumnarRulesAndInsertTransitions`, so the record
+    // rides on each rule's own transitions, one override per phase. The post transitions run in
+    // reverse list order and the pre transitions in list order, so each phase needs the rule that
+    // adds the union injected at the other end.
+    Seq(false, true).foreach { aqeEnabled =>
+      val post = ListBuffer.empty[Partitioning]
+      checkInjectedUnionIsStamped(
+        create { extensions =>
+          extensions.injectColumnar(_ => ObserveUnionPartitioningColumnarRule(post))
+          extensions.injectColumnar(_ => WrapRootInUnionColumnarRule)
+        }, aqeEnabled)
+      val pre = ListBuffer.empty[Partitioning]
+      checkInjectedUnionIsStamped(
+        create { extensions =>
+          extensions.injectColumnar(_ => WrapRootInUnionPreColumnarRule)
+          extensions.injectColumnar(_ => ObserveUnionPartitioningPreColumnarRule(pre))
+        }, aqeEnabled)
+      Seq("post" -> post, "pre" -> pre).foreach { case (phase, seen) =>
+        assert(seen.nonEmpty,
+          s"the second columnar rule must have seen the union, $phase, aqe=$aqeEnabled")
+        assert(!seen.exists(_.isInstanceOf[UnknownPartitioning]),
+          s"the record must ride behind the rule that added it, $phase, aqe=$aqeEnabled: $seen")
+      }
+    }
+  }
+
+  test("SPARK-59122: the codegen conf is recorded for a prep rule after the one that added it") {
+    // The same window, read through the codegen gate rather than the partitioning. The repartition
+    // is what makes AQE engage at all; it is round-robin, so the union above it has nothing to pass
+    // through and stays plain, which leaves its gate turning on the codegen confs. Only enablement
+    // is observable here: a one-child union is under any legal `maxChildren`, which cannot go below
+    // two, so `UnionCodegenSuite` pins that field on a union of three.
+    val seen = ListBuffer.empty[Boolean]
+    withSession(create { extensions =>
+      extensions.injectQueryStagePrepRule(_ => WrapRootInUnion)
+      extensions.injectQueryStagePrepRule(_ => ObserveUnionSupportCodegen(seen))
+    }) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      val df = session.range(0, 20, 1, 2).repartition(2).selectExpr("id + 1 AS w")
+      assert(df.collect().map(_.getLong(0)).sorted.toSeq == (1L to 20L).toSeq,
+        "the injected union must not drop or duplicate rows")
+      assert(seen.nonEmpty, "the second prep rule must have seen the union")
+      assert(seen.forall(identity),
+        s"the snapshot pass between the two rules must have recorded the codegen conf: $seen")
+    }
+  }
+
+  test("SPARK-59122: an injected shuffle read rule's union is recorded before validation") {
+    // The other consumer inside `optimizeQueryStage`. For an `AQEShuffleReadRule` the fold checks
+    // the rewrite with `ValidateRequirements` and keeps the plan from before the rule when it
+    // fails, so a union the rule put under the aggregate is present afterwards only if the check
+    // saw the recorded conf. The flip lands after the wrapper read its snapshot, so the live value
+    // says the union concatenates while the record says it passes the partitioning through.
+    withSession(create(_.injectQueryStageOptimizerRule(_ => WrapAggChildInUnion))) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, true)
+      val df = session.range(0, 20, 1, 2).selectExpr("id % 5 AS k").groupBy("k").count()
+      assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, false)
+      assert(df.collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq ==
+        (0L until 5L).map((_, 4L)), "the injected union must not drop or duplicate rows")
+
+      val unions = collect(df.queryExecution.executedPlan) { case u: UnionExec => u }
+      assert(unions.size == 1,
+        "the aggregate's requirement must have been judged against the recorded conf, or the " +
+          s"rewrite was dropped, got\n${df.queryExecution.executedPlan}")
+    }
+  }
+
+  test("SPARK-59122: the barrier in AQE post stage creation stamps from the adaptive snapshot") {
+    // The cases above leave the conf where it is until their barriers have run, so one answering
+    // from a read of its own rather than the snapshot `AdaptiveSparkPlanExec` took at construction
+    // would pass them too. Here the two differ: the flip lands after the wrapper is built and
+    // before the stage carrying the injected union is created. This is where it can be seen, since
+    // the rules listed per stage are the ones built anew each time; the lists that run per
+    // re-planning round are built once, with the snapshot, so a barrier in them cannot take a
+    // later value to begin with.
+    withSession(create(_.injectColumnar(_ => WrapRootInUnionColumnarRule))) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, true)
+      val df = session.range(0, 20, 1, 2).selectExpr("id % 5 AS k", "id AS v")
+        .repartition(4, col("k")).selectExpr("k", "v + 1 AS w")
+      // Constructing the wrapper is what reads AQE's snapshot.
+      assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, false)
+      // The stages, the columnar rules and the barrier behind them all run here.
+      assert(df.collect().map(_.getLong(1)).sorted.toSeq == (1L to 20L).toSeq,
+        "the injected union must not drop or duplicate rows")
+
+      val unions = collect(df.queryExecution.executedPlan) { case u: UnionExec => u }
+      assert(unions.size == 1, s"expected the one union the rule adds, got ${unions.size}")
+      assert(!unions.head.outputPartitioning.isInstanceOf[UnknownPartitioning],
+        "the barrier must stamp from the snapshot, not from the value the conf holds when it " +
+          s"runs, got ${unions.head.outputPartitioning}")
+    }
+  }
+
+  test("SPARK-59122: a late AQE barrier records the codegen confs the wrapper was built with") {
+    // The same divergence read through the codegen gate. A barrier taking the value the conf holds
+    // when it runs would record fusion as out, so nothing would fuse and the copy of the union
+    // inside the shell would carry no `numOutputRows`. Round-robin children, so the union has
+    // nothing to pass through and stays plain, which is what leaves its gate on these two confs.
+    withSession(create(_.injectColumnar(_ => RebuildRootUnionColumnarRule))) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      Seq(
+        "enablement" -> (SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "false"),
+        "the child cap" -> (SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN.key -> "2")
+      ).foreach { case (what, (key, flipped)) =>
+        session.conf.set(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key, "true")
+        // Three children, so that a cap of two excludes this union; the cap cannot go below two.
+        session.conf.set(SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN.key, "3")
+        val df = session.range(0, 20, 1, 2).repartition(2)
+          .union(session.range(20, 40, 1, 2).repartition(2))
+          .union(session.range(40, 60, 1, 2).repartition(2))
+        assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+
+        session.conf.set(key, flipped)
+        assert(df.collect().map(_.longValue()).sorted.toSeq == (0L until 60L).toSeq,
+          "the rebuilt union must not drop or duplicate rows")
+
+        val fused = collect(df.queryExecution.executedPlan) { case w: WholeStageCodegenExec => w }
+          .flatMap(_.collect { case u: UnionExec => u })
+        assert(fused.size == 1, s"the rebuilt union must fuse with $what flipped, got\n" +
+          df.queryExecution.executedPlan)
+        assert(fused.head.children.forall(_.isInstanceOf[InputAdapter]),
+          s"expected the copy inside the shell, got ${fused.head.children.map(_.getClass)}")
+        assert(fused.head.metrics("numOutputRows").value == 60,
+          s"the copy inside the shell must count the rows with $what flipped")
       }
     }
   }
@@ -1411,6 +1670,120 @@ object MyQueryPostPlannerStrategyRule extends Rule[SparkPlan] {
       case h: HashAggregateExec if h.aggregateExpressions.map(_.mode).contains(Final) =>
         SortExec(h.groupingExpressions.map(k => SortOrder.apply(k, Ascending)), false, h)
     }
+  }
+}
+
+/**
+ * Stands for an extension that introduces a `UnionExec` of its own: replaces a root `ProjectExec`
+ * with a fresh one-child union, which carries no stamped decision because it is a new instance, and
+ * leaves the rows alone. Matching only the root keeps it idempotent, since the root is a
+ * `UnionExec` afterwards; matching a `ProjectExec` keeps it out of the way of
+ * `postStageCreationRules`, which requires the exchange it is handed to stay an exchange.
+ */
+object WrapRootInUnion extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = plan match {
+    case p: ProjectExec => UnionExec(Seq(p))
+    case other => other
+  }
+}
+
+/**
+ * Stands for an injected shuffle-read optimizer that builds a parent over a `UnionExec` of its own:
+ * a fresh one-child union under the final aggregate, which leaves the rows alone and makes
+ * `ValidateRequirements` judge the aggregate's clustering requirement against what that union
+ * reports. `optimizeQueryStage` drops the whole rewrite when that check fails, so the union
+ * survives only if it answered from the recorded conf. Matching `Final` mode keeps it off the
+ * partial aggregate inside the shuffle stage, whose requirement is unspecified either way.
+ */
+object WrapAggChildInUnion extends Rule[SparkPlan] with AQEShuffleReadRule {
+  override protected def supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
+
+  override def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
+    case agg: HashAggregateExec
+        if agg.aggregateExpressions.exists(_.mode == Final) &&
+          !agg.child.isInstanceOf[UnionExec] =>
+      agg.withNewChildren(Seq(UnionExec(Seq(agg.child))))
+  }
+}
+
+/** The columnar-rule wrapper for `WrapRootInUnion`. */
+object WrapRootInUnionColumnarRule extends ColumnarRule {
+  override def postColumnarTransitions: Rule[SparkPlan] = WrapRootInUnion
+}
+
+/** `WrapRootInUnion` in the other phase, where the injected rules run in list order. */
+object WrapRootInUnionPreColumnarRule extends ColumnarRule {
+  override def preColumnarTransitions: Rule[SparkPlan] = WrapRootInUnion
+}
+
+/**
+ * Stands for an extension that returns a `UnionExec` of its own in place of one already in the
+ * plan: a fresh instance over the same children, so it carries no stamped decision, and the rows
+ * are the same ones. Replaces the root only, which is where `postStageCreationRules` hands it a
+ * union; a stage's own plan is rooted at the exchange, so those applications leave it alone.
+ */
+object RebuildRootUnion extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = plan match {
+    case u: UnionExec => UnionExec(u.children)
+    case other => other
+  }
+}
+
+/** The columnar-rule wrapper for `RebuildRootUnion`. */
+object RebuildRootUnionColumnarRule extends ColumnarRule {
+  override def postColumnarTransitions: Rule[SparkPlan] = RebuildRootUnion
+}
+
+/**
+ * Records what each `UnionExec` reports, with `UNION_OUTPUT_PARTITIONING` turned off: a concrete
+ * answer can then only come from a decision stamped earlier, or from the conf a snapshot pass
+ * recorded. Injected as a stage-optimizer rule it runs after the barrier at the end of the query
+ * stage preparation rules; injected as a prep rule it runs among them. Puts the conf back, so
+ * nothing downstream sees the flip.
+ */
+case class ObserveUnionPartitioning(seen: ListBuffer[Partitioning]) extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = {
+    plan.foreach {
+      case u: UnionExec =>
+        val enabled = u.conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING)
+        u.conf.setConf(SQLConf.UNION_OUTPUT_PARTITIONING, false)
+        try seen += u.outputPartitioning
+        finally u.conf.setConf(SQLConf.UNION_OUTPUT_PARTITIONING, enabled)
+      case _ =>
+    }
+    plan
+  }
+}
+
+/** The columnar-rule wrapper for `ObserveUnionPartitioning`. */
+case class ObserveUnionPartitioningColumnarRule(seen: ListBuffer[Partitioning])
+  extends ColumnarRule {
+  override def postColumnarTransitions: Rule[SparkPlan] = ObserveUnionPartitioning(seen)
+}
+
+/** `ObserveUnionPartitioning` in the other phase. */
+case class ObserveUnionPartitioningPreColumnarRule(seen: ListBuffer[Partitioning])
+  extends ColumnarRule {
+  override def preColumnarTransitions: Rule[SparkPlan] = ObserveUnionPartitioning(seen)
+}
+
+/**
+ * Records whether each `UnionExec` says it supports codegen, read with
+ * `WHOLESTAGE_UNION_CODEGEN_ENABLED` turned off: a `true` can then only come from the conf a
+ * snapshot pass recorded for it, or from a decision stamped earlier. Puts the conf back, so nothing
+ * downstream sees the flip.
+ */
+case class ObserveUnionSupportCodegen(seen: ListBuffer[Boolean]) extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = {
+    plan.foreach {
+      case u: UnionExec =>
+        val enabled = u.conf.getConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED)
+        u.conf.setConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED, false)
+        try seen += u.supportCodegen
+        finally u.conf.setConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED, enabled)
+      case _ =>
+    }
+    plan
   }
 }
 
