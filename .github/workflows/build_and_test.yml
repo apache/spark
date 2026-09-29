@@ -358,7 +358,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           build/apache-maven-*
@@ -368,7 +368,7 @@ jobs:
         restore-keys: |
           build-${{ runner.os }}-
     - name: Restore Coursier local repository
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: ~/.cache/coursier
         key: coursier-${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -492,13 +492,13 @@ jobs:
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
       - name: Build and push (Documentation)
         if: ${{ fromJson(needs.precondition.outputs.required).docs == 'true' && hashFiles('dev/spark-test-image/docs/Dockerfile') != '' }}
         id: docker_build_docs
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: ./dev/spark-test-image/docs/
           build-contexts: |
@@ -511,7 +511,7 @@ jobs:
       - name: Build and push (Linter)
         if: ${{ fromJson(needs.precondition.outputs.required).lint == 'true' && hashFiles('dev/spark-test-image/lint/Dockerfile') != '' }}
         id: docker_build_lint
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: ./dev/spark-test-image/lint/
           build-contexts: |
@@ -524,7 +524,7 @@ jobs:
       - name: Build and push (SparkR)
         if: ${{ fromJson(needs.precondition.outputs.required).sparkr == 'true' && hashFiles('dev/spark-test-image/sparkr/Dockerfile') != '' }}
         id: docker_build_sparkr
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: ./dev/spark-test-image/sparkr/
           push: true
@@ -536,7 +536,7 @@ jobs:
         if: ${{ (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true') && env.PYSPARK_IMAGE_TO_TEST != '' }}
         id: docker_build_pyspark
         env: ${{ fromJSON(inputs.envs) }}
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: ./dev/spark-test-image/${{ env.PYSPARK_IMAGE_TO_TEST }}/
           build-contexts: |
@@ -585,7 +585,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache SBT and Maven
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           build/apache-maven-*
@@ -595,7 +595,7 @@ jobs:
         restore-keys: |
           build-${{ runner.os }}-
     - name: Cache Coursier local repository
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ~/.cache/coursier
         key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -714,7 +714,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           build/apache-maven-*
@@ -724,7 +724,7 @@ jobs:
         restore-keys: |
           build-${{ runner.os }}-
     - name: Restore Coursier local repository
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: ~/.cache/coursier
         key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -896,7 +896,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           build/apache-maven-*
@@ -906,7 +906,7 @@ jobs:
         restore-keys: |
           build-${{ runner.os }}-
     - name: Restore Coursier local repository
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: ~/.cache/coursier
         key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -1087,7 +1087,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           build/apache-maven-*
@@ -1097,14 +1097,14 @@ jobs:
         restore-keys: |
           build-${{ runner.os }}-
     - name: Restore Coursier local repository
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: ~/.cache/coursier
         key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           coursier-${{ runner.os }}-
     - name: Cache Maven local repository
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ~/.m2/repository
         key: docs-maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
@@ -1223,7 +1223,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           build/apache-maven-*
@@ -1233,14 +1233,14 @@ jobs:
         restore-keys: |
           build-${{ runner.os }}-
     - name: Restore Coursier local repository
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: ~/.cache/coursier
         key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           coursier-${{ runner.os }}-
     - name: Cache Maven local repository
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ~/.m2/repository
         key: docs-maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
@@ -1324,7 +1324,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache SBT and Maven
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           build/apache-maven-*
@@ -1334,7 +1334,7 @@ jobs:
         restore-keys: |
           build-${{ runner.os }}-
     - name: Restore Coursier local repository
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: ~/.cache/coursier
         key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -1361,7 +1361,7 @@ jobs:
         rm compile-artifact.tar.zst
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ./tpcds-sf-1
         key: tpcds-${{ runner.os }}-${{ hashFiles('.github/workflows/build_and_test.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
@@ -1458,7 +1458,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache SBT and Maven
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           build/apache-maven-*
@@ -1468,7 +1468,7 @@ jobs:
         restore-keys: |
           build-${{ runner.os }}-
     - name: Restore Coursier local repository
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: ~/.cache/coursier
         key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -1544,7 +1544,7 @@ jobs:
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Cache SBT and Maven
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             build/apache-maven-*
@@ -1554,7 +1554,7 @@ jobs:
           restore-keys: |
             build-${{ runner.os }}-
       - name: Restore Coursier local repository
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/coursier
           key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -1636,7 +1636,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Use Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24.13.0
           cache: 'npm'
