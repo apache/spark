@@ -79,42 +79,73 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
       case _ => p
     }
 
-    val boundPlan = if (conf.charVarcharFirstClassTypes) {
-      plan.resolveOperatorsUp {
-        case relation: LogicalRelation => bindCharVarcharScanMode(relation)
-        case relation: DataSourceV2Relation => bindCharVarcharScanMode(relation)
-        case relation: HiveTableRelation => bindCharVarcharScanMode(relation)
-      }
-    } else {
-      plan
-    }
+    val padReads = conf.readSideCharPadding || standardSemantics
+    val bindFirstClass = conf.charVarcharFirstClassTypes
 
     // standardSemantics takes precedence over legacy charVarcharAsString.
     if (conf.charVarcharAsString && !standardSemantics) {
-      return boundPlan
+      return if (bindFirstClass) {
+        plan.resolveOperatorsUp {
+          case relation: LogicalRelation => bindCharVarcharScanMode(relation)
+          case relation: DataSourceV2Relation => bindCharVarcharScanMode(relation)
+          case relation: HiveTableRelation => bindCharVarcharScanMode(relation)
+        }
+      } else {
+        plan
+      }
     }
 
     if (standardSemantics && !conf.readSideCharPadding) {
       warnReadSidePaddingOverride()
     }
 
-    if (conf.readSideCharPadding || standardSemantics) {
-      val newPlan = boundPlan.resolveOperatorsUpWithNewOutput {
+    if (padReads) {
+      val newPlan = plan.resolveOperatorsUpWithNewOutput {
+        case r: LogicalRelation if r.charVarcharScanMode.exists(_ != scanMode) =>
+          r -> Nil
         case r: LogicalRelation =>
-          ApplyCharTypePaddingHelper.readSidePadding(r, () =>
-            r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
+          val bound = if (bindFirstClass) {
+            bindCharVarcharScanMode(r).asInstanceOf[LogicalRelation]
+          } else {
+            r
+          }
+          ApplyCharTypePaddingHelper.readSidePadding(bound, () =>
+            bound.copy(output = bound.output.map(CharVarcharUtils.cleanAttrMetadata)))
+        case r: DataSourceV2Relation if r.charVarcharScanMode.exists(_ != scanMode) =>
+          r -> Nil
         case r: DataSourceV2Relation =>
-          ApplyCharTypePaddingHelper.readSidePadding(r, () =>
-            r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
+          val bound = if (bindFirstClass) {
+            bindCharVarcharScanMode(r).asInstanceOf[DataSourceV2Relation]
+          } else {
+            r
+          }
+          ApplyCharTypePaddingHelper.readSidePadding(bound, () =>
+            bound.copy(output = bound.output.map(CharVarcharUtils.cleanAttrMetadata)))
+        case r: HiveTableRelation if r.charVarcharScanMode.exists(_ != scanMode) =>
+          r -> Nil
         case r: HiveTableRelation =>
-          ApplyCharTypePaddingHelper.readSidePadding(r, () => {
-            val cleanedDataCols = r.dataCols.map(CharVarcharUtils.cleanAttrMetadata)
-            val cleanedPartCols = r.partitionCols.map(CharVarcharUtils.cleanAttrMetadata)
-            r.copy(dataCols = cleanedDataCols, partitionCols = cleanedPartCols)
+          val bound = if (bindFirstClass) {
+            bindCharVarcharScanMode(r).asInstanceOf[HiveTableRelation]
+          } else {
+            r
+          }
+          ApplyCharTypePaddingHelper.readSidePadding(bound, () => {
+            val cleanedDataCols = bound.dataCols.map(CharVarcharUtils.cleanAttrMetadata)
+            val cleanedPartCols = bound.partitionCols.map(CharVarcharUtils.cleanAttrMetadata)
+            bound.copy(dataCols = cleanedDataCols, partitionCols = cleanedPartCols)
           })
       }
       ApplyCharTypePaddingHelper.paddingForStringComparison(newPlan, padCharCol = false)
     } else {
+      val boundPlan = if (bindFirstClass) {
+        plan.resolveOperatorsUp {
+          case relation: LogicalRelation => bindCharVarcharScanMode(relation)
+          case relation: DataSourceV2Relation => bindCharVarcharScanMode(relation)
+          case relation: HiveTableRelation => bindCharVarcharScanMode(relation)
+        }
+      } else {
+        plan
+      }
       ApplyCharTypePaddingHelper.paddingForStringComparison(
         boundPlan, padCharCol = !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE))
     }

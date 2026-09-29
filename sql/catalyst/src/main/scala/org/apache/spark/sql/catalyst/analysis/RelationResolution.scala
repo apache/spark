@@ -604,17 +604,22 @@ class RelationResolution(
       output = ref.output,
       catalog = Some(resolvedCatalog),
       identifier = Some(ref.identifier),
-      options = ref.options)
+      options = ref.options,
+      charVarcharScanMode = ref.charVarcharScanMode)
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, ref: V2TableReference): LogicalPlan = {
     cached transform {
       case r: DataSourceV2Relation if matchesReference(r, ref) =>
         V2ReferenceUtils.validateLoadedTable(r.table, ref)
+        val reboundMode = ref.context match {
+          case _: V2Reference.TemporaryViewContext => ref.charVarcharScanMode
+          case _ => None
+        }
         r.copy(
           output = ref.output,
           options = ref.options,
-          charVarcharScanMode = None)
+          charVarcharScanMode = reboundMode)
     }
   }
 

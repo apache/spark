@@ -80,7 +80,9 @@ private[sql] object CharVarcharScanMode {
       conf.setConfString(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key, "false")
   }
 
-  /** Parses a mode from its `toString` name; the inverse of [[CharVarcharScanMode.toString]]. */
+  /**
+   * Parses a mode from `PreserveNative.toString` or `SparkStandard.toString`.
+   */
   def fromName(name: String): CharVarcharScanMode = name match {
     case "PreserveNative" => PreserveNative
     case "SparkStandard" => SparkStandard

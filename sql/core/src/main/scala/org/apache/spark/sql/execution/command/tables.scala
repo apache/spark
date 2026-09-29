@@ -205,16 +205,18 @@ case class AlterTableRenameCommand(
       DDLUtils.verifyAlterTableType(catalog, table, isView)
       val cacheManager = sparkSession.sharedState.cacheManager
       val resolver = sparkSession.sessionState.conf.resolver
-      val lookedUp = (
-        cacheManager.lookupDirectCacheDescriptorsByName(oldName.nameParts, resolver) ++
-          cacheManager.lookupDirectCacheDescriptorsByName(
-            sparkSession.sessionState.catalogManager.currentCatalog.name() +:
-              oldName.nameParts, resolver)).distinct
-      val oldCaches = if (lookedUp.nonEmpty) {
-        lookedUp
-      } else {
-        cacheManager.lookupCachedData(sparkSession.table(oldName.unquotedString)).toSeq.map { cd =>
-          TableCacheDescriptor(cd.plan, cd.cachedRepresentation.cacheBuilder.storageLevel)
+      val oldCaches = {
+        val catalogName = sparkSession.sessionState.catalogManager.currentCatalog.name()
+        val lookedUp = cacheManager.lookupDirectCacheDescriptorsByNames(
+          Seq(oldName.nameParts, catalogName +: oldName.nameParts), resolver)
+        if (lookedUp.nonEmpty) {
+          lookedUp
+        } else {
+          val cached = cacheManager.lookupCachedData(
+            sparkSession.table(oldName.unquotedString))
+          cached.toSeq.map { cd =>
+            TableCacheDescriptor(cd.plan, cd.cachedRepresentation.cacheBuilder.storageLevel)
+          }
         }
       }
       if (oldCaches.nonEmpty) {

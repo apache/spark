@@ -3886,7 +3886,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-58814: V2 temp view rebinds CHAR/VARCHAR policy on lookup") {
+  test("SPARK-58814: V2 temp view keeps creation-time CHAR/VARCHAR policy") {
     val t = "testcat.ns1.ns2.tbl"
     val preserveConf = Seq(
       SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
@@ -3902,16 +3902,25 @@ class DataSourceV2DataFrameSuite
         withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
           sql(s"INSERT INTO $t VALUES ('abcdef')")
         }
-        withSQLConf(preserveConf: _*) {
+        withSQLConf(standardConf: _*) {
           spark.table(t).select("v").createOrReplaceTempView("v")
         }
-        withSQLConf(standardConf: _*) {
+        withSQLConf(preserveConf: _*) {
           checkError(
             exception = intercept[SparkRuntimeException] {
               spark.table("v").collect()
             },
             condition = "EXCEED_LIMIT_LENGTH",
             parameters = Map("limit" -> "4"))
+        }
+      }
+      withTempView("v_native") {
+        withSQLConf(preserveConf: _*) {
+          spark.table(t).select("v").createOrReplaceTempView("v_native")
+        }
+        withSQLConf(standardConf: _*) {
+          // Cast so collect does not run session write-side VARCHAR checks on the output.
+          checkAnswer(spark.table("v_native").selectExpr("CAST(v AS STRING)"), Row("abcdef"))
         }
       }
     }

@@ -508,10 +508,25 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   def lookupDirectCacheDescriptorsByName(
       name: Seq[String],
       resolver: Resolver): Seq[TableCacheDescriptor] = {
-    cachedData.collect {
-      case cd if isDirectNamedCache(cd.plan, name, resolver) =>
-        TableCacheDescriptor(cd.plan, cd.cachedRepresentation.cacheBuilder.storageLevel)
+    lookupDirectCacheDescriptorsByNames(Seq(name), resolver)
+  }
+
+  /**
+   * Direct named caches matching any of `names` from one cache snapshot.
+   */
+  def lookupDirectCacheDescriptorsByNames(
+      names: Seq[Seq[String]],
+      resolver: Resolver): Seq[TableCacheDescriptor] = {
+    val groups = names.map(_ => Seq.newBuilder[TableCacheDescriptor])
+    cachedData.foreach { cd =>
+      names.indices.foreach { i =>
+        if (isDirectNamedCache(cd.plan, names(i), resolver)) {
+          groups(i) += TableCacheDescriptor(
+            cd.plan, cd.cachedRepresentation.cacheBuilder.storageLevel)
+        }
+      }
     }
+    groups.flatMap(_.result()).distinct
   }
 
   /**
@@ -523,12 +538,16 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       mode: Option[CharVarcharScanMode],
       plan: LogicalPlan): SparkSession = {
     val restore = spark.cloneSession()
+    val policy = cacheRebuildPolicy(plan)
     mode.foreach { m =>
       CharVarcharScanMode.configure(
         restore.sessionState.conf,
         m,
-        nativeCharVarcharTypes = hasNativeCharVarcharTypes(plan))
+        nativeCharVarcharTypes = policy.nativeTypes)
     }
+    restore.sessionState.conf.setConfString(
+      SQLConf.READ_SIDE_CHAR_PADDING.key,
+      policy.readSidePadding.toString)
     restore
   }
 
@@ -590,11 +609,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   private def tryRebuildCacheEntry(spark: SparkSession, cd: CachedData): Option[CachedData] = {
-    val mode = capturedCharVarcharScanMode(cd.plan)
-    val rebuildSession = sessionForCacheRebuild(spark, mode, cd.plan)
+    val policy = cacheRebuildPolicy(cd.plan)
+    val rebuildSession = sessionForCacheRebuild(spark, policy)
     rebuildSession.withActive {
       try {
-        tryRefreshPlan(rebuildSession, cd.plan).map { refreshedPlan =>
+        tryRefreshPlan(rebuildSession, cd.plan, policy.mixedModes).map { refreshedPlan =>
           val qe = QueryExecution.create(
             rebuildSession,
             refreshedPlan,
@@ -615,42 +634,65 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   // shared with the caller. CHAR/VARCHAR confs are set on that clone, never on `spark`.
   private def sessionForCacheRebuild(
       spark: SparkSession,
-      mode: Option[CharVarcharScanMode],
-      plan: LogicalPlan): SparkSession = {
+      policy: CacheRebuildPolicy): SparkSession = {
     val base = getOrCloneSessionWithConfigsOff(spark)
-    mode match {
-      case None => base
-      case Some(m) =>
-        val session = if (base eq spark) spark.cloneSession() else base
+    // Mixed bound modes must not share one configure() or one padding flag.
+    if (policy.mixedModes || (policy.mode.isEmpty && !policy.readSidePadding)) {
+      base
+    } else {
+      val session = if (base eq spark) spark.cloneSession() else base
+      policy.mode.foreach { m =>
         CharVarcharScanMode.configure(
           session.sessionState.conf,
           m,
-          nativeCharVarcharTypes = hasNativeCharVarcharTypes(plan))
-        session
+          nativeCharVarcharTypes = policy.nativeTypes)
+      }
+      session.sessionState.conf.setConfString(
+        SQLConf.READ_SIDE_CHAR_PADDING.key,
+        policy.readSidePadding.toString)
+      session
     }
   }
 
-  private def hasNativeCharVarcharTypes(plan: LogicalPlan): Boolean = {
-    plan.exists {
+  private case class CacheRebuildPolicy(
+      mode: Option[CharVarcharScanMode],
+      mixedModes: Boolean,
+      nativeTypes: Boolean,
+      readSidePadding: Boolean)
+
+  // One plan walk for rebuild session flags. Mixed bound modes skip a global configure so
+  // each relation keeps the mode already stored on that node.
+  private def cacheRebuildPolicy(plan: LogicalPlan): CacheRebuildPolicy = {
+    var mode: Option[CharVarcharScanMode] = None
+    var mixed = false
+    var native = false
+    var padding = false
+    plan.foreach {
       case r: DataSourceV2Relation =>
-        r.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))
+        r.charVarcharScanMode.foreach { m =>
+          if (mode.exists(_ != m)) mixed = true else if (mode.isEmpty) mode = Some(m)
+        }
+        if (r.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))) native = true
       case r: LogicalRelation =>
-        r.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))
+        r.charVarcharScanMode.foreach { m =>
+          if (mode.exists(_ != m)) mixed = true else if (mode.isEmpty) mode = Some(m)
+        }
+        if (r.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))) native = true
       case r: HiveTableRelation =>
-        r.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))
-      case _ => false
+        r.charVarcharScanMode.foreach { m =>
+          if (mode.exists(_ != m)) mixed = true else if (mode.isEmpty) mode = Some(m)
+        }
+        if (r.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))) native = true
+      case project @ Project(_, child)
+          if ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, child) =>
+        padding = true
+      case _ =>
     }
-  }
-
-  private def capturedCharVarcharScanMode(plan: LogicalPlan): Option[CharVarcharScanMode] = {
-    plan.collectFirst {
-      case r: DataSourceV2Relation if r.charVarcharScanMode.isDefined =>
-        r.charVarcharScanMode.get
-      case r: LogicalRelation if r.charVarcharScanMode.isDefined =>
-        r.charVarcharScanMode.get
-      case r: HiveTableRelation if r.charVarcharScanMode.isDefined =>
-        r.charVarcharScanMode.get
-    }
+    CacheRebuildPolicy(
+      mode = if (mixed) None else mode,
+      mixedModes = mixed,
+      nativeTypes = native,
+      readSidePadding = padding)
   }
 
   /**
@@ -666,21 +708,29 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    *
    * @return the refreshed plan if refresh succeeds, None otherwise
    */
-  private def tryRefreshPlan(spark: SparkSession, plan: LogicalPlan): Option[LogicalPlan] = {
+  private def tryRefreshPlan(
+      spark: SparkSession,
+      plan: LogicalPlan,
+      mixedModes: Boolean): Option[LogicalPlan] = {
     try {
-      EliminateSubqueryAliases(plan) match {
-        case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
-            if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] =>
-          refreshV2RelationTable(r, catalog, ident)
-        case project @ Project(_, r @ ExtractV2CatalogAndIdentifier(catalog, ident))
-            if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] &&
-              r.charVarcharScanMode.exists(
-                ApplyCharTypePaddingHelper.isReadSidePaddingProject(project, r, _)) =>
-          // Drop the analyzer-generated padding Project. QueryExecution.create re-analyzes
-          // the refreshed relation so the Project matches the new schema and scan mode.
-          refreshV2RelationTable(r, catalog, ident)
-        case _ =>
-          Some(V2TableRefreshUtil.refresh(spark, plan))
+      if (mixedModes) {
+        // Keep each relation's stored mode and policy Project; only refresh Table instances.
+        Some(V2TableRefreshUtil.refresh(spark, plan))
+      } else {
+        EliminateSubqueryAliases(plan) match {
+          case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
+              if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] =>
+            refreshV2RelationTable(r, catalog, ident)
+          case project @ Project(_, r @ ExtractV2CatalogAndIdentifier(catalog, ident))
+              if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] &&
+                r.charVarcharScanMode.exists(
+                  ApplyCharTypePaddingHelper.isReadSidePaddingProject(project, r, _)) =>
+            // Drop the analyzer-generated padding Project. QueryExecution.create re-analyzes
+            // the refreshed relation so the Project matches the new schema and scan mode.
+            refreshV2RelationTable(r, catalog, ident)
+          case _ =>
+            Some(V2TableRefreshUtil.refresh(spark, plan))
+        }
       }
     } catch {
       case NonFatal(e) =>

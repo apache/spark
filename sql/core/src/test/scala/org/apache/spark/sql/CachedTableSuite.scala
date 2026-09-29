@@ -33,9 +33,10 @@ import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AsOfVersion
+import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, Project, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.{CharVarcharScanMode, DateTimeConstants}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.CatalogPlugin
@@ -2360,7 +2361,8 @@ class CachedTableSuite extends SharedSparkSession
   //            RENAME TABLE does not promote a dependent query cache;
   //            V1 table rename restores both bound modes;
   //            micro-batch WriteToDataSourceV2 invalidates both bound modes
-  // Replay   - same recache/rename tests assert retained mode and storage level
+  // Replay   - same recache/rename tests assert retained mode and storage level;
+  //            PreserveNative padding inversion uses a fresh DataFrame after recache
   test("RENAME TABLE manages cache with time travel plans correctly") {
     val t = "testcat.tbl"
     val tRenamed = "testcat.tbl_renamed"
@@ -2477,7 +2479,9 @@ class CachedTableSuite extends SharedSparkSession
     val preserveConf = Seq(
       SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
       SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
-    val standardConf = Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
+    val standardConf = Seq(
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
 
     withTable(t) {
       withSQLConf(preserveConf: _*) {
@@ -2524,6 +2528,42 @@ class CachedTableSuite extends SharedSparkSession
         cachedData(preserveConf).cachedRepresentation.cacheBuilder.storageLevel === MEMORY_ONLY)
       assert(cachedData(standardConf).cachedRepresentation.cacheBuilder.storageLevel === DISK_ONLY)
     }
+  }
+
+  test("PreserveNative recache keeps independent read-side padding") {
+    val t = "testcat.pad_tbl"
+    val preserveConf = Seq(
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
+    def withPadding(enabled: Boolean): Seq[(String, String)] = {
+      preserveConf :+ (SQLConf.READ_SIDE_CHAR_PADDING.key -> enabled.toString)
+    }
+    def hasPadding(ds: Dataset[_]): Boolean = ds.queryExecution.analyzed.exists {
+      case project @ Project(_, child) =>
+        ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, child)
+      case _ => false
+    }
+    def roundTrip(cachePadding: Boolean, recachePadding: Boolean): Unit = {
+      withTable(t) {
+        withSQLConf(withPadding(cachePadding): _*) {
+          sql(s"CREATE TABLE $t (id int, data char(4)) USING foo")
+          sql(s"INSERT INTO $t VALUES (1, 'a')")
+          sql(s"CACHE TABLE $t")
+          assert(hasPadding(spark.table(t)) === cachePadding)
+        }
+        withSQLConf(withPadding(recachePadding): _*) {
+          sql(s"INSERT INTO $t VALUES (2, 'b')")
+        }
+        withSQLConf(withPadding(cachePadding): _*) {
+          val fresh = spark.table(t)
+          assertCached(fresh)
+          assert(hasPadding(fresh) === cachePadding)
+          checkAnswer(fresh.select("id"), Seq(Row(1), Row(2)))
+        }
+      }
+    }
+    roundTrip(cachePadding = false, recachePadding = true)
+    roundTrip(cachePadding = true, recachePadding = false)
   }
 
   test("CHAR/VARCHAR scan modes do not split caches for non-CHAR relations") {
