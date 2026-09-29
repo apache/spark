@@ -593,4 +593,97 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
       )
     )
   }
+
+  test("coalescing is eventually consistent for existing rows when " +
+      "ignore-null selection changes") {
+    // Demonstrates the "Eventual consistency of the carry-in anchor" contract of
+    // [[Scd2BatchProcessor.coalesceIgnoredNulls]]: a leaf temporarily dropped from the ignore-null
+    // selection is not reconciled, so a later narrow affected window propagates a stale carry-in
+    // until a wider window pulls in the authoring row.
+
+    // "other" is authored and non-null in every row, so coalescing never changes it. It exists
+    // only so the selection can move off "value" without becoming an (invalid) empty list.
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("other", StringType)
+    val emptyMap = versionMap()
+    val unauthoredMap = versionMap(Seq("value") -> false)
+
+    // -- Batch 1 (selection = {value}) ------------------------------------------------
+    // Two rows arrive for key 1: seq 1 authors "old", seq 3 has an unauthored null.
+    // The affected window spans both rows, so seq 3 inherits "old" from seq 1.
+    val batch1Input = targetTableOf(schema)(
+      Row(1, "old", "x", 1L, null, cdcMetadata(1L, emptyMap)),
+      Row(1, null, "x", 3L, null, cdcMetadata(3L, unauthoredMap))
+    )
+    checkAnswer(
+      coalesce(batch1Input, includeColumns("value")),
+      Seq(
+        Row(1, "old", "x", 1L, null, cdcMetadata(1L, emptyMap)),
+        Row(1, "old", "x", 3L, null, cdcMetadata(3L, unauthoredMap))
+      )
+    )
+
+    // -- Batch 2 (selection = {other} -- "value" temporarily removed) -----------------
+    // An out-of-order seq 2 arrives with value = "new", slotting between seq 1 and
+    // seq 3. The decomposed target state after batch 2:
+    //   seq 1: value="old",  startAt=1, endAt=2,    versionMap={}
+    //   seq 2: value="new",  startAt=2, endAt=3,    versionMap={}
+    //   seq 3: value="old",  startAt=3, endAt=null, versionMap={value->false}
+    val batch2AffectedWindow = targetTableOf(schema)(
+      Row(1, "old", "x", 1L, 2L, cdcMetadata(1L, emptyMap)),
+      Row(1, "new", "x", 2L, 3L, cdcMetadata(2L, emptyMap)),
+      Row(1, "old", "x", 3L, null, cdcMetadata(3L, unauthoredMap))
+    )
+    // "value" is not in the active selection, so it is not reconciled. Seq 3 retains its
+    // previously inherited "old" even though seq 2 (which authors "new") now directly
+    // precedes it.
+    checkAnswer(
+      coalesce(batch2AffectedWindow, includeColumns("other")),
+      Seq(
+        Row(1, "old", "x", 1L, 2L, cdcMetadata(1L, emptyMap)),
+        Row(1, "new", "x", 2L, 3L, cdcMetadata(2L, emptyMap)),
+        Row(1, "old", "x", 3L, null, cdcMetadata(3L, unauthoredMap))
+      )
+    )
+
+    // -- Batch 3 (selection = {value} -- "value" re-added) ----------------------------
+    // Seq 4 arrives with an unauthored null. The affected window covers only the rows
+    // touched by this event: seq 3 (the anchor) and seq 4 (the new row). Seq 2, which
+    // holds the correct "new", is outside the window.
+    //
+    // The carry-in anchor (seq 3) has a stale value: it inherited "old" in batch 1
+    // and was not reconciled while "value" was outside the selection. Seq 4 inherits
+    // this stale "old" rather than the correct "new".
+    val batch3Input = targetTableOf(schema)(
+      Row(1, "old", "x", 3L, 4L, cdcMetadata(3L, unauthoredMap)),
+      Row(1, null, "x", 4L, null, cdcMetadata(4L, unauthoredMap))
+    )
+    checkAnswer(
+      coalesce(batch3Input, includeColumns("value")),
+      Seq(
+        Row(1, "old", "x", 3L, 4L, cdcMetadata(3L, unauthoredMap)),
+        Row(1, "old", "x", 4L, null, cdcMetadata(4L, unauthoredMap))
+      )
+    )
+
+    // -- Correction -------------------------------------------------------------------
+    // A future batch's affected window expands to include seq 2. Now seq 2 is the
+    // first authored row in the window: its "new" propagates forward and the stale
+    // carry-in is corrected.
+    val correctionInput = targetTableOf(schema)(
+      Row(1, "new", "x", 2L, 3L, cdcMetadata(2L, emptyMap)),
+      Row(1, "old", "x", 3L, 4L, cdcMetadata(3L, unauthoredMap)),
+      Row(1, "old", "x", 4L, null, cdcMetadata(4L, unauthoredMap))
+    )
+    checkAnswer(
+      coalesce(correctionInput, includeColumns("value")),
+      Seq(
+        Row(1, "new", "x", 2L, 3L, cdcMetadata(2L, emptyMap)),
+        Row(1, "new", "x", 3L, 4L, cdcMetadata(3L, unauthoredMap)),
+        Row(1, "new", "x", 4L, null, cdcMetadata(4L, unauthoredMap))
+      )
+    )
+  }
 }
