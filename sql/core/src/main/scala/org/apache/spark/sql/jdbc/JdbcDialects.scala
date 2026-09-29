@@ -218,6 +218,13 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
+   * Whether TimestampNTZType values are read and written as zoneless `LocalDateTime` rather than
+   * through `java.sql.Timestamp`. Dialects decide from the [[JDBCOptions]] of the read or write.
+   */
+  @Since("4.4.0")
+  def timestampNTZAsWallClock(options: JDBCOptions): Boolean = false
+
+  /**
    * Returns a factory for creating connections to the given JDBC URL.
    * In general, creating a connection has nothing to do with JDBC partition id.
    * But sometimes it is needed, such as a database with multiple shard nodes.
@@ -953,15 +960,6 @@ abstract class JdbcDialect extends Serializable with Logging {
       rsmd: ResultSetMetaData,
       columnIdx: Int,
       metadata: MetadataBuilder): Unit = {}
-
-  /**
-   * Set extra column metadata for the given column on the write path.
-   *
-   * @param dt The Catalyst type of the column being written.
-   * @param metadata The metadata builder to store the extra column information.
-   */
-  @Since("4.4.0")
-  def updateExtraColumnMetaForWrite(dt: DataType, metadata: MetadataBuilder): Unit = {}
 }
 
 /**

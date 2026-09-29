@@ -55,11 +55,6 @@ import org.apache.spark.util.ArrayImplicits._
  */
 object JdbcUtils extends Logging with SQLConfHelper {
 
-  // Marks an NTZ column to read (resp. write) as wall-clock. Distinct keys so a read marker on the
-  // resolved schema can't force wall-clock on a later write to a different dialect.
-  private[sql] val READ_TIMESTAMP_NTZ_WALL_CLOCK = "read_timestamp_ntz_wall_clock"
-  private[sql] val WRITE_TIMESTAMP_NTZ_WALL_CLOCK = "write_timestamp_ntz_wall_clock"
-
   /**
    * Returns true if the table already exists in the JDBC database.
    */
@@ -400,10 +395,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
       dialect: JdbcDialect,
       schema: StructType,
       inputMetrics: InputMetrics,
-      fetchAndTransformToInternalRowsMetric: Option[SQLMetric] = None): Iterator[InternalRow] = {
+      fetchAndTransformToInternalRowsMetric: Option[SQLMetric] = None,
+      options: Option[JDBCOptions] = None): Iterator[InternalRow] = {
     new NextIterator[InternalRow] {
       private[this] val rs = resultSet
-      private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema)
+      private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema, options)
       private[this] val mutableRow =
         new SpecificInternalRow(schema.fields.map(x => x.dataType).toImmutableArraySeq)
 
@@ -456,15 +452,17 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   private def makeGetters(
       dialect: JdbcDialect,
-      schema: StructType): Array[JDBCValueGetter] = {
+      schema: StructType,
+      options: Option[JDBCOptions]): Array[JDBCValueGetter] = {
     val replaced = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
-    replaced.fields.map(sf => makeGetter(sf.dataType, dialect, sf.metadata))
+    replaced.fields.map(sf => makeGetter(sf.dataType, dialect, sf.metadata, options))
   }
 
   private def makeGetter(
       dt: DataType,
       dialect: JdbcDialect,
-      metadata: Metadata): JDBCValueGetter = dt match {
+      metadata: Metadata,
+      options: Option[JDBCOptions]): JDBCValueGetter = dt match {
     case BooleanType => JDBCValueGetter.BooleanGetter
     case DateType => JDBCValueGetter.DateGetter(dialect)
     case _: TimeType => JDBCValueGetter.TimeGetter
@@ -483,7 +481,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case TimestampType => JDBCValueGetter.TimestampGetter(dialect)
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeNTZGetter(dialect)
-    case TimestampNTZType if metadata.contains(READ_TIMESTAMP_NTZ_WALL_CLOCK) =>
+    case TimestampNTZType if options.exists(dialect.timestampNTZAsWallClock) =>
       JDBCValueGetter.TimestampNTZWallClockGetter
     case TimestampNTZType => JDBCValueGetter.TimestampNTZGetter(dialect)
     case t: TimestampNTZNanosType => JDBCValueGetter.TimestampNTZNanosGetter(t.precision)
@@ -508,7 +506,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       conn: Connection,
       dialect: JdbcDialect,
       dataType: DataType,
-      metadata: Metadata): JDBCValueSetter = dataType match {
+      metadata: Metadata,
+      options: JDBCOptions): JDBCValueSetter = dataType match {
     case IntegerType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setInt(pos + 1, row.getInt(pos))
@@ -554,7 +553,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
           stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
       }
 
-    case TimestampNTZType if metadata.contains(WRITE_TIMESTAMP_NTZ_WALL_CLOCK) =>
+    case TimestampNTZType if dialect.timestampNTZAsWallClock(options) =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setObject(pos + 1, row.getAs[java.time.LocalDateTime](pos))
     case TimestampNTZType =>
@@ -728,7 +727,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
         conn.setTransactionIsolation(finalIsolationLevel)
       }
       val stmt = conn.prepareStatement(insertStmt)
-      val setters = rddSchema.fields.map(f => makeSetter(conn, dialect, f.dataType, f.metadata))
+      val setters =
+        rddSchema.fields.map(f => makeSetter(conn, dialect, f.dataType, f.metadata, options))
       val nullTypes = rddSchema.fields.map(f => getJdbcType(f.dataType, dialect).jdbcNullType)
       val numFields = rddSchema.fields.length
 
@@ -925,11 +925,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val url = options.url
     val table = options.table
     val dialect = JdbcDialects.get(url)
-    val rddSchema = StructType(df.schema.map { field =>
-      val builder = new MetadataBuilder().withMetadata(field.metadata)
-      dialect.updateExtraColumnMetaForWrite(field.dataType, builder)
-      field.copy(metadata = builder.build())
-    })
+    val rddSchema = df.schema
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
 

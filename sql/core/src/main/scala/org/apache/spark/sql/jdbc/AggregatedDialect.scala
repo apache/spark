@@ -46,8 +46,8 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
     dialects.flatMap(_.getJDBCType(dt)).headOption
   }
 
-  override def updateExtraColumnMetaForWrite(dt: DataType, metadata: MetadataBuilder): Unit = {
-    dialects.foreach(_.updateExtraColumnMetaForWrite(dt, metadata))
+  override def timestampNTZAsWallClock(options: JDBCOptions): Boolean = {
+    dialects.exists(_.timestampNTZAsWallClock(options))
   }
 
   override def quoteIdentifier(colName: String): String = {

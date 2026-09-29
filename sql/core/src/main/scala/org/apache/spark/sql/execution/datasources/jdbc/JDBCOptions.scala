@@ -265,6 +265,14 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(false)
 
+  // Plan-time snapshot of the Oracle NTZ legacy flag. The pinned param (V2 catalog) wins, so the
+  // scan's rebuild keeps it.
+  val legacyOracleTimestampNTZMapping =
+    parameters
+      .get(JDBC_LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING)
+      .map(_.toBoolean)
+      .getOrElse(SQLConf.get.legacyOracleTimestampNTZMappingEnabled)
+
   val hint = parameters.get(JDBC_HINT_STRING).map(value => {
     require(value.matches("(?s)^/\\*\\+ .* \\*/$"),
       s"Invalid value `$value` for option `$JDBC_HINT_STRING`." +
@@ -379,4 +387,12 @@ object JDBCOptions {
   val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
   val JDBC_PREFER_TIMESTAMP_NANOS = newOption("preferTimestampNanos")
   val JDBC_HINT_STRING = newOption("hint")
+  // Internal: pinned by the V2 catalog via planTimeOptions. newOption keeps it out of the driver
+  // connection properties.
+  val JDBC_LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING = newOption("__legacyOracleTimestampNTZMapping")
+
+  // Conf snapshots the V2 catalog pins into a table's options so the scan's rebuild keeps them.
+  private[sql] def planTimeOptions: Map[String, String] = Map(
+    JDBC_LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING ->
+      SQLConf.get.legacyOracleTimestampNTZMappingEnabled.toString)
 }

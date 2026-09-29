@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Date, SQLException, Timestamp, Types}
+import java.sql.Types.TIMESTAMP
 import java.time.LocalDateTime
 import java.util.Locale
 
@@ -184,7 +185,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
       case INTERVAL_YM => Some(YearMonthIntervalType())
       case INTERVAL_DS => Some(DayTimeIntervalType())
-      case Types.TIMESTAMP if !conf.legacyOracleTimestampNTZMappingEnabled && typeName != null &&
+      case TIMESTAMP if !conf.legacyOracleTimestampNTZMappingEnabled && typeName != null &&
           typeName.toUpperCase(Locale.ROOT).matches("DATE|TIMESTAMP") =>
         val metadata = if (md != null) md.build() else Metadata.empty
         // Absent scale metadata: Oracle TIMESTAMP defaults to TIMESTAMP(6).
@@ -193,23 +194,15 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
           metadata.getBoolean("preferTimestampNanos")
         val resolved = JdbcUtils.resolveTimestampType(
           isTimestampNTZ = true, scale = scale, preferTimestampNanos = preferNanos)
-        // Oracle DATE/TIMESTAMP are zoneless; mark the microsecond NTZ wall-clock so a later flag
-        // flip can't desync the read. The nanos NTZ getter is wall-clock by construction.
-        if (md != null && resolved == TimestampNTZType) {
-          md.putBoolean(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
-        }
         Some(resolved)
       case _ => None
     }
   }
 
-  override def updateExtraColumnMetaForWrite(dt: DataType, metadata: MetadataBuilder): Unit = {
-    dt match {
-      case TimestampNTZType if !conf.legacyOracleTimestampNTZMappingEnabled =>
-        metadata.putBoolean(JdbcUtils.WRITE_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
-      case _ =>
-    }
-  }
+  // Oracle DATE/TIMESTAMP are zoneless, so under the non-legacy mapping NTZ values read/write as
+  // wall-clock LocalDateTime, bypassing the JVM-default-zone java.sql.Timestamp bridge.
+  override def timestampNTZAsWallClock(options: JDBCOptions): Boolean =
+    !options.legacyOracleTimestampNTZMapping
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     // For more details, please see
