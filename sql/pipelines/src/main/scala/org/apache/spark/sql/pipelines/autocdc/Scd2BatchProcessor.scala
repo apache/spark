@@ -1725,17 +1725,24 @@ object Scd2BatchProcessor {
       return versionMap
     }
 
-    val conditionalEntries = leafInheritanceContexts.map { context =>
+    // Build the version map entry only for eligible schema evolved leaves, null for all other
+    // leaves.
+    val newEntryPerLeafOrNull = leafInheritanceContexts.map { context =>
       F.when(
         context.needsSchemaEvolutionEntry,
         Scd2VersionMap.buildVersionMapEntry(context.path, authored = false))
     }
-    val nonNullEntries = F.filter(
-      F.array(conditionalEntries: _*), (entry: Column) => entry.isNotNull)
-    val newEntries = F.map_from_entries(nonNullEntries)
+
+    // Filter out the null entries, which explicitly represent leaves that don't need to gain a
+    // version map entry due to schema evolution.
+    val newEntries = F.filter(
+      F.array(newEntryPerLeafOrNull: _*), (entry: Column) => entry.isNotNull)
+
+    // Concat new entries mapping with existing version map.
     F.when(
       versionMap.isNotNull,
-      F.map_concat(versionMap, newEntries))
+      F.map_concat(versionMap, F.map_from_entries(newEntries))
+    )
   }
 
   /**
@@ -2186,6 +2193,10 @@ private[autocdc] case class LeafInheritanceContext(
     inherits: Column,
     needsSchemaEvolutionEntry: Column) {
 
+  /**
+   * Name of the temporary column that holds [[valueToInheritIfAny]], the wrapped value this row
+   * may inherit, during ignore-null coalescing.
+   */
   val valueToInheritIfAnyColName: String =
     LeafInheritanceContext.valueToInheritIfAnyColumnName(index)
 
