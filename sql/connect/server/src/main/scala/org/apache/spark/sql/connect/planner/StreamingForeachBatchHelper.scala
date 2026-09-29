@@ -31,7 +31,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, PYTHON_EXEC, QUERY_ID, R
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders}
 import org.apache.spark.sql.connect.IllegalStateErrors
-import org.apache.spark.sql.connect.common.ForeachWriterPacket
+import org.apache.spark.sql.connect.common.{ForeachWriterPacket, UdfSerialization}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connect.service.SparkConnectService
@@ -101,7 +101,8 @@ object StreamingForeachBatchHelper extends Logging {
       payloadBytes: Array[Byte],
       sessionHolder: SessionHolder): ForeachBatchFnType = {
     val foreachBatchPkt =
-      Utils.deserialize[ForeachWriterPacket](payloadBytes, Utils.getContextOrSparkClassLoader)
+      UdfSerialization
+        .deserialize[ForeachWriterPacket](payloadBytes, Utils.getContextOrSparkClassLoader)
     val fn = foreachBatchPkt.foreachWriter.asInstanceOf[(Dataset[Any], Long) => Unit]
     val encoder = foreachBatchPkt.datasetEncoder.asInstanceOf[AgnosticEncoder[Any]]
     // TODO(SPARK-44462): Set up Spark Connect session.

@@ -188,8 +188,8 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
       join.failAnalysis(
         errorClass = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
         messageParameters = Map(
-          "operand1" -> toSQLExpr(leftExpr),
-          "operand2" -> toSQLExpr(rightExpr)))
+          "refs1" -> toSQLExpr(leftExpr),
+          "refs2" -> toSQLExpr(rightExpr)))
     }
   }
 

@@ -5410,7 +5410,7 @@ object TimeBucketExpressionBuilder extends ExpressionBuilder {
     expressions match {
       case Seq(rawBucketSize, rawTs) =>
         val bucketSize = retypeNull(rawBucketSize, DayTimeIntervalType())
-        // Fall back to TimestampType for bad ts types; ExpectsInputTypes will report it.
+        // Fall back to TimestampType when ts is not a recognized timestamp type.
         val tsType = rawTs.dataType match {
           case t if acceptsTsType(t) => t
           case _ => TimestampType

@@ -53,6 +53,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   SpecialFrameBoundary,
   SpecifiedWindowFrame,
   SubtractTimestamps,
+  TimeBucket,
   TimestampAddInterval,
   WindowSpecDefinition
 }
@@ -710,6 +711,16 @@ abstract class TypeCoercionHelper {
             }
           }
           .getOrElse(b) // If there is no applicable conversion, leave expression unchanged.
+
+      case t: TimeBucket =>
+        val children = t.children.zip(t.inputTypes).zipWithIndex.map {
+          case ((in, _), index) if index > 0 && in.dataType.isInstanceOf[TimeType] =>
+            // TIME-to-timestamp depends on CURRENT_DATE, so require an explicit cast.
+            in
+          case ((in, expected), _) =>
+            implicitCast(in, expected).getOrElse(in)
+        }
+        t.withNewChildren(children)
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
