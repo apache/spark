@@ -37,7 +37,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.connector.catalog.V2TableUtil
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaValidationMode.{ALLOW_NEW_TOP_LEVEL_FIELDS, PROHIBIT_CHANGES}
 import org.apache.spark.util.ArrayImplicits._
@@ -50,6 +50,8 @@ import org.apache.spark.util.ArrayImplicits._
  * loaded table metadata is validated against the original metadata depending on the context.
  * For instance, temporary views with fully resolved logical plans don't allow schema changes
  * in underlying tables.
+ * Changelog references also retain the requested context and captured post-processing metadata
+ * so re-resolution can reload the changelog and preserve the analyzed CDC operators.
  */
 private[sql] case class V2TableReference private(
     catalog: TableCatalog,
@@ -57,7 +59,8 @@ private[sql] case class V2TableReference private(
     options: CaseInsensitiveStringMap,
     info: TableInfo,
     output: Seq[AttributeReference],
-    context: Context)
+    context: Context,
+    changelog: Option[ChangelogTable])
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
   override def name: String = V2TableUtil.toQualifiedName(catalog, identifier)
@@ -135,7 +138,11 @@ private[sql] object V2TableReference {
         columns = relation.table.columns.toImmutableArraySeq,
         metadataColumns = V2TableUtil.extractMetadataColumns(relation)),
       relation.output,
-      context)
+      context,
+      relation.table match {
+        case changelog: ChangelogTable => Some(changelog)
+        case _ => None
+      })
     ref.copyTagsFrom(relation)
     ref
   }

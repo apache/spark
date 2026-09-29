@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{EnumSet => JEnumSet, Set => JSet}
 
-import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogContext, Column, SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogContext, Column, Identifier, SupportsRead, Table, TableCapability, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -42,6 +42,29 @@ case class ChangelogTable(
   // and correct types.
   ChangelogTable.validateSchema(changelog)
 
+  // Capture the metadata used to build the analyzer's CDC post-processing operators.
+  private val carryovers = changelog.containsCarryoverRows()
+  private val intermediateChanges = changelog.containsIntermediateChanges()
+  private val updatesAsDeleteAndInsert = changelog.representsUpdateAsDeleteAndInsert()
+  private val requiresCarryOverRemoval =
+    changelogContext.deduplicationMode() != ChangelogContext.DeduplicationMode.NONE && carryovers
+  private val requiresUpdateDetection =
+    changelogContext.computeUpdates() && updatesAsDeleteAndInsert
+  private val requiresNetChanges =
+    changelogContext.deduplicationMode() == ChangelogContext.DeduplicationMode.NET_CHANGES &&
+      intermediateChanges
+  private val rowId = if (
+      requiresCarryOverRemoval || requiresUpdateDetection || requiresNetChanges) {
+    changelog.rowId().toVector.map(_.fieldNames().toVector)
+  } else {
+    Vector.empty
+  }
+  private val rowVersion = if (requiresCarryOverRemoval) {
+    Option(changelog.rowVersion()).map(_.fieldNames().toVector)
+  } else {
+    None
+  }
+
   override def name: String = changelog.name
 
   override def columns: Array[Column] = changelog.columns
@@ -51,9 +74,41 @@ case class ChangelogTable(
   }
 
   override def capabilities: JSet[TableCapability] = JEnumSet.of(BATCH_READ, MICRO_BATCH_READ)
+
+  /** Checks that refreshing the changelog preserves the already analyzed CDC rewrites. */
+  def validateRefresh(current: ChangelogTable): Unit = {
+    if (resolved) {
+      val changedProperties = Seq(
+        "containsCarryoverRows" -> (carryovers != current.carryovers),
+        "containsIntermediateChanges" -> (intermediateChanges != current.intermediateChanges),
+        "representsUpdateAsDeleteAndInsert" ->
+          (updatesAsDeleteAndInsert != current.updatesAsDeleteAndInsert),
+        "rowId" -> (rowId != current.rowId),
+        "rowVersion" -> (rowVersion != current.rowVersion)).collect {
+        case (property, true) => property
+      }
+      if (changedProperties.nonEmpty) {
+        throw QueryCompilationErrors.changelogChangedAfterAnalysis(name, changedProperties)
+      }
+    }
+  }
 }
 
 object ChangelogTable {
+
+  def load(
+      catalog: TableCatalog,
+      ident: Identifier,
+      context: ChangelogContext,
+      stateOptions: CaseInsensitiveStringMap): ChangelogTable = {
+    val changelog = try {
+      catalog.loadChangelog(ident, context, stateOptions)
+    } catch {
+      case _: UnsupportedOperationException =>
+        throw QueryCompilationErrors.cdcNotSupportedError(catalog.name())
+    }
+    ChangelogTable(changelog, context)
+  }
 
   private[v2] def validateSchema(cl: Changelog): Unit = {
     val byName = cl.columns.map(c => c.name -> c).toMap

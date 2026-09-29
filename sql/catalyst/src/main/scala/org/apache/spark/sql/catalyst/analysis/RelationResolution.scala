@@ -63,6 +63,7 @@ class RelationResolution(
 
   private def relationCache = AnalysisContext.get.relationCache
   private def tableCache = AnalysisContext.get.tableCache
+  private def changelogCache = AnalysisContext.get.changelogCache
 
   /**
    * If we are resolving database objects (relations, functions, etc.) inside views, we may need to
@@ -383,13 +384,9 @@ class RelationResolution(
     expandIdentifier(u.multipartIdentifier) match {
       case CatalogAndIdentifier(catalog, ident) =>
         val tableCatalog = catalog.asTableCatalog
-        val changelog = try {
-          tableCatalog.loadChangelog(ident, ctx, u.options)
-        } catch {
-          case _: UnsupportedOperationException =>
-            throw QueryCompilationErrors.cdcNotSupportedError(tableCatalog.name())
-        }
-        val changelogTable = ChangelogTable(changelog, ctx)
+        val key = toChangelogCacheKey(catalog, ident, ctx, u.options)
+        val changelogTable = changelogCache.getOrElseUpdate(key,
+          ChangelogTable.load(tableCatalog, ident, ctx, key.stateOptions))
         val relation = if (u.isStreaming) {
           StreamingRelationV2(
             None, changelogTable.name, changelogTable, u.options,
@@ -514,13 +511,32 @@ class RelationResolution(
   }
 
   def resolveReference(ref: V2TableReference): LogicalPlan = {
-    val relation = if (ref.context.cacheable) {
+    val relation = if (ref.changelog.nonEmpty) {
+      resolveChangelogReference(ref)
+    } else if (ref.context.cacheable) {
       getOrLoadRelation(ref)
     } else {
       loadRelation(ref)
     }
     val planId = ref.getTagValue(LogicalPlan.PLAN_ID_TAG)
     cloneWithPlanId(relation, planId)
+  }
+
+  private def resolveChangelogReference(ref: V2TableReference): DataSourceV2Relation = {
+    val catalog = catalogManager.catalog(ref.catalog.name).asTableCatalog
+    val captured = ref.changelog.get
+    val key = toChangelogCacheKey(
+      catalog, ref.identifier, captured.changelogContext, ref.options)
+    def load(): ChangelogTable = {
+      ChangelogTable.load(catalog, ref.identifier, captured.changelogContext, key.stateOptions)
+    }
+    val current = if (ref.context.cacheable) {
+      changelogCache.getOrElseUpdate(key, load())
+    } else {
+      load()
+    }
+    captured.validateRefresh(current)
+    createRelation(ref, catalog, current.copy(resolved = captured.resolved))
   }
 
   private def getOrLoadRelation(ref: V2TableReference): LogicalPlan = {
@@ -631,6 +647,18 @@ class RelationResolution(
       ident,
       timeTravelSpec,
       CatalogV2Util.extractTableStateOptions(catalog, options))
+  }
+
+  private def toChangelogCacheKey(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      context: ChangelogContext,
+      options: CaseInsensitiveStringMap): ChangelogCacheKey = {
+    ChangelogCacheKey(
+      catalog,
+      ident,
+      context,
+      CatalogV2Util.extractChangelogStateOptions(catalog, options))
   }
 
   private def cloneWithPlanId(plan: LogicalPlan, planId: Option[Long]): LogicalPlan = {
