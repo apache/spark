@@ -33,7 +33,13 @@ from pyspark.sql.connect.expressions import (
     PythonUDF,
 )
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.sql.types import DataType, StringType, StructType, _parse_datatype_string
+from pyspark.sql.types import (
+    DataType,
+    StringType,
+    StructType,
+    _check_no_char_varchar,
+    _parse_datatype_string,
+)
 from pyspark.sql.udf import (
     UDFRegistration as PySparkUDFRegistration,
 )
@@ -191,6 +197,10 @@ class UserDefinedFunction:
         # (see :class:`pyspark.sql.aggregator.Aggregator`); ``None`` otherwise. A first-class field
         # so it survives ``_wrapped()``, ``asNondeterministic()`` and ``spark.udf.register``.
         self.bufferSchema = bufferSchema
+        if isinstance(returnType, DataType):
+            PySparkUserDefinedFunction._check_return_type(returnType, evalType)
+        if bufferSchema is not None:
+            _check_no_char_varchar(bufferSchema, "Python UDAF buffer schemas")
 
     @property
     def returnType(self) -> DataType:

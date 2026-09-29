@@ -32,7 +32,7 @@ from pyspark.sql.connect.table_arg import TableArg
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.sql.types import DataType, StructType
+from pyspark.sql.types import DataType, StructType, _check_no_char_varchar
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult, _validate_udtf_handler  # noqa: F401
 from pyspark.sql.udtf import UDTFRegistration as PySparkUDTFRegistration
 from pyspark.util import PythonEvalType
@@ -154,6 +154,9 @@ class UserDefinedTableFunction:
         deterministic: bool = False,
     ) -> None:
         _validate_udtf_handler(func, returnType)
+
+        if isinstance(returnType, DataType):
+            _check_no_char_varchar(returnType, "Python UDTF return types")
 
         self.func = func
         self.returnType: Optional[DataType] = (

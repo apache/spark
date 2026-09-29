@@ -1047,6 +1047,12 @@
     },
     "sqlState" : "XX000"
   },
+  "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON" : {
+    "message" : [
+      "CHAR/VARCHAR is not supported in <feature>. Cast to STRING in SQL instead. Data type: <data_type>."
+    ],
+    "sqlState" : "0A000"
+  },
   "CHECKPOINT_DIRECTORY_NOT_SET" : {
     "message" : [
       "Cannot checkpoint because no checkpoint directory is configured.",
