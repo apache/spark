@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.externalUDF
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{SparkContext, SparkEnv, TaskContext}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.UnaryExecNode
@@ -64,10 +64,10 @@ trait ExternalUDFExec extends UnaryExecNode {
    * `FinishResponse` if processing completed, or cancels anything still in
    * flight and waits for the `CancelResponse`. For the UDF sessions used here,
    * exhausting the data iterator completes execution and surfaces execution or
-   * finish errors. Therefore, `close` only cleans up the session and its returned
-   * termination does not determine whether the Spark task succeeds. The provided
-   * function receives the session and must return the result iterator. It may use
-   * the session but MUST NOT close it.
+   * finish errors. Therefore, `close` cleans up the session, and the termination
+   * it returns is used only for metrics; it does not determine whether the Spark
+   * task succeeds. The provided function receives the session and must return the
+   * result iterator. It may use the session but MUST NOT close it.
    */
   protected def withUDFWorkerSession(
       taskContext: TaskContext,
@@ -112,7 +112,7 @@ trait ExternalUDFExec extends UnaryExecNode {
     SparkEnv.get.getExternalUDFDispatcher(workerSpec).createSession(securityScope)
   }
 
-  protected def recordTerminalMetrics(termination: Termination): Unit = {
+  private def recordTerminalMetrics(termination: Termination): Unit = {
     val reported = termination match {
       case Termination.Finished(response) if response.hasMetrics => Some(response.getMetrics)
       case Termination.Cancelled(response) if response.hasMetrics => Some(response.getMetrics)
@@ -141,7 +141,7 @@ private[externalUDF] object ExternalUDFMetrics {
     "workWallNanos" -> "external UDF worker execution time",
     "workCpuNanos" -> "external UDF worker CPU time")
 
-  def create(sc: org.apache.spark.SparkContext): Map[String, SQLMetric] = {
+  def create(sc: SparkContext): Map[String, SQLMetric] = {
     sizeMetrics.map { case (name, description) =>
       name -> SQLMetrics.createSizeMetric(sc, description)
     } ++ countMetrics.map { case (name, description) =>
