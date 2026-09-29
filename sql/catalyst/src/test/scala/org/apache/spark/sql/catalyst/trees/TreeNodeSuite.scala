@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.trees
 
 import java.math.BigInteger
-import java.util.UUID
+import java.util.{IdentityHashMap, UUID}
 import java.util.concurrent.{CyclicBarrier, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -26,6 +26,7 @@ import scala.annotation.nowarn
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.util.hashing.MurmurHash3
 
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
@@ -146,6 +147,59 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     } finally {
       executor.shutdownNow()
     }
+  }
+
+  test("TreeNode cache accessors retain computed values") {
+    val left = Literal(1)
+    val right = Literal(2)
+    val node = Add(left, right)
+    val expectedTreePatternBits = TreePatternBits.toPatternBits(
+      TreePattern.BINARY_ARITHMETIC, TreePattern.LITERAL)
+
+    def cacheField(name: String) = {
+      val field = classOf[TreeNode[_]].getDeclaredField(name)
+      field.setAccessible(true)
+      field
+    }
+
+    val treePatternBits = node.treePatternBits
+    assert(treePatternBits == expectedTreePatternBits)
+    val treePatternBitsCache = cacheField("treePatternBitsCacheValue").get(node)
+    assert(treePatternBitsCache eq treePatternBits)
+    assert(node.treePatternBits eq treePatternBits)
+
+    val containsChild = node.containsChild
+    assert(containsChild == Set(left, right))
+    val containsChildCache = cacheField("containsChildCacheValue").get(node)
+    assert(containsChildCache eq containsChild)
+    assert(node.containsChild eq containsChild)
+
+    val height = node.height
+    assert(height === 2)
+    val heightCache = cacheField("heightCacheValue").get(node)
+    assert(heightCache == Integer.valueOf(height))
+    assert(node.height === height)
+    assert(cacheField("heightCacheValue").get(node) eq heightCache)
+
+    val expectedHashCode = MurmurHash3.caseClassHash(node)
+    val hashCode = node.hashCode()
+    assert(hashCode === expectedHashCode)
+    val hashCodeCache = cacheField("hashCodeCacheValue").get(node)
+    assert(hashCodeCache == Integer.valueOf(hashCode))
+    assert(node.hashCode() === hashCode)
+    assert(cacheField("hashCodeCacheValue").get(node) eq hashCodeCache)
+
+    val allChildrenMethod = classOf[TreeNode[_]].getDeclaredMethod("allChildren")
+    allChildrenMethod.setAccessible(true)
+    val allChildren = allChildrenMethod.invoke(node)
+      .asInstanceOf[IdentityHashMap[TreeNode[_], Any]]
+    assert(allChildren.size() === 2)
+    assert(allChildren.containsKey(left))
+    assert(allChildren.containsKey(right))
+    val allChildrenCache = cacheField("allChildrenCacheValue").get(node)
+    assert(allChildrenCache eq allChildren)
+    val secondAllChildren = allChildrenMethod.invoke(node)
+    assert(secondAllChildren eq allChildren)
   }
 
   test("top node changed") {
