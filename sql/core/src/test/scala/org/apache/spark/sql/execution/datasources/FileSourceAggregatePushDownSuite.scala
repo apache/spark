@@ -123,6 +123,35 @@ trait FileSourceAggregatePushDownSuite
     }
   }
 
+  test("SPARK-59607: COUNT on a null partition column is not overcounted with push down") {
+    withTempPath { dir =>
+      // Three partitions a / __HIVE_DEFAULT_PARTITION__ / b, one row each. The null
+      // partition value is written to the __HIVE_DEFAULT_PARTITION__ directory and read
+      // back as SQL NULL, which COUNT(p) must not count.
+      Seq((1, "a"), (2, null), (3, "b")).toDF("v", "p")
+        .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
+      withTempView("tmp") {
+        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
+        val query = "SELECT COUNT(*), COUNT(v), COUNT(p) FROM tmp"
+        Seq("false", "true").foreach { enableVectorizedReader =>
+          withSQLConf(vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            // Without push down, COUNT(p) skips the NULL-partition row: (3, 3, 2).
+            withSQLConf(aggPushDownEnabledKey -> "false") {
+              checkAnswer(sql(query), Seq(Row(3, 3, 2)))
+            }
+            // With push down the result must be identical; before the fix COUNT(p)
+            // wrongly returned 3 by counting the __HIVE_DEFAULT_PARTITION__ rows.
+            withSQLConf(aggPushDownEnabledKey -> "true") {
+              val df = sql(query)
+              checkPushedInfo(df, "PushedAggregation: [COUNT(*), COUNT(v), COUNT(p)]")
+              checkAnswer(df, Seq(Row(3, 3, 2)))
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("filter alias over aggregate") {
     val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
       (9, "mno", 7), (2, null, 6))

@@ -256,7 +256,7 @@ object ParquetUtils extends Logging {
       partitionValues: InternalRow,
       datetimeRebaseSpec: RebaseSpec): InternalRow = {
     val (primitiveTypes, values) = getPushedDownAggResult(
-      footer, filePath, dataSchema, partitionSchema, aggregation)
+      footer, filePath, dataSchema, partitionSchema, partitionValues, aggregation)
 
     val builder = Types.buildMessage
     primitiveTypes.foreach(t => builder.addField(t))
@@ -325,6 +325,7 @@ object ParquetUtils extends Logging {
       filePath: String,
       dataSchema: StructType,
       partitionSchema: StructType,
+      partitionValues: InternalRow,
       aggregation: Aggregation)
   : (Array[PrimitiveType], Array[Any]) = {
     val footerFileMetaData = footer.getFileMetaData
@@ -361,16 +362,18 @@ object ParquetUtils extends Logging {
           case count: Count if V2ColumnUtils.extractV2Column(count.column).isDefined =>
             val colName = V2ColumnUtils.extractV2Column(count.column).get
             schemaName = "count(" + colName + ")"
-            rowCount += block.getRowCount
-            var isPartitionCol = false
-            if (partitionSchema.getFieldIndex(colName).isDefined) {
-              isPartitionCol = true
-            }
             isCount = true
-            if (!isPartitionCol) {
+            val partitionColIndex = partitionSchema.getFieldIndex(colName)
+            if (partitionColIndex.isEmpty) {
+              rowCount += block.getRowCount
               index = dataSchema.getFieldIndex(colName).getOrElse(-1)
               // Count(*) includes the null values, but Count(colName) doesn't.
               rowCount -= getNumNulls(filePath, blockMetaData, index)
+            } else if (!partitionValues.isNullAt(partitionColIndex.get)) {
+              // A partition column value is constant per file. A non-null partition
+              // contributes every row; a null partition (__HIVE_DEFAULT_PARTITION__)
+              // is SQL NULL and contributes 0 to Count(colName), so it is skipped.
+              rowCount += block.getRowCount
             }
           case _: CountStar =>
             schemaName = "count(*)"
