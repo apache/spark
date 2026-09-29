@@ -906,7 +906,7 @@ case class ApproxTopKCombine(
   override def update(buffer: CombineInternal[Any], input: InternalRow): CombineInternal[Any] = {
     val inputState = state.eval(input).asInstanceOf[InternalRow]
     if (inputState == null) {
-      // A NULL sketch contributes nothing, like NULL inputs to any other aggregate.
+      // A NULL sketch carries no items, so it contributes nothing to the combined sketch.
       return buffer
     }
     val inputSketchBytes = inputState.getBinary(0)

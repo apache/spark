@@ -571,12 +571,46 @@ class ApproxTopKSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-59818: estimate is nullable when its state is nullable") {
+  test("SPARK-59818: estimate nullability follows the nullability of its state") {
     withTempView("estimate_nullable_state") {
       sql(s"SELECT $nullSketchState AS state")
         .createOrReplaceTempView("estimate_nullable_state")
-      val res = sql("SELECT approx_top_k_estimate(state, 2) FROM estimate_nullable_state")
-      assert(res.schema.fields.head.nullable)
+      val nullableRes =
+        sql("SELECT approx_top_k_estimate(state, 2) FROM estimate_nullable_state")
+      assert(nullableRes.schema.fields.head.nullable)
+    }
+    // The common case: a sketch produced by approx_top_k_accumulate is non-nullable, so the
+    // estimate over it must stay non-nullable.
+    val nonNullableRes = sql(
+      """SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), 2)
+        |FROM VALUES 0, 1, 1 AS tab(expr)""".stripMargin)
+    assert(!nonNullableRes.schema.fields.head.nullable)
+  }
+
+  test("SPARK-59818: estimate rejects a non-positive k even for a NULL state") {
+    Seq(0, -1).foreach { invalidK =>
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql(s"SELECT approx_top_k_estimate($nullSketchState, $invalidK)").collect()
+        },
+        condition = "APPROX_TOP_K_NON_POSITIVE_ARG",
+        parameters = Map("argName" -> "`k`", "argValue" -> invalidK.toString)
+      )
+    }
+    withTempView("estimate_invalid_k") {
+      sql(
+        s"""SELECT approx_top_k_accumulate(expr) AS state
+           |FROM VALUES 0, 1, 1 AS tab(expr)
+           |UNION ALL
+           |SELECT $nullSketchState AS state""".stripMargin)
+        .createOrReplaceTempView("estimate_invalid_k")
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql("SELECT approx_top_k_estimate(state, 0) FROM estimate_invalid_k").collect()
+        },
+        condition = "APPROX_TOP_K_NON_POSITIVE_ARG",
+        parameters = Map("argName" -> "`k`", "argValue" -> "0")
+      )
     }
   }
 
