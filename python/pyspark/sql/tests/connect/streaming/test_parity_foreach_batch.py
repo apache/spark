@@ -62,6 +62,91 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
             if q:
                 q.stop()
 
+    def test_batch_dataframe_in_sql_from_captured_session(self):
+        """Expected: #55410 fails DATAFRAME_NOT_FOUND; final fix passes with batch rows."""
+        root = self.spark
+
+        def process(batch_df, _):
+            expected = sorted(row.value for row in batch_df.select("value").collect())
+            if root.range(1).count() != 1:
+                raise AssertionError("Captured session cannot run an independent query")
+            actual = sorted(
+                row.value
+                for row in root.sql("SELECT value FROM {batch}", batch=batch_df).collect()
+            )
+            if actual != expected:
+                raise AssertionError(f"SQL rows {actual} != batch rows {expected}")
+
+        q = None
+        try:
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            q = df.writeStream.foreachBatch(process).start()
+            q.processAllAvailable()
+            self.assertTrue(any(p.numInputRows > 0 for p in q.recentProgress))
+            self.assertIsNone(q.exception())
+        finally:
+            if q:
+                q.stop()
+
+    def test_batch_uses_stream_session_for_stateful_aqe(self):
+        """Expected: master fails the AQE check; #55410 and final fix pass."""
+        root = self.spark
+
+        def process(batch_df, _):
+            batch_count = batch_df.count()
+            root_aqe = root.conf.get("spark.sql.adaptive.enabled")
+            batch_aqe = batch_df.sparkSession.conf.get("spark.sql.adaptive.enabled")
+            same_session = root.session_id == batch_df.sparkSession.session_id
+            if same_session or root_aqe != "true" or batch_aqe != "false":
+                raise AssertionError(
+                    f"batch_count={batch_count}, same_session={same_session}, "
+                    f"AQE root={root_aqe}, batch={batch_aqe}; "
+                    f"root session={root.session_id}, "
+                    f"batch session={batch_df.sparkSession.session_id}"
+                )
+
+        q = None
+        with self.sql_conf({"spark.sql.adaptive.enabled": "true"}):
+            try:
+                df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+                q = df.groupBy("value").count().writeStream.outputMode("complete").foreachBatch(
+                    process
+                ).start()
+                q.processAllAvailable()
+                self.assertTrue(any(p.numInputRows > 0 for p in q.recentProgress))
+                self.assertIsNone(q.exception())
+            finally:
+                if q:
+                    q.stop()
+
+    def test_batch_dataframe_join_with_captured_dataframe(self):
+        """Expected: #55410 fails SESSION_NOT_SAME; final fix passes with joined rows."""
+        lookup = self.spark.range(2).selectExpr(
+            "CASE id WHEN 0 THEN 'hello' ELSE 'this' END AS value"
+        )
+
+        def process(batch_df, _):
+            expected = sorted(row.value for row in batch_df.select("value").collect())
+            lookup_values = sorted(row.value for row in lookup.select("value").collect())
+            if lookup_values != ["hello", "this"]:
+                raise AssertionError(f"Captured lookup rows changed: {lookup_values}")
+            actual = sorted(
+                row.value for row in batch_df.join(lookup, "value").select("value").collect()
+            )
+            if actual != expected:
+                raise AssertionError(f"Joined rows {actual} != batch rows {expected}")
+
+        q = None
+        try:
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            q = df.writeStream.foreachBatch(process).start()
+            q.processAllAvailable()
+            self.assertTrue(any(p.numInputRows > 0 for p in q.recentProgress))
+            self.assertIsNone(q.exception())
+        finally:
+            if q:
+                q.stop()
+
     def test_pickling_error(self):
         class NoPickle:
             def __reduce__(self):
