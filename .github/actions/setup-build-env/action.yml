@@ -58,7 +58,7 @@ runs:
     #   Coursier: coursier-<os>-<hash(**/pom.xml, **/plugins.sbt)>
     #   Maven:    maven-<os>-java<ver>-<hash(**/pom.xml)>
     - name: Cache SBT and Maven
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           build/apache-maven-*
@@ -78,7 +78,7 @@ runs:
 
     - name: Cache Coursier local repository
       if: inputs.coursier == 'cache'
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ~/.cache/coursier
         key: >-
@@ -91,7 +91,7 @@ runs:
 
     - name: Restore Coursier local repository
       if: inputs.coursier == 'restore'
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: ~/.cache/coursier
         key: >-
@@ -104,7 +104,7 @@ runs:
 
     - name: Cache Maven local repository
       if: inputs.cache-maven-local == 'true'
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ~/.m2/repository
         key: >-
