@@ -1551,10 +1551,13 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    val (storeProvider, _) = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
-      stateSchemaBroadcast)
-    storeProvider.getReadStore(version, stateStoreCkptId)
+    withClosedProviderRetry(storeProviderId) { createUnpublishedProvider =>
+      getStateStoreProvider(storeProviderId, keySchema, valueSchema,
+        keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+        stateSchemaBroadcast, createUnpublishedProvider)
+    } { (storeProvider, _) =>
+      storeProvider.getReadStore(version, stateStoreCkptId)
+    }
   }
 
   /**
@@ -1625,12 +1628,68 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    val (storeProvider, shouldForceSnapshotUpload) = getStateStoreProvider(storeProviderId,
-      keySchema, valueSchema, keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf,
-      useMultipleValuesPerKey, stateSchemaBroadcast)
-    storeProvider.getStore(version, stateStoreCkptId, shouldForceSnapshotUpload)
+    withClosedProviderRetry(storeProviderId) { createUnpublishedProvider =>
+      getStateStoreProvider(storeProviderId,
+        keySchema, valueSchema, keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf,
+        useMultipleValuesPerKey, stateSchemaBroadcast, createUnpublishedProvider)
+    } { (storeProvider, shouldForceSnapshotUpload) =>
+      storeProvider.getStore(version, stateStoreCkptId, shouldForceSnapshotUpload)
+    }
   }
   // scalastyle:on
+
+  private def withClosedProviderRetry[T](
+      storeProviderId: StateStoreProviderId)(
+      getProvider: Boolean => (StateStoreProvider, Boolean))(
+      loadStore: (StateStoreProvider, Boolean) => T): T = {
+    val (firstProvider, firstShouldForceSnapshotUpload) = getProvider(false)
+    try {
+      loadStore(firstProvider, firstShouldForceSnapshotUpload)
+    } catch {
+      case error: StateStoreInvalidStateMachineTransition
+        if isClosedProviderLoadTransition(error) =>
+        loadedProviders.synchronized {
+          if (loadedProviders.get(storeProviderId).exists(_ eq firstProvider)) {
+            loadedProviders.remove(storeProviderId)
+          } else {
+            None
+          }
+        }.foreach { provider =>
+          unloadedProvidersToClose.add(
+            (storeProviderId, provider, MaintenanceOpRequest.All))
+        }
+        // Create the replacement without publishing it in loadedProviders yet.
+        val (replacementProvider, replacementShouldForceSnapshotUpload) = getProvider(true)
+        val store = try {
+          loadStore(replacementProvider, replacementShouldForceSnapshotUpload)
+        } catch {
+          case error: Throwable =>
+            unloadedProvidersToClose.add(
+              (storeProviderId, replacementProvider, MaintenanceOpRequest.All))
+            throw error
+        }
+        loadedProviders.synchronized {
+          if (loadedProviders.contains(storeProviderId)) {
+            Some(replacementProvider)
+          } else {
+            loadedProviders.put(storeProviderId, replacementProvider)
+            None
+          }
+        }.foreach { provider =>
+          unloadedProvidersToClose.add(
+            (storeProviderId, provider, MaintenanceOpRequest.All))
+        }
+        store
+    }
+  }
+
+  private def isClosedProviderLoadTransition(
+      error: StateStoreInvalidStateMachineTransition): Boolean = {
+    val parameters = error.getMessageParameters
+    parameters.get("oldState") == "CLOSED" &&
+      parameters.get("newState") == "ACQUIRED" &&
+      parameters.get("operation") == "load"
+  }
 
   /*
    * @return (StateStoreProvider, shouldForceSnapshotUpload)
@@ -1646,20 +1705,29 @@ object StateStore extends Logging {
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean,
-      stateSchemaBroadcast: Option[StateSchemaBroadcast]): (StateStoreProvider, Boolean) = {
+      stateSchemaBroadcast: Option[StateSchemaBroadcast],
+      // A retry loads the replacement before making it visible to other callers.
+      createUnpublishedProvider: Boolean = false): (StateStoreProvider, Boolean) = {
     loadedProviders.synchronized {
       startMaintenanceIfNeeded(storeConf)
 
       // SPARK-42567 - Track load time for state store provider and log warning if takes longer
       // than 2s.
       val (provider, loadTimeMs) = Utils.timeTakenMs {
-        loadedProviders.getOrElseUpdate(
-          storeProviderId,
+        if (createUnpublishedProvider) {
           StateStoreProvider.createAndInit(
             storeProviderId, keySchema, valueSchema, keyStateEncoderSpec,
             useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
             stateSchemaBroadcast)
-        )
+        } else {
+          loadedProviders.getOrElseUpdate(
+            storeProviderId,
+            StateStoreProvider.createAndInit(
+              storeProviderId, keySchema, valueSchema, keyStateEncoderSpec,
+              useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+              stateSchemaBroadcast)
+          )
+        }
       }
 
       if (loadTimeMs > 2000L) {

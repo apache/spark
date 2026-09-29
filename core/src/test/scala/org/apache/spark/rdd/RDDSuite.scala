@@ -918,6 +918,48 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     assert(c.cartesian[Int](a).collect().toList.sorted === c_cartesian_a)
   }
 
+  test("SPARK-59877: CartesianRDD includes both parent locations by default") {
+    val left = new LocationPrefRDD(sc.parallelize(Seq(1), 1), _ => Seq("left", "shared"))
+    val right = new LocationPrefRDD(sc.parallelize(Seq(2), 1), _ => Seq("right", "shared"))
+    val cartesian = new CartesianRDD(sc, left, right)
+    assert(cartesian.preferredLocations(cartesian.partitions.head) ===
+      Seq("left", "shared", "right"))
+  }
+
+  test("SPARK-59877: CartesianRDD can prefer first-parent locations") {
+    val left = new LocationPrefRDD(sc.parallelize(Seq(1), 1), _ => Seq("left", "shared"))
+    val right = new LocationPrefRDD(sc.parallelize(Seq(2), 1), _ => Seq("right", "shared"))
+    val cartesian = new CartesianRDD(
+      sc, left, right, preferFirstParentLocations = true)
+    assert(cartesian.preferredLocations(cartesian.partitions.head) ===
+      Seq("left", "shared"))
+  }
+
+  test("SPARK-59877: CartesianRDD finds first-parent locations through a narrow dependency") {
+    val left = new LocationPrefRDD(sc.parallelize(Seq(1), 1), _ => Seq("left"))
+    val right = new LocationPrefRDD(sc.parallelize(Seq(2), 1), _ => Seq("right"))
+    val cartesian = new CartesianRDD(
+      sc, left.map(identity), right, preferFirstParentLocations = true)
+    assert(cartesian.preferredLocations(cartesian.partitions.head) === Seq("left"))
+  }
+
+  test("SPARK-59877: CartesianRDD finds locations through nested narrow dependencies") {
+    val left = new LocationPrefRDD(sc.parallelize(Seq(1), 1), _ => Seq("left"))
+    val right = new LocationPrefRDD(sc.parallelize(Seq(2), 1), _ => Seq("right"))
+    val cartesian = new CartesianRDD(
+      sc, left.map(identity).map(identity), right, preferFirstParentLocations = true)
+    assert(cartesian.preferredLocations(cartesian.partitions.head) === Seq("left"))
+  }
+
+  test("SPARK-59877: CartesianRDD falls back to second-parent locations") {
+    val leftWithoutLocations = new LocationPrefRDD(sc.parallelize(Seq(1), 1), _ => Seq.empty)
+    val right = new LocationPrefRDD(sc.parallelize(Seq(2), 1), _ => Seq("right", "shared"))
+    val fallbackCartesian = new CartesianRDD(
+      sc, leftWithoutLocations, right, preferFirstParentLocations = true)
+    assert(fallbackCartesian.preferredLocations(fallbackCartesian.partitions.head) ===
+      Seq("right", "shared"))
+  }
+
   test("SPARK-48656: number of cartesian partitions overflow") {
     val numSlices: Int = 65536
     val rdd1 = sc.parallelize(Seq(1, 2, 3), numSlices = numSlices)
