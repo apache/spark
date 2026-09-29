@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, LongType, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 /**
@@ -76,6 +76,19 @@ object DateTimeUtils extends SparkDateTimeUtils {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(d, TimestampType, context)
     } else {
       DoubleExactNumeric.toLong(d * MICROS_PER_SECOND)
+    }
+  }
+
+  /**
+   * Converts a number of seconds since the epoch to microseconds since the epoch, and fails
+   * with a DATETIME_OVERFLOW error if the result does not fit in a Long.
+   */
+  def secondsToMicros(seconds: Long): Long = {
+    try {
+      Math.multiplyExact(seconds, MICROS_PER_SECOND)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.timestampConstructorOverflowError(seconds, LongType, "seconds")
     }
   }
 
