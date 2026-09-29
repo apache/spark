@@ -17,10 +17,11 @@
 
 package org.apache.spark
 
-import java.io.{File, IOException}
+import java.io.{File, FilterOutputStream, IOException}
 import java.net.URI
 import java.nio.ByteBuffer
 import java.util.Properties
+import java.util.zip.CRC32
 
 import scala.reflect.ClassTag
 
@@ -858,8 +859,15 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
       val countFile = new Path(checkpointPath, "_num_partitions")
       assert(fs.exists(countFile), "expected _num_partitions to exist before corruption")
       val originalBytes = readAllBytes(fs, countFile)
-      // Format version 1: 1-byte version, 4-byte count, 8-byte CRC32 of the first 5 bytes.
-      assert(originalBytes.length === 13)
+      // Pin the version-1 layout independently of the writer: 1-byte version, 4-byte big-endian
+      // count, 8-byte big-endian CRC32 of the preceding 5 bytes. A change to any field must bump
+      // the version rather than pass silently because the paired reader was changed with it.
+      val expectedBytes = Array[Byte](
+        0x01, // format version
+        0x00, 0x00, 0x00, 0x04, // partition count 4
+        0x00, 0x00, 0x00, 0x00, 0xfc.toByte, 0x2f, 0x1a, 0xb4.toByte) // CRC32 of 0x0100000004
+      assert(originalBytes === expectedBytes)
+      assert(encodePartitionCount(version = 1, count = 4) === expectedBytes)
 
       // A corrupted file must not prevent recovery, and a WARN must be logged to confirm
       // the check ran and was suppressed, not silently skipped.
@@ -898,6 +906,15 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
         writeAllBytes(fs, countFile, originalBytes :+ 0.toByte)
       }
 
+      // Internally consistent payloads that the reader must still reject: the checksum verifies,
+      // so only the version and count validation stand between them and a false mismatch.
+      assertTolerated("checksum-valid unsupported version") {
+        writeAllBytes(fs, countFile, encodePartitionCount(version = 2, count = 4))
+      }
+      assertTolerated("checksum-valid negative count") {
+        writeAllBytes(fs, countFile, encodePartitionCount(version = 1, count = -1))
+      }
+
       // Control: restoring the original payload makes the count authoritative again, and a real
       // trailing-file loss is still reported rather than tolerated.
       writeAllBytes(fs, countFile, originalBytes)
@@ -932,12 +949,24 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  // Encodes a _num_partitions payload (SPARK-58883) independently of ReliableCheckpointRDD, so
+  // tests can build checksum-valid inputs for the reader's rejection branches.
+  private def encodePartitionCount(version: Byte, count: Int): Array[Byte] = {
+    val header = ByteBuffer.allocate(5).put(version).putInt(count).array()
+    val crc = new CRC32()
+    crc.update(header)
+    ByteBuffer.allocate(13).put(header).putLong(crc.getValue).array()
+  }
+
   // SPARK-58883: the _num_partitions file is best effort. A failure to publish it must neither
   // fail the action that triggered checkpointing (the partition files are already committed by
-  // then) nor leave a partial file behind; it must only log the inactive-check warning.
+  // then) nor leave a partial or temp file behind; it must only log the inactive-check warning.
+  // The write and rename-throws cases fail after the temp file exists, exercising its cleanup.
   Seq(
     ("create throws", classOf[PartitionCountCreateFailingFilesystem]),
-    ("rename returns false", classOf[PartitionCountRenameFailingFilesystem])
+    ("write throws after create", classOf[PartitionCountWriteFailingFilesystem]),
+    ("rename returns false", classOf[PartitionCountRenameFailingFilesystem]),
+    ("rename throws", classOf[PartitionCountRenameThrowingFilesystem])
   ).foreach { case (failure, fsClass) =>
     test(s"SPARK-58883: checkpointing succeeds when publishing _num_partitions fails " +
         s"($failure)") {
@@ -1029,6 +1058,36 @@ class PartitionCountCreateFailingFilesystem extends LocalFileSystem {
 }
 
 /**
+ * A filesystem whose output stream for the `_num_partitions` temp file throws on the first write
+ * (SPARK-58883). Unlike [[PartitionCountCreateFailingFilesystem]], `create` succeeds, so the temp
+ * file exists when publication fails and its cleanup path is exercised.
+ */
+class PartitionCountWriteFailingFilesystem extends LocalFileSystem {
+  override def create(
+      f: Path,
+      permission: FsPermission,
+      overwrite: Boolean,
+      bufferSize: Int,
+      replication: Short,
+      blockSize: Long,
+      progress: Progressable): FSDataOutputStream = {
+    val out = super.create(f, permission, overwrite, bufferSize, replication, blockSize, progress)
+    if (f.getName == "._num_partitions-tmp") {
+      new FSDataOutputStream(new FilterOutputStream(out) {
+        override def write(b: Int): Unit = {
+          throw new IOException(s"Injected failure writing $f")
+        }
+        override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+          throw new IOException(s"Injected failure writing $f")
+        }
+      }, null)
+    } else {
+      out
+    }
+  }
+}
+
+/**
  * A filesystem that reports failure to publish the `_num_partitions` metadata the way HDFS and
  * S3A do (SPARK-58883): `rename` onto the final path returns false instead of throwing. Partition
  * file renames are unaffected.
@@ -1036,5 +1095,19 @@ class PartitionCountCreateFailingFilesystem extends LocalFileSystem {
 class PartitionCountRenameFailingFilesystem extends LocalFileSystem {
   override def rename(src: Path, dst: Path): Boolean = {
     if (dst.getName == "_num_partitions") false else super.rename(src, dst)
+  }
+}
+
+/**
+ * A filesystem whose `rename` onto the final `_num_partitions` path throws instead of returning
+ * false (SPARK-58883), as some object-store connectors do. The temp file exists when the exception
+ * is raised, so this exercises its cleanup on the exceptional path.
+ */
+class PartitionCountRenameThrowingFilesystem extends LocalFileSystem {
+  override def rename(src: Path, dst: Path): Boolean = {
+    if (dst.getName == "_num_partitions") {
+      throw new IOException(s"Injected failure renaming $src to $dst")
+    }
+    super.rename(src, dst)
   }
 }

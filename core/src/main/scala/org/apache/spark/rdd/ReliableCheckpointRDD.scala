@@ -331,7 +331,8 @@ private[spark] object ReliableCheckpointRDD extends Logging {
    * Write the partition count of the checkpointed RDD to the checkpoint directory so that
    * a later read via [[SparkContext.checkpointFile]] can detect a truncated directory.
    * The file is written atomically (temp path then rename) so a torn write leaves no partial
-   * file; the payload layout is documented at [[PARTITION_COUNT_FORMAT_VERSION]].
+   * file, and the temp file is removed if publication fails at any point after it is created;
+   * the payload layout is documented at [[PARTITION_COUNT_FORMAT_VERSION]].
    * This is done on a best-effort basis; any exception is caught, logged and ignored so that
    * an inability to write the file does not prevent checkpointing. See SPARK-58883.
    */
@@ -343,18 +344,36 @@ private[spark] object ReliableCheckpointRDD extends Logging {
         checkpointDirPath, s".${checkpointPartitionCountFileName()}-tmp")
       val bufferSize = sc.conf.get(BUFFER_SIZE)
       val fs = countFilePath.getFileSystem(sc.hadoopConfiguration)
+      // A cleanup failure must not mask the publication failure being handled, so it is only
+      // logged.
+      def deleteTempFile(): Unit = {
+        try {
+          fs.delete(tmpFilePath, false)
+        } catch {
+          case NonFatal(e) =>
+            logWarning(log"Failed to delete ${MDC(TEMP_OUTPUT_PATH, tmpFilePath)}", e)
+        }
+      }
       // Write to a temp path first so readers never see a partial file.
       val fileOutputStream = fs.create(tmpFilePath, true, bufferSize)
-      val dos = new DataOutputStream(fileOutputStream)
-      Utils.tryWithSafeFinally {
-        val header = partitionCountHeader(partitionCount)
-        dos.write(header)
-        dos.writeLong(partitionCountChecksum(header))
-      } {
-        dos.close()
+      // From here on the temp file exists and must not be left behind on any failure.
+      val renamed = try {
+        val dos = new DataOutputStream(fileOutputStream)
+        Utils.tryWithSafeFinally {
+          val header = partitionCountHeader(partitionCount)
+          dos.write(header)
+          dos.writeLong(partitionCountChecksum(header))
+        } {
+          dos.close()
+        }
+        fs.rename(tmpFilePath, countFilePath)
+      } catch {
+        case NonFatal(e) =>
+          deleteTempFile()
+          throw e
       }
-      if (!fs.rename(tmpFilePath, countFilePath)) {
-        fs.delete(tmpFilePath, false)
+      if (!renamed) {
+        deleteTempFile()
         logWarning(
           log"Failed to rename ${MDC(TEMP_OUTPUT_PATH, tmpFilePath)} to " +
           log"${MDC(PATH, countFilePath)}, " +
