@@ -66,7 +66,7 @@ class ExecutorPVCResizeDriverPlugin extends DriverPlugin with Logging {
   private var threshold: Double = _
   private var factor: Double = _
 
-  private val latestReports = new ConcurrentHashMap[String, PVCDiskUsageReport]()
+  private[k8s] val latestReports = new ConcurrentHashMap[String, PVCDiskUsageReport]()
   private val failedPvcs = ConcurrentHashMap.newKeySet[String]()
   private val requestedSizes = new ConcurrentHashMap[String, Long]()
 
@@ -117,22 +117,27 @@ class ExecutorPVCResizeDriverPlugin extends DriverPlugin with Logging {
   }
 
   private[k8s] def checkAndResizePVCs(): Unit = {
-    logInfo(s"Latest PVC usage reports: $latestReports")
     val appId = sparkContext.applicationId
 
     sparkContext.schedulerBackend match {
       case b: KubernetesClusterSchedulerBackend =>
         val client = b.kubernetesClient
+        // Skip terminated pods kept by deleteOnTermination=false since their reports are stale.
         val pods = client.pods()
           .inNamespace(namespace)
           .withLabel(SPARK_APP_ID_LABEL, appId)
           .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+          .withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
           .list()
           .getItems.asScala
 
         val podByExecId = pods.flatMap { p =>
           Option(p.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL)).map(_ -> p)
         }.toMap
+
+        // Drop reports of executors without a pod so that latestReports does not grow unbounded.
+        latestReports.keySet().retainAll(podByExecId.keySet.asJava)
+        logInfo(s"Latest PVC usage reports: $latestReports")
 
         latestReports.values().asScala.foreach { report =>
           podByExecId.get(report.executorId).foreach { pod =>
