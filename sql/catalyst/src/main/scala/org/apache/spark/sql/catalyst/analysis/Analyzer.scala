@@ -1091,25 +1091,28 @@ class Analyzer(
       }
     }
 
+    // Returns the metadata output of the children by expression ID, keeping the first one for
+    // duplicated IDs. `metadataOutput` can be expensive: a Project gets it from its child, so it
+    // traverses a whole chain of Projects. Call this once per plan node, not once per attribute.
+    private def childrenMetadataOutput(plan: LogicalPlan): Map[ExprId, Attribute] = {
+      plan.children.flatMap(_.metadataOutput).groupMapReduce(_.exprId)(identity)((a, _) => a)
+    }
+
     private def getMetadataAttributes(plan: LogicalPlan): Seq[Attribute] = {
+      lazy val childrenMetadata = childrenMetadataOutput(plan)
       plan.expressions.flatMap(_.collect {
         case a: Attribute if a.isMetadataCol => a
-        case a: Attribute
-          if plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId)) =>
-          plan.children.collectFirst {
-            case c if c.metadataOutput.exists(_.exprId == a.exprId) =>
-              c.metadataOutput.find(_.exprId == a.exprId).get
-          }.get
+        case a: Attribute if childrenMetadata.contains(a.exprId) => childrenMetadata(a.exprId)
       })
     }
 
     private def hasMetadataCol(plan: LogicalPlan): Boolean = {
+      lazy val childrenMetadata = childrenMetadataOutput(plan)
       plan.expressions.exists(_.exists {
         case a: Attribute =>
           // If an attribute is resolved before being labeled as metadata
           // (i.e. from the originating Dataset), we check with expression ID
-          a.isMetadataCol ||
-            plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId))
+          a.isMetadataCol || childrenMetadata.contains(a.exprId)
         case _ => false
       })
     }
