@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPILED_PYTHON_UDF
 import org.apache.spark.sql.types.{
-  BinaryType, BooleanType, DataType, DecimalType, FractionalType,
-  IntegralType, NumericType, StringType}
+  ArrayType, BinaryType, BooleanType, DataType, DecimalType, FractionalType,
+  IntegralType, MapType, NumericType, StringType}
 
 /**
  * Prunes the per-input-type options carried by a [[TranspiledPythonUDF]] down to those whose
@@ -88,6 +88,7 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   //   "string"  -> StringType with UTF8_BINARY collation only
   //   "bool"    -> BooleanType
   //   "binary"  -> BinaryType
+  //   "map" -> MapType; "array" -> ArrayType (any element type)
   //
   // Two deliberate exclusions keep the transpiled semantics faithful to Python:
   // - DecimalType is NOT matched by any numeric category: Python receives
@@ -112,6 +113,8 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
         case ("string", st: StringType) => st.isUTF8BinaryCollation
         case ("bool", dt) => dt.isInstanceOf[BooleanType]
         case ("binary", dt) => dt.isInstanceOf[BinaryType]
+        case ("map", dt) => dt.isInstanceOf[MapType]
+        case ("array", dt) => dt.isInstanceOf[ArrayType]
         case _ => false
       }
     }
