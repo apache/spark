@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, Projec
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.{sideBySide, CharVarcharScanMode, CharVarcharUtils}
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
@@ -114,8 +114,9 @@ private[sql] case class TableCacheDescriptor(
  * SparkStandard padding Project, view rename capturing more than one cache entry.
  *
  * Replay: rebuild and rename restoration clone a session, set both CHAR/VARCHAR SQLConf flags
- * for the captured mode, and never mutate the caller session. Direct V2 recache recreates the
- * relation from the catalog table so output matches the new schema, then re-analyzes padding.
+ * for the captured mode, and never mutate the caller session. Direct V2 recache loads a fresh
+ * Table from the catalog onto the existing relation (keeping output types, scan mode, and
+ * padding Project). The rebuilt cache key is that refreshed plan, not a re-analyzed copy.
  */
 class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
@@ -596,6 +597,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       cd.cachedRepresentation.cacheBuilder.clearCache()
       tryRebuildCacheEntry(spark, cd).foreach { entry =>
         this.synchronized {
+          // sameResult includes scan mode, so a PreserveNative sibling must not suppress
+          // SparkStandard (or a padded vs unpadded PreserveNative key).
           if (lookupCachedDataInternal(entry.plan).nonEmpty) {
             logWarning("While recaching, data was already added to cache.")
           } else {
@@ -613,12 +616,14 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     val rebuildSession = sessionForCacheRebuild(spark, policy)
     rebuildSession.withActive {
       try {
-        tryRefreshPlan(rebuildSession, cd.plan, policy.mixedModes).map { refreshedPlan =>
+        tryRefreshPlan(cd.plan).map { refreshedPlan =>
           val qe = QueryExecution.create(
             rebuildSession,
             refreshedPlan,
             refreshPhaseEnabled = false)
-          val newKey = qe.normalized
+          // Keep the captured mode and padding Project as the cache key. qe.normalized re-runs
+          // analysis, which can drop or rebuild that Project under the caller session.
+          val newKey = QueryExecution.normalize(rebuildSession, refreshedPlan)
           val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
           cd.copy(plan = newKey, cachedRepresentation = newCache)
         }
@@ -708,30 +713,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    *
    * @return the refreshed plan if refresh succeeds, None otherwise
    */
-  private def tryRefreshPlan(
-      spark: SparkSession,
-      plan: LogicalPlan,
-      mixedModes: Boolean): Option[LogicalPlan] = {
+  private def tryRefreshPlan(plan: LogicalPlan): Option[LogicalPlan] = {
     try {
-      if (mixedModes) {
-        // Keep each relation's stored mode and policy Project; only refresh Table instances.
-        Some(V2TableRefreshUtil.refresh(spark, plan))
-      } else {
-        EliminateSubqueryAliases(plan) match {
-          case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
-              if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] =>
-            refreshV2RelationTable(r, catalog, ident)
-          case project @ Project(_, r @ ExtractV2CatalogAndIdentifier(catalog, ident))
-              if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] &&
-                r.charVarcharScanMode.exists(
-                  ApplyCharTypePaddingHelper.isReadSidePaddingProject(project, r, _)) =>
-            // Drop the analyzer-generated padding Project. QueryExecution.create re-analyzes
-            // the refreshed relation so the Project matches the new schema and scan mode.
-            refreshV2RelationTable(r, catalog, ident)
-          case _ =>
-            Some(V2TableRefreshUtil.refresh(spark, plan))
-        }
-      }
+      // Keep scan mode and any analyzer padding Project. Load Table from the catalog rather
+      // than the shared relation cache so a recache after write sees committed rows.
+      Some(refreshV2RelationTablesFromCatalog(plan))
     } catch {
       case NonFatal(e) =>
         logWarning(log"Failed to refresh plan while attempting to recache", e)
@@ -741,18 +727,14 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   // Load from the catalog, not the shared relation cache, so a recache after write sees
   // the committed rows instead of the copy pinned when the cache was created.
-  private def refreshV2RelationTable(
-      relation: DataSourceV2Relation,
-      catalog: TableCatalog,
-      ident: Identifier): Option[DataSourceV2Relation] = {
-    val table = CatalogV2Util.getTable(catalog, ident, options = relation.options)
-    if (relation.table.id == table.id) {
-      Some(
-        DataSourceV2Relation
-          .create(table, Some(catalog), Some(ident), relation.options)
-          .copy(charVarcharScanMode = relation.charVarcharScanMode))
-    } else {
-      None
+  // Keep output types, scan mode, and padding Projects: DataSourceV2Relation.create rewrites
+  // CHAR/VARCHAR to annotated STRING, so a later analysis pass cannot restore the cache key.
+  private def refreshV2RelationTablesFromCatalog(plan: LogicalPlan): LogicalPlan = {
+    plan.transformWithSubqueries {
+      case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
+          if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] =>
+        val table = CatalogV2Util.getTable(catalog, ident, options = r.options)
+        if (r.table.id == table.id) r.copy(table = table) else r
     }
   }
 

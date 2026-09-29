@@ -1757,9 +1757,11 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         assert(otherOptionsRelation.table eq cached.table)
         assert(initialRelation.options.get("split-size") == "5")
         assert(otherOptionsRelation.options.get("split-size") == "9")
-        assert(initialRelation.charVarcharScanMode.isEmpty)
-        assert(cachedRelation.charVarcharScanMode.isEmpty)
-        assert(otherOptionsRelation.charVarcharScanMode.isEmpty)
+        // Temporary-view refs keep the stored CHAR/VARCHAR mode across shared-cache reuse.
+        assert(initialRelation.charVarcharScanMode.contains(CharVarcharScanMode.PreserveNative))
+        assert(cachedRelation.charVarcharScanMode.contains(CharVarcharScanMode.PreserveNative))
+        assert(
+          otherOptionsRelation.charVarcharScanMode.contains(CharVarcharScanMode.PreserveNative))
         assert(AnalysisContext.get.tableCache.size == 1)
         assert(AnalysisContext.get.relationCache.size == 2)
       }

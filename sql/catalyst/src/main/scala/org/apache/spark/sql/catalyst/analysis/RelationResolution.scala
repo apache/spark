@@ -612,6 +612,8 @@ class RelationResolution(
     cached transform {
       case r: DataSourceV2Relation if matchesReference(r, ref) =>
         V2ReferenceUtils.validateLoadedTable(r.table, ref)
+        // Temp-view refs store creation-time CHAR/VARCHAR policy (the setting is persisted).
+        // Shared table-cache hits for other contexts clear the mode so this analysis rebinds.
         val reboundMode = ref.context match {
           case _: V2Reference.TemporaryViewContext => ref.charVarcharScanMode
           case _ => None

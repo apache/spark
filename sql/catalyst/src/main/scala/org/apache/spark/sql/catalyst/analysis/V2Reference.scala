@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.V2TableReference.TableInfo
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
-import org.apache.spark.sql.catalyst.util.{CharVarcharScanMode, truncatedString}
+import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharScanMode}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.connector.catalog.Column
