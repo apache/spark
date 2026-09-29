@@ -197,12 +197,15 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
     val dataAttrs = AttributeSet(readDataColumns)
     // Over `toSeq` rather than the set, because `ExpressionSet.filter` hands the predicate
     // `e.canonicalized`, which drops attribute names and metadata, and a format deciding by either
-    // would answer about an expression it will never be given.
-    val offered = afterScanFilters.toSeq.filter { expr =>
-      val refs = expr.references
-      expr.deterministic && refs.nonEmpty && refs.subsetOf(dataAttrs) &&
-        fsRelation.fileFormat.supportsStorageFilter(expr)
-    }
+    // would answer about an expression it will never be given. Normalized to the relation's own
+    // column names, as the pushed data filters are, because the analyzer spells a reference the way
+    // the query did, while the reader sees the names of the schema it reads.
+    val offered = DataSourceStrategy.normalizeExprs(afterScanFilters.toSeq, readDataColumns)
+      .filter { expr =>
+        val refs = expr.references
+        expr.deterministic && refs.nonEmpty && refs.subsetOf(dataAttrs) &&
+          fsRelation.fileFormat.supportsStorageFilter(expr)
+      }
     if (offered.isEmpty) return Nil
     val storageKeyAttrs = AttributeSet.fromAttributeSets(offered.map(_.references))
     if (dataAttrs.subsetOf(storageKeyAttrs)) Nil else offered

@@ -94,6 +94,13 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
    */
   protected ParquetFileReader fileReader;
 
+  /**
+   * The options {@link #fileReader} was built with, or null when a row-group reader was handed in.
+   * A subclass that has to agree with that reader about a setting reads it here rather than parsing
+   * the conf a second time.
+   */
+  protected ParquetReadOptions readOptions;
+
   protected Configuration configuration;
 
   @Override
@@ -111,16 +118,16 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.configuration = taskAttemptContext.getConfiguration();
     FileSplit split = (FileSplit) inputSplit;
     this.file = split.getPath();
-    ParquetReadOptions options = HadoopReadOptions
+    readOptions = HadoopReadOptions
         .builder(configuration, file)
         .withRange(split.getStart(), split.getStart() + split.getLength())
         .build();
     if (inputFile.isDefined() && fileFooter.isDefined() && inputStream.isDefined()) {
       fileReader = new ParquetFileReader(
-          inputFile.get(), fileFooter.get(), options, inputStream.get());
+          inputFile.get(), fileFooter.get(), readOptions, inputStream.get());
     } else {
       fileReader = new ParquetFileReader(
-          HadoopInputFile.fromPath(file, configuration), options);
+          HadoopInputFile.fromPath(file, configuration), readOptions);
     }
     this.reader = new ParquetRowGroupReaderImpl(fileReader);
     this.fileSchema = fileReader.getFileMetaData().getSchema();
@@ -182,12 +189,12 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.file = new Path(path);
     long length = this.file.getFileSystem(configuration).getFileStatus(this.file).getLen();
 
-    ParquetReadOptions options = HadoopReadOptions
+    readOptions = HadoopReadOptions
       .builder(configuration, file)
       .withRange(0, length)
       .build();
     fileReader = ParquetFileReader.open(
-      HadoopInputFile.fromPath(file, configuration), options);
+      HadoopInputFile.fromPath(file, configuration), readOptions);
     this.reader = new ParquetRowGroupReaderImpl(fileReader);
     this.fileSchema = fileReader.getFooter().getFileMetaData().getSchema();
 

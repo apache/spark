@@ -66,7 +66,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  * TODO: make this always return ColumnarBatches.
  *
  * <p>{@link LateMaterializationParquetRecordReader} extends this with storage-filter pushdown. The
- * protected members below are what it reaches and what it overrides; the read path itself is this
+ * protected members below are what it reaches and what it overrides. The read path itself is this
  * class's alone.
  */
 public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBase<Object> {
@@ -85,7 +85,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * Encapsulate writable column vectors with other Parquet related info such as
    * repetition / definition levels.
    */
-  protected ParquetColumnVector[] columnVectors;
+  private ParquetColumnVector[] columnVectors;
 
   /**
    * The number of rows that have been returned.
@@ -183,8 +183,16 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       capacity);
   }
 
-  // Hadoop's 2-arg initialize is not overridden. Super's delegates to this overload, which already
-  // runs initializeInternal().
+  /**
+   * Implementation of RecordReader API. Super's delegates to the overload below, which runs
+   * {@link #initializeInternal()}, so this does not run it a second time.
+   */
+  @Override
+  public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
+      throws IOException, InterruptedException, UnsupportedOperationException {
+    super.initialize(inputSplit, taskAttemptContext);
+  }
+
   @Override
   public void initialize(
       InputSplit inputSplit,
@@ -221,25 +229,11 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   @Override
   public void close() throws IOException {
-    // Chained through a finally block because super.close() owns the file handle and the input
-    // stream, which a failing vector close must not leak.
-    try {
-      closeAllocated();
-    } finally {
-      super.close();
-    }
-  }
-
-  /**
-   * Releases everything this reader allocated, except what {@code super.close()} owns, which is the
-   * file handle and the input stream. For this class that is the batch it hands out. A subclass
-   * whose batch does not hold every vector it allocated closes the rest here too.
-   */
-  protected void closeAllocated() {
     if (columnarBatch != null) {
       columnarBatch.close();
       columnarBatch = null;
     }
+    super.close();
   }
 
   @Override
@@ -402,31 +396,14 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * Advances to the next batch of rows. Returns false if there are no more.
    */
   public boolean nextBatch() throws IOException {
-    resetBatch();
-    if (rowsReturned >= totalRowCount) return false;
-    if (rowsReturned == totalCountLoadedSoFar && !loadNextRowGroup()) return false;
-
-    int num = (int) Math.min(capacity, totalCountLoadedSoFar - rowsReturned);
-    readBatchColumns(num);
-    finishBatch(num);
-    return true;
-  }
-
-  /** Drops whatever the previous batch held, which is the first step of every batch. */
-  protected void resetBatch() {
     for (ParquetColumnVector vector : columnVectors) {
       vector.reset();
     }
     columnarBatch.setNumRows(0);
-  }
+    if (rowsReturned >= totalRowCount) return false;
+    if (rowsReturned == totalCountLoadedSoFar && !loadNextRowGroup()) return false;
 
-  /**
-   * Reads {@code num} rows through the column readers the current row group installed, assembles
-   * the top-level vectors, and fills the row-index column if the projection asked for one. A leaf
-   * with no reader is skipped, which is a leaf this row group's read does not fetch, either a
-   * column the file does not have or one a subclass supplies itself.
-   */
-  protected void readBatchColumns(int num) throws IOException {
+    int num = (int) Math.min(capacity, totalCountLoadedSoFar - rowsReturned);
     for (ParquetColumnVector cv : columnVectors) {
       for (ParquetColumnVector leafCv : cv.getLeaves()) {
         VectorizedColumnReader columnReader = leafCv.getColumnReader();
@@ -441,14 +418,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     if (rowIndexGenerator != null) {
       rowIndexGenerator.populateRowIndex(columnVectors, num);
     }
-  }
 
-  /** Publishes {@code num} rows as the current batch. */
-  private void finishBatch(int num) {
     rowsReturned += num;
     columnarBatch.setNumRows(num);
     numBatched = num;
     batchIdx = 0;
+    return true;
   }
 
   protected void initializeInternal() throws IOException, UnsupportedOperationException {
@@ -508,8 +483,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   /**
    * Loads the row group the read continues with, and returns false if there is none left. Only a
-   * subclass that picks its own rows can answer false, because this class reads every row of every
-   * row group, and then {@code totalRowCount} already says when they run out.
+   * subclass that picks its own rows can answer false, because this class reads every row group
+   * parquet hands it, and then {@code totalRowCount} already says when they run out.
    */
   protected boolean loadNextRowGroup() throws IOException {
     PageReadStore pages = reader.readNextRowGroup();
@@ -519,16 +494,16 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     }
     // Null ranges, because this path never picks the rows itself, and whether parquet narrowed the
     // row group by a pushed filter's column index is known only to the store it handed back.
-    installRowGroup(pages, null, pages.getRowCount());
+    installRowGroup(pages, null);
     return true;
   }
 
   /**
    * Points the column readers at one row group's {@code pages}, from which they are to read the
-   * rows {@code rowRanges} names, or every row of the row group when it is null. {@code rowCount}
-   * is how many rows that is, which is what the read has left before it needs another row group.
+   * rows {@code rowRanges} names. Null ranges leave that to the store, which names its rows through
+   * its row indexes when parquet filtered it and otherwise holds every row of the row group.
    */
-  protected final void installRowGroup(PageReadStore pages, RowRanges rowRanges, long rowCount)
+  protected final void installRowGroup(PageReadStore pages, RowRanges rowRanges)
       throws IOException {
     if (rowIndexGenerator != null) {
       rowIndexGenerator.initFromPageReadStore(pages);
@@ -542,7 +517,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         initColumnReader(pages, rowRanges, columnVectors[i]);
       }
     }
-    totalCountLoadedSoFar += rowCount;
+    totalCountLoadedSoFar += pages.getRowCount();
   }
 
   /**
@@ -556,9 +531,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   /**
    * A column reader for one leaf column over one row group's pages, reading the rows
-   * {@code rowRanges} names, or every row of the chunk when it is null. Every column reader this
-   * reader builds needs the same rebase and timezone settings, which are the file's, so this is
-   * where they are applied and a subclass reading its own columns goes through here too.
+   * {@code rowRanges} names, or, when it is null, the rows the store names, as for
+   * {@link #installRowGroup}. Every column reader this reader builds needs the same rebase and
+   * timezone settings, which are the file's, so this is where they are applied and a subclass
+   * reading its own columns goes through here too.
    */
   protected VectorizedColumnReader newColumnReader(
       ColumnDescriptor descriptor,

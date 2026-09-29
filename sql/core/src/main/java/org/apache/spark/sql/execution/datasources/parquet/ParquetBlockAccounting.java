@@ -42,7 +42,8 @@ import org.apache.spark.internal.SparkLoggerFactory;
  * arithmetic and causes no IO of its own, which is what lets a reader report these numbers per row
  * group.
  *
- * <p>One instance per file, because the warning below is reported once per file.
+ * <p>One instance per reader, which reads one split of a file, because the warning below is
+ * reported once per instance.
  */
 final class ParquetBlockAccounting {
   private static final SparkLogger LOG =
@@ -50,7 +51,7 @@ final class ParquetBlockAccounting {
 
   private final ParquetFileReader reader;
 
-  /** Whether the byte count has already been reported as undercounting on this file. */
+  /** Whether the byte count has already been reported as undercounting by this instance. */
   private boolean loggedMissingStoreEntry;
 
   ParquetBlockAccounting(ParquetFileReader reader) {
@@ -144,7 +145,7 @@ final class ParquetBlockAccounting {
         // truncated file, so a byte metric must not be able to change the answer.
         if (chunk.getOffsetIndexReference() != null && !loggedMissingStoreEntry) {
           loggedMissingStoreEntry = true;
-          LOG.warn("Undercounting the storage filter's avoided bytes for {}: column {} of row "
+          LOG.warn("Miscounting the storage filter's avoided bytes for {}: column {} of row "
               + "group {} has an offset index the block's column index store was not built with",
               MDC.of(LogKeys.PATH, reader.getFile()),
               MDC.of(LogKeys.COLUMN_NAME, path.toDotString()),

@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.datasources.parquet;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.filter2.columnindex.RowRanges;
 
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.PrimitiveIterator;
 
@@ -208,47 +210,45 @@ abstract class ParquetReadState {
 
   /**
    * Coalesces the runs of ascending row indexes into one range each, so `[0, 1, 2, 4, 5, 7, 8, 9]`
-   * yields `[0-2]`, then `[4-5]`, then `[7-9]`.
-   *
-   * <p>One range at a time on purpose. They are consumed once, in order, so holding them all buys
-   * nothing and costs a list per column reader of the row group, which for scattered rows is one
-   * entry per row in every one of those lists.
+   * yields `[0-2]`, `[4-5]` and `[7-9]`. All of them are built up front, then walked in order.
    */
   private static final class RowIndexState extends ParquetReadState {
-    private final PrimitiveIterator.OfLong rowIndexes;
-
-    /** The row index that ended the previous range by not continuing it, so it starts the next. */
-    private long pendingRowIndex;
-    private boolean hasPendingRowIndex;
+    private final Iterator<RowRange> rowRanges;
 
     RowIndexState(
         ColumnDescriptor descriptor, boolean isRequired, PrimitiveIterator.OfLong rowIndexes) {
       super(descriptor, isRequired);
-      this.rowIndexes = rowIndexes;
+      List<RowRange> ranges = new ArrayList<>();
+      long currentStart = Long.MIN_VALUE;
+      long previous = Long.MIN_VALUE;
+      while (rowIndexes.hasNext()) {
+        long idx = rowIndexes.nextLong();
+        if (currentStart == Long.MIN_VALUE) {
+          currentStart = idx;
+        } else if (previous + 1 != idx) {
+          ranges.add(new RowRange(currentStart, previous));
+          currentStart = idx;
+        }
+        previous = idx;
+      }
+      if (previous != Long.MIN_VALUE) {
+        ranges.add(new RowRange(currentStart, previous));
+      }
+      this.rowRanges = ranges.iterator();
     }
 
     @Override
     void nextRange() {
-      if (!hasPendingRowIndex && !rowIndexes.hasNext()) {
+      if (rowRanges.hasNext()) {
+        RowRange range = rowRanges.next();
+        includeRange(range.start(), range.end());
+      } else {
         includeNothingMore();
-        return;
       }
-      long start = hasPendingRowIndex ? pendingRowIndex : rowIndexes.nextLong();
-      hasPendingRowIndex = false;
-      long end = start;
-      // A range can only be closed by seeing the index that does not continue it, so that index is
-      // held back for the next call.
-      while (rowIndexes.hasNext()) {
-        long idx = rowIndexes.nextLong();
-        if (idx == end + 1) {
-          end = idx;
-        } else {
-          pendingRowIndex = idx;
-          hasPendingRowIndex = true;
-          break;
-        }
-      }
-      includeRange(start, end);
+    }
+
+    /** A range of row indexes `[start, end]`. */
+    private record RowRange(long start, long end) {
     }
   }
 }

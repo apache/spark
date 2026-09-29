@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkEnv, TaskContext}
+import org.apache.spark.executor.Executor
+import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
 import org.apache.spark.sql.catalyst.expressions.{And, BasePredicate, BloomFilterMightContain, BoundReference, Expression, Predicate}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -25,7 +27,9 @@ import org.apache.spark.sql.types.{DataType, StructType}
 /**
  * The SQL metrics the reader updates while applying a [[ParquetStorageFilter]], created by
  * `ParquetFileFormat.storageFilterMetrics`. Every counter is scoped to what the storage filter
- * added on top of a read of the same projection without one.
+ * saved against a read of the same projection without one. None counts what it cost. A row group
+ * whose filter was given up reads its key columns twice and counts nothing, so the counters can
+ * show a saving on a scan that read more than it would have with the feature off.
  *
  *  - [[rowGroupsSkipped]] counts row groups whose data columns were never read.
  *  - [[rowsExcludedByRowGroup]] sums those skipped row groups' rows, counting per block the rows
@@ -33,15 +37,14 @@ import org.apache.spark.sql.types.{DataType, StructType}
  *  - [[rowsExcludedWithinRowGroup]] sums rows excluded inside row groups that were kept.
  *  - [[bytesAvoidedByRowGroup]] sums, per skipped row group, the non-key bytes a plain read of this
  *    projection would have transferred for the rows that survived the pushed data filter. Phase 1
- *    reads the key columns of every block, so key bytes are never part of it, and it is zero on an
- *    all-keys projection, which can avoid nothing.
+ *    reads the key columns of every block, so key bytes are never part of it.
  *  - [[bytesAvoidedByPageFiltering]] sums, per kept row group, that same non-key baseline minus the
- *    bytes phase 2 read, which is what `finalRanges` page selection pruned.
+ *    bytes phase 2 read, which is what `finalRanges` page selection pruned. A row group that gave
+ *    splicing up reads its key columns again in phase 2, which is taken off, down to zero.
  *
  * The row counters' suffix says where a row was excluded, not whether reading it was avoided. A row
  * excluded inside a kept row group may have been read as part of a page that held a survivor, or
- * not read at all because phase 2 skipped its page. An all-keys projection has no page filtering at
- * all, and [[rowsExcludedWithinRowGroup]] still counts every row the filter dropped.
+ * not read at all because phase 2 skipped its page.
  */
 case class StorageFilterMetrics(
     rowGroupsSkipped: SQLMetric,
@@ -192,7 +195,7 @@ object ParquetStorageFilter {
       "storage filter key columns must have a type the vectorized reader can copy, but " +
         unsupported.map(f => s"${f.name} ${f.dataType.catalogString}").mkString(", ") +
         " do not; see ParquetStorageFilter.isSupportedKeyType")
-    require(!keyFields.exists(f => ParquetRowIndexUtil.isRowIndexColumnName(f.name)),
+    require(!keyFields.exists(f => f.name == ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME),
       "a storage filter must not have a key column named " +
         s"${ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME}, because the reader writes row " +
         "indexes over that column, so what it reads back depends on how its row group was read")
@@ -237,7 +240,29 @@ object ParquetStorageFilter {
   def isSupportedStorageFilter(expr: Expression): Boolean = expr match {
     case bloom: BloomFilterMightContain =>
       bloom.references.forall(a => isSupportedKeyType(a.dataType)) &&
-        !bloom.references.exists(a => ParquetRowIndexUtil.isRowIndexColumnName(a.name))
+        !bloom.references.exists(a => a.name == ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)
     case _ => false
   }
+
+  /**
+   * Rethrows, as it is, an error the reader met while applying a storage filter that it must not
+   * absorb by giving the filter up. Two kinds are not the reader's to absorb, and both are asked
+   * the way the rest of Spark asks them:
+   *  - a pending task kill, since the error may be the kill's interrupt surfacing through a UDF
+   *    that wrapped it. `PythonRunner` reads a kill off the task context in the same way.
+   *  - a fatal error in the cause chain, found by `Executor.isFatalError` as deep as the executor
+   *    itself looks, which is `spark.executor.killOnFatalError.depth`.
+   *
+   * As it is, because a `TaskKilledException` of the reader's own would be read as a corrupt file
+   * under `ignoreCorruptFiles`.
+   */
+  def rethrowIfMustPropagate(e: Throwable): Unit = {
+    val context = TaskContext.get()
+    val killed = context != null && context.isInterrupted()
+    if (killed || Executor.isFatalError(e, fatalErrorDepth)) throw e
+  }
+
+  // Read the way `SparkUncaughtExceptionHandler` reads it, since there may be no SparkEnv.
+  private def fatalErrorDepth: Int = Option(SparkEnv.get).map(_.conf.get(KILL_ON_FATAL_ERROR_DEPTH))
+    .getOrElse(KILL_ON_FATAL_ERROR_DEPTH.defaultValue.get)
 }

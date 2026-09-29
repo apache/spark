@@ -1948,22 +1948,24 @@ object SQLConf {
       .doc("If true, the vectorized Parquet reader may apply a runtime storage filter, such as a " +
         "bloom filter from join runtime filtering, while it reads. It reads the columns the " +
         "filter needs first, evaluates the filter per row, and then reads the remaining columns " +
-        "only for the rows that survived. This is a planning-time decision. With it false, no " +
-        "storage filter is attached to a scan at all. A filter that is attached also stays in " +
-        "the post-scan filter, the way a pushed data filter does, so the reader is free to stop " +
-        "applying it wherever doing so would cost more than it saves, and the answer does not " +
-        "change. A row group where it stops reads its key columns twice, which is slower than " +
-        "not pushing the filter. Under spark.sql.files.ignoreCorruptFiles the answer can change. " +
-        "A corrupt page in a key column then also drops the rows of its row group that a plain " +
-        "read returns before it reaches that page. Narrowing a row group to part of its rows " +
-        "trusts the Parquet page index, which a read with no pushed data filter never consults, " +
-        "so on a file whose page index is wrong this can pair a row's key with another row's " +
-        "values. Turning this off avoids that. Setting parquet.filter.columnindex.enabled to " +
-        "false avoids it too, and keeps the row groups the filter empties, which need no index " +
-        "at all. Every other row group then reads its key columns twice. Note that the " +
-        "surviving key values of a whole row group are buffered before that row group's first " +
-        "batch is produced, so a task holds up to one extra copy of the key columns for one row " +
-        "group.")
+        "only for the rows that survived. This is a planning-time decision. " +
+        "A filter that is attached also stays in the post-scan filter, the way a pushed data " +
+        "filter does, so the reader is free to stop applying it wherever doing so would cost " +
+        "more than it saves, and the answer does not change. A row group where it stops reads " +
+        "its key columns twice, which is slower than not pushing the filter. " +
+        "Under spark.sql.files.ignoreCorruptFiles the answer can change, because this reader " +
+        "reads different pages in a different order than a plain read. Which rows survive a " +
+        "corrupt page can then differ from a plain read, in either direction. " +
+        "Returning only the surviving rows of a row group relies on the Parquet page index, so a " +
+        "file whose page index is wrong can pair a row's key with another row's values. Setting " +
+        "parquet.filter.columnindex.enabled to false makes the reader fall back to skipping " +
+        "whole row groups in which the filter rejects every row. A row group with a surviving " +
+        "row then reads its key columns twice. A file without a page index falls back the same " +
+        "way. The page index and that conf also apply to the page-level filtering of pushed " +
+        "data filters, with or without this feature. " +
+        "Note that the surviving key values of a whole row group are buffered before that row " +
+        "group's first batch is produced, so a task holds up to one extra copy of the key " +
+        "columns for one row group.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -1973,16 +1975,19 @@ object SQLConf {
     buildConf("spark.sql.parquet.storageFilterPushdown.maxSplicedRowGroupBytes")
       .internal()
       .doc("The maximum memory, in bytes, that the vectorized Parquet reader holds for one row " +
-        "group while it applies a storage filter. Two things count against it, and both grow " +
-        "with the number of surviving rows. One is the key values buffered to splice into the " +
-        "output batches, which follow the reader's memory mode and so can be off heap. The other " +
-        "is the row ranges those rows fall into, always on heap, which the second phase needs to " +
-        "select its pages. The count is examined after every surviving row. Past the limit the " +
-        "reader releases the buffer and reads every projected column of the surviving rows " +
-        "instead, which costs one extra read of the key columns. Past it again it reads the row " +
-        "group with no filter applied at all, which is correct and pays that same extra read, " +
-        "so it is slower than not pushing the filter. What is counted is an estimate of what " +
-        "the buffer holds, not a bound on what the column vectors behind it allocate.")
+        "group while it applies a storage filter. " +
+        "Two things count against it, and both grow with the number of surviving rows. The " +
+        "first is the row ranges those rows fall into, which the second phase needs to select " +
+        "its pages. They are always on heap. The second is the surviving key values, buffered " +
+        "to splice into the output batches. They follow the reader's memory mode, so they can " +
+        "be off heap. " +
+        "The count is examined after every surviving row. Past the limit the reader first " +
+        "releases the buffered key values, and reads every projected column of the surviving " +
+        "rows instead, which costs one extra read of the key columns. If the row ranges alone " +
+        "still pass the limit, it reads the row group with no filter applied at all. That is " +
+        "correct and pays the same extra read, so it is slower than not pushing the filter. " +
+        "What is counted is an estimate of what the buffer holds, not a bound on what the " +
+        "column vectors behind it allocate.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
