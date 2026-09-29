@@ -416,6 +416,19 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val ANALYZER_RESOLVE_WITH_COLUMNS_IN_ISOLATION =
+    buildConf("spark.sql.analyzer.resolveWithColumnsInIsolation")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("When true, the analyzer resolves a lazily planned `withColumns`, such as the ones " +
+        "created by Spark Connect, as soon as its child is resolved, in isolation from the " +
+        "child plan. This lets a long chain of `withColumns` calls be resolved in one pass, " +
+        "instead of taking at least one analyzer iteration per call and hitting " +
+        s"${ANALYZER_MAX_ITERATIONS.key}.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ANALYZER_SINGLE_PASS_RESOLVER_ENABLED =
     buildConf("spark.sql.analyzer.singlePassResolver.enabled")
       .internal()

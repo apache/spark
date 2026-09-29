@@ -1032,6 +1032,75 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
+  private def withColumns(child: LogicalPlan, name: String, expr: Expression): LogicalPlan =
+    Project(Seq(UnresolvedStarWithColumns(Seq(name), Seq(expr))), child)
+
+  private def fn(name: String, args: Expression*): UnresolvedFunction =
+    UnresolvedFunction(name, args, isDistinct = false)
+
+  // Analyzes the plan with the lazily planned `withColumns` resolved in isolation, and checks
+  // that the result is the same as resolving them in the normal iterations.
+  private def checkWithColumnsResolution(plan: LogicalPlan): Unit = {
+    val expected = withSQLConf(
+        SQLConf.ANALYZER_RESOLVE_WITH_COLUMNS_IN_ISOLATION.key -> "false",
+        SQLConf.ANALYZER_MAX_ITERATIONS.key -> "1000") {
+      getAnalyzer.executeAndCheck(plan, new QueryPlanningTracker)
+    }
+    comparePlans(getAnalyzer.executeAndCheck(plan, new QueryPlanningTracker), expected)
+  }
+
+  test("SPARK-59855: resolve a long chain of lazily planned withColumns") {
+    // Like a chain of Spark Connect `withColumn` calls. Each call adds a column that references
+    // the column added by the previous call and takes several rules to be resolved.
+    val chain = (1 to 120).foldLeft[LogicalPlan](testRelation) { (child, i) =>
+      val prev = UnresolvedAttribute(if (i == 1) "a" else s"c${i - 1}")
+      withColumns(child, s"c$i", fn("abs", prev + 1L))
+    }
+    withSQLConf(SQLConf.ANALYZER_RESOLVE_WITH_COLUMNS_IN_ISOLATION.key -> "false") {
+      // The normal iterations resolve at most one `withColumns` of the chain per iteration.
+      val message = intercept[RuntimeException](getAnalyzer.execute(chain)).getMessage
+      assert(message.startsWith("Max iterations (100) reached for batch Resolution"))
+    }
+    checkWithColumnsResolution(chain)
+  }
+
+  test("SPARK-59855: lazily planned withColumns that can't be resolved in isolation") {
+    val plan = withColumns(testRelation, "b", $"a" + 1L)
+    Seq(
+      // Need the plan to be rewritten.
+      withColumns(plan, "c", fn("explode", CreateArray(Seq($"b")))),
+      withColumns(plan, "c",
+        WindowExpression(fn("sum", $"b"), WindowSpecDefinition(Nil, Nil, UnspecifiedFrame))),
+      // Needs the whole project list to be resolved.
+      Project(Seq(UnresolvedStarWithColumns(Seq("x", "c"), Seq($"b" + 1L, $"x" + 1L))), plan),
+      // Needs the plan in the expression to be resolved.
+      withColumns(plan, "c", ScalarSubquery(testRelation.select(max($"a")))),
+      // Needs the star in the expression to be expanded.
+      withColumns(plan, "c", fn("struct", UnresolvedStar(None))),
+      // Mixed with a `withColumnsRenamed`.
+      withColumns(Project(Seq(UnresolvedStarWithColumnsRenames(Seq("b"), Seq("r"))), plan),
+        "c", $"r" + $"a")
+    ).foreach { p =>
+      // The `withColumns` on top is resolved in isolation once its child is resolved.
+      checkWithColumnsResolution(withColumns(p, "d", fn("abs", $"a" + 1L)))
+    }
+  }
+
+  test("SPARK-59855: errors in lazily planned withColumns are reported as usual") {
+    Seq($"x" + 1L, fn("abs", Literal(true))).foreach { expr =>
+      val plan = withColumns(withColumns(testRelation, "b", $"a" + 1L), "c", expr)
+      val errors = Seq("true", "false").map { enabled =>
+        withSQLConf(SQLConf.ANALYZER_RESOLVE_WITH_COLUMNS_IN_ISOLATION.key -> enabled) {
+          intercept[AnalysisException] {
+            getAnalyzer.executeAndCheck(plan, new QueryPlanningTracker)
+          }
+        }
+      }
+      assert(errors(0).getCondition == errors(1).getCondition)
+      assert(errors(0).getMessageParameters == errors(1).getMessageParameters)
+    }
+  }
+
   test("SPARK-30886 Deprecate two-parameter TRIM/LTRIM/RTRIM") {
     Seq("trim", "ltrim", "rtrim").foreach { f =>
       withSQLConf(SQLConf.MANAGE_PARSER_CACHES.key -> "false") { // Avoid additional logging

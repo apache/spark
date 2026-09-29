@@ -26,7 +26,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{RelationTimeTravel, UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{RelationTimeTravel, UnresolvedAlias, UnresolvedFunction, UnresolvedRelation, UnresolvedStarWithColumns}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
@@ -631,6 +631,60 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .build())
     }
     assert(e.getMessage.contains("part1, part2"))
+  }
+
+  test("SPARK-59855: plan a long chain of withColumns lazily") {
+    def attr(name: String, planId: Option[Long]): proto.Expression = {
+      val builder = proto.Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier(name)
+      planId.foreach(builder.setPlanId)
+      proto.Expression.newBuilder().setUnresolvedAttribute(builder).build()
+    }
+    def fn(name: String, args: proto.Expression*): proto.Expression =
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          proto.Expression.UnresolvedFunction
+            .newBuilder()
+            .setFunctionName(name)
+            .addAllArguments(args.asJava))
+        .build()
+    val one = proto.Expression.newBuilder().setLiteral(toLiteralProto(1L)).build()
+    val range = proto.Relation
+      .newBuilder()
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(0))
+      .setRange(proto.Range.newBuilder().setStart(0).setEnd(10).setStep(1))
+      .build()
+
+    // Like `df = df.withColumn(f"c{i}", F.abs(prev + 1))` in a loop in PySpark, where `prev` is
+    // the column added by the previous call, referenced by name or by `df[...]` alternately.
+    val n = 200
+    val chain = (1 to n).foldLeft(range) { (child, i) =>
+      val prev = attr(
+        if (i == 1) "id" else s"c${i - 1}",
+        if (i % 2 == 0) Some(child.getCommon.getPlanId) else None)
+      proto.Relation
+        .newBuilder()
+        .setCommon(proto.RelationCommon.newBuilder().setPlanId(i))
+        .setWithColumns(
+          proto.WithColumns
+            .newBuilder()
+            .setInput(child)
+            .addAliases(proto.Expression.Alias
+              .newBuilder()
+              .addName(s"c$i")
+              .setExpr(fn("abs", fn("+", prev, one)))))
+        .build()
+    }
+
+    val plan = transform(chain)
+    // The planner doesn't analyze the `withColumns` eagerly.
+    val lazyWithColumns = plan.collect {
+      case p @ logical.Project(Seq(_: UnresolvedStarWithColumns), _) => p
+    }
+    assert(lazyWithColumns.length == n)
+    val df = Dataset.ofRows(spark, plan)
+    assert(df.columns.toSeq == "id" +: (1 to n).map(i => s"c$i"))
+    assert(df.select(s"c$n").collect().map(_.getLong(0)).toSeq == (0L until 10L).map(_ + n))
   }
 
   test("transform UnresolvedStar and ExpressionString") {

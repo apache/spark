@@ -597,7 +597,7 @@ class Analyzer(
       new UnresolveRelationsInTransaction(catalogManager))
   )
 
-  override def batches: Seq[Batch] = earlyBatches ++ Seq(
+  private def resolutionBatch: Batch =
     Batch("Resolution", fixedPoint,
       ResolveUnresolvedInsert ::
       new ResolveCatalogs(catalogManager) ::
@@ -677,7 +677,18 @@ class Analyzer(
         ResolveTranspiledPythonUDFOptions) ++
       Seq(ResolveUpdateEventTimeWatermarkColumn) ++
       extendedResolutionRules ++
-      Seq(NameStreamingSources) : _*),
+      Seq(NameStreamingSources) : _*)
+
+  /**
+   * Runs only the "Resolution" batch. [[ResolveReferences]] uses it to resolve a lazily planned
+   * `withColumns` in isolation from its child.
+   */
+  private lazy val resolutionBatchExecutor = new RuleExecutor[LogicalPlan] {
+    override protected def batches: Seq[Batch] = Seq(resolutionBatch.asInstanceOf[Batch])
+  }
+
+  override def batches: Seq[Batch] = earlyBatches ++ Seq(
+    resolutionBatch,
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
@@ -1695,6 +1706,11 @@ class Analyzer(
       // Wait for the rule `DeduplicateRelations` to resolve conflicting attrs first.
       case p: LogicalPlan if hasConflictingAttrs(p) => p
 
+      // Expand the star of a lazily planned `withColumns` and resolve it right away.
+      case p @ Project(Seq(_: UnresolvedStarWithColumns), child)
+          if conf.getConf(SQLConf.ANALYZER_RESOLVE_WITH_COLUMNS_IN_ISOLATION) =>
+        resolveWithColumns(p.copy(projectList = buildExpandedProjectList(p.projectList, child)))
+
       // If the projection list contains Stars, expand it.
       case p: Project if containsStar(p.projectList) =>
         val expanded = p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
@@ -1792,13 +1808,7 @@ class Analyzer(
       case a: Aggregate => resolveReferencesInAggregate(a)
 
       // Special case for Project as it supports lateral column alias.
-      case p: Project =>
-        val resolvedBasic = p.projectList.map(resolveExpressionByPlanChildren(_, p))
-        // Lateral column alias has higher priority than outer reference.
-        val resolvedWithLCA = resolveLateralColumnAlias(resolvedBasic)
-        val resolvedFinal = resolvedWithLCA.map(resolveColsLastResort)
-        p.copy(projectList =
-          resolvedFinal.map(e => aliasIfOuterReference(e.asInstanceOf[NamedExpression])))
+      case p: Project => resolveReferencesInProject(p)
 
       case o: OverwriteByExpression if o.table.resolved =>
         // The delete condition of `OverwriteByExpression` will be passed to the table
@@ -1995,6 +2005,60 @@ class Analyzer(
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")
         q.mapExpressions(resolveExpressionByPlanChildren(_, q, includeLastResort = true))
+    }
+
+    private def resolveReferencesInProject(p: Project): Project = {
+      val resolvedBasic = p.projectList.map(resolveExpressionByPlanChildren(_, p))
+      // Lateral column alias has higher priority than outer reference.
+      val resolvedWithLCA = resolveLateralColumnAlias(resolvedBasic)
+      val resolvedFinal = resolvedWithLCA.map(resolveColsLastResort)
+      p.copy(projectList =
+        resolvedFinal.map(e => aliasIfOuterReference(e.asInstanceOf[NamedExpression])))
+    }
+
+    /**
+     * Resolves a `withColumns` whose star has just been expanded.
+     *
+     * A lazily planned chain of `withColumns`, like the one Spark Connect creates for a chain of
+     * `withColumn` calls, is a stack of Projects. A Project waits for its child to be resolved,
+     * and then takes several rules to be resolved itself, so the normal iterations resolve at most
+     * one Project of the chain per iteration, and a long chain hits the max iterations limit.
+     * Instead, we resolve the Project right away: resolve its column references against the child
+     * as usual, then run the "Resolution" batch on the expressions that are still unresolved,
+     * over a leaf node with the same output as the child. This costs time proportional to the
+     * width of the Project instead of the size of the child, and lets the parent Project be
+     * resolved in the same pass. Expressions that can't be resolved this way, e.g. a window
+     * function that needs the plan to be rewritten, are left to the normal iterations.
+     */
+    private def resolveWithColumns(p: Project): Project = {
+      if (containsStar(p.projectList) || containsDeserializer(p.projectList) ||
+          p.projectList.exists(SubqueryExpression.hasSubquery)) {
+        p
+      } else {
+        val withReferences = resolveReferencesInProject(p)
+        val unresolved = withReferences.projectList.filterNot(_.resolved)
+        // Lateral column alias references need the whole project list to be resolved.
+        if (unresolved.isEmpty ||
+            unresolved.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE))) {
+          withReferences
+        } else {
+          val leaf = LocalRelation(p.child.output, isStreaming = p.child.isStreaming)
+          try {
+            resolutionBatchExecutor.execute(Project(unresolved, leaf)) match {
+              case r @ Project(resolvedList, l) if (l eq leaf) && r.resolved &&
+                  r.missingInput.isEmpty && resolvedList.length == unresolved.length =>
+                val resolvedIter = resolvedList.iterator
+                withReferences.copy(projectList = withReferences.projectList.map { e =>
+                  if (e.resolved) e else resolvedIter.next()
+                })
+              case _ => withReferences
+            }
+          } catch {
+            // Leave the error to the normal iterations, so that it's reported as usual.
+            case _: AnalysisException => withReferences
+          }
+        }
+      }
     }
 
     private object MergeResolvePolicy extends Enumeration {
