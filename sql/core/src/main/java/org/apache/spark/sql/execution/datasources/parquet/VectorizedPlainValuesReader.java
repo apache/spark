@@ -90,11 +90,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     }
     if (i + 7 < total) {
       int numBytesToSkip = (total - i) / 8;
-      try {
-        in.skipFully(numBytesToSkip);
-      } catch (IOException e) {
-        throw new ParquetDecodingException("Failed to skip bytes", e);
-      }
+      skipFully(numBytesToSkip);
       i += numBytesToSkip * 8;
     }
     if (i < total) {
@@ -109,6 +105,31 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     } catch (IOException e) {
       throw new ParquetDecodingException("Failed to read " + length + " bytes", e);
     }
+  }
+
+  /** Skips exactly `n` bytes, failing on a short page like `getBuffer` does on reads. */
+  private void skipFully(long n) {
+    VectorizedReaderBase.skipFully(in, n);
+  }
+
+  /**
+   * Reads the length prefix of a binary value. The length is read from the file, so validate it
+   * against the rest of the page: on a `SingleBufferInputStream`, slicing or skipping a negative
+   * length moves the stream position backwards instead of failing, and `readNBytes` returns a
+   * short array instead of failing when the length runs past the end of the page.
+   */
+  private int readLength() {
+    int len = readInteger();
+    if (len < 0) {
+      throw new ParquetDecodingException(
+          "Corrupted PLAIN page: negative binary length: " + len);
+    }
+    int available = in.available();
+    if (len > available) {
+      throw new ParquetDecodingException("Corrupted PLAIN page: binary length " + len +
+          " is larger than the " + available + " bytes left in the page");
+    }
+    return len;
   }
 
   @Override
@@ -128,7 +149,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public void skipIntegers(int total) {
-    in.skip(total * 4L);
+    skipFully(total * 4L);
   }
 
   @Override
@@ -189,7 +210,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public void skipLongs(int total) {
-    in.skip(total * 8L);
+    skipFully(total * 8L);
   }
 
   @Override
@@ -257,7 +278,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public void skipFloats(int total) {
-    in.skip(total * 4L);
+    skipFully(total * 4L);
   }
 
   @Override
@@ -277,7 +298,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public void skipDoubles(int total) {
-    in.skip(total * 8L);
+    skipFully(total * 8L);
   }
 
   @Override
@@ -296,7 +317,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public final void skipBytes(int total) {
-    in.skip(total * 4L);
+    skipFully(total * 4L);
   }
 
   @Override
@@ -311,7 +332,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public void skipShorts(int total) {
-    in.skip(total * 4L);
+    skipFully(total * 4L);
   }
 
   @Override
@@ -361,7 +382,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   @Override
   public final void readBinary(int total, WritableColumnVector v, int rowId) {
     for (int i = 0; i < total; i++) {
-      int len = readInteger();
+      int len = readLength();
       ByteBuffer buffer = getBuffer(len);
       if (buffer.hasArray()) {
         v.putByteArray(rowId + i, buffer.array(), buffer.arrayOffset() + buffer.position(), len);
@@ -376,8 +397,8 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   @Override
   public void skipBinary(int total) {
     for (int i = 0; i < total; i++) {
-      int len = readInteger();
-      in.skip(len);
+      int len = readLength();
+      skipFully(len);
     }
   }
 
@@ -396,6 +417,6 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public void skipFixedLenByteArray(int total, int len) {
-    in.skip(total * (long) len);
+    skipFully(total * (long) len);
   }
 }
