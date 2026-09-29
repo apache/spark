@@ -66,6 +66,7 @@ class ExecutorPVCResizePluginSuite
     when(podOperations.inNamespace(namespace)).thenReturn(podsWithNamespace)
     when(podsWithNamespace.withLabel(SPARK_APP_ID_LABEL, appId)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
+    when(labeledPods.withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")).thenReturn(labeledPods)
     when(labeledPods.list()).thenReturn(podList)
     when(kubernetesClient.persistentVolumeClaims()).thenReturn(pvcOperations)
     when(pvcOperations.inNamespace(namespace)).thenReturn(pvcsWithNamespace)
@@ -252,6 +253,28 @@ class ExecutorPVCResizePluginSuite
     plugin.checkAndResizePVCs()
 
     verify(pvcsWithNamespace, never()).withName(org.mockito.ArgumentMatchers.anyString())
+  }
+
+  test("SPARK-59839: Reports of executors without a pod are removed") {
+    val plugin = createPlugin()
+    val pod = createPodWithPVC(1, "pvc-1", "/data")
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+    plugin.receive(PVCDiskUsageReport("1", 0.5))
+    plugin.receive(PVCDiskUsageReport("2", 0.5)) // No pod for executor 2
+    assert(plugin.latestReports.keySet() === java.util.Set.of("1", "2"))
+
+    plugin.checkAndResizePVCs()
+
+    assert(plugin.latestReports.keySet() === Collections.singleton("1"))
+  }
+
+  test("SPARK-59839: Inactive executor pods are excluded from the listing") {
+    val plugin = createPlugin()
+    when(podList.getItems).thenReturn(Collections.emptyList())
+
+    plugin.checkAndResizePVCs()
+
+    verify(labeledPods).withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
   }
 
   test("pvcsOf returns claim names mounted by the executor container") {
