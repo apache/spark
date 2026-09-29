@@ -23428,8 +23428,7 @@ def variant_array_length(v: "ColumnOrName", path: Optional[Union[Column, str]] =
     Parameters
     ----------
     v : :class:`~pyspark.sql.Column` or str
-        a variant column or column name
-        A column that evaluates to a variant.
+        a variant column or column name.
     path : :class:`~pyspark.sql.Column` or str, optional
         the JSONPath identifying the array to inspect. A `str` is a literal path; a
         :class:`~pyspark.sql.Column` supplies the path at runtime. If omitted, the root array is
@@ -23438,8 +23437,7 @@ def variant_array_length(v: "ColumnOrName", path: Optional[Union[Column, str]] =
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an integer column representing the array length, or NULL for non-array variant values
-        Returns a column that evaluates to an integer.
+        an integer column representing the array length, or NULL for non-array variant values.
 
     Examples
     --------
