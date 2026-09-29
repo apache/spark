@@ -4775,6 +4775,7 @@ object SQLConf {
 
   val STATS_ESTIMATOR_CLASS =
     buildConf("spark.sql.statistics.estimatorClass")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .internal()
       .doc("The class used to estimate logical plan statistics. The class must implement " +
         "org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStatsEstimator " +
