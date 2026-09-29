@@ -377,8 +377,9 @@ private[joins] class SortMergeAsOfJoinScanner(
   private def residualHolds: Boolean = boundResidualCond.forall(holds)
 
   /**
-   * Backward joins: keeps the last row that passes both conditions. The scan stops
-   * once the as-of condition turns false after a match, since it stays false after that.
+   * Backward joins: keeps the last row that passes both conditions. The buffer is sorted
+   * ascending, so that row is the closest and no distance is needed. The scan stops once the
+   * as-of condition turns false after a match, since it stays false after that.
    */
   private def findLastBackward(leftRow: InternalRow): InternalRow = {
     var bestMatch: InternalRow = null
@@ -405,9 +406,9 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   /**
-   * Forward joins: returns the first row that passes both conditions. It picks by buffer
-   * order, not by distance: the distance can overflow for far-apart values, and it can rank
-   * STRUCT and ARRAY values wrongly, for example ones with NULL parts or a leading STRING field.
+   * Forward joins: returns the first row that passes both conditions. The buffer is sorted
+   * ascending, so that row is the closest and no distance is needed. The scan stops once the
+   * as-of condition turns false after being true, since it stays false after that.
    */
   private def findFirstForward(leftRow: InternalRow): InternalRow = {
     val iter = rightGroupBuffer.generateIterator()
