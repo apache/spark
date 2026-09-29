@@ -189,12 +189,14 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
     val emptyMap = versionMap()
     val unauthoredMap = versionMap(Seq("value") -> false)
 
+    // Every boundary row carries non-null data, so a leak into the inheritance chain would
+    // surface as that value instead of the expected null.
     val input = targetTableOf(schema)(
       // Key 1: a leading tombstone resets values inherited before the affected suffix.
-      Row(1, null, 20L, 20L, cdcMetadata(20L, null)),
+      Row(1, "tombstone", 20L, 20L, cdcMetadata(20L, null)),
       Row(1, "stale", 10L, null, cdcMetadata(30L, unauthoredMap)),
       // Key 2: a decomposition tail represents the same kind of delete boundary.
-      Row(2, null, null, 20L, cdcMetadata(null, null)),
+      Row(2, "tail", null, 20L, cdcMetadata(null, null)),
       Row(2, "stale", 10L, null, cdcMetadata(30L, unauthoredMap)),
       // Key 3: a closed interval followed by a visibility gap also ends inheritance.
       Row(3, "before-gap", 10L, 20L, cdcMetadata(10L, emptyMap)),
@@ -204,9 +206,9 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       coalesce(input, selection),
       Seq(
-        Row(1, null, 20L, 20L, cdcMetadata(20L, null)),
+        Row(1, "tombstone", 20L, 20L, cdcMetadata(20L, null)),
         Row(1, null, 10L, null, cdcMetadata(30L, unauthoredMap)),
-        Row(2, null, null, 20L, cdcMetadata(null, null)),
+        Row(2, "tail", null, 20L, cdcMetadata(null, null)),
         Row(2, null, 10L, null, cdcMetadata(30L, unauthoredMap)),
         Row(3, "before-gap", 10L, 20L, cdcMetadata(10L, emptyMap)),
         Row(3, null, 30L, null, cdcMetadata(30L, unauthoredMap))
@@ -358,13 +360,19 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
         Row(1, "source", 10L, null, cdcMetadata(10L, versionMap()))
       )
 
-      val exception = try {
-        coalesce(input, selection).collect()
-        throw new IllegalStateException("Expected a case-sensitive column-resolution failure")
-      } catch {
-        case e: AnalysisException => e
-      }
-      assert(exception.getCondition == "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA")
+      checkError(
+        exception = intercept[AnalysisException] {
+          coalesce(input, selection)
+        },
+        condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
+        sqlState = "42703",
+        parameters = Map(
+          "caseSensitivity" -> CaseSensitivityLabels.CaseSensitive,
+          "schemaName" -> "ignoreNullSelection",
+          "missingColumns" -> "VALUE",
+          "availableColumns" -> "Value"
+        )
+      )
     }
   }
 
