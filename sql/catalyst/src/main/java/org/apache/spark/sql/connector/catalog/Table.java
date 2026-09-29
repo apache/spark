@@ -96,15 +96,21 @@ public interface Table extends Relation {
   }
 
   /**
-   * Returns the string map of properties exposed by commands that display table metadata.
+   * Returns additional, display-only table properties, such as catalog-owned labels.
    *
-   * <p>The default implementation returns {@link #properties()}. Implementations may include
-   * transient metadata that should not be treated as persisted table properties.
+   * <p>Spark adds these entries to the non-reserved properties displayed by V2 table metadata
+   * commands and {@code Catalog.getTableProperties}. Entries in {@link #properties()} take
+   * precedence, and reserved keys such as {@link TableCatalog#PROP_EXTERNAL} and
+   * {@link TableCatalog#PROP_LOCATION} are ignored in this map. Table type and other reserved
+   * metadata are read from {@code properties()}.
+   *
+   * <p>These entries may be transient and are excluded from {@code SHOW CREATE TABLE}. The
+   * default implementation returns an empty map.
    *
    * @since 4.4.0
    */
   default Map<String, String> displayProperties() {
-    return properties();
+    return Collections.emptyMap();
   }
 
   /**

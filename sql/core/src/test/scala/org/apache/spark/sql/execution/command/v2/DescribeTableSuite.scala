@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import java.util
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.TableCatalog
@@ -222,34 +222,35 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
     }
   }
 
-  test("display commands use display properties without exposing them to SHOW CREATE TABLE") {
+  gridTest("display properties preserve table type and reserved metadata")(Seq(false, true)) {
+      external =>
     withNamespaceAndTable("ns", "table") { tbl =>
       sql(s"CREATE TABLE $tbl (id bigint) $defaultUsing " +
+        "COMMENT 'table comment' LOCATION 'file:/tmp/display-properties' " +
         "TBLPROPERTIES ('persisted' = 'stored')")
-
       val table = loadTable(catalog, "ns", "table")
-      val displayProperties = new util.HashMap[String, String](table.properties)
-      displayProperties.put("catalog-label", "catalog-value")
-      table.setDisplayProperties(displayProperties)
+      if (external) {
+        table.properties.put(TableCatalog.PROP_EXTERNAL, "true")
+      }
+      table.setDisplayProperties(Map(
+        "catalog-label" -> "catalog-value",
+        "persisted" -> "display-value",
+        TableCatalog.PROP_EXTERNAL -> (!external).toString,
+        TableCatalog.PROP_COMMENT -> "display comment",
+        TableCatalog.PROP_LOCATION -> "file:/display-location",
+        TableCatalog.PROP_PROVIDER -> "display-provider",
+        TableCatalog.PROP_OWNER -> "display-owner").asJava)
 
-      val describeRows = sql(s"DESCRIBE TABLE EXTENDED $tbl").collect()
-      val properties = describeRows.find(_.getString(0) == "Table Properties")
-      assert(properties.exists(_.getString(1) ==
-        "[catalog-label=catalog-value,persisted=stored]"))
-
-      val shownProperties = sql(s"SHOW TBLPROPERTIES $tbl").collect()
-        .map(row => row.getString(0) -> row.getString(1)).toMap
-      assert(shownProperties("catalog-label") == "catalog-value")
-      assert(shownProperties("persisted") == "stored")
-
-      val extendedInfo = sql(s"SHOW TABLE EXTENDED IN $catalog.ns LIKE 'table'")
-        .collect()(0).getString(3)
-      assert(extendedInfo.contains(
-        "Table Properties: [catalog-label=catalog-value, persisted=stored]"))
-
-      val createDDL = sql(s"SHOW CREATE TABLE $tbl").head().getString(0)
-      assert(createDDL.contains("'persisted' = 'stored'"))
-      assert(!createDDL.contains("catalog-label"))
+      checkAnswer(
+        sql(s"DESCRIBE TABLE EXTENDED $tbl").where(
+          "col_name IN ('Type', 'Comment', 'Location', 'Provider', 'Owner', 'Table Properties')"),
+        Seq(
+          Row("Type", if (external) "EXTERNAL" else "MANAGED", ""),
+          Row("Comment", "table comment", ""),
+          Row("Location", "file:/tmp/display-properties", ""),
+          Row("Provider", "_", ""),
+          Row("Owner", Utils.getCurrentUserName(), ""),
+          Row("Table Properties", "[catalog-label=catalog-value,persisted=stored]", "")))
     }
   }
 

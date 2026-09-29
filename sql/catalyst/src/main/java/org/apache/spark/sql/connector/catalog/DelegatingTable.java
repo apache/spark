@@ -75,6 +75,11 @@ public class DelegatingTable implements Table {
   }
 
   @Override
+  public Map<String, String> displayProperties() {
+    return Collections.unmodifiableMap(info.displayProperties());
+  }
+
+  @Override
   public Transform[] partitioning() {
     return info.partitions();
   }

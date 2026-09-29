@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils
-import org.apache.spark.sql.connector.catalog.InMemoryBaseTable
+import org.apache.spark.sql.connector.catalog.{InMemoryBaseTable, TableCatalog}
 import org.apache.spark.sql.execution.command
 
 /**
@@ -32,6 +34,28 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
     .set(InMemoryBaseTable.ASSIGN_COLUMN_IDS, "true")
 
   override def fullName: String = s"$catalog.$ns.$table"
+
+  test("show create table excludes display-only properties") {
+    withNamespaceAndTable(ns, table) { t =>
+      sql(s"CREATE TABLE $t (id bigint) $defaultUsing " +
+        "COMMENT 'table comment' LOCATION 'file:/tmp/display-properties' " +
+        "TBLPROPERTIES ('persisted' = 'stored')")
+      loadTable(catalog, ns, table).setDisplayProperties(Map(
+        "catalog-label" -> "catalog-value",
+        "persisted" -> "display-value",
+        TableCatalog.PROP_COMMENT -> "display comment",
+        TableCatalog.PROP_LOCATION -> "file:/display-location").asJava)
+
+      assert(getShowCreateDDL(t, false) === Array(
+        s"CREATE TABLE $t (",
+        "id BIGINT)",
+        defaultUsing,
+        "COMMENT 'table comment'",
+        "LOCATION 'file:/tmp/display-properties'",
+        "TBLPROPERTIES (",
+        "'persisted' = 'stored')"))
+    }
+  }
 
   test("SPARK-33898: show create table as serde") {
     withNamespaceAndTable(ns, table) { t =>

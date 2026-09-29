@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -34,6 +35,7 @@ public class TableInfo {
 
   private final Column[] columns;
   private final Map<String, String> properties;
+  private final Map<String, String> displayProperties;
   private final Transform[] partitions;
   private final Constraint[] constraints;
 
@@ -43,6 +45,7 @@ public class TableInfo {
   protected TableInfo(Builder builder) {
     this.columns = builder.columns;
     this.properties = builder.properties;
+    this.displayProperties = builder.displayProperties;
     this.partitions = builder.partitions;
     this.constraints = builder.constraints;
   }
@@ -59,6 +62,15 @@ public class TableInfo {
     return properties;
   }
 
+  /**
+   * Returns the additional display-only properties described by {@link Table#displayProperties()}.
+   *
+   * @since 4.4.0
+   */
+  public Map<String, String> displayProperties() {
+    return displayProperties;
+  }
+
   public Transform[] partitions() {
     return partitions;
   }
@@ -66,11 +78,23 @@ public class TableInfo {
   public Constraint[] constraints() { return constraints; }
 
   public static class Builder extends RelationBuilder<Builder> {
+    protected Map<String, String> displayProperties = new HashMap<>();
     protected Transform[] partitions = new Transform[0];
     protected Constraint[] constraints = new Constraint[0];
 
     @Override
     protected Builder self() { return this; }
+
+    /**
+     * Sets additional display-only properties, taking a defensive copy of the map.
+     *
+     * @see Table#displayProperties()
+     * @since 4.4.0
+     */
+    public Builder withDisplayProperties(Map<String, String> displayProperties) {
+      this.displayProperties = new HashMap<>(displayProperties);
+      return this;
+    }
 
     public Builder withPartitions(Transform[] partitions) {
       this.partitions = partitions;
