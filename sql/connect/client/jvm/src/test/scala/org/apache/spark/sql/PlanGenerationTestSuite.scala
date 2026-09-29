@@ -2805,6 +2805,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.variant_array_length(fn.parse_json(fn.col("g")), "$.a")
   }
 
+  functionTest("variant_array_length without path") {
+    fn.variant_array_length(fn.parse_json(fn.col("g")))
+  }
+
   functionTest("is_valid_variant") {
     fn.is_valid_variant(fn.parse_json(fn.col("g")))
   }

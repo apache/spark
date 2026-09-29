@@ -14871,13 +14871,13 @@ object functions {
   def is_variant_null(v: Column): Column = Column.fn("is_variant_null", v)
 
   /**
-   * Returns the number of elements in a variant array. Returns NULL if the input is SQL NULL, a
-   * variant null, or any non-array variant value.
+   * Returns the number of elements in a variant array. Returns NULL if the input is SQL NULL or
+   * the input is not an array.
    *
    * @param v
    *   a variant column. A column that evaluates to a variant.
    * @group variant_funcs
-   * @since 5.0.0
+   * @since 4.4.0
    * @return
    *   Returns a column that evaluates to an integer.
    */
@@ -14885,15 +14885,14 @@ object functions {
 
   /**
    * Returns the number of elements in the variant array at `path`. Returns NULL if the input is
-   * SQL NULL, the path does not exist, or the target is a variant null or any non-array variant
-   * value.
+   * SQL NULL, the path does not exist, or the target is not an array.
    *
    * @param v
    *   a variant column. A column that evaluates to a variant.
    * @param path
    *   a column containing a JSONPath string that identifies the array to inspect.
    * @group variant_funcs
-   * @since 5.0.0
+   * @since 4.4.0
    * @return
    *   Returns a column that evaluates to an integer.
    */
@@ -14902,15 +14901,14 @@ object functions {
 
   /**
    * Returns the number of elements in the variant array at `path`. Returns NULL if the input is
-   * SQL NULL, the path does not exist, or the target is a variant null or any non-array variant
-   * value.
+   * SQL NULL, the path does not exist, or the target is not an array.
    *
    * @param v
    *   a variant column. A column that evaluates to a variant.
    * @param path
    *   a JSONPath string that identifies the array to inspect.
    * @group variant_funcs
-   * @since 5.0.0
+   * @since 4.4.0
    * @return
    *   Returns a column that evaluates to an integer.
    */

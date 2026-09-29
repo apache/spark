@@ -23421,9 +23421,9 @@ def variant_array_length(v: "ColumnOrName", path: Optional[Union[Column, str]] =
     """
     Returns the number of elements in the variant array at `path`. If `path` is omitted, the root
     array is inspected. Returns NULL if the input is SQL NULL, the path does not exist, or the
-    target is a variant null or any non-array variant value.
+    target is not an array.
 
-    .. versionadded:: 5.0.0
+    .. versionadded:: 4.4.0
 
     Parameters
     ----------
@@ -23446,6 +23446,8 @@ def variant_array_length(v: "ColumnOrName", path: Optional[Union[Column, str]] =
     >>> df = spark.createDataFrame([('''{"a": [1, 2, 3]}''',), ('''{"a": 1}''',)], ['json'])
     >>> df.select(variant_array_length(parse_json(df.json), "$.a").alias("r")).collect()
     [Row(r=3), Row(r=None)]
+    >>> df.select(variant_array_length(parse_json(lit("[1, 2]"))).alias("r")).collect()
+    [Row(r=2)]
     """
     from pyspark.sql.classic.column import _to_java_column
 
