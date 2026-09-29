@@ -418,6 +418,56 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         Row(Timestamp.valueOf("2026-06-29 10:03:00"), 1, "v1.1")))
   }
 
+  test("NULL whole STRUCT column MATCH_CONDITION never matches") {
+    // A NULL struct must never match, the same as a NULL scalar operand.
+    for {
+      (nullStruct, one, five) <- Seq(
+        ("CAST(NULL AS STRUCT<a: INT>)", "named_struct('a', 1)", "named_struct('a', 5)"),
+        ("CAST(NULL AS STRUCT<e: STRUCT<a: INT>>)",
+          "named_struct('e', named_struct('a', 1))", "named_struct('e', named_struct('a', 5))"))
+      ansiEnabled <- Seq(true, false)
+    } {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        def asOfTags(joinType: String, left: String, op: String, rights: String): DataFrame =
+          sql(
+            s"""
+               |SELECT r.tag
+               |FROM VALUES ($left, 'l') AS t(k, tag)
+               |$joinType ASOF JOIN VALUES $rights AS r(k, tag)
+               |  MATCH_CONDITION (t.k $op r.k)
+               |""".stripMargin)
+        checkSortMergeAsOf(
+          asOfTags("", nullStruct, ">=", s"($nullStruct, 'rnull'), ($one, 'r1')"), Nil)
+        checkSortMergeAsOf(asOfTags("", nullStruct, "<=", s"($one, 'r1')"), Nil)
+        checkSortMergeAsOf(asOfTags("", five, ">=", s"($nullStruct, 'rnull')"), Nil)
+        // LEFT ASOF JOIN keeps the NULL left row with NULL right columns.
+        checkSortMergeAsOf(
+          asOfTags("LEFT", nullStruct, ">=", s"($nullStruct, 'rnull'), ($one, 'r1')"),
+          Row(null) :: Nil)
+      }
+    }
+  }
+
+  test("nested STRUCT column MATCH_CONDITION keeps a NULL inner struct apart from NULL fields") {
+    // {e: NULL} sorts before {e: {a: NULL}}, as in a plain comparison. Only `>` here: a forward
+    // join also reads the distance, which is NULL for these values.
+    val eNull = "named_struct('e', CAST(NULL AS STRUCT<a: INT>))"
+    val aNull = "named_struct('e', named_struct('a', CAST(NULL AS INT)))"
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        checkSortMergeAsOf(
+          sql(
+            s"""
+               |SELECT r.tag
+               |FROM VALUES ($aNull, 'l') AS t(k, tag)
+               |ASOF JOIN VALUES ($eNull, 'r') AS r(k, tag)
+               |  MATCH_CONDITION (t.k > r.k)
+               |""".stripMargin),
+          Row("r") :: Nil)
+      }
+    }
+  }
+
   test("whole STRUCT column with an ARRAY field MATCH_CONDITION") {
     // The array field is compared as a whole; field 'a' ties, so the array field decides.
     checkSortMergeAsOf(

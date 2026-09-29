@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, CreateNamedStruct, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, If, LambdaFunction, LessThan, LessThanOrEqual, Literal, Rand, Subtract, ZipWith}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, CreateNamedStruct, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, If, IsNull, LambdaFunction, LessThan, LessThanOrEqual, Literal, Rand, Subtract, ZipWith}
 import org.apache.spark.sql.catalyst.plans.{GreaterThanOp, GreaterThanOrEqualOp, Inner, JoinType, LeftOuter, LessThanOp, LessThanOrEqualOp, MatchComparisonOperator}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.types._
@@ -201,10 +201,27 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
     // Field names differ, so each side is decomposed into a positional struct for the compare,
     // not the raw struct. A regression that ordered fields right but compared raw structs would
     // slip past the orderExpression checks above, so pin the comparison operands too.
+    // The struct columns are nullable, so each decomposed struct is guarded: a NULL struct must
+    // stay NULL, not become a struct of NULL fields that compares as equal.
+    val ge = resolved.asOfCondition.asInstanceOf[GreaterThanOrEqual]
+    Seq(ge.left -> lstruct, ge.right -> rstruct).foreach { case (operand, original) =>
+      operand match {
+        case If(IsNull(`original`), Literal(null, _), _: CreateNamedStruct) =>
+        case other => fail(s"expected a NULL-guarded decomposed struct operand, got $other")
+      }
+    }
+  }
+
+  test("materializes a non-nullable struct operand without a NULL guard") {
+    val leftNotNull = lstruct.withNullability(false)
+    val rightNotNull = rstruct.withNullability(false)
+    val resolved = ResolveAsOfJoin.apply(asOf(
+      leftExpr = leftNotNull, rightExpr = rightNotNull,
+      l = LocalRelation(leftNotNull), r = LocalRelation(rightNotNull)))
+      .asInstanceOf[AsOfJoin]
     val ge = resolved.asOfCondition.asInstanceOf[GreaterThanOrEqual]
     assert(ge.left.isInstanceOf[CreateNamedStruct] && ge.right.isInstanceOf[CreateNamedStruct],
-      s"expected decomposed struct operands, got ${ge.left} >= ${ge.right}")
-    assert(ge.left != lstruct && ge.right != rstruct)
+      s"expected unguarded decomposed struct operands, got ${ge.left} >= ${ge.right}")
   }
 
   test("expands USING into an equi-join predicate wrapped in a Project") {

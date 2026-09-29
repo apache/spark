@@ -2980,7 +2980,8 @@ object AsOfJoin {
 
   /**
    * Tuple/struct operands may use different field names on each side. Rewrite them to positional
-   * structs with matching schemas so comparison and ordering type-check.
+   * structs with matching schemas so comparison and ordering type-check. A NULL struct stays NULL,
+   * so it never matches, the same as in a plain comparison.
    */
   private def alignOperandsForComparison(
       leftOperand: Expression,
@@ -2990,9 +2991,19 @@ object AsOfJoin {
         val aligned = pairs.map { case (left, right) =>
           alignOperandsForComparison(left, right)
         }
-        (CreateStruct(aligned.map(_._1)), CreateStruct(aligned.map(_._2)))
+        (keepNullStruct(leftOperand, CreateStruct(aligned.map(_._1))),
+          keepNullStruct(rightOperand, CreateStruct(aligned.map(_._2))))
       case None =>
         (leftOperand, rightOperand)
+    }
+  }
+
+  /** A rebuilt struct is never NULL, so return NULL when the original struct is NULL. */
+  private def keepNullStruct(original: Expression, rebuilt: Expression): Expression = {
+    if (original.nullable) {
+      If(IsNull(original), Literal(null, rebuilt.dataType), rebuilt)
+    } else {
+      rebuilt
     }
   }
 
