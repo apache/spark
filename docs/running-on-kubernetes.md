@@ -2109,6 +2109,10 @@ See the [configuration page](configuration.html) for information on Spark config
     TOTAL_DURATION policy chooses an executor with the biggest total task time.
     AVERAGE_DURATION policy chooses an executor with the biggest average task time.
     FAILED_TASKS policy chooses an executor with the most number of failed tasks.
+    ACTIVE_TASKS policy chooses an executor with the smallest number of active tasks.
+    If there is a tie, it chooses an executor with the smallest add-time.
+    It is recommended to use it with spark.kubernetes.executor.minTasksPerExecutorBeforeRolling
+    because newly started executors usually have no active tasks.
     OUTLIER policy chooses an executor with outstanding statistics which is bigger than
     at least two standard deviation from the mean in average task time,
     total task time, total task GC time, and the number of failed tasks if exists.
@@ -2130,7 +2134,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.resizeThreshold</code></td>
   <td><code>0.9</code></td>
   <td>
-    The threshold to resize.
+    The threshold to resize. It should be in (0, 1).
     Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
@@ -2140,7 +2144,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.resizeFactor</code></td>
   <td><code>0.1</code></td>
   <td>
-    The factor to resize.
+    The factor to resize. It should be in (0, 1].
     Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
