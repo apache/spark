@@ -1438,6 +1438,41 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59688: a left outer join over an identity side and a compatible transform " +
+    "returns real rows, not spurious nulls") {
+    withFunction(FlipLowBitFunction) {
+      // Same coinciding-keys shape as the inner-join case above, but a LEFT OUTER join, where the
+      // wrong result shows differently. Every left row here has a match, so both join types should
+      // return the data. Reading the mispaired partitions as they stand makes an inner join drop
+      // the rows and return 0 of 2; an outer join instead keeps the left rows and null-extends
+      // them, returning wrong DATA -- (0, 'a', null) -- that reads like a legitimate no-match
+      // rather than an obviously missing row. The reduce onto `flip_low_bit` fixes both.
+      val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+      createTable("t1", cols, Array(identity("id")))
+      sql("INSERT INTO testcat.ns.t1 VALUES (0, 'a'), (1, 'b')")
+
+      createTable("t2", cols, Array(Expressions.apply("flip_low_bit", Expressions.column("id"))))
+      sql("INSERT INTO testcat.ns.t2 VALUES (0, 'x'), (1, 'y')")
+
+      val df = sql("SELECT t1.id, t1.data, t2.data " +
+        "FROM testcat.ns.t1 LEFT OUTER JOIN testcat.ns.t2 ON t1.id = t2.id")
+
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        checkAnswer(df, Seq(Row(0L, "a", "x"), Row(1L, "b", "y")))
+        val plan = stripAQEPlan(df.queryExecution.executedPlan)
+        assert(collectShuffles(plan).isEmpty, "storage-partitioned join should not shuffle")
+        val groupPartitions = collectGroupPartitions(plan)
+        assert(groupPartitions.size == 2,
+          "both sides should be regrouped onto the merged partition keys")
+        assert(groupPartitions.count(_.reducers.exists(_.exists(_.isDefined))) == 1,
+          "and exactly one side should reduce, the identity one onto `flip_low_bit`")
+        val joins = collect(plan) { case smj: SortMergeJoinExec => smj }
+        assert(joins.size == 1, s"test setup: one join to validate:\n$plan")
+        assert(ValidateRequirements.validate(joins.head), "the plan that leaves must hold up")
+      }
+    }
+  }
+
   test("SPARK-59121: two sides reduced together are not reduced a second time") {
     withReducedTsJoinLegs(bothRows, row2021) {
       // Both inner joins reduce onto the year key space, and the two legs hold different key sets,
