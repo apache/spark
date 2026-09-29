@@ -1016,7 +1016,7 @@ case class Scd2BatchProcessor(
    * interval gaps and delete boundaries that terminate inheritance, and before start/end
    * reconciliation so inherited tracked-history values determine the final SCD2 runs.
    *
-   * ==Eventual consistency of the carry-in anchor==
+   * ==== Eventual consistency of the carry-in anchor ====
    *
    * A leaf's reconciliation in any pass is a function of two independent inputs:
    *
