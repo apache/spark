@@ -1283,9 +1283,9 @@ object JsonConstructorNullBehavior {
 
 /**
  * Marker for expressions whose result is JSON text and therefore carry an implicit SQL/JSON
- * `FORMAT JSON`: when such an expression appears as an argument of a JSON constructor (e.g.
- * `JSON_ARRAY` or `JSON_OBJECT`), its value is spliced in verbatim rather than quoted as a JSON
- * string:
+ * `FORMAT JSON`: when such an expression is written *directly* as a lexical argument of a JSON
+ * constructor (e.g. `JSON_ARRAY` or `JSON_OBJECT`), its value is spliced in verbatim rather than
+ * quoted as a JSON string:
  *
  * {{{
  *   JSON_ARRAY(JSON_ARRAY(1))   -- '[[1]]'    (spliced; not the quoted string '["[1]"]')
@@ -1295,6 +1295,10 @@ object JsonConstructorNullBehavior {
  * `AstBuilder.visitJsonArray` / `visitJsonObject`) rather than re-deriving it from the child
  * expression during evaluation, so a later optimizer rewrite (e.g. `CollapseProject` inlining a
  * `JSON_ARRAY` alias into an argument position) cannot change whether a value is spliced or quoted.
+ * Because only the direct lexical argument is inspected, a value reaching the constructor through
+ * function-routine resolution (a qualified or otherwise routed call) is quoted, not spliced
+ * (deferred to SPARK-59243); the exception is `JSON_OBJECT`'s unqualified comma form, which carries
+ * the eligibility through explicitly (see `JsonImplicitFormatCarrier`).
  *
  * Most implementers always emit JSON text, so `emitsImplicitJsonText` defaults to true. An
  * implementer with a mode that instead emits a plain (non-JSON) string overrides it so that mode
@@ -1788,8 +1792,9 @@ object JsonObjectExpressionBuilder extends ExpressionBuilder {
         funcName, Seq("2n (n >= 0)"), expressions.length)
     }
     // A `JsonImplicitFormatCarrier` marks a lexically nested JSON producer, spliced raw (unwrapped
-    // here) and trusted; every other value is quoted. Routed calls carry no explicit FORMAT JSON,
-    // so nothing needs validation.
+    // here) and trusted; every other value is JSON-serialized like `to_json` (a string is quoted,
+    // while a number, boolean, array, struct, or map keeps its JSON representation). Routed calls
+    // carry no explicit FORMAT JSON, so nothing needs validation.
     val taggedMembers = expressions.grouped(2).map {
       case Seq(k, JsonImplicitFormatCarrier(v)) => ((k, v), true)
       case Seq(k, v) => ((k, v), false)
@@ -2372,7 +2377,8 @@ case class JsonObjectExpr(
   // `ApplyDefaultCollation` cast the result to a non-default collation; the `dataType` override
   // below stays authoritative when RETURNING is given explicitly.
   with DefaultStringProducingExpression
-  with ImplicitlyFormattedAsJson {
+  with ImplicitlyFormattedAsJson
+  with RoutedSqlJsonExpression {
 
   // `rawJson(i)` splices member `i`'s value verbatim (already-JSON text) rather than quoting it;
   // `needsValidation(i)` marks that raw text as arbitrary user input to JSON-validate at eval (an
@@ -2640,7 +2646,12 @@ case class JsonObjectExpr(
 
   override def prettyName: String = "json_object"
 
-  override def sql: String = {
+  override def sql: String = sqlString(forceBuiltinOwnership = true, _.sql)
+
+  // See [[RoutedSqlJsonExpression]] for `forceBuiltinOwnership` and `renderChild`.
+  private[sql] def sqlString(
+      forceBuiltinOwnership: Boolean,
+      renderChild: Expression => String): String = {
     val membersSQL = members.zip(rawJson).map { case ((k, v), raw) =>
       // Render SQL that reparses to the frozen `raw` flag, regardless of optimizer rewrites of the
       // child:
@@ -2652,21 +2663,22 @@ case class JsonObjectExpr(
       //    under COLLATE): neutralize with `CAST(... AS STRING)` so reparse keeps it quoted.
       //  - otherwise the child's shape already reproduces the flag.
       val valueSQL = (raw, JsonObjectExpr.rawJsonValue(v)) match {
-        case (true, Some(c)) => c.sql
-        case (true, None) => s"${v.sql} FORMAT JSON"
-        case (false, Some(_)) => s"CAST(${v.sql} AS STRING)"
-        case (false, None) => v.sql
+        case (true, Some(c)) => renderChild(c)
+        case (true, None) => s"${renderChild(v)} FORMAT JSON"
+        case (false, Some(_)) => s"CAST(${renderChild(v)} AS STRING)"
+        case (false, None) => renderChild(v)
       }
-      s"${k.sql} VALUE $valueSQL"
+      s"${renderChild(k)} VALUE $valueSQL"
     }.mkString(", ")
-    // Always render an explicit ON NULL clause. It forces the direct grammar path on reparse (a
+    // Render the null-handling clause. A non-default `ABSENT ON NULL` always renders (it is part of
+    // the requested semantics). The default `NULL ON NULL` is synthetic here: canonical `sql`
+    // (`forceBuiltinOwnership`) appends it to force the direct grammar path on reparse (a
     // clause-free call routes through function resolution and could bind a shadowing routine), so a
-    // resolved built-in round-trips to the same built-in. This diverges from `JsonArray`, which
-    // omits its default clause and has the same latent gap.
-    // TODO(SPARK-59728): align `JsonArray.sql` to render an explicit direct-path marker too.
+    // resolved built-in round-trips to the same built-in; the never-reparsed pretty form omits it
+    // so column names do not expose ownership text the user never wrote. Mirrors `JsonArray`.
     val nullSQL = nullBehavior match {
-      case JsonConstructorNullBehavior.Null => " NULL ON NULL"
       case JsonConstructorNullBehavior.Absent => " ABSENT ON NULL"
+      case JsonConstructorNullBehavior.Null => if (forceBuiltinOwnership) " NULL ON NULL" else ""
     }
     // Reference identity, not value equality: an explicit `RETURNING STRING COLLATE ...` is a
     // distinct StringType instance that `==` the default companion, so `==` would drop it. `eq`

@@ -1586,6 +1586,12 @@ jsonObjectMember
 // Compatibility form used by systems such as MySQL: `JSON_OBJECT(key, value[, key, value]...)`.
 // Kept as a separate alternative from `jsonObjectMember` because COMMA is both the key/value
 // separator inside a member and the separator between members.
+//
+// The `jsonObjectMember` (colon/VALUE) list is listed first in `#jsonObject`, so when a token
+// stream matches both forms the colon-member reading wins. This only overlaps when a comma-form
+// argument itself contains a `:` extraction, e.g. `JSON_OBJECT(v:k, v:x)`: this parses as the two
+// colon members `v:k` and `v:x` (the natural reading), not as one comma-form pair. To force the
+// comma form on colon-bearing arguments, parenthesize them: `JSON_OBJECT((v:k), (v:x))`.
 jsonObjectCommaMember
     : keyExpr=expression COMMA valueExpr=expression
     ;
