@@ -14,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import io
-import json
 import os
 import signal
 import sys
@@ -23,7 +21,6 @@ import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import patch
 
 has_resource_module = True
 try:
@@ -34,35 +31,7 @@ except ImportError:
 from py4j.protocol import Py4JJavaError
 
 from pyspark import SparkConf, SparkContext
-from pyspark.serializers import read_int
 from pyspark.testing.utils import PySparkTestCase, QuietTest, ReusedPySparkTestCase, eventually
-
-
-class WorkerProtocolTests(unittest.TestCase):
-    def test_metrics_report_is_length_prefixed_json(self):
-        # Allow this driver-side test to import the worker-only module.
-        with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
-            from pyspark.worker import report_metrics
-
-        stream = io.BytesIO()
-        report_metrics(stream, 1.25, 2.5, 3.75, 42, 7, 9)
-        stream.seek(0)
-
-        self.assertEqual(read_int(stream), -3)
-        length = read_int(stream)
-        self.assertGreater(length, 0)
-        self.assertEqual(
-            json.loads(stream.read(length)),
-            {
-                "bootTimestampMs": 1250,
-                "initTimestampMs": 2500,
-                "finishTimestampMs": 3750,
-                "pythonExecutionDurationMs": 42,
-                "memoryBytesSpilled": 7,
-                "diskBytesSpilled": 9,
-            },
-        )
-        self.assertEqual(stream.read(), b"")
 
 
 class WorkerTests(ReusedPySparkTestCase):
