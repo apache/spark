@@ -130,6 +130,7 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
             ([("a", 1), ("b", 2, 3)], "x string, y long", "3"),
             ([(1, d), (2, d, 3)], "y long, d date", "3"),
             ([("a", 1), ("b",)], "x string, y long", "1"),
+            ([(1, d), (2,)], "y long, d date", "1"),
         ]:
             with self.subTest(data=data, schema=schema):
                 with self.assertRaises(PySparkValueError) as pe:
