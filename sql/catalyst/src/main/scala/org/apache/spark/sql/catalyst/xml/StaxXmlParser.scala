@@ -630,16 +630,23 @@ class StaxXmlParser(
       schema: StructType,
       rootAttributes: Array[Attribute] = Array.empty): InternalRow = {
     val row = new Array[Any](schema.length)
-    // If there are attributes, then we process them first.
-    convertAttributes(rootAttributes, schema).toSeq.foreach {
-      case (f, v) =>
-        getFieldIndex(schema, f).foreach { row(_) = v }
+    var badRecordException: Option[Throwable] = None
+    // Convert rowTag attributes under the same recovery accumulator as child fields so
+    // an over-limit CHAR/VARCHAR attribute is a parse-mode failure, not a reader abort.
+    try {
+      convertAttributes(rootAttributes, schema).toSeq.foreach {
+        case (f, v) =>
+          getFieldIndex(schema, f).foreach { row(_) = v }
+      }
+    } catch {
+      case e: SparkUpgradeException => throw e
+      case DuplicateMapKeyUtils(e) => throw e
+      case NonFatal(e) =>
+        badRecordException = Some(e)
     }
 
     val wildcardColName = options.wildcardColName
     val hasWildcard = schema.exists(_.name == wildcardColName)
-
-    var badRecordException: Option[Throwable] = None
 
     var shouldStop = false
     while (!shouldStop) {

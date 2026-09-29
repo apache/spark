@@ -641,6 +641,13 @@ class JacksonParser(
       }
     }
 
+    // Value conversion can fail after the key is recorded. Do not build MapData from
+    // unpaired buffers: ArrayBasedMapData would throw a cardinality error and hide
+    // the original conversion failure (for example EXCEED_LIMIT_LENGTH).
+    if (keys.length != values.length) {
+      throw badRecordException.get
+    }
+
     // The JSON map will never have null or duplicated map keys, it's safe to create a
     // ArrayBasedMapData directly here.
     val mapData = ArrayBasedMapData(keys.toArray, values.toArray)

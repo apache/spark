@@ -1021,7 +1021,11 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
   import testImplicits._
 
   private def assertParseExceedLimit(query: String, expectedLimit: String = "5"): Unit = {
-    val e = intercept[SparkException] { sql(query).collect() }
+    assertParseExceedLimitError(sql(query).collect(), expectedLimit)
+  }
+
+  private def assertParseExceedLimitError(body: => Any, expectedLimit: String = "5"): Unit = {
+    val e = intercept[SparkException] { body }
     val cause = e.getCause match {
       case r: SparkRuntimeException => r
       case other =>
@@ -2810,6 +2814,77 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                |  map('attributePrefix', '', 'mode', 'FAILFAST'))""".stripMargin,
             expectedLimit = "2")
         }
+    }
+  }
+
+  test("SPARK-59274: JSON map value overflow keeps EXCEED_LIMIT_LENGTH") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val json = """{"m":{"k":"abcdef"},"tail":1}"""
+      val goodJson = """{"m":{"k":"ab"},"tail":2}"""
+      Seq("CHAR(2)", "VARCHAR(2)").foreach { valueType =>
+        val schema = s"m MAP<STRING, $valueType>, tail INT"
+        val fromJson = s"SELECT from_json('$json', '$schema')"
+        Seq(true, false).foreach { partial =>
+          withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+            withClue(s"$valueType partial=$partial") {
+              if (partial) {
+                checkAnswer(sql(fromJson), Row(Row(null, 1)))
+              } else {
+                checkAnswer(sql(fromJson), Row(Row(null, null)))
+              }
+              assertParseExceedLimit(
+                s"SELECT from_json('$json', '$schema', map('mode', 'FAILFAST'))",
+                expectedLimit = "2")
+
+              withTempPath { path =>
+                Seq(json, goodJson).toDS()
+                  .repartition(1)
+                  .write.text(path.getCanonicalPath)
+                val fileSchema = schema
+                val permissive = spark.read.schema(fileSchema).json(path.getCanonicalPath)
+                if (partial) {
+                  checkAnswer(permissive, Seq(Row(null, 1), Row(Map("k" -> "ab"), 2)))
+                } else {
+                  checkAnswer(permissive, Seq(Row(null, null), Row(Map("k" -> "ab"), 2)))
+                }
+                val failFast = spark.read
+                  .option("mode", "FAILFAST")
+                  .schema(fileSchema)
+                  .json(path.getCanonicalPath)
+                assertParseExceedLimitError(failFast.collect(), expectedLimit = "2")
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59274: XML rowTag attribute overflow uses parse mode") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("CHAR(2)", "VARCHAR(2)").foreach { attrType =>
+        withTempPath { path =>
+          Seq(
+            """<ROWS><ROW c="abcdef"><v>1</v></ROW><ROW c="ok"><v>2</v></ROW></ROWS>"""
+          ).toDS().write.text(path.getCanonicalPath)
+          val schema = s"c $attrType, v INT"
+          withClue(attrType) {
+            val permissive = spark.read
+              .option("rowTag", "ROW")
+              .option("attributePrefix", "")
+              .schema(schema)
+              .xml(path.getCanonicalPath)
+            checkAnswer(permissive, Seq(Row(null, 1), Row("ok", 2)))
+            val failFast = spark.read
+              .option("rowTag", "ROW")
+              .option("attributePrefix", "")
+              .option("mode", "FAILFAST")
+              .schema(schema)
+              .xml(path.getCanonicalPath)
+            assertParseExceedLimitError(failFast.collect(), expectedLimit = "2")
+          }
+        }
+      }
     }
   }
 
