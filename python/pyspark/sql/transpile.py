@@ -140,6 +140,9 @@ class AbstractTranspiler(object):
     # to enable this transpiler.
     variety: str = ""
 
+    def __init__(self, null_strict: bool = True) -> None:
+        pass
+
     @classmethod
     def register(cls) -> None:
         AbstractTranspiler.varieties[cls.variety] = cls
