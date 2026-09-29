@@ -2882,6 +2882,8 @@ object AsOfJoin {
    *
    * SQL tuple literals `(t.a, t.b)` are flattened to scalar leaves. Whole struct columns
    * (`t.k >= r.k`) sort by the struct value directly so nested struct shapes stay intact.
+   * A struct that can be NULL is never flattened: its leaves cannot tell a NULL struct from a
+   * struct of NULL fields, but the comparison can, so it sorts as one value, NULL first.
    * Array operands sort element-wise; length mismatches follow Spark array ordering semantics.
    */
   def matchSortExpressions(
@@ -2890,8 +2892,10 @@ object AsOfJoin {
     (leftOperand.dataType, rightOperand.dataType) match {
       case (leftStruct: StructType, rightStruct: StructType)
           if MatchConditionTypes.usesIdenticalStructSort(leftStruct, rightStruct) =>
-        if (isSqlTupleStructOperand(leftOperand) || isSqlTupleStructOperand(rightOperand)) {
-          val pairs = collectStructLeafPairs(leftOperand, rightOperand, leftStruct)
+        if ((isSqlTupleStructOperand(leftOperand) || isSqlTupleStructOperand(rightOperand)) &&
+            !leftOperand.nullable && !rightOperand.nullable) {
+          val pairs = collectStructLeafPairs(
+            leftOperand, rightOperand, leftStruct, splitNullableStructs = false)
           (pairs.map(_._1), pairs.map(_._2))
         } else {
           (Seq(leftOperand), Seq(rightOperand))
@@ -2981,7 +2985,8 @@ object AsOfJoin {
   /**
    * Tuple/struct operands may use different field names on each side. Rewrite them to positional
    * structs with matching schemas so comparison and ordering type-check. A NULL struct stays NULL,
-   * so it never matches, the same as in a plain comparison.
+   * as in a plain comparison: a NULL operand never matches, and a NULL inner struct is less than
+   * any non-NULL struct.
    */
   private def alignOperandsForComparison(
       leftOperand: Expression,
@@ -3117,17 +3122,21 @@ object AsOfJoin {
     wrapCompositeOrderExpression(leafDiffs, structType)
   }
 
+  /** `splitNullableStructs = false` keeps a struct pair whole when either side can be NULL. */
   private def collectStructLeafPairs(
       leftOperand: Expression,
       rightOperand: Expression,
-      structType: StructType): Seq[(Expression, Expression)] = {
+      structType: StructType,
+      splitNullableStructs: Boolean = true): Seq[(Expression, Expression)] = {
     structFieldExprs(leftOperand, structType)
       .zip(structFieldExprs(rightOperand, structType))
       .flatMap {
         case (left, right) =>
-          if (MatchConditionTypes.usesStructDecomposition(left.dataType, right.dataType)) {
+          val canSplit = splitNullableStructs || (!left.nullable && !right.nullable)
+          if (canSplit &&
+              MatchConditionTypes.usesStructDecomposition(left.dataType, right.dataType)) {
             collectStructLeafPairs(
-              left, right, left.dataType.asInstanceOf[StructType])
+              left, right, left.dataType.asInstanceOf[StructType], splitNullableStructs)
           } else {
             Seq((left, right))
           }

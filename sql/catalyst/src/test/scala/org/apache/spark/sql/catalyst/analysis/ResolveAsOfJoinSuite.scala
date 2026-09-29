@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, CreateNamedStruct, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, If, IsNull, LambdaFunction, LessThan, LessThanOrEqual, Literal, Rand, Subtract, ZipWith}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, CreateNamedStruct, EqualTo, Expression, GetStructField, GreaterThan, GreaterThanOrEqual, If, IsNull, LambdaFunction, LessThan, LessThanOrEqual, Literal, Rand, Subtract, ZipWith}
 import org.apache.spark.sql.catalyst.plans.{GreaterThanOp, GreaterThanOrEqualOp, Inner, JoinType, LeftOuter, LessThanOp, LessThanOrEqualOp, MatchComparisonOperator}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.types._
@@ -203,11 +203,40 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
     // slip past the orderExpression checks above, so pin the comparison operands too.
     // The struct columns are nullable, so each decomposed struct is guarded: a NULL struct must
     // stay NULL, not become a struct of NULL fields that compares as equal.
+    // The rebuilt struct must read its own side's fields in order, so a left/right swap fails.
     val ge = resolved.asOfCondition.asInstanceOf[GreaterThanOrEqual]
     Seq(ge.left -> lstruct, ge.right -> rstruct).foreach { case (operand, original) =>
       operand match {
-        case If(IsNull(`original`), Literal(null, _), _: CreateNamedStruct) =>
+        case If(IsNull(`original`), Literal(null, _), rebuilt: CreateNamedStruct) =>
+          val fields = rebuilt.valExprs.map {
+            case GetStructField(child, ordinal, _) => child -> ordinal
+            case other => fail(s"expected a field of $original, got $other")
+          }
+          assert(fields == Seq(original -> 0, original -> 1))
         case other => fail(s"expected a NULL-guarded decomposed struct operand, got $other")
+      }
+    }
+  }
+
+  test("materializes a nested nullable struct operand with a NULL guard at each level") {
+    // A NULL inner struct must stay NULL too, so it compares below {a: NULL}, as in `>=`.
+    val innerType = StructType(StructField("a", IntegerType) :: Nil)
+    val lnested = AttributeReference("n", StructType(StructField("e", innerType) :: Nil))()
+    val rnested = AttributeReference("n", StructType(StructField("g", innerType) :: Nil))()
+    val resolved = ResolveAsOfJoin.apply(asOf(
+      leftExpr = lnested, rightExpr = rnested,
+      l = LocalRelation(lnested), r = LocalRelation(rnested)))
+      .asInstanceOf[AsOfJoin]
+    val ge = resolved.asOfCondition.asInstanceOf[GreaterThanOrEqual]
+    Seq(ge.left -> lnested, ge.right -> rnested).foreach { case (operand, original) =>
+      operand match {
+        case If(IsNull(`original`), Literal(null, _), outer: CreateNamedStruct) =>
+          outer.valExprs match {
+            case Seq(If(IsNull(GetStructField(`original`, 0, _)), Literal(null, _),
+                _: CreateNamedStruct)) =>
+            case other => fail(s"expected a NULL-guarded inner struct, got $other")
+          }
+        case other => fail(s"expected a NULL-guarded nested struct operand, got $other")
       }
     }
   }
@@ -222,6 +251,47 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
     val ge = resolved.asOfCondition.asInstanceOf[GreaterThanOrEqual]
     assert(ge.left.isInstanceOf[CreateNamedStruct] && ge.right.isInstanceOf[CreateNamedStruct],
       s"expected unguarded decomposed struct operands, got ${ge.left} >= ${ge.right}")
+  }
+
+  test("sorts a nullable struct operand as one value, not by its fields") {
+    // Fields cannot tell a NULL struct from a struct of NULL fields, but the comparison can, so
+    // splitting a nullable struct lets two different values tie in the sort.
+    def tuple(fields: (String, Expression)*): CreateNamedStruct =
+      CreateNamedStruct(fields.flatMap { case (name, e) => Seq(Literal(name), e) })
+    def sortExprs(leftExpr: Expression, rightExpr: Expression): Seq[Seq[Expression]] = {
+      val resolved = ResolveAsOfJoin.apply(asOf(
+        leftExpr = leftExpr, rightExpr = rightExpr,
+        l = LocalRelation(leftExpr.references.toSeq),
+        r = LocalRelation(rightExpr.references.toSeq)))
+        .asInstanceOf[AsOfJoin]
+      Seq(resolved.leftSortExprs, resolved.rightSortExprs)
+    }
+    def field(struct: Expression, ordinal: Int, name: String): Expression =
+      GetStructField(struct, ordinal, Some(name))
+
+    // Tuple vs struct column: a nullable column sorts whole; a non-nullable one by its fields.
+    val ta = AttributeReference("a", IntegerType)()
+    val tb = AttributeReference("b", IntegerType)()
+    val abType = StructType(StructField("a", IntegerType) :: StructField("b", IntegerType) :: Nil)
+    val rs = AttributeReference("s", abType)()
+    val rsNotNull = rs.withNullability(false)
+    val tab = tuple("a" -> ta, "b" -> tb)
+    assert(sortExprs(tab, rs) == Seq(Seq(tab), Seq(rs)))
+    assert(sortExprs(tab, rsNotNull) ==
+      Seq(Seq(ta, tb), Seq(field(rsNotNull, 0, "a"), field(rsNotNull, 1, "b"))))
+
+    // Tuple with an inner struct: a nullable inner struct sorts whole; a non-nullable one splits.
+    val innerType = StructType(StructField("a", IntegerType) :: Nil)
+    val tx = AttributeReference("x", IntegerType)()
+    val rx = AttributeReference("x", IntegerType)()
+    val ts = AttributeReference("s", innerType)()
+    val rsInner = AttributeReference("s", innerType)()
+    assert(sortExprs(tuple("x" -> tx, "s" -> ts), tuple("x" -> rx, "s" -> rsInner)) ==
+      Seq(Seq(tx, ts), Seq(rx, rsInner)))
+    val tsNotNull = ts.withNullability(false)
+    val rsInnerNotNull = rsInner.withNullability(false)
+    assert(sortExprs(tuple("x" -> tx, "s" -> tsNotNull), tuple("x" -> rx, "s" -> rsInnerNotNull))
+      == Seq(Seq(tx, field(tsNotNull, 0, "a")), Seq(rx, field(rsInnerNotNull, 0, "a"))))
   }
 
   test("expands USING into an equi-join predicate wrapped in a Project") {

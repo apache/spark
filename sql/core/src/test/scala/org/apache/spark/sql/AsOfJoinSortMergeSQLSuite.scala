@@ -78,6 +78,14 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         |""".stripMargin)
   }
 
+  /** Runs `f` with temp view `r` over `rows`, kept in input order so ties keep that order. */
+  private def withOrderedRightView(rows: String, columns: String)(f: => Unit): Unit = {
+    withTempView("r") {
+      sql(s"SELECT * FROM VALUES $rows AS r($columns)").coalesce(1).createOrReplaceTempView("r")
+      f
+    }
+  }
+
   test("INNER ASOF JOIN with TIMESTAMP MATCH_CONDITION") {
     setupTradeQuoteViews()
     checkSortMergeAsOf(
@@ -423,6 +431,9 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     for {
       (nullStruct, one, five) <- Seq(
         ("CAST(NULL AS STRUCT<a: INT>)", "named_struct('a', 1)", "named_struct('a', 5)"),
+        // Two fields make the `<=` distance {NULL, NULL}, not NULL, so only the guard stops it.
+        ("CAST(NULL AS STRUCT<a: INT, b: INT>)",
+          "named_struct('a', 1, 'b', 1)", "named_struct('a', 5, 'b', 5)"),
         ("CAST(NULL AS STRUCT<e: STRUCT<a: INT>>)",
           "named_struct('e', named_struct('a', 1))", "named_struct('e', named_struct('a', 5))"))
       ansiEnabled <- Seq(true, false)
@@ -464,6 +475,60 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
                |  MATCH_CONDITION (t.k > r.k)
                |""".stripMargin),
           Row("r") :: Nil)
+      }
+    }
+  }
+
+  test("tuple vs nullable STRUCT column MATCH_CONDITION: a NULL struct does not end the scan") {
+    // A NULL struct and {NULL, NULL} have the same fields, so a sort by fields ties them. Both
+    // input orders must pick r11: a NULL row after a match must not stop the backward scan.
+    val allNull = "(named_struct('a', CAST(NULL AS INT), 'b', CAST(NULL AS INT)), 'allnull')"
+    val nullStruct = "(CAST(NULL AS STRUCT<a: INT, b: INT>), 'rnull')"
+    val r11 = "(named_struct('a', 1, 'b', 1), 'r11')"
+    for {
+      rights <- Seq(s"$allNull, $nullStruct, $r11", s"$nullStruct, $allNull, $r11")
+      ansiEnabled <- Seq(true, false)
+    } {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        withOrderedRightView(rights, "s, tag") {
+          checkSortMergeAsOf(
+            sql(
+              """
+                |SELECT r.tag
+                |FROM VALUES (1, 2) AS t(a, b)
+                |ASOF JOIN r
+                |  MATCH_CONDITION ((t.a, t.b) >= r.s)
+                |""".stripMargin),
+            Row("r11") :: Nil)
+        }
+      }
+    }
+  }
+
+  test("tuple with a nullable inner STRUCT MATCH_CONDITION picks the closest row") {
+    // NULL and {a: NULL} have the same field, but the comparison ranks NULL lower. Both input
+    // orders must pick the row equal to the left one, in both directions.
+    val aNull = "named_struct('a', CAST(NULL AS INT))"
+    val nullA = "CAST(NULL AS STRUCT<a: INT>)"
+    val rAnull = s"(1, $aNull, 'r_anull')"
+    val rNull = s"(1, $nullA, 'r_null')"
+    for {
+      rights <- Seq(s"$rAnull, $rNull", s"$rNull, $rAnull")
+      ansiEnabled <- Seq(true, false)
+    } {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        withOrderedRightView(rights, "x, s, tag") {
+          def asOfTag(left: String, op: String): DataFrame =
+            sql(
+              s"""
+                 |SELECT r.tag
+                 |FROM VALUES (1, $left) AS t(x, s)
+                 |ASOF JOIN r
+                 |  MATCH_CONDITION ((t.x, t.s) $op (r.x, r.s))
+                 |""".stripMargin)
+          checkSortMergeAsOf(asOfTag(aNull, ">="), Row("r_anull") :: Nil)
+          checkSortMergeAsOf(asOfTag(nullA, "<="), Row("r_null") :: Nil)
+        }
       }
     }
   }
