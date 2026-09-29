@@ -1951,6 +1951,26 @@ class CatalystTranspiler(AbstractTranspiler):
                 )
             case ast.Return(value=value):
                 return self._convert_chunk(params, value)
+            case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
+                # SPARK-55214: Python ``len`` on a str is the number of Unicode
+                # code points; Spark ``length`` on a string column is character
+                # length -- they match for well-formed UTF-8. ``len(None)``
+                # raises TypeError in Python, while Spark ``length(NULL)`` is
+                # NULL, so guard like value comparisons: raise on NULL, else
+                # ``length``. A caller that already proved non-null (``if x is
+                # not None: return len(x)``) takes the otherwise branch.
+                if self._category(params, arg) != "string":
+                    raise UnsupportedOperationException(
+                        "`len` is only lowered for string operands; other "
+                        "types fall back to interpreted Python"
+                    )
+                arg_col = self._convert_chunk(params, arg)
+                err = lit(
+                    "Python UDF transpiler: cannot call len() on NULL; "
+                    "Python would raise TypeError here. Add an "
+                    "`is not None` guard or filter NULLs upstream."
+                )
+                return when(arg_col.isNull(), raise_error(err)).otherwise(length(arg_col))
             # Only a call through a plain name can be one of the builtins we lower.
             # Anything else -- `(lambda y: y + 1)(x)`, a method call, a call through a
             # subscript -- falls through to the generic "AST node Call is not
@@ -1978,29 +1998,6 @@ class CatalystTranspiler(AbstractTranspiler):
                         f"name {name!r} is not in the UDF's parameter list "
                         "and free variables / closures are not supported"
                     )
-            case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
-                # SPARK-55214: Python ``len`` on a str is the number of Unicode
-                # code points; Spark ``length`` on a string column is character
-                # length -- they match for well-formed UTF-8. ``len(None)``
-                # raises TypeError in Python, while Spark ``length(NULL)`` is
-                # NULL, so guard like value comparisons: raise on NULL, else
-                # ``length``. A caller that already proved non-null (``if x is
-                # not None: return len(x)``) takes the otherwise branch.
-                if self._category(params, arg) != "string":
-                    raise UnsupportedOperationException(
-                        "`len` is only lowered for string operands; other "
-                        "types fall back to interpreted Python"
-                    )
-                arg_col = self._convert_chunk(params, arg)
-                if self._is_nonnull_node(params, arg):
-                    return length(arg_col)
-                err = lit(
-                    "Python UDF transpiler: cannot call len() on NULL; "
-                    "Python would raise TypeError here. Add an "
-                    "`is not None` guard or filter NULLs upstream."
-                )
-                self._null_guard_emitted = True
-                return when(arg_col.isNull(), raise_error(err)).otherwise(length(arg_col))
             case _:
                 raise UnsupportedOperationException(
                     f"AST node {type(body).__name__} is not supported by the "
