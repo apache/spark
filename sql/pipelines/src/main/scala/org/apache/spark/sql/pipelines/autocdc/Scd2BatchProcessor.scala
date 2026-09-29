@@ -995,9 +995,10 @@ case class Scd2BatchProcessor(
   }
 
   /**
-   * Replaces unauthored leaf values with values inherited from the most recent authoring row
-   * for the same key, and materializes version map entries for leaves that would otherwise lose
-   * their unauthored signal after inheriting a non-null value.
+   * Replaces unauthored leaf values with values inherited from the nearest preceding authoring
+   * row for the same key in `decomposedDf`, and materializes version map entries for
+   * schema-evolved leaves that would otherwise lose their unauthored signal after inheriting a
+   * non-null value.
    *
    * An existing non-null version map is the row's established authorship record. Its semantic
    * contents are frozen across ignore-null selection changes: the active selection determines
@@ -1014,6 +1015,25 @@ case class Scd2BatchProcessor(
    * Must run after decomposition cleanup, whose canonical row shapes expose the persisted
    * interval gaps and delete boundaries that terminate inheritance, and before start/end
    * reconciliation so inherited tracked-history values determine the final SCD2 runs.
+   *
+   * ==Eventual consistency of the carry-in anchor==
+   *
+   * A leaf's reconciliation in any pass is a function of two independent inputs:
+   *
+   *  1. The active ignore-null selection. Only leaves in the active selection are eligible for
+   *     coalescing; an unauthored leaf outside it is not reconciled in this pass.
+   *  2. The affected window of rows pulled in for reconciliation. It is computed independently
+   *     of the selection, from anchor-row deduction (the earliest existing row bisected by an
+   *     incoming event, or the earliest event in the microbatch).
+   *
+   * The first upsert-representing row in the affected window supplies its stored value as
+   * carry-in, even when its version map records that value as unauthored, because its
+   * predecessor is outside the window. If the leaf was temporarily dropped from the selection,
+   * that stored value may not have been reconciled against the latest authoring row.
+   *
+   * Correction for that anchor row is eventually consistent: once the affected window expands to
+   * include a preceding row that authored the leaf, the stale carry-in is replaced and all
+   * downstream unauthored rows inherit the correct value.
    */
   private[autocdc] def coalesceIgnoredNulls(
       decomposedDf: DataFrame): DataFrame =
@@ -2194,7 +2214,9 @@ private[autocdc] object LeafInheritanceContext {
     // If this first row is an existing upsert, it cannot itself be re-coalesced in this sweep:
     // its predecessor is outside the affected window, so its stored value is the only safe
     // carry-in. With an unchanged selection that value is already correct. After a selection
-    // change, correcting the anchor is deferred until reconciliation includes preceding history.
+    // change, correcting the anchor is deferred until reconciliation includes preceding
+    // history. See the "Eventual consistency of the carry-in anchor" section in the
+    // [[coalesceIgnoredNulls]] scaladoc.
     val rowEstablishesCarryIn = rowInheritanceContext.isFirstUpsertRepresentingRow
     val rowUpdatesInheritanceChain =
       rowResetsInheritanceChain || rowContributesAuthoredValue || rowEstablishesCarryIn
