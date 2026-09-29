@@ -50,7 +50,7 @@ trait ExternalUDFExec extends UnaryExecNode {
   // Metrics
   // ---------------------------------------------------------------------------
 
-  protected lazy val externalUdfMetrics: Map[String, SQLMetric] =
+  protected val externalUdfMetrics: Map[String, SQLMetric] =
     ExternalUDFMetrics.create(sparkContext)
 
   override lazy val metrics: Map[String, SQLMetric] = externalUdfMetrics
