@@ -1541,6 +1541,14 @@ public class JavaAPISuite implements Serializable {
     );
     JavaPairRDD<byte[], Integer> pairRDD = sc.parallelizePairs(pairs);
 
+    // Homogeneous byte[] keys and values still collect successfully
+    List<byte[]> collectedKeys = pairRDD.keys().collect();
+    assertEquals(2, collectedKeys.size());
+    assertArrayEquals(new byte[]{1}, collectedKeys.get(0));
+    assertArrayEquals(new byte[]{2}, collectedKeys.get(1));
+    List<Integer> collectedValues = pairRDD.values().collect();
+    assertEquals(Arrays.asList(1, 2), collectedValues);
+
     SparkException ex1 = assertThrows(SparkException.class,
       () -> pairRDD.partitionBy(new HashPartitioner(2)));
     assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex1.getCondition());
@@ -1556,6 +1564,25 @@ public class JavaAPISuite implements Serializable {
     SparkException ex4 = assertThrows(SparkException.class,
       () -> pairRDD.subtractByKey(pairRDD));
     assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex4.getCondition());
+
+    // Array key is not the first element in the collection
+    List<Tuple2<Object, Integer>> mixedKeyPairs = Arrays.asList(
+      new Tuple2<>("nonArrayKey", 1),
+      new Tuple2<>(new byte[]{2}, 2)
+    );
+    JavaPairRDD<Object, Integer> mixedKeyRDD = sc.parallelizePairs(mixedKeyPairs);
+    SparkException exMixed = assertThrows(SparkException.class,
+      () -> mixedKeyRDD.partitionBy(new HashPartitioner(2)));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", exMixed.getCondition());
+
+    List<Tuple2<byte[], Integer>> nullKeyFirstPairs = Arrays.asList(
+      new Tuple2<>(null, 1),
+      new Tuple2<>(new byte[]{2}, 2)
+    );
+    JavaPairRDD<byte[], Integer> nullKeyFirstRDD = sc.parallelizePairs(nullKeyFirstPairs);
+    SparkException exNullFirst = assertThrows(SparkException.class,
+      () -> nullKeyFirstRDD.partitionBy(new HashPartitioner(2)));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", exNullFirst.getCondition());
 
     // Also test JavaPairRDD.fromJavaRDD with explicit key class
     JavaRDD<Tuple2<byte[], Integer>> rdd = sc.parallelize(pairs);
@@ -1591,6 +1618,11 @@ public class JavaAPISuite implements Serializable {
 
     List<Object> values = pairRDD.values().collect();
     assertEquals(Arrays.asList("stringVal", 100), values);
+
+    // Ensure HashPartitioner does not produce a false positive on non-array heterogeneous keys
+    JavaPairRDD<Number, Object> partitioned = pairRDD.partitionBy(new HashPartitioner(2));
+    assertEquals(2, partitioned.partitions().size());
+    assertEquals(2, partitioned.collect().size());
   }
 
 }

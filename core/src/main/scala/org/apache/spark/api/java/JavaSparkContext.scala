@@ -154,10 +154,10 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   : JavaPairRDD[K, V] = {
     val seq = list.asScala.toSeq
     implicit val ctagK: ClassTag[K] =
-      seq.iterator.filter(_ != null).map(_._1).find(_ != null) match {
-        case Some(k) if k.getClass.isArray => ClassTag(k.getClass).asInstanceOf[ClassTag[K]]
-        case _ => fakeClassTag[K]
-      }
+      seq.iterator.collectFirst {
+        case t if t != null && t._1 != null && t._1.getClass.isArray =>
+          ClassTag(t._1.getClass).asInstanceOf[ClassTag[K]]
+      }.getOrElse(fakeClassTag[K])
     implicit val ctagV: ClassTag[V] = fakeClassTag
     JavaPairRDD.fromRDD(sc.parallelize(seq, numSlices))
   }
