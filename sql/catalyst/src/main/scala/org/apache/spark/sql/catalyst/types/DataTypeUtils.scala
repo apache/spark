@@ -201,8 +201,9 @@ object DataTypeUtils {
 
       case (_: NullType, _) if storeAssignmentPolicy == ANSI => true
 
-      case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == ANSI =>
-        if (!Cast.canANSIStoreAssign(w, r) && ansiStoreAssignmentCastCheck == AT_ANALYSIS) {
+      case (w: AtomicType, r: AtomicType)
+          if storeAssignmentPolicy == ANSI && ansiStoreAssignmentCastCheck == AT_ANALYSIS =>
+        if (!Cast.canANSIStoreAssign(w, r)) {
           throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
             tableName, context, w.catalogString, r.catalogString
           )
