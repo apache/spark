@@ -21,7 +21,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -128,81 +127,11 @@ case class Scd1BatchProcessor(
       reconciledMicrobatchDf: DataFrame,
       targetTableIdentifier: TableIdentifier
   ): Unit = {
-    val meta = AutoCdcReservedNames.cdcMetadataColName
-
-    val destinationTableStr = targetTableIdentifier.quotedString
-    // (Re-)alias the reconciled microbatch DF for easy reference for the remainder of the merge.
-    val microbatchDf = reconciledMicrobatchDf.as("microbatch")
-
-    val microbatchCdcMetadataCol = F.col(s"microbatch.`$meta`")
-    val destinationCdcMetadataCol =
-      F.col(s"$destinationTableStr.`$meta`")
-
-    val microbatchDeleteVersionField =
-      Scd1BatchProcessor.deleteSequenceOf(microbatchCdcMetadataCol)
-    val microbatchUpsertVersionField =
-      Scd1BatchProcessor.upsertSequenceOf(microbatchCdcMetadataCol)
-    val destinationUpsertVersionField =
-      Scd1BatchProcessor.upsertSequenceOf(destinationCdcMetadataCol)
-
-    val keysMatch = changeArgs.keys
-      .map(k =>
-        F.col(s"microbatch.${k.quoted}") === F.col(s"$destinationTableStr.${k.quoted}")
-      )
-      .reduce(_ && _)
-
-    // Upsert beats existing row if incoming upsert sequence is geq to the upsert sequence on
-    // the target.
-    val incomingWinsUpsert = microbatchUpsertVersionField.isNotNull &&
-      microbatchUpsertVersionField >= destinationUpsertVersionField
-
-    // Delete beats existing row if delete sequencing is strictly greater than the upsert
-    // sequence on the target. This is an arbitrary but deliberate choice to maintain that
-    // upserts get priority over deletes on duplicate sequencing.
-    val incomingWinsDelete = microbatchDeleteVersionField.isNotNull &&
-      microbatchDeleteVersionField > destinationUpsertVersionField
-
-    val resolver = microbatchDf.sparkSession.sessionState.conf.resolver
-    val keyNames = changeArgs.keys.map(_.name)
-
-    def constructTargetColumnAssignmentsFromMicrobatch(columnName: String): (String, Column) = {
-      // Map a column in the target table to its direct equivalent in the microbatch. Note that
-      // because of target-table schema evolution during SDP dataset materialization, the
-      // microbatch's columns are always a subset of (or equal to) the target's columns.
-      val quotedCol = QuotingUtils.quoteIdentifier(columnName)
-      s"$destinationTableStr.$quotedCol" -> F.col(s"microbatch.$quotedCol")
-    }
-
-    // Most merge implementations require that join columns are not mutated, even when the
-    // mutation would be a no-op. The remaining microbatch columns (including the CDC metadata
-    // column) are overwritten outright when the incoming upsert wins.
-    val columnsToUpdateWhenIncomingWinsUpsert: Map[String, Column] =
-      microbatchDf.columns
-        .filterNot(c => keyNames.exists(resolver(_, c)))
-        .map(constructTargetColumnAssignmentsFromMicrobatch)
-        .toMap
-
-    val columnsToInsertOnNewKey: Map[String, Column] =
-      microbatchDf.columns
-        .map(constructTargetColumnAssignmentsFromMicrobatch)
-        .toMap
-
-    microbatchDf
-      .mergeInto(destinationTableStr, keysMatch)
-      .whenMatched(incomingWinsDelete)
-      .delete()
-      .whenMatched(incomingWinsUpsert)
-      .update(columnsToUpdateWhenIncomingWinsUpsert)
-      // New key: only insert upserts; deletes for absent keys are no-ops for the target table
-      // merge, and instead would have been inserted as tombstones into the auxiliary table.
-      .whenNotMatched(microbatchDeleteVersionField.isNull)
-      // When inserting a brand new row for a new key, construct column mappings from microbatch.
-      // The microbatch's columns may be a strict subset of the target's columns -- e.g. the user
-      // narrowed `column_list` between runs, or the source DF dropped a column. The target's
-      // columns can never be a strict subset of the microbatch's, however, because SDP's schema
-      // evolution always unions old and new schemas onto the target.
-      .insert(columnsToInsertOnNewKey)
-      .merge()
+    new Scd1RowLevelTargetMerge(
+      changeArgs = changeArgs,
+      reconciledMicrobatchDf = reconciledMicrobatchDf,
+      targetTableIdentifier = targetTableIdentifier
+    ).merge()
   }
 }
 
