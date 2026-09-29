@@ -2735,6 +2735,26 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def dateAddDaysOverflowError(days: Int, numDays: Int): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"add ${toSQLValue(numDays, IntegerType)} days to " +
+          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def dateSubtractDaysOverflowError(days: Int, numDays: Int): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"subtract ${toSQLValue(numDays, IntegerType)} days from " +
+          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
   def calendarIntervalArrowNanosOverflowError(
       interval: CalendarInterval): SparkArithmeticException = {
     new SparkArithmeticException(
