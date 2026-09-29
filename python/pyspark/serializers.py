@@ -62,6 +62,7 @@ which contains two batches of two objects:
 
 import codecs
 import collections
+import io
 import itertools
 import marshal
 import os
@@ -414,6 +415,17 @@ if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
     _hijack_namedtuple()
 
 
+class _RestrictedUnpickler(pickle.Unpickler):
+    def __init__(self, file, allowed_names, *, encoding="bytes"):
+        super().__init__(file, encoding=encoding)
+        self.allowed_names = allowed_names
+
+    def find_class(self, module, name):
+        if (module, name) not in self.allowed_names:
+            raise pickle.UnpicklingError(f"Unpickling {module}.{name} is not allowed")
+        return super().find_class(module, name)
+
+
 class PickleSerializer(FramedSerializer):
     """
     Serializes objects using Python's pickle serializer:
@@ -432,6 +444,18 @@ class PickleSerializer(FramedSerializer):
 
 
 class CloudPickleSerializer(FramedSerializer):
+    # Class-level default for `allowed_names`. Instances of this serializer are pickled and
+    # shipped across the driver and workers, which may run different Spark versions. Pickle
+    # restores an instance via __new__ + __dict__ without calling __init__, so an instance
+    # pickled by a version that predates `allowed_names` would otherwise lack the attribute
+    # entirely. Declaring the default here keeps `self.allowed_names` resolvable in that
+    # cross-version case; only a version-matched, explicitly restricted instance sets it.
+    allowed_names = None
+
+    def __init__(self, allowed_names=None):
+        super().__init__()
+        self.allowed_names = allowed_names
+
     def dumps(self, obj):
         from pyspark.util import print_exec
 
@@ -449,6 +473,9 @@ class CloudPickleSerializer(FramedSerializer):
             raise pickle.PicklingError(msg)
 
     def loads(self, obj, encoding="bytes"):
+        if self.allowed_names is not None:
+            unpickler = _RestrictedUnpickler(io.BytesIO(obj), self.allowed_names, encoding=encoding)
+            return unpickler.load()
         return cloudpickle.loads(obj, encoding=encoding)
 
 

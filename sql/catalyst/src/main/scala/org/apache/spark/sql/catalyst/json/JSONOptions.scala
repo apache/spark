@@ -244,6 +244,10 @@ class JSONOptions(
   val useUnsafeRow: Boolean = parameters.get(USE_UNSAFE_ROW).map(_.toBoolean).getOrElse(
     SQLConf.get.getConf(SQLConf.JSON_USE_UNSAFE_ROW))
 
+  val streamMultilineTopLevelArray: Boolean =
+    parameters.get(ENABLE_STREAMING_TOP_LEVEL_ARRAY).map(_.toBoolean).getOrElse(
+      SQLConf.get.getConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY))
+
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {
     val streamReadConstraints = StreamReadConstraints
@@ -343,6 +347,7 @@ object JSONOptions extends DataSourceOptions {
   val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
   val EXPLODE_EMBEDDED_ARRAY = newOption(DataSourceOptions.EXPLODE_EMBEDDED_ARRAY)
   val USE_UNSAFE_ROW = newOption("useUnsafeRow")
+  val ENABLE_STREAMING_TOP_LEVEL_ARRAY = newOption("enableStreamingTopLevelArray")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

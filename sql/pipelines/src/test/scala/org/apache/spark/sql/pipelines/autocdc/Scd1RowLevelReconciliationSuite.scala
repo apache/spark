@@ -17,13 +17,19 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import Scd1RowLevelReconciliation.{
+  applyTombstonesToMicrobatch,
+  deduplicateMicrobatch,
+  projectTargetColumnsOntoMicrobatch
+}
+
 import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
+class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession {
 
   /**
    * Test Schema for a microbatch that already has the SCD1 CDC metadata column projected.
@@ -50,7 +56,6 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
   private def cdcMetadataRow(deleteSeq: Option[Long], upsertSeq: Option[Long]): Row =
     Row(deleteSeq.getOrElse(null), upsertSeq.getOrElse(null))
 
-
   /** Build a microbatch [[DataFrame]] from explicit rows and an explicit schema. */
   private def microbatchOf(schema: StructType)(rows: Row*): DataFrame =
     spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
@@ -62,6 +67,15 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
    */
   private def columnNamesAndDataTypes(schema: StructType): Seq[(String, DataType)] =
     schema.fields.map(f => (f.name, f.dataType)).toSeq
+
+  private def extendMicrobatchRowsWithCdcMetadata(
+      changeArgs: ChangeArgs,
+      batch: DataFrame): DataFrame =
+    Scd1RowLevelReconciliation.extendMicrobatchRowsWithCdcMetadata(
+      changeArgs = changeArgs,
+      resolvedSequencingType = LongType,
+      validatedMicrobatch = batch
+    )
 
   // =============== deduplicateMicrobatch tests ===============
 
@@ -77,17 +91,14 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, 20L, "middle")
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
 
     checkAnswer(
-      df = processor.deduplicateMicrobatch(batch),
+      df = deduplicateMicrobatch(changeArgs, batch),
       expectedAnswer = Row(1, 30L, "winner")
     )
   }
@@ -102,17 +113,14 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, 10L, "only-row")
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
 
     checkAnswer(
-      df = processor.deduplicateMicrobatch(batch),
+      df = deduplicateMicrobatch(changeArgs, batch),
       expectedAnswer = Row(1, 10L, "only-row")
     )
   }
@@ -128,18 +136,15 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, 10L, "second-tied-row")
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
 
     // On equal sequence number events for the same key we provide no guarantee on which event will
     // survive, but the contract is _one_ event will survive - assert that below.
-    val result = processor.deduplicateMicrobatch(batch).collect()
+    val result = deduplicateMicrobatch(changeArgs, batch).collect()
     assert(result.length == 1)
     assert(result.head.getInt(0) == 1)
     assert(result.head.getLong(1) == 10L)
@@ -160,17 +165,14 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, 10L, "non-null-sequence")
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
 
     checkAnswer(
-      df = processor.deduplicateMicrobatch(batch),
+      df = deduplicateMicrobatch(changeArgs, batch),
       expectedAnswer = Row(1, 10L, "non-null-sequence")
     )
   }
@@ -188,16 +190,13 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       // deduplication if all rows contain a null sequence in the microbatch.
       Row(1, null, "null-sequence")
     )
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
     checkAnswer(
-      df = processor.deduplicateMicrobatch(batch),
+      df = deduplicateMicrobatch(changeArgs, batch),
       expectedAnswer = Row(null, null, null)
     )
   }
@@ -216,17 +215,14 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(3, 1L, "c1-only")
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
 
     checkAnswer(
-      df = processor.deduplicateMicrobatch(batch),
+      df = deduplicateMicrobatch(changeArgs, batch),
       expectedAnswer = Seq(
         Row(1, 20L, "a2-winner"),
         Row(2, 50L, "b1-winner"),
@@ -247,19 +243,16 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, 20L, "winning-name", 200)
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
 
     // All non-key columns must come from the row with the largest sequence value, never
     // a mix of values from multiple rows.
     checkAnswer(
-      df = processor.deduplicateMicrobatch(batch),
+      df = deduplicateMicrobatch(changeArgs, batch),
       expectedAnswer = Row(1, 20L, "winning-name", 200)
     )
   }
@@ -278,17 +271,14 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, 20L, Row("new", 200))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
 
     checkAnswer(
-      df = processor.deduplicateMicrobatch(batch),
+      df = deduplicateMicrobatch(changeArgs, batch),
       expectedAnswer = Row(1, 20L, Row("new", 200))
     )
   }
@@ -309,17 +299,14 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row("US", 2, 99L, "us2-only")
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("region"), UnqualifiedColumnName("customer_id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("region"), UnqualifiedColumnName("customer_id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
 
     checkAnswer(
-      df = processor.deduplicateMicrobatch(batch),
+      df = deduplicateMicrobatch(changeArgs, batch),
       expectedAnswer = Seq(
         Row("US", 1, 20L, "us1-new"),
         Row("EU", 1, 5L, "eu1-only"),
@@ -346,17 +333,14 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, 15L, 15L, "always-loses")
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.greatest(F.col("seq"), F.col("alt_seq")),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.greatest(F.col("seq"), F.col("alt_seq")),
+      storedAsScdType = ScdType.Type1
     )
 
     checkAnswer(
-      df = processor.deduplicateMicrobatch(batch),
+      df = deduplicateMicrobatch(changeArgs, batch),
       expectedAnswer = Row(1, 10L, 30L, "winner")
     )
   }
@@ -372,17 +356,14 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, 20L, "new")
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("`user.id`")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("`user.id`")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
 
     checkAnswer(
-      df = processor.deduplicateMicrobatch(batch),
+      df = deduplicateMicrobatch(changeArgs, batch),
       expectedAnswer = Row(1, 20L, "new")
     )
   }
@@ -390,7 +371,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
   test(
     "deduplicateMicrobatch fails when a key column collides with the reserved name"
   ) {
-    val reservedColName = Scd1BatchProcessor.winningRowColName
+    val reservedColName = Scd1RowLevelReconciliation.winningRowColName
 
     val schema = new StructType()
       .add(reservedColName, StringType)
@@ -402,18 +383,15 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row("k1", 20L, "winner")
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName(reservedColName)),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName(reservedColName)),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
 
     checkError(
       exception = intercept[AnalysisException] {
-        processor.deduplicateMicrobatch(batch).collect()
+        deduplicateMicrobatch(changeArgs, batch).collect()
       },
       condition = "AMBIGUOUS_REFERENCE",
       sqlState = "42704",
@@ -438,18 +416,15 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row("a2", 1, 2.5, 20L, false)
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
 
     // Field names and dataTypes must match the input exactly, in the original order.
     assert(
-      columnNamesAndDataTypes(processor.deduplicateMicrobatch(batch).schema) ==
+      columnNamesAndDataTypes(deduplicateMicrobatch(changeArgs, batch).schema) ==
         columnNamesAndDataTypes(schema))
   }
 
@@ -461,16 +436,13 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val batch = microbatchOf(schema)()
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
 
-    val result = processor.deduplicateMicrobatch(batch)
+    val result = deduplicateMicrobatch(changeArgs, batch)
     assert(result.collect().isEmpty)
     assert(columnNamesAndDataTypes(result.schema) == columnNamesAndDataTypes(schema))
   }
@@ -491,21 +463,18 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(4, 40L, true)
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1,
-        deleteCondition = Some(F.col("is_delete") === true)
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1,
+      deleteCondition = Some(F.col("is_delete") === true)
     )
 
     // Mutual-exclusivity invariant: each row's CDC metadata struct has exactly one of
     // (deleteSequence, upsertSequence) non-null, and the non-null side carries the row's
     // sequence value.
     checkAnswer(
-      df = processor.extendMicrobatchRowsWithCdcMetadata(batch),
+      df = extendMicrobatchRowsWithCdcMetadata(changeArgs, batch),
       expectedAnswer = Seq(
         Row(1, 10L, false, Row(null, 10L)),
         Row(2, 20L, true, Row(20L, null)),
@@ -525,18 +494,15 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, 10L, null)
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1,
-        deleteCondition = Some(F.col("is_delete"))
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1,
+      deleteCondition = Some(F.col("is_delete"))
     )
 
     checkAnswer(
-      df = processor.extendMicrobatchRowsWithCdcMetadata(batch),
+      df = extendMicrobatchRowsWithCdcMetadata(changeArgs, batch),
       expectedAnswer = Row(1, 10L, null, Row(null, 10L))
     )
   }
@@ -553,18 +519,15 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(2, 20L, "b")
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1,
-        deleteCondition = None
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1,
+      deleteCondition = None
     )
 
     checkAnswer(
-      df = processor.extendMicrobatchRowsWithCdcMetadata(batch),
+      df = extendMicrobatchRowsWithCdcMetadata(changeArgs, batch),
       expectedAnswer = Seq(
         Row(1, 10L, "a", Row(null, 10L)),
         Row(2, 20L, "b", Row(null, 20L))
@@ -582,16 +545,13 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, 10L, "a")
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
 
-    val result = processor.extendMicrobatchRowsWithCdcMetadata(batch)
+    val result = extendMicrobatchRowsWithCdcMetadata(changeArgs, batch)
 
     // Original columns are preserved in their original order, with CDC metadata appended at
     // the very end.
@@ -612,16 +572,13 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, 10, "a")
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
 
-    val resultDf = processor.extendMicrobatchRowsWithCdcMetadata(batch)
+    val resultDf = extendMicrobatchRowsWithCdcMetadata(changeArgs, batch)
 
     val cdcMetadataDataType =
       resultDf.schema(AutoCdcReservedNames.cdcMetadataColName).dataType.asInstanceOf[StructType]
@@ -653,18 +610,15 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, Row(1L, 0L))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
     )
 
     val ex = intercept[AnalysisException] {
       // .schema forces analysis of the underlying logical plan, surfacing the invalid cast.
-      processor.extendMicrobatchRowsWithCdcMetadata(batch).schema
+      extendMicrobatchRowsWithCdcMetadata(changeArgs, batch).schema
     }
     assert(ex.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
   }
@@ -676,17 +630,14 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(2, "bob", 25, Row(20L, null))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1,
-        columnSelection = None
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1,
+      columnSelection = None
     )
 
-    val result = processor.projectTargetColumnsOntoMicrobatch(batch)
+    val result = projectTargetColumnsOntoMicrobatch(changeArgs, batch)
 
     // None selection is no-op on the user columns, and the CDC metadata column is unconditionally
     // re-projected last, so the output shape exactly matches the input.
@@ -706,21 +657,18 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, "alice", 30, Row(null, 10L))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1,
-        columnSelection = Some(
-          ColumnSelection.IncludeColumns(
-            Seq(UnqualifiedColumnName("id"), UnqualifiedColumnName("age"))
-          )
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1,
+      columnSelection = Some(
+        ColumnSelection.IncludeColumns(
+          Seq(UnqualifiedColumnName("id"), UnqualifiedColumnName("age"))
         )
-      ),
-      resolvedSequencingType = LongType
+      )
     )
 
-    val result = processor.projectTargetColumnsOntoMicrobatch(batch)
+    val result = projectTargetColumnsOntoMicrobatch(changeArgs, batch)
 
     assert(result.schema.fieldNames.toSeq ==
       Seq("id", "age", AutoCdcReservedNames.cdcMetadataColName))
@@ -735,21 +683,18 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, "alice", 30, Row(null, 10L))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1,
-        columnSelection = Some(
-          ColumnSelection.ExcludeColumns(
-            Seq(UnqualifiedColumnName("age"))
-          )
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1,
+      columnSelection = Some(
+        ColumnSelection.ExcludeColumns(
+          Seq(UnqualifiedColumnName("age"))
         )
-      ),
-      resolvedSequencingType = LongType
+      )
     )
 
-    val result = processor.projectTargetColumnsOntoMicrobatch(batch)
+    val result = projectTargetColumnsOntoMicrobatch(changeArgs, batch)
 
     assert(
       result.schema.fieldNames.toSeq ==
@@ -766,20 +711,17 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, "alice", 30, Row(null, 10L))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1,
-        // User specifies (age, id) -- intentionally different from the schema order (id, age).
-        columnSelection = Some(ColumnSelection.IncludeColumns(
-          Seq(UnqualifiedColumnName("age"), UnqualifiedColumnName("id"))
-        ))
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1,
+      // User specifies (age, id) -- intentionally different from the schema order (id, age).
+      columnSelection = Some(ColumnSelection.IncludeColumns(
+        Seq(UnqualifiedColumnName("age"), UnqualifiedColumnName("id"))
+      ))
     )
 
-    val result = processor.projectTargetColumnsOntoMicrobatch(batch)
+    val result = projectTargetColumnsOntoMicrobatch(changeArgs, batch)
 
     // Output column order follows the original microbatch schema (id before age), not the order
     // in which the user listed columns in IncludeColumns. The CDC metadata column is appended
@@ -806,24 +748,21 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, "u-100", Row(null, 10L))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        sequencing = F.col("seq"),
-        storedAsScdType = ScdType.Type1,
-        columnSelection = Some(
-          ColumnSelection.IncludeColumns(
-            Seq(
-              UnqualifiedColumnName("id"),
-              UnqualifiedColumnName("`user.id`")
-            )
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1,
+      columnSelection = Some(
+        ColumnSelection.IncludeColumns(
+          Seq(
+            UnqualifiedColumnName("id"),
+            UnqualifiedColumnName("`user.id`")
           )
         )
-      ),
-      resolvedSequencingType = LongType
+      )
     )
 
-    val result = processor.projectTargetColumnsOntoMicrobatch(batch)
+    val result = projectTargetColumnsOntoMicrobatch(changeArgs, batch)
 
     assert(result.schema.fieldNames.toSeq ==
       Seq("id", "user.id", AutoCdcReservedNames.cdcMetadataColName))
@@ -840,22 +779,19 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
         Row(1, "alice", 30, Row(null, 10L))
       )
 
-      val processor = Scd1BatchProcessor(
-        changeArgs = ChangeArgs(
-          keys = Seq(UnqualifiedColumnName("id")),
-          sequencing = F.col("seq"),
-          storedAsScdType = ScdType.Type1,
-          // User columns intentionally use a different case than the schema (id, age).
-          columnSelection = Some(
-            ColumnSelection.IncludeColumns(
-              Seq(UnqualifiedColumnName("ID"), UnqualifiedColumnName("AGE"))
-            )
+      val changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type1,
+        // User columns intentionally use a different case than the schema (id, age).
+        columnSelection = Some(
+          ColumnSelection.IncludeColumns(
+            Seq(UnqualifiedColumnName("ID"), UnqualifiedColumnName("AGE"))
           )
-        ),
-        resolvedSequencingType = LongType
+        )
       )
 
-      val result = processor.projectTargetColumnsOntoMicrobatch(batch)
+      val result = projectTargetColumnsOntoMicrobatch(changeArgs, batch)
 
       // Output column names follow the microbatch schema's casing, not the casing in the user's
       // columnSelection. The CDC metadata column is appended last as always.
@@ -871,7 +807,8 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
   // =============== applyTombstonesToMicrobatch tests ===============
 
   /**
-   * Schema for the microbatch input to [[Scd1BatchProcessor.applyTombstonesToMicrobatch]]
+   * Schema for the microbatch input to
+   * [[Scd1RowLevelReconciliation.applyTombstonesToMicrobatch]]
    * tests.
    */
   private val applyTombstonesToMicrobatchTestMicrobatchSchema: StructType = new StructType()
@@ -883,7 +820,8 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType)
 
   /**
-   * Schema for the auxiliary input to [[Scd1BatchProcessor.applyTombstonesToMicrobatch]] tests.
+   * Schema for the auxiliary input to
+   * [[Scd1RowLevelReconciliation.applyTombstonesToMicrobatch]] tests.
    *
    * In practice for SCD1 the auxiliary table only carries key columns and the CDC metadata
    * column -- never user data columns -- so we mirror that production-side asymmetry here,
@@ -908,18 +846,15 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
-        // into the CDC metadata column.
-        sequencing = F.lit(0L),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
+      // into the CDC metadata column.
+      sequencing = F.lit(0L),
+      storedAsScdType = ScdType.Type1
     )
 
-    val result = processor.applyTombstonesToMicrobatch(microbatch, auxiliary)
+    val result = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary)
     assert(result.collect().isEmpty)
   }
 
@@ -936,19 +871,16 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
-        // into the CDC metadata column.
-        sequencing = F.lit(0L),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
+      // into the CDC metadata column.
+      sequencing = F.lit(0L),
+      storedAsScdType = ScdType.Type1
     )
 
     checkAnswer(
-      df = processor.applyTombstonesToMicrobatch(microbatch, auxiliary),
+      df = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary),
       expectedAnswer = Row(1, "tied-upsert", Row(null, 10L))
     )
   }
@@ -963,19 +895,16 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
-        // into the CDC metadata column.
-        sequencing = F.lit(0L),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
+      // into the CDC metadata column.
+      sequencing = F.lit(0L),
+      storedAsScdType = ScdType.Type1
     )
 
     checkAnswer(
-      df = processor.applyTombstonesToMicrobatch(microbatch, auxiliary),
+      df = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary),
       expectedAnswer = Seq(
         Row(1, "fresher-upsert", Row(null, 15L)),
         Row(1, "fresher-delete", Row(20L, null))
@@ -994,19 +923,16 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(2, cdcMetadataRow(deleteSeq = Some(1000), upsertSeq = None))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
-        // into the CDC metadata column.
-        sequencing = F.lit(0L),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
+      // into the CDC metadata column.
+      sequencing = F.lit(0L),
+      storedAsScdType = ScdType.Type1
     )
 
     checkAnswer(
-      df = processor.applyTombstonesToMicrobatch(microbatch, auxiliary),
+      df = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary),
       expectedAnswer = Row(1, "stays", Row(null, 5L))
     )
   }
@@ -1028,19 +954,16 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row("US", 99, cdcMetadataRow(deleteSeq = Some(1000), upsertSeq = None))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("region"), UnqualifiedColumnName("customer_id")),
-        // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
-        // into the CDC metadata column.
-        sequencing = F.lit(0L),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("region"), UnqualifiedColumnName("customer_id")),
+      // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
+      // into the CDC metadata column.
+      sequencing = F.lit(0L),
+      storedAsScdType = ScdType.Type1
     )
 
     checkAnswer(
-      df = processor.applyTombstonesToMicrobatch(microbatch, auxiliary),
+      df = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary),
       expectedAnswer = Seq(
         Row("US", 1, Row(null, 5L)),
         Row("US", 2, Row(null, 5L))
@@ -1060,18 +983,15 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("`user.id`")),
-        // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
-        // into the CDC metadata column.
-        sequencing = F.lit(0L),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("`user.id`")),
+      // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
+      // into the CDC metadata column.
+      sequencing = F.lit(0L),
+      storedAsScdType = ScdType.Type1
     )
 
-    val result = processor.applyTombstonesToMicrobatch(microbatch, auxiliary)
+    val result = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary)
     assert(result.collect().isEmpty)
   }
 
@@ -1088,19 +1008,16 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // against incoming rows in the microbatch.
     val auxiliary = microbatchOf(applyTombstonesToMicrobatchTestAuxiliarySchema)()
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
-        // into the CDC metadata column.
-        sequencing = F.lit(0L),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
+      // into the CDC metadata column.
+      sequencing = F.lit(0L),
+      storedAsScdType = ScdType.Type1
     )
 
     checkAnswer(
-      df = processor.applyTombstonesToMicrobatch(microbatch, auxiliary),
+      df = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary),
       expectedAnswer = Seq(
         Row(1, "kept-upsert", Row(null, 5L)),
         Row(2, "kept-delete", Row(7L, null))
@@ -1121,19 +1038,16 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, cdcMetadataRow(deleteSeq = None, upsertSeq = None))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
-        // into the CDC metadata column.
-        sequencing = F.lit(0L),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
+      // into the CDC metadata column.
+      sequencing = F.lit(0L),
+      storedAsScdType = ScdType.Type1
     )
 
     checkAnswer(
-      df = processor.applyTombstonesToMicrobatch(microbatch, auxiliary),
+      df = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary),
       expectedAnswer = Row(1, "kept-upsert", Row(null, 5L))
     )
   }
@@ -1154,18 +1068,15 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
-        // into the CDC metadata column.
-        sequencing = F.lit(0L),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
+      // into the CDC metadata column.
+      sequencing = F.lit(0L),
+      storedAsScdType = ScdType.Type1
     )
 
-    val result = processor.applyTombstonesToMicrobatch(microbatch, auxiliary)
+    val result = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary)
     assert(result.collect().isEmpty)
   }
 
@@ -1182,18 +1093,15 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = Some(20)))
     )
 
-    val processor = Scd1BatchProcessor(
-      changeArgs = ChangeArgs(
-        keys = Seq(UnqualifiedColumnName("id")),
-        // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
-        // into the CDC metadata column.
-        sequencing = F.lit(0L),
-        storedAsScdType = ScdType.Type1
-      ),
-      resolvedSequencingType = LongType
+    val changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
+      // into the CDC metadata column.
+      sequencing = F.lit(0L),
+      storedAsScdType = ScdType.Type1
     )
 
-    val result = processor.applyTombstonesToMicrobatch(microbatch, auxiliary)
+    val result = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary)
     assert(result.collect().isEmpty)
   }
 }

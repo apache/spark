@@ -22,7 +22,7 @@ import java.util.Collections
 import scala.jdk.CollectionConverters._
 
 import org.slf4j.Logger
-import sun.misc.{Signal, SignalHandler}
+import sun.misc.{Signal, SignalHandler} // scalastyle:ignore sunmiscsignal
 
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._

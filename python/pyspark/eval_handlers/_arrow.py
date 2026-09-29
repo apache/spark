@@ -251,19 +251,6 @@ class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
                 yield ArrowBatchTransformer.wrap_struct(batch)
 
 
-def _concat_group_batches(batch_list: list["pa.RecordBatch"]) -> "pa.RecordBatch":
-    """Concatenate a group's RecordBatches into a single one, with a fallback for
-    pyarrow before 19.0.0 (which lacks ``pa.concat_batches``). Remove the fallback
-    once support for those versions is dropped."""
-    import pyarrow as pa
-
-    if hasattr(pa, "concat_batches"):
-        return pa.concat_batches(batch_list)
-    return pa.RecordBatch.from_struct_array(
-        pa.concat_arrays([b.to_struct_array() for b in batch_list])
-    )
-
-
 class ArrowGroupedAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     """SQL_GROUPED_AGG_ARROW_UDF: each UDF reduces its input columns over the whole
     group to a single scalar; emit one row per group with one column per UDF,
@@ -287,10 +274,7 @@ class ArrowGroupedAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         import pyarrow as pa
 
         for group in data:
-            batch_list = list(group)
-            if not batch_list:
-                continue
-            concatenated = _concat_group_batches(batch_list)
+            concatenated = ArrowBatchTransformer.concat_batches(group)
             results = [
                 udf_func(
                     *[concatenated.column(o) for o in args_offsets],
@@ -366,10 +350,7 @@ class ArrowWindowAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         import pyarrow as pa
 
         for group in data:
-            batch_list = list(group)
-            if not batch_list:
-                continue
-            concatenated = _concat_group_batches(batch_list)
+            concatenated = ArrowBatchTransformer.concat_batches(group)
             num_rows = concatenated.num_rows
 
             result_arrays = []

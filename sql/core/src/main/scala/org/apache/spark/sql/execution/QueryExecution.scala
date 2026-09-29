@@ -279,16 +279,14 @@ class QueryExecution(
         result.toImmutableArraySeq)
     }
     p transformDown {
-      case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
-        eagerlyExecute(u, "multi-commands", CommandExecutionMode.SKIP)
-      case w @ WithCTE(u @ Union(children, _, _), _) if children.forall(_.isInstanceOf[Command]) =>
-        eagerlyExecute(w, "multi-commands", CommandExecutionMode.SKIP)
-      case c: Command =>
-        val name = commandExecutionName(c)
-        eagerlyExecute(c, name, CommandExecutionMode.NON_ROOT)
-      case w @ WithCTE(c: Command, _) =>
-        val name = commandExecutionName(c)
-        eagerlyExecute(w, name, CommandExecutionMode.SKIP)
+      // isEagerlyExecutedCommand decides the shapes; this only maps each to a name and mode.
+      case node if QueryExecution.isEagerlyExecutedCommand(node) =>
+        val (name, mode) = node match {
+          case c: Command => (commandExecutionName(c), CommandExecutionMode.NON_ROOT)
+          case WithCTE(c: Command, _) => (commandExecutionName(c), CommandExecutionMode.SKIP)
+          case _ => ("multi-commands", CommandExecutionMode.SKIP) // Union / WithCTE(Union)
+        }
+        eagerlyExecute(node, name, mode)
     }
   }
 
@@ -795,6 +793,20 @@ object QueryExecution {
   private val _nextExecutionId = new AtomicLong(0)
 
   private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
+
+  /**
+   * Whether [[QueryExecution.eagerlyExecuteCommands]] would eagerly execute `plan` as a command:
+   * a `Command`, a `Union` of commands, or either wrapped in a `WithCTE`. The single source of
+   * truth for those shapes, gated on by `eagerlyExecuteCommands`. EXECUTE IMMEDIATE uses it to
+   * defer matching inner payloads to the execution level.
+   */
+  private[sql] def isEagerlyExecutedCommand(plan: LogicalPlan): Boolean = plan match {
+    case Union(children, _, _) => children.forall(_.isInstanceOf[Command])
+    case WithCTE(Union(children, _, _), _) => children.forall(_.isInstanceOf[Command])
+    case _: Command => true
+    case WithCTE(_: Command, _) => true
+    case _ => false
+  }
 
   private[execution] def create(
       sparkSession: SparkSession,

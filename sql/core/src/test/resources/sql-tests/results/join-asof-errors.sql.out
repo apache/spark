@@ -313,6 +313,30 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT * FROM VALUES (ARRAY(1)) AS t(a) ASOF JOIN VALUES (ARRAY('x')) AS r(a)
+  MATCH_CONDITION (t.a >= r.a)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "type1" : "\"ARRAY<INT>\"",
+    "type2" : "\"ARRAY<STRING>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 41,
+    "stopIndex" : 108,
+    "fragment" : "ASOF JOIN VALUES (ARRAY('x')) AS r(a)\n  MATCH_CONDITION (t.a >= r.a)"
+  } ]
+}
+
+
+-- !query
 SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (t.trade_time >= q.bid_price)
   ON t.symbol = q.symbol
@@ -383,6 +407,56 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 71,
     "stopIndex" : 171,
     "fragment" : "ASOF JOIN\n     VALUES (named_struct('a', 1, 'm', MAP('a', 1))) AS r(s)\n  MATCH_CONDITION (t.s >= r.s)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM VALUES (named_struct('a', 1)) AS t(s) ASOF JOIN
+     VALUES (named_struct('c', CAST(1 AS BIGINT))) AS r(s)
+  MATCH_CONDITION (t.s >= r.s)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "type1" : "\"STRUCT<a: INT NOT NULL>\"",
+    "type2" : "\"STRUCT<c: BIGINT NOT NULL>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 53,
+    "stopIndex" : 151,
+    "fragment" : "ASOF JOIN\n     VALUES (named_struct('c', CAST(1 AS BIGINT))) AS r(s)\n  MATCH_CONDITION (t.s >= r.s)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM VALUES (named_struct('a', 1)) AS t(s) ASOF JOIN
+     VALUES (named_struct('a', CAST('x' AS STRING))) AS r(s)
+  MATCH_CONDITION (t.s >= r.s)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "type1" : "\"STRUCT<a: INT NOT NULL>\"",
+    "type2" : "\"STRUCT<a: STRING NOT NULL>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 53,
+    "stopIndex" : 153,
+    "fragment" : "ASOF JOIN\n     VALUES (named_struct('a', CAST('x' AS STRING))) AS r(s)\n  MATCH_CONDITION (t.s >= r.s)"
   } ]
 }
 

@@ -445,9 +445,26 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
     assert(asOfJoin.rightSortExprs.nonEmpty)
   }
 
+  test("MATCH_CONDITION accepts ARRAY operands with coercible element types") {
+    // SPARK-59528: a resolved orderExpression proves the elements were unified for the ZipWith.
+    val sqlText =
+      """
+        |SELECT t.a
+        |FROM VALUES (ARRAY(1, 3)) AS t(a)
+        |ASOF JOIN VALUES (ARRAY(CAST(1 AS BIGINT), CAST(2 AS BIGINT))) AS r(a)
+        |  MATCH_CONDITION (t.a >= r.a)
+        |""".stripMargin
+    val analyzed = sql(sqlText).queryExecution.analyzed
+    assert(analyzed.resolved)
+    val asOfJoin = analyzed.collectFirst { case j: AsOfJoin => j }.get
+    assert(asOfJoin.asOfCondition.resolved)
+    assert(asOfJoin.orderExpression.resolved)
+  }
+
   test("ARRAY<STRUCT> MATCH_CONDITION with mismatched element names and types is rejected") {
-    // ASOF operand validation accepts these (fields compared positionally, names ignored), the
-    // failure is the generic comparison check, since array elements are not name-realigned.
+    // SPARK-59528: array element structs coerce only when field names match, like the `>=` the
+    // join builds; different names have no common type, so this is now rejected up front instead
+    // of failing later with BINARY_OP_DIFF_TYPES.
     val sqlText =
       """
         |SELECT r.a
@@ -459,12 +476,11 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         |""".stripMargin
     checkError(
       exception = intercept[AnalysisException](sql(sqlText)),
-      condition = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+      condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE",
       sqlState = Some("42K09"),
       parameters = Map(
-        "left" -> "\"ARRAY<STRUCT<x: INT NOT NULL>>\"",
-        "right" -> "\"ARRAY<STRUCT<y: BIGINT NOT NULL>>\"",
-        "sqlExpr" -> "\"(a >= a)\""),
+        "type1" -> "\"ARRAY<STRUCT<x: INT NOT NULL>>\"",
+        "type2" -> "\"ARRAY<STRUCT<y: BIGINT NOT NULL>>\""),
       queryContext = Array(
         ExpectedContext(
           fragment = """ASOF JOIN (

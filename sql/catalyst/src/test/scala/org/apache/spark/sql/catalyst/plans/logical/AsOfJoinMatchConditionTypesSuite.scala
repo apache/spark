@@ -89,6 +89,16 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(!MatchConditionTypes.areOperandsCompatible(intArray, stringArray))
   }
 
+  test("string and interval types are incompatible") {
+    // SPARK-59528: STRING string-promotes to any atomic type, so findWiderTypeForTwo accepts STRING
+    // vs INTERVAL, but the `>=` cannot coerce that pair (no common type) and would fail later with
+    // BINARY_OP_DIFF_TYPES. Reject up front. Fails if the string/interval guard is dropped.
+    assert(!MatchConditionTypes.areOperandsCompatible(StringType, YearMonthIntervalType()))
+    assert(!MatchConditionTypes.areOperandsCompatible(DayTimeIntervalType(), StringType))
+    // The guard is narrow: STRING still pairs with a numeric type, which the comparison promotes.
+    assert(MatchConditionTypes.areOperandsCompatible(StringType, LongType))
+  }
+
   test("orderable scalars with no common type are incompatible") {
     // Both are individually valid, orderable operands ...
     assert(MatchConditionTypes.isValidOperandType(TimestampType))
@@ -121,9 +131,66 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(MatchConditionTypes.usesStructDecomposition(leftStruct, rightStruct))
   }
 
-  test("array operands require identical element types") {
+  test("struct operands with different field names and coercible types are rejected") {
+    // int vs bigint needs coercion, which aligns fields by name; different names have no common
+    // type, so the `>=` cannot resolve. Fails if positional matching accepted coercible fields
+    // (the accept-then-fail bug: validation passes, then analysis throws BINARY_OP_DIFF_TYPES).
+    val leftStruct = StructType(StructField("a", IntegerType) :: Nil)
+    val rightStruct = StructType(StructField("c", LongType) :: Nil)
+    assert(!MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
+  }
+
+  test("struct operands with matching field names and coercible types are compatible") {
+    // Same field name: the comparison widens field a from int to bigint by name.
+    // Fails if the fix over-tightened and rejected same-named coercible structs.
+    val leftStruct = StructType(StructField("a", IntegerType) :: Nil)
+    val rightStruct = StructType(StructField("a", LongType) :: Nil)
+    assert(MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
+  }
+
+  test("struct operands whose fields only string-promote or decimal-widen are rejected") {
+    // Same field name, but a field pair the `>=` cannot widen: findTightestCommonType is None for
+    // INT vs STRING (string promotion only) and for two different decimals (decimal widening only).
+    // findWiderTypeForTwo would accept both by name, so the type check would pass and analysis then
+    // throw BINARY_OP_DIFF_TYPES. Fails if the struct arm used findWiderTypeForTwo instead of the
+    // tightest-common-type rule the array element path uses.
+    val intStruct = StructType(StructField("a", IntegerType) :: Nil)
+    val stringStruct = StructType(StructField("a", StringType) :: Nil)
+    assert(!MatchConditionTypes.areOperandsCompatible(intStruct, stringStruct))
+
+    val decimalStruct = StructType(StructField("a", DecimalType(10, 2)) :: Nil)
+    val widerDecimalStruct = StructType(StructField("a", DecimalType(20, 5)) :: Nil)
+    assert(!MatchConditionTypes.areOperandsCompatible(decimalStruct, widerDecimalStruct))
+  }
+
+  test("array operands with identical element types are compatible") {
     val leftArray = ArrayType(IntegerType)
     val rightArray = ArrayType(IntegerType)
+    assert(MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
+    assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
+  }
+
+  test("array operands with coercible element types are compatible") {
+    // SPARK-59528: elements widen via findTightestCommonType, like the array `>=` comparison.
+    val intArray = ArrayType(IntegerType)
+    val longArray = ArrayType(LongType)
+    assert(MatchConditionTypes.areOperandsCompatible(intArray, longArray))
+    assert(MatchConditionTypes.usesArrayOrderExpression(intArray, longArray))
+    assert(MatchConditionTypes.areOperandsCompatible(longArray, intArray))
+    assert(MatchConditionTypes.areOperandsCompatible(intArray, ArrayType(DoubleType)))
+  }
+
+  test("array operands whose elements only string-promote are rejected") {
+    // SPARK-59528: INT vs STRING has no tightest common type, so the array `>=` cannot coerce it.
+    val intArray = ArrayType(IntegerType)
+    val stringArray = ArrayType(StringType)
+    assert(!MatchConditionTypes.areOperandsCompatible(intArray, stringArray))
+    assert(!MatchConditionTypes.usesArrayOrderExpression(intArray, stringArray))
+  }
+
+  test("nested array operands with coercible element types are compatible") {
+    val leftArray = ArrayType(ArrayType(IntegerType))
+    val rightArray = ArrayType(ArrayType(LongType))
     assert(MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
     assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
   }
@@ -143,11 +210,25 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
   }
 
-  test("array operands with different element types are rejected") {
+  test("array operands with non-coercible element types are rejected") {
+    // INT and BINARY are both orderable but have no common type.
     val leftArray = ArrayType(IntegerType)
-    val rightArray = ArrayType(StringType)
+    val rightArray = ArrayType(BinaryType)
     assert(!MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
     assert(!MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
+  }
+
+  test("array struct elements coerce only when field names match") {
+    val leftArray = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    // Same field name, coercible field type: elements widen to struct<a:bigint>, so accepted.
+    val sameNameArray = ArrayType(StructType(StructField("a", LongType) :: Nil))
+    assert(MatchConditionTypes.areOperandsCompatible(leftArray, sameNameArray))
+    assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, sameNameArray))
+    // Different field name, coercible field type: no tightest common type, so rejected.
+    // Fails if the rule fell back to positional struct matching, which ignores field names.
+    val diffNameArray = ArrayType(StructType(StructField("b", LongType) :: Nil))
+    assert(!MatchConditionTypes.areOperandsCompatible(leftArray, diffNameArray))
+    assert(!MatchConditionTypes.usesArrayOrderExpression(leftArray, diffNameArray))
   }
 
   test("empty struct operands are invalid") {

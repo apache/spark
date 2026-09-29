@@ -24,6 +24,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -178,6 +179,33 @@ class ArrowBatchTransformer:
         return pa.RecordBatch.from_arrays(
             [batch.columns[i] for i in column_indices],
             [batch.schema.names[i] for i in column_indices],
+        )
+
+    @classmethod
+    def concat_batches(
+        cls, batches: Iterable["pa.RecordBatch"], schema: Optional["pa.Schema"] = None
+    ) -> "pa.RecordBatch":
+        """Concatenate same-schema RecordBatches by row.
+
+        ``batches`` may be any iterable of RecordBatches and is consumed once, and zero-row
+        batches are dropped. If no rows remain, an empty batch of ``schema`` is returned, or an
+        error is raised when ``schema`` is not given. A single remaining batch is returned
+        unchanged. PyArrow before 19.0.0 has no ``concat_batches``; the fallback concatenates
+        the equivalent StructArrays and converts the result back to a RecordBatch.
+        """
+        import pyarrow as pa
+
+        batches = [batch for batch in batches if batch.num_rows]
+        if not batches:
+            if schema is None:
+                raise PySparkValueError("concat_batches needs a schema when the input has no rows")
+            return pa.RecordBatch.from_pylist([], schema=schema)
+        if len(batches) == 1:
+            return batches[0]
+        if hasattr(pa, "concat_batches"):
+            return pa.concat_batches(batches)
+        return pa.RecordBatch.from_struct_array(
+            pa.concat_arrays([batch.to_struct_array() for batch in batches])
         )
 
     @staticmethod
