@@ -40,7 +40,7 @@ jobs:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
     - name: Cache Maven local repository
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.m2/repository
         key: build-sparkr-windows-maven-${{ hashFiles('**/pom.xml') }}
