@@ -87,7 +87,9 @@ object ExecuteExternalUDFExecSuite {
       expectedTimeZone: String,
       expectedLargeVarTypes: Boolean,
       requestCount: LongAccumulator,
-      closeCount: LongAccumulator)
+      closeCount: LongAccumulator,
+      terminalMetrics: Option[ExecutionMetrics],
+      cancelOnClose: Boolean)
     extends WorkerSession(new TestWorkerHandle, WorkerLogger.NoOp) {
 
     override protected def doInit(message: Init): InitResponse = {
@@ -145,7 +147,18 @@ object ExecuteExternalUDFExecSuite {
 
     override protected def doClose(cancel: () => Cancel): Termination = {
       closeCount.add(1L)
-      completeTerminal(Termination.Finished(FinishResponse.getDefaultInstance))
+      val termination = if (cancelOnClose) {
+        val response = terminalMetrics.fold(CancelResponse.getDefaultInstance) { metrics =>
+          CancelResponse.newBuilder().setMetrics(metrics).build()
+        }
+        Termination.Cancelled(response)
+      } else {
+        val response = terminalMetrics.fold(FinishResponse.getDefaultInstance) { metrics =>
+          FinishResponse.newBuilder().setMetrics(metrics).build()
+        }
+        Termination.Finished(response)
+      }
+      completeTerminal(termination)
       settledTermination
     }
 
@@ -263,12 +276,10 @@ object ExecuteExternalUDFExecSuite {
       expectedTimeZone: String,
       expectedLargeVarTypes: Boolean,
       requestCount: LongAccumulator,
-      closeCount: LongAccumulator)
+      closeCount: LongAccumulator,
+      terminalMetrics: Option[ExecutionMetrics],
+      cancelOnClose: Boolean)
     extends ExecuteExternalUDFExec(udf, resultAttr, child) {
-
-    def recordTestTerminalMetrics(termination: Termination): Unit = {
-      recordTerminalMetrics(termination)
-    }
 
     override protected def withUDFWorkerSession(
         taskContext: TaskContext,
@@ -282,7 +293,9 @@ object ExecuteExternalUDFExecSuite {
         expectedTimeZone,
         expectedLargeVarTypes,
         requestCount,
-        closeCount)
+        closeCount,
+        terminalMetrics,
+        cancelOnClose)
       taskContext.addTaskCompletionListener[Unit] { _ =>
         recordTerminalMetrics(session.close())
       }
@@ -296,14 +309,18 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
 
   private def testExecution(
       behavior: ResponseBehavior,
-      rowCount: Long): TestExecution = {
+      rowCount: Long,
+      terminalMetrics: Option[ExecutionMetrics] = None,
+      cancelOnClose: Boolean = false): TestExecution = {
     val child = spark.range(0L, rowCount, 1L, 1).queryExecution.executedPlan
     testExecution(
       behavior,
       child,
       Seq(child.output.head),
       LongType,
-      udfNullable = false)
+      udfNullable = false,
+      terminalMetrics = terminalMetrics,
+      cancelOnClose = cancelOnClose)
   }
 
   private def testExecution(
@@ -312,6 +329,24 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
       udfChildren: Seq[Expression],
       udfDataType: DataType,
       udfNullable: Boolean): TestExecution = {
+    testExecution(
+      behavior,
+      child,
+      udfChildren,
+      udfDataType,
+      udfNullable,
+      terminalMetrics = None,
+      cancelOnClose = false)
+  }
+
+  private def testExecution(
+      behavior: ResponseBehavior,
+      child: SparkPlan,
+      udfChildren: Seq[Expression],
+      udfDataType: DataType,
+      udfNullable: Boolean,
+      terminalMetrics: Option[ExecutionMetrics],
+      cancelOnClose: Boolean): TestExecution = {
     val udf = ExternalUserDefinedFunction(
       name = Some("identity"),
       workerSpec = UDFWorkerSpecification.getDefaultInstance,
@@ -344,7 +379,9 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
         conf.sessionLocalTimeZone,
         conf.arrowUseLargeVarTypes,
         requestCount,
-        closeCount),
+        closeCount,
+        terminalMetrics,
+        cancelOnClose),
       requestCount,
       closeCount)
   }
@@ -405,8 +442,6 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
 
   gridTest("external UDF records typed terminal metrics from")(
       Seq("finish", "cancel")) { terminal =>
-    val execution = testExecution(EchoResponses, rowCount = 1L)
-    val plan = execution.plan.asInstanceOf[TestExecuteExternalUDFExec]
     val reported = ExecutionMetrics.newBuilder()
       .setBytesIn(1)
       .setBytesOut(2)
@@ -421,15 +456,18 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
       .setWorkWallNanos(11)
       .setWorkCpuNanos(12)
       .build()
-    val termination = terminal match {
-      case "finish" =>
-        Termination.Finished(FinishResponse.newBuilder().setMetrics(reported).build())
-      case "cancel" =>
-        Termination.Cancelled(CancelResponse.newBuilder().setMetrics(reported).build())
+    val execution = testExecution(
+      EchoResponses,
+      rowCount = 5L,
+      terminalMetrics = Some(reported),
+      cancelOnClose = terminal == "cancel")
+    val plan = execution.plan.asInstanceOf[TestExecuteExternalUDFExec]
+
+    terminal match {
+      case "finish" => plan.executeCollect()
+      case "cancel" => plan.executeTake(1)
       case other => fail(s"unexpected terminal: $other")
     }
-
-    plan.recordTestTerminalMetrics(termination)
 
     Seq(
       "bytesIn", "bytesOut", "rowsIn", "rowsOut", "batchesIn", "batchesOut",
@@ -440,15 +478,17 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
   }
 
   test("external UDF preserves missing and measured zero terminal metrics") {
-    val execution = testExecution(EchoResponses, rowCount = 1L)
-    val plan = execution.plan.asInstanceOf[TestExecuteExternalUDFExec]
     val reported = ExecutionMetrics.newBuilder()
       .setBytesIn(0)
       .setRowsOut(-1L)
       .build()
-    val response = FinishResponse.newBuilder().setMetrics(reported).build()
+    val execution = testExecution(
+      EchoResponses,
+      rowCount = 1L,
+      terminalMetrics = Some(reported))
+    val plan = execution.plan.asInstanceOf[TestExecuteExternalUDFExec]
 
-    plan.recordTestTerminalMetrics(Termination.Finished(response))
+    plan.executeCollect()
 
     assert(plan.metrics("bytesIn").value === 0L)
     assert(!plan.metrics("bytesIn").isZero)
