@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference,
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, PartitioningCollection, REPEATS_GROUP, SPREADS_SPLITS}
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryCatalystRuntimeFilterCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.Distributions
@@ -45,10 +45,11 @@ import org.apache.spark.sql.execution.{
   SparkPlan,
   UnionExec,
   WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.{AQEShuffleReadExec, ResultQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
-import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.execution.ui.SparkPlanGraphNode
 import org.apache.spark.sql.execution.window.{Final, Partial, WindowGroupLimitExec, WindowGroupLimitMode}
@@ -7653,8 +7654,8 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59120: reduced partition keys are read at the types they were built with") {
     // The join reduces the identity side onto the year key space, so its keys become `IntegerType`
     // years while the partitioning still reports `identity(ts)`, declaring `TimestampType`. With
-    // the subset opt-in on, AQE re-runs `createShuffleSpec` on the already reduced children through
-    // `ValidateRequirements`, which projects and sorts those keys. The mechanism is in
+    // the subset opt-in on, AQE re-runs `EnsureRequirements` over the already reduced children,
+    // and its `createShuffleSpec` projects and sorts those keys. The mechanism is in
     // `ShuffleSpecSuite`'s "createShuffleSpec sorts the projected keys at their built-with types".
     withTable("t_identity", "t_years") {
       createTsTable("t_identity", Array(identity("ts")))
@@ -9228,6 +9229,239 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59671: a partially clustered join leaves AQE's shuffle coalescing alone") {
+    // AQE validates a stage's whole candidate plan before accepting a shuffle-read change: on the
+    // base, a storage-partitioned join whose sides are aligned but not grouped kept every shuffle
+    // in its stage uncoalesced, unrelated ones included. Partially clustered distribution plans
+    // such a pair: the side that keeps its splits spreads them, and the other replicates its
+    // group across them, so both report repeated keys on purpose. The assertions below pin the
+    // read that the join's presence must leave alone.
+    val idCols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+    createTable("pc1", idCols, Array(identity("id")))
+    createTable("pc2", idCols, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.pc1 VALUES (1, 'a1'), (2, 'a2'), (3, 'a3')")
+    // Key 1 twice: the side holding it keeps and spreads its two splits, which is what makes the
+    // pair ungrouped while its keys still line up.
+    sql("INSERT INTO testcat.ns.pc2 VALUES (1, 'b1'), (1, 'b1b'), (2, 'b2'), (4, 'b4')")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+      val df = sql(
+        s"""
+           |SELECT /*+ MERGE(a) */ a.id, b.data
+           |FROM testcat.ns.pc1 a JOIN testcat.ns.pc2 b ON a.id = b.id
+           |UNION ALL
+           |SELECT count(*), cast(id % 2 AS STRING)
+           |FROM testcat.ns.pc1 GROUP BY id % 2
+           |""".stripMargin)
+      checkAnswer(df, Seq(Row(1, "b1"), Row(1, "b1b"), Row(2, "b2"), Row(2, "1"), Row(1, "0")))
+
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val joins = collect(plan) { case j: ShuffledJoin => j }
+      assert(joins.size == 1, s"test setup: one storage-partitioned join:\n$plan")
+      assert(collectGroupPartitions(plan).exists { g =>
+        PartitioningCollection.representativeOf(g.outputPartitioning).exists(!_.isGrouped)
+      }, s"test setup: the pair is spread, so a side repeats its keys:\n$plan")
+      // The join's side shuffles nothing (this suite's `collectShuffles` counts the exchanges a
+      // join reads through), and the chain shuffles once, for the aggregate: the stage holding
+      // both is the one whose read the join's presence could have kept uncoalesced.
+      assert(collectShuffles(plan).isEmpty, s"the join shuffles nothing:\n$plan")
+      assert(collectAllShuffles(plan).size === 1,
+        s"and the chain shuffles once, for the aggregate:\n$plan")
+      val aqeReads = collect(df.queryExecution.executedPlan) { case r: AQEShuffleReadExec => r }
+      assert(aqeReads.size === 1 && aqeReads.head.hasCoalescedPartition,
+        s"the aggregate's shuffle read must coalesce:\n${df.queryExecution.executedPlan}")
+
+      // And the two share a stage, which is what makes the coalesce a decision the join can
+      // block: a read in a stage of its own would coalesce whatever the join did.
+      val finalStage = collect(df.queryExecution.executedPlan) {
+        case s: ResultQueryStageExec => s
+      }
+      assert(finalStage.size === 1 && finalStage.head.plan.exists {
+        case j: ShuffledJoin => true
+        case _ => false
+      }, s"test setup: the join is in the stage the read belongs to:\n" +
+        s"${df.queryExecution.executedPlan}")
+    }
+  }
+
+  test("SPARK-59671: a three-table chain keeps its AQE coalescing") {
+    val idCols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+    createTable("p3a", idCols, Array(identity("id")))
+    createTable("p3b", idCols, Array(identity("id")))
+    createTable("p3c", idCols, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.p3a VALUES (1, 'a1'), (2, 'a2')")
+    sql("INSERT INTO testcat.ns.p3b VALUES (1, 'b1'), (1, 'b1b'), (2, 'b2')")
+    sql("INSERT INTO testcat.ns.p3c VALUES (1, 'c1'), (2, 'c2')")
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+      val df = sql(
+        s"""
+           |SELECT /*+ MERGE(a, b), MERGE(a, c) */ a.id AS aid, b.id AS bid, c.data
+           |FROM testcat.ns.p3a a JOIN testcat.ns.p3b b ON a.id = b.id
+           |JOIN testcat.ns.p3c c ON a.id = c.id
+           |UNION ALL
+           |SELECT count(*), 0, 'x' FROM testcat.ns.p3a GROUP BY id % 2
+           |""".stripMargin)
+      // The union coerces the join's `id` and the aggregate's `count(*)` to one type, bigint.
+      checkAnswer(df, Seq(Row(1L, 1, "c1"), Row(1L, 1, "c1"), Row(2L, 2, "c2"),
+        Row(1L, 0, "x"), Row(1L, 0, "x")))
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      assert(collectShuffles(plan).isEmpty, s"the chain must not shuffle:\n$plan")
+      assert(plan.exists(p => keyedPartitioningsOf(Seq(p)).size >= 2),
+        s"test setup: a side reports one keyed member per join key column:\n$plan")
+      assert(ValidateRequirements.validate(plan), s"the chain's pairing holds up:\n$plan")
+      // Each join zips a spread side against a repeating side: the collection it reports agrees
+      // on no origin, so nothing above may read the pair's claim off it, while the groupings
+      // below it hold the two complementary stamps.
+      val joins = collect(plan) { case j: ShuffledJoin => j }
+      assert(joins.nonEmpty, s"test setup: a storage-partitioned chain:\n$plan")
+      assert(joins.forall(j => keyedPartitioningsOf(Seq(j)).forall(_.ungroupingOrigin.isEmpty)),
+        s"a zipped pair reports no claim of its own:\n$plan")
+      val origins = collectAllGroupPartitions(plan).flatMap(_.ungroupingOrigin).distinct
+      assert(origins.contains(SPREADS_SPLITS) && origins.contains(REPEATS_GROUP),
+        s"one side spreads and the other repeats, got $origins:\n$plan")
+      assert(collect(df.queryExecution.executedPlan) { case r: AQEShuffleReadExec => r }
+        .exists(_.hasCoalescedPartition),
+        s"the aggregate's shuffle read must coalesce:\n${df.queryExecution.executedPlan}")
+    }
+  }
+
+  test("SPARK-59671: an AQE local read over a split scan does not lose matches") {
+    // A lower join with a non-bucketed side cannot align, so it hash-shuffles the bucketed scan
+    // as its source reports it: ungrouped, with one key's rows across splits. AQE broadcasts the
+    // narrow side on its runtime size, and the wide side's shuffle, now a broadcast join's probe
+    // side, becomes a local read. A local read reports the partitioning from *before* the shuffle,
+    // which is that ungrouped keyed layout. The upper join then reads two layouts that agree key
+    // by key while neither holds a key's whole group: consuming them as an aligned pair would zip
+    // split i against split i and drop every match that crosses mappers. Validation has to refuse
+    // the pair so that AQE keeps the full shuffle read instead.
+    val idCols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+    createTable("lrt", idCols, Array(identity("id")))
+    createTable("lrs1", idCols, Array.empty[Transform])
+    createTable("lrs2", idCols, Array.empty[Transform])
+    // Key 1 in two splits, so that no single mapper holds all of its rows. The padding keeps the
+    // relation over the runtime broadcast threshold, which is what keeps the upper join a sort
+    // merge join reading both lower joins.
+    val pad = "x" * 4096
+    sql(s"INSERT INTO testcat.ns.lrt VALUES (1, 't1a$pad')")
+    sql(s"INSERT INTO testcat.ns.lrt VALUES (1, 't1b$pad')")
+    sql("INSERT INTO testcat.ns.lrt VALUES (2, 't2a')")
+    sql("INSERT INTO testcat.ns.lrs1 VALUES (1, 's1a'), (2, 's1b')")
+    sql("INSERT INTO testcat.ns.lrs2 VALUES (1, 's2a'), (2, 's2b')")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        // Nothing broadcasts at plan time, so both lower joins plan as sort merge joins and
+        // shuffle their sides; AQE broadcasts the narrow sides on their runtime size alone.
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+        SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "1k",
+        // Coalescing would merge the wide side's shuffle into one slot first, and a local read
+        // over a single slot holds every row and loses nothing. Off, the read stays one slot per
+        // mapper, which is the shape that reports the scan's own ungrouped layout.
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        // More reducer slots than the wide side has mappers, which is when a local read keeps one
+        // partition per mapper.
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4") {
+      val df = sql(
+        """
+          |SELECT substring(a.data, 1, 3), substring(b.data, 1, 3)
+          |FROM (SELECT t1.id AS id, t1.data AS data FROM testcat.ns.lrt t1
+          |      JOIN testcat.ns.lrs1 s1 ON t1.id = s1.id) a
+          |JOIN (SELECT t2.id AS id, t2.data AS data FROM testcat.ns.lrt t2
+          |      JOIN testcat.ns.lrs2 s2 ON t2.id = s2.id) b
+          |ON a.id = b.id
+          |""".stripMargin)
+      // Every pair of key 1's rows across the two relations, and key 2's one pair. A read that
+      // kept one partition per mapper and paired them index by index would find only the two
+      // same-split pairs of key 1 and key 2's one.
+      checkAnswer(df, Seq(Row("t1a", "t1a"), Row("t1a", "t1b"), Row("t1b", "t1a"),
+        Row("t1b", "t1b"), Row("t2a", "t2a")))
+
+      // The shape the answer is about, so that it is not read as an accident: the wide side's
+      // shuffle carries a scan that reports one key across splits, and both narrow sides ended up
+      // broadcast, which is what turned the wide side's shuffle into a local-read candidate.
+      val plan = df.queryExecution.executedPlan
+      val shuffles = collectAllShuffles(plan)
+      // The two wide sides are one scan, so they share one exchange by reuse; each narrow side
+      // keeps its own, read whole as its broadcast's build input.
+      assert(shuffles.size == 3,
+        s"one shared wide-side shuffle and one per narrow side:\n${plan.treeString}")
+      val splitScans = shuffles
+        .flatMap(s => keyedPartitioningsOf(Seq(s.child))).filter(!_.isGrouped)
+      assert(splitScans.nonEmpty,
+        s"test setup: a shuffled scan reports a key across splits:\n${plan.treeString}")
+      assert(collect(plan) { case j: BroadcastHashJoinExec => j }.size == 2,
+        s"test setup: both lower joins broadcast at runtime:\n${plan.treeString}")
+
+      // The refusal this test exists for: no local read may hand out the wide side's ungrouped
+      // keyed layout. A local read building a broadcast reads the whole relation and reports the
+      // scan's own unknown partitioning, which pairs nothing and is harmless.
+      assert(collect(plan) { case r: AQEShuffleReadExec if r.isLocalRead => r }
+        .forall(r => keyedPartitioningsOf(Seq(r)).isEmpty),
+        s"no local read reports a keyed layout:\n${plan.treeString}")
+      // And nothing re-pairs a partial read: the plan holds no grouping node at all.
+      assert(collectAllGroupPartitions(plan).isEmpty,
+        s"nothing re-pairs a partial read:\n${plan.treeString}")
+    }
+  }
+
+  test("SPARK-59671: an ungrouped sort branch leaves AQE's shuffle coalescing alone") {
+    // The sort branch keeps the scan's splits as they stand: the catalog hands the partition keys
+    // over sorted, so no node settles them and the layout stays ungrouped under the sort. An
+    // ordering reads the keys without pairing anything, so that layout answers for itself --
+    // before this, the finished plan failed validation on it and AQE kept the aggregate branch's
+    // shuffle read uncoalesced: the stage-wide symptom this PR is motivated by.
+    val idCols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+    createTable("sot", idCols, Array(identity("id")))
+    // Key 1 across two splits, so the layout the sort reads is ungrouped.
+    sql("INSERT INTO testcat.ns.sot VALUES (2, 'o2')")
+    sql("INSERT INTO testcat.ns.sot VALUES (1, 'o1a')")
+    sql("INSERT INTO testcat.ns.sot VALUES (1, 'o1b')")
+
+    withTable("sos") {
+      sql("CREATE TABLE sos (k INT) USING parquet")
+      sql("INSERT INTO sos VALUES (1), (1), (2), (2), (3)")
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true",
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+          SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
+        val df = sql(
+          """
+            |(SELECT id FROM testcat.ns.sot ORDER BY id)
+            |UNION ALL
+            |(SELECT count(*) FROM sos GROUP BY k)
+            |""".stripMargin)
+        // The union coerces the branch outputs to bigint.
+        val collected = df.collect().map(_.getLong(0)).toSeq
+        // The ordered branch comes first and stays ordered, its key's splits apart.
+        assert(collected.take(3) == Seq(1L, 1L, 2L),
+          s"the ordered branch keeps its order:\n${df.queryExecution.executedPlan}")
+        assert(collected.drop(3).sorted == Seq(1L, 2L, 2L), "one row per key group")
+
+        val plan = df.queryExecution.executedPlan
+        // The symptom: the aggregate's shuffle read coalesces even though the finished plan
+        // holds an ungrouped layout.
+        assert(collect(plan) { case r: AQEShuffleReadExec => r }.exists(_.hasCoalescedPartition),
+          s"the aggregate's shuffle read coalesces:\n$plan")
+        // The shape it coalesces on: the sort reads the scan's own ungrouped layout with no
+        // grouping node in between, which is what the old validation refused the plan for.
+        assert(collectScans(plan).exists(s => s.outputPartitioning match {
+          case k: KeyedPartitioning => !k.isGrouped
+          case _ => false
+        }), s"test setup: the sort branch keeps an ungrouped layout:\n$plan")
+        assert(collectAllGroupPartitions(plan).isEmpty,
+          s"test setup: nothing settles the sort branch's keys:\n$plan")
+      }
+    }
+  }
 }
 
 /**

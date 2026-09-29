@@ -149,13 +149,15 @@ case class EnsureRequirements(
               if (keys.zip(keys.drop(1)).forall { case (k1, k2) => keyOrdering.lteq(k1, k2) }) {
                 child
               } else {
-                // Use distributePartitions to spread splits across expected partitions
+                // Spread the splits across the expected partitions, in the ordering's sequence
                 val sortedGroupedKeys = keys
                   .groupBy(identity).view.mapValues(_.size)
                   .toSeq.sortBy(_._1)(keyOrdering)
                 GroupPartitionsExec(child,
                   expectedPartitionKeys = Some(sortedGroupedKeys),
-                  distributePartitions = true
+                  // The keys stay ungrouped so that the ordering the operator reads is the one
+                  // derived from them, which is no side of a pairing.
+                  ungroupingOrigin = Some(SPREADS_FOR_ORDERING)
                 )
               }
 
@@ -592,6 +594,9 @@ case class EnsureRequirements(
       right: SparkPlan,
       rightRequired: ClusteredDistribution): Option[Seq[SparkPlan]] = {
     parent match {
+      // A keyed alignment is planned for these two operators only. A `SortMergeAsOfJoinExec` is
+      // a `ShuffledJoin` and gets none: its matches are read in the order within a partition,
+      // which neither a spread side nor a repeating one preserves.
       case smj: SortMergeJoinExec =>
         checkKeyGroupCompatible(left, leftRequired, right, rightRequired, smj.joinType)
       case sj: ShuffledHashJoinExec =>
@@ -904,13 +909,25 @@ case class EnsureRequirements(
       }
 
       // Now we need to push-down the common partition information to the `GroupPartitionsExec`s.
+      //
+      // Where `applyPartialClustering` holds, exactly one side repeats: `replicateRightSide` is
+      // the negation of `replicateLeftSide`, and the branch above is taken only when the side it
+      // picked may replicate for the join type. That split is the whole of the pairing's
+      // soundness: for a key, a partition holding part of it on the spread side holds all of it
+      // on the repeating side, so pairing the two index by index loses no match, and
+      // `ValidateRequirements` cannot tell such a pair from two sides that split the key between
+      // them. Each side stamps why it is left ungrouped (`UngroupingOrigin`), so a reader of the
+      // finished plan judges the pair on the layouts it holds; the stamp also decides the node's
+      // routing (`GroupPartitionsExec.distributePartitions`).
       (
         GroupPartitionsExec(rawLeft, leftSpec.joinKeyPositions,
           Some(mergedPartitionKeys), leftReducers,
-          distributePartitions = applyPartialClustering && !replicateLeftSide),
+          ungroupingOrigin = Option.when(applyPartialClustering)(
+            if (replicateLeftSide) REPEATS_GROUP else SPREADS_SPLITS)),
         GroupPartitionsExec(rawRight, rightSpec.joinKeyPositions,
           Some(mergedPartitionKeys), rightReducers,
-          distributePartitions = applyPartialClustering && !replicateRightSide))
+          ungroupingOrigin = Option.when(applyPartialClustering)(
+            if (replicateRightSide) REPEATS_GROUP else SPREADS_SPLITS)))
     }
 
     // The pairing is only worth committing to if both children still declare the same aligned key
