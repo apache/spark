@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.*;
  * <p>The types this handles are also the types a storage filter's key columns may have:
  * {@code ParquetStorageFilter.isSupportedKeyType} answers from {@link #supports}, so the planner's
  * gate, the filter's own checks and the copy itself read one list. That list is narrower than
- * {@code AtomicType}, for two different reasons:
+ * {@code AtomicType}, for three different reasons:
  * <ul>
  *   <li>{@code VariantType} cannot be supported, since its Parquet representation is a group
  *       rather than a primitive leaf, so phase 1 has nothing flat to read it into. It is
@@ -41,6 +41,11 @@ import org.apache.spark.sql.types.*;
  *       byte-array copier below would work. But no bloom can currently reference them, because
  *       {@code HashExpression}'s codegen type dispatch has no case for either, so hashing one fails
  *       at codegen. They are left out until something can actually produce such a filter.
+ *   <li>{@code TimestampNTZNanosType} and {@code TimestampLTZNanosType}, behind
+ *       {@code spark.sql.timestampNanosTypes.enabled}, could be supported too. A bloom can be built
+ *       on one, but a vector holds it in two children, the epoch micros and the nanos within the
+ *       micro, so neither copier below fits. A filter on one is not offered, and the scan reads
+ *       the way it would without this feature.
  * </ul>
  */
 @FunctionalInterface

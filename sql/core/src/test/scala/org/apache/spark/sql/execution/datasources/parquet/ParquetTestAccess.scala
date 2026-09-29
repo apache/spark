@@ -85,8 +85,9 @@ object ParquetTestAccess {
   /**
    * A read state over `descriptor`, told which rows to include the same way production tells it, as
    * ranges when the caller holds them, else as the row indexes a page store handed out, else not at
-   * all, which means every row of the chunk. Both may be given, as production does whenever it
-   * reads ranges out of a store that indexes its rows, and then the ranges are what it walks.
+   * all, which means every row of the chunk. Ranges come with the row indexes, as they do whenever
+   * production reads ranges out of a store that indexes its rows, and then the ranges are what it
+   * walks. Ranges alone are refused.
    */
   def newState(
       descriptor: ColumnDescriptor,

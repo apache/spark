@@ -27,7 +27,9 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, FSInputStream, Path, RawLocalFileSystem}
-import org.apache.hadoop.mapreduce.Job
+import org.apache.hadoop.mapred.FileSplit
+import org.apache.hadoop.mapreduce.{Job, TaskAttemptID}
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.column.impl.ColumnWriteStoreV1
 import org.apache.parquet.column.page.DataPageV1
@@ -38,11 +40,13 @@ import org.apache.parquet.hadoop.metadata.{ColumnChunkMetaData, CompressionCodec
 import org.apache.parquet.hadoop.util.{HadoopInputFile, HadoopOutputFile}
 import org.apache.parquet.schema.MessageTypeParser
 
+import org.apache.spark.SparkException
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{sources, DataFrame, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BloomFilterMightContain, BoundReference, Cast, EqualTo, Expression, GreaterThanOrEqual, IsNull, LessThanOrEqual, Literal, Or, Predicate, Rand, Remainder, SecondsToTimestamp, XxHash64}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BloomFilterMightContain, BoundReference, Cast, EqualTo, Expression, GreaterThanOrEqual, IsNull, LessThanOrEqual, Literal, Or, Predicate, Rand, Remainder, SecondsToTimestamp, UnaryExpression, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.{Filter => LogicalFilter}
 import org.apache.spark.sql.execution.{CollapseCodegenStages, ColumnarToRowExec, FileSourceScanExec, FilterExec, LocalLimitExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -310,6 +314,43 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("Hadoop's 2-arg initialize initializes the reader once") {
+    // That overload delegates to the 5-arg one, which runs the reader's own initialization, and it
+    // used to run that a second time on top. A reader that declined the filter on the first pass,
+    // here because every projected column is a key column, then reached the filter it had just
+    // released and failed with an NPE instead of reading plainly.
+    withTempDir { dir =>
+      val keys = (1L to 20L)
+      val path = writeKeyParquetFile(dir, keys)
+      val requested = StructType(Seq(StructField("k", LongType, nullable = false)))
+      val filter = createFilter(
+        Seq(GreaterThanOrEqual(BoundReference(0, LongType, nullable = false), Literal(15L))),
+        requested)
+      // What `ParquetFileFormat` sets up for the read, down to what the schema converter needs.
+      val conf = spark.sessionState.newHadoopConf()
+      conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
+      conf.set(ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA, requested.json)
+      Seq(SQLConf.CASE_SENSITIVE, SQLConf.PARQUET_BINARY_AS_STRING,
+          SQLConf.PARQUET_INT96_AS_TIMESTAMP, SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED,
+          SQLConf.LEGACY_PARQUET_NANOS_AS_LONG).foreach { entry =>
+        conf.set(entry.key, spark.sessionState.conf.getConfString(entry.key))
+      }
+      val split = new FileSplit(new Path(path), 0, new File(path).length(), Array.empty[String])
+      val context = new TaskAttemptContextImpl(conf, new TaskAttemptID())
+      Utils.tryWithResource(new LateMaterializationParquetRecordReader(false, 4096, filter)) {
+        reader =>
+          reader.initialize(split, context)
+          reader.initBatch(new StructType(), null)
+          val read = mutable.ArrayBuffer[Long]()
+          while (reader.nextBatch()) {
+            val batch = reader.resultBatch()
+            (0 until batch.numRows()).foreach(i => read += batch.column(0).getLong(i))
+          }
+          assert(read == keys, s"every row must come back unfiltered; got ${read.size}")
+      }
+    }
+  }
+
   test("multi-batch emit: survivor count exceeds capacity") {
     // Drive the reader at capacity = 16 with a row group of 71 survivors out of 100. Exercises:
     //   - The per-key-column queue holding multiple full-capacity vectors plus a partial tail.
@@ -463,6 +504,28 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       try {
         assert(result == (0 until 20).map(_.toString),
           s"the row group must come back whole; got ${result.size} rows: $result")
+      } finally {
+        reader.close()
+      }
+    }
+  }
+
+  test("a checked exception from the key expression gives the row group up") {
+    // Nor is the fail-open narrowed to unchecked exceptions. A Hive UDF in the key wraps what it
+    // throws in a checked SparkException (FAILED_EXECUTE_UDF), which no signature declares, so a
+    // catch of RuntimeException alone would fail a query a plain read answers. The filter is
+    // selective, so returning every row is what proves the give-up.
+    withTempDir { dir =>
+      val rows = (0L until 20L).map(i => (i, i.toString))
+      val path = writeParquetFile(dir, rows, rowGroupSize = 64 * 1024L)
+      val requested = StructType(Seq(
+        StructField("k", LongType, nullable = false),
+        StructField("v", StringType, nullable = true)))
+      val key = ThrowsCheckedOn(BoundReference(0, LongType, nullable = false), bad = 7L)
+      val filter = createFilter(Seq(GreaterThanOrEqual(key, Literal(10L))), requested)
+      val (result, reader) = readAll(path, filter)
+      try {
+        assert(result == rows, s"the row group must come back whole; got ${result.size} rows")
       } finally {
         reader.close()
       }
@@ -1206,11 +1269,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   }
 
   test("FileSourceStrategy leaves a non-deterministic bloom in the post-scan Filter") {
-    // `ParquetStorageFilter.test` evaluates the predicate without calling
-    // `BasePredicate.initialize(partitionIndex)`, which `GeneratePredicate` emits for a
-    // `Nondeterministic` expression, so a non-deterministic conjunct has to stay behind. No
-    // producer builds one today, hence the hand-built plan. `InjectRuntimeFilter`'s blooms hash
-    // join keys, which are deterministic.
+    // The reader drops the rows a storage filter rejects and the post-scan Filter evaluates it
+    // again on the rows the reader keeps, so the two evaluations have to agree, and a
+    // non-deterministic conjunct has to stay behind. No producer builds one today, hence the
+    // hand-built plan. `InjectRuntimeFilter`'s blooms hash join keys, which are deterministic.
     withTempDir { dir =>
       val rows = (1L to 50L).map(i => (i, s"v_$i"))
       val path = writeParquetFile(dir, rows)
@@ -1618,9 +1680,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     val mode = if (useOffHeap) "off-heap" else "on-heap"
     test(s"$mode vectors: multi-batch emit closes and reallocates survivor vectors correctly") {
       // Off-heap is where the close/free hazards actually bite. OffHeapColumnVector.close() frees
-      // the native buffer, so a double close or a read after close is a crash rather than stale
-      // data. capacity = 16 over 71 survivors forces 5 emits, each closing the previous emit's
-      // dequeued key vectors. The other 29 rows are what makes a declining reader fail this.
+      // the native buffer, so a read after close is a crash rather than stale data. A second close
+      // is harmless, since close() zeroes the addresses it freed. capacity = 16 over 71 survivors
+      // forces 5 emits, each closing the previous emit's dequeued key vectors. The other 29 rows
+      // are what makes a declining reader fail this.
       withTempDir { dir =>
         val path = writeKeyParquetFileFromSql(dir, "id", n = 100L, rowGroupSize = 64 * 1024L)
         val bound = GreaterThanOrEqual(BoundReference(0, LongType, nullable = true), Literal(30L))
@@ -1831,6 +1894,23 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         val ids = rowPlan.executeCollect().map(_.getLong(idPos)).toSet
         assert(ids == Set(1L, 2L, 3L, 4L, 5L),
           s"the older file must fail open and the newer one pass the cast; got $ids")
+      }
+    }
+  }
+
+  test("all keys missing: a checked exception on the constant reads the file") {
+    // The constant evaluation fails open under the same rule as a row's, a checked exception
+    // included. The older file's `k` reads as its DEFAULT 7, which the key expression throws on,
+    // so that file must be read the way a plain scan would. The newer file's keys evaluate
+    // normally and are rejected, since no Filter runs above this scan.
+    withSQLConf(
+        SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "true",
+        SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
+      withEvolvedKeyTable("k BIGINT DEFAULT 7") { table =>
+        val collected = collectWithStorageFilterOnKey(
+          table, k => GreaterThanOrEqual(ThrowsCheckedOn(k, bad = 7L), Literal(100L)))
+        assert(collected == Set((1L, Some(7L)), (2L, Some(7L)), (3L, Some(7L))),
+          s"the older file must fail open and the newer one be filtered; got $collected")
       }
     }
   }
@@ -2593,6 +2673,23 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       }
     }
   }
+}
+
+/**
+ * The identity on a key, except that it throws a checked [[SparkException]] on `bad`, the way a
+ * Hive UDF key does through `FAILED_EXECUTE_UDF`. Scala throws it without declaring it.
+ */
+private case class ThrowsCheckedOn(child: Expression, bad: Long)
+  extends UnaryExpression with CodegenFallback {
+  override def dataType: DataType = child.dataType
+
+  override protected def nullSafeEval(input: Any): Any = {
+    if (input == bad) throw new SparkException(s"the key expression refuses $bad")
+    input
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): ThrowsCheckedOn =
+    copy(child = newChild)
 }
 
 /**

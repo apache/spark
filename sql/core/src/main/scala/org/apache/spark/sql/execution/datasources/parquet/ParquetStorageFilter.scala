@@ -129,9 +129,11 @@ class ParquetStorageFilter private (
     val created = Predicate.create(boundExpression)
     // A prepared bloom reaches the executor as a binary Literal inside this expression, up to
     // `spark.sql.optimizer.runtime.bloomFilter.maxNumBits` of it, while `created` holds the
-    // deserialized filter instead. Dropping the expression lets the task reclaim those bytes for
-    // the rest of its life. Safe because every task attempt deserializes its own copy from the
-    // driver's bytes, and this lazy val is the only reader of the field.
+    // deserialized filter instead. Dropping the expression lets a columnar scan's task reclaim
+    // those bytes for the rest of its life. A row-based scan keeps them anyway, since its closure
+    // captures the scan node, whose storage filters hold the same bytes. Safe because every task
+    // attempt deserializes its own copy from the driver's bytes, and this lazy val is the only
+    // reader of the field.
     //
     // It does mean the filter must only ever be evaluated on an executor. Were the driver's copy
     // to run this, it is the copy serialized to every attempt, and it would go out with nothing

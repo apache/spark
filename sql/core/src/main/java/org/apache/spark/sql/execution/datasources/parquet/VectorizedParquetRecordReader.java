@@ -90,12 +90,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   /**
    * The number of rows that have been returned.
    */
-  protected long rowsReturned;
+  private long rowsReturned;
 
   /**
    * The number of rows that have been reading, including the current in flight row group.
    */
-  protected long totalCountLoadedSoFar = 0;
+  private long totalCountLoadedSoFar = 0;
 
   /**
    * For each leaf column, if it is in the set, it means the column is missing in the file and
@@ -147,7 +147,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   /**
    * Populates the row index column if needed.
    */
-  protected ParquetRowIndexUtil.RowIndexGenerator rowIndexGenerator = null;
+  private ParquetRowIndexUtil.RowIndexGenerator rowIndexGenerator = null;
 
   /**
    * The memory mode of the columnarBatch
@@ -183,16 +183,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       capacity);
   }
 
-  /**
-   * Implementation of RecordReader API.
-   */
-  @Override
-  public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
-      throws IOException, InterruptedException, UnsupportedOperationException {
-    super.initialize(inputSplit, taskAttemptContext);
-    initializeInternal();
-  }
-
+  // Hadoop's 2-arg initialize is not overridden. Super's delegates to this overload, which already
+  // runs initializeInternal().
   @Override
   public void initialize(
       InputSplit inputSplit,
@@ -240,11 +232,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   /**
    * Releases everything this reader allocated, except what {@code super.close()} owns, which is the
-   * file handle and the input stream. For this class that is the batch it hands out.
-   *
-   * <p>A subclass that hands out a batch whose slots it does not solely own has to replace this
-   * rather than extend it, since closing the batch as well would then close a shared vector twice
-   * and free the same buffer twice.
+   * file handle and the input stream. For this class that is the batch it hands out. A subclass
+   * whose batch does not hold every vector it allocated closes the rest here too.
    */
   protected void closeAllocated() {
     if (columnarBatch != null) {
@@ -414,18 +403,13 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   public boolean nextBatch() throws IOException {
     resetBatch();
-    if (noMoreRows()) return false;
+    if (rowsReturned >= totalRowCount) return false;
     if (rowsReturned == totalCountLoadedSoFar && !loadNextRowGroup()) return false;
 
     int num = (int) Math.min(capacity, totalCountLoadedSoFar - rowsReturned);
     readBatchColumns(num);
     finishBatch(num);
     return true;
-  }
-
-  /** Whether this read has returned every row it is going to. */
-  protected boolean noMoreRows() {
-    return rowsReturned >= totalRowCount;
   }
 
   /** Drops whatever the previous batch held, which is the first step of every batch. */
@@ -585,7 +569,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         datetimeRebaseMode, datetimeRebaseTz, int96RebaseMode, int96RebaseTz, writerVersion);
   }
 
-  protected void initColumnReader(PageReadStore pages, RowRanges rowRanges, ParquetColumnVector cv)
+  private void initColumnReader(PageReadStore pages, RowRanges rowRanges, ParquetColumnVector cv)
       throws IOException {
     if (!missingColumns.contains(cv.getColumn())) {
       if (cv.getColumn().isPrimitive()) {

@@ -172,10 +172,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
    *
    * The rest are per conjunct:
    *  - It is deterministic. The reader drops the rows the conjunct rejects and the post-scan
-   *    `Filter` evaluates it again on the rows it keeps, so the two evaluations have to agree. Such
-   *    a conjunct would also fail at task time, since a reader evaluates the predicate without
-   *    `BasePredicate.initialize(partitionIndex)`, which `GeneratePredicate` emits for a
-   *    `Nondeterministic` expression.
+   *    `Filter` evaluates it again on the rows it keeps, so the two evaluations have to agree.
    *  - It references at least one column, and every column it references is a projected data
    *    column. A reference to something the scan does not read cannot be evaluated by the reader.
    *  - [[FileFormat.supportsStorageFilter]] accepts it. That is where the expression shapes and

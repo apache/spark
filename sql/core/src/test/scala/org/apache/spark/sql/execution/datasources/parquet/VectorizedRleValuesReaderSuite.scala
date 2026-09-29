@@ -126,6 +126,16 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
     runAndAssertFiltered(defLevels, maxDef = 1, includedPositions = included)
   }
 
+  test("row ranges without row indexes are refused") {
+    // Pages from a store with no row indexes carry no first row index either, so each would place
+    // its first row at 0 and the ranges would select the wrong rows. Failing is the only answer.
+    val e = intercept[IllegalStateException] {
+      ParquetTestAccess.newState(
+        intColumnDescriptor(1), isRequired = false, rowRanges = rowRangesOf(Array(3, 4, 5)))
+    }
+    assert(e.getMessage.contains("no row indexes"), e.getMessage)
+  }
+
   test("multi-page: reader reinitialized between pages, state carried via resetForNewPage") {
     val page1 = Array.tabulate(128)(i => i & 1)
     val page2 = Array.fill(64)(1) ++ Array.tabulate(64)(i => i & 1)
@@ -265,9 +275,9 @@ private object VectorizedRleValuesReaderSuite {
    * Variant of `runAndAssert` that restricts the read to the listed positions, both ways a read
    * state can be told which rows to include: one row index per row, which is what parquet hands out
    * for filtering it did itself, and the ranges those positions form, which is what a reader that
-   * filtered them already holds. Both must include the same rows. Verifies that skipped value
-   * positions advance the value reader correctly and that included rows map to the expected values
-   * in order.
+   * filtered them already holds. Production hands the ranges in next to the row indexes, and so
+   * does this. Both must include the same rows. Verifies that skipped value positions advance the
+   * value reader correctly and that included rows map to the expected values in order.
    */
   private def runAndAssertFiltered(
       defLevels: Array[Int],
@@ -277,8 +287,8 @@ private object VectorizedRleValuesReaderSuite {
       ParquetTestAccess.newState(
         intColumnDescriptor(maxDef), maxDef == 0, longIterator(includedPositions)))
     readFilteredAndAssert(defLevels, maxDef, includedPositions,
-      ParquetTestAccess.newState(
-        intColumnDescriptor(maxDef), maxDef == 0, rowRanges = rowRangesOf(includedPositions)))
+      ParquetTestAccess.newState(intColumnDescriptor(maxDef), maxDef == 0,
+        longIterator(includedPositions), rowRangesOf(includedPositions)))
   }
 
   private def readFilteredAndAssert(

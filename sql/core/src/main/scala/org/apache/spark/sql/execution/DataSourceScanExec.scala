@@ -774,11 +774,11 @@ case class FileSourceScanExec(
   lazy val inputRDD: RDD[InternalRow] = {
     val options = relation.options +
       (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
-    val hadoopConf = getHadoopConf(relation.sparkSession, relation.options)
     // The storage-filter entry point is only asked when there is something to push, so a
     // `FileFormat` subclass which customizes reading by overriding `buildReaderWithPartitionValues`
     // keeps being used on every other query. A format that declines, which is the default, falls
-    // back to that builder here rather than inside itself.
+    // back to that builder here rather than inside itself. Each builder gets a conf of its own, so
+    // whatever a declining builder set up in it cannot reach the fallback.
     val storageFilterReader = if (preparedStorageFilters.isEmpty) {
       None
     } else {
@@ -790,7 +790,7 @@ case class FileSourceScanExec(
         filters = pushedDownFilters,
         storageFilters = preparedStorageFilters,
         options = options,
-        hadoopConf = hadoopConf,
+        hadoopConf = getHadoopConf(relation.sparkSession, relation.options),
         storageFilterMetrics = storageFilterMetrics)
     }
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
@@ -802,7 +802,7 @@ case class FileSourceScanExec(
           requiredSchema = requiredSchema,
           filters = pushedDownFilters,
           options = options,
-          hadoopConf = hadoopConf)
+          hadoopConf = getHadoopConf(relation.sparkSession, relation.options))
       }
 
     val readRDD = if (bucketedScan) {

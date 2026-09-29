@@ -93,7 +93,7 @@ abstract class ParquetReadState {
    * that filtered the rows itself holds their ranges, and every column reader of the row group can
    * then walk that one list. Null says it does not, and the page store is left to describe its
    * rows, which it can only do as {@code rowIndexes}, one index per row. No row indexes in turn
-   * means every row of the chunk is included.
+   * means every row of the chunk is included, which is why ranges without them are refused.
    */
   static ParquetReadState forRead(
       ColumnDescriptor descriptor,
@@ -102,6 +102,14 @@ abstract class ParquetReadState {
       PrimitiveIterator.OfLong rowIndexes) {
     ParquetReadState state;
     if (rowRanges != null) {
+      if (rowIndexes == null) {
+        // Only a store parquet filtered itself indexes its rows, and only its pages carry the first
+        // row index that places them in the row group. Pages read whole would each place their
+        // first row at 0, and the ranges would then select the wrong rows with no error.
+        throw new IllegalStateException(String.format(
+            "Row ranges were given for column %s, but its pages carry no row indexes to find "
+                + "those rows by", descriptor));
+      }
       state = new RangeListState(descriptor, isRequired, rowRanges.getRanges());
     } else if (rowIndexes == null) {
       state = new AllRowsState(descriptor, isRequired);

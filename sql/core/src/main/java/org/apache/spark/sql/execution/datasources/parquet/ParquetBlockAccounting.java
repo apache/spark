@@ -152,10 +152,13 @@ final class ParquetBlockAccounting {
         }
         continue;
       }
+      int pageCount = offsetIndex.getPageCount();
+      if (pageCount == 0) {
+        continue;
+      }
       // The dictionary page is read whenever any data page of the chunk is, so count it here the
       // same way parquet's ColumnIndexFilterUtils.calculateOffsetRanges does.
-      total += dictionaryPageSize(chunk);
-      int pageCount = offsetIndex.getPageCount();
+      total += dictionaryPageSize(chunk, offsetIndex);
       for (int i = 0; i < pageCount; i++) {
         long from = offsetIndex.getFirstRowIndex(i);
         long to = offsetIndex.getLastRowIndex(i, blockRowCount);
@@ -168,13 +171,14 @@ final class ParquetBlockAccounting {
   }
 
   /**
-   * Compressed size of a chunk's dictionary page, or 0 if it has none.
-   * {@link ColumnChunkMetaData#getStartingPos()} already resolves to the dictionary page offset
-   * when there is a valid one, so the gap up to the first data page is exactly the dictionary page.
+   * Compressed size of a chunk's dictionary page, or 0 if it has none. It is the gap between where
+   * the chunk starts and its first data page, taken from the offset index as parquet's read takes
+   * it, not from the footer's data page offset. parquet-mr 1.11 wrote that offset pointing at the
+   * dictionary page itself (PARQUET-1977), and the gap would then read as 0.
    */
-  private static long dictionaryPageSize(ColumnChunkMetaData chunk) {
+  private static long dictionaryPageSize(ColumnChunkMetaData chunk, OffsetIndex offsetIndex) {
     long startingPos = chunk.getStartingPos();
-    long firstDataPageOffset = chunk.getFirstDataPageOffset();
+    long firstDataPageOffset = offsetIndex.getOffset(0);
     return startingPos < firstDataPageOffset ? firstDataPageOffset - startingPos : 0L;
   }
 }

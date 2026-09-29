@@ -1952,11 +1952,15 @@ object SQLConf {
         "storage filter is attached to a scan at all. A filter that is attached also stays in " +
         "the post-scan filter, the way a pushed data filter does, so the reader is free to stop " +
         "applying it wherever doing so would cost more than it saves, and the answer does not " +
-        "change. Narrowing a row group to part of its rows trusts the Parquet page index, which " +
-        "a read with no pushed data filter never consults, so on a file whose page index is " +
-        "wrong this can pair a row's key with another row's values. Setting " +
-        "parquet.filter.columnindex.enabled to false is the escape hatch, and it leaves the " +
-        "filter with the row groups it empties, which need no index at all. Note that the " +
+        "change. A row group where it stops reads its key columns twice, which is slower than " +
+        "not pushing the filter. Under spark.sql.files.ignoreCorruptFiles the answer can change. " +
+        "A corrupt page in a key column then also drops the rows of its row group that a plain " +
+        "read returns before it reaches that page. Narrowing a row group to part of its rows " +
+        "trusts the Parquet page index, which a read with no pushed data filter never consults, " +
+        "so on a file whose page index is wrong this can pair a row's key with another row's " +
+        "values. Turning this off avoids that. Setting parquet.filter.columnindex.enabled to " +
+        "false avoids it too, and keeps the row groups the filter empties, which need no index " +
+        "at all. Every other row group then reads its key columns twice. Note that the " +
         "surviving key values of a whole row group are buffered before that row group's first " +
         "batch is produced, so a task holds up to one extra copy of the key columns for one row " +
         "group.")
@@ -1976,9 +1980,9 @@ object SQLConf {
         "select its pages. The count is examined after every surviving row. Past the limit the " +
         "reader releases the buffer and reads every projected column of the surviving rows " +
         "instead, which costs one extra read of the key columns. Past it again it reads the row " +
-        "group with no filter applied at all, which is correct but as slow as not pushing the " +
-        "filter. What is counted is an estimate of what the buffer holds, not a bound on what " +
-        "the column vectors behind it allocate.")
+        "group with no filter applied at all, which is correct and pays that same extra read, " +
+        "so it is slower than not pushing the filter. What is counted is an estimate of what " +
+        "the buffer holds, not a bound on what the column vectors behind it allocate.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
