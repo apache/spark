@@ -1239,6 +1239,7 @@ object FunctionRegistry {
     registerInternalExpression[PythonPromotingMultiply]("python_promoting_multiply")
     registerInternalExpression[PythonPromotingAbs]("python_promoting_abs")
     registerInternalExpression[PythonPromotingNegate]("python_promoting_negate")
+
     registerInternalExpression[Product]("product")
     registerInternalExpression[BloomFilterAggregate]("bloom_filter_agg")
     registerInternalExpression[CollectTopK]("collect_top_k")
