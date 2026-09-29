@@ -17,6 +17,7 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.Collections
+import java.util.concurrent.ScheduledThreadPoolExecutor
 
 import scala.jdk.CollectionConverters._
 
@@ -73,6 +74,7 @@ class ExecutorResizePluginSuite
     when(podOperations.inNamespace(namespace)).thenReturn(podsWithNamespace)
     when(podsWithNamespace.withLabel(SPARK_APP_ID_LABEL, appId)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
+    when(labeledPods.withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")).thenReturn(labeledPods)
     when(labeledPods.list()).thenReturn(podList)
     when(kubernetesClient.top()).thenReturn(topOperations)
     when(topOperations.pods()).thenReturn(podMetricOperations)
@@ -157,6 +159,15 @@ class ExecutorResizePluginSuite
     plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
 
     verify(podMetricOperations, never()).metrics(anyString(), anyString())
+  }
+
+  test("SPARK-59840: Inactive executor pods are excluded from the listing") {
+    val plugin = createPlugin()
+    when(podList.getItems).thenReturn(Collections.emptyList())
+
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
+
+    verify(labeledPods).withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
   }
 
   test("Memory usage below threshold should not trigger resize") {
@@ -386,6 +397,37 @@ class ExecutorResizePluginSuite
             "confValue" -> value.toDouble.toString,
             "confRequirement" -> requirement))
       }
+    }
+  }
+
+  test("SPARK-59842: resizeInterval defaults to 1 minute") {
+    assert(new SparkConf(false).get(EXECUTOR_RESIZE_INTERVAL) === 60)
+  }
+
+  test("SPARK-59842: init returns early when resizeInterval is 0") {
+    val plugin = new ExecutorResizeDriverPlugin()
+    val sparkConf = new SparkConf().set(EXECUTOR_RESIZE_INTERVAL.key, "0")
+    val sc = mock(classOf[SparkContext])
+    when(sc.conf).thenReturn(sparkConf)
+    val pluginCtx = mock(classOf[PluginContext])
+
+    val result = plugin.init(sc, pluginCtx)
+
+    assert(result.isEmpty)
+  }
+
+  test("SPARK-59842: init schedules the resize task by default") {
+    val plugin = new ExecutorResizeDriverPlugin()
+    val sc = mock(classOf[SparkContext])
+    when(sc.conf).thenReturn(new SparkConf())
+    val pluginCtx = mock(classOf[PluginContext])
+    try {
+      assert(plugin.init(sc, pluginCtx).isEmpty)
+      val field = plugin.getClass.getDeclaredField("periodicService")
+      field.setAccessible(true)
+      assert(field.get(plugin).asInstanceOf[ScheduledThreadPoolExecutor].getQueue.size === 1)
+    } finally {
+      plugin.shutdown()
     }
   }
 }
