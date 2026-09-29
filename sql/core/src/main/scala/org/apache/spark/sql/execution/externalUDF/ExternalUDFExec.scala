@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.execution.externalUDF
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.udf.worker.UDFWorkerSpecification
+import org.apache.spark.udf.worker.{ExecutionMetrics, UDFWorkerSpecification}
 import org.apache.spark.udf.worker.core.{Termination, WorkerSecurityScope, WorkerSession}
 
 /**
@@ -113,11 +111,11 @@ trait ExternalUDFExec extends UnaryExecNode {
 
   protected def recordTerminalMetrics(termination: Termination): Unit = {
     val reported = termination match {
-      case Termination.Finished(response) => Some(response.getMetricsMap)
-      case Termination.Cancelled(response) => Some(response.getMetricsMap)
+      case Termination.Finished(response) if response.hasMetrics => Some(response.getMetrics)
+      case Termination.Cancelled(response) if response.hasMetrics => Some(response.getMetrics)
       case _ => None
     }
-    reported.foreach(values => ExternalUDFMetrics.update(metrics, values.asScala))
+    reported.foreach(ExternalUDFMetrics.update(metrics, _))
   }
 }
 
@@ -150,15 +148,25 @@ private[externalUDF] object ExternalUDFMetrics {
     }
   }
 
-  def update(target: Map[String, SQLMetric], reported: collection.Map[String, String]): Unit = {
-    reported.foreach { case (name, value) =>
-      for {
-        metric <- target.get(name)
-        parsed <- value.toLongOption
-        if parsed >= 0L
-      } {
-        metric += parsed
+  def update(target: Map[String, SQLMetric], reported: ExecutionMetrics): Unit = {
+    def updateIfPresent(name: String, present: Boolean, value: => Long): Unit = {
+      if (present && value >= 0L) {
+        target(name) += value
       }
     }
+
+    updateIfPresent("bytesIn", reported.hasBytesIn, reported.getBytesIn)
+    updateIfPresent("bytesOut", reported.hasBytesOut, reported.getBytesOut)
+    updateIfPresent("rowsIn", reported.hasRowsIn, reported.getRowsIn)
+    updateIfPresent("rowsOut", reported.hasRowsOut, reported.getRowsOut)
+    updateIfPresent("batchesIn", reported.hasBatchesIn, reported.getBatchesIn)
+    updateIfPresent("batchesOut", reported.hasBatchesOut, reported.getBatchesOut)
+    updateIfPresent("initWallNanos", reported.hasInitWallNanos, reported.getInitWallNanos)
+    updateIfPresent(
+      "processingWallNanos", reported.hasProcessingWallNanos, reported.getProcessingWallNanos)
+    updateIfPresent("receiveWallNanos", reported.hasReceiveWallNanos, reported.getReceiveWallNanos)
+    updateIfPresent("sendWallNanos", reported.hasSendWallNanos, reported.getSendWallNanos)
+    updateIfPresent("workWallNanos", reported.hasWorkWallNanos, reported.getWorkWallNanos)
+    updateIfPresent("workCpuNanos", reported.hasWorkCpuNanos, reported.getWorkCpuNanos)
   }
 }

@@ -407,25 +407,8 @@ message Finish {}
 //     introduced as a separate streaming message in a future revision
 //     without changing this contract. TODO(SPARK-56922).
 message FinishResponse {
-    // Per-execution metrics accumulated over the session. Portable names:
-    //
-    //   bytesIn / bytesOut       application payload bytes accepted / produced
-    //   rowsIn / rowsOut         exact row counts, omitted when unavailable
-    //   batchesIn / batchesOut   data request / response counts
-    //   initWallNanos            worker-side initialization wall time
-    //   processingWallNanos      wall time from initialization to termination
-    //   receiveWallNanos         wall time awaiting inbound protocol messages
-    //   sendWallNanos            wall time blocked handing off responses
-    //   workWallNanos            wall time executing work units
-    //   workCpuNanos             CPU time executing work units
-    //
-    // Values are base-10 non-negative integers. All values are cumulative for
-    // this Execute stream; timing values are nanoseconds. Absence means
-    // unavailable, while zero means measured zero. Workers may add names, and
-    // engines MUST ignore unknown names and malformed values. Byte counts
-    // exclude gRPC, HTTP/2, and TLS framing. Wait times are not transfer times
-    // and MUST NOT be used as rate denominators.
-    map<string, string> metrics = 1;
+    // (Optional) Final metrics accumulated over this Execute stream.
+    optional ExecutionMetrics metrics = 1;
 
     // (Optional) Inline finish result returned by the worker.
     // Mirrors [[InitResponse.data]] -- the finish phase allows the
@@ -486,15 +469,34 @@ message Cancel {
 // accumulated up to the point of cancellation -- even a partial execution
 // may produce useful diagnostics (e.g. rows processed before abort).
 message CancelResponse {
-    // Per-execution metrics accumulated up to cancellation. Values are partial
-    // snapshots and follow the names and rules in [[FinishResponse.metrics]].
-    map<string, string> metrics = 1;
+    // (Optional) Partial metrics accumulated over this Execute stream.
+    optional ExecutionMetrics metrics = 1;
 
     // (Optional) Error raised by the cancel callback (if any), invoked
     // when [[Cancel]] is received. The engine SHOULD surface this
     // alongside any prior [[ExecutionError]] (e.g. as a suppressed
     // exception).
     optional ExecutionError error = 2;
+}
+
+// Per-execution metrics accumulated by one Execute stream. Each field is
+// cumulative for the stream. Absence means unavailable; zero means measured
+// zero. Byte counts exclude gRPC, HTTP/2, and TLS framing. Timing values are
+// nanoseconds; wait times are not transfer times and MUST NOT be used as rate
+// denominators.
+message ExecutionMetrics {
+    optional uint64 bytes_in = 1;
+    optional uint64 bytes_out = 2;
+    optional uint64 rows_in = 3;
+    optional uint64 rows_out = 4;
+    optional uint64 batches_in = 5;
+    optional uint64 batches_out = 6;
+    optional uint64 init_wall_nanos = 7;
+    optional uint64 processing_wall_nanos = 8;
+    optional uint64 receive_wall_nanos = 9;
+    optional uint64 send_wall_nanos = 10;
+    optional uint64 work_wall_nanos = 11;
+    optional uint64 work_cpu_nanos = 12;
 }
 
 // Worker -> Engine application-level error raised during the
@@ -665,7 +667,7 @@ message Heartbeat {
 message HeartbeatResponse {
     // (Optional) Worker-global metrics aggregated across all active sessions
     // (e.g. total rows processed, active session count, memory usage).
-    // Complements the per-execution metrics in [[FinishResponse.metrics]].
+    // Complements the per-execution metrics in [[ExecutionMetrics]].
     // Free-form; names are worker-defined.
     map<string, string> metrics = 1;
 }
