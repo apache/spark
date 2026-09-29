@@ -32,7 +32,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONFIG, CONFIG2, EXECUTOR_ID, MAX_MEMORY_SIZE, MEMORY_SIZE}
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Spark plugin to monitor executor pod memory usage and increase the memory limit
@@ -63,8 +63,11 @@ class ExecutorResizeDriverPlugin extends DriverPlugin with Logging {
       return Map.empty[String, String].asJava
     }
 
-    val interval = Utils.timeStringAsSeconds(
-      sc.conf.get(EXECUTOR_RESIZE_INTERVAL.key, "1m"))
+    val interval = sc.conf.get(EXECUTOR_RESIZE_INTERVAL)
+    if (interval <= 0) {
+      logInfo("ExecutorResizePlugin disabled (interval <= 0).")
+      return Map.empty[String, String].asJava
+    }
     val threshold = sc.conf.get(EXECUTOR_RESIZE_THRESHOLD)
     val factor = sc.conf.get(EXECUTOR_RESIZE_FACTOR)
     maxMemory = sc.conf.get(EXECUTOR_RESIZE_MAX_MEMORY)
