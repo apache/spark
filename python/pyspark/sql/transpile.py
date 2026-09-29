@@ -258,6 +258,7 @@ from pyspark.sql.functions import (
 )
 from pyspark.sql.internal import InternalFunction
 from pyspark.sql.types import (
+    ArrayType,
     BinaryType,
     BooleanType,
     DataType,
@@ -2511,20 +2512,33 @@ def _transpile_func(
     try:
         # The transpiler lowers to atomic (numeric/string/boolean/binary)
         # expressions and casts the result to the declared return type. For a
-        # return type no lowering can even category-match (arrays, maps,
-        # structs, datetimes, ...), that Cast either never resolves -- and
-        # because the options ride along as children of TranspiledPythonUDF,
-        # an unresolvable Cast fails the WHOLE query at CheckAnalysis instead
-        # of falling back -- or diverges from the interpreted converter, which
+        # return type no lowering can even category-match (maps, structs,
+        # datetimes, ...), that Cast either never resolves -- and because the
+        # options ride along as children of TranspiledPythonUDF, an
+        # unresolvable Cast fails the WHOLE query at CheckAnalysis instead of
+        # falling back -- or diverges from the interpreted converter, which
         # nulls type-mismatched results. Restrict transpilation to return
         # types some lowering can match (the strict per-variant body-category
         # check lives in ``_transpile_from_ast``); everything else falls back
         # to interpreted Python.
+        #
+        # An array of an atomic element is allowed through: the built-in
+        # CatalystTranspiler still refuses every array-typed body in its
+        # per-variant check (only a NULL lowering category-matches, and NULL
+        # casts to any array type cleanly), while other transpiler varieties
+        # can produce full array-typed expressions whose cast to the declared
+        # array type resolves (and whose results the interpreted converter
+        # accepts as lists).
         if isinstance(returnType, str):
             from pyspark.sql.types import _parse_datatype_string
 
             returnType = _parse_datatype_string(returnType)
-        if not isinstance(returnType, (NumericType, StringType, BooleanType, BinaryType)):
+        atomic = (NumericType, StringType, BooleanType, BinaryType)
+        if isinstance(returnType, ArrayType):
+            return_supported = isinstance(returnType.elementType, atomic)
+        else:
+            return_supported = isinstance(returnType, atomic)
+        if not return_supported:
             return (
                 [],
                 [

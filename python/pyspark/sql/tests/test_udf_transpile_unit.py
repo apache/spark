@@ -1143,11 +1143,16 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_udf_transpile_falls_back_for_uncastable_return_type(self):
         # The lowered expression is cast to the declared return type; a return
-        # type no atomic lowering can be cast to (arrays, maps, datetimes, ...)
+        # type no atomic lowering can be cast to (maps, structs, datetimes, ...)
         # would make that Cast fail CheckAnalysis and break the whole query
         # (the options are children of TranspiledPythonUDF), so such UDFs must
-        # fall back at construction instead. Interpreted execution still works
-        # (the pickled-UDF converter nulls the type-mismatched results).
+        # fall back at construction instead. Arrays of atomic elements are let
+        # through the outer gate (other transpiler varieties can produce full
+        # array-typed expressions), but the CatalystTranspiler's per-variant
+        # body-category check still refuses every array-typed body, so an
+        # atomic body declared as an array return falls back the same way.
+        # Interpreted execution still works (the pickled-UDF converter nulls
+        # the type-mismatched results).
         import warnings as _warnings
 
         from pyspark.sql.types import ArrayType, TimestampType
@@ -1168,6 +1173,41 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             df = self.spark.createDataFrame([Row(a=1)])
             [result] = df.select(array_udf("a")).collect()
             self.assertIsNone(result[0], "interpreted fallback nulls the mismatch")
+
+    def test_udf_transpile_array_return_only_null_body_lowers(self):
+        # With an array-of-atomic return type the only lowering the
+        # CatalystTranspiler accepts is a bare-None body (NULL casts to any
+        # array type cleanly, and the interpreted path returns None too);
+        # anything array-typed is refused by the per-variant category check.
+        import warnings as _warnings
+
+        from pyspark.sql.types import ArrayType
+
+        def none_body(x: int) -> None:
+            return None
+
+        def list_body(x: int):
+            return [x]
+
+        with self.sql_conf(_TRANSPILE_ON):
+            with _warnings.catch_warnings(record=True):
+                _warnings.simplefilter("always")
+                null_udf = UserDefinedFunction(none_body, ArrayType(LongType()))
+            self.assertTrue(null_udf.transpiled, "NULL lowering should cast to array<int>")
+            with _warnings.catch_warnings(record=True):
+                _warnings.simplefilter("always")
+                list_udf = UserDefinedFunction(list_body, ArrayType(LongType()))
+            self.assertEqual([], list_udf.transpiled, "array-typed body must fail closed")
+            df = self.spark.createDataFrame([Row(a=1), Row(a=None)])
+            self.assertEqual(
+                [None, None],
+                [r[0] for r in df.select(null_udf("a")).collect()],
+            )
+            self.assertEqual(
+                [[1], [None]],
+                [r[0] for r in df.select(list_udf("a")).collect()],
+                "interpreted fallback still runs the Python body",
+            )
 
     def test_udf_transpile_falls_back_for_cross_category_return_cast(self):
         # Per-variant guard: the body category must MATCH the declared return
