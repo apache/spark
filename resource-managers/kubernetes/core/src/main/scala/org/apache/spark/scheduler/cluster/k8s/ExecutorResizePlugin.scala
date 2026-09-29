@@ -65,8 +65,8 @@ class ExecutorResizeDriverPlugin extends DriverPlugin with Logging {
 
     val interval = Utils.timeStringAsSeconds(
       sc.conf.get(EXECUTOR_RESIZE_INTERVAL.key, "1m"))
-    val threshold = sc.conf.getDouble(EXECUTOR_RESIZE_THRESHOLD.key, 0.9)
-    val factor = sc.conf.getDouble(EXECUTOR_RESIZE_FACTOR.key, 0.1)
+    val threshold = sc.conf.get(EXECUTOR_RESIZE_THRESHOLD)
+    val factor = sc.conf.get(EXECUTOR_RESIZE_FACTOR)
     maxMemory = sc.conf.get(EXECUTOR_RESIZE_MAX_MEMORY)
     val namespace = sc.conf.get(KUBERNETES_NAMESPACE)
 
