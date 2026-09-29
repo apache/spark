@@ -1751,6 +1751,8 @@ object Scd2BatchProcessor {
       contextsBeneath: Seq[LeafInheritanceContext]): Column = {
     val reconstructed = field.dataType match {
       case struct: StructType =>
+        // If this field is a struct, recursively reconstruct all of its children by applying their
+        // resolved values after ignore-null coalescing. 
         val contextsByChildName = contextsBeneath.groupBy(_.path(path.length))
         val rebuilt = F.struct(
           struct.fields.toImmutableArraySeq.map { childField =>
@@ -1762,22 +1764,31 @@ object Scd2BatchProcessor {
               .as(childField.name, childField.metadata)
           }: _*
         )
+        // If none of this struct's leaves are inheriting as part of this coalesce pass, let the
+        // struct pass its value through as-is. This is to avoid incorrectly materializing a null
+        // struct with a struct with all null leaves.
         val anyInherits = contextsBeneath.map(_.inherits).reduce(_ || _)
         F.when(anyInherits, rebuilt)
           .otherwise(F.col(QuotingUtils.quoteNameParts(path)))
       case _ =>
+        // If this field is not a struct (and therefore must be a leaf), either directly apply the
+        // resolved value to inherit if the leaf should be inheriting, otherwise pass its value
+        // through as-is. 
         val context = contextsBeneath.head
         F.when(context.inherits, context.valueToInherit)
           .otherwise(F.col(QuotingUtils.quoteNameParts(path)))
     }
-    val nullabilityChecked =
+    val validatedReconstructed =
       if (field.nullable) {
         reconstructed
       } else {
+        // If the field was marked as non-nullable but coalescing deduces it will resolve to a
+        // null, throw an explicit exception. Pushing `AssertNotNull` into the plan for a
+        // non-nullable field also prevents Spark from preemptively complaining during analysis. 
         ExpressionUtils.column(
           AssertNotNull(ExpressionUtils.expression(reconstructed), path))
       }
-    nullabilityChecked.cast(field.dataType)
+    validatedReconstructed.cast(field.dataType)
   }
 
   /**
