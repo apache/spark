@@ -179,9 +179,20 @@ class InMemoryChangelog(
     Column.create("_commit_version", LongType),
     Column.create("_commit_timestamp", TimestampType, properties.commitTimestampNullable))
 
+  private val rows = changeRows.iterator.map(_.copy()).toVector
+  // Independent loads can share cached results only when their captured read states match.
+  private val readIdentity = (tableName, dataColumns.toVector, rows, properties)
+
   override def name(): String = tableName
 
   override def columns(): Array[Column] = cdcColumns
+
+  override def equals(other: Any): Boolean = other match {
+    case that: InMemoryChangelog => getClass == that.getClass && readIdentity == that.readIdentity
+    case _ => false
+  }
+
+  override def hashCode(): Int = readIdentity.hashCode()
 
   override def containsCarryoverRows(): Boolean = properties.containsCarryoverRows
 
@@ -206,7 +217,7 @@ class InMemoryChangelog(
   override def newScanBuilder(
       options: CaseInsensitiveStringMap): ScanBuilder = {
     onScan(options)
-    new InMemoryChangelogScanBuilder(readSchema, changeRows)
+    new InMemoryChangelogScanBuilder(readSchema, rows)
   }
 
   def readSchema: StructType = {

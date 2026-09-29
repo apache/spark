@@ -44,8 +44,8 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
    *  - Data columns: Verifies captured columns align with the current schema
    *  - Metadata columns: Checks metadata column consistency
    *
-   * Tables with time travel specifications are skipped as they reference a specific point
-   * in time and don't have to be refreshed.
+   * Tables with time travel specifications and changelogs with an explicit ending bound are
+   * skipped because they reference captured historical data.
    *
    * Schema validation mode depends on the underlying plan. Commands, for instance,
    * prohibit any schema changes while queries permit adding columns.
@@ -71,8 +71,8 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
    *  - Data columns: Verifies captured columns align with the current schema
    *  - Metadata columns: Checks metadata column consistency
    *
-   * Tables with time travel specifications are skipped as they reference a specific point
-   * in time and don't have to be refreshed.
+   * Tables with time travel specifications and changelogs with an explicit ending bound are
+   * skipped because they reference captured historical data.
    *
    * @param spark the currently active Spark session
    * @param plan the logical plan to refresh
@@ -88,6 +88,8 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
     val currentTables = mutable.HashMap.empty[CurrentTableKey, Table]
     val currentChangelogs = mutable.HashMap.empty[ChangelogCacheKey, ChangelogTable]
     plan transformWithSubqueries {
+      case r @ DataSourceV2Relation(changelog: ChangelogTable, _, _, _, _, _)
+          if changelog.isBounded => r
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
           if (r.isVersioned || !versionedOnly) && r.timeTravelSpec.isEmpty =>
         val currentTable = r.table match {

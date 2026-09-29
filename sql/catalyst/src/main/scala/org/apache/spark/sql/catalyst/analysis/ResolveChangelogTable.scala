@@ -43,8 +43,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Post-processes a resolved [[ChangelogTable]] read to apply CDC option semantics
- * (carry-over removal, update detection, net change computation) and to enforce
- * supported option combinations.
+ * (carry-over removal, update detection, net change computation).
  *
  * Fires after [[ResolveRelations]] has wrapped the connector's [[Changelog]] in a
  * [[ChangelogTable]]. Both batch ([[DataSourceV2Relation]]) and streaming
@@ -122,15 +121,14 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case rel @ DataSourceV2Relation(table: ChangelogTable, _, _, _, _, _) if !table.resolved =>
       val changelog = table.changelog
-      val req = evaluateRequirements(table)
 
       val resolvedRel = rel.copy(table = table.copy(resolved = true))
       var updatedRel: LogicalPlan = resolvedRel
-      if (req.requiresCarryOverRemoval || req.requiresUpdateDetection) {
+      if (table.requiresCarryoverRemoval || table.requiresUpdateDetection) {
         updatedRel = addRowLevelPostProcessing(
-          resolvedRel, changelog, req.requiresCarryOverRemoval, req.requiresUpdateDetection)
+          resolvedRel, changelog, table.requiresCarryoverRemoval, table.requiresUpdateDetection)
       }
-      if (req.requiresNetChanges) {
+      if (table.requiresNetChangeCollapse) {
         // Resolve rowId against the bare DataSourceV2Relation. V2ExpressionUtils.resolveRefs
         // requires a V2-shaped plan; addRowLevelPostProcessing may have wrapped the relation
         // in Project/Window, which would break resolution against `updatedRel`. Catalyst
@@ -146,14 +144,13 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     case rel @ StreamingRelationV2(_, _, table: ChangelogTable, _, _, _, _, _, _)
         if !table.resolved =>
       val changelog = table.changelog
-      val req = evaluateRequirements(table)
       val resolvedRel = rel.copy(table = table.copy(resolved = true))
       var updatedRel: LogicalPlan = resolvedRel
-      if (req.requiresCarryOverRemoval || req.requiresUpdateDetection) {
+      if (table.requiresCarryoverRemoval || table.requiresUpdateDetection) {
         updatedRel = addStreamingRowLevelPostProcessing(
-          resolvedRel, changelog, req.requiresCarryOverRemoval, req.requiresUpdateDetection)
+          resolvedRel, changelog, table.requiresCarryoverRemoval, table.requiresUpdateDetection)
       }
-      if (req.requiresNetChanges) {
+      if (table.requiresNetChangeCollapse) {
         // Resolve the rowId references against `updatedRel` (the post-row-level plan)
         // rather than the bare `resolvedRel`. The streaming row-level rewrite uses
         // Aggregate + Generate(Inline), neither of which preserves the original
@@ -166,38 +163,6 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
           updatedRel, changelog, table.changelogContext.computeUpdates())
       }
       updatedRel
-  }
-
-  // ---------------------------------------------------------------------------
-  // Option validation & Requirement Computation
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Captures which post-processing passes a CDC query requires, derived from the
-   * user-provided [[org.apache.spark.sql.connector.catalog.ChangelogContext]] and the
-   * connector-declared [[Changelog]]
-   * capability flags.
-   */
-  private case class PostProcessingRequirements(
-      requiresCarryOverRemoval: Boolean,
-      requiresUpdateDetection: Boolean,
-      requiresNetChanges: Boolean) {
-    def needsAny: Boolean =
-      requiresCarryOverRemoval || requiresUpdateDetection || requiresNetChanges
-  }
-
-  /**
-   * Validates CDC option/capability combinations and computes which post-processing
-   * passes are required. Throws an [[org.apache.spark.sql.AnalysisException]] for
-   * unsupported or contradictory combinations (currently: `computeUpdates` with
-   * surfaced carry-overs but no carry-over removal).
-   */
-  private def evaluateRequirements(table: ChangelogTable): PostProcessingRequirements = {
-    table.validatePostProcessingOptions()
-    PostProcessingRequirements(
-      table.requiresCarryOverRemoval,
-      table.requiresUpdateDetection,
-      table.requiresNetChanges)
   }
 
   // ---------------------------------------------------------------------------

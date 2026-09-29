@@ -286,15 +286,15 @@ class ChangelogResolutionSuite extends SharedSparkSession {
     cat.resetLoadChangelogCalls()
     val tableName = s"$cdcCatalogName.test_table"
     val df = sql(
-      s"SELECT id FROM $tableName CHANGES FROM VERSION 1 TO VERSION 1 " +
+      s"SELECT id FROM $tableName CHANGES FROM VERSION 1 " +
         "WITH ('BrAnCh' = 'Main', 'split-size' = '5') UNION ALL " +
-        s"SELECT id FROM $tableName CHANGES FROM VERSION 1 TO VERSION 1 " +
+        s"SELECT id FROM $tableName CHANGES FROM VERSION 1 " +
         "WITH ('branch' = 'Main', 'split-size' = '9') UNION ALL " +
-        s"SELECT id FROM $tableName CHANGES FROM VERSION 2 TO VERSION 2 " +
+        s"SELECT id FROM $tableName CHANGES FROM VERSION 2 " +
         "WITH ('branch' = 'Main') UNION ALL " +
-        s"SELECT id FROM $tableName CHANGES FROM VERSION 1 TO VERSION 1 " +
+        s"SELECT id FROM $tableName CHANGES FROM VERSION 1 " +
         "WITH ('branch' = 'main') UNION ALL " +
-        s"SELECT id FROM $tableName CHANGES FROM VERSION 1 TO VERSION 1 " +
+        s"SELECT id FROM $tableName CHANGES FROM VERSION 1 " +
         "WITH ('branch' = 'Main', 'deduplicationMode' = 'none')")
     val relations = df.queryExecution.analyzed.collect { case r: DataSourceV2Relation => r }
     val changelogs = relations.map(_.table.asInstanceOf[ChangelogTable])
@@ -305,7 +305,7 @@ class ChangelogResolutionSuite extends SharedSparkSession {
     assert(relations.take(2).map(_.options.get("split-size")) == Seq("5", "9"))
     assert(cat.loadChangelogCalls.size == 4)
     QueryTest.checkAnswer(
-      df, Seq(Row(1L), Row(1L), Row(1L), Row(1L), Row(2L)), checkToRDD = false)
+      df, Seq.fill(4)(Row(1L)) ++ Seq.fill(5)(Row(2L)), checkToRDD = false)
 
     cat.resetLoadChangelogCalls()
     cat.resetLoadTableCalls()
@@ -338,7 +338,7 @@ class ChangelogResolutionSuite extends SharedSparkSession {
 
   test("refreshing cached CDC data preserves CDC reads and ordinary table cache isolation") {
     val tableName = s"$cdcCatalogName.test_table"
-    val cdcQuery = s"SELECT * FROM $tableName CHANGES FROM VERSION 1 TO VERSION 10"
+    val cdcQuery = s"SELECT * FROM $tableName CHANGES FROM VERSION 1"
     sql(s"INSERT INTO $tableName VALUES (100, 'current')")
     val cat = cdcCatalog
     cat.addChangeRows(ident, Seq(changeRow(1L, 1L)))
@@ -356,15 +356,14 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       assert(cacheManager.lookupCachedData(spark.table(tableName)).isEmpty)
       checkAnswer(spark.table(tableName).select("id"), Seq(Row(100L)))
 
-      assert(cacheManager.lookupCachedData(cached).isDefined)
-      checkAnswer(cached.select("id"), Seq(Row(1L), Row(2L)))
+      assert(cacheManager.lookupCachedData(cached).isEmpty)
 
       val fresh = sql(cdcQuery)
       assert(cacheManager.lookupCachedData(fresh).isDefined)
       checkAnswer(fresh.select("id"), Seq(Row(1L), Row(2L)))
 
       val differentRange = sql(
-        s"SELECT * FROM $tableName CHANGES FROM VERSION 2 TO VERSION 10")
+        s"SELECT * FROM $tableName CHANGES FROM VERSION 2")
       assert(cacheManager.lookupCachedData(differentRange).isEmpty)
     } finally {
       spark.catalog.clearCache()
@@ -382,9 +381,56 @@ class ChangelogResolutionSuite extends SharedSparkSession {
     QueryTest.checkAnswer(df, Seq(Row(1L), Row(10L)), checkToRDD = false)
     assert(cat.loadTableCalls.isEmpty)
     assert(cat.loadChangelogCalls.size == 1)
-    V2TableRefreshUtil.refresh(spark, df.queryExecution.analyzed)
+    val refreshed = V2TableRefreshUtil.refresh(spark, df.queryExecution.analyzed)
+    assert(refreshed.fastEquals(df.queryExecution.analyzed))
     assert(cat.loadTableCalls.isEmpty)
-    assert(cat.loadChangelogCalls.size == 2)
+    assert(cat.loadChangelogCalls.size == 1)
+  }
+
+  gridTest("CDC refresh reloads only open-ended ranges")(
+      Seq[(ChangelogRange, Boolean)](
+        new ChangelogRange.VersionRange(
+          "1", java.util.Optional.of("10"), true, true) -> true,
+        new ChangelogRange.TimestampRange(
+          1000000L, java.util.Optional.of(java.lang.Long.valueOf(10000000L)), true, true) -> true,
+        new ChangelogRange.VersionRange(
+          "1", java.util.Optional.empty[String](), true, true) -> false,
+        new ChangelogRange.TimestampRange(
+          1000000L, java.util.Optional.empty[java.lang.Long](), true, true) -> false,
+        new ChangelogRange.UnboundedRange() -> false)) { case (range, bounded) =>
+    val cat = cdcCatalog
+    cat.addChangeRows(ident, Seq(changeRow(1L, 1L)))
+    val context = new ChangelogContext(
+      range, ChangelogContext.DeduplicationMode.DROP_CARRYOVERS, false)
+    val stateOptions = new CaseInsensitiveStringMap(Collections.singletonMap("branch", "Main"))
+    val scanOptions = new java.util.HashMap[String, String](stateOptions.asCaseSensitiveMap())
+    scanOptions.put("split-size", "5")
+    val captured = ChangelogTable(
+      cat.loadChangelog(ident, context, stateOptions), context, resolved = true)
+    val original = DataSourceV2Relation.create(
+      captured, Some(cat), Some(ident), new CaseInsensitiveStringMap(scanOptions))
+    cat.addChangeRows(ident, Seq(changeRow(2L, 2L)))
+    cat.resetLoadChangelogCalls()
+    cat.resetLoadTableCalls()
+
+    val refreshed = V2TableRefreshUtil.refresh(spark, original)
+      .asInstanceOf[DataSourceV2Relation]
+    assert(refreshed.options == original.options)
+    assert(cat.loadTableCalls.isEmpty)
+    if (bounded) {
+      assert(refreshed eq original)
+      assert(refreshed.table eq captured)
+      assert(cat.loadChangelogCalls.isEmpty)
+    } else {
+      assert(refreshed.table ne captured)
+      assert(cat.loadChangelogCalls == Seq((context, stateOptions)))
+      val current = refreshed.table.asInstanceOf[ChangelogTable]
+      assert(current.changelogContext == context)
+      assert(current.resolved)
+    }
+    val expected = if (bounded) Seq(Row(1L)) else Seq(Row(1L), Row(2L))
+    QueryTest.checkAnswer(
+      Dataset.ofRows(spark, refreshed).select("id"), expected, checkToRDD = false)
   }
 
   test("versioned-only refresh leaves an unversioned changelog captured") {
@@ -402,7 +448,7 @@ class ChangelogResolutionSuite extends SharedSparkSession {
   test("CDC refresh uses CDC state keys and validates the captured schema") {
     val cat = cdcCatalog
     cat.changelogKeys = Some(java.util.Set.of("ReF"))
-    val analyzed = spark.read.option("startingVersion", "1").option("endingVersion", "10")
+    val analyzed = spark.read.option("startingVersion", "1")
       .option("branch", "Main").option("ref", "History").option("split-size", "5")
       .changes(s"$cdcCatalogName.test_table").queryExecution.analyzed
     val context = cat.lastChangelogContext.get
@@ -432,9 +478,9 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       val cat = cdcCatalog
       cat.addChangeRows(ident, Seq(changeRow(1L, 1L), changeRow(2L, 2L)))
       val tableName = s"$cdcCatalogName.test_table"
-      sql(s"SELECT * FROM $tableName CHANGES FROM VERSION 1 TO VERSION 1")
+      sql(s"SELECT * FROM $tableName CHANGES FROM VERSION 1")
         .createOrReplaceTempView("cdc_first")
-      sql(s"SELECT * FROM $tableName CHANGES FROM VERSION 2 TO VERSION 2")
+      sql(s"SELECT * FROM $tableName CHANGES FROM VERSION 2")
         .createOrReplaceTempView("cdc_second")
       cat.resetLoadChangelogCalls()
       cat.resetLoadTableCalls()
@@ -448,7 +494,34 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       assert(changelogs.forall(_.resolved))
       assert(cat.loadChangelogCalls.size == 2)
       assert(cat.loadTableCalls.isEmpty)
-      QueryTest.checkAnswer(df, Seq(Row(1L), Row(1L), Row(2L)), checkToRDD = false)
+      QueryTest.checkAnswer(
+        df, Seq(Row(1L), Row(1L), Row(2L), Row(2L), Row(2L)), checkToRDD = false)
+    }
+  }
+
+  gridTest("bounded CDC temp views preserve captured reads")(
+      Seq("VERSION 1 TO VERSION 10",
+        "TIMESTAMP '1970-01-01 00:00:01' TO TIMESTAMP '1970-01-01 00:00:10'")) { range =>
+    withTempView("bounded_cdc") {
+      val cat = cdcCatalog
+      cat.addChangeRows(ident, Seq(changeRow(1L, 1L)))
+      val changes = sql(s"SELECT * FROM $cdcCatalogName.test_table CHANGES FROM $range")
+      val captured = changes.queryExecution.analyzed.collectFirst {
+        case r: DataSourceV2Relation => r.table
+      }.get
+      changes.createOrReplaceTempView("bounded_cdc")
+      cat.addChangeRows(ident, Seq(changeRow(2L, 2L)))
+      cat.resetLoadChangelogCalls()
+      cat.resetLoadTableCalls()
+
+      val fromView = spark.table("bounded_cdc")
+      val current = fromView.queryExecution.analyzed.collectFirst {
+        case r: DataSourceV2Relation => r.table
+      }.get
+      assert(current eq captured)
+      assert(cat.loadChangelogCalls.isEmpty)
+      assert(cat.loadTableCalls.isEmpty)
+      QueryTest.checkAnswer(fromView.select("id"), Seq(Row(1L)), checkToRDD = false)
     }
   }
 

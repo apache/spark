@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.{EnumSet => JEnumSet, Set => JSet}
 
 import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogContext, Column, Identifier, SupportsRead, Table, TableCapability, TableCatalog}
+import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -38,28 +39,33 @@ case class ChangelogTable(
     changelogContext: ChangelogContext,
     resolved: Boolean = false) extends Table with SupportsRead {
 
-  // Validate that the connector returned a schema with the required CDC metadata columns
-  // and correct types.
-  ChangelogTable.validateSchema(changelog)
-
   // Capture the metadata used to build the analyzer's CDC post-processing operators.
-  private val carryovers = changelog.containsCarryoverRows()
-  private val intermediateChanges = changelog.containsIntermediateChanges()
-  private val updatesAsDeleteAndInsert = changelog.representsUpdateAsDeleteAndInsert()
-  private[sql] val requiresCarryOverRemoval =
-    changelogContext.deduplicationMode() != ChangelogContext.DeduplicationMode.NONE && carryovers
+  private val containsCarryoverRows = changelog.containsCarryoverRows()
+  private val containsIntermediateChanges = changelog.containsIntermediateChanges()
+  private val representsUpdateAsDeleteAndInsert = changelog.representsUpdateAsDeleteAndInsert()
+
+  private[sql] val requiresCarryoverRemoval =
+    changelogContext.deduplicationMode() != ChangelogContext.DeduplicationMode.NONE &&
+      containsCarryoverRows
   private[sql] val requiresUpdateDetection =
-    changelogContext.computeUpdates() && updatesAsDeleteAndInsert
-  private[sql] val requiresNetChanges =
+    changelogContext.computeUpdates() && representsUpdateAsDeleteAndInsert
+  private[sql] val requiresNetChangeCollapse =
     changelogContext.deduplicationMode() == ChangelogContext.DeduplicationMode.NET_CHANGES &&
-      intermediateChanges
+      containsIntermediateChanges
+
+  // Validate the schema and option combinations before capturing the referenced fields.
+  ChangelogTable.validateSchema(changelog)
+  if (requiresUpdateDetection && containsCarryoverRows && !requiresCarryoverRemoval) {
+    throw QueryCompilationErrors.cdcUpdateDetectionRequiresCarryOverRemoval(name)
+  }
+
   private val rowId = if (
-      requiresCarryOverRemoval || requiresUpdateDetection || requiresNetChanges) {
+      requiresCarryoverRemoval || requiresUpdateDetection || requiresNetChangeCollapse) {
     changelog.rowId().toVector.map(_.fieldNames().toVector)
   } else {
     Vector.empty
   }
-  private val rowVersion = if (requiresCarryOverRemoval) {
+  private val rowVersion = if (requiresCarryoverRemoval) {
     Option(changelog.rowVersion()).map(_.fieldNames().toVector)
   } else {
     None
@@ -75,26 +81,20 @@ case class ChangelogTable(
 
   override def capabilities: JSet[TableCapability] = JEnumSet.of(BATCH_READ, MICRO_BATCH_READ)
 
-  private[sql] def validatePostProcessingOptions(): Unit = {
-    if (requiresUpdateDetection && carryovers &&
-        changelogContext.deduplicationMode() == ChangelogContext.DeduplicationMode.NONE) {
-      throw QueryCompilationErrors.cdcUpdateDetectionRequiresCarryOverRemoval(name)
-    }
-  }
-
-  private[v2] def canonicalizedForPlanComparison: Table = {
-    ChangelogTable.CanonicalizedChangelogTable(changelogContext, resolved)
+  private[sql] def isBounded: Boolean = changelogContext.range() match {
+    case range: VersionRange => range.endingVersion().isPresent
+    case range: TimestampRange => range.endingTimestamp().isPresent
+    case _: UnboundedRange => false
   }
 
   /** Checks that refreshing the changelog preserves the already analyzed CDC rewrites. */
   def validateRefresh(current: ChangelogTable): Unit = {
     if (resolved) {
-      current.validatePostProcessingOptions()
       val changedProperties = Seq(
         "containsCarryoverRows" ->
-          (requiresCarryOverRemoval != current.requiresCarryOverRemoval),
+          (requiresCarryoverRemoval != current.requiresCarryoverRemoval),
         "containsIntermediateChanges" ->
-          (requiresNetChanges != current.requiresNetChanges),
+          (requiresNetChangeCollapse != current.requiresNetChangeCollapse),
         "representsUpdateAsDeleteAndInsert" ->
           (requiresUpdateDetection != current.requiresUpdateDetection),
         "rowId" -> (rowId != current.rowId),
@@ -122,21 +122,6 @@ object ChangelogTable {
         throw QueryCompilationErrors.cdcNotSupportedError(catalog.name())
     }
     ChangelogTable(changelog, context)
-  }
-
-  /**
-   * A comparison-only table that removes connector object identity from canonicalized plans.
-   * The enclosing relation retains the catalog, identifier, options, output, and CDC operators.
-   */
-  private case class CanonicalizedChangelogTable(
-      changelogContext: ChangelogContext,
-      resolved: Boolean) extends Table {
-    override def name: String = "canonicalized changelog"
-
-    override def columns: Array[Column] = Array.empty
-
-    override def capabilities: JSet[TableCapability] =
-      JEnumSet.noneOf(classOf[TableCapability])
   }
 
   private[v2] def validateSchema(cl: Changelog): Unit = {

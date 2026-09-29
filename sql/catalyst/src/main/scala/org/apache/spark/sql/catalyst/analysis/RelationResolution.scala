@@ -510,21 +510,22 @@ class RelationResolution(
     }
   }
 
-  def resolveReference(ref: V2TableReference): LogicalPlan = {
-    val relation = if (ref.changelog.nonEmpty) {
-      resolveChangelogReference(ref)
-    } else if (ref.context.cacheable) {
-      getOrLoadRelation(ref)
-    } else {
-      loadRelation(ref)
+  def resolveReference(ref: V2Reference): LogicalPlan = {
+    val relation = ref match {
+      case changelogRef: V2ChangelogReference =>
+        resolveChangelogReference(changelogRef)
+      case tableRef: V2TableReference if tableRef.context.cacheable =>
+        getOrLoadRelation(tableRef)
+      case tableRef: V2TableReference =>
+        loadRelation(tableRef)
     }
     val planId = ref.getTagValue(LogicalPlan.PLAN_ID_TAG)
     cloneWithPlanId(relation, planId)
   }
 
-  private def resolveChangelogReference(ref: V2TableReference): DataSourceV2Relation = {
+  private def resolveChangelogReference(ref: V2ChangelogReference): DataSourceV2Relation = {
     val catalog = catalogManager.catalog(ref.catalog.name).asTableCatalog
-    val captured = ref.changelog.get
+    val captured = ref.changelog
     val key = toChangelogCacheKey(
       catalog, ref.identifier, captured.changelogContext, ref.options)
     def load(): ChangelogTable = {
@@ -591,10 +592,10 @@ class RelationResolution(
   }
 
   private def createRelation(
-      ref: V2TableReference,
+      ref: V2Reference,
       resolvedCatalog: TableCatalog,
       table: Table): DataSourceV2Relation = {
-    V2TableReferenceUtils.validateLoadedTable(table, ref)
+    V2ReferenceUtils.validateLoadedTable(table, ref)
     DataSourceV2Relation(
       table = table,
       output = ref.output,
@@ -606,7 +607,7 @@ class RelationResolution(
   private def adaptCachedRelation(cached: LogicalPlan, ref: V2TableReference): LogicalPlan = {
     cached transform {
       case r: DataSourceV2Relation if matchesReference(r, ref) =>
-        V2TableReferenceUtils.validateLoadedTable(r.table, ref)
+        V2ReferenceUtils.validateLoadedTable(r.table, ref)
         r.copy(output = ref.output, options = ref.options)
     }
   }

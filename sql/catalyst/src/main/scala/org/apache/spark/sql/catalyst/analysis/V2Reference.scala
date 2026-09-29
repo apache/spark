@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.V2TableReference.Context
+import org.apache.spark.sql.catalyst.analysis.V2Reference.Context
+import org.apache.spark.sql.catalyst.analysis.V2Reference.TemporaryViewContext
+import org.apache.spark.sql.catalyst.analysis.V2Reference.TransactionContext
+import org.apache.spark.sql.catalyst.analysis.V2Reference.WriteTargetContext
 import org.apache.spark.sql.catalyst.analysis.V2TableReference.TableInfo
-import org.apache.spark.sql.catalyst.analysis.V2TableReference.TemporaryViewContext
-import org.apache.spark.sql.catalyst.analysis.V2TableReference.TransactionContext
-import org.apache.spark.sql.catalyst.analysis.V2TableReference.WriteTargetContext
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
@@ -43,41 +43,55 @@ import org.apache.spark.sql.util.SchemaValidationMode.{ALLOW_NEW_TOP_LEVEL_FIELD
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * A reference to a V2 table.
+ * A reference to a V2 table or changelog.
  *
  * References are placeholders for the latest table metadata and are replaced with actual table
  * versions during analysis, allowing Spark to reload tables with up-to-date metadata. The newly
  * loaded table metadata is validated against the original metadata depending on the context.
- * For instance, temporary views with fully resolved logical plans don't allow schema changes
- * in underlying tables.
- * Changelog references also retain the requested context and captured post-processing metadata
- * so re-resolution can reload the changelog and preserve the analyzed CDC operators.
+ * For instance, temporary views with fully resolved logical plans retain their captured schema.
  */
-private[sql] case class V2TableReference private(
-    catalog: TableCatalog,
-    identifier: Identifier,
-    options: CaseInsensitiveStringMap,
-    info: TableInfo,
-    output: Seq[AttributeReference],
-    context: Context,
-    changelog: Option[ChangelogTable])
+private[sql] sealed abstract class V2Reference
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
-  override def name: String = V2TableUtil.toQualifiedName(catalog, identifier)
+  def catalog: TableCatalog
 
-  override def newInstance(): V2TableReference = {
-    copy(output = output.map(_.newInstance()))
-  }
+  def identifier: Identifier
+
+  def options: CaseInsensitiveStringMap
+
+  def info: TableInfo
+
+  override def output: Seq[AttributeReference]
+
+  def context: Context
+
+  override def newInstance(): V2Reference
+
+  override def name: String = V2TableUtil.toQualifiedName(catalog, identifier)
 
   override def computeStats(): Statistics = Statistics.DUMMY
 
   override def simpleString(maxFields: Int): String = {
     val outputString = truncatedString(output, "[", ", ", "]", maxFields)
-    s"TableReference$outputString $name"
+    s"${nodeName.stripPrefix("V2")}$outputString $name"
   }
 
   def toRelation(table: Table): DataSourceV2Relation = {
     DataSourceV2Relation(table, output, Some(catalog), Some(identifier), options)
+  }
+}
+
+/** A reference that reloads ordinary table metadata. */
+private[sql] case class V2TableReference private[analysis](
+    catalog: TableCatalog,
+    identifier: Identifier,
+    options: CaseInsensitiveStringMap,
+    info: TableInfo,
+    output: Seq[AttributeReference],
+    context: Context) extends V2Reference {
+
+  override def newInstance(): V2TableReference = {
+    copy(output = output.map(_.newInstance()))
   }
 }
 
@@ -87,6 +101,27 @@ private[sql] object V2TableReference {
       tableId: Option[String],
       columns: Seq[Column],
       metadataColumns: Seq[MetadataColumn])
+}
+
+/**
+ * A reference that retains the requested changelog context and captured post-processing metadata.
+ * Re-resolution reloads the changelog while preserving the analyzed CDC operators and schema.
+ */
+private[sql] case class V2ChangelogReference private[analysis](
+    catalog: TableCatalog,
+    identifier: Identifier,
+    options: CaseInsensitiveStringMap,
+    changelog: ChangelogTable,
+    info: TableInfo,
+    output: Seq[AttributeReference],
+    context: Context) extends V2Reference {
+
+  override def newInstance(): V2ChangelogReference = {
+    copy(output = output.map(_.newInstance()))
+  }
+}
+
+private[sql] object V2Reference {
 
   sealed trait Context {
     /** Whether re-resolution may reuse the per-query relation cache. */
@@ -114,43 +149,42 @@ private[sql] object V2TableReference {
     val sharedCacheable = false
   }
 
-  def createForTempView(relation: DataSourceV2Relation, viewName: Seq[String]): V2TableReference = {
+  def createForTempView(relation: DataSourceV2Relation, viewName: Seq[String]): V2Reference = {
     create(relation, TemporaryViewContext(viewName))
   }
 
-  // V2TableReference nodes in the transaction context are produced by
+  // V2Reference nodes in the transaction context are produced by
   // UnresolveRelationsInTransaction which unresolves already resolved relations.
-  def createForTransaction(relation: DataSourceV2Relation): V2TableReference = {
+  def createForTransaction(relation: DataSourceV2Relation): V2Reference = {
     create(relation, TransactionContext)
   }
 
-  def createForWriteTarget(relation: DataSourceV2Relation): V2TableReference = {
+  def createForWriteTarget(relation: DataSourceV2Relation): V2Reference = {
     create(relation, WriteTargetContext)
   }
 
-  private def create(relation: DataSourceV2Relation, context: Context): V2TableReference = {
-    val ref = V2TableReference(
-      relation.catalog.get.asTableCatalog,
-      relation.identifier.get,
-      relation.options,
-      TableInfo(
-        tableId = Option(relation.table.id),
-        columns = relation.table.columns.toImmutableArraySeq,
-        metadataColumns = V2TableUtil.extractMetadataColumns(relation)),
-      relation.output,
-      context,
-      relation.table match {
-        case changelog: ChangelogTable => Some(changelog)
-        case _ => None
-      })
+  private def create(relation: DataSourceV2Relation, context: Context): V2Reference = {
+    val catalog = relation.catalog.get.asTableCatalog
+    val identifier = relation.identifier.get
+    val info = TableInfo(
+      tableId = Option(relation.table.id),
+      columns = relation.table.columns.toImmutableArraySeq,
+      metadataColumns = V2TableUtil.extractMetadataColumns(relation))
+    val ref = relation.table match {
+      case changelog: ChangelogTable =>
+        V2ChangelogReference(catalog, identifier, relation.options, changelog, info,
+          relation.output, context)
+      case _ =>
+        V2TableReference(catalog, identifier, relation.options, info, relation.output, context)
+    }
     ref.copyTagsFrom(relation)
     ref
   }
 }
 
-private[sql] object V2TableReferenceUtils extends SQLConfHelper {
+private[sql] object V2ReferenceUtils extends SQLConfHelper {
 
-  def validateLoadedTable(table: Table, ref: V2TableReference): Unit = {
+  def validateLoadedTable(table: Table, ref: V2Reference): Unit = {
     ref.context match {
       case ctx: TemporaryViewContext =>
         validateLoadedTableInTempView(table, ref, ctx)
@@ -161,7 +195,7 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
     }
   }
 
-  private def validateNoChanges(table: Table, ref: V2TableReference): Unit = {
+  private def validateNoChanges(table: Table, ref: V2Reference): Unit = {
     // Make sure the table was not dropped and recreated.
     ref.info.tableId.foreach(V2TableUtil.validateTableId(ref.name, _, table))
 
@@ -190,7 +224,7 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
 
   private def validateLoadedTableInTempView(
       table: Table,
-      ref: V2TableReference,
+      ref: V2Reference,
       ctx: TemporaryViewContext): Unit = {
     val tableName = ref.identifier.toQualifiedNameParts(ref.catalog)
 

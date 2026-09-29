@@ -1155,7 +1155,7 @@ class Analyzer(
       case view: View if !view.child.resolved =>
         ViewResolution
           .resolve(view, options, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
-      // V2TableReference is a placeholder for DSv2 tables that needs to be resolved to
+      // V2Reference is a placeholder for DSv2 tables or changelogs that must be resolved to
       // DataSourceV2Relation on each view access. Only dataframe temp view may contain it
       // as it stores resolved plans directly.
       case view: View if view.isTempViewStoringAnalyzedPlan =>
@@ -1165,7 +1165,7 @@ class Analyzer(
       case _ => plan
     }
 
-    // Unwrap temp views storing analyzed plans and resolve V2TableReference nodes in the child.
+    // Unwrap temp views storing analyzed plans and resolve V2Reference nodes in the child.
     private def unwrapRelationPlan(plan: LogicalPlan): LogicalPlan = {
       EliminateSubqueryAliases(plan) match {
         case v: View if v.isTempViewStoringAnalyzedPlan => resolveTableReferencesInTempView(v.child)
@@ -1173,12 +1173,12 @@ class Analyzer(
       }
     }
 
-    // Resolve V2TableReference nodes inside temp view plans. These are created by
-    // V2TableReference.createForTempView. We only need to resolve it when returning
+    // Resolve V2Reference nodes inside temp view plans. These are created by
+    // V2Reference.createForTempView. We only need to resolve it when returning
     // the plan of temp views (in resolveViews and unwrapRelationPlan).
     private def resolveTableReferencesInTempView(plan: LogicalPlan): LogicalPlan = {
       plan.resolveOperatorsUp {
-        case r: V2TableReference if r.context.isInstanceOf[V2TableReference.TemporaryViewContext] =>
+        case r: V2Reference if r.context.isInstanceOf[V2Reference.TemporaryViewContext] =>
           relationResolution.resolveReference(r)
       }
     }
@@ -1195,7 +1195,7 @@ class Analyzer(
         // Inserting into a file-based temporary view is allowed.
         // (e.g., spark.read.parquet("path").createOrReplaceTempView("t").
         // Thus, we need to look at the raw plan if `relation` is a temporary view.
-        // unwrapRelationPlan also resolves V2TableReference nodes in temp view plans.
+        // unwrapRelationPlan also resolves V2Reference nodes in temp view plans.
         unwrapRelationPlan(relation) match {
           case v: View if i.replaceCriteriaOpt.exists(_.isReplaceWhere) =>
             throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.desc.identifier, i)
@@ -1206,11 +1206,11 @@ class Analyzer(
 
       case write: V2StreamingWriteCommand =>
         write.table match {
-          case ref: V2TableReference =>
+          case ref: V2Reference =>
             relationResolution.resolveReference(ref) match {
               case r: NamedRelation => write.withNewTable(r)
               case other => throw SparkException.internalError(
-                s"Expected V2TableReference write target to resolve to a NamedRelation, " +
+                s"Expected V2Reference write target to resolve to a NamedRelation, " +
                   s"but got ${other.getClass.getName}")
             }
           case _ => write
@@ -1236,7 +1236,7 @@ class Analyzer(
       case u: UnresolvedRelation =>
         resolveRelation(u).map(resolveViews(_, u.options)).getOrElse(u)
 
-      case r: V2TableReference =>
+      case r: V2Reference =>
         relationResolution.resolveReference(r)
 
       case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
@@ -2683,13 +2683,13 @@ class Analyzer(
         case a: FunctionTableSubqueryArgumentExpression if !a.plan.resolved =>
           resolveSubQuery(a, outer)(
             (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs))
-        // The subquery's plan is already resolved. Replace any V2TableReferences without
+        // The subquery's plan is already resolved. Replace any V2References without
         // re-running any analyzer rules.
         case se: SubqueryExpression
             if se.plan.resolved &&
-               se.plan.collectFirstWithSubqueries { case _: V2TableReference => () }.isDefined =>
+               se.plan.collectFirstWithSubqueries { case _: V2Reference => () }.isDefined =>
           val newPlan = se.plan.transformWithSubqueries {
-            case r: V2TableReference => relationResolution.resolveReference(r)
+            case r: V2Reference => relationResolution.resolveReference(r)
           }
           se.withNewPlan(newPlan)
       }
