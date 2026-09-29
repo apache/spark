@@ -59,9 +59,21 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
     prefixLengthVector = new OnHeapColumnVector(valueCount, IntegerType);
     prefixLengthReader.initFromPage(valueCount, in);
-    prefixLengthReader.readIntegers(prefixLengthReader.getTotalValueCount(),
-        prefixLengthVector, 0);
+    int prefixCount = prefixLengthReader.getTotalValueCount();
+    if (prefixCount > valueCount) {
+      throw new ParquetDecodingException("Corrupted DELTA_BYTE_ARRAY page: " + prefixCount +
+          " prefix lengths in a page of " + valueCount + " values");
+    }
+    prefixLengthReader.readIntegers(prefixCount, prefixLengthVector, 0);
     suffixReader.initFromPage(valueCount, in);
+    // Every value has both a prefix length and a suffix. Rows are bounds-checked against the
+    // decoded suffixes, so a row past the decoded prefix lengths would otherwise read a prefix
+    // length that was never decoded.
+    int suffixCount = suffixReader.getTotalValueCount();
+    if (prefixCount != suffixCount) {
+      throw new ParquetDecodingException("Corrupted DELTA_BYTE_ARRAY page: " + prefixCount +
+          " prefix lengths but " + suffixCount + " suffixes");
+    }
   }
 
   @Override
@@ -90,6 +102,8 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
 
   private void readValues(int total, WritableColumnVector c, int rowId) {
     for (int i = 0; i < total; i++) {
+      // getBytes checks that the row has been decoded, so call it before reading the prefix.
+      ByteBuffer suffix = suffixReader.getBytes(currentRow);
       // NOTE: due to PARQUET-246, it is important that we
       // respect prefixLength which was read from prefixLengthReader,
       // even for the *first* value of a page. Even though the first
@@ -97,7 +111,6 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       // because of PARQUET-246.
       int prefixLength = prefixLengthVector.getInt(currentRow);
       checkPrefixLength(prefixLength);
-      ByteBuffer suffix = suffixReader.getBytes(currentRow);
       byte[] suffixArray = suffix.array();
       int suffixLength = suffix.limit() - suffix.position();
       int length = prefixLength + suffixLength;
@@ -140,9 +153,10 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
     WritableColumnVector c2 = binaryValVector;
 
     for (int i = 0; i < total; i++) {
+      // getBytes checks that the row has been decoded, so call it before reading the prefix.
+      ByteBuffer suffix = suffixReader.getBytes(currentRow);
       int prefixLength = prefixLengthVector.getInt(currentRow);
       checkPrefixLength(prefixLength);
-      ByteBuffer suffix = suffixReader.getBytes(currentRow);
       byte[] suffixArray = suffix.array();
       int suffixLength = suffix.limit() - suffix.position();
       int length = prefixLength + suffixLength;
