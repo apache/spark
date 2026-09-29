@@ -32,6 +32,23 @@ import org.apache.spark.sql.types.{CharType, GeometryType, IntegerType, MapType,
 class JsonObjectSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
+  test("in the comma form, colon-bearing arguments bind as colon members (documented precedence)") {
+    // `JSON_OBJECT(a:b, c:d)` matches both list forms: the colon-member list and the comma
+    // (MySQL-compat) list. The colon-member alternative is declared first, so it wins -- `a:b, c:d`
+    // reads as the two members (a -> b) and (c -> d), the SQL-standard `key : value` reading, not
+    // as a single comma-form pair whose key and value are `:`-extractions.
+    checkAnswer(
+      sql("SELECT json_object(a:b, c:d) FROM VALUES ('k1','v1','k2','v2') t(a,b,c,d)"),
+      Row("""{"k1":"v1","k2":"v2"}"""))
+    // Parenthesizing each argument forces the comma form (one member whose key/value are the
+    // `:`-extractions). The non-VARIANT extraction target then errors -- proving it parsed as one
+    // comma-form pair, not two colon members (which resolve cleanly above).
+    val e = intercept[AnalysisException] {
+      sql("SELECT json_object((a:b), (c:d)) FROM VALUES ('k1','v1','k2','v2') t(a,b,c,d)").collect()
+    }
+    assert(e.getCondition == "COLUMN_IS_NOT_VARIANT_TYPE")
+  }
+
   test("basic object from key-value pairs using VALUE keyword") {
     checkAnswer(
       sql("SELECT json_object('id' VALUE 7, 'name' VALUE 'Ada')"),
@@ -340,7 +357,7 @@ world'))"""))
       condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = Some("42K09"),
       parameters = Map(
-        "sqlExpr" -> "\"JSON_OBJECT(ok VALUE 1, 2 VALUE bad NULL ON NULL)\"",
+        "sqlExpr" -> "\"JSON_OBJECT(ok VALUE 1, 2 VALUE bad)\"",
         "paramIndex" -> "third",
         "requiredType" -> "\"STRING\"",
         "inputSql" -> "\"2\"",
@@ -480,6 +497,31 @@ world'))"""))
     assert(quoted.sql ==
       "JSON_OBJECT('a' VALUE CAST(JSON_OBJECT('b' VALUE 1 NULL ON NULL) AS STRING) NULL ON NULL)")
     checkAnswer(sql(s"SELECT ${quoted.sql}"), Row("""{"a":"{\"b\":1}"}"""))
+  }
+
+  test("generated column names omit the synthetic NULL ON NULL ownership clause") {
+    // Canonical `.sql` appends a default NULL ON NULL so a clause-free call reparses to the builtin
+    // (see the shadowing test), but that marker is never reparsed for display. Unaliased column
+    // names must therefore not expose ownership text the user never wrote; a non-default
+    // ABSENT ON NULL the user did write is kept.
+    def colName(q: String): String = sql(q).schema.head.name
+    assert(colName("SELECT json_object()") == "JSON_OBJECT()")
+    assert(colName("SELECT json_object('id' VALUE 7)") == "JSON_OBJECT(id VALUE 7)")
+    assert(colName("SELECT json_object('id', 7)") == "JSON_OBJECT(id VALUE 7)")
+    assert(colName("SELECT json_object('a' VALUE json_object('b' VALUE 1))") ==
+      "JSON_OBJECT(a VALUE JSON_OBJECT(b VALUE 1))")
+    assert(colName("SELECT json_object('v' VALUE NULL ABSENT ON NULL)") ==
+      "JSON_OBJECT(v VALUE NULL ABSENT ON NULL)")
+  }
+
+  test("ABSENT ON NULL round-trips through .sql keeping null members omitted") {
+    // The ABSENT renderer arm must emit `ABSENT ON NULL` (not the default clause and not nothing),
+    // so a canonical round trip keeps dropping null-valued members rather than retaining them.
+    val absent = JsonObjectExpr(
+      Seq((Literal("a"), Literal(1)), (Literal("b"), Literal.create(null, IntegerType))),
+      Seq(false, false), Seq(false, false), JsonConstructorNullBehavior.Absent, StringType)
+    assert(absent.sql == "JSON_OBJECT('a' VALUE 1, 'b' VALUE CAST(NULL AS INT) ABSENT ON NULL)")
+    checkAnswer(sql(s"SELECT ${absent.sql}"), Row("""{"a":1}"""))
   }
 
   test("JSON_OBJECT is not foldable") {
@@ -856,6 +898,15 @@ world'))"""))
     checkAnswer(
       sql("SELECT json_object('a', CAST(json_object('b', 1) AS STRING))"),
       Row("""{"a":"{\"b\":1}"}"""))
+  }
+
+  test("routed comma-form builder ties each member's raw flag to its own position") {
+    // The routed builder groups the flat arg list by pairs and derives each member's raw flag from
+    // its own carrier. Mix a quoted ordinary string, a raw nested object, and a raw nested array in
+    // distinct positions so a grouping/indexing slip would splice or quote a neighbouring member.
+    checkAnswer(
+      sql("""SELECT json_object('a', '{"x":1}', 'b', json_object('c', 1), 'd', json_array(1))"""),
+      Row("""{"a":"{\"x\":1}","b":{"c":1},"d":[1]}"""))
   }
 
   test("a compatible routine shadows a comma-form call even with a nested producer value") {
