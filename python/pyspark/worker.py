@@ -3182,7 +3182,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     if needed == 0:
                         flat_batch = pa.RecordBatch.from_pylist([], schema=empty_schema)
                     else:
-                        combined = ArrowBatchTransformer.concat_batches(pending_chunks)
+                        combined = ArrowBatchTransformer.concat_batches(
+                            pending_chunks, empty_schema
+                        )
                         flat_batch = combined.slice(0, needed)
                         remainder = combined.slice(needed)
                         pending_chunks = [remainder] if remainder.num_rows else []
