@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import java.util
+
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
@@ -40,18 +43,32 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
   private val changeData: mutable.Map[String, mutable.ArrayBuffer[InternalRow]] =
     mutable.Map.empty
 
-  // Stores the most recent ChangelogContext and options passed to loadChangelog(), so tests
-  // can verify that the parser/DataFrame API correctly constructed and forwarded them.
-  private var _lastChangelogContext: Option[ChangelogContext] = None
-  def lastChangelogContext: Option[ChangelogContext] = _lastChangelogContext
+  private var explicitChangelogStateOptionKeys: Option[util.Set[String]] = None
 
-  private var _lastOptions: Option[CaseInsensitiveStringMap] = None
-  def lastOptions: Option[CaseInsensitiveStringMap] = _lastOptions
+  // Stores loadChangelog() calls so tests can verify context construction, state-option
+  // projection, and per-query changelog pinning.
+  private val _loadChangelogCalls = mutable.ArrayBuffer.empty[
+    (Identifier, ChangelogContext, CaseInsensitiveStringMap)]
+  def loadChangelogCalls: Seq[(Identifier, ChangelogContext, CaseInsensitiveStringMap)] =
+    _loadChangelogCalls.toSeq
+  def resetLoadChangelogCalls(): Unit = _loadChangelogCalls.clear()
+  def lastChangelogContext: Option[ChangelogContext] = _loadChangelogCalls.lastOption.map(_._2)
+  def lastStateOptions: Option[CaseInsensitiveStringMap] = _loadChangelogCalls.lastOption.map(_._3)
 
   // Per-table overrides for Changelog properties (carry-over rows, intermediate changes,
   // update representation, row identity). Tests can set these to exercise post-processing.
   private val changelogProperties: mutable.Map[String, ChangelogProperties] =
     mutable.Map.empty
+
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
+    super.initialize(name, options)
+    explicitChangelogStateOptionKeys = Option(options.get("changelogStateOptionKeys"))
+      .map(_.split(",").iterator.map(_.trim).filter(_.nonEmpty).toSet.asJava)
+  }
+
+  override def changelogStateOptionKeys(): util.Set[String] = {
+    explicitChangelogStateOptionKeys.getOrElse(super.changelogStateOptionKeys())
+  }
 
   /**
    * Override the [[Changelog]] properties returned for a given table.
@@ -67,9 +84,8 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
   override def loadChangelog(
       ident: Identifier,
       changelogContext: ChangelogContext,
-      options: CaseInsensitiveStringMap): Changelog = {
-    _lastChangelogContext = Some(changelogContext)
-    _lastOptions = Some(options)
+      changelogStateOptions: CaseInsensitiveStringMap): Changelog = {
+    _loadChangelogCalls += ((ident, changelogContext, changelogStateOptions))
     if (!tableExists(ident)) {
       throw new NoSuchTableException(ident.asMultipartIdentifier)
     }

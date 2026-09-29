@@ -59,6 +59,11 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
   }
 
   @Override
+  public Set<String> changelogStateOptionKeys() {
+    return asTableCatalog().changelogStateOptionKeys();
+  }
+
+  @Override
   public String[] defaultNamespace() {
     return delegate.defaultNamespace();
   }
@@ -81,6 +86,14 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
   @Override
   public Table loadTable(Identifier ident, String version) throws NoSuchTableException {
     return asTableCatalog().loadTable(ident, version);
+  }
+
+  @Override
+  public Changelog loadChangelog(
+      Identifier ident,
+      ChangelogContext context,
+      CaseInsensitiveStringMap changelogStateOptions) throws NoSuchTableException {
+    return asTableCatalog().loadChangelog(ident, context, changelogStateOptions);
   }
 
   @Override

@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.ChangelogRange
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, Transform}
 import org.apache.spark.sql.connector.read.ScanBuilder
-import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
+import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation, V2TableRefreshUtil}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -40,24 +40,37 @@ class ChangelogResolutionSuite extends SharedSparkSession {
 
   private val cdcCatalogName = "cdc_catalog"
   private val noCdcCatalogName = "no_cdc_catalog"
+  private val tableStateOption = "tableState"
+  private val changelogStateOption = "changelogState"
+  private val scanOption = "scanOption"
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(s"spark.sql.catalog.$cdcCatalogName",
       classOf[InMemoryChangelogCatalog].getName)
+    spark.conf.set(
+      s"spark.sql.catalog.$cdcCatalogName.tableStateOptionKeys", tableStateOption)
+    spark.conf.set(
+      s"spark.sql.catalog.$cdcCatalogName.changelogStateOptionKeys", changelogStateOption)
     spark.conf.set(s"spark.sql.catalog.$noCdcCatalogName",
       classOf[InMemoryTableCatalog].getName)
   }
 
   override def afterAll(): Unit = {
     spark.conf.unset(s"spark.sql.catalog.$cdcCatalogName")
+    spark.conf.unset(s"spark.sql.catalog.$cdcCatalogName.tableStateOptionKeys")
+    spark.conf.unset(s"spark.sql.catalog.$cdcCatalogName.changelogStateOptionKeys")
     spark.conf.unset(s"spark.sql.catalog.$noCdcCatalogName")
     super.afterAll()
   }
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    val catalog = spark.sessionState.catalogManager.catalog(cdcCatalogName).asTableCatalog
+    val changelogCatalog = spark.sessionState.catalogManager
+      .catalog(cdcCatalogName)
+      .asInstanceOf[InMemoryChangelogCatalog]
+    changelogCatalog.resetLoadChangelogCalls()
+    val catalog = changelogCatalog.asTableCatalog
     val ident = Identifier.of(Array.empty, "test_table")
     if (catalog.tableExists(ident)) {
       catalog.dropTable(ident)
@@ -208,63 +221,207 @@ class ChangelogResolutionSuite extends SharedSparkSession {
     assert(range.endingVersion().get() == "5")
   }
 
-  test("user-defined options are forwarded to loadChangelog") {
+  test("DataFrame API projects changelog state options while preserving scan options") {
     val cat = spark.sessionState.catalogManager
       .catalog(cdcCatalogName)
       .asInstanceOf[InMemoryChangelogCatalog]
 
-    spark.read
+    val df = spark.read
       .option("startingVersion", "1")
-      .option("customOption", "customValue")
+      .option(tableStateOption, "table-state")
+      .option(changelogStateOption, "changelog-state")
+      .option(scanOption, "scan-value")
       .changes(s"$cdcCatalogName.test_table")
 
-    val opts = cat.lastOptions
-    assert(opts.isDefined)
-    assert(opts.get.get("customOption") == "customValue")
-    assert(opts.get.get("startingVersion") == "1")
+    val analyzed = df.queryExecution.analyzed
+    val stateOptions = cat.lastStateOptions.get
+    assert(stateOptions.size() == 1)
+    assert(stateOptions.get(changelogStateOption) == "changelog-state")
+    assert(stateOptions.get(tableStateOption) == null)
+    assert(stateOptions.get("startingVersion") == null)
+    assert(stateOptions.get(scanOption) == null)
+
+    val relation = analyzed.collectFirst {
+      case r: DataSourceV2Relation => r
+    }.get
+    assert(relation.options.get("startingVersion") == "1")
+    assert(relation.options.get(tableStateOption) == "table-state")
+    assert(relation.options.get(changelogStateOption) == "changelog-state")
+    assert(relation.options.get(scanOption) == "scan-value")
   }
 
-  test("user-defined options are forwarded to loadChangelog - SQL WITH clause") {
+  test("SQL WITH clause projects changelog state options") {
     val cat = spark.sessionState.catalogManager
       .catalog(cdcCatalogName)
       .asInstanceOf[InMemoryChangelogCatalog]
 
     sql(s"SELECT * FROM $cdcCatalogName.test_table CHANGES FROM VERSION 1 " +
-      "WITH ('customOption' = 'customValue')").queryExecution.analyzed
+      s"WITH ('$changelogStateOption' = 'changelog-state', " +
+      s"'$scanOption' = 'scan-value')").queryExecution.analyzed
 
-    val opts = cat.lastOptions
-    assert(opts.isDefined)
-    assert(opts.get.get("customOption") == "customValue")
+    val stateOptions = cat.lastStateOptions.get
+    assert(stateOptions.size() == 1)
+    assert(stateOptions.get(changelogStateOption) == "changelog-state")
+    assert(stateOptions.get(scanOption) == null)
   }
 
-  test("user-defined options are forwarded to loadChangelog - DataStreamReader") {
+  test("DataStreamReader projects changelog state options") {
     val cat = spark.sessionState.catalogManager
       .catalog(cdcCatalogName)
       .asInstanceOf[InMemoryChangelogCatalog]
 
-    spark.readStream
+    val df = spark.readStream
       .option("startingVersion", "1")
-      .option("customOption", "customValue")
+      .option(changelogStateOption, "changelog-state")
+      .option(scanOption, "scan-value")
       .changes(s"$cdcCatalogName.test_table")
-      .queryExecution.analyzed
 
-    val opts = cat.lastOptions
-    assert(opts.isDefined)
-    assert(opts.get.get("customOption") == "customValue")
-    assert(opts.get.get("startingVersion") == "1")
+    val analyzed = df.queryExecution.analyzed
+    val stateOptions = cat.lastStateOptions.get
+    assert(stateOptions.size() == 1)
+    assert(stateOptions.get(changelogStateOption) == "changelog-state")
+    assert(stateOptions.get("startingVersion") == null)
+    assert(stateOptions.get(scanOption) == null)
+
+    val relation = analyzed.collectFirst {
+      case r: StreamingRelationV2 => r
+    }.get
+    assert(relation.extraOptions.get("startingVersion") == "1")
+    assert(relation.extraOptions.get(changelogStateOption) == "changelog-state")
+    assert(relation.extraOptions.get(scanOption) == "scan-value")
   }
 
-  test("user-defined options are forwarded to loadChangelog - streaming SQL") {
+  test("streaming SQL projects changelog state options") {
     val cat = spark.sessionState.catalogManager
       .catalog(cdcCatalogName)
       .asInstanceOf[InMemoryChangelogCatalog]
 
     sql(s"SELECT * FROM STREAM $cdcCatalogName.test_table CHANGES FROM VERSION 1 " +
-      "WITH ('customOption' = 'customValue')").queryExecution.analyzed
+      s"WITH ('$changelogStateOption' = 'changelog-state', " +
+      s"'$scanOption' = 'scan-value')").queryExecution.analyzed
 
-    val opts = cat.lastOptions
-    assert(opts.isDefined)
-    assert(opts.get.get("customOption") == "customValue")
+    val stateOptions = cat.lastStateOptions.get
+    assert(stateOptions.size() == 1)
+    assert(stateOptions.get(changelogStateOption) == "changelog-state")
+    assert(stateOptions.get(scanOption) == null)
+  }
+
+  test("references share a changelog by context and state options") {
+    val cat = spark.sessionState.catalogManager
+      .catalog(cdcCatalogName)
+      .asInstanceOf[InMemoryChangelogCatalog]
+
+    val analyzed = sql(
+      s"SELECT a.id FROM $cdcCatalogName.test_table " +
+      s"CHANGES FROM VERSION 1 TO VERSION 5 " +
+      s"WITH ('$changelogStateOption' = 'same', '$scanOption' = 'left') AS a " +
+      s"JOIN $cdcCatalogName.test_table CHANGES FROM VERSION 1 TO VERSION 5 " +
+      s"WITH ('$changelogStateOption' = 'same', '$scanOption' = 'right') AS b " +
+      "ON a.id = b.id").queryExecution.analyzed
+
+    assert(cat.loadChangelogCalls.size == 1)
+    val relations = analyzed.collect {
+      case r: DataSourceV2Relation if r.table.isInstanceOf[ChangelogTable] => r
+    }
+    assert(relations.size == 2)
+    val changelogs = relations.map(_.table.asInstanceOf[ChangelogTable].changelog)
+    assert(changelogs.head eq changelogs.last)
+    assert(relations.map(_.options.get(scanOption)).toSet == Set("left", "right"))
+  }
+
+  test("streaming references share a changelog while preserving scan options") {
+    val cat = spark.sessionState.catalogManager
+      .catalog(cdcCatalogName)
+      .asInstanceOf[InMemoryChangelogCatalog]
+
+    val analyzed = sql(
+      s"SELECT a.id FROM STREAM $cdcCatalogName.test_table " +
+      s"CHANGES FROM VERSION 1 " +
+      s"WITH ('$changelogStateOption' = 'same', '$scanOption' = 'left') AS a " +
+      s"JOIN STREAM $cdcCatalogName.test_table CHANGES FROM VERSION 1 " +
+      s"WITH ('$changelogStateOption' = 'same', '$scanOption' = 'right') AS b " +
+      "ON a.id = b.id").queryExecution.analyzed
+
+    assert(cat.loadChangelogCalls.size == 1)
+    val relations = analyzed.collect {
+      case r: StreamingRelationV2 if r.table.isInstanceOf[ChangelogTable] => r
+    }
+    assert(relations.size == 2)
+    val changelogs = relations.map(_.table.asInstanceOf[ChangelogTable].changelog)
+    assert(changelogs.head eq changelogs.last)
+    assert(relations.map(_.extraOptions.get(scanOption)).toSet == Set("left", "right"))
+  }
+
+  test("references load different changelogs for different state options or contexts") {
+    val cat = spark.sessionState.catalogManager
+      .catalog(cdcCatalogName)
+      .asInstanceOf[InMemoryChangelogCatalog]
+
+    sql(
+      s"SELECT a.id FROM $cdcCatalogName.test_table " +
+      s"CHANGES FROM VERSION 1 TO VERSION 5 " +
+      s"WITH ('$changelogStateOption' = 'left') AS a " +
+      s"JOIN $cdcCatalogName.test_table CHANGES FROM VERSION 1 TO VERSION 5 " +
+      s"WITH ('$changelogStateOption' = 'right') AS b ON a.id = b.id")
+      .queryExecution.analyzed
+    assert(cat.loadChangelogCalls.size == 2)
+
+    cat.resetLoadChangelogCalls()
+    sql(
+      s"SELECT a.id FROM $cdcCatalogName.test_table " +
+      s"CHANGES FROM VERSION 1 TO VERSION 5 " +
+      s"WITH ('$changelogStateOption' = 'same') AS a " +
+      s"JOIN $cdcCatalogName.test_table CHANGES FROM VERSION 2 TO VERSION 5 " +
+      s"WITH ('$changelogStateOption' = 'same') AS b ON a.id = b.id")
+      .queryExecution.analyzed
+    assert(cat.loadChangelogCalls.size == 2)
+  }
+
+  test("generic table refresh leaves changelog relations unchanged") {
+    val analyzed = sql(
+      s"SELECT * FROM $cdcCatalogName.test_table CHANGES FROM VERSION 1 TO VERSION 5")
+      .queryExecution.analyzed
+
+    val refreshed = V2TableRefreshUtil.refresh(spark, analyzed)
+    val relations = refreshed.collect {
+      case r: DataSourceV2Relation if r.table.isInstanceOf[ChangelogTable] => r
+    }
+    assert(relations.size == 1)
+  }
+
+  test("cached changelog relation is not reused as the base table") {
+    val changes = spark.read
+      .option("startingVersion", "1")
+      .option("deduplicationMode", "none")
+      .changes(s"$cdcCatalogName.test_table")
+      .cache()
+
+    try {
+      val baseRelation = spark.table(s"$cdcCatalogName.test_table")
+        .queryExecution.analyzed.collectFirst {
+          case r: DataSourceV2Relation => r
+        }.get
+      assert(!baseRelation.table.isInstanceOf[ChangelogTable])
+      assert(!baseRelation.output.exists(_.name == "_change_type"))
+    } finally {
+      changes.unpersist(blocking = true)
+    }
+  }
+
+  test("recaching a changelog evicts the stale cache entry") {
+    val changes = spark.read
+      .option("startingVersion", "1")
+      .option("deduplicationMode", "none")
+      .changes(s"$cdcCatalogName.test_table")
+      .cache()
+
+    try {
+      assert(spark.sharedState.cacheManager.lookupCachedData(changes).nonEmpty)
+      spark.sharedState.cacheManager.recacheByPlan(spark, changes.queryExecution.analyzed)
+      assert(spark.sharedState.cacheManager.lookupCachedData(changes).isEmpty)
+    } finally {
+      changes.unpersist(blocking = true)
+    }
   }
 
   // ===========================================================================

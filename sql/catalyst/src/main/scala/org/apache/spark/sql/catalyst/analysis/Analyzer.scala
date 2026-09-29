@@ -138,6 +138,9 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  * @param tableCache A mapping from (catalog, identifier, time travel spec, table-state options) to
  *                   concrete tables. This pins one table state while allowing references to keep
  *                   different read-specific options.
+ * @param changelogCache A mapping from (catalog, identifier, changelog context, changelog-state
+ *                       options) to concrete changelogs. This pins one changelog state while
+ *                       allowing references to keep different scan-specific options.
  * @param referredTempViewNames All the temp view names referred by the current view we are
  *                              resolving. It's used to make sure the relation resolution is
  *                              consistent between view creation and view resolution. For example,
@@ -159,6 +162,7 @@ case class AnalysisContext(
     maxNestedViewDepth: Int = -1,
     relationCache: mutable.Map[RelationCacheKey, LogicalPlan] = mutable.Map.empty,
     tableCache: mutable.Map[TableCacheKey, Table] = mutable.Map.empty,
+    changelogCache: mutable.Map[ChangelogCacheKey, Changelog] = mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     // 1. If we are resolving a view, this field will be restored from the view metadata,
     //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.
@@ -254,6 +258,7 @@ object AnalysisContext {
       maxNestedViewDepth = maxNestedViewDepth,
       relationCache = originContext.relationCache,
       tableCache = originContext.tableCache,
+      changelogCache = originContext.changelogCache,
       referredTempViewNames = viewDesc.viewReferredTempViewNames,
       referredTempFunctionNames = mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
       referredTempVariableNames = viewDesc.viewReferredTempVariableNames,

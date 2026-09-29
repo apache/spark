@@ -86,8 +86,11 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       schemaValidationMode: SchemaValidationMode): LogicalPlan = {
     val currentTables = mutable.HashMap.empty[CurrentTableKey, Table]
     plan transformWithSubqueries {
+      // ChangelogTable is loaded through loadChangelog and its capabilities shape analyzer
+      // post-processing. It cannot be refreshed safely through the base-table path below.
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
-          if (r.isVersioned || !versionedOnly) && r.timeTravelSpec.isEmpty =>
+          if !r.table.isInstanceOf[ChangelogTable] &&
+            (r.isVersioned || !versionedOnly) && r.timeTravelSpec.isEmpty =>
         val stateOptions = CatalogV2Util.extractTableStateOptions(catalog, r.options)
         val currentTable = currentTables.getOrElseUpdate((catalog, ident, stateOptions), {
           val tableName = V2TableUtil.toQualifiedName(catalog, ident)
