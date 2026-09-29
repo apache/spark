@@ -340,47 +340,50 @@ object ParquetUtils extends Logging {
       var isCount = false
       var index = 0
       var schemaName = ""
-      blocks.forEach { block =>
-        val blockMetaData = block.getColumns
-        agg match {
-          case max: Max if V2ColumnUtils.extractV2Column(max.column).isDefined =>
-            val colName = V2ColumnUtils.extractV2Column(max.column).get
-            index = dataSchema.getFieldIndex(colName).getOrElse(-1)
-            schemaName = "max(" + colName + ")"
-            val currentMax = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, true)
+      agg match {
+        case max: Max if V2ColumnUtils.extractV2Column(max.column).isDefined =>
+          val colName = V2ColumnUtils.extractV2Column(max.column).get
+          index = dataSchema.getFieldIndex(colName).getOrElse(-1)
+          schemaName = "max(" + colName + ")"
+          blocks.forEach { block =>
+            val currentMax = getCurrentBlockMaxOrMin(filePath, block.getColumns, index, true)
             if (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0) {
               value = currentMax
             }
-          case min: Min if V2ColumnUtils.extractV2Column(min.column).isDefined =>
-            val colName = V2ColumnUtils.extractV2Column(min.column).get
-            index = dataSchema.getFieldIndex(colName).getOrElse(-1)
-            schemaName = "min(" + colName + ")"
-            val currentMin = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, false)
+          }
+        case min: Min if V2ColumnUtils.extractV2Column(min.column).isDefined =>
+          val colName = V2ColumnUtils.extractV2Column(min.column).get
+          index = dataSchema.getFieldIndex(colName).getOrElse(-1)
+          schemaName = "min(" + colName + ")"
+          blocks.forEach { block =>
+            val currentMin = getCurrentBlockMaxOrMin(filePath, block.getColumns, index, false)
             if (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0) {
               value = currentMin
             }
-          case count: Count if V2ColumnUtils.extractV2Column(count.column).isDefined =>
-            val colName = V2ColumnUtils.extractV2Column(count.column).get
-            schemaName = "count(" + colName + ")"
-            isCount = true
-            val partitionColIndex = partitionSchema.getFieldIndex(colName)
-            if (partitionColIndex.isEmpty) {
-              rowCount += block.getRowCount
+          }
+        case count: Count if V2ColumnUtils.extractV2Column(count.column).isDefined =>
+          val colName = V2ColumnUtils.extractV2Column(count.column).get
+          schemaName = "count(" + colName + ")"
+          isCount = true
+          // A partition value is constant within a file, so classify the column once.
+          partitionSchema.getFieldIndex(colName) match {
+            case None =>
               index = dataSchema.getFieldIndex(colName).getOrElse(-1)
-              // Count(*) includes the null values, but Count(colName) doesn't.
-              rowCount -= getNumNulls(filePath, blockMetaData, index)
-            } else if (!partitionValues.isNullAt(partitionColIndex.get)) {
-              // A partition column value is constant per file. A non-null partition
-              // contributes every row; a null partition (__HIVE_DEFAULT_PARTITION__)
-              // is SQL NULL and contributes 0 to Count(colName), so it is skipped.
-              rowCount += block.getRowCount
-            }
-          case _: CountStar =>
-            schemaName = "count(*)"
-            rowCount += block.getRowCount
-            isCount = true
-          case _ =>
-        }
+              blocks.forEach { block =>
+                // Count(*) includes the null values, but Count(colName) doesn't.
+                rowCount += block.getRowCount - getNumNulls(filePath, block.getColumns, index)
+              }
+            // A non-null partition contributes every row; a null partition
+            // (__HIVE_DEFAULT_PARTITION__) is SQL NULL and contributes 0.
+            case Some(i) if !partitionValues.isNullAt(i) =>
+              blocks.forEach { block => rowCount += block.getRowCount }
+            case Some(_) => // null partition: contributes 0
+          }
+        case _: CountStar =>
+          schemaName = "count(*)"
+          isCount = true
+          blocks.forEach { block => rowCount += block.getRowCount }
+        case _ =>
       }
       if (isCount) {
         valuesBuilder += rowCount
