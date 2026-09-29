@@ -74,7 +74,6 @@ class ChangelogResolutionSuite extends SharedSparkSession {
     cdcCatalog.clearChangeRows(ident)
     cdcCatalog.setChangelogProperties(ident, ChangelogProperties())
     val catalog = spark.sessionState.catalogManager.catalog(cdcCatalogName).asTableCatalog
-    val ident = Identifier.of(Array.empty, "test_table")
     if (catalog.tableExists(ident)) {
       catalog.dropTable(ident)
     }
@@ -772,7 +771,7 @@ class ChangelogStateOptionsCatalog extends InMemoryChangelogCatalog {
   var rejectCurrentTableLoads: Boolean = false
 
   override def changelogStateOptionKeys(): java.util.Set[String] = {
-    changelogKeys.getOrElse(super.changelogStateOptionKeys())
+    changelogKeys.getOrElse(tableStateOptionKeys())
   }
 
   override def loadTable(ident: Identifier): Table = {
