@@ -155,11 +155,11 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
    * The conjuncts of `afterScanFilters` the file format can evaluate at the storage layer for late
    * materialization, to prune the IO of the columns the filter does not reference.
    *
-   * They stay in the post-scan `Filter` as well, the way a pushed data filter does: the reader is
+   * They stay in the post-scan `Filter` as well, the way a pushed data filter does. The reader is
    * offered them, not obliged to honor them, so the plan keeps the exact check. What it costs is
    * evaluating the conjunct a second time for the rows the scan emits. What it buys is a reader
-   * free to give up on a file with no page index, or on a row group whose survivors scatter too far
-   * to hold their row ranges, without the answer depending on it.
+   * free to give up on a file it cannot read in part, or on a stretch of rows whose survivors cost
+   * too much to keep track of, without the answer depending on it.
    *
    * Two of the conditions are per scan, and failing either offers nothing:
    *  - [[FileFormat.supportsStorageFilterPushdown]] holds. That is where a format reads the conf
@@ -171,15 +171,17 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
    *    about batch support rather than naming a format.
    *
    * The rest are per conjunct:
-   *  - It is deterministic. A reader evaluates the predicate without
+   *  - It is deterministic. The reader drops the rows the conjunct rejects and the post-scan
+   *    `Filter` evaluates it again on the rows it keeps, so the two evaluations have to agree. Such
+   *    a conjunct would also fail at task time, since a reader evaluates the predicate without
    *    `BasePredicate.initialize(partitionIndex)`, which `GeneratePredicate` emits for a
-   *    `Nondeterministic` expression, so a non-deterministic conjunct would fail at task time.
+   *    `Nondeterministic` expression.
    *  - It references at least one column, and every column it references is a projected data
    *    column. A reference to something the scan does not read cannot be evaluated by the reader.
    *  - [[FileFormat.supportsStorageFilter]] accepts it. That is where the expression shapes and
    *    column types a reader can evaluate live, so this method names neither a format nor a type.
    *
-   * One last condition is on the set that survives: at least one projected column must be left for
+   * One last condition is on the set that survives, that at least one projected column is left for
    * the reader to prune. A scan that projects nothing but the filter's own storage-key columns
    * reads the same columns for the same rows either way, since the reader has to read a key column
    * to evaluate the filter on it, so offering it could only add the cost of evaluating the
@@ -196,7 +198,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
     if (!fsRelation.fileFormat.supportBatch(sparkSession, resultSchema)) return Nil
 
     val dataAttrs = AttributeSet(readDataColumns)
-    // Over `toSeq` rather than the set: `ExpressionSet.filter` hands the predicate
+    // Over `toSeq` rather than the set, because `ExpressionSet.filter` hands the predicate
     // `e.canonicalized`, which drops attribute names and metadata, and a format deciding by either
     // would answer about an expression it will never be given.
     val offered = afterScanFilters.toSeq.filter { expr =>

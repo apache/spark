@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, BasePredicate, BloomFilterMightContain, BoundReference, Expression, Predicate}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -108,9 +107,9 @@ object StorageFilterMetrics {
  * data-column pages that do not overlap any surviving row range.
  *
  * [[keyColumnIndices]] are indices into the scan's requested data schema identifying the leaf
- * columns referenced by the filter. [[test]] expects a row whose fields are those key columns in
- * that order: the predicate's references are rewritten to [[BoundReference]]s pointing at positions
- * 0..(keyColumnIndices.length - 1) when the filter is built.
+ * columns referenced by the filter. [[preparedPredicate]] expects a row whose fields are those key
+ * columns in that order. The predicate's references are rewritten to [[BoundReference]]s pointing
+ * at positions 0..(keyColumnIndices.length - 1) when the filter is built.
  */
 class ParquetStorageFilter private (
     val keyColumnIndices: Array[Int],
@@ -121,6 +120,12 @@ class ParquetStorageFilter private (
   // Codegen-produced predicates can be awkward to serialize from driver to executor, so we defer
   // construction to first use on the executor.
   @transient private lazy val predicate: BasePredicate = {
+    // The field below is nulled the first time this runs, and the copy that reaches every task is
+    // the driver's. So a driver-side evaluation would leave each executor building a predicate from
+    // nothing, which is named here rather than left to an NPE from `Predicate.create`.
+    require(boundExpression != null,
+      "a storage filter must only be evaluated on an executor, and this copy has released the " +
+        "expression it would build its predicate from")
     val created = Predicate.create(boundExpression)
     // A prepared bloom reaches the executor as a binary Literal inside this expression, up to
     // `spark.sql.optimizer.runtime.bloomFilter.maxNumBits` of it, while `created` holds the
@@ -135,12 +140,10 @@ class ParquetStorageFilter private (
     created
   }
 
-  def test(keyRow: InternalRow): Boolean = predicate.eval(keyRow)
-
   /**
-   * The predicate itself, for a caller that evaluates it per row of a batch. Resolving the `lazy
-   * val` costs a volatile read, which is why a loop takes it out of the loop rather than calling
-   * [[test]].
+   * The predicate this filter evaluates, which the reader resolves once and then runs per row. It
+   * is handed out rather than wrapped, because resolving the `lazy val` costs a volatile read that
+   * a per-row loop would otherwise pay.
    */
   def preparedPredicate: BasePredicate = predicate
 }
@@ -187,10 +190,10 @@ object ParquetStorageFilter {
       "storage filter key columns must have a type the vectorized reader can copy, but " +
         unsupported.map(f => s"${f.name} ${f.dataType.catalogString}").mkString(", ") +
         " do not; see ParquetStorageFilter.isSupportedKeyType")
-    require(!keyFields.exists(_.name == ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME),
+    require(!keyFields.exists(f => ParquetRowIndexUtil.isRowIndexColumnName(f.name)),
       "a storage filter must not have a key column named " +
-        s"${ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME}: the reader writes row indexes " +
-        "over that column, so what it reads back depends on how its row group was read")
+        s"${ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME}, because the reader writes row " +
+        "indexes over that column, so what it reads back depends on how its row group was read")
 
     val indexMap = originalOrdinals.zipWithIndex.toMap
     val remapped = expr.transform {
@@ -204,7 +207,7 @@ object ParquetStorageFilter {
    * Whether `dt` is usable as a storage-filter key column type, which is whether the reader's
    * per-type value copier handles it. [[isSupportedStorageFilter]] asks this for the planner and
    * [[create]] re-checks it, so `ValueCopier` is only ever asked for a type it has. It is the one
-   * list: see `ValueCopier` for which types are in it and why.
+   * list. See `ValueCopier` for which types are in it and why.
    */
   def isSupportedKeyType(dt: DataType): Boolean = ValueCopier.supports(dt)
 
@@ -213,26 +216,26 @@ object ParquetStorageFilter {
    * `ParquetFileFormat.supportsStorageFilter` answers for the planner. Three conditions:
    *
    *  - the whole conjunct is a `BloomFilterMightContain`, not something with a bloom nested under
-   *    an OR or a NOT: the reader evaluates the expression it is given and reads a false as "drop
+   *    an OR or a NOT. The reader evaluates the expression it is given and reads a false as "drop
    *    this row";
    *  - every column it references has a type the reader's value copier can handle. Every reference
    *    is checked, not only the ones under the hash, because [[create]] binds all of them;
    *  - no referenced column is named like the synthetic row-index metadata column. This reader
    *    finds that column by name and writes row indexes over whatever the file holds (SPARK-40059),
-   *    so such a column would read back differently depending on how its row group was read: from
+   *    so such a column would read back differently depending on how its row group was read, from
    *    the survivor queues where the row group was spliced, from the overwritten vector where it
    *    was not.
    *
    * Nothing here asks whether the expression is safe to evaluate on every row. The reader evaluates
    * the predicate without the conjuncts that precede it in the plan, so one that throws on a row an
    * earlier conjunct would have rejected throws where a plain scan does not. That is handled where
-   * it arises: the reader gives the filter up for the row group and reads it plainly, and the
+   * it arises. The reader gives the filter up for the row group and reads it plainly, and the
    * post-scan `Filter` then evaluates every conjunct in its own order.
    */
   def isSupportedStorageFilter(expr: Expression): Boolean = expr match {
     case bloom: BloomFilterMightContain =>
       bloom.references.forall(a => isSupportedKeyType(a.dataType)) &&
-        !bloom.references.exists(_.name == ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)
+        !bloom.references.exists(a => ParquetRowIndexUtil.isRowIndexColumnName(a.name))
     case _ => false
   }
 }

@@ -112,9 +112,13 @@ object ParquetRowIndexUtil {
     }
   }
 
+  /** Whether `name` names the synthetic column the reader writes file row indexes over. */
+  def isRowIndexColumnName(name: String): Boolean =
+    name == ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
+
   def findRowIndexColumnIndexInSchema(sparkSchema: StructType): Int = {
     sparkSchema.fields.zipWithIndex.find { case (field: StructField, _: Int) =>
-      field.name == ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
+      isRowIndexColumnName(field.name)
     } match {
       case Some((field: StructField, idx: Int)) =>
         if (field.dataType != LongType) {
@@ -127,6 +131,6 @@ object ParquetRowIndexUtil {
   }
 
   def isRowIndexColumn(column: ParquetColumn): Boolean = {
-    column.path.length == 1 && column.path.last == ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
+    column.path.length == 1 && isRowIndexColumnName(column.path.last)
   }
 }

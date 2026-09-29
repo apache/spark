@@ -774,6 +774,7 @@ case class FileSourceScanExec(
   lazy val inputRDD: RDD[InternalRow] = {
     val options = relation.options +
       (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
+    val hadoopConf = getHadoopConf(relation.sparkSession, relation.options)
     // The storage-filter entry point is only asked when there is something to push, so a
     // `FileFormat` subclass which customizes reading by overriding `buildReaderWithPartitionValues`
     // keeps being used on every other query. A format that declines, which is the default, falls
@@ -789,7 +790,7 @@ case class FileSourceScanExec(
         filters = pushedDownFilters,
         storageFilters = preparedStorageFilters,
         options = options,
-        hadoopConf = getHadoopConf(relation.sparkSession, relation.options),
+        hadoopConf = hadoopConf,
         storageFilterMetrics = storageFilterMetrics)
     }
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
@@ -801,7 +802,7 @@ case class FileSourceScanExec(
           requiredSchema = requiredSchema,
           filters = pushedDownFilters,
           options = options,
-          hadoopConf = getHadoopConf(relation.sparkSession, relation.options))
+          hadoopConf = hadoopConf)
       }
 
     val readRDD = if (bucketedScan) {
@@ -816,22 +817,19 @@ case class FileSourceScanExec(
   // Materialize scalar subqueries inside storage filters to literals and bind AttributeReferences
   // to BoundReferences targeting positions in `requiredSchema`. Subqueries must have been prepared
   // by SparkPlan before this is forced (same contract as `pushedDownFilters`).
+  //
+  // No conf check here, since the conf decides at planning time whether a scan is offered storage
+  // filters at all, and re-reading it now could only make this scan drop work it already has.
+  //
+  // `output` is `readDataColumns ++ generatedMetadataColumns ++ partitionColumns ++
+  // constantMetadataColumns` and `requiredSchema` is the StructType of the first two groups, so
+  // the first `requiredSchema.length` attributes line up with its fields.
   @transient
   protected lazy val preparedStorageFilters: Seq[Expression] = {
-    if (storageFilters.isEmpty) {
-      Nil
-    } else {
-      // No conf check here: the conf decides at planning time whether a scan is offered storage
-      // filters at all, and re-reading it now could only make this scan drop work it already has.
-      //
-      // `output` is `readDataColumns ++ generatedMetadataColumns ++ partitionColumns ++
-      // constantMetadataColumns` and `requiredSchema` is the StructType of the first two groups, so
-      // the first `requiredSchema.length` attributes line up with its fields.
-      val requestedDataAttrs = output.take(requiredSchema.length)
-      storageFilters.map { expr =>
-        val subqueryReplaced = expr.transform { case s: execution.ScalarSubquery => s.toLiteral }
-        BindReferences.bindReference(subqueryReplaced, requestedDataAttrs)
-      }
+    val requestedDataAttrs = output.take(requiredSchema.length)
+    storageFilters.map { expr =>
+      val subqueryReplaced = expr.transform { case s: execution.ScalarSubquery => s.toLiteral }
+      BindReferences.bindReference(subqueryReplaced, requestedDataAttrs)
     }
   }
 

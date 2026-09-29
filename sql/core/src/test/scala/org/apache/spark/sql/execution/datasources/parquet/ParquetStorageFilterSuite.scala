@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.File
+import java.io.{File, RandomAccessFile}
 import java.net.URI
 import java.time.LocalTime
 import java.util.concurrent.atomic.AtomicLong
@@ -34,7 +34,7 @@ import org.apache.parquet.column.page.DataPageV1
 import org.apache.parquet.column.page.mem.MemPageStore
 import org.apache.parquet.format.converter.ParquetMetadataConverter
 import org.apache.parquet.hadoop.{ParquetFileWriter, ParquetInputFormat, ParquetOutputFormat}
-import org.apache.parquet.hadoop.metadata.{ColumnChunkMetaData, CompressionCodecName}
+import org.apache.parquet.hadoop.metadata.{ColumnChunkMetaData, CompressionCodecName, ParquetMetadata}
 import org.apache.parquet.hadoop.util.{HadoopInputFile, HadoopOutputFile}
 import org.apache.parquet.schema.MessageTypeParser
 
@@ -161,11 +161,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       metrics: StorageFilterMetrics = allMetrics()): ParquetStorageFilter =
     keyTypeAtLeastFilter(Literal(threshold), LongType, metrics)
 
-  // Writes a single-column (just `k`) parquet file for the supplied key type via Spark's
-  // {@code Encoder}.
-  // A key column of the caller's type plus one non-key column. Every key-type fixture carries that
-  // second column, because a projection of key columns alone is one the reader declines: it would
-  // read what a plain scan reads, so there is nothing for phase 2 to prune.
+  // A key column of the caller's type plus one non-key column, written via Spark's `Encoder`. Every
+  // key-type fixture carries that second column, because a projection of key columns alone is one
+  // the reader declines. It would read what a plain scan reads, so there is nothing for phase 2 to
+  // prune.
   private def writeKeyParquetFile[T : org.apache.spark.sql.Encoder](
       dir: File,
       keys: Seq[T],
@@ -175,8 +174,8 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       spark.createDataset(keys).toDF("k").selectExpr("k", "CAST(k AS STRING) AS v"),
       rowGroupSize)
 
-  // Reads a key-type fixture, returning the survivor keys and the reader. The {@code extract}
-  // function pulls one value at a time from the batch's key column.
+  // Reads a key-type fixture, returning the survivor keys and the reader. The `extract` function
+  // pulls one value at a time from the batch's key column.
   private def readKeysAll[T](
       filePath: String,
       storageFilter: ParquetStorageFilter,
@@ -199,8 +198,8 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
 
   test("rejects entire row group: no data-column IO, row-group-skipped metric incremented") {
     withTempDir { dir =>
-      // 40 rows in one row group: parquet's first row-group size check is at record 100, so
-      // `rowGroupSize` cannot split a file this small. The one row group is the one rejected.
+      // 40 rows come out as one row group. Parquet's first row-group size check is at record 100,
+      // so `rowGroupSize` cannot split a file this small. The one row group is the one rejected.
       val rows = (1L to 40L).map(i => (i, s"v_$i"))
       val path = writeParquetFile(dir, rows, rowGroupSize = 256L)
 
@@ -260,7 +259,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       val filter = keyAtLeastFilter(195L, m)
       val (result, reader) = readAll(path, filter)
       try {
-        // Output is exact: VectorizedColumnReader uses PageReadStore.getRowIndexes (driven by
+        // Output is exact. VectorizedColumnReader uses PageReadStore.getRowIndexes (driven by
         // our finalRanges) to skip rows within partial pages, so emitted rows == survivors.
         val expected = rows.filter(_._1 >= 195L).toSet
         assert(result.toSet == expected,
@@ -269,7 +268,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         assert(m.rowGroupsSkipped.value >= 1,
           s"expected row groups skipped; got ${m.rowGroupsSkipped.value}")
         // "Partially kept" is the `rowsExcludedWithinRowGroup` half of the accounting, and only
-        // this identity establishes it: a row group that was neither skipped whole nor emitted has
+        // this identity establishes it. A row group that was neither skipped whole nor emitted has
         // to have its rows counted there.
         val excludedRg = m.rowsExcludedByRowGroup.value
         val excludedPf = m.rowsExcludedWithinRowGroup.value
@@ -369,14 +368,14 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   }
 
   test("ParquetStorageFilter.create rejects a filter that violates a planner precondition") {
-    // These are all planner bugs by construction: storageFiltersFor pre-checks each one. The rows
-    // are safe either way, since the conjunct stays in the post-scan Filter, but a soft rejection
-    // would hide the bug behind a silently slower read. create fails instead.
+    // These are all planner bugs by construction, because storageFiltersFor pre-checks each one.
+    // The rows are safe either way, since the conjunct stays in the post-scan Filter, but a soft
+    // rejection would hide the bug behind a silently slower read. create fails instead.
     val requested = StructType(Seq(
       StructField("k", LongType, nullable = false),
       StructField("v", StringType, nullable = false)))
 
-    // Nothing to push: the caller is supposed to check this before calling.
+    // Nothing to push. The caller is supposed to check this before calling.
     val empty = intercept[IllegalArgumentException] {
       createFilter(Seq.empty, requested)
     }
@@ -406,9 +405,9 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
 
     // A key column named like the synthetic row-index metadata column. This reader finds that
     // column by name and writes row indexes over whatever the file holds, so what a key column of
-    // that name reads back would depend on how its row group was read. Both gates reject it: the
-    // planner's, so the filter is never offered, and this one, so a caller past the planner fails
-    // rather than reading a key the reader itself overwrote.
+    // that name reads back would depend on how its row group was read. Both gates reject it. The
+    // planner's means the filter is never offered, and this one means a caller past the planner
+    // fails rather than reading a key the reader itself overwrote.
     val rowIndexName = ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
     val rowIndexSchema = StructType(Seq(
       StructField(rowIndexName, LongType, nullable = false),
@@ -438,12 +437,12 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   }
 
   test("a plain JDK exception from the key expression gives the row group up") {
-    // The reader's fail-open is not narrowed to Spark's own errors, and this is why: a built-in
+    // The reader's fail-open is not narrowed to Spark's own errors, and this is why. A built-in
     // expression that `InjectRuntimeFilter` is happy to build a bloom over can raise a plain JDK
     // one. Rethrowing it would fail a query a plain read answers, and under `ignoreCorruptFiles`
     // an exception from a reader is read as a corrupt file, which drops the rest of it silently.
     //
-    // The filter is selective, so returning every row is what proves the give-up: a filter that
+    // The filter is selective, so returning every row is what proves the give-up. A filter that
     // ran to the end would have dropped the rows below 10 seconds.
     withTempDir { dir =>
       val df = spark.range(0, 20).selectExpr(
@@ -454,7 +453,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       val requested = StructType(Seq(
         StructField("k", decimalType, nullable = true),
         StructField("v", StringType, nullable = true)))
-      // Row 7 throws: 1.0000001 seconds is not a whole number of microseconds.
+      // Row 7 throws, since 1.0000001 seconds is not a whole number of microseconds.
       val secondsKey = GreaterThanOrEqual(
         SecondsToTimestamp(BoundReference(0, decimalType, nullable = true)),
         Literal.create(10L * 1000000L, TimestampType))
@@ -514,7 +513,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
 
   test("pushed data filter on a non-key column + storage filter on key: cross-propagation works") {
     // A pushed data filter on a non-key column and a storage filter on the key column have to
-    // compose: phase 0 derives its row ranges from the pushed filter, phase 1 narrows them with the
+    // compose. Phase 0 derives its row ranges from the pushed filter, phase 1 narrows them with the
     // storage filter, and phase 2 reads the non-key columns under the intersection.
     //
     // Note the predicate deliberately uses `>` rather than `!=`. ColumnIndexFilter substitutes
@@ -579,15 +578,16 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     (df.queryExecution.executedPlan, df.collect())
   }
 
-  // Creates two parquet tables (bf1: large, bf2: small with selective filter) for join tests, and
-  // sets what it takes for the optimizer to build a bloom over them at all: the application side
-  // must look big enough to be worth one, and the join must not become a broadcast. Every test
-  // below needs both, so they are here rather than in each; a test states only what it varies.
+  // Creates two parquet tables for join tests, a large `bf1` and a small `bf2` with a selective
+  // filter, and sets what it takes for the optimizer to build a bloom over them at all. The
+  // application side must look big enough to be worth one, and the join must not become a
+  // broadcast. Every test below needs both, so they are here rather than in each, and a test states
+  // only what it varies.
   private def withBloomFilterTables(body: => Unit): Unit = {
     withTable("bf1", "bf2") {
-      // bf1 = "large" application side: 600 rows.
+      // bf1 is the large application side, 600 rows.
       spark.range(600).selectExpr("id AS k", "id AS v").write.format("parquet").saveAsTable("bf1")
-      // bf2 = "small" creation side: 30 rows, with a selective filter (v = 5 keeps 1 row).
+      // bf2 is the small creation side, 30 rows, with a selective filter (v = 5 keeps 1 row).
       spark.range(30).selectExpr("id AS k", "id AS v").write.format("parquet").saveAsTable("bf2")
       withSQLConf(
           SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1000",
@@ -618,7 +618,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   }
 
   test("FileSourceStrategy leaves the bloom behind when every projected column is a key column") {
-    // Nothing is left for phase 2 to prune: the reader would read the same column for the same rows
+    // Nothing is left for phase 2 to prune. The reader would read the same column for the same rows
     // as a plain scan, since it has to read a key column to evaluate the filter on it, and would
     // add only the cost of evaluating the predicate outside the generated code.
     withBloomFilterTables {
@@ -685,10 +685,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   }
 
   test("a row group over the splice cap is read the plain way, same rows, more bytes") {
-    // Past the cap a row group is read the plain way: phase 2 takes every projected column, key
+    // Past the cap a row group is read the plain way. Phase 2 takes every projected column, key
     // columns included, so nothing is buffered. Two things have to hold. The rows must not
     // change, since a fallback that quietly dropped the predicate would return extra rows. And
-    // the fallback must actually have happened, which is observable: it reads the key column a
+    // the fallback must actually have happened, which is observable. It reads the key column a
     // second time, so it transfers strictly more bytes. Without that second assertion the test
     // would pass even if the cap never reached the reader.
     //
@@ -719,7 +719,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
 
       val (splicedRows, splicedBytes) = run("64MB")
       // 100 bytes is past what 16 survivors of a long key buffer, and still leaves room for the
-      // row ranges: `k >= 350` keeps a contiguous run, so there is one range to hold.
+      // row ranges. `k >= 350` keeps a contiguous run, so there is one range to hold.
       val (plainRows, plainBytes) = run("100b")
       assert(splicedRows == 51, s"the filter keeps keys 350..400; got $splicedRows")
       assert(plainRows == splicedRows,
@@ -804,7 +804,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       assert(plain < spliced,
         s"the second key read must count against the saving; plain=$plain spliced=$spliced")
 
-      // The two halves of the budget are weighed together, and this is the case that says so: eight
+      // The two halves of the budget are weighed together, and this is the case that says so. Eight
       // survivors of a long key buffer 8 * (1 + 8) = 72 bytes and fall in one range of 40, so
       // neither half reaches the 100-byte cap on its own while the sum passes it at the seventh.
       // Weighing them separately would keep splicing here, and report the larger saving for it.
@@ -882,7 +882,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     // at page level. What it can still do is skip a row group the filter empties, which needs no
     // index at all, and that is the split this test pins. The three row groups are ordered so that
     // the file's first partial read is what discovers the missing index, and the two row groups
-    // after that discovery still get phase 1: the middle one is emptied by the filter and skipped
+    // after that discovery still get phase 1. The middle one is emptied by the filter and skipped
     // whole, the last keeps rows and is read whole. The missing index is learned from the read that
     // fails, so the first row group is the one that discovers it. Spark's own writer always writes
     // the page index, hence the hand-built file.
@@ -941,16 +941,16 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     // Reading part of a row group goes through the block's column index store, and parquet builds
     // that store over every column of the requested schema, emptying it altogether if one of them
     // has no offset index. So a row group whose key column has none cannot be narrowed either, and
-    // the footer check has to ask about the whole projection: asking only about the columns phase 2
+    // the footer check has to ask about the whole projection. Asking only about the columns phase 2
     // reads would let such a row group buffer its survivors and then have phase 2 throw, and the
     // reader answers that by not trusting the page index for the rest of the file. Every row group
     // after it would then be read whole, which is more than a plain read of the same query, since
     // that keeps the pushed data filter's page pruning.
     //
-    // The file: the first row group's key column has no offset index while its value column does,
-    // and the other two have one for both. The pushed data filter matches one value per row group,
-    // so parquet's statistics filter keeps all three while its column index narrows the two it can
-    // to the page that value is in.
+    // In the file, the first row group's key column has no offset index while its value column
+    // does, and the other two have one for both. The pushed data filter matches one value per row
+    // group, so parquet's statistics filter keeps all three while its column index narrows the two
+    // it can to the page that value is in.
     withTempDir { dir =>
       val blocks = (0 until 3).map(b => ((b * 100 + 1L) to (b * 100 + 100L)).map(i => (i, i)))
       val path = writeParquetFileByHand(dir, blocks,
@@ -984,7 +984,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         }.toSeq
       }
       // The footer check gets there before the phase-2 read does, which is what keeps the rest of
-      // the file's page filtering: this WARN is what the exception path would have reported.
+      // the file's page filtering. This WARN is what the exception path would have reported.
       assert(!logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
         .exists(_.contains("without page-level storage filtering")),
         "the footer check must decline the row group rather than the read discovering it")
@@ -992,7 +992,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       // the empty store widens its ranges to the block.
       assert((1L to 100L).forall(values.contains),
         s"the first row group must come back whole; got ${values.count(_ <= 100L)} of its rows")
-      // The other two keep their page pruning, which is the regression this pins: read whole they
+      // The other two keep their page pruning, which is the regression this pins. Read whole they
       // would contribute 200 rows rather than one page each.
       assert(values.size < 300,
         s"the row groups that can be narrowed must still be; got all ${values.size} rows")
@@ -1002,14 +1002,103 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  // Overwrites the bytes of one chunk's offset index while leaving the footer's reference to it.
+  // Parquet then reads the reference, fails to parse what it points at, and reports the whole block
+  // as having no column index, which is the one file shape that reaches phase 2's retry.
+  private def breakOffsetIndex(filePath: String, blockIdx: Int, columnIdx: Int): Unit = {
+    val chunk = footerOf(filePath).getBlocks.get(blockIdx).getColumns.get(columnIdx)
+    val ref = chunk.getOffsetIndexReference
+    assert(ref != null, s"block $blockIdx column $columnIdx has no offset index to damage")
+    val file = new File(filePath)
+    val raf = new RandomAccessFile(file, "rw")
+    try {
+      raf.seek(ref.getOffset)
+      raf.write(Array.fill(ref.getLength)(0xFF.toByte))
+    } finally {
+      raf.close()
+    }
+    // Hadoop's local filesystem checks a side-car checksum that the write above invalidates, and a
+    // mismatch there would fail the read for the wrong reason.
+    val crc = new File(file.getParentFile, s".${file.getName}.crc")
+    if (crc.exists()) assert(crc.delete(), s"could not remove $crc")
+  }
+
+  test("a row group whose offset index parquet cannot parse leaves the rest of the file its " +
+    "page pruning") {
+    // The retry leaves the reader unable to narrow the rest of this file, since the next row
+    // group's store may be as unreadable as this one's. What it must not give up is the pushed data
+    // filter's own page pruning, which parquet did before the reader saw the block, and which a
+    // plain read of the same query keeps. Dropping that would read more than having no storage
+    // filter at all.
+    //
+    // One file shape reaches the retry, a footer that references an offset index parquet cannot
+    // then parse, so the fixture is hand-built and then damaged.
+    withTempDir { dir =>
+      val blocks = (0 until 3).map(b => ((b * 100 + 1L) to (b * 100 + 100L)).map(i => (i, i)))
+      val path = writeParquetFileByHand(dir, blocks, (_, _) => true)
+      breakOffsetIndex(path, blockIdx = 1, columnIdx = 0)
+      // The fixture's whole point. The footer still offers the index the read cannot use, which is
+      // what gets past the footer check and into the retry.
+      assert(footerOf(path).getBlocks.get(1).getColumns.get(0).getOffsetIndexReference != null,
+        "the damaged index must still be referenced, or the footer check declines the row group")
+      val schema = StructType(Seq(
+        StructField("k", LongType, nullable = false),
+        StructField("v", LongType, nullable = false)))
+      // One value per row group, so parquet's statistics keep every one of them and its column
+      // index narrows each to the page holding that value. All three are even, so all three also
+      // survive the storage filter below.
+      val pushed = Seq(sources.In("v", Array[Any](2L, 102L, 202L)))
+      val evenKeys = Seq(EqualTo(
+        Remainder(BoundReference(0, LongType, nullable = false), Literal(2L)), Literal(0L)))
+      def read(storageFilters: Seq[Expression]): Seq[Long] = {
+        val readerFn = new ParquetFileFormat().buildReaderWithStorageFilters(
+          spark, schema, new StructType(), schema, pushed, storageFilters,
+          Map(FileFormat.OPTION_RETURNING_BATCH -> "true"),
+          spark.sessionState.newHadoopConf(), metricMap())
+          .getOrElse(fail("ParquetFileFormat must answer with a reader"))
+        val file = PartitionedFile(
+          InternalRow.empty, SparkPath.fromPathString(path), 0, new File(path).length())
+        readerFn(file).asInstanceOf[Iterator[Object]].flatMap {
+          case batch: ColumnarBatch => (0 until batch.numRows()).map(batch.column(0).getLong)
+          case row: InternalRow => Seq(row.getLong(0))
+        }.toSeq
+      }
+      val logAppender = new LogAppender("damaged offset index")
+      var filtered: Seq[Long] = null
+      withLogAppender(logAppender) {
+        filtered = read(evenKeys)
+      }
+      assert(logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+        .exists(_.contains("without page-level storage filtering")),
+        "the read must have discovered the damaged index, or this test proves nothing")
+      // A plain read of the same query is the bar. The filtering one must never hand the post-scan
+      // Filter more rows than that.
+      val plain = read(Nil)
+      assert(filtered.size <= plain.size,
+        s"the filtering read must not read more than a plain one; got ${filtered.size} rows " +
+          s"against ${plain.size}")
+      // The sharp form of the same thing. The last row group's index is intact, so its pages are
+      // still pruned after the retry has latched.
+      assert(filtered.count(_ > 200L) < 100,
+        s"the last row group must keep its pruning; got ${filtered.count(_ > 200L)} of its 100")
+      // The damaged row group comes back whole, which is the cost that is inherent to it.
+      assert((101L to 200L).forall(filtered.contains),
+        s"the damaged row group must come back whole; got " +
+          s"${filtered.count(k => k > 100L && k <= 200L)} of its 100")
+      // And every row the pushed filter matches is in the output, all three being even.
+      assert(Seq(2L, 102L, 202L).forall(filtered.contains),
+        s"the matching rows must survive; got ${filtered.size} rows")
+    }
+  }
+
   test("scattered survivors: phase 2 lines its values up with the spliced keys, or gives up") {
     // An alternating filter makes one range per surviving row, which is the shape that exercises
-    // phase 2's range walk and the only one where a defect there is invisible from the row count:
-    // the keys come from the splice queues and would still be right while the values came from
+    // phase 2's range walk and the only one where a defect there is invisible from the row count.
+    // The keys come from the splice queues and would still be right while the values came from
     // other rows. So this asserts the pairs.
     //
     // Past the cap those ranges cost more than the budget allows, and the filter is given up for
-    // that row group: every one of its rows is emitted and the post-scan Filter narrows them.
+    // that row group. Every one of its rows is emitted and the post-scan Filter narrows them.
     withTempDir { dir =>
       val rows = (1L to 400L).map(i => (i, f"v_$i%04d"))
       val path = writeParquetFile(dir, rows, rowGroupSize = 64 * 1024L, pageSize = Some(512L))
@@ -1031,8 +1120,8 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         "with room for the ranges, every surviving row comes back with its own value")
       // The capacity decides where the budget is crossed. At 4096 the 200 survivors never fill an
       // accumulator, so the ranges alone cross it; at 16 the buffer has been through several
-      // accumulators by then. Both have to abandon the buffer and give the filter up together:
-      // keeping one without the other would leave phase 2 reading non-key columns while emit
+      // accumulators by then. Both have to abandon the buffer and give the filter up together.
+      // Keeping one without the other would leave phase 2 reading non-key columns while emit
       // spliced keys from a queue holding only the first survivors.
       assert(readWithCap(1024L) == rows,
         "past the cap the filter is given up and the row group comes back whole")
@@ -1087,7 +1176,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     // `kind = 'num'` drops the row before the cast runs. So the query returns its rows instead of
     // failing, which is what it does with the feature off.
     withTable("ansi_app", "ansi_build") {
-      // One file, one row group, with the non-numeric row inside it: a separate file would be
+      // One file, one row group, with the non-numeric row inside it. A separate file would be
       // pruned whole by the pushed `kind = 'num'` filter and the reader would never see the row.
       spark.range(600)
         .selectExpr(
@@ -1120,7 +1209,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     // `ParquetStorageFilter.test` evaluates the predicate without calling
     // `BasePredicate.initialize(partitionIndex)`, which `GeneratePredicate` emits for a
     // `Nondeterministic` expression, so a non-deterministic conjunct has to stay behind. No
-    // producer builds one today, hence the hand-built plan: `InjectRuntimeFilter`'s blooms hash
+    // producer builds one today, hence the hand-built plan. `InjectRuntimeFilter`'s blooms hash
     // join keys, which are deterministic.
     withTempDir { dir =>
       val rows = (1L to 50L).map(i => (i, s"v_$i"))
@@ -1140,8 +1229,8 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
             countBloomFiltersInPostScanFilters(physical))
         }
 
-        // Control: the same bloom over the key alone is offered to the scan, so the arms differ in
-        // exactly one thing. It stays in the post-scan Filter either way.
+        // As a control, the same bloom over the key alone is offered to the scan, so the arms
+        // differ in exactly one thing. It stays in the post-scan Filter either way.
         val (deterministicInScan, deterministicPostScan) =
           extractedBlooms(new XxHash64(Seq(k)))
         assert(deterministicInScan == 1 && deterministicPostScan == 1,
@@ -1150,7 +1239,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
 
         // `Rand` contributes no reference, so `k` is still the only key column. The planner's
         // `deterministic` test on the conjunct is the gate that rejects this one, and the only one
-        // that does: the reader never calls `initialize(partitionIndex)`, so it could not evaluate
+        // that does. The reader never calls `initialize(partitionIndex)`, so it could not evaluate
         // the expression, while the format's hook answers about shapes and types alone.
         val nonDeterministic = new XxHash64(Seq(k, Rand(Literal(1L))))
         assert(!nonDeterministic.deterministic, "the value expression must be non-deterministic")
@@ -1173,13 +1262,13 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       dictionary: Boolean = false,
       valueCopies: Int = 1): String = {
     // Each of the `n` ids is written `valueCopies` times in a row, which is what makes parquet
-    // actually pick dictionary encoding when it is asked for: a dictionary writer falls back to
+    // actually pick dictionary encoding when it is asked for. A dictionary writer falls back to
     // PLAIN as soon as the dictionary plus the encoded ids is no smaller than the raw values, and
     // all-distinct keys guarantee exactly that. The copies have to be consecutive, since the
     // decision is per column chunk, and a row group holding one copy of each value is no better
     // off than a row group of distinct ones.
-    // `div`, not `/`: `/` is floating-point division in Spark SQL, which would hand every key
-    // expression a double and quietly change the written type.
+    // `div`, not `/`, since `/` is floating-point division in Spark SQL, which would hand every
+    // key expression a double and quietly change the written type.
     val ids = spark.range(0, n * valueCopies).selectExpr(s"(id div $valueCopies) + 1 AS id")
     writeSingleParquetFile(dir, ids.selectExpr(s"$keyExpr AS k", "CAST(id AS STRING) AS v"),
       rowGroupSize, dictionary = dictionary)
@@ -1187,11 +1276,13 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
 
   // Every column chunk of the file, from its footer. The facts the tests below assert about a
   // fixture are read off these rather than assumed from the write options.
-  private def footerChunks(filePath: String): Seq[ColumnChunkMetaData] = {
+  private def footerChunks(filePath: String): Seq[ColumnChunkMetaData] =
+    footerOf(filePath).getBlocks.asScala.flatMap(_.getColumns.asScala).toSeq
+
+  private def footerOf(filePath: String): ParquetMetadata = {
     val conf = spark.sessionState.newHadoopConf()
-    val footer = ParquetFooterReader.readFooter(
+    ParquetFooterReader.readFooter(
       HadoopInputFile.fromPath(new Path(filePath), conf), ParquetMetadataConverter.NO_FILTER)
-    footer.getBlocks.asScala.flatMap(_.getColumns.asScala).toSeq
   }
 
   // Asserted rather than assumed, because asking for dictionary encoding does not mean getting it.
@@ -1204,7 +1295,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   // in this suite goes through here.
   //
   // `tryInitializeResource` closes the reader if anything inside throws and leaves it open
-  // otherwise, which is the contract these helpers need: the caller closes it once its assertions
+  // otherwise, which is the contract these helpers need. The caller closes it once its assertions
   // pass. Without it a failure in the read loop, which is what these tests are looking for, leaks
   // the reader, its input stream and its off-heap vectors for the rest of the JVM, and can cascade
   // into unrelated failures in the same suite. `initialize` throws too, so the wrap starts at
@@ -1241,11 +1332,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  // Renders one column value as a string using its *internal* representation, so the splicing path
-  // and the plain path can be compared without going through external type conversion.
-  // A key value as a string, so a test can compare what the splicing path emitted with what the
-  // plain path did without knowing the type. `InternalRow.getAccessor` does the per-type read,
-  // which is why this takes the batch's row rather than the column vector.
+  // A key value as a string in its *internal* representation, so the splicing path and the plain
+  // path can be compared without knowing the type and without external type conversion.
+  // `InternalRow.getAccessor` does the per-type read, which is why this takes the batch's row
+  // rather than the column vector.
   private def renderValue(row: InternalRow, ordinal: Int, dt: DataType): String =
     InternalRow.getAccessor(dt)(row, ordinal) match {
       case null => "null"
@@ -1255,7 +1345,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
 
   // Reads a key-only file through the plain (no storage filter) path and keeps the rows the given
-  // bound predicate accepts. This is the oracle for the splicing path: whatever the plain reader
+  // bound predicate accepts. This is the oracle for the splicing path. Whatever the plain reader
   // returns, filtered in Scala, is exactly what splicing must produce.
   private def survivorsViaPlainPath(
       filePath: String,
@@ -1272,7 +1362,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  // ----- Key-type coverage: one case per ValueCopier branch -----
+  // ----- Key-type coverage, one case per ValueCopier branch -----
 
   // (case name, SQL expression producing `k`, Spark type, threshold as an external value)
   private val keyTypeCases: Seq[(String, String, DataType, Any)] = Seq(
@@ -1310,7 +1400,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   // decode branch rather than straight out of the value array.
   for {
     (name, keyExpr, dt, threshold) <- keyTypeCases
-    // Two types have no dictionary arm to take, and parquet's own writer factory says why: there is
+    // Two types have no dictionary arm to take, and parquet's own writer factory says why. There is
     // "no dictionary encoding for boolean", and for FIXED_LEN_BYTE_ARRAY, which is what a
     // byte-array DECIMAL maps to, "dictionary encoding was not enabled in PARQUET 1.0", which is
     // the writer version Spark writes by default. Asking for it yields PLAIN, so that arm would
@@ -1356,9 +1446,9 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   }
 
   test("TIME key column is supported: isSupportedKeyType admits it and the copier handles it") {
-    // Regression test: TimeType is an AtomicType that passes every planning-time gate (it is
-    // batch-readable and XxHash64 hashes it, so InjectRuntimeFilter will build a bloom on a TIME
-    // join key), so a key-type whitelist that omitted it would fail the task at reader init.
+    // This is a regression test. TimeType is an AtomicType that passes every planning-time gate
+    // (it is batch-readable and XxHash64 hashes it, so InjectRuntimeFilter will build a bloom on a
+    // TIME join key), so a key-type whitelist that omitted it would fail the task at reader init.
     assert(ParquetStorageFilter.isSupportedKeyType(TimeType(6)),
       "TIME must be an eligible storage-filter key type")
     withTempDir { dir =>
@@ -1387,7 +1477,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   test("isSupportedKeyType covers exactly the types the reader can copy") {
     // What FileSourceStrategy offers, what ParquetStorageFilter.create admits and what the reader
     // can copy are one list, because isSupportedKeyType answers from ValueCopier. Both are asserted
-    // here: a type the copier has no case for would be a task failure rather than a planning-time
+    // here. A type the copier has no case for would be a task failure rather than a planning-time
     // rejection, and the delegation is what rules that out.
     val supported: Seq[DataType] = Seq(
       BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
@@ -1466,10 +1556,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
 
   test("key ordinals collected out of order still pair with the right batch slots") {
     // `ParquetStorageFilter.create` sorts the ordinals it collects, and the emit path depends on
-    // that: it pairs the k-th key slot of the batch with key-row position k, which is the identity
+    // that. It pairs the k-th key slot of the batch with key-row position k, which is the identity
     // only while the list is ascending. Nothing else in the suite supplies an unsorted one, because
     // every other fixture happens to mention its keys in column order. Production does not promise
-    // that: the conjuncts arrive in `afterScanFilters` order, which follows the join. Without the
+    // that. The conjuncts arrive in `afterScanFilters` order, which follows the join. Without the
     // sort this returns `a` and `b` swapped, with no exception to notice.
     withTempDir { dir =>
       val path = writeSingleParquetFile(dir,
@@ -1501,7 +1591,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   }
 
   test("partition columns are preserved alongside spliced key columns") {
-    // The emit path rewrites the key slots alone, and a partition slot is not one of them: it sits
+    // The emit path rewrites the key slots alone, and a partition slot is not one of them. It sits
     // past the data columns and must keep the constant vector `initBatch` populated for it.
     withTempDir { dir =>
       val rows = (1L to 200L).map(i => (i, s"v_$i"))
@@ -1527,7 +1617,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   Seq(false, true).foreach { useOffHeap =>
     val mode = if (useOffHeap) "off-heap" else "on-heap"
     test(s"$mode vectors: multi-batch emit closes and reallocates survivor vectors correctly") {
-      // Off-heap is where the close/free hazards actually bite: OffHeapColumnVector.close() frees
+      // Off-heap is where the close/free hazards actually bite. OffHeapColumnVector.close() frees
       // the native buffer, so a double close or a read after close is a crash rather than stale
       // data. capacity = 16 over 71 survivors forces 5 emits, each closing the previous emit's
       // dequeued key vectors. The other 29 rows are what makes a declining reader fail this.
@@ -1556,21 +1646,12 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         val path = writeParquetFile(dir, rows, rowGroupSize = 256L)
         val m = allMetrics()
         val filter = keyAtLeastFilter(195L, m)
-        val reader = new LateMaterializationParquetRecordReader(useOffHeap, 4096, filter)
-        val collected = mutable.ArrayBuffer[(Long, String)]()
+        val (collected, reader) = readAllWith(
+          path, Seq("k", "v"), filter,
+          (b, i) => (b.column(0).getLong(i), b.column(1).getUTF8String(i).toString),
+          useOffHeap = useOffHeap)
         try {
-          // Inside the try: an off-heap vector allocated before a failing one has to be closed.
-          reader.initialize(path, Seq("k", "v").asJava)
-          reader.initBatch(new StructType(), null)
-          while (reader.nextBatch()) {
-            val batch = reader.resultBatch()
-            var i = 0
-            while (i < batch.numRows()) {
-              collected += ((batch.column(0).getLong(i), batch.column(1).getUTF8String(i).toString))
-              i += 1
-            }
-          }
-          assert(collected.toSeq == rows.filter(_._1 >= 195L),
+          assert(collected == rows.filter(_._1 >= 195L),
             s"expected exact filtering; got ${collected.map(_._1)}")
           // A mixed projection has non-key bytes to avoid, in both the skipped row groups and the
           // partially kept one. Asserting they are non-negative would prove nothing, since
@@ -1610,7 +1691,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  // ----- Schema evolution: a column missing from the physical file -----
+  // ----- Schema evolution, a column missing from the physical file -----
 
   test("non-key column missing from a file: byte-avoided metrics tolerate a missing offset index") {
     // ColumnIndexStore returns a null OffsetIndex for a column that is in the (clipped) requested
@@ -1619,7 +1700,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     // without a null guard this is an NPE on the first row group of the older file.
     withTempDir { dir =>
       val base = new File(dir, "merged").getAbsolutePath
-      // Older file: (k, v). Newer file: (k, v, w).
+      // The older file has (k, v), the newer one (k, v, w).
       (1L to 200L).map(i => (i, s"v_$i")).toDF("k", "v")
         .repartition(1)
         .write
@@ -1655,7 +1736,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
 
         // The avoided-bytes counters are what walk the offset index of the missing column, so a
         // positive total is the evidence that the walk ran and coped. Asserting non-negativity
-        // would prove nothing: `SQLMetric.add` drops a negative and the value cannot go below zero.
+        // would prove nothing. `SQLMetric.add` drops a negative and the value cannot go below zero.
         val bytesRg = withSF.metrics(StorageFilterMetrics.BYTES_AVOIDED_BY_ROW_GROUP)
         val bytesPf =
           withSF.metrics(StorageFilterMetrics.BYTES_AVOIDED_BY_PAGE_FILTERING)
@@ -1728,7 +1809,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   test("all keys missing: an error on the constant reads the file rather than skipping it") {
     // A file with none of the filter's key columns makes the predicate constant over it, so the
     // reader decides once, from the values `initBatch` materialized for those columns. That
-    // evaluation can throw exactly as a row's value can: here the older file's `k` reads as its
+    // evaluation can throw exactly as a row's value can. Here the older file's `k` reads as its
     // DEFAULT, which is not a number, and the cast fails under ANSI. Failing open reads the file
     // the way a plain scan would, so its rows survive. Skipping it would lose them, and rethrowing
     // would fail a query a plain read answers.
@@ -1774,7 +1855,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   }
 
   test("missing key column with an existence DEFAULT that fails the filter skips the older file") {
-    // Mirror image of the previous test: the default does NOT satisfy the predicate, so the older
+    // Mirror image of the previous test. The default does NOT satisfy the predicate, so the older
     // file must be skipped in full while the newer file is still filtered normally.
     withSQLConf(
         SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "true",
@@ -1877,12 +1958,60 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("a storage filter binds to the right column with partition and metadata columns in output") {
+    // `preparedStorageFilters` binds the filter's references against `output.take(requiredSchema
+    // .length)`, and `output` is the data columns, then the generated metadata columns, then the
+    // partition columns, then the constant metadata ones. A projection carrying all four is where a
+    // wrong prefix would bind the predicate to another column and drop rows the filter keeps, which
+    // the post-scan Filter cannot put back.
+    withTempDir { dir =>
+      val outDir = new File(dir, "parted").getAbsolutePath
+      spark.range(1, 201)
+        .selectExpr("id AS k", "CONCAT('v_', id) AS v", "CAST(id % 3 AS INT) AS p")
+        .repartition(1)
+        .write
+        .partitionBy("p")
+        .option(ParquetOutputFormat.BLOCK_SIZE, 256L)
+        .parquet(outDir)
+      withSQLConf(SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        val df = spark.read.parquet(outDir).select(
+          col("k"), col("v"), col("p"),
+          col("_metadata.row_index").as("ri"), col("_metadata.file_size").as("fs"))
+        val scan = scanOf(df.queryExecution.executedPlan)
+        val keyAttr = scan.output.find(_.name == "k").getOrElse(fail("no k in scan output"))
+        val withSF = scan.copy(storageFilters = Seq(GreaterThanOrEqual(keyAttr, Literal(150L))))
+        // The assumption the binding rests on, stated where a change to `output` would break it.
+        assert(withSF.output.take(withSF.requiredSchema.length).map(_.name) ==
+          withSF.requiredSchema.fieldNames.toSeq,
+          s"the scan's leading attributes must be its data columns; got " +
+            s"${withSF.output.map(_.name)}")
+        val kPos = withSF.output.indexWhere(_.name == "k")
+        val pPos = withSF.output.indexWhere(_.name == "p")
+        def collectAll(plan: SparkPlan): Set[Seq[Any]] = {
+          val rowPlan = if (plan.supportsColumnar) ColumnarToRowExec(plan) else plan
+          val types = plan.output.map(_.dataType)
+          rowPlan.executeCollect().map(_.toSeq(types)).toSet
+        }
+        val filtered = collectAll(withSF)
+        // The same scan without the filter is the oracle, so the row indexes and file sizes come
+        // from the read rather than from arithmetic over how the partitions were written.
+        val expected = collectAll(withSF.copy(storageFilters = Nil))
+          .filter(_(kPos).asInstanceOf[Long] >= 150L)
+        assert(filtered == expected,
+          s"expected ${expected.size} rows with their own partition and metadata values; " +
+            s"got ${filtered.size}")
+        assert(filtered.map(_(pPos)).size == 3,
+          s"every partition value must still be represented; got ${filtered.map(_(pPos))}")
+      }
+    }
+  }
+
   // ----- Planner gates and the lost-filter invariant -----
 
   test("supportsStorageFilter is what decides, and a subclass answers false") {
     // The planner asks the format rather than testing its class, so the expression shapes and the
     // column types a reader can evaluate stay in its own package. A ParquetFileFormat subclass
-    // still answers false: it may customize reading by overriding buildReaderWithPartitionValues,
+    // still answers false. It may customize reading by overriding buildReaderWithPartitionValues,
     // and a scan with storage filters routes through buildReaderWithStorageFilters instead, which
     // would bypass whatever the subclass does.
     //
@@ -1925,7 +2054,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
 
 
   test("bloom stays in the post-scan Filter when the vectorized reader is unavailable") {
-    // The whole lost-filter safety argument rests on this gate: if the reader cannot do late
+    // The whole lost-filter safety argument rests on this gate. If the reader cannot do late
     // materialization, the planner must NOT move the bloom out of the post-scan Filter.
     withBloomFilterTables {
       withSQLConf(
@@ -1944,7 +2073,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   test("a scan reads plainly when the vectorized reader is disabled after planning") {
     // preparedStorageFilters deliberately does not re-check the conf. The reader then cannot honor
     // the filter, and since the post-scan Filter keeps it, not honoring it is a slower read rather
-    // than a wrong one: every row of the file comes back from the scan.
+    // than a wrong one. Every row of the file comes back from the scan.
     withTempDir { dir =>
       val rows = (1L to 50L).map(i => (i, s"v_$i"))
       val path = writeParquetFile(dir, rows)
@@ -2059,7 +2188,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   }
 
   test("off-heap column vectors through the planner: spliced values survive the free") {
-    // Off-heap is where the vector lifecycle actually bites: the previous batch's key vectors are
+    // Off-heap is where the vector lifecycle actually bites. The previous batch's key vectors are
     // freed at the next nextBatch(), so a stale reference reads released native memory rather than
     // old bytes. This drives it through the planner, where the batch also crosses
     // ColumnarToRowExec.
@@ -2129,7 +2258,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         val bytesRg = withSF.metrics(StorageFilterMetrics.BYTES_AVOIDED_BY_ROW_GROUP)
         val bytesPf =
           withSF.metrics(StorageFilterMetrics.BYTES_AVOIDED_BY_PAGE_FILTERING)
-        // Non-negativity is not assertable: `SQLMetric.add` drops a negative, so the value cannot
+        // Non-negativity is not assertable. `SQLMetric.add` drops a negative, so the value cannot
         // go below zero however wrong the arithmetic is. A positive total can fail.
         assert(bytesRg.value + bytesPf.value > 0,
           s"page-subset ranges must still credit avoided bytes; rg=${bytesRg.value} " +
@@ -2140,13 +2269,13 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
 
   test("column-index filtering off: the filter keeps only the row groups it empties") {
     // `parquet.filter.columnindex.enabled=false` is the escape hatch for a file whose page index is
-    // wrong, and it has to cover phase 2 as well as phase 0: phase 2 reads part of a row group
+    // wrong, and it has to cover phase 2 as well as phase 0. Phase 2 reads part of a row group
     // through the offset index, which parquet consults whatever that conf says, so a wrong index
     // there would pair a row's key with another row's values. The post-scan Filter cannot catch
     // that, since the key it sees is the right one.
     //
     // What the filter keeps in that case is the row groups it empties, which needs no index at all.
-    // So the two arms differ in granularity, not in correctness: with the conf on the scan returns
+    // So the two arms differ in granularity, not in correctness. With the conf on the scan returns
     // exactly the surviving rows, with it off the row groups that hold one come back whole. This
     // test executes the scan alone, so nothing re-applies the conjunct above it, and no data filter
     // is pushed, so statistics-level row-group pruning stays out of it.
@@ -2190,10 +2319,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       s"(pushed data filter narrowing the row group = $pushDataFilter)") {
       // The byte walks report IO that did not happen, so they must not cause any IO themselves,
       // which would make the counters change what they measure. A storage filter that keeps every
-      // row reads exactly the pages a plain read of the same projection reads: phase 1 the key
-      // pages, phase 2 the rest. So the two arms must transfer the same bytes over a filesystem
-      // that counts them, and a walk that read an offset index of its own would show up as a
-      // difference.
+      // row reads exactly the pages a plain read of the same projection reads. Phase 1 reads the
+      // key pages and phase 2 the rest. So the two arms must transfer the same bytes over a
+      // filesystem that counts them, and a walk that read an offset index of its own would show up
+      // as a difference.
       //
       // Both range shapes are covered, because the walk answers them from different places. With a
       // pushed data filter the column index narrows `pushedFilterRanges` to a page subset and the
@@ -2261,7 +2390,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   // ----- Metric arithmetic -----
 
   test("row metrics account for every row of the file") {
-    // Ties the three count metrics to the file: whatever is not emitted must have been avoided
+    // Ties the three count metrics to the file. Whatever is not emitted must have been avoided
     // either by a whole-row-group skip or by page filtering. A sign flip or a mis-scoped schema in
     // the accounting shows up here, which a `>= 0` assertion cannot catch.
     withTempDir { dir =>
@@ -2339,7 +2468,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   test("early termination: the reader stops without draining the file") {
     // executeTake on a bare ColumnarToRowExec goes through ColumnarToRowEvaluatorFactory, not
     // through the generated code, so nothing closes the batch from outside here. What this covers
-    // is abandoning the reader mid-file: the survivor queues still hold vectors, and
+    // is abandoning the reader mid-file. The survivor queues still hold vectors, and
     // RecordReaderIterator closes the reader on task completion. The external close is the test
     // below.
     withTempDir { dir =>
@@ -2364,8 +2493,8 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     // emits that line unconditionally. What exercises the close is the collect below, where the
     // limit makes the row loop exit with a batch still in hand.
     //
-    // What it exercises: the spliced batch's columns are closed from outside while the reader is
-    // still open, and the reader's own close() then runs over the same vectors.
+    // What it exercises is that the spliced batch's columns are closed from outside while the
+    // reader is still open, and the reader's own close() then runs over the same vectors.
     withTempDir { dir =>
       val rows = (1L to 200L).map(i => (i, s"v_$i"))
       val path = writeParquetFile(dir, rows, rowGroupSize = 256L)
@@ -2395,9 +2524,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   // ----- Partially-missing key columns, end to end through the reader -----
 
   test("one of two key columns missing from a file: splicing runs on the values the scan returns") {
-    // The most intricate branch of initializeLateMaterialization: splicing engages with a predicate
-    // that has one Literal substituted and one BoundReference renumbered, the missing key's field
-    // lands among the non-key columns, and its output slot is filled by ParquetColumnVector.
+    // This is the most intricate branch of initializeLateMaterialization, where splicing engages
+    // with a predicate that has one Literal substituted and one BoundReference renumbered, the
+    // missing key's field lands among the non-key columns, and its output slot is filled by
+    // ParquetColumnVector.
     //
     // The SELECT order (a, b, c) also differs from the table's (a, c, b), so this covers a
     // projection whose order does not match the relation's dataSchema.
@@ -2428,7 +2558,8 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         val cPos = withSF.output.indexWhere(_.name == "c")
         val collected = rowPlan.executeCollect()
           .map(r => (r.getLong(aPos), r.getString(cPos), r.getLong(bPos))).toSet
-        // Older file: a in {2,3} pass a>=2, and b=7 passes b>=5. Newer file: 40 and 50 both pass.
+        // In the older file a in {2,3} pass a>=2, and b=7 passes b>=5. In the newer file 40 and 50
+        // both pass.
         val expected = Set((2L, "y", 7L), (3L, "z", 7L), (4L, "p", 40L), (5L, "q", 50L))
         // Compare against the plain read too, so a failure here is unambiguously the storage-filter
         // path rather than a wrong expectation. df.collect() goes through the Project, so it is in

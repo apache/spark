@@ -173,14 +173,14 @@ trait FileFormat {
    * not reference, by reading and evaluating the ones they do first (e.g. late materialization with
    * a runtime bloom filter).
    *
-   * Honoring them is optional, here and in a reader that does implement them: the planner leaves
-   * every one of them in the post-scan `Filter` as well, so ignoring one is a missed optimization
-   * rather than a wrong answer.
+   * Honoring them is optional, here and in a reader that does implement them, because the planner
+   * leaves every one of them in the post-scan `Filter` as well, so ignoring one is a missed
+   * optimization rather than a wrong answer.
    *
    * Being optional is also an obligation. A storage filter is evaluated out of the plan's order,
    * without the conjuncts that precede it, so it can raise an error on a row those conjuncts would
    * have rejected, which is an error a plain scan never raises. A reader must not fail the query
-   * for that: it gives the filter up for as much of the read as it needs to and lets the post-scan
+   * for that. It gives the filter up for as much of the read as it needs to and lets the post-scan
    * `Filter` decide, in its own order.
    *
    * A format that does not apply storage filters returns `None`, which is the default, and the
@@ -210,8 +210,9 @@ trait FileFormat {
 
   /**
    * Whether this format applies storage filters in this session at all, which is also where the
-   * conf that enables them belongs: a format's own conf should not decide for another format. Asked
-   * once per scan, before anything per conjunct, so a format that answers false costs one call.
+   * conf that enables them belongs, since a format's own conf should not decide for another format.
+   * Asked once per scan, before anything per conjunct, so a format that answers false costs one
+   * call.
    */
   def supportsStorageFilterPushdown(sparkSession: SparkSession): Boolean = false
 
@@ -219,7 +220,7 @@ trait FileFormat {
    * The SQL metrics this format's reader updates while it applies storage filters, keyed the way
    * the scan then exposes them. Asked once per scan, and only for a scan that has storage filters.
    *
-   * It belongs to the format for the same reason the conf does: what there is to count is the
+   * It belongs to the format for the same reason the conf does, that what there is to count is the
    * format's own vocabulary. Row groups and page filtering are Parquet's words, and another format
    * measures what it avoided differently.
    */
@@ -232,7 +233,7 @@ trait FileFormat {
    * The planner decides what it can see from the plan, that the conjunct is deterministic and
    * references only projected data columns. It asks this for everything else, so the expression
    * shapes and column types a reader supports stay in that reader's own package. Answering true
-   * says the reader can evaluate the expression, not that it will: the conjunct stays in the
+   * says the reader can evaluate the expression, not that it will, since the conjunct stays in the
    * post-scan `Filter`, so a reader is free to give a file up.
    */
   def supportsStorageFilter(expr: Expression): Boolean = false

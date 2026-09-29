@@ -230,7 +230,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   @Override
   public void close() throws IOException {
     // Chained through a finally block because super.close() owns the file handle and the input
-    // stream: a failing vector close must not leak them.
+    // stream, which a failing vector close must not leak.
     try {
       closeAllocated();
     } finally {
@@ -243,8 +243,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * file handle and the input stream. For this class that is the batch it hands out.
    *
    * <p>A subclass that hands out a batch whose slots it does not solely own has to replace this
-   * rather than extend it: closing the batch as well would then close a shared vector twice and
-   * free the same buffer twice.
+   * rather than extend it, since closing the batch as well would then close a shared vector twice
+   * and free the same buffer twice.
    */
   protected void closeAllocated() {
     if (columnarBatch != null) {
@@ -415,8 +415,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   public boolean nextBatch() throws IOException {
     resetBatch();
     if (noMoreRows()) return false;
-    checkEndOfRowGroup();
-    if (noMoreRows()) return false;
+    if (rowsReturned == totalCountLoadedSoFar && !loadNextRowGroup()) return false;
 
     int num = (int) Math.min(capacity, totalCountLoadedSoFar - rowsReturned);
     readBatchColumns(num);
@@ -424,17 +423,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     return true;
   }
 
-  /**
-   * Whether this read has returned every row it is going to. Asked twice per batch, before and
-   * after the next row group is loaded, because a subclass may only learn there that it has none
-   * left. For this class the second answer cannot differ from the first, since
-   * {@link #checkEndOfRowGroup} throws rather than run out of row groups.
-   */
+  /** Whether this read has returned every row it is going to. */
   protected boolean noMoreRows() {
     return rowsReturned >= totalRowCount;
   }
 
-  /** Drops whatever the previous batch held: the first step of every {@link #nextBatch()}. */
+  /** Drops whatever the previous batch held, which is the first step of every batch. */
   protected void resetBatch() {
     for (ParquetColumnVector vector : columnVectors) {
       vector.reset();
@@ -445,8 +439,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   /**
    * Reads {@code num} rows through the column readers the current row group installed, assembles
    * the top-level vectors, and fills the row-index column if the projection asked for one. A leaf
-   * with no reader is skipped, which is a leaf this row group's read does not fetch: a column the
-   * file does not have, or one a subclass supplies itself.
+   * with no reader is skipped, which is a leaf this row group's read does not fetch, either a
+   * column the file does not have or one a subclass supplies itself.
    */
   protected void readBatchColumns(int num) throws IOException {
     for (ParquetColumnVector cv : columnVectors) {
@@ -466,7 +460,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   /** Publishes {@code num} rows as the current batch. */
-  protected void finishBatch(int num) {
+  private void finishBatch(int num) {
     rowsReturned += num;
     columnarBatch.setNumRows(num);
     numBatched = num;
@@ -528,22 +522,52 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     return false;
   }
 
-  protected void checkEndOfRowGroup() throws IOException {
-    if (rowsReturned != totalCountLoadedSoFar) return;
+  /**
+   * Loads the row group the read continues with, and returns false if there is none left. Only a
+   * subclass that picks its own rows can answer false, because this class reads every row of every
+   * row group, and then {@code totalRowCount} already says when they run out.
+   */
+  protected boolean loadNextRowGroup() throws IOException {
     PageReadStore pages = reader.readNextRowGroup();
     if (pages == null) {
       throw new IOException("expecting more rows but reached last block. Read "
           + rowsReturned + " out of " + totalRowCount);
     }
+    // Null ranges, because this path never picks the rows itself, and whether parquet narrowed the
+    // row group by a pushed filter's column index is known only to the store it handed back.
+    installRowGroup(pages, null, pages.getRowCount());
+    return true;
+  }
+
+  /**
+   * Points the column readers at one row group's {@code pages}, from which they are to read the
+   * rows {@code rowRanges} names, or every row of the row group when it is null. {@code rowCount}
+   * is how many rows that is, which is what the read has left before it needs another row group.
+   */
+  protected final void installRowGroup(PageReadStore pages, RowRanges rowRanges, long rowCount)
+      throws IOException {
     if (rowIndexGenerator != null) {
       rowIndexGenerator.initFromPageReadStore(pages);
     }
-    for (ParquetColumnVector cv : columnVectors) {
-      // This path never picks the rows itself: whether parquet narrowed the row group by a pushed
-      // filter's column index is known only to the store it handed back.
-      initColumnReader(pages, null, cv);
+    for (int i = 0; i < columnVectors.length; i++) {
+      if (suppliesOwnVector(i)) {
+        // Cleared rather than left alone, because a reader a previous row group set would otherwise
+        // be driven over this row group's pages.
+        columnVectors[i].setColumnReader(null);
+      } else {
+        initColumnReader(pages, rowRanges, columnVectors[i]);
+      }
     }
-    totalCountLoadedSoFar += pages.getRowCount();
+    totalCountLoadedSoFar += rowCount;
+  }
+
+  /**
+   * Whether the batch's top-level slot {@code slot} takes its vector from somewhere other than the
+   * row group being installed, which for this class is never. A subclass answering true must have a
+   * primitive column in that slot, which is what {@code setColumnReader} requires.
+   */
+  protected boolean suppliesOwnVector(int slot) {
+    return false;
   }
 
   /**

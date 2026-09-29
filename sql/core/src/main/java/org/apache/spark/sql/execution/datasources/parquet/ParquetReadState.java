@@ -26,10 +26,10 @@ import java.util.PrimitiveIterator;
 /**
  * Helper class to store intermediate state while reading a Parquet column chunk.
  *
- * <p>There is one subclass per way of saying which rows to include: every row of the chunk, the
- * ranges the caller of the read already held, or the one row index per row that a page store
- * describes parquet's own filtering with. {@link #forRead} picks between them; everything else
- * about a read is the same whichever it is, and lives here.
+ * <p>There is one subclass per way of saying which rows to include, which is every row of the
+ * chunk, the ranges the caller of the read already held, or the one row index per row that a page
+ * store describes parquet's own filtering with. {@link #forRead} picks between them. Everything
+ * else about a read is the same whichever it is, and lives here.
  */
 abstract class ParquetReadState {
   /**
@@ -89,7 +89,7 @@ abstract class ParquetReadState {
    * The state for reading {@code descriptor}, told which rows to include the best way the caller
    * can say it.
    *
-   * <p>{@code rowRanges} is the rows the read was asked for, when whoever asked knew them: a caller
+   * <p>{@code rowRanges} is the rows the read was asked for, when whoever asked knew them. A caller
    * that filtered the rows itself holds their ranges, and every column reader of the row group can
    * then walk that one list. Null says it does not, and the page store is left to describe its
    * rows, which it can only do as {@code rowIndexes}, one index per row. No row indexes in turn
@@ -108,8 +108,8 @@ abstract class ParquetReadState {
     } else {
       state = new RowIndexState(descriptor, isRequired, rowIndexes);
     }
-    // Here rather than in the constructors: reading the first range needs the state each subclass
-    // sets, and a constructor calling `nextRange` would be calling into its own subclass.
+    // Here rather than in the constructors, because reading the first range needs the state each
+    // subclass sets, and a constructor calling `nextRange` would be calling into its own subclass.
     state.nextRange();
     return state;
   }
@@ -117,7 +117,7 @@ abstract class ParquetReadState {
   /**
    * Must be called at the beginning of reading a new batch.
    */
-  void resetForNewBatch(int batchSize) {
+  final void resetForNewBatch(int batchSize) {
     this.valueOffset = 0;
     this.levelOffset = 0;
     this.rowsToReadInBatch = batchSize;
@@ -129,7 +129,7 @@ abstract class ParquetReadState {
   /**
    * Must be called at the beginning of reading a new page.
    */
-  void resetForNewPage(int totalValuesInPage, long pageFirstRowIndex) {
+  final void resetForNewPage(int totalValuesInPage, long pageFirstRowIndex) {
     this.valuesToReadInPage = totalValuesInPage;
     this.rowId = pageFirstRowIndex;
   }
@@ -137,14 +137,14 @@ abstract class ParquetReadState {
   /**
    * Returns the start index of the current row range.
    */
-  long currentRangeStart() {
+  final long currentRangeStart() {
     return currentRangeStart;
   }
 
   /**
    * Returns the end index of the current row range.
    */
-  long currentRangeEnd() {
+  final long currentRangeEnd() {
     return currentRangeEnd;
   }
 
@@ -199,7 +199,7 @@ abstract class ParquetReadState {
   }
 
   /**
-   * Coalesces the runs of ascending row indexes into one range each: `[0, 1, 2, 4, 5, 7, 8, 9]`
+   * Coalesces the runs of ascending row indexes into one range each, so `[0, 1, 2, 4, 5, 7, 8, 9]`
    * yields `[0-2]`, then `[4-5]`, then `[7-9]`.
    *
    * <p>One range at a time on purpose. They are consumed once, in order, so holding them all buys

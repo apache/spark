@@ -68,8 +68,8 @@ final class ParquetBlockAccounting {
 
   /**
    * Whether every one of {@code paths} that this file has can be read in part, which needs an
-   * offset index for it in this block. A column the file does not have is no obstacle: a read never
-   * reads it, and it is not in the walk to begin with.
+   * offset index for it in this block. A column the file does not have is no obstacle, since a read
+   * never reads it and it is not in the walk to begin with.
    */
   boolean hasOffsetIndexes(int blockIndex, Set<ColumnPath> paths) {
     for (ColumnChunkMetaData chunk : reader.getRowGroups().get(blockIndex).getColumns()) {
@@ -88,21 +88,22 @@ final class ParquetBlockAccounting {
    *
    * <p>Two sources, chosen so this never causes IO of its own:
    * <ul>
-   *   <li>{@code rowRanges} covers the whole block: the answer is the sum of the chunks'
-   *       {@code getTotalSize()}, which is already in the footer. This is the case that matters:
-   *       whenever nothing else has built the block's {@link ColumnIndexStore}, {@code rowRanges}
+   *   <li>{@code rowRanges} covers the whole block, and the answer is the sum of the chunks'
+   *       {@code getTotalSize()}, which is already in the footer. This is the case that matters.
+   *       Whenever nothing else has built the block's {@link ColumnIndexStore}, {@code rowRanges}
    *       is necessarily the whole block, because a narrower range can only come from column-index
    *       filtering, which builds the store as a side effect.
-   *   <li>{@code rowRanges} is a strict subset: walk the offset index, as parquet's own read path
-   *       does, and add the dictionary page the way {@code calculateOffsetRanges} does. The store
-   *       is guaranteed to exist here, so the walk is pure metadata arithmetic. For ranges a reader
-   *       narrowed itself, which column-index filtering had no hand in, that guarantee is an
-   *       ordering one: the reader's own read of those ranges built the store first.
+   *   <li>{@code rowRanges} is a strict subset, and the walk goes over the offset index, as
+   *       parquet's own read path does, adding the dictionary page the way
+   *       {@code calculateOffsetRanges} does. The store is guaranteed to exist here, so the walk is
+   *       pure metadata arithmetic. For ranges a reader narrowed itself, which column-index
+   *       filtering had no hand in, that guarantee is an ordering one, since the reader's own read
+   *       of those ranges built the store first.
    * </ul>
    *
    * <p>Columns absent from this physical file (schema evolution) contribute nothing, which is
-   * correct: the reader transfers nothing for them. They fall out of the walk by themselves, which
-   * goes over the block's chunks rather than over {@code paths}.
+   * correct, since the reader transfers nothing for them. They fall out of the walk by themselves,
+   * which goes over the block's chunks rather than over {@code paths}.
    */
   long compressedBytesForRowRanges(
       int blockIndex,
@@ -120,8 +121,8 @@ final class ParquetBlockAccounting {
     for (ColumnChunkMetaData chunk : block.getColumns()) {
       ColumnPath path = chunk.getPath();
       if (!paths.contains(path)) {
-        // A leaf of the file this walk is not about: not projected at all, or projected but read in
-        // another phase than the one being measured.
+        // A leaf of the file this walk is not about, either not projected at all, or projected but
+        // read in another phase than the one being measured.
         continue;
       }
       if (wholeBlock) {
@@ -138,9 +139,9 @@ final class ParquetBlockAccounting {
         // The store answers null, rather than throwing, for a path it was not built with. That can
         // only mean the block's store was built while a narrower schema was requested than this
         // walk asks about, an ordering bug rather than a property of the file, and the footer tells
-        // the two apart. It is reported rather than thrown: this walk only produces a counter, and
-        // `ignoreCorruptFiles` turns any exception from a reader into a silently truncated file, so
-        // a byte metric must not be able to change the answer.
+        // the two apart. It is reported rather than thrown, because this walk only produces a
+        // counter, and `ignoreCorruptFiles` turns any exception from a reader into a silently
+        // truncated file, so a byte metric must not be able to change the answer.
         if (chunk.getOffsetIndexReference() != null && !loggedMissingStoreEntry) {
           loggedMissingStoreEntry = true;
           LOG.warn("Undercounting the storage filter's avoided bytes for {}: column {} of row "

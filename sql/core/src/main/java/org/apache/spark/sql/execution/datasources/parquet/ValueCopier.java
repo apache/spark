@@ -32,13 +32,13 @@ import org.apache.spark.sql.types.*;
  * gate, the filter's own checks and the copy itself read one list. That list is narrower than
  * {@code AtomicType}, for two different reasons:
  * <ul>
- *   <li>{@code VariantType} cannot be supported: its Parquet representation is a group, not a
- *       primitive leaf, so phase 1 has nothing flat to read it into. It is unreachable anyway,
- *       since {@code HashExpression.checkInputDataTypes} rejects variant, so no bloom can be built
- *       on one.
+ *   <li>{@code VariantType} cannot be supported, since its Parquet representation is a group
+ *       rather than a primitive leaf, so phase 1 has nothing flat to read it into. It is
+ *       unreachable anyway, since {@code HashExpression.checkInputDataTypes} rejects variant, so no
+ *       bloom can be built on one.
  *   <li>{@code GeometryType} and {@code GeographyType} could be supported. Both map to a primitive
  *       Parquet BINARY and both are handled by {@code WritableColumnVector.isArray}, so the
- *       byte-array copier below would work. But no bloom can currently reference them:
+ *       byte-array copier below would work. But no bloom can currently reference them, because
  *       {@code HashExpression}'s codegen type dispatch has no case for either, so hashing one fails
  *       at codegen. They are left out until something can actually produce such a filter.
  * </ul>
