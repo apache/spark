@@ -1122,6 +1122,27 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
     ]
 
 
+def _annotation_base_name(annotation: Optional[ast.AST]) -> Optional[str]:
+    """The bare type name an annotation spells, peeling one subscript.
+
+    ``dict[str, str]`` and bare ``dict`` both come back ``"dict"``; a stringized
+    annotation (``def f(a: "int")``) is unwrapped to its text; an attribute
+    spelling (``typing.Dict[str, str]``) unwraps to the attribute name. ``None``
+    means the annotation is absent or not a simple name we recognise.
+    """
+    if annotation is None:
+        return None
+    if isinstance(annotation, ast.Subscript):
+        annotation = annotation.value
+    if isinstance(annotation, ast.Name):
+        return annotation.id
+    if isinstance(annotation, ast.Attribute):
+        return annotation.attr  # typing.Dict -> "Dict", typing.List -> "List"
+    if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+        return annotation.value  # stringized annotation, e.g. def f(a: "int")
+    return None
+
+
 def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
     """Map a parameter's type annotation to a category, or ``None`` when absent
     or unrecognised (the caller then tries all numeric and string variants).
@@ -1130,11 +1151,7 @@ def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
     ``"binary"`` (matching the constant handling in ``_category``). ``int``
     maps to ``"integer"`` and ``float`` maps to ``"float"`` so the JVM can
     select the variant whose NaN semantics match the bound column type."""
-    name: Optional[str] = None
-    if isinstance(annotation, ast.Name):
-        name = annotation.id
-    elif isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
-        name = annotation.value  # stringized annotation, e.g. def f(a: "int")
+    name = _annotation_base_name(annotation)
     if name == "str":
         return "string"
     if name == "int":
@@ -1145,6 +1162,10 @@ def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
         return "bool"
     if name == "bytes":
         return "binary"
+    if name in ("dict", "Dict", "Mapping"):
+        return "map"
+    if name in ("list", "List", "Sequence"):
+        return "array"
     return None
 
 
