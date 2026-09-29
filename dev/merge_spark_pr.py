@@ -115,6 +115,19 @@ MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
 # test sources run on the merged tree, i.e. exactly what would be pushed. Slow on a cold build,
 # but catches mis-resolved conflicts and PRs that bit-rotted after their CI ran.
 COMPILE_CHECK_CMD = ["build/sbt", ";clean;compile;test:compile"]
+# Precise patterns for the 4.2+ ConfigBindingPolicy API. A backport to a pre-4.2 branch that
+# adds either will not compile there (SPARK-52611): the .withBindingPolicy(...) call and the
+# ConfigBindingPolicy import must be dropped, and .version(...) retargeted to that branch.
+# maybe_binding_policy_warning scans the cherry-pick diff (Scala/Java only) for these as a
+# pre-push check. The method call is anchored on "." so a comment that merely says
+# "withBindingPolicy" is not flagged; ConfigBindingPolicy in a comment still can be, which is
+# fine -- the prompt is advisory and the remedy (drop the import) is the same either way.
+BINDING_POLICY_PATTERNS = (
+    ("withBindingPolicy", re.compile(r"\.withBindingPolicy\s*\(")),
+    ("ConfigBindingPolicy", re.compile(r"\bConfigBindingPolicy\b")),
+)
+# Source suffixes the binding-policy diff is restricted to; the API only lives in Scala/Java.
+BINDING_POLICY_SOURCE_SUFFIXES = ("*.scala", "*.java")
 
 
 def semver_branch_rank(name):
@@ -908,6 +921,146 @@ def maybe_compile_check(ref_name):
     continue_maybe("Compile check failed on %s. Push anyway? (experts only!)" % ref_name)
 
 
+def _is_pre_binding_policy_branch(ref):
+    """True if `ref` is a Spark branch that predates the ConfigBindingPolicy API (4.2+).
+
+    master and branch-M.x (M >= 4) carry the API; branch-4.0/branch-4.1 and any branch-3.x
+    do not. Anything we cannot classify as a maintenance branch is treated as carrying it
+    so a tag or custom ref never triggers a false warning.
+
+    >>> _is_pre_binding_policy_branch("master")
+    False
+    >>> _is_pre_binding_policy_branch("branch-4.x")
+    False
+    >>> _is_pre_binding_policy_branch("branch-4.2")
+    False
+    >>> _is_pre_binding_policy_branch("branch-4.1")
+    True
+    >>> _is_pre_binding_policy_branch("branch-4.0")
+    True
+    >>> _is_pre_binding_policy_branch("branch-3.5")
+    True
+    >>> _is_pre_binding_policy_branch("branch-3.x")
+    True
+    >>> _is_pre_binding_policy_branch("v4.1.0")
+    False
+    >>> _is_pre_binding_policy_branch("HEAD")
+    False
+    >>> _is_pre_binding_policy_branch("my-custom-ref")
+    False
+    """
+    if ref == "master":
+        return False
+    integration = re.match(r"^branch-(\d+)\.x$", ref)
+    if integration:
+        return int(integration.group(1)) < 4
+    matched = re.match(r"^branch-(\d+)\.(\d+)$", ref)
+    if matched:
+        return (int(matched.group(1)), int(matched.group(2))) < (4, 2)
+    return False
+
+
+def _added_binding_policy_tokens(diff):
+    """Return the sorted subset of BINDING_POLICY_PATTERNS matched on added (``+``) lines.
+
+    Only scans lines the diff added (a leading ``+`` that is not the ``+++`` file header), so a
+    cherry-pick that *removes* a stray .withBindingPolicy is not flagged. Matching uses the
+    precise patterns from BINDING_POLICY_PATTERNS, so a comment that merely mentions
+    ``withBindingPolicy`` (no leading dot, no call) is not flagged; ``ConfigBindingPolicy`` in
+    a comment still can match, which is fine -- the prompt is advisory.
+
+    >>> _added_binding_policy_tokens(
+    ...     "+++ b/foo\\n"
+    ...     "+.withBindingPolicy(X)\\n"
+    ...     "-.withBindingPolicy(Y)\\n"
+    ...     "+import ...ConfigBindingPolicy\\n"
+    ...     "+// see withBindingPolicy usage\\n"
+    ...     " context\\n"
+    ... )
+    ['ConfigBindingPolicy', 'withBindingPolicy']
+    >>> _added_binding_policy_tokens("-.withBindingPolicy(X)\\n")
+    []
+    >>> _added_binding_policy_tokens("+// mentions ConfigBindingPolicy in a comment\\n")
+    ['ConfigBindingPolicy']
+    >>> _added_binding_policy_tokens("")
+    []
+    """
+    found = set()
+    for line in diff.splitlines():
+        if line.startswith("+") and not line.startswith("+++"):
+            for token, pattern in BINDING_POLICY_PATTERNS:
+                if pattern.search(line):
+                    found.add(token)
+    return sorted(found)
+
+
+def maybe_binding_policy_warning(pick_ref, pick_head):
+    """Warn before pushing a backport to a pre-4.2 branch that adds ConfigBindingPolicy.
+
+    A cherry-pick onto branch-4.1/4.0/3.x that reintroduces ``.withBindingPolicy(...)`` or
+    ``ConfigBindingPolicy`` will not compile there (the API is 4.2+, see SPARK-52611). This
+    is a git-diff + grep pre-push check: it restricts the diff to Scala/Java sources, scans
+    only the lines the cherry-pick added for the precise patterns in BINDING_POLICY_PATTERNS,
+    and on a hit prints the remedy and interactively asks the committer to confirm the push.
+    No-op on branches that carry the API, so master/branch-4.x backports are unaffected.
+
+    No-op on a branch that carries the API (no diff fetched, no prompt):
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> with patch.object(git, "run") as run, patch("builtins.input") as inp, \\
+    ...      redirect_stdout(StringIO()):
+    ...     maybe_binding_policy_warning("branch-4.2", "deadbeef")
+    >>> run.call_count
+    0
+    >>> inp.call_count
+    0
+
+    No-op when the cherry-pick added none of the tokens:
+
+    >>> with patch.object(git, "run", return_value="+ unrelated change\\n"), \\
+    ...      patch("builtins.input") as inp, redirect_stdout(StringIO()):
+    ...     maybe_binding_policy_warning("branch-4.1", "deadbeef")
+    >>> inp.call_count
+    0
+
+    Warns and prompts when the cherry-pick adds a token on a pre-4.2 branch; accepting
+    continues (no abort), so input is called once by the continue_maybe prompt:
+
+    >>> with patch.object(git, "run", return_value="+.withBindingPolicy(X)\\n"), \\
+    ...      patch("builtins.input", return_value="y") as inp, redirect_stdout(StringIO()):
+    ...     maybe_binding_policy_warning("branch-4.1", "deadbeef")
+    >>> inp.call_count
+    1
+
+    Declining the warning aborts (SystemExit from fail), matching the compile-check override:
+
+    >>> with patch.object(git, "run", return_value="+.withBindingPolicy(X)\\n"), \\
+    ...      patch("builtins.input", return_value=""), redirect_stdout(StringIO()):
+    ...     try:
+    ...         maybe_binding_policy_warning("branch-4.1", "deadbeef")
+    ...         aborted = False
+    ...     except SystemExit:
+    ...         aborted = True
+    >>> aborted
+    True
+    """
+    if not _is_pre_binding_policy_branch(pick_ref):
+        return
+    diff = git.run(["git", "diff", pick_head, "HEAD", "--", *BINDING_POLICY_SOURCE_SUFFIXES])
+    tokens = _added_binding_policy_tokens(diff)
+    if not tokens:
+        return
+    print_error(
+        "Warning: backport to %s adds %s, which does not exist before branch-4.2 "
+        "(SPARK-52611). Drop the .withBindingPolicy(...) call and the ConfigBindingPolicy "
+        "import, and retarget .version(...) to this branch's next release."
+        % (pick_ref, " / ".join(tokens))
+    )
+    continue_maybe("Push the backport to %s anyway? (experts only!)" % pick_ref)
+
+
 # merge the requested PR and return the merge hash
 def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors):
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
@@ -1028,6 +1181,7 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
         else:
             print("Cherry-pick already completed manually; continuing with the backport.")
 
+    maybe_binding_policy_warning(pick_ref, pick_head)
     maybe_compile_check(pick_branch_name)
 
     continue_maybe(
