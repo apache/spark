@@ -288,6 +288,19 @@ of the most common options to set are:
   <td>0.7.0</td>
 </tr>
 <tr>
+  <td><code>spark.inprocess.python.sitePackages</code></td>
+  <td>(none)</td>
+  <td>
+    Comma-separated executor directories for packages used by opt-in in-process Python UDFs.
+    JEP must be directly importable from these directories. Spark distribution paths and
+    process <code>PYTHONPATH</code> take precedence; <code>.pth</code> files are processed.
+    Paths cannot contain single quotes, backslashes, newlines or the platform path separator.
+    See the <a href="sql-pyspark-inprocess-udf.html">in-process Python UDF guide</a>
+    for plugin setup, native dependencies and limitations.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
  <td><code>spark.executor.pyspark.memory</code></td>
   <td>Not set</td>
   <td>

@@ -22,6 +22,7 @@ Functions are registered once per task and released when that task finishes. Cal
 pass only a handle and CDI addresses, so large closures are not copied per batch.
 """
 
+import re
 import sys
 from typing import Any, Callable, Iterable, Optional, Sequence
 
@@ -36,12 +37,18 @@ from pyspark.util import _format_exception
 _UDF_TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
 NullChecker = Callable[[pa.Array], None]
 _udfs: dict[str, tuple[Callable[..., pa.Array], pa.DataType, NullChecker, bool, bool, bool]] = {}
+# Pin exported buffers until the task has released its CDI references. This keeps Python
+# finalizers on the interpreter thread, including for NumPy-backed results.
+_results: dict[str, pa.Array] = {}
 
 
 def _jep_safe_message(message: str) -> str:
-    # JEP uses JNI modified UTF-8 for exception text. Keep the transport ASCII and
-    # escape NUL explicitly; ordinary UTF-8 and embedded NUL are not safe here.
-    return message.encode("ascii", "backslashreplace").decode("ascii").replace("\0", "\\x00")
+    # JNI modified UTF-8 agrees with UTF-8 for BMP characters except NUL/surrogates.
+    return re.sub(
+        r"[\x00\ud800-\udfff\U00010000-\U0010ffff]",
+        lambda match: match.group().encode("unicode_escape").decode("ascii"),
+        message,
+    )
 
 
 def _inprocess_register(
@@ -92,6 +99,7 @@ def _inprocess_register(
 
 def _inprocess_release(handles: Iterable[str]) -> None:
     for handle in handles:
+        _results.pop(handle, None)
         _udfs.pop(handle, None)
 
 
@@ -111,6 +119,13 @@ def _nullable_type(data_type: pa.DataType) -> pa.DataType:
             nullable_field(data_type.item_field),
             keys_sorted=data_type.keys_sorted,
         )
+    # These physical representations depend on session settings unavailable to the UDF.
+    if pa.types.is_timestamp(data_type) and data_type.tz is not None:
+        return pa.timestamp(data_type.unit, tz="UTC")
+    if pa.types.is_large_string(data_type):
+        return pa.string()
+    if pa.types.is_large_binary(data_type):
+        return pa.binary()
     return data_type
 
 
@@ -178,6 +193,8 @@ def _null_check_plan(expected_type: pa.DataType) -> Optional[NullCheckPlan]:
             return None
 
         def entries(array: pa.Array) -> pa.Array:
+            if len(array) == 0:
+                return array.values.slice(0, 0)
             start = array.offsets[0].as_py()
             length = array.offsets[-1].as_py() - start
             # values.field honors the entries struct's offset; keys/items do not.
@@ -220,6 +237,13 @@ def _with_schema(array: pa.Array, expected_type: pa.DataType) -> pa.Array:
     # Rebind buffers after validating logical nullability. Arrow cast checks hidden child
     # slots too, rejecting null children underneath null parents. from_buffers preserves
     # those masks and applies the declared names, metadata and nullability without casting.
+    if array.type != expected_type and (
+        pa.types.is_string(expected_type)
+        or pa.types.is_large_string(expected_type)
+        or pa.types.is_binary(expected_type)
+        or pa.types.is_large_binary(expected_type)
+    ):
+        return pc.cast(array, expected_type, safe=True)
     children = None
     if pa.types.is_struct(expected_type):
         children = [_with_schema(array.field(i), f.type) for i, f in enumerate(expected_type)]
@@ -284,6 +308,8 @@ def _inprocess_invoke(
             simplified_traceback,
             traceback_with_locals,
         ) = _udfs[handle]
+        # The task closes the preceding batch's CDI references before invoking again.
+        _results.pop(handle, None)
         if len(input_array_ptrs) != len(input_schema_ptrs):
             raise ValueError("Mismatched input ArrowArray and ArrowSchema pointer counts")
         input_arrays = [
@@ -298,6 +324,7 @@ def _inprocess_invoke(
         result = _validate_result(
             udf_func(*args, **kwargs), int(expected_rows), expected_type, checker
         )
+        _results[handle] = result
         result._export_to_c(int(output_array_ptr), int(output_schema_ptr))
     except BaseException as error:
         raise RuntimeError(

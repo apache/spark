@@ -16,6 +16,7 @@
  */
 package org.apache.spark.internal.config
 
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.network.util.ByteUnit
@@ -55,6 +56,22 @@ private[spark] object Python {
     .version("2.4.0")
     .bytesConf(ByteUnit.MiB)
     .createOptional
+
+  val IN_PROCESS_SITE_PACKAGES = ConfigBuilder("spark.inprocess.python.sitePackages")
+    .doc("Comma-separated executor directories containing packages for in-process Python UDFs. " +
+      "These directories are processed with site.addsitedir after Spark distribution paths " +
+      "and the process PYTHONPATH. JEP must be directly importable from these directories. " +
+      "Paths cannot contain quotes, backslashes, newlines or the platform path separator.")
+    .version("4.4.0")
+    .stringConf
+    .toSequence
+    .checkValue(_.forall(isValidInProcessPath), "Invalid in-process Python site-packages path")
+    .createWithDefault(Nil)
+
+  private[spark] def isValidInProcessPath(path: String): Boolean = {
+    !path.exists(c => c == '\'' || c == '\\' || c == '\r' || c == '\n' ||
+      c == File.pathSeparatorChar)
+  }
 
   val PYTHON_AUTH_SOCKET_TIMEOUT = ConfigBuilder("spark.python.authenticate.socketTimeout")
     .internal()

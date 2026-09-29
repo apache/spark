@@ -18,24 +18,24 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.File
-import java.nio.ByteBuffer
 import java.util.concurrent.{Callable, ExecutionException, Executors, ThreadFactory, TimeoutException, TimeUnit}
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import jep.{JepConfig, JepException, MainInterpreter, PyConfig, SharedInterpreter}
+import jep.{JepConfig, JepException, MainInterpreter, NamingConventionClassEnquirer, PyConfig, SharedInterpreter}
 import org.apache.arrow.c.{ArrowSchema, Data}
 import org.apache.arrow.vector.types.pojo.Field
 
 import org.apache.spark.{TaskContext, TaskKilledException}
 import org.apache.spark.api.python.{PythonException, PythonUtils}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Python
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
 /** Owns one interpreter generation per executor plugin lifecycle. */
 private[python] object InProcessPythonRuntime extends Logging {
-  val SITE_PACKAGES_CONFIG = "spark.inprocess.python.sitePackages"
   private val TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
   private var active: InterpreterSession = _
   private var mainConfigured = false
@@ -43,17 +43,31 @@ private[python] object InProcessPythonRuntime extends Logging {
 
   private[python] class LifecycleException(message: String) extends IllegalStateException(message)
 
-  private def configureInterpreter(sitePackages: Seq[String]): Unit = {
-    if (!mainConfigured) {
-      // Like Python workers, use a stable default hash seed on every executor. This must
-      // happen before JEP creates its process-wide main interpreter, including on restarts.
-      MainInterpreter.setInitParams(
-        PyConfig.isolated().setUseEnvironment(false).setHashSeed(0).setUseHashSeed(true))
-      mainConfigured = true
+  // Keep JEP references out of the singleton's verifier so currentSession can report
+  // an uninitialized runtime even when the provided JEP JAR is absent.
+  private[python] object InterpreterConfiguration {
+    def configure(sitePackages: Seq[String]): Unit = {
+      if (!mainConfigured) {
+        // Like Python workers, use a stable default hash seed on every executor. This must
+        // happen before JEP creates its process-wide main interpreter, including on restarts.
+        MainInterpreter.setInitParams(
+          PyConfig.isolated().setUseEnvironment(false).setHashSeed(0).setUseHashSeed(true))
+        mainConfigured = true
+      }
+      if (!sharedConfigured) {
+        // JEP imports its Python package during construction, before our bootstrap runs.
+        SharedInterpreter.setConfig(interpreterConfig(sitePackages))
+      }
     }
-    if (!sharedConfigured) {
-      // JEP imports its Python package during construction, before our bootstrap runs.
-      SharedInterpreter.setConfig(new JepConfig().addIncludePaths(sitePackages: _*))
+
+    def interpreterConfig(sitePackages: Seq[String]): JepConfig = {
+      require(sitePackages.forall(Python.isValidInProcessPath),
+        s"Invalid ${Python.IN_PROCESS_SITE_PACKAGES.key}: paths cannot contain quotes, " +
+          "backslashes, newlines or the platform path separator")
+      val config = new JepConfig().setClassEnquirer(new NamingConventionClassEnquirer(false))
+      // Calling addIncludePaths with no arguments adds the working directory in JEP.
+      if (sitePackages.nonEmpty) config.addIncludePaths(sitePackages: _*)
+      config
     }
   }
 
@@ -81,7 +95,7 @@ private[python] object InProcessPythonRuntime extends Logging {
     if (active != null && !active.isTerminated) {
       active.requireCompatible(sitePackages)
     } else {
-      configureInterpreter(sitePackages)
+      InterpreterConfiguration.configure(sitePackages)
       val candidate = new InterpreterSession(sitePackages)
       try {
         candidate.initialize()
@@ -127,6 +141,9 @@ private[python] object InProcessPythonRuntime extends Logging {
     @volatile private var running = true
     // Accessed only on the owning thread.
     private var interp: SharedInterpreter = _
+    // Guarded by this session's monitor. Shutdown must keep Python-owned result buffers
+    // pinned until their tasks have released the JVM CDI references.
+    private val registeredHandles = mutable.Set.empty[String]
 
     def isRunning: Boolean = running
     def isTerminated: Boolean = executor.isTerminated
@@ -212,13 +229,19 @@ private[python] object InProcessPythonRuntime extends Logging {
             |_added = [p for p in sys.path if p not in _before and p not in _configured]
             |_preferred = list(dict.fromkeys(list(_spark_paths) + _configured + _added))
             |sys.path[:] = _preferred + [p for p in sys.path if p not in _preferred]
+            |sys.stdout.reconfigure(line_buffering=True, write_through=True)
+            |sys.stderr.reconfigure(line_buffering=True, write_through=True)
+            |import locale, warnings
+            |if locale.getencoding().lower() in ('ascii', 'ansi_x3.4-1968', 'us-ascii'):
+            |    warnings.warn('In-process Python requires a UTF-8 locale; '
+            |                  'set LC_ALL=C.UTF-8 before starting the executor')
             |del _site_packages, _spark_paths, _configured, _before, _added, _preferred
             |""".stripMargin))
         candidate.exec(bootstrapScript(
           "from pyspark.sql.pandas.utils import require_minimum_pyarrow_version\n" +
           "require_minimum_pyarrow_version()\n" +
           "from pyspark.inprocess.runtime import " +
-          "_inprocess_invoke, _inprocess_register, _inprocess_release, _udfs"))
+          "_inprocess_invoke, _inprocess_register, _inprocess_release, _udfs, _results"))
         interp = candidate
       } catch {
         case t: Throwable => Utils.tryWithSafeFinally { throw t } { candidate.close() }
@@ -227,34 +250,44 @@ private[python] object InProcessPythonRuntime extends Logging {
 
     /** Enqueue cleanup after outstanding calls without creating an executor or waiting. */
     def release(handles: Seq[String]): Unit = synchronized {
-      if (running && handles.nonEmpty) {
+      if (!executor.isShutdown && handles.nonEmpty) {
         executor.submit(new Runnable {
           override def run(): Unit = {
             if (interp != null) interp.invoke("_inprocess_release", handles.asJava)
           }
         })
+        registeredHandles --= handles
       }
-      // During shutdown the queued close clears all remaining handles.
+      finishShutdown()
     }
 
-    /** A timeout bounds plugin stop, not native execution or CDI buffer ownership. */
-    def shutdown(waitMillis: Long = 5000L): Unit = {
-      synchronized {
-        if (running) {
-          running = false
-          executor.submit(new Runnable {
-            override def run(): Unit = {
-              if (interp != null) {
+    // Called with the session monitor held. A late task cleanup can finish a bounded stop.
+    private def finishShutdown(): Unit = {
+      if (!running && registeredHandles.isEmpty && !executor.isShutdown) {
+        executor.submit(new Runnable {
+          override def run(): Unit = {
+            if (interp != null) {
+              try {
+                interp.exec("_results.clear(); _udfs.clear()")
+              } finally {
                 try {
-                  interp.exec("_udfs.clear()")
+                  interp.exec("sys.stdout.flush(); sys.stderr.flush()")
                 } finally {
                   try { interp.close() } finally { interp = null }
                 }
               }
             }
-          })
-          executor.shutdown()
-        }
+          }
+        })
+        executor.shutdown()
+      }
+    }
+
+    /** A timeout bounds plugin stop, not native execution or CDI buffer ownership. */
+    def shutdown(waitMillis: Long = 5000L): Unit = {
+      synchronized {
+        running = false
+        finishShutdown()
       }
       try {
         if (!executor.awaitTermination(waitMillis, TimeUnit.MILLISECONDS)) {
@@ -280,26 +313,33 @@ private[python] object InProcessPythonRuntime extends Logging {
         hideTraceback: Boolean,
         simplifiedTraceback: Boolean,
         tracebackWithLocals: Boolean): Long = {
-      // Bulk-copy on the task thread. JEP's PyJBuffer supports memoryview without per-byte JNI.
-      val command = ByteBuffer.allocateDirect(serializedUdf.length)
-      command.put(serializedUdf).flip()
-      val schema = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
-      Utils.tryWithSafeFinally {
-        Data.exportField(ArrowUtils.rootAllocator, expectedField, null, schema)
-        timedOnInterpreterThread {
-          withPythonException {
-            interp.invoke("_inprocess_register", handle, command,
-              java.lang.Long.valueOf(schema.memoryAddress()), pythonVersion,
-              java.lang.Boolean.valueOf(hideTraceback),
-              java.lang.Boolean.valueOf(simplifiedTraceback),
-              java.lang.Boolean.valueOf(tracebackWithLocals))
-          }
-        }
-      } {
-        Utils.tryWithSafeFinally {
-          if (schema.snapshot().release != 0L) schema.release()
-        } { schema.close() }
+      synchronized {
+        checkState(running)
+        registeredHandles += handle
       }
+      // Arrow owns the temporary off-heap copy, including on failure or cancellation.
+      val buffer = ArrowUtils.rootAllocator.buffer(serializedUdf.length)
+      Utils.tryWithSafeFinally {
+        val command = buffer.nioBuffer(0, serializedUdf.length)
+        command.put(serializedUdf).flip()
+        val schema = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
+        Utils.tryWithSafeFinally {
+          Data.exportField(ArrowUtils.rootAllocator, expectedField, null, schema)
+          timedOnInterpreterThread {
+            withPythonException {
+              interp.invoke("_inprocess_register", handle, command,
+                java.lang.Long.valueOf(schema.memoryAddress()), pythonVersion,
+                java.lang.Boolean.valueOf(hideTraceback),
+                java.lang.Boolean.valueOf(simplifiedTraceback),
+                java.lang.Boolean.valueOf(tracebackWithLocals))
+            }
+          }
+        } {
+          Utils.tryWithSafeFinally {
+            if (schema.snapshot().release != 0L) schema.release()
+          } { schema.close() }
+        }
+      } { buffer.close() }
     }
 
     def invoke(
@@ -318,27 +358,27 @@ private[python] object InProcessPythonRuntime extends Logging {
           java.lang.Integer.valueOf(expectedRows), argumentNames.toSeq.asJava)
       }
     }
-  }
 
-  private def withPythonException(body: => Unit): Unit = {
-    try {
-      body
-    } catch {
-      case e: JepException =>
-        val msg = e.getMessage
-        val sentinelIdx = if (msg != null) msg.indexOf(TRACEBACK_SENTINEL) else -1
-        if (sentinelIdx >= 0) {
-          throw new PythonException(
-            errorClass = "PYTHON_EXCEPTION",
-            messageParameters = Map(
-              "msg" -> "An exception was thrown from the in-process Python UDF",
-              "traceback" -> msg.substring(sentinelIdx + TRACEBACK_SENTINEL.length)),
-            // The formatted Python message already applies the query's traceback policy.
-            // Do not retain JEP's separate Python traceback through a nested cause.
-            cause = null)
-        } else {
-          throw new RuntimeException(s"In-process Python infrastructure error: $msg", e)
-        }
+    private def withPythonException(body: => Unit): Unit = {
+      try {
+        body
+      } catch {
+        case e: JepException =>
+          val msg = e.getMessage
+          val sentinelIdx = if (msg != null) msg.indexOf(TRACEBACK_SENTINEL) else -1
+          if (sentinelIdx >= 0) {
+            throw new PythonException(
+              errorClass = "PYTHON_EXCEPTION",
+              messageParameters = Map(
+                "msg" -> "An exception was thrown from the in-process Python UDF",
+                "traceback" -> msg.substring(sentinelIdx + TRACEBACK_SENTINEL.length)),
+              // The formatted Python message already applies the query's traceback policy.
+              // Do not retain JEP's separate Python traceback through a nested cause.
+              cause = null)
+          } else {
+            throw new RuntimeException(s"In-process Python infrastructure error: $msg", e)
+          }
+      }
     }
   }
 }

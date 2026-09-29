@@ -90,6 +90,21 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             UDFRegistration(self.connect).register("inprocess", udf)
         self.assertEqual(error.exception.getCondition(), "INVALID_UDF_EVAL_TYPE")
 
+    @unittest.skipIf(is_remote_only(), "Requires the classic-only in-process UDF API")
+    def test_inprocess_udf_dataframe_call_is_rejected(self):
+        from unittest.mock import patch
+
+        from pyspark.errors import PySparkNotImplementedError
+        from pyspark.inprocess import inprocess_udf
+
+        udf = inprocess_udf("long")(lambda x: x)
+        with patch("pyspark.sql.utils.is_remote", return_value=True):
+            for column in ["id", self.connect.range(0, 1).id]:
+                with self.assertRaises(PySparkNotImplementedError) as error:
+                    udf(column)
+                self.assertEqual(error.exception.getCondition(), "NOT_IMPLEMENTED")
+                self.assertIn("Spark Connect", str(error.exception))
+
     def test_char_varchar_collation_type_round_trip(self):
         data_types = [
             CharType(4),

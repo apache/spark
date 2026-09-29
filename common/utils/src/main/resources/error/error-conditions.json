@@ -5216,6 +5216,11 @@
           "<sparkSubmitDeployModeKey> can only be \"cluster\" or \"client\"."
         ]
       },
+      "MISSING_IN_PROCESS_PYTHON_PLUGIN" : {
+        "message" : [
+          "In-process Python UDFs require <plugin> in spark.plugins. Install JEP and Arrow CDI on executors and configure the plugin before starting Spark."
+        ]
+      },
       "NETWORK_AUTH_MUST_BE_ENABLED" : {
         "message" : [
           "<networkAuthEnabledConf> must be enabled when enabling encryption."

@@ -23,6 +23,8 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
+import org.apache.spark.internal.config.PLUGINS
+import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.plans.logical.NamedParametersSupport
@@ -58,7 +60,6 @@ object InProcessPythonUDFBuilder {
       jColumns: JList[Column],
       deterministic: Boolean,
       pythonVersion: String): Column = {
-    checkConfiguration(SQLConf.get)
     val returnType = DataType.fromJson(returnTypeJson)
     val inputExprs = jColumns.asScala.map(col => ColumnNodeExpression(col.node)).toSeq
     NamedParametersSupport.splitAndCheckNamedArguments(inputExprs, name, SQLConf.get.resolver)
@@ -79,12 +80,19 @@ object InProcessPythonUDFBuilder {
     val unsupported = Seq(
       Option.when(PythonWorkerEnvironment.read(conf).nonEmpty)("spark.pythonWorkerEnv.*"),
       conf.pythonUDFProfiler.map(_ => SQLConf.PYTHON_UDF_PROFILER.key),
-      Option(SparkEnv.get).flatMap(_.conf.getOption("spark.executor.pyspark.memory"))
-        .map(_ => "spark.executor.pyspark.memory")).flatten
+      Option(SparkEnv.get).flatMap(_.conf.get(PYSPARK_EXECUTOR_MEMORY)).filter(_ > 0)
+        .map(_ => PYSPARK_EXECUTOR_MEMORY.key)).flatten
     unsupported.headOption.foreach { config =>
       throw new SparkException(
         errorClass = "INVALID_SPARK_CONFIG.UNSUPPORTED_IN_PROCESS_PYTHON_UDF",
         messageParameters = Map("config" -> config),
+        cause = null)
+    }
+    val plugin = "org.apache.spark.sql.execution.python.InProcessPythonPlugin"
+    if (!Option(SparkEnv.get).exists(_.conf.get(PLUGINS).contains(plugin))) {
+      throw new SparkException(
+        errorClass = "INVALID_SPARK_CONFIG.MISSING_IN_PROCESS_PYTHON_PLUGIN",
+        messageParameters = Map("plugin" -> plugin),
         cause = null)
     }
   }

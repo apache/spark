@@ -792,6 +792,18 @@ UDF, UDTF and UDT
     wrap_udt
 
 
+In-process Python UDFs require an executor plugin and native dependencies and are
+available only in Spark Classic. See the
+`setup guide <https://spark.apache.org/docs/latest/sql-pyspark-inprocess-udf.html>`_.
+
+.. currentmodule:: pyspark.inprocess
+
+.. autosummary::
+    :toctree: api/
+
+    inprocess_udf
+
+
 Table-Valued Functions
 ----------------------
 .. currentmodule:: pyspark.sql.tvf

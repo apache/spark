@@ -1675,7 +1675,8 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       // Extend the set of types with the new types found in the current project node
       case p: Project =>
         pythonUDFEvalTypesInUpperProjects ++ p.projectList.flatMap(_.collect {
-          case udf: PythonUDF if isScalarPythonUDF(udf) =>
+          case udf: PythonUDF if isScalarPythonUDF(udf) &&
+              udf.evalType != PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF =>
             correctEvalType(udf, pythonUDFArrowFallbackOnUDT)
         }).toSet
 
@@ -1795,7 +1796,6 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
           lazy val containsUDF = a.child.exists {
             case udf: PythonUDF =>
               isScalarPythonUDF(udf) &&
-                udf.evalType != PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF &&
                 pythonUDFEvalTypesInUpperProjects.contains(
                   correctEvalType(udf, pythonUDFArrowFallbackOnUDT))
             case _ => false

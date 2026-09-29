@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Python.IN_PROCESS_SITE_PACKAGES
 
 /**
  * Spark plugin that initializes jep's SharedInterpreter on a dedicated executor thread,
@@ -51,10 +52,7 @@ private[python] class InProcessPythonExecutorPlugin extends ExecutorPlugin with 
   override def init(ctx: PluginContext, extraConf: JMap[String, String]): Unit = {
     logInfo("Initializing in-process Python runtime (jep SharedInterpreter).")
     try {
-      val sitePackages = ctx.conf()
-        .getOption(InProcessPythonRuntime.SITE_PACKAGES_CONFIG)
-        .map(_.split(",").map(_.trim).filter(_.nonEmpty).toSeq)
-        .getOrElse(Seq.empty)
+      val sitePackages = ctx.conf().get(IN_PROCESS_SITE_PACKAGES)
       // Resolve CDI classes inside the guarded call, so even a missing JAR gets a useful error.
       InProcessArrowBridge.verifyDependencies()
       InProcessPythonRuntime.initialize(sitePackages)

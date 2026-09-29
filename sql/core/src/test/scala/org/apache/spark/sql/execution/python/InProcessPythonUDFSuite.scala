@@ -85,6 +85,18 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("missing executor plugin is rejected before task submission") {
+    val column = makeUDF("identity", col("id"))
+    val error = intercept[SparkException] {
+      spark.range(1).select(column).queryExecution.executedPlan.execute()
+    }
+    checkError(
+      exception = error,
+      condition = "INVALID_SPARK_CONFIG.MISSING_IN_PROCESS_PYTHON_PLUGIN",
+      parameters = Map("plugin" ->
+        "org.apache.spark.sql.execution.python.InProcessPythonPlugin"))
+  }
+
   test("positional arguments after named arguments are rejected by the builder") {
     val named = PythonSQLUtils.namedArgumentExpression("x", col("id"))
     val error = intercept[AnalysisException] {

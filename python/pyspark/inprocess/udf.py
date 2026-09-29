@@ -39,7 +39,7 @@ from inspect import signature
 from typing import Any, Callable, Optional, Union
 
 from pyspark import Accumulator, Broadcast, cloudpickle
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkNotImplementedError, PySparkTypeError, PySparkValueError
 from pyspark.sql.column import Column
 from pyspark.sql.types import DataType, _parse_datatype_string
 from pyspark.util import PythonEvalType
@@ -48,7 +48,12 @@ from pyspark.util import PythonEvalType
 class _InProcessPickler(cloudpickle.CloudPickler):
     def reducer_override(self, obj: Any) -> Any:
         if isinstance(obj, (Broadcast, Accumulator)):
-            raise TypeError("In-process UDFs do not support Spark broadcasts or accumulators")
+            raise PySparkNotImplementedError(
+                errorClass="NOT_IMPLEMENTED",
+                messageParameters={
+                    "feature": "Spark broadcasts or accumulators in in-process UDFs"
+                },
+            )
         return super().reducer_override(obj)
 
 
@@ -143,14 +148,15 @@ class InProcessUDFWrapper:
         Returns:
             pyspark.sql.Column
         """
-        from pyspark import SparkContext
         from pyspark.sql.classic.column import _to_java_column
+        from pyspark.sql.utils import get_active_spark_context, is_remote
 
-        sc = SparkContext._active_spark_context
-        if sc is None:
-            raise RuntimeError(
-                "No active SparkContext. Start a SparkSession before calling an inprocess_udf."
+        if is_remote():
+            raise PySparkNotImplementedError(
+                errorClass="NOT_IMPLEMENTED",
+                messageParameters={"feature": "In-process Python UDFs in Spark Connect"},
             )
+        sc = get_active_spark_context()
 
         jvm = sc._jvm
         assert jvm is not None
@@ -189,17 +195,22 @@ def inprocess_udf(return_type: Union[DataType, str], deterministic: bool = True)
     """
     Decorator to register a Python function as an in-process UDF.
 
+    .. versionadded:: 4.4.0
+
     The decorated function receives one ``pa.Array`` per input column and must
     return a single ``pa.Array`` of the declared ``return_type``.
 
     The result must have the same length as the input batch and its Arrow type
-    must match the declared Spark type, including nested fields and timestamp
-    timezone. Nested nullability may be widened, but actual nulls cannot be returned
-    in non-nullable fields. Value types must match exactly; use an explicit PyArrow
-    cast in the function when conversion is intended. Sliced results are copied when
+    must match the declared Spark type, including nested fields. Timezone-aware
+    timestamps are relabeled to the session timezone without changing their instants;
+    string/binary offset widths are converted to match ``useLargeVarTypes``. Other
+    value types must match exactly. Nested nullability may be widened, but actual
+    nulls cannot be returned in non-nullable fields. Sliced results are copied when
     required by Arrow Java.
 
-    Spark broadcasts, accumulators, and ``SparkContext.addPyFile`` are unsupported.
+    Spark broadcasts, accumulators, ``SparkFiles``, ``--py-files``,
+    ``spark.submit.pyFiles``, ``SparkContext.addPyFile`` and
+    ``SparkSession.addArtifacts(..., pyfile=True)`` are unsupported.
     Install dependencies on executors before starting Spark. The driver's Python
     major.minor version must match the embedded interpreter.
 

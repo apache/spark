@@ -19,7 +19,9 @@
 """Arrow CDI contract tests that do not need a Spark JVM or JEP."""
 
 import sys
+import threading
 import unittest
+import weakref
 from importlib.util import find_spec
 from unittest.mock import patch
 
@@ -47,6 +49,7 @@ if _have_arrow_cdi:
         _inprocess_invoke,
         _inprocess_register,
         _inprocess_release,
+        _results,
         _udfs,
         _validate_result,
     )
@@ -56,6 +59,7 @@ if _have_arrow_cdi:
 @unittest.skipUnless(_have_arrow_cdi, "Arrow CDI tests require PyArrow and cffi")
 class InProcessRuntimeTests(unittest.TestCase):
     def tearDown(self):
+        _results.clear()
         _udfs.clear()
 
     def register(self, handle, serialized, expected=None, version=None, **options):
@@ -150,10 +154,94 @@ class InProcessRuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "expected decimal128"):
             self.invoke(lambda x: x, [value], DecimalType(10, 2))
 
-    def test_timestamp_timezone_mismatch(self):
-        value = pa.array([0], type=pa.timestamp("us", tz="UTC"))
-        with self.assertRaisesRegex(RuntimeError, "America/Los_Angeles"):
-            self.invoke(lambda x: x, [value], TimestampType(), timezone="America/Los_Angeles")
+    def test_timestamp_timezone_labels_preserve_instants_and_buffers(self):
+        value = pa.array([0, None, 123456], type=pa.timestamp("us", tz="UTC"))
+        for timezone in ["Etc/UTC", "America/Los_Angeles"]:
+            result = self.invoke(lambda x: x, [value], TimestampType(), timezone=timezone)
+            self.assertEqual(result.type, pa.timestamp("us", tz=timezone))
+            self.assertEqual(result.cast(pa.int64()).to_pylist(), [0, None, 123456])
+            self.assertEqual(result.buffers()[1].address, value.buffers()[1].address)
+        for datatype in [pa.timestamp("us"), pa.timestamp("ms", tz="UTC")]:
+            with self.assertRaisesRegex(TypeError, "expected"):
+                _validate_result(pa.array([0], type=datatype), 1, value.type)
+
+    def test_session_dependent_nested_string_and_binary_widths(self):
+        value = pa.array([{"s": ["hello", None], "b": b"data"}, None])
+        expected = pa.struct(
+            [pa.field("s", pa.list_(pa.large_string())), pa.field("b", pa.large_binary())]
+        )
+        result = _validate_result(value, 2, expected)
+        self.assertEqual(result.type, expected)
+        self.assertEqual(result.to_pylist(), value.to_pylist())
+        self.assertEqual(_validate_result(result, 2, value.type).to_pylist(), value.to_pylist())
+
+    def test_exported_numpy_buffers_are_finalized_on_the_interpreter_thread(self):
+        import numpy as np
+
+        from pyspark.inprocess import runtime
+
+        finalized = []
+        owners = []
+
+        def produce(values):
+            array = np.arange(len(values), dtype=np.int64)
+            owners.append(weakref.ref(array))
+            weakref.finalize(array, lambda: finalized.append(threading.get_ident()))
+            return pa.array(array)
+
+        _udfs["owned"] = (produce, pa.int64(), lambda array: None, False, False, False)
+        for batch in range(2):
+            array = ffi.new("struct ArrowArray*")
+            schema = ffi.new("struct ArrowSchema*")
+            # A normal input is imported on the simulated interpreter thread.
+            input_array = ffi.new("struct ArrowArray*")
+            input_schema = ffi.new("struct ArrowSchema*")
+            pa.array([1, 2])._export_to_c(
+                int(ffi.cast("uintptr_t", input_array)),
+                int(ffi.cast("uintptr_t", input_schema)),
+            )
+            runtime._inprocess_invoke(
+                "owned",
+                [int(ffi.cast("uintptr_t", input_array))],
+                [int(ffi.cast("uintptr_t", input_schema))],
+                int(ffi.cast("uintptr_t", array)),
+                int(ffi.cast("uintptr_t", schema)),
+                2,
+            )
+
+            def release_cdi():
+                array.release(array)
+                schema.release(schema)
+
+            task = threading.Thread(target=release_cdi)
+            task.start()
+            task.join()
+            self.assertIsNotNone(owners[-1]())
+            self.assertEqual(len(finalized), batch)
+        _inprocess_release(["owned"])
+        self.assertEqual(finalized, [threading.get_ident()] * 2)
+        self.assertTrue(all(owner() is None for owner in owners))
+
+    def test_empty_map_does_not_read_offsets(self):
+        from pyspark.inprocess.runtime import _null_checker
+
+        expected = pa.map_(pa.string(), pa.field("value", pa.int64(), nullable=False))
+        empty = pa.array([], type=expected)
+
+        class EmptyMap:
+            values = empty.values
+            null_count = 0
+
+            def __len__(self):
+                return 0
+
+            @property
+            def offsets(self):
+                raise AssertionError("An empty map must not read its offsets buffer")
+
+        _null_checker(expected)(EmptyMap())
+        nested = pa.array([[], None, []], type=pa.list_(expected))
+        self.assertEqual(_validate_result(nested, 3, nested.type), nested)
 
     def test_primitive_types_do_not_implicitly_cast(self):
         cases = [
@@ -477,7 +565,7 @@ class InProcessRuntimeTests(unittest.TestCase):
         self.assertEqual(wrapper.func(x=pa.array([1])).to_pylist(), [1])
 
     def test_exception_text_is_safe_for_jni(self):
-        message = "failure: \U0001f600 \ud800 \0 tail"
+        message = "failure: caf\u00e9 \u4e2d\u6587 \U0001f600 \ud800 \0 tail"
 
         def fail(x):
             raise ValueError(message)
@@ -485,9 +573,26 @@ class InProcessRuntimeTests(unittest.TestCase):
         with self.assertRaises(RuntimeError) as error:
             self.invoke(fail, [pa.array([1])], LongType())
         text = str(error.exception)
-        self.assertTrue(text.isascii())
+        self.assertIn("caf\u00e9 \u4e2d\u6587", text)
         self.assertNotIn("\0", text)
         self.assertIn(r"\U0001f600 \ud800 \x00 tail", text)
+
+    def test_connect_and_missing_context_have_categorized_errors(self):
+        from pyspark import SparkContext
+        from pyspark.errors import PySparkNotImplementedError, PySparkRuntimeError
+
+        udf = inprocess_udf(LongType())(lambda x: x)
+        with patch("pyspark.sql.utils.is_remote", return_value=True):
+            with self.assertRaises(PySparkNotImplementedError) as error:
+                udf("id")
+            self.assertEqual(error.exception.getCondition(), "NOT_IMPLEMENTED")
+        with (
+            patch("pyspark.sql.utils.is_remote", return_value=False),
+            patch.object(SparkContext, "_active_spark_context", None),
+        ):
+            with self.assertRaises(PySparkRuntimeError) as error:
+                udf("id")
+            self.assertEqual(error.exception.getCondition(), "SESSION_OR_CONTEXT_NOT_EXISTS")
 
     def test_wrapper_metadata_and_return_type_validation(self):
         from pyspark.errors import PySparkTypeError

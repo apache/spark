@@ -20,9 +20,11 @@ package org.apache.spark.sql.execution.python
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.spark.{SparkFunSuite, TaskContext, TaskKilledException}
+import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskKilledException}
+import org.apache.spark.internal.config.Python.IN_PROCESS_SITE_PACKAGES
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.util.ArrowUtils
 
 class InProcessPythonRuntimeSuite extends SparkFunSuite {
   private var runtime: InProcessPythonRuntime.InterpreterSession = _
@@ -34,6 +36,36 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
 
   override def afterEach(): Unit = {
     try { runtime.shutdown() } finally { super.afterEach() }
+  }
+
+  test("site-packages config validates JEP include paths") {
+    val conf = new SparkConf(false)
+    assert(conf.get(IN_PROCESS_SITE_PACKAGES).isEmpty)
+    conf.set(IN_PROCESS_SITE_PACKAGES.key, " /opt/venv/lib, /opt/extra ")
+    assert(conf.get(IN_PROCESS_SITE_PACKAGES) == Seq("/opt/venv/lib", "/opt/extra"))
+    Seq("bad'path", "bad\npath", "bad\\path", s"bad${java.io.File.pathSeparator}path")
+      .foreach { path =>
+        conf.set(IN_PROCESS_SITE_PACKAGES.key, path)
+        intercept[IllegalArgumentException] { conf.get(IN_PROCESS_SITE_PACKAGES) }
+        intercept[IllegalArgumentException] {
+          InProcessPythonRuntime.InterpreterConfiguration.interpreterConfig(Seq(path))
+        }
+      }
+  }
+
+  test("registration failure frees its temporary native command buffer") {
+    val before = ArrowUtils.rootAllocator.getAllocatedMemory
+    val field = ArrowUtils.toArrowField("result", LongType, true, "UTC")
+    intercept[NullPointerException] {
+      // This session deliberately has no interpreter, so invocation fails after allocation.
+      runtime.register("failed", new Array[Byte](1024 * 1024), field, "3.12", false, false, false)
+    }
+    assert(ArrowUtils.rootAllocator.getAllocatedMemory == before)
+    runtime.shutdown(waitMillis = 20)
+    assert(!runtime.isTerminated)
+    runtime.release(Seq("failed"))
+    runtime.shutdown()
+    assert(runtime.isTerminated)
   }
 
   test("lifecycle errors distinguish configuration mismatch from stopping") {

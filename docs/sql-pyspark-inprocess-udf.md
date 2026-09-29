@@ -43,14 +43,18 @@ therefore prevent its task from completing cancellation and block every subseque
 in-process UDF on that executor, including calls from other tasks, jobs, and sessions.
 Recovery from a permanently hung invocation requires replacing the executor process.
 Plugin shutdown stops accepting new calls and waits up to five seconds for the interpreter thread. If a call is
-still running, cleanup stays queued behind it; its memory remains live until the
-call returns or the process exits. Shutdown does not forcibly interrupt native
+still running or a task still owns exported results, cleanup waits for that task to release
+its CDI references; the memory remains live until cleanup completes or the process exits. Shutdown does not forcibly interrupt native
 code. A new interpreter cannot start until the previous one has fully stopped.
 
 A scalar UDF must return a `pyarrow.Array` with exactly one element per input row.
 The runtime checks the result type against the declared Spark type, including
-nested fields, decimal scale, and timestamp unit/timezone. Value types must match
-exactly: use an explicit PyArrow cast in the UDF for numeric or other conversions.
+nested fields, decimal scale, and timestamp unit. Timezone-aware timestamps are relabeled
+to `spark.sql.session.timeZone` without changing their UTC instants or copying their buffers.
+Timezone-naive and timezone-aware timestamps are not interchangeable. String and binary
+offset widths, including nested values, are converted as needed to match
+`spark.sql.execution.arrow.useLargeVarTypes`. These conversions can allocate new buffers.
+Other value types must match exactly: use an explicit PyArrow cast for numeric conversions.
 Nested field nullability may differ if the actual values satisfy the declared nullability. Sliced results, including nested
 child slices, are copied to remove offsets that Arrow Java's CDI importer cannot
 read. Compatible results retain zero-copy transfer.
@@ -72,12 +76,16 @@ reads their buffers.
 Each batch uses fresh input buffers. A Python function may retain an input array;
 later batches do not overwrite it. Retained arrays keep native memory alive, so
 functions should release them when no longer needed. JVM input vectors and result
-vectors are released on task completion, early termination and failure.
+vectors are released on task completion, early termination and failure. The runtime retains
+each exported result until the next invocation for that task or task cleanup, after the JVM
+has released its references. The runtime drops its Python references on the interpreter
+thread, so releasing JVM results does not trigger Python finalizers on Spark task threads.
+Cleanup can remain queued behind another task's invocation.
 
 UDF deserialization uses PySpark's bundled cloudpickle. Each task registers its
 own function instance once and passes a small handle for subsequent batches.
-Exception text escapes non-ASCII characters and NUL to preserve it across JEP's
-JNI exception transport.
+Exception text escapes NUL, surrogates and non-BMP characters for JEP's JNI exception
+transport. Other characters, including non-English BMP text, remain readable.
 Task completion queues release of the registered function and its closure state. Imported
 Python modules still share executor-wide state. Configured site-packages paths
 are supplied to JEP before its first construction, so JEP itself can be found in
@@ -92,24 +100,40 @@ flags from the environment (including `PYTHONFAULTHANDLER` and `PYTHONDEVMODE`).
 explicitly restores its Python distribution paths and the executor process `PYTHONPATH`
 before configured `sitePackages` paths. This also supports YARN's localized Python archives
 when `SPARK_HOME` is absent. Python modules must not install process-wide signal handlers
-that replace the JVM's handlers.
+that replace the JVM's handlers. JEP's automatic Java package discovery is disabled so
+Java packages do not shadow Python packages.
 
-Spark broadcasts, accumulators, `SparkContext.addPyFile`, and Python `TaskContext`
-are not supported by this embedded runtime. Captured broadcast and accumulator
+Executors must start with a UTF-8 locale, for example `LC_ALL=C.UTF-8` on systems that
+provide it. Isolated initialization ignores `PYTHONUTF8` and `PYTHONIOENCODING` and does
+not coerce an ASCII locale; the runtime warns if it detects one. Standard output and error
+use line buffering and are flushed during orderly interpreter shutdown.
+
+Spark broadcasts, accumulators, `SparkFiles`, `--py-files`, `spark.submit.pyFiles`,
+`SparkContext.addPyFile`, `SparkSession.addArtifacts(..., pyfile=True)`, and Python
+`TaskContext` are not supported by this embedded runtime. Python files may incidentally
+be importable on YARN through its process `PYTHONPATH`; this is not portable support for
+these APIs. For archived environments, access files by their configured executor paths,
+rather than `SparkFiles.get`. Captured broadcast and accumulator
 objects are rejected during serialization; functions must not access them through
 imported modules either. Install modules on executors before startup, optionally
 using `spark.inprocess.python.sitePackages`. Session-scoped `spark.pythonWorkerEnv.*`
 settings are rejected: the shared interpreter cannot apply per-session process
 environments. Configure environment variables before the executor starts, for example
 with `spark.executorEnv.NAME` (or the launching environment in local mode).
-In-process UDFs reject `spark.executor.pyspark.memory`, `spark.sql.pyspark.udf.profiler`,
-and `spark.pythonWorkerEnv.*`. Python runs inside the JVM, so a separate Python process
+At query execution on the driver, in-process UDFs reject positive
+`spark.executor.pyspark.memory`, `spark.sql.pyspark.udf.profiler`, and
+`spark.pythonWorkerEnv.*` settings. A Python memory value of `0` means no separate limit
+and is accepted. Python runs inside the JVM, so a separate Python process
 memory limit cannot be applied. Use executor memory settings for sizing, and worker-based
-UDFs when these Python worker features are needed.
+UDFs when these Python worker features are needed. Worker-specific logging, faulthandler,
+traceback-dump timers, process reuse, idle timeouts, and pipelined worker transport settings
+do not apply to this mode. In particular, `spark.sql.pyspark.worker.logging.enabled` and
+`spark.sql.execution.pyspark.udf.faulthandler.enabled` do not enable these worker facilities
+inside the JVM. Ordinary UDFs in the same application retain their worker settings.
 
 SQL registration through `spark.udf.register` is not supported and is rejected at registration time.
 Spark Connect does not support this execution mode; both client SQL registration and
-server planning reject it. The decorator accepts a `DataType` or a DDL string; DDL
+server planning reject it, and DataFrame API calls report that Connect is unsupported. The decorator accepts a `DataType` or a DDL string; DDL
 strings are parsed lazily with the active Spark session. It exposes `func`, `returnType`,
 `evalType`, `deterministic`, and `asNondeterministic()` along with the function's name
 and docstring.
@@ -349,10 +373,9 @@ Adjust `python3.11` in the paths below to match the Python version in your venv.
 ### YARN
 
 Spark extracts `--archives` to a relative path (`./myvenv/`) on each YARN container before the executor JVM
-starts. The key extra config compared to local development is
-`spark.executorEnv.PYSPARK_PYTHON`, which tells PySpark's Python worker to use the venv's
-Python executable (ensuring a consistent Python version between the JVM-embedded interpreter
-and any out-of-process fallbacks).
+starts. Set `spark.pyspark.python` to the venv executable if ordinary worker UDFs in the same
+application should also use that environment. This does not select JEP's embedded CPython;
+JEP must be built against the intended Python version. In-process UDFs do not fall back to workers.
 
 ```bash
 spark-submit \
@@ -364,7 +387,7 @@ spark-submit \
   --conf spark.plugins=org.apache.spark.sql.execution.python.InProcessPythonPlugin \
   --conf spark.executor.cores=1 \
   --conf spark.task.cpus=1 \
-  --conf spark.executorEnv.PYSPARK_PYTHON=./myvenv/bin/python3 \
+  --conf spark.pyspark.python=./myvenv/bin/python3 \
   --conf spark.executor.extraJavaOptions="-Djava.library.path=./myvenv/lib/python3.11/site-packages/jep" \
   --conf spark.inprocess.python.sitePackages=./myvenv/lib/python3.11/site-packages \
   my_app.py
@@ -439,7 +462,7 @@ spark-submit \
   --conf spark.plugins=org.apache.spark.sql.execution.python.InProcessPythonPlugin \
   --conf spark.executor.cores=1 \
   --conf spark.task.cpus=1 \
-  --conf spark.executorEnv.PYSPARK_PYTHON=./myvenv/bin/python3 \
+  --conf spark.pyspark.python=./myvenv/bin/python3 \
   --conf spark.executor.extraJavaOptions="-Djava.library.path=./myvenv/lib/python3.11/site-packages/jep" \
   --conf spark.inprocess.python.sitePackages=./myvenv/lib/python3.11/site-packages \
   my_app.py
@@ -456,8 +479,9 @@ spark-submit \
 | **Required value** | `org.apache.spark.sql.execution.python.InProcessPythonPlugin` |
 
 Registers the in-process Python plugin. This initializes the `SharedInterpreter` on each
-executor at startup. Without this plugin, in-process UDF execution fails with an
-initialization error. Task calls and cleanup never create or restart an interpreter.
+executor at startup. Without this plugin, the driver rejects in-process UDF execution
+before submitting tasks. Missing native dependencies are reported during plugin initialization.
+Task calls and cleanup never create or restart an interpreter.
 
 ---
 
@@ -486,8 +510,11 @@ spark.inprocess.python.sitePackages = ./myvenv/lib/python3.11/site-packages
 ```
 
 The relative path `./myvenv/` resolves to the directory where Spark extracted your archive on
-the executor node. Spark unpacks `--archives myvenv.zip#myvenv` to `./myvenv/` at task launch
-time.
+the executor node. Initial archives are localized or unpacked before executor plugin
+initialization, so their site-packages directories are available when JEP starts.
+
+Paths cannot contain a single quote, backslash, newline, comma, or the platform path
+separator (`:` on Linux/macOS). Commas separate configuration entries.
 
 **Multiple paths** (comma-separated):
 

@@ -98,6 +98,10 @@ class InProcessUDFTests(ReusedSQLTestCase):
             f.write("MAGIC = 99\n")
         with open(os.path.join(cls.site_packages, "helper.pth"), "w") as f:
             f.write("extra\n")
+        for name in ["spire", "redis"]:
+            package = Path(cls.site_packages) / name
+            package.mkdir()
+            (package / "__init__.py").write_text("PYTHON_PACKAGE = True\n")
         shadow = os.path.join(cls.site_packages, "pyspark")
         os.mkdir(shadow)
         with open(os.path.join(shadow, "__init__.py"), "w") as f:
@@ -159,8 +163,8 @@ class InProcessUDFTests(ReusedSQLTestCase):
         identity = inprocess_udf("long")(lambda x: x)
         column = identity("id")
         with self.sql_conf({"spark.pythonWorkerEnv.INPROCESS_TEST_VALUE": "value"}):
-            with self.assertRaisesRegex(Exception, "UNSUPPORTED_IN_PROCESS_PYTHON_UDF"):
-                identity("id")
+            # Columns are session-agnostic; validate using the query's session at execution.
+            identity("id")
             with self.assertRaisesRegex(Exception, "UNSUPPORTED_IN_PROCESS_PYTHON_UDF"):
                 self.spark.range(1).select(column).collect()
 
@@ -170,20 +174,83 @@ class InProcessUDFTests(ReusedSQLTestCase):
         identity = inprocess_udf("long")(lambda x: x)
         column = identity("id")
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
-            with self.assertRaisesRegex(Exception, "UNSUPPORTED_IN_PROCESS_PYTHON_UDF"):
-                identity("id")
+            # Columns are session-agnostic; validate using the query's session at execution.
+            identity("id")
             with self.assertRaisesRegex(Exception, "UNSUPPORTED_IN_PROCESS_PYTHON_UDF"):
                 self.spark.range(1).select(column).collect()
         conf = self.spark.sparkContext._jvm.org.apache.spark.SparkEnv.get().conf()
         key = "spark.executor.pyspark.memory"
         try:
             conf.set(key, "128m")
-            with self.assertRaisesRegex(Exception, "UNSUPPORTED_IN_PROCESS_PYTHON_UDF"):
-                identity("id")
+            # Columns are session-agnostic; validate using the query's session at execution.
+            identity("id")
             with self.assertRaisesRegex(Exception, "UNSUPPORTED_IN_PROCESS_PYTHON_UDF"):
                 self.spark.range(1).select(column).collect()
         finally:
             conf.remove(key)
+
+    def test_configuration_uses_the_query_session(self):
+        from pyspark.inprocess import inprocess_udf
+
+        identity = inprocess_udf("long")(lambda x: x)
+        second = self.spark.newSession()
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            column = identity("id")
+            self.assertEqual([r[0] for r in second.range(2).select(column).collect()], [0, 1])
+            with self.assertRaisesRegex(Exception, "UNSUPPORTED_IN_PROCESS_PYTHON_UDF"):
+                self.spark.range(2).select(column).collect()
+        conf = self.spark.sparkContext._jvm.org.apache.spark.SparkEnv.get().conf()
+        try:
+            conf.set("spark.executor.pyspark.memory", "0")
+            self.assertEqual(self.spark.range(1).select(identity("id")).first()[0], 0)
+        finally:
+            conf.remove("spark.executor.pyspark.memory")
+
+    def test_python_packages_are_not_shadowed_by_java_imports(self):
+        from pyspark.inprocess import inprocess_udf
+
+        def probe(x):
+            import sys
+
+            import pyarrow as pa
+            import redis
+            import spire
+
+            good = spire.PYTHON_PACKAGE and redis.PYTHON_PACKAGE
+            good = good and sys.stdout.line_buffering and sys.stdout.write_through
+            return pa.array([good] * len(x))
+
+        self.assertTrue(
+            self.spark.range(1).select(inprocess_udf("boolean")(probe)("id")).first()[0]
+        )
+
+    def test_result_schema_adapts_to_session_representation(self):
+        from pyspark.inprocess import inprocess_udf
+
+        def timestamp(x):
+            import pyarrow as pa
+
+            return pa.array([0] * len(x), type=pa.timestamp("us", tz="UTC"))
+
+        def nested(x):
+            import pyarrow as pa
+
+            return pa.array([{"s": ["hello"], "b": b"data"}] * len(x))
+
+        for zone in ["UTC", "Etc/UTC", "America/Los_Angeles"]:
+            with self.sql_conf({"spark.sql.session.timeZone": zone}):
+                result = self.spark.range(1).select(inprocess_udf("timestamp")(timestamp)("id"))
+                self.assertEqual(
+                    result.toDF("value").selectExpr("unix_micros(value)").first()[0], 0
+                )
+        with self.sql_conf({"spark.sql.execution.arrow.useLargeVarTypes": "true"}):
+            result = (
+                self.spark.range(1)
+                .select(inprocess_udf("struct<s:array<string>,b:binary>")(nested)("id"))
+                .first()[0]
+            )
+            self.assertEqual(result.s, ["hello"])
+            self.assertEqual(result.b, b"data")
 
     def test_kwargs_only_function(self):
         from pyspark.inprocess import inprocess_udf
@@ -260,6 +327,66 @@ class MissingCdiProbe {
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("MISSING_CDI_REJECTED", result.stdout)
 
+    def test_missing_jep_has_an_initialization_hint(self):
+        import subprocess
+
+        jvm = self.spark.sparkContext._jvm
+        java_home = jvm.java.lang.System.getProperty("java.home")
+        classpath = os.pathsep.join(
+            p
+            for p in jvm.java.lang.System.getProperty("java.class.path").split(os.pathsep)
+            if p != str(self.jep_jar)
+        )
+        source = """
+import java.lang.reflect.Proxy;
+import java.util.Collections;
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.plugin.PluginContext;
+import org.apache.spark.sql.execution.python.InProcessPythonPlugin;
+import org.apache.spark.sql.execution.python.InProcessPythonRuntime;
+
+class MissingJepProbe {
+  public static void main(String[] args) {
+    try {
+      InProcessPythonRuntime.currentSession();
+      throw new AssertionError("Uninitialized runtime was accepted");
+    } catch (IllegalStateException expected) {
+      if (!expected.getMessage().contains("executor plugin")) throw expected;
+    }
+    PluginContext context = (PluginContext) Proxy.newProxyInstance(
+        PluginContext.class.getClassLoader(), new Class<?>[] {PluginContext.class},
+        (proxy, method, values) -> new SparkConf(false));
+    try {
+      new InProcessPythonPlugin().executorPlugin().init(context, Collections.emptyMap());
+      throw new AssertionError("Plugin accepted a missing JEP dependency");
+    } catch (IllegalStateException expected) {
+      if (!(expected.getCause() instanceof LinkageError)) throw expected;
+      if (!expected.getMessage().contains("jep.jar")) throw expected;
+      System.out.println("MISSING_JEP_REJECTED");
+    }
+  }
+}
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            source_file = Path(directory) / "MissingJepProbe.java"
+            source_file.write_text(source)
+            result = subprocess.run(
+                [
+                    str(Path(java_home) / "bin" / "java"),
+                    "--add-opens=java.base/java.nio=ALL-UNNAMED",
+                    "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+                    "-Dio.netty.tryReflectionSetAccessible=true",
+                    "-cp",
+                    classpath,
+                    str(source_file),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("MISSING_JEP_REJECTED", result.stdout)
+
     def test_fresh_jvm_retries_configuration_without_spark_home(self):
         import subprocess
         import venv
@@ -280,6 +407,8 @@ class MissingCdiProbe {
         # These flags must be ignored by the embedded interpreter. No signals are raised.
         env["PYTHONFAULTHANDLER"] = "1"
         env["PYTHONDEVMODE"] = "1"
+        env["LC_ALL"] = "C"
+        env["LANG"] = "C"
 
         class BootstrapCheck:
             def __reduce__(self):
@@ -287,7 +416,10 @@ class MissingCdiProbe {
                     "(__import__('sys').flags.isolated == 1 and "
                     "__import__('sys').flags.ignore_environment == 1 and "
                     "not __import__('faulthandler').is_enabled() and "
-                    "'pyspark.zip' in __import__('pyspark').__file__ and (lambda x: x)) or "
+                    "'pyspark.zip' in __import__('pyspark').__file__ and "
+                    "__import__('sys').stdout.line_buffering and "
+                    "__import__('sys').stdout.write_through and "
+                    "(print('SHUTDOWN_FLUSH', end='') or (lambda x: x))) or "
                     "(_ for _ in ()).throw(AssertionError('unexpected bootstrap state'))",
                 )
 
@@ -323,6 +455,8 @@ class BootstrapProbe {
       }
       System.out.println("BOOTSTRAP_OK");
     } finally {
+      InProcessPythonRuntime.currentSession().release(
+          scala.jdk.javaapi.CollectionConverters.asScala(Arrays.asList("probe")).toSeq());
       InProcessPythonRuntime.shutdown();
     }
   }
@@ -362,15 +496,18 @@ class BootstrapProbe {
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("BOOTSTRAP_OK", result.stdout)
+            self.assertIn("SHUTDOWN_FLUSH", result.stdout)
+            self.assertIn("set LC_ALL=C.UTF-8", result.stderr)
 
     def test_exception_unicode_and_nul_survive_jep(self):
         from pyspark.inprocess import inprocess_udf
 
         def fail(x):
-            raise ValueError("failure: \U0001f600 \ud800 \0 tail")
+            raise ValueError("failure: caf\u00e9 \u4e2d\u6587 \U0001f600 \ud800 \0 tail")
 
         with self.assertRaises(Exception) as error:
             self.spark.range(1).select(inprocess_udf("long")(fail)("id")).collect()
+        self.assertIn("caf\u00e9 \u4e2d\u6587", str(error.exception))
         self.assertIn(r"\U0001f600 \ud800 \x00 tail", str(error.exception))
 
     def test_named_argument_resolver(self):
@@ -578,6 +715,45 @@ class BootstrapProbe {
         df = self.spark.range(3, numPartitions=1)
         with self.assertRaisesRegex(Exception, "returned 2 rows; expected 3"):
             df.select(short(df.id)).collect()
+
+    def test_numpy_finalizers_run_on_the_interpreter_thread(self):
+        from pyspark.inprocess import inprocess_udf
+
+        with tempfile.TemporaryDirectory() as directory:
+            marker = str(Path(directory) / "finalizers.txt")
+
+            def produce(x):
+                import threading
+                import weakref
+
+                import numpy as np
+                import pyarrow as pa
+
+                owner = threading.get_ident()
+
+                def finalized():
+                    with open(marker, "a") as stream:
+                        stream.write(f"{owner} {threading.get_ident()}\n")
+
+                values = np.arange(len(x), dtype=np.int64)
+                weakref.finalize(values, finalized)
+                return pa.array(values)
+
+            with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "2"}):
+                result = (
+                    self.spark.range(8, numPartitions=2)
+                    .select(inprocess_udf("long")(produce)("id"))
+                    .collect()
+                )
+                self.assertEqual(len(result), 8)
+            # A subsequent invocation waits behind cleanup already queued by completed tasks.
+            identity = inprocess_udf("long")(lambda x: x)
+            self.spark.range(1).select(identity("id")).collect()
+            records = Path(marker).read_text().splitlines()
+            self.assertEqual(len(records), 4)
+            for record in records:
+                owner, finalizer = record.split()
+                self.assertEqual(owner, finalizer)
 
     def test_arrow_memory_is_released_on_success_limit_and_failure(self):
         from pyspark.inprocess import inprocess_udf
@@ -1350,7 +1526,7 @@ class BootstrapProbe {
         try:
             for value in (broadcast, accumulator):
                 with self.subTest(value=type(value).__name__):
-                    with self.assertRaisesRegex(TypeError, "broadcasts or accumulators"):
+                    with self.assertRaisesRegex(NotImplementedError, "broadcasts or accumulators"):
                         inprocess_udf(LongType())(lambda x: value.value)("id")
         finally:
             broadcast.destroy()
