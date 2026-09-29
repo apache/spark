@@ -136,23 +136,16 @@ case class EnsureRequirements(
         case Some(resolution) =>
           (distribution, resolution) match {
             case (o: OrderedDistribution, _) =>
-              // OrderedDistribution requires grouped KeyedPartitioning with sorted keys
-              // according to the distribution's ordering.
+              // OrderedDistribution requires a KeyedPartitioning with keys sorted according to
+              // the distribution's ordering.
               val satisfyingKeyedPartitioning = resolution.fold(identity, _._1)
-              // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees
-              // one attribute per partition expression.
-              val attrs = satisfyingKeyedPartitioning.expressions.flatMap(_.references)
-              val keyRowOrdering = RowOrdering.create(o.ordering, attrs)
-              val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
-              val keys = satisfyingKeyedPartitioning.partitionKeys
-              // An empty zip is vacuously sorted, which is the answer for a single key.
-              if (keys.zip(keys.drop(1)).forall { case (k1, k2) => keyOrdering.lteq(k1, k2) }) {
+              if (satisfyingKeyedPartitioning.keysSortedFor(o)) {
                 child
               } else {
                 // Spread the splits across the expected partitions, in the ordering's sequence
-                val sortedGroupedKeys = keys
+                val sortedGroupedKeys = satisfyingKeyedPartitioning.partitionKeys
                   .groupBy(identity).view.mapValues(_.size)
-                  .toSeq.sortBy(_._1)(keyOrdering)
+                  .toSeq.sortBy(_._1)(satisfyingKeyedPartitioning.keyOrderingFor(o))
                 GroupPartitionsExec(child,
                   expectedPartitionKeys = Some(sortedGroupedKeys),
                   // The keys stay ungrouped so that the ordering the operator reads is the one
