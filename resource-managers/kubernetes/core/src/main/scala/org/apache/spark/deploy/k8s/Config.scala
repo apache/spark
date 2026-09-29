@@ -290,15 +290,15 @@ private[spark] object Config extends Logging {
 
   val EXECUTOR_RESIZE_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.resizeInterval")
-      .doc("Interval between executor resize operations. To disable, set 0 (default)")
+      .doc("Interval between executor resize operations. To disable, set 0.")
       .version("4.2.0")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= 0, "Interval should be non-negative")
-      .createWithDefault(0)
+      .createWithDefaultString("1m")
 
   val EXECUTOR_RESIZE_THRESHOLD =
     ConfigBuilder("spark.kubernetes.executor.resizeThreshold")
-      .doc("The threshold to resize.")
+      .doc("The threshold to resize. It should be in (0, 1).")
       .version("4.2.0")
       .doubleConf
       .checkValue(v => 0 < v && v < 1, "The threshold should be in (0, 1)")
@@ -306,7 +306,7 @@ private[spark] object Config extends Logging {
 
   val EXECUTOR_RESIZE_FACTOR =
     ConfigBuilder("spark.kubernetes.executor.resizeFactor")
-      .doc("The factor to resize.")
+      .doc("The factor to resize. It should be in (0, 1].")
       .version("4.2.0")
       .doubleConf
       .checkValue(v => 0 < v && v <= 1, "The factor should be in (0, 1]")

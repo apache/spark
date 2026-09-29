@@ -2122,9 +2122,9 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.resizeInterval</code></td>
-  <td><code>0s</code></td>
+  <td><code>1min</code></td>
   <td>
-    Interval between executor resize operations. To disable, set 0 (default).
+    Interval between executor resize operations. To disable, set 0.
     Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
@@ -2134,7 +2134,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.resizeThreshold</code></td>
   <td><code>0.9</code></td>
   <td>
-    The threshold to resize.
+    The threshold to resize. It should be in (0, 1).
     Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
@@ -2144,7 +2144,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.resizeFactor</code></td>
   <td><code>0.1</code></td>
   <td>
-    The factor to resize.
+    The factor to resize. It should be in (0, 1].
     Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
