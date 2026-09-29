@@ -215,6 +215,8 @@ case class VariantArrayLength(child: Expression, path: Expression)
     Examples:
       > SELECT _FUNC_(parse_json('[1, 2, 3]'));
        3
+      > SELECT _FUNC_(parse_json('[]'));
+       0
       > SELECT _FUNC_(parse_json('{"a": [1, 2]}'), '$.a');
        2
       > SELECT _FUNC_(parse_json('{"a": 1}'));

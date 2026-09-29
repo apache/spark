@@ -14875,11 +14875,11 @@ object functions {
    * the input is not an array.
    *
    * @param v
-   *   a variant column. A column that evaluates to a variant.
+   *   a variant column.
    * @group variant_funcs
    * @since 4.4.0
    * @return
-   *   Returns a column that evaluates to an integer.
+   *   an integer column, or NULL for non-array variant values.
    */
   def variant_array_length(v: Column): Column = Column.fn("variant_array_length", v)
 
@@ -14888,13 +14888,13 @@ object functions {
    * SQL NULL, the path does not exist, or the target is not an array.
    *
    * @param v
-   *   a variant column. A column that evaluates to a variant.
+   *   a variant column.
    * @param path
    *   a column containing a JSONPath string that identifies the array to inspect.
    * @group variant_funcs
    * @since 4.4.0
    * @return
-   *   Returns a column that evaluates to an integer.
+   *   an integer column, or NULL if the path is absent or the target is not an array.
    */
   def variant_array_length(v: Column, path: Column): Column =
     Column.fn("variant_array_length", v, path)
@@ -14904,13 +14904,13 @@ object functions {
    * SQL NULL, the path does not exist, or the target is not an array.
    *
    * @param v
-   *   a variant column. A column that evaluates to a variant.
+   *   a variant column.
    * @param path
    *   a JSONPath string that identifies the array to inspect.
    * @group variant_funcs
    * @since 4.4.0
    * @return
-   *   Returns a column that evaluates to an integer.
+   *   an integer column, or NULL if the path is absent or the target is not an array.
    */
   def variant_array_length(v: Column, path: String): Column =
     variant_array_length(v, lit(path))
