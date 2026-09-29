@@ -91,7 +91,7 @@ GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY")
 # conflicts and the computed merge hash stay realistic -- but every outbound effect is routed
 # through a DryRun* client (see Git/GitHub/Jira below) that logs a "DRY-RUN: would ..." line
 # instead of executing it: the git push to PUSH_REMOTE_NAME, the GitHub PR close/comment, and all
-# JIRA writes (component and fixVersion updates, assignment, and the resolve transition).
+# JIRA writes (component and fixVersion updates, assignment, and resolve/reopen transitions).
 DRY_RUN_ENV = bool(os.environ.get("DRY_RUN"))
 
 
@@ -318,7 +318,7 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
                     % (line_major, line_major)
                 )
             continue
-        prefix = b.replace("branch-", "")
+        prefix = b.replace("branch-", "") + "."
         found_versions = [n for n in names if n.startswith(prefix)]
         chosen = _semver_max_version(found_versions)
         if chosen:
@@ -351,6 +351,37 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
 
     filtered = [item for item in contributions if keep(item)]
     return list(dict.fromkeys(v for _, v in filtered)), warnings
+
+
+def compute_revert_fix_versions(merge_branches, unreleased_version_names, existing_version_names):
+    """Suggest recorded Fix Versions to remove for the branches receiving a revert.
+
+    Infer each branch separately so that redundant versions recorded by separate merge
+    runs are included in the removal candidates.
+
+    >>> versions = ["5.0.0", "4.3.0", "4.2.0", "3.5.2"]
+    >>> compute_revert_fix_versions(
+    ...     ["master", "branch-4.x", "branch-4.2"], versions, versions)
+    (['5.0.0', '4.3.0', '4.2.0'], [])
+    >>> compute_revert_fix_versions(["master"], versions, versions)
+    (['5.0.0'], [])
+    >>> compute_revert_fix_versions(["branch-4.2"], versions, ["4.3.0", "3.5.2"])
+    ([], [])
+    >>> compute_revert_fix_versions(["branch-4.x"], versions, ["4.3.0", "4.2.0"])
+    (['4.3.0'], [])
+    >>> compute_revert_fix_versions(
+    ...     ["branch-4.2"], ["4.2.1", "4.20.0"], ["4.2.1", "4.20.0"])
+    (['4.2.1'], [])
+    """
+    candidates = set()
+    warnings = []
+    for branch in merge_branches:
+        versions, branch_warnings = compute_merge_default_fix_versions(
+            [branch], unreleased_version_names
+        )
+        candidates.update(versions)
+        warnings.extend(branch_warnings)
+    return [v for v in existing_version_names if v in candidates], warnings
 
 
 def additional_fix_versions(inferred_versions, existing_versions):
@@ -1434,9 +1465,7 @@ def get_jira_issue(prompt, default_jira_id=""):
             resolution = issue.fields.resolution
             resolution_name = resolution.name if resolution is not None else None
             print("JIRA issue %s already has status '%s' (%s)" % (jira_id, status, resolution_name))
-            # Only a ticket an earlier merge resolved as Fixed can legitimately gain
-            # another Fix Version. Duplicate / Won't Fix / Invalid tickets must not be
-            # touched.
+            # Only Fixed resolutions permit updates to resolved or closed tickets.
             if resolution_name != "Fixed":
                 return None
         if get_input("Check if the JIRA information is as expected (y/N): ", ["y", "n", ""]) == "y":
@@ -1594,6 +1623,72 @@ def resolve_jira_issue(
     )
 
 
+def revert_jira_issue(merge_branches, default_jira_id=""):
+    issue = get_jira_issue("Enter the JIRA id for the reverted change", default_jira_id)
+    if issue is None:
+        return
+
+    remove_jira_fix_versions(issue, merge_branches)
+    if issue.fields.status.name not in ("Resolved", "Closed"):
+        return
+
+    prompt = "Reopen JIRA issue %s so the change can be reworked? (y/N): " % issue.key
+    if get_input(prompt, ["y", "n", ""]) != "y":
+        return
+    try:
+        reopen = next(
+            (t for t in asf_jira.transitions(issue.key) if t["name"] == "Reopen Issue"), None
+        )
+        if reopen is None:
+            print_error(
+                "No Reopen Issue transition available for %s; reopen it manually." % issue.key
+            )
+            return
+        jira_ops.reopen_issue(issue, reopen["id"])
+    except Exception as e:
+        print_error("Failed to reopen %s; reopen it manually: %s" % (issue.key, e))
+
+
+def remove_jira_fix_versions(issue, merge_branches):
+    versions = asf_jira.project_versions("SPARK")
+    unreleased_names = [
+        v.name
+        for v in versions
+        if not v.raw["released"] and not v.raw["archived"] and parse_version(v.name) is not None
+    ]
+    existing_names = [v.name for v in issue.fields.fixVersions]
+    available_names = set(existing_names).intersection(unreleased_names)
+    if not available_names:
+        print("JIRA issue %s has no unreleased fix versions to remove." % issue.key)
+        return
+
+    defaults, warnings = compute_revert_fix_versions(
+        merge_branches, unreleased_names, existing_names
+    )
+    for warning in warnings:
+        print_error(warning)
+    print("Revert merged into: %s" % ", ".join(merge_branches))
+    print("JIRA issue %s has fix version(s): %s" % (issue.key, existing_names))
+    print("Available unreleased fix version(s) to remove: %s" % sorted(available_names))
+    while True:
+        raw = bold_input(
+            "Enter comma-separated fix version(s) to remove [%s], or 'skip': " % ",".join(defaults)
+        )
+        if raw.strip().lower() == "skip":
+            return
+        removals = fix_versions_from_input(raw, ",".join(defaults))
+        if not removals:
+            print("No fix version selected; update %s manually if needed." % issue.key)
+            return
+        if set(removals).issubset(available_names):
+            break
+        print_error("Select only unreleased fix versions currently recorded on this JIRA.")
+
+    prompt = "Remove fix version(s) %s from %s? (y/N): " % (removals, issue.key)
+    if get_input(prompt, ["y", "n", ""]) == "y":
+        jira_ops.remove_fix_versions(issue, removals)
+
+
 def choose_jira_assignee(issue):
     """
     Prompt the user to choose who to assign the issue to in jira, given a list of candidates,
@@ -1654,7 +1749,7 @@ class Jira:
     """ASF JIRA writes used by the merge script -- the single seam for JIRA mutations.
 
     The pre-write JIRA lookups stay on the module-level asf_jira client; the writes (components,
-    fix versions, the resolve transition, assignment, and the contributor-role grant) go through
+    fix versions, workflow transitions, assignment, and the contributor-role grant) go through
     here, so DryRunJira can log them. Two Production writes (add_fix_versions, resolve_issue) also
     read the issue back afterward to print the updated summary; DryRunJira skips the write and that
     read-back alike. main() builds Jira(asf_jira) normally and DryRunJira(asf_jira) for a dry run,
@@ -1691,6 +1786,10 @@ class Jira:
             % (issue.key, [v["name"] for v in new_version_jsons])
         )
 
+    def remove_fix_versions(self, issue, version_names):
+        issue.update(update={"fixVersions": [{"remove": {"name": name}} for name in version_names]})
+        print("Successfully removed fixVersions=%s from %s!" % (version_names, issue.key))
+
     def resolve_issue(
         self, issue, resolve_id, fix_version_jsons, comment, resolution_id, fix_version_names
     ):
@@ -1706,6 +1805,11 @@ class Jira:
         except Exception:
             print("Unable to fetch JIRA issue %s after resolving" % issue.key)
         print("Successfully resolved %s with fixVersions=%s!" % (issue.key, fix_version_names))
+
+    def reopen_issue(self, issue, reopen_id):
+        # Spark's Reopen Issue workflow clears the resolution.
+        self._client.transition_issue(issue.key, reopen_id)
+        print("Successfully reopened %s!" % issue.key)
 
     def assign(self, issue_key, assignee):
         # Shorthand for jira.client.JIRA.assign_issue. The library's own assign_issue re-searches
@@ -1736,6 +1840,9 @@ class DryRunJira(Jira):
             % ([v["name"] for v in new_version_jsons], issue.key)
         )
 
+    def remove_fix_versions(self, issue, version_names):
+        print("DRY-RUN: would remove fixVersions=%s from JIRA %s." % (version_names, issue.key))
+
     def resolve_issue(
         self, issue, resolve_id, fix_version_jsons, comment, resolution_id, fix_version_names
     ):
@@ -1743,6 +1850,9 @@ class DryRunJira(Jira):
             "DRY-RUN: would resolve JIRA %s as Fixed with fixVersions=%s and add comment:\n%s"
             % (issue.key, fix_version_names, comment)
         )
+
+    def reopen_issue(self, issue, reopen_id):
+        print("DRY-RUN: would reopen JIRA %s." % issue.key)
 
     def assign(self, issue_key, assignee):
         print("DRY-RUN: would assign JIRA %s to '%s'." % (issue_key, assignee))
@@ -1775,11 +1885,12 @@ def resolve_jira_issues(title, merge_branches, comment, title_components=()):
         )
 
 
-def update_jira_for_pr(pr_num, title, merge_branches, title_components):
+def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_revert=False):
     skip_jira_title_tags = ("MINOR", "TRIVIAL", "FOLLOWUP")
     tags = set(title_components)
+    jira_title = title[len('Revert "') : -1] if is_revert else title
     try:
-        parsed = Title.parse(title)
+        parsed = Title.parse(jira_title)
         tags.update(parsed.leading)
         tags.update(parsed.components)
     except ValueError:
@@ -1796,6 +1907,12 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components):
     # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
     print()
     continue_maybe("Would you like to update an associated JIRA?")
+    if is_revert:
+        jira_ids = list(dict.fromkeys(re.findall("SPARK-[0-9]{4,5}", jira_title)))
+        for jira_id in jira_ids or [""]:
+            revert_jira_issue(merge_branches, jira_id)
+        return
+
     jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
         pr_num,
         GITHUB_BASE,
@@ -2417,9 +2534,8 @@ def main():
             # pushes have already landed.
             if picked_commits:
                 post_merge_comment(pr_num, picked_commits)
-            # Backport mode may be the first chance to resolve a JIRA after an interrupted
-            # original merge. If it was already resolved, add any newly inferred fix versions.
-            update_jira_for_pr(pr_num, title, picked_refs, title_components)
+            # Reconcile JIRA with every branch that contains the merge or revert.
+            update_jira_for_pr(pr_num, title, picked_refs, title_components, is_revert=is_revert_pr)
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -2538,10 +2654,215 @@ def main():
             post_merge_comment(pr_num, merged_commits)
         # This is deliberately in the finally block: once the target branch has been pushed,
         # cancelling a later cherry-pick must not bypass the JIRA update decision.
-        update_jira_for_pr(pr_num, title, merged_refs, title_components)
+        update_jira_for_pr(pr_num, title, merged_refs, title_components, is_revert=is_revert_pr)
 
 
 __test__ = {
+    "revert_jira_issue": """
+    A revert removes the versions for its branches while preserving released, archived,
+    and unrelated versions. JIRA receives individual removals so concurrent additions survive.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from types import SimpleNamespace
+    >>> from unittest.mock import Mock, call, patch
+    >>> def version(name, released=False, archived=False):
+    ...     return SimpleNamespace(
+    ...         name=name, raw={"name": name, "released": released, "archived": archived})
+    >>> versions = [version("5.0.0"), version("4.3.0"), version("4.2.1", released=True),
+    ...             version("4.2.0", archived=True), version("3.5.2")]
+    >>> issue = Mock(key="SPARK-1234")
+    >>> issue.fields.fixVersions = versions
+    >>> issue.fields.status.name = "Open"
+    >>> client = Mock()
+    >>> client.project_versions.return_value = versions
+    >>> writer = Jira(client)
+    >>> def run_revert(answers):
+    ...     issue.reset_mock()
+    ...     client.reset_mock()
+    ...     output = StringIO()
+    ...     with (
+    ...         patch.dict(revert_jira_issue.__globals__, asf_jira=client,
+    ...                    jira_ops=writer, get_jira_issue=Mock(return_value=issue)),
+    ...         patch("builtins.input", side_effect=answers),
+    ...         redirect_stdout(output),
+    ...     ):
+    ...         revert_jira_issue(["master", "branch-4.x"], "SPARK-1234")
+    ...     return output.getvalue()
+    >>> output = run_revert(["", "y"])
+    >>> issue.update.assert_called_once_with(update={"fixVersions": [
+    ...     {"remove": {"name": "5.0.0"}}, {"remove": {"name": "4.3.0"}}]})
+    >>> client.mock_calls
+    [call.project_versions('SPARK')]
+
+    The committer can narrow the selection, decline confirmation, or skip the update.
+
+    >>> output = run_revert(["5.0.0", "y"])
+    >>> issue.update.assert_called_once_with(
+    ...     update={"fixVersions": [{"remove": {"name": "5.0.0"}}]})
+    >>> for answers in (["", "n"], ["", ""], ["skip"]):
+    ...     output = run_revert(answers)
+    ...     issue.update.assert_not_called()
+
+    Released, archived, and unrecorded versions are rejected even when entered manually.
+
+    >>> output = run_revert(["4.2.1", "4.2.0", "9.9.9", "", "y"])
+    >>> output.count("Select only unreleased fix versions currently recorded on this JIRA.")
+    3
+    >>> issue.update.assert_called_once_with(update={"fixVersions": [
+    ...     {"remove": {"name": "5.0.0"}}, {"remove": {"name": "4.3.0"}}]})
+
+    Dry runs log the removal without writing to JIRA.
+
+    >>> writer = DryRunJira(client)
+    >>> output = run_revert(["", "y"])
+    >>> "DRY-RUN: would remove fixVersions=['5.0.0', '4.3.0'] from JIRA SPARK-1234." in output
+    True
+    >>> issue.update.assert_not_called()
+    >>> client.mock_calls
+    [call.project_versions('SPARK')]
+
+    Removing the last fix versions is allowed. A rerun with no matching versions is a no-op.
+
+    >>> writer = Jira(client)
+    >>> issue.fields.fixVersions = versions[:2]
+    >>> output = run_revert(["", "y"])
+    >>> issue.update.assert_called_once_with(update={"fixVersions": [
+    ...     {"remove": {"name": "5.0.0"}}, {"remove": {"name": "4.3.0"}}]})
+    >>> issue.fields.fixVersions = versions[2:]
+    >>> output = run_revert([""])
+    >>> issue.update.assert_not_called()
+    >>> issue.fields.fixVersions = []
+    >>> output = run_revert([])
+    >>> "no unreleased fix versions to remove" in output
+    True
+    >>> issue.update.assert_not_called()
+
+    Resolved and closed tickets can be reopened even when no fix versions remain.
+
+    >>> client.transitions.return_value = [
+    ...     {"id": "701", "name": "Close Issue"}, {"id": "3", "name": "Reopen Issue"}]
+    >>> for status in ("Resolved", "Closed"):
+    ...     issue.fields.status.name = status
+    ...     output = run_revert(["y"])
+    ...     client.transitions.assert_called_once_with("SPARK-1234")
+    ...     client.transition_issue.assert_called_once_with("SPARK-1234", "3")
+    ...     issue.update.assert_not_called()
+
+    Reopening is optional and independent of fix-version removal.
+
+    >>> for answer in ("n", ""):
+    ...     output = run_revert([answer])
+    ...     client.transitions.assert_not_called()
+    ...     client.transition_issue.assert_not_called()
+    >>> issue.fields.fixVersions = versions
+    >>> output = run_revert(["", "y", "y"])
+    >>> issue.update.assert_called_once_with(update={"fixVersions": [
+    ...     {"remove": {"name": "5.0.0"}}, {"remove": {"name": "4.3.0"}}]})
+    >>> client.transition_issue.assert_called_once_with("SPARK-1234", "3")
+    >>> for answers in (["skip", "y"], ["", "n", "y"]):
+    ...     output = run_revert(answers)
+    ...     issue.update.assert_not_called()
+    ...     client.transition_issue.assert_called_once_with("SPARK-1234", "3")
+    >>> output = run_revert(["", "y", "n"])
+    >>> issue.update.assert_called_once()
+    >>> client.transition_issue.assert_not_called()
+
+    Dry runs log both updates and leave JIRA untouched.
+
+    >>> writer = DryRunJira(client)
+    >>> output = run_revert(["", "y", "y"])
+    >>> "DRY-RUN: would remove fixVersions=" in output
+    True
+    >>> "DRY-RUN: would reopen JIRA SPARK-1234." in output
+    True
+    >>> issue.update.assert_not_called()
+    >>> client.transition_issue.assert_not_called()
+
+    Unavailable transitions report that manual action is needed.
+
+    >>> writer = Jira(client)
+    >>> client.transitions.return_value = [{"id": "701", "name": "Close Issue"}]
+    >>> output = run_revert(["skip", "y"])
+    >>> "No Reopen Issue transition available for SPARK-1234; reopen it manually." in output
+    True
+    >>> client.transition_issue.assert_not_called()
+
+    Lookup and transition failures are nonfatal and request manual reopening.
+
+    >>> client.transitions.side_effect = RuntimeError("lookup failed")
+    >>> output = run_revert(["skip", "y"])
+    >>> "Failed to reopen SPARK-1234; reopen it manually: lookup failed" in output
+    True
+    >>> client.transition_issue.assert_not_called()
+    >>> client.transitions.side_effect = None
+    >>> client.transitions.return_value = [{"id": "3", "name": "Reopen Issue"}]
+    >>> client.transition_issue.side_effect = RuntimeError("permission denied")
+    >>> output = run_revert(["skip", "y"])
+    >>> "Failed to reopen SPARK-1234; reopen it manually: permission denied" in output
+    True
+    >>> client.transition_issue.assert_called_once_with("SPARK-1234", "3")
+    >>> client.transition_issue.side_effect = None
+
+    Active tickets require no reopening prompt or transition lookup.
+
+    >>> issue.fields.fixVersions = []
+    >>> for status in ("Open", "In Progress", "Reopened"):
+    ...     issue.fields.status.name = status
+    ...     output = run_revert([])
+    ...     client.transitions.assert_not_called()
+    ...     client.transition_issue.assert_not_called()
+    """,
+    "update_jira_for_revert": """
+    Reverts update each referenced JIRA once and bypass the resolve/add path.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, call, patch
+    >>> reverter, resolver, confirm = Mock(), Mock(), Mock()
+    >>> def update(title, branches, is_revert=False):
+    ...     reverter.reset_mock()
+    ...     resolver.reset_mock()
+    ...     confirm.reset_mock()
+    ...     with (
+    ...         patch.dict(update_jira_for_pr.__globals__, revert_jira_issue=reverter,
+    ...                    resolve_jira_issues=resolver, continue_maybe=confirm),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         update_jira_for_pr("123", title, branches, [], is_revert=is_revert)
+    >>> title = 'Revert "[SPARK-1234][SPARK-5678][SQL] Fix SPARK-1234"'
+    >>> update(title, ["master", "branch-4.x"], is_revert=True)
+    >>> assert reverter.call_args_list == [
+    ...     call(['master', 'branch-4.x'], 'SPARK-1234'),
+    ...     call(['master', 'branch-4.x'], 'SPARK-5678')]
+    >>> resolver.assert_not_called()
+
+    Backport-only runs use the same revert path. A missing JIRA id is entered interactively.
+
+    >>> update('Revert "[SPARK-1234][SQL] Fix"', ["branch-4.2"], is_revert=True)
+    >>> reverter.assert_called_once_with(["branch-4.2"], "SPARK-1234")
+    >>> update('Revert "Fix"', ["master"], is_revert=True)
+    >>> reverter.assert_called_once_with(["master"], "")
+
+    Wrapped skip tags preserve the existing policy for MINOR, TRIVIAL, and FOLLOWUP changes.
+
+    >>> for title in ('Revert "[MINOR][SQL] Fix"', 'Revert "[TRIVIAL][SQL] Fix"',
+    ...               'Revert "[SPARK-1234][SQL][FOLLOWUP] Fix"'):
+    ...     update(title, ["master"], is_revert=True)
+    ...     reverter.assert_not_called()
+    ...     resolver.assert_not_called()
+    ...     confirm.assert_not_called()
+
+    Ordinary merges and reapplies still resolve the issue or add fix versions.
+
+    >>> for title in ('[SPARK-1234][SQL] Fix', 'Reapply "[SPARK-1234][SQL] Fix"'):
+    ...     update(title, ["master"])
+    ...     reverter.assert_not_called()
+    ...     resolver.assert_called_once_with(
+    ...         title, ["master"],
+    ...         "Issue resolved by pull request 123\\n[https://github.com/apache/spark/pull/123]",
+    ...         [])
+    """,
     "reconcile_jira_affects_versions": """
     Blank input accepts the suggested version and appends it to the existing versions:
 
