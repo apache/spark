@@ -29,9 +29,9 @@ import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.api.plugin.PluginContext
-import org.apache.spark.deploy.k8s.Config.KUBERNETES_ALLOCATION_PODS_ALLOCATOR
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 
@@ -299,6 +299,29 @@ class ExecutorResizePluginSuite
       val result = plugin.init(sc, pluginCtx)
 
       assert(result.isEmpty)
+    }
+  }
+
+  Seq(
+    (EXECUTOR_RESIZE_THRESHOLD, Seq("0", "1", "1.5"), "The threshold should be in (0, 1)"),
+    (EXECUTOR_RESIZE_FACTOR, Seq("-0.1", "0", "1.5"), "The factor should be in (0, 1]")
+  ).foreach { case (entry, invalidValues, requirement) =>
+    test(s"SPARK-59843: init fails on invalid ${entry.key}") {
+      invalidValues.foreach { value =>
+        val plugin = new ExecutorResizeDriverPlugin()
+        val sparkConf = new SparkConf().set(entry.key, value)
+        val sc = mock(classOf[SparkContext])
+        when(sc.conf).thenReturn(sparkConf)
+        val pluginCtx = mock(classOf[PluginContext])
+
+        checkError(
+          exception = intercept[SparkIllegalArgumentException](plugin.init(sc, pluginCtx)),
+          condition = "INVALID_CONF_VALUE.REQUIREMENT",
+          parameters = Map(
+            "confName" -> entry.key,
+            "confValue" -> value.toDouble.toString,
+            "confRequirement" -> requirement))
+      }
     }
   }
 }
