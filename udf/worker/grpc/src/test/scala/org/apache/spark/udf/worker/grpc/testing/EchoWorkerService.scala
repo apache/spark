@@ -241,9 +241,7 @@ class EchoWorkerService extends UdfWorkerGrpc.UdfWorkerImplBase {
       case Draining =>
         (Drained, () => {
           sendControl(UdfControlResponse.newBuilder()
-            .setFinish(FinishResponse.newBuilder()
-              .putMetrics("status", "ok")
-              .build())
+            .setFinish(FinishResponse.getDefaultInstance)
             .build())
           finalizeDone()
         })

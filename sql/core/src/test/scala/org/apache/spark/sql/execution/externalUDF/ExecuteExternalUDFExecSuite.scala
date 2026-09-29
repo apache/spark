@@ -46,8 +46,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.udf.worker.{Cancel, CancelResponse, DataRequest, DataResponse, Finish,
-  ExecutionMetrics, FinishResponse, Init, InitResponse, UDFWorkerDataFormat,
+import org.apache.spark.udf.worker.{Cancel, CancelResponse, DataRequest, DataResponse,
+  ExecutionMetrics, Finish, FinishResponse, Init, InitResponse, UDFWorkerDataFormat,
   UDFWorkerSpecification}
 import org.apache.spark.udf.worker.core.{Termination, WorkerHandle, WorkerLogger,
   WorkerSecurityScope, WorkerSession}
