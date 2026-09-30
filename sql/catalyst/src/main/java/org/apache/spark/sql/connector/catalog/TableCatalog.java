@@ -139,7 +139,7 @@ public interface TableCatalog extends CatalogPlugin {
    *
    * @return a non-null set of case-insensitive option keys
    *
-   * @since 4.3.1
+   * @since 4.3.0
    */
   default Set<String> changelogStateOptionKeys() { return tableStateOptionKeys(); }
 
