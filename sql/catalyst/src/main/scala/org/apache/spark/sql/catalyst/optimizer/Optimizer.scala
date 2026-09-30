@@ -3391,13 +3391,14 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
  * 2. This rule has to be done after de-duplicating the attributes; otherwise, the generated
  *    join conditions will be incorrect.
  */
-object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
+object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(INTERSECT), ruleId) {
     case Intersect(left, right, false) =>
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
-      Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And), JoinHint.NONE))
+      Distinct(
+        Join(left, right, LeftSemi, buildBalancedPredicateOption(joinCond, And), JoinHint.NONE))
   }
 }
 
@@ -3413,13 +3414,14 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
  * 2. This rule has to be done after de-duplicating the attributes; otherwise, the generated
  *    join conditions will be incorrect.
  */
-object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
+object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(EXCEPT), ruleId) {
     case Except(left, right, false) =>
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
-      Distinct(Join(left, right, LeftAnti, joinCond.reduceLeftOption(And), JoinHint.NONE))
+      Distinct(
+        Join(left, right, LeftAnti, buildBalancedPredicateOption(joinCond, And), JoinHint.NONE))
   }
 }
 
