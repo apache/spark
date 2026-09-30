@@ -152,7 +152,7 @@ class AbstractTranspiler(object):
         params: List[str],
         returnType: "DataTypeOrString",
         param_categories: Optional[dict] = None,
-    ) -> Optional[Column]:
+    ) -> Optional[Union[Column, Tuple[Column, List[str]]]]:
         """Lower ``function_ast`` to a :class:`Column`, or return ``None`` to decline.
 
         The override point for ``spark.sql.experimental.optimizer.pyTranspilers``.
@@ -161,6 +161,19 @@ class AbstractTranspiler(object):
         on a method or callable instance, has been removed, so ``params[i]`` is the
         name bound to placeholder ``_udf_param_i`` with no offsetting needed. It is
         also the list ``param_categories`` is keyed by.
+
+        The return value describes the option the variety actually produced, not
+        the one the caller asked about. A plain :class:`Column` is the existing
+        contract: the caller labels the option with the ``param_categories`` combo
+        it passed in, so a variety that just consumes that assumption needs no
+        change. A variety that works out its own input types -- e.g. one that reads
+        the function's annotations and supports types the combo enum does not
+        cover -- returns a ``(Column, list[str])`` tuple instead, where the list is
+        one category per public param (``"numeric"`` / ``"string"`` / ``"bool"`` /
+        ``"binary"``) describing the option the variety built. The caller uses those
+        when present and falls back to the combo otherwise, so existing varieties
+        do not move. Without this, every new type a variety supports is another
+        entry in a fixed category enum matched against the caller's guess.
         """
         pass
 
@@ -849,7 +862,7 @@ class CatalystTranspiler(AbstractTranspiler):
         params: List[str],
         returnType: "DataTypeOrString",
         param_categories: Optional[dict] = None,
-    ) -> Optional[Column]:
+    ) -> Optional[Union[Column, Tuple[Column, List[str]]]]:
         # Short circuit on nothing to transpile.
         if src == "" or ast_info is None:
             return None
@@ -1379,14 +1392,32 @@ def _transpile_func(
         for transpiler in transpilers:
             for combo in combos:
                 try:
-                    transpiled_column = transpiler._transpile_from_ast(
+                    result = transpiler._transpile_from_ast(
                         src, ast_info, function_ast, public_params, returnType, combo
                     )
-                    if transpiled_column is not None:
+                    if result is not None:
+                        # A variety may report the input categories the option it
+                        # built actually needs (a ``(Column, list[str])`` tuple),
+                        # falling back to the combo we asked about otherwise -- so a
+                        # variety that works out its own input types (e.g. from
+                        # annotations) is not matched against our guess, and a new
+                        # type it supports is not another entry in a fixed enum.
+                        if isinstance(result, tuple):
+                            transpiled_column, categories = result
+                            # A variety that declines inside a tuple (built no
+                            # option) is treated like a plain-``None`` decline:
+                            # appending a ``None`` Column would surface a raw JVM
+                            # NPE at call time, breaking the "a transpile failure
+                            # must never break a working UDF" invariant. Skip it.
+                            if transpiled_column is None:
+                                continue
+                            input_categories.append(list(categories))
+                        else:
+                            transpiled_column = result
+                            input_categories.append(
+                                [combo.get(i, "numeric") for i in range(len(public_params))]
+                            )
                         transpiled.append(transpiled_column)
-                        input_categories.append(
-                            [combo.get(i, "numeric") for i in range(len(public_params))]
-                        )
                 except Exception as e:
                     errors.append(str(e))
         return (
