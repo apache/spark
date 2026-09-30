@@ -61,7 +61,7 @@ class SparkEnvUDFDispatcherSuite extends SparkFunSuite {
   }
 
   test("an unset worker type fails with an actionable message") {
-    val factory = SparkEnv.resolveUDFDispatcherFactory(new SparkConf(false))
+    val factory = SparkEnv.resolveUDFDispatcherFactory()
     val e = intercept[UnsupportedOperationException] {
       factory.createDispatcher(spec, WorkerLogger.NoOp)
     }
@@ -74,30 +74,13 @@ class SparkEnvUDFDispatcherSuite extends SparkFunSuite {
       .newBuilder()
       .setDirect(DirectWorker.getDefaultInstance)
       .build()
-    val factory = SparkEnv.resolveUDFDispatcherFactory(new SparkConf(false))
+    val factory = SparkEnv.resolveUDFDispatcherFactory()
     val e = intercept[SparkException] {
       factory.createDispatcher(directSpec, WorkerLogger.NoOp)
     }
     assert(e.getMessage.contains("DIRECT"))
     assert(e.getMessage.contains("spark-udf-worker-grpc"))
     assert(e.getMessage.contains(SparkEnv.DIRECT_DISPATCHER_FACTORY_CLASS))
-  }
-
-  test("the removed dispatcher factory class setting is rejected without loading the class") {
-    val key = "spark.test.dispatcherModeInitialized"
-    System.clearProperty(key)
-    try {
-      val conf = new SparkConf(false)
-        .set(SparkEnv.REMOVED_DISPATCHER_FACTORY_KEY, "org.apache.spark.NotADispatcherMode$")
-      val e = intercept[SparkException] {
-        SparkEnv.resolveUDFDispatcherFactory(conf)
-      }
-      assert(e.getMessage.contains(SparkEnv.REMOVED_DISPATCHER_FACTORY_KEY))
-      assert(e.getMessage.contains("Custom dispatcher classes are not supported"))
-      assert(System.getProperty(key) == null)
-    } finally {
-      System.clearProperty(key)
-    }
   }
 
   test("stop waits for lazy dispatcher manager creation and closes created dispatchers") {
@@ -132,10 +115,6 @@ class SparkEnvUDFDispatcherSuite extends SparkFunSuite {
       pool.shutdownNow()
     }
   }
-}
-
-object NotADispatcherMode {
-  System.setProperty("spark.test.dispatcherModeInitialized", "true")
 }
 
 object TestBlockingDispatcherFactory {

@@ -231,7 +231,7 @@ class SparkEnv (
    * can be exercised without a user-supplied class name.
    */
   private[spark] def createUDFDispatcherFactory(): UDFDispatcherFactory = {
-    SparkEnv.resolveUDFDispatcherFactory(conf)
+    SparkEnv.resolveUDFDispatcherFactory()
   }
 
   private def createUDFDispatcherManager(): UDFDispatcherManager = {
@@ -531,8 +531,6 @@ object SparkEnv extends Logging {
   private[spark] val driverSystemName = "sparkDriver"
   private[spark] val executorSystemName = "sparkExecutor"
 
-  private[spark] val REMOVED_DISPATCHER_FACTORY_KEY = "spark.udf.worker.dispatcherFactory"
-
   /**
    * Spark-owned implementation of direct worker creation. A string, not a compile-time
    * reference: `core` depends on `udf-worker-proto` and `udf-worker-core` only, so the
@@ -547,16 +545,9 @@ object SparkEnv extends Logging {
    * (SPARK-55278). The factory routes from the closed `worker` oneof in
    * [[UDFWorkerSpecification]], rather than from a second configuration value.
    *
-   * A user-supplied class name is never loaded. The old class-name setting was
-   * introduced after the last release and is rejected explicitly if present.
+   * A user-supplied class name is never loaded.
    */
-  private[spark] def resolveUDFDispatcherFactory(conf: SparkConf): UDFDispatcherFactory = {
-    if (conf.contains(REMOVED_DISPATCHER_FACTORY_KEY)) {
-      throw new SparkException(
-        s"$REMOVED_DISPATCHER_FACTORY_KEY has been removed. Custom dispatcher classes " +
-          "are not supported; worker creation and runtime behavior belong in " +
-          "UDFWorkerSpecification.")
-    }
+  private[spark] def resolveUDFDispatcherFactory(): UDFDispatcherFactory = {
     new UDFDispatcherFactory {
       override def createDispatcher(
           workerSpec: UDFWorkerSpecification,
