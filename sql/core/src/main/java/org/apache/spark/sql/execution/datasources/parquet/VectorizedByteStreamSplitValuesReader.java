@@ -99,10 +99,11 @@ public class VectorizedByteStreamSplitValuesReader
       throw new ParquetDecodingException("Corrupted BYTE_STREAM_SPLIT page: " + encodedValues +
         " encoded values do not match the page value count " + valueCount);
     }
-    // Otherwise the page value count includes nulls and is only an upper bound, so a page that
-    // is off by whole values is not detected here, and its values are decoded with the wrong
-    // stream stride. With fewer encoded values than non-null rows, a read or skip past the
-    // last encoded value fails. With more, the page is not detected.
+    // Otherwise the page value count includes nulls and is only an upper bound. A page with
+    // more encoded values than that is rejected below, but a page that is off by whole values
+    // within the bound is not detected here, and its values are decoded with the wrong stream
+    // stride. With fewer encoded values than non-null rows, a read or skip past the last
+    // encoded value fails. With more, the page is not detected.
     if (encodedValues > valueCount) {
       throw new ParquetDecodingException("Corrupted BYTE_STREAM_SPLIT page: " + encodedValues +
         " encoded values exceed the page value count " + valueCount);

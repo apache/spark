@@ -22,13 +22,12 @@ import java.util.{Optional, PrimitiveIterator}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 
-import org.apache.parquet.bytes.{BytesInput, DirectByteBufferAllocator}
+import org.apache.parquet.bytes.BytesInput
 import org.apache.parquet.column.{ColumnDescriptor, Encoding, ParquetProperties}
 import org.apache.parquet.column.impl.ColumnWriteStoreV1
 import org.apache.parquet.column.page._
 import org.apache.parquet.column.page.mem.MemPageStore
 import org.apache.parquet.column.statistics.Statistics
-import org.apache.parquet.column.values.bytestreamsplit.ByteStreamSplitValuesWriter.FloatByteStreamSplitValuesWriter
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
@@ -493,10 +492,13 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       "message root { required float a; }")
     val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
     val cd = new ColumnDescriptor(Array("a"), ty, 0, 0)
-    val valuesWriter = new FloatByteStreamSplitValuesWriter(3, 12, new DirectByteBufferAllocator())
-    Seq(1.0f, 2.0f, 3.0f).foreach(v => valuesWriter.writeFloat(v))
-    val data = valuesWriter.getBytes.toByteArray
-    valuesWriter.close()
+    // BYTE_STREAM_SPLIT stores byte b of value i at b * (number of values) + i.
+    val values = Seq(1.0f, 2.0f, 3.0f)
+    val data = new Array[Byte](4 * values.length)
+    values.zipWithIndex.foreach { case (v, i) =>
+      val bits = java.lang.Float.floatToIntBits(v)
+      (0 until 4).foreach(b => data(b * values.length + i) = (bits >> (8 * b)).toByte)
+    }
 
     Seq(false, true).foreach { pageV2 =>
       val memPageStore = new MemPageStore(4)
@@ -506,7 +508,7 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
           Encoding.BYTE_STREAM_SPLIT, BytesInput.from(data), Statistics.createStats(ty))
       } else {
         pageWriter.writePage(BytesInput.from(data), 4, 4, Statistics.createStats(ty),
-          Encoding.BIT_PACKED, Encoding.BIT_PACKED, Encoding.BYTE_STREAM_SPLIT)
+          Encoding.RLE, Encoding.RLE, Encoding.BYTE_STREAM_SPLIT)
       }
       val recordReader = new VectorizedParquetRecordReader(
         DateTimeUtils.getZoneId("EST"), "CORRECTED", "UTC", "CORRECTED", "UTC", true, 2)
