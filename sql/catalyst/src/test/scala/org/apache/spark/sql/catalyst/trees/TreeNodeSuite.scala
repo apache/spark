@@ -156,7 +156,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val expectedTreePatternBits = TreePatternBits.toPatternBits(
       TreePattern.BINARY_ARITHMETIC, TreePattern.LITERAL)
 
-    def cacheField(name: String) = {
+    def cacheField(name: String): java.lang.reflect.Field = {
       val field = classOf[TreeNode[_]].getDeclaredField(name)
       field.setAccessible(true)
       field
