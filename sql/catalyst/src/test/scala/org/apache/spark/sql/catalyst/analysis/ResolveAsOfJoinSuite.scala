@@ -87,6 +87,14 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
   private val leftEmptyArr: LogicalPlan = LocalRelation(lemptyArr)
   private val rightEmptyArr: LogicalPlan = LocalRelation(remptyArr)
 
+  // Arrays of structs whose fields differ in type, so their per-field distances differ in type.
+  private val mixedElement =
+    StructType(StructField("f", IntegerType) :: StructField("ts", TimestampType) :: Nil)
+  private val lmixedArr = AttributeReference("ma", ArrayType(mixedElement))()
+  private val rmixedArr = AttributeReference("ma", ArrayType(mixedElement))()
+  private val leftMixedArr: LogicalPlan = LocalRelation(lmixedArr)
+  private val rightMixedArr: LogicalPlan = LocalRelation(rmixedArr)
+
   /** Build an [[AsOfJoin]] from a `MATCH_CONDITION` whose operands are already resolved. */
   private def asOf(
       leftExpr: Expression = la,
@@ -201,6 +209,19 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
     val body = zip.function.asInstanceOf[LambdaFunction].function
     assert(body.isInstanceOf[If], s"expected a signed element distance, got $body")
     assert(body.dataType == IntegerType)
+  }
+
+  test("materializes an ARRAY<STRUCT> with mixed field types into a struct element distance") {
+    val resolved = ResolveAsOfJoin.apply(
+      asOf(leftExpr = lmixedArr, rightExpr = rmixedArr, l = leftMixedArr, r = rightMixedArr))
+      .asInstanceOf[AsOfJoin]
+    val zip = resolved.orderExpression.asInstanceOf[ZipWith]
+    // The INT and TIMESTAMP field distances differ in type, so one array could not hold both.
+    val body = zip.function.asInstanceOf[LambdaFunction].function
+    assert(body.isInstanceOf[CreateNamedStruct], s"expected a struct element distance, got $body")
+    val fields = body.asInstanceOf[CreateNamedStruct].valExprs
+    assert(fields.size == 2)
+    assert(fields.forall(_.isInstanceOf[Subtract]), s"expected per-field Subtracts, got $fields")
   }
 
   test("materializes a positional struct operand into a flattened per-field distance") {

@@ -213,12 +213,38 @@ SELECT r.c1, r.c2
 FROM VALUES (1, 2) AS t(c1, c2) ASOF JOIN VALUES (1, 1) AS r(c1, c2)
   MATCH_CONDITION ((t.c1, t.c2) >= (r.c1, r.c2));
 
--- FVT-ASOF-4-018b: ARRAY of empty STRUCT (SPARK-59749); the elements tie, so length decides
+-- FVT-ASOF-4-018b: ARRAY of empty STRUCT (SPARK-59749) with >=. The elements tie, so length
+-- orders the arrays. Sizes 1 and 2 pass; the closest is size 2.
 SELECT size(r.a) AS matched_size
 FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
      VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
             (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
   MATCH_CONDITION (t.a >= r.a);
+
+-- FVT-ASOF-4-018c: ARRAY of empty STRUCT with >. Only size 1 passes.
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a > r.a);
+
+-- FVT-ASOF-4-018d: ARRAY of empty STRUCT with <=. Sizes 2 and 3 pass; the closest is size 2.
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a <= r.a);
+
+-- FVT-ASOF-4-018e: ARRAY of empty STRUCT with <. Only size 3 passes.
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a < r.a);
 
 -- FVT-ASOF-4-019: MAP operand rejection — covered by FVT-ASOF-3-010
 
