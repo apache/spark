@@ -38,14 +38,16 @@ private[sql] object DuplicateMapKeyUtils {
   def unapply(exception: Throwable): Option[SparkRuntimeException] = cause(exception)
 
   /**
-   * Builds an XML map with a constrained CHAR/VARCHAR key type from a raw-key last-wins
-   * accumulator. Failed values still occupy a slot so normalized collisions are visible.
+   * Builds a JSON or XML map with a constrained CHAR/VARCHAR key type from a raw-key
+   * last-wins accumulator. Failed values still occupy a slot so normalized collisions
+   * are visible.
    *
-   * CHAR/VARCHAR keys: repeated raw XML keys keep the last value, then
+   * CHAR/VARCHAR keys: repeated exact serialized names keep the last value, then
    * `spark.sql.mapKeyDedupPolicy` applies to normalized keys.
    *
    * Example: parsing `a` and `a ` as CHAR(2) keys raises
    * DUPLICATED_MAP_KEY under EXCEPTION and keeps `a ` -> 2 under LAST_WIN.
+   * Exact JSON `{"a":1,"a":2}` is last-wins regardless of policy.
    */
   def buildConstrainedMap(
       lastEntries: mutable.LinkedHashMap[UTF8String, (UTF8String, Option[Any])],

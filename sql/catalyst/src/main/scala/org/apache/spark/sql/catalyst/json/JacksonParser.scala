@@ -192,7 +192,8 @@ class JacksonParser(
   private def makeMapRootConverter(mt: MapType): JsonParser => Iterable[InternalRow] = {
     val fieldConverter = makeConverter(mt.valueType)
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, mt) {
-      case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter)))
+      case START_OBJECT =>
+        Some(InternalRow(convertMap(parser, fieldConverter, mt.keyType, mt.valueType)))
     }
   }
 
@@ -485,7 +486,8 @@ class JacksonParser(
     case mt: MapType =>
       val valueConverter = makeConverter(mt.valueType)
       (parser: JsonParser) => parseJsonToken[MapData](parser, dataType) {
-        case START_OBJECT => convertMap(parser, valueConverter)
+        case START_OBJECT =>
+          convertMap(parser, valueConverter, mt.keyType, mt.valueType)
       }
 
     case udt: UserDefinedType[_] =>
@@ -594,6 +596,7 @@ class JacksonParser(
             bitmask(index) = false
           } catch {
             case e: SparkUpgradeException => throw e
+            case DuplicateMapKeyUtils(e) => throw e
             case err: PartialValueException if enablePartialResults =>
               badRecordException = badRecordException.orElse(Some(err.cause))
               row.update(index, err.partialResult)
@@ -618,11 +621,57 @@ class JacksonParser(
   }
 
   /**
+   * Finish a JSON value that failed conversion. `skipChildren` only works at
+   * START_OBJECT / START_ARRAY; if the converter already consumed tokens inside a nested
+   * object, leftover FIELD_NAMEs would otherwise leak as keys of the enclosing map.
+   */
+  private def skipRemainingValue(parser: JsonParser, mapDepth: Int): Unit = {
+    parser.getCurrentToken match {
+      case START_OBJECT | START_ARRAY =>
+        parser.skipChildren()
+      case END_OBJECT | END_ARRAY | null =>
+        // The value converter already consumed through its boundary.
+      case _ =>
+        // Still inside a nested value: skip until Jackson returns to this map.
+        var token = parser.getCurrentToken
+        while (token != null &&
+            parser.getParsingContext != null &&
+            parser.getParsingContext.getNestingDepth > mapDepth) {
+          token = parser.nextToken()
+        }
+    }
+  }
+
+  /**
    * Parse an object as a Map, preserving all fields.
    */
   private def convertMap(
       parser: JsonParser,
-      fieldConverter: ValueConverter): MapData = {
+      fieldConverter: ValueConverter,
+      keyType: DataType,
+      valueType: DataType): MapData = {
+    val constrainedKeys =
+      keyType.isInstanceOf[CharType] || keyType.isInstanceOf[VarcharType]
+    // CHAR/VARCHAR maps always drain to END_OBJECT so mapKeyDedupPolicy is applied
+    // before a stored length error. Partial results still control STRING maps.
+    val drainErrors = constrainedKeys || enablePartialResults
+    val mapDepth = parser.getParsingContext.getNestingDepth
+
+    if (constrainedKeys) {
+      convertConstrainedMap(parser, fieldConverter, keyType, valueType, mapDepth)
+    } else {
+      convertOrdinaryMap(parser, fieldConverter, drainErrors, mapDepth)
+    }
+  }
+
+  /**
+   * Ordinary STRING JSON maps keep every parsed pair, including exact duplicate names.
+   */
+  private def convertOrdinaryMap(
+      parser: JsonParser,
+      fieldConverter: ValueConverter,
+      drainErrors: Boolean,
+      mapDepth: Int): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
@@ -635,9 +684,9 @@ class JacksonParser(
         case err: PartialValueException if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(err.cause))
           values += err.partialResult
-        case NonFatal(e) if enablePartialResults =>
+        case NonFatal(e) if drainErrors =>
           badRecordException = badRecordException.orElse(Some(e))
-          parser.skipChildren()
+          skipRemainingValue(parser, mapDepth)
       }
     }
 
@@ -656,6 +705,59 @@ class JacksonParser(
       mapData
     } else {
       throw PartialMapDataResultException(mapData, badRecordException.get)
+    }
+  }
+
+  /**
+   * CHAR/VARCHAR JSON maps apply assignment to object names, then
+   * `spark.sql.mapKeyDedupPolicy` to collisions created by that normalization.
+   * Exact repeated names stay historical last-wins.
+   */
+  private def convertConstrainedMap(
+      parser: JsonParser,
+      fieldConverter: ValueConverter,
+      keyType: DataType,
+      valueType: DataType,
+      mapDepth: Int): MapData = {
+    val lastEntries =
+      mutable.LinkedHashMap.empty[UTF8String, (UTF8String, Option[Any])]
+    var partialResultException: Option[Throwable] = None
+    var badMapException: Option[Throwable] = None
+
+    while (nextUntil(parser, JsonToken.END_OBJECT)) {
+      val rawKey = UTF8String.fromString(parser.currentName)
+      val value = try {
+        Some(fieldConverter.apply(parser))
+      } catch {
+        case err: PartialValueException if enablePartialResults =>
+          partialResultException = partialResultException.orElse(Some(err.cause))
+          Some(err.partialResult)
+        case DuplicateMapKeyUtils(e) => throw e
+        case NonFatal(e) =>
+          badMapException = badMapException.orElse(Some(e))
+          skipRemainingValue(parser, mapDepth)
+          None
+      }
+      try {
+        val key = CharVarcharUtils.applyTextParseSemantics(rawKey, keyType)
+        lastEntries.update(rawKey, (key, value))
+      } catch {
+        case NonFatal(e) =>
+          badMapException = badMapException.orElse(Some(e))
+      }
+    }
+
+    val mapData = DuplicateMapKeyUtils.buildConstrainedMap(
+      lastEntries, keyType, valueType)
+
+    // Ordinary value or key conversion failures invalidate the whole map. Delay throwing
+    // until the closing brace has been consumed and constrained-key dedup has run.
+    badMapException.foreach(throw _)
+
+    if (partialResultException.isEmpty) {
+      mapData
+    } else {
+      throw PartialMapDataResultException(mapData, partialResultException.get)
     }
   }
 
@@ -757,6 +859,7 @@ class JacksonParser(
       }
     } catch {
       case e: SparkUpgradeException => throw e
+      case DuplicateMapKeyUtils(e) => throw e
       case e: CharConversionException if options.encoding.isEmpty =>
         throw badRecord(e, () => recordLiteral(record))
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
@@ -776,6 +879,7 @@ class JacksonParser(
       createParser(factory, record)
     } catch {
       case e: SparkUpgradeException => throw e
+      case DuplicateMapKeyUtils(e) => throw e
       case e: CharConversionException if options.encoding.isEmpty =>
         throw badRecord(e, () => recordLiteral(record))
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
@@ -811,6 +915,9 @@ class JacksonParser(
     def handleFailure[R](elementStart: Option[JsonToken])(operation: => R): R = {
       try operation catch {
         case e: SparkUpgradeException => fail(e)
+        case DuplicateMapKeyUtils(e) =>
+          closeParser()
+          throw e
         case e: CharConversionException if options.encoding.isEmpty => fail(e)
         case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
             _: PartialResultException | _: PartialResultArrayException |
