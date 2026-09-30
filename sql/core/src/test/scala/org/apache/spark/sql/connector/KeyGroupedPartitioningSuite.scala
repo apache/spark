@@ -1520,32 +1520,65 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("SPARK-59887: a side shuffled onto a transform of an expression is not paired as it is") {
-    Seq(4, 8).foreach(n => createBucketedIdTable(s"bucket$n", n, numIds = 8))
-    createTable("plain", Array(Column.create("b", LongType), Column.create("data", StringType)),
-      Array.empty)
-    sql("INSERT INTO testcat.ns.plain VALUES " +
-      (0 until 8).map(i => s"($i, 'p$i')").mkString(", "))
-
-    // The first join shuffles `plain` onto `bucket(4, b + 1)`, which is a function of `b`, but not
-    // the same function of it as the third table's `bucket(n, id)` is of `id`. The second join
-    // clusters `plain` on `b`, so pairing the two as they stand, or after reducing `bucket(8, id)`
-    // onto 4 buckets, puts a row with `b = id` on a different partition on each side.
-    Seq(4 -> "false", 8 -> "true").foreach { case (third, allowCompatibleTransforms) =>
-      withSQLConf(
-        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> allowCompatibleTransforms) {
-        val df = sql(
-          s"""SELECT b4.id, p.b, t.id FROM testcat.ns.bucket4 b4
-             |JOIN testcat.ns.plain p ON b4.id = p.b + 1
-             |JOIN testcat.ns.bucket$third t ON p.b = t.id""".stripMargin)
-        checkAnswer(df, (0 until 7).map(b => Row(b + 1L, b.toLong, b.toLong)))
-        // One shuffle per join: `plain` for the first, the first join's output for the second, and
-        // none for the third table. The second join does not shuffle onto the `bucket(4, b + 1)`
-        // layout, since that would move both of its sides.
-        assert(collectShuffles(stripAQEPlan(df.queryExecution.executedPlan)).size == 2)
+  // Each key is a function of `b` other than `b` itself. A check on the leaves of the key would
+  // reject `b + 1` for its literal, but not `-b`, so both are tested.
+  Seq("p.b + 1" -> ((b: Long) => b + 1), "-p.b" -> ((b: Long) => -b)).foreach {
+    case (key, keyOf) =>
+      // `plain` holds `b` in 0..7, and `keys`, bucketed on `id`, holds the key of each `b`.
+      def createKeyTables(): Unit = {
+        createTable("plain", Array(Column.create("b", LongType)), Array.empty)
+        sql("INSERT INTO testcat.ns.plain VALUES " + (0 until 8).map(b => s"($b)").mkString(", "))
+        createTable("keys", Array(Column.create("id", LongType)), Array(bucket(4, "id")))
+        sql("INSERT INTO testcat.ns.keys VALUES " +
+          (0 until 8).map(b => s"(${keyOf(b)})").mkString(", "))
       }
-    }
+
+      test("SPARK-59887: a side shuffled onto a transform of an expression is not paired as it " +
+          s"is ($key)") {
+        createKeyTables()
+        Seq(4, 8).foreach(n => createBucketedIdTable(s"bucket$n", n, numIds = 8))
+
+        // The first join shuffles `plain` onto the bucket of its key, which is a function of `b`,
+        // but not the same function of it as the third table's `bucket(n, id)` is of `id`. The
+        // second join clusters `plain` on `b`, so pairing the two as they stand, or after reducing
+        // `bucket(8, id)` onto 4 buckets, puts a row with `b = id` on a different partition on
+        // each side.
+        Seq(4 -> "false", 8 -> "true").foreach { case (third, allowCompatibleTransforms) =>
+          withSQLConf(
+            SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> allowCompatibleTransforms) {
+            val df = sql(
+              s"""SELECT k.id, p.b, t.id FROM testcat.ns.keys k
+                 |JOIN testcat.ns.plain p ON k.id = $key
+                 |JOIN testcat.ns.bucket$third t ON p.b = t.id""".stripMargin)
+            checkAnswer(df, (0 until 8).map(b => Row(keyOf(b), b.toLong, b.toLong)))
+            // One shuffle per join: `plain` for the first, the first join's output for the
+            // second, and none for the third table. The second join does not shuffle onto the
+            // bucket of the key, since that would move both of its sides.
+            assert(collectShuffles(stripAQEPlan(df.queryExecution.executedPlan)).size == 2)
+          }
+        }
+      }
+
+      test(s"SPARK-59887: a side is not shuffled onto a transform of an expression ($key)") {
+        createKeyTables()
+        createTable("xy", Array(Column.create("x", LongType), Column.create("y", LongType)),
+          Array.empty)
+        sql("INSERT INTO testcat.ns.xy VALUES " +
+          (0 until 8).map(b => s"(${keyOf(b)}, $b)").mkString(", "))
+
+        // The first join shuffles `plain` onto the bucket of its key, so its output offers that
+        // layout next to `bucket(4, id)`. The second join must not shuffle `xy` onto the first
+        // one. That builds `bucket(4, y)` for `xy`, not the bucket of the same function of `y`,
+        // so a row with `b = y` lands in a different bucket on each side.
+        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+          val df = sql(
+            s"""SELECT k.id, p.b, q.x FROM testcat.ns.plain p
+               |JOIN testcat.ns.keys k ON $key = k.id
+               |JOIN testcat.ns.xy q ON k.id = q.x AND p.b = q.y""".stripMargin)
+          checkAnswer(df, (0 until 8).map(b => Row(keyOf(b), b.toLong, keyOf(b))))
+        }
+      }
   }
 
   test("SPARK-59887: a side shuffled onto a transform of a struct field is not paired as it is") {
@@ -1591,28 +1624,6 @@ class KeyGroupedPartitioningSuite
           |  (SELECT x.id, ps.s FROM testcat.ns.bucket4 x JOIN testcat.ns.ps ps ON x.id = ps.s.a) l
           |  JOIN testcat.ns.rs r ON l.s = r.t""".stripMargin)
       checkAnswer(df, (0 until 8).map(i => Row(i.toLong)))
-    }
-  }
-
-  test("SPARK-59887: a side is not shuffled onto a transform of an expression") {
-    createBucketedIdTable("bucket4", 4, numIds = 8)
-    createTable("plain", Array(Column.create("b", LongType)), Array.empty)
-    sql("INSERT INTO testcat.ns.plain VALUES " + (0 until 8).map(i => s"(${i - 1})").mkString(", "))
-    createTable("xy", Array(Column.create("x", LongType), Column.create("y", LongType)),
-      Array.empty)
-    sql("INSERT INTO testcat.ns.xy VALUES " +
-      (0 until 8).map(i => s"($i, ${i - 1})").mkString(", "))
-
-    // The first join shuffles `plain` onto `bucket(4, b + 1)`, so its output offers that layout
-    // next to `bucket(4, id)`. The second join must not shuffle `xy` onto the first one. That
-    // builds `bucket(4, y)` for `xy` and drops the `+ 1`, so a row with `b = y` lands in a
-    // different bucket on each side.
-    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
-      val df = sql(
-        """SELECT b4.id, p.b, q.x FROM testcat.ns.plain p
-          |JOIN testcat.ns.bucket4 b4 ON p.b + 1 = b4.id
-          |JOIN testcat.ns.xy q ON b4.id = q.x AND p.b = q.y""".stripMargin)
-      checkAnswer(df, (0 until 8).map(i => Row(i.toLong, (i - 1).toLong, i.toLong)))
     }
   }
 
