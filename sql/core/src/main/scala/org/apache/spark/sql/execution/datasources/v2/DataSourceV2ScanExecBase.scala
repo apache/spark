@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, RowOrdering, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, ExpressionSet, RowOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -107,15 +107,26 @@ trait DataSourceV2ScanExecBase
 
   /**
    * Returns the output ordering for this scan. When the source reports ordering via
-   * `SupportsReportOrdering`, that ordering is returned as-is. Otherwise, when the output
-   * partitioning is a `KeyedPartitioning` and
+   * `SupportsReportOrdering`, that ordering may reference columns pruned out of the scan output
+   * (see V2ScanPartitioningAndOrdering), while a consumer binds it against the output, e.g. the
+   * k-way merge of `GroupPartitionsExec`. Ordering is prefix-based, so the leading run of sort
+   * orders over the output is kept and the rest is dropped, except the sort orders on a partition
+   * key when the output partitioning is a `KeyedPartitioning`: each partition holds a single key,
+   * so those still hold. Otherwise, when the output partitioning is a `KeyedPartitioning` and
    * `spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled` is on, each partition
    * contains rows where the key expressions evaluate to a single constant value, so the data
    * is trivially sorted by those expressions within the partition.
    */
   override def outputOrdering: Seq[SortOrder] = {
     (ordering, outputPartitioning) match {
-      case (Some(o), _) => o
+      case (Some(o), p) =>
+        val (prefix, rest) = o.span(_.references.subsetOf(outputSet))
+        p match {
+          case k: KeyedPartitioning if rest.nonEmpty =>
+            val keyExprs = ExpressionSet(k.expressions)
+            prefix ++ rest.filter(order => keyExprs.contains(order.child))
+          case _ => prefix
+        }
       case (_, k: KeyedPartitioning) if conf.v2BucketingPartitionKeyOrderingEnabled =>
         k.expressions.map(SortOrder(_, Ascending))
       case _ => Seq.empty
