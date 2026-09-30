@@ -160,6 +160,42 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     checkEvaluation(cast(Long.MinValue - 0.9D, LongType), Long.MinValue)
   }
 
+  test("SPARK-59805: ANSI cast of a wide decimal to int/short/byte truncates exactly") {
+    // BigDecimal-backed decimal(20, s) literals just inside and just outside each bound. The
+    // in-range ones round up past the bound as a Double, which used to make them overflow.
+    def wideDecimal(str: String, scale: Int): Literal = {
+      val d = Decimal(BigDecimal(str), 20, scale)
+      assert(!d.isCompact, s"$str should not be backed by a long")
+      Literal(d)
+    }
+    Seq[(DataType, Int, String, Any, String, Any, String)](
+      (IntegerType, 8, "2147483647.99999999", Int.MaxValue, "-2147483648.99999999",
+        Int.MinValue, "0.00000001"),
+      (ShortType, 13, "32767.9999999999999", Short.MaxValue, "-32768.9999999999999",
+        Short.MinValue, "0.0000000000001"),
+      (ByteType, 15, "127.999999999999999", Byte.MaxValue, "-128.999999999999999",
+        Byte.MinValue, "0.000000000000001")
+    ).foreach { case (dt, scale, maxStr, maxValue, minStr, minValue, ulp) =>
+      checkEvaluation(cast(wideDecimal(maxStr, scale), dt), maxValue)
+      checkEvaluation(cast(wideDecimal(minStr, scale), dt), minValue)
+      // One unit in the last place past the integral bound overflows.
+      Seq(
+        BigDecimal(maxValue.toString) + 1 + BigDecimal(ulp),
+        BigDecimal(minValue.toString) - 1 - BigDecimal(ulp)
+      ).foreach { value =>
+        val lit = wideDecimal(value.toString, scale)
+        checkErrorInExpression[SparkArithmeticException](
+          cast(lit, dt),
+          "CAST_OVERFLOW",
+          Map(
+            "value" -> s"${value}BD",
+            "sourceType" -> s"\"DECIMAL(20,$scale)\"",
+            "targetType" -> s"\"${dt.sql}\"",
+            "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+      }
+    }
+  }
+
   test("ANSI mode: Throw exception on casting out-of-range value to decimal type") {
     checkExceptionInExpression[ArithmeticException](
       cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")

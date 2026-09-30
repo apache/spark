@@ -3866,6 +3866,58 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-59805: sum and avg of decimal(15,2) whose wide buffer crosses the compact " +
+      "unscaled range") {
+    // In the grouped aggregation, the decimal(25,2) sum buffer is stored in the variable-length
+    // region of an UnsafeRow and updated in place. A running sum is held as a Long while
+    // |unscaled| < 10^18 (value 10^16) and as a BigDecimal otherwise. `max` has unscaled value
+    // 10^15 - 1, so n same-sign rows of it stay below 10^18 for n <= 1000 and exceed it for
+    // n >= 1001.
+    val max = BigDecimal("9999999999999.99")
+    def rows(k: Int, v: BigDecimal, n: Int): Seq[(Int, BigDecimal)] = Seq.fill(n)((k, v))
+    def upAndDown(k: Int, sign: Int): Seq[(Int, BigDecimal)] = {
+      val v = max * sign
+      rows(k, v, 999) ++ Seq.fill(50)(Seq(v, v, -v, -v)).flatten.map((k, _))
+    }
+    // One element per partition, in row order, so each partition's partial aggregation (the
+    // update path) sees exactly these running sums:
+    val partitions: Seq[Seq[(Int, BigDecimal)]] = Seq(
+      // Groups 0 and 1: 1100 same-sign rows cross 10^18 (at row 1001), then 200 rows of the
+      // other sign bring the sum back to 900 * max, below it again.
+      rows(0, max, 1100) ++ rows(0, -max, 200) ++ rows(1, -max, 1100) ++ rows(1, max, 200) ++
+        // Groups 2 and 3: from 999 * max, each (+v, +v, -v, -v) steps the sum through 1000,
+        // 1001, 1000 and 999 times max: 50 crossings in each direction.
+        upAndDown(2, 1) ++ upAndDown(3, -1),
+      // Groups 4 and 5: two partial sums of 700 * max, which cross only when merged.
+      // Group 6: partial sums 1100 * max and -1050 * max, both beyond 10^18, merge to 50 * max
+      // in either order. Group 7: small values.
+      rows(4, max, 700) ++ rows(5, -max, 700) ++ rows(6, max, 1100) ++
+        Seq(BigDecimal("0.01"), BigDecimal("-0.03"), BigDecimal("1234.56")).map((7, _)),
+      rows(4, max, 700) ++ rows(5, -max, 700) ++ rows(6, -max, 1050))
+    val df = spark.sparkContext.parallelize(partitions, partitions.size)
+      .flatMap(partition => partition)
+      .toDF("k", "v")
+      .select($"k", $"v".cast("decimal(15, 2)").as("v"))
+    assert(df.rdd.getNumPartitions === partitions.size)
+    // avg(decimal(15,2)) returns decimal(19,6).
+    def sumAndAvg(values: Seq[BigDecimal]): Seq[java.math.BigDecimal] = {
+      val sum = values.sum
+      Seq(sum, (sum / values.size).setScale(6, BigDecimal.RoundingMode.HALF_UP)).map(_.bigDecimal)
+    }
+    val allRows = partitions.flatten
+    val expectedPerGroup = allRows.groupBy(_._1).toSeq.map { case (k, kvs) =>
+      Row(k +: sumAndAvg(kvs.map(_._2)): _*)
+    }
+    // The global aggregation checks the same data without grouping.
+    val expectedTotal = Row(sumAndAvg(allRows.map(_._2)): _*)
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        checkAnswer(df.groupBy("k").agg(sum("v"), avg("v")), expectedPerGroup)
+        checkAnswer(df.agg(sum("v"), avg("v")), expectedTotal)
+      }
+    }
+  }
+
   test("SPARK-32761: aggregating multiple distinct CONSTANT columns") {
      checkAnswer(sql("select count(distinct 2), count(distinct 2,3)"), Row(1, 1))
   }

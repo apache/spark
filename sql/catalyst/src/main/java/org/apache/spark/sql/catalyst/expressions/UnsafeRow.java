@@ -64,6 +64,9 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   public static final int WORD_SIZE = 8;
 
+  /** Unscaled values of a compact (Long-backed) Decimal are strictly within +-10^18. */
+  private static final long COMPACT_UNSCALED_LIMIT = Decimal.POW_10()[Decimal.MAX_LONG_DIGITS()];
+
   //////////////////////////////////////////////////////////////////////////////
   // Static methods
   //////////////////////////////////////////////////////////////////////////////
@@ -289,6 +292,11 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
         setNullAt(ordinal);
         // keep the offset for future update
         Platform.putLong(baseObject, getFieldOffset(ordinal), cursor << 32);
+      } else if (value.isCompact()) {
+        // Write the unscaled Long directly, in the same bytes BigInteger.toByteArray() returns.
+        final int numBytes =
+          writeCompactUnscaledBytes(baseObject, baseOffset + cursor, value.toUnscaledLong());
+        setLong(ordinal, (cursor << 32) | ((long) numBytes));
       } else {
 
         final BigInteger integer = value.toJavaBigDecimal().unscaledValue();
@@ -301,6 +309,23 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
         setLong(ordinal, (cursor << 32) | ((long) bytes.length));
       }
     }
+  }
+
+  /**
+   * Writes `unscaled` as the minimal big-endian two's-complement bytes that
+   * `BigInteger.valueOf(unscaled).toByteArray()` would return, which is how decimals with
+   * precision > 18 are encoded, and returns the number of bytes written (1 to 8).
+   */
+  public static int writeCompactUnscaledBytes(Object baseObject, long address, long unscaled) {
+    // BigInteger's bitLength() of `unscaled`, plus one sign bit, rounded up to whole bytes.
+    final int bitLength = 64 - Long.numberOfLeadingZeros(unscaled < 0 ? ~unscaled : unscaled);
+    final int numBytes = (bitLength >> 3) + 1;
+    long remaining = unscaled;
+    for (int i = numBytes - 1; i >= 0; i--) {
+      Platform.putByte(baseObject, address + i, (byte) remaining);
+      remaining >>= 8;
+    }
+    return numBytes;
   }
 
   @Override
@@ -427,6 +452,25 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
       return Decimal.createUnsafe(getLong(ordinal), precision, scale);
     } else {
+      final long offsetAndSize = getLong(ordinal);
+      final int size = (int) offsetAndSize;
+      if (size > 0 && size <= 8) {
+        // The unscaled value fits a Long: decode it without allocating a byte[] and BigInteger.
+        final long address = baseOffset + (int) (offsetAndSize >> 32);
+        long unscaled = Platform.getByte(baseObject, address); // sign-extends the first byte
+        for (int i = 1; i < size; i++) {
+          unscaled = (unscaled << 8) | (Platform.getByte(baseObject, address + i) & 0xFFL);
+        }
+        // A compact Decimal's scale indexes Decimal.POW_10, so it must be in
+        // [0, MAX_LONG_DIGITS] even when the unscaled value is small. A negative scale is
+        // only possible with spark.sql.legacy.allowNegativeScaleOfDecimal.
+        if (unscaled > -COMPACT_UNSCALED_LIMIT && unscaled < COMPACT_UNSCALED_LIMIT &&
+            scale >= 0 && scale <= Decimal.MAX_LONG_DIGITS()) {
+          return Decimal.createUnsafe(unscaled, precision, scale);
+        }
+        // Not compact: the same BigDecimal-backed Decimal as the path below.
+        return Decimal.apply(BigDecimal.valueOf(unscaled, scale), precision, scale);
+      }
       byte[] bytes = getBinary(ordinal);
       BigInteger bigInteger = new BigInteger(bytes);
       BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
