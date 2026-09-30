@@ -106,6 +106,16 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
             .withName(KubernetesClientUtils.configMapNameDriver)
             .endConfigMap()
           .endVolume()
+        .addNewSchedulingGate(PRE_RESOURCES_SCHEDULING_GATE)
+        .endSpec()
+      .build()
+
+  // SPARK-38079: what the driver pod looks like once its pre-resources scheduling gate has
+  // been removed (see run()'s "Remove the pre-resources scheduling gate" step).
+  private def fullExpectedPodGateRemoved(keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
+    new PodBuilder(fullExpectedPod(keyToPaths))
+      .editSpec()
+        .removeMatchingFromSchedulingGates(_.getName == PRE_RESOURCES_SCHEDULING_GATE)
         .endSpec()
       .build()
 
@@ -183,9 +193,26 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     createdPodArgumentCaptor = ArgumentCaptor.forClass(classOf[Pod])
     createdResourcesArgumentCaptor = ArgumentCaptor.forClass(classOf[Array[HasMetadata]])
     when(podsWithNamespace.resource(fullExpectedPod())).thenReturn(namedPods)
+    // SPARK-38079: the failure-cleanup catch blocks in run() delete the *created* driver pod
+    // via kubernetesClient.pods().resource(createdDriverPod) -- note: not .inNamespace(...)
+    // first, unlike the pre-creation .resource(fullExpectedPod()) call above -- so mock that
+    // chain too, resolving to the same namedPods mock instead of null.
+    when(podOperations.resource(podWithOwnerReference())).thenReturn(namedPods)
     when(resourceList.forceConflicts()).thenReturn(resourceList)
     when(namedPods.serverSideApply()).thenReturn(podWithOwnerReference())
+    // SPARK-38079: the pod is created still scheduling-gated (see run()); .create() returns
+    // that gated pod, with its UID already assigned by the (simulated) API server.
     when(namedPods.create()).thenReturn(podWithOwnerReference())
+    // SPARK-38079: run() removes the gate via a single .edit(UnaryOperator[Pod]) call once
+    // its pre-resources exist. Mockito can't match a lambda by its behavior, so this answers
+    // by actually invoking whatever function run() passes in -- exactly like the real
+    // fabric8 implementation does -- against the gated pod, so the returned pod reflects
+    // whatever edit run() actually asked for.
+    when(namedPods.edit(ArgumentMatchers.any[java.util.function.UnaryOperator[Pod]]()))
+      .thenAnswer(invocation => {
+        val editFn = invocation.getArgument[java.util.function.UnaryOperator[Pod]](0)
+        editFn.apply(podWithOwnerReference())
+      })
     when(namedPods.watch(loggingPodStatusWatcher)).thenReturn(mock[Watch])
     val sId = submissionId(kconf.namespace, POD_NAME)
     when(loggingPodStatusWatcher.watchOrStop(sId)).thenReturn(true)
@@ -201,8 +228,11 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       loggingPodStatusWatcher)
     submissionClient.run()
+    // SPARK-38079: the pod is created still scheduling-gated (see run()), then that gate is
+    // removed via a single edit() once its pre-resources exist.
     verify(podsWithNamespace).resource(fullExpectedPod())
     verify(namedPods).create()
+    verify(namedPods).edit(ArgumentMatchers.any[java.util.function.UnaryOperator[Pod]]())
   }
 
   test("The client should create Kubernetes resources") {
@@ -213,10 +243,10 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       loggingPodStatusWatcher)
     submissionClient.run()
     val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues.asScala.flatten
-    // SPARK-38079: the driver's own config map is now a pre-resource, so it is sent via
-    // resourceList() twice (once before pod creation, once for the owner-reference
-    // refresh) -- 2 for the config map, 1 for the (post-resource) secret.
-    assert(otherCreatedResources.size === 3)
+    // SPARK-38079: the driver's own config map is a pre-resource, created in a single
+    // resourceList() call (with its owner reference already set -- see run()) now that the
+    // driver pod exists -- 1 for the config map, 1 for the (post-resource) secret.
+    assert(otherCreatedResources.size === 2)
     val secrets = otherCreatedResources.toArray.filter(_.isInstanceOf[Secret]).toSeq
     assert(secrets === ADDITIONAL_RESOURCES_WITH_OWNER_REFERENCES)
     val configMaps = otherCreatedResources.toArray
@@ -232,201 +262,100 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf2key=conf2value"))
   }
 
-  test("SPARK-38079: driver's own config map is created before the driver pod, " +
-      "to avoid a mount race") {
+  test("SPARK-38079: driver pod is created (still scheduling-gated) before its own config " +
+      "map, and the config map's single create call already carries the owner reference") {
     val submissionClient = new Client(
       kconf,
       driverBuilder,
       kubernetesClient,
       loggingPodStatusWatcher)
     submissionClient.run()
-    // The first resourceList(...) call is always the pre-resources application, which
-    // happens before the driver pod is created. The driver's own config map must be
-    // included there so that it exists in Kubernetes before the pod that mounts it.
-    val firstResourceListCall = createdResourcesArgumentCaptor.getAllValues.get(0)
-    val configMaps = firstResourceListCall.filter(_.isInstanceOf[ConfigMap])
-    assert(configMaps.nonEmpty,
-      "the driver's own config map must be sent as a pre-resource, before the driver pod " +
-        "is created, to avoid a \"configmap ... not found\" mount race (SPARK-38079)")
+    // The pod itself must be created before any pre-resource resourceList() call, since a
+    // pre-resource's owner reference (set below) needs the pod's UID.
+    verify(podsWithNamespace).resource(fullExpectedPod())
+    verify(namedPods).create()
 
-    // Safety check: the pre-resource owner-reference refresh (the second resourceList()
-    // call) must still set an owner reference on the config map, same as before this
-    // change, so that it is still garbage-collected along with the driver pod.
-    val secondResourceListCall = createdResourcesArgumentCaptor.getAllValues.get(1)
-    val refreshedConfigMap = secondResourceListCall
-      .filter(_.isInstanceOf[ConfigMap]).map(_.asInstanceOf[ConfigMap]).head
-    val ownerReferences = refreshedConfigMap.getMetadata.getOwnerReferences
+    // The (single) resourceList(...) call creating the driver's own config map must already
+    // carry the owner reference -- there is no separate, later "refresh" call, unlike before
+    // this refactor. The pod stays scheduling-gated (so kubelet cannot attempt to mount it)
+    // for as long as this has not yet happened, avoiding the "configmap ... not found" mount
+    // race (SPARK-38079) without ever creating the config map ownerless.
+    val resourceListCall = createdResourcesArgumentCaptor.getAllValues.get(0)
+    val configMaps = resourceListCall
+      .filter(_.isInstanceOf[ConfigMap]).map(_.asInstanceOf[ConfigMap])
+    assert(configMaps.nonEmpty,
+      "the driver's own config map must be created as a pre-resource")
+    val ownerReferences = configMaps.head.getMetadata.getOwnerReferences
     assert(ownerReferences.size() === 1)
     assert(ownerReferences.get(0).getName === POD_NAME)
     assert(ownerReferences.get(0).getUid === DRIVER_POD_UID)
+
+    // The scheduling gate must be removed only after the config map has been created.
+    verify(namedPods).edit(ArgumentMatchers.any[java.util.function.UnaryOperator[Pod]]())
   }
 
-  // SPARK-38079: making the driver's own config map (and other credential-bearing resources,
-  // e.g. Kerberos keytab/delegation-token secrets) a pre-resource above means they briefly
-  // exist without an owner reference (see the comment on cleanupOrphanedPreResources in
-  // KubernetesClientApplication.scala). run() registers a shutdown hook to best-effort clean
-  // those up if this process is terminated abruptly in that window. Actually triggering a JVM
-  // shutdown hook from a test is impractical, so these tests instead call the (package-private)
-  // cleanup method directly, the same way the hook itself would.
-  private def newRecoveryClientMocks(): (KubernetesClient, RESOURCE_LIST, PodResource) = {
-    val recoveryClient = mock[KubernetesClient]
-    val recoveryResourceList = mock[RESOURCE_LIST]
-    val recoveryPodOperations = mock[PODS]
-    val recoveryPodsWithNamespace = mock[PODS_WITH_NAMESPACE]
-    val recoveryNamedPod = mock[PodResource]
-    doReturn(recoveryResourceList)
-      .when(recoveryClient).resourceList(ArgumentMatchers.any[Array[HasMetadata]](): _*)
-    when(recoveryClient.pods()).thenReturn(recoveryPodOperations)
-    when(recoveryPodOperations.inNamespace(kconf.namespace)).thenReturn(recoveryPodsWithNamespace)
-    when(recoveryPodsWithNamespace.withName(POD_NAME)).thenReturn(recoveryNamedPod)
-    (recoveryClient, recoveryResourceList, recoveryNamedPod)
-  }
-
-  test("SPARK-38079: shutdown-hook cleanup deletes orphaned pre-resources and the driver pod " +
-      "if this submission created it") {
-    val (recoveryClient, recoveryResourceList, recoveryNamedPod) = newRecoveryClientMocks()
-    val submissionClient = new Client(
-      kconf,
-      driverBuilder,
-      kubernetesClient,
-      loggingPodStatusWatcher,
-      recoveryClientFactoryOverride = Some(() => recoveryClient))
-
-    submissionClient.cleanupOrphanedPreResources(
-      PRE_RESOURCES, POD_NAME, preResourcesApplied = true, podCreatedByUs = true)
-
-    verify(recoveryResourceList).delete()
-    verify(recoveryNamedPod).delete()
-    // The recovery client is built fresh for this cleanup and must not leak.
-    verify(recoveryClient).close()
-  }
-
-  test("SPARK-38079: shutdown-hook cleanup does not delete the driver pod if this submission " +
-      "never created it") {
-    val (recoveryClient, recoveryResourceList, recoveryNamedPod) = newRecoveryClientMocks()
-    val submissionClient = new Client(
-      kconf,
-      driverBuilder,
-      kubernetesClient,
-      loggingPodStatusWatcher,
-      recoveryClientFactoryOverride = Some(() => recoveryClient))
-
-    // podCreatedByUs = false: e.g. the pod creation API call itself never succeeded (or a
-    // differently-submitted application happens to be using the same pod name), so this
-    // cleanup must not delete a pod it did not create.
-    submissionClient.cleanupOrphanedPreResources(
-      PRE_RESOURCES, POD_NAME, preResourcesApplied = true, podCreatedByUs = false)
-
-    verify(recoveryResourceList).delete()
-    verify(recoveryNamedPod, never()).delete()
-  }
-
-  test("SPARK-38079: shutdown-hook cleanup is a no-op if pre-resources were never applied") {
-    var recoveryClientFactoryInvoked = false
-    val submissionClient = new Client(
-      kconf,
-      driverBuilder,
-      kubernetesClient,
-      loggingPodStatusWatcher,
-      recoveryClientFactoryOverride = Some(() => {
-        recoveryClientFactoryInvoked = true
-        mock[KubernetesClient]
-      }))
-
-    // preResourcesApplied = false: the pre-resource serverSideApply() call itself never
-    // succeeded, so there is nothing to have been left orphaned -- and in particular, the
-    // existing catch block for that call (in run()) has already handled cleanup of whatever
-    // partial state that failed call may have left behind.
-    submissionClient.cleanupOrphanedPreResources(
-      PRE_RESOURCES, POD_NAME, preResourcesApplied = false, podCreatedByUs = false)
-
-    assert(!recoveryClientFactoryInvoked,
-      "the recovery client must not be built at all when there is nothing to clean up")
-  }
-
-  test("SPARK-38079: shutdown-hook cleanup swallows exceptions from the recovery client " +
-      "(best-effort only)") {
-    val (recoveryClient, recoveryResourceList, recoveryNamedPod) = newRecoveryClientMocks()
-    doThrow(new RuntimeException("simulated API server failure"))
-      .when(recoveryResourceList).delete()
-    val submissionClient = new Client(
-      kconf,
-      driverBuilder,
-      kubernetesClient,
-      loggingPodStatusWatcher,
-      recoveryClientFactoryOverride = Some(() => recoveryClient))
-
-    // Must not throw: this runs on the JVM shutdown-hook thread, where an uncaught exception
-    // would only be printed to stderr and otherwise has no one left to meaningfully handle it.
-    submissionClient.cleanupOrphanedPreResources(
-      PRE_RESOURCES, POD_NAME, preResourcesApplied = true, podCreatedByUs = true)
-
-    // The pod delete is independent of the (failed) pre-resource delete above, and must still
-    // be attempted.
-    verify(recoveryNamedPod).delete()
-  }
-
-  // SPARK-38079: the tests above all call cleanupOrphanedPreResources directly, since actually
-  // triggering a JVM shutdown hook from a test is impractical. That leaves the wiring in run()
-  // itself -- does it register a hook before applying pre-resources, and remove that exact hook
-  // once done with them -- uncovered by those tests alone. These two tests close that gap by
-  // injecting a fake ShutdownHookOps instead.
-  test("SPARK-38079: cleanup hook is registered before pre-resources are applied and " +
-      "removed once run() completes successfully") {
-    var registeredHook: Option[() => Unit] = None
-    var removedRef: Option[Any] = None
-    val fakeOps = ShutdownHookOps(
-      addHook = { hook =>
-        registeredHook = Some(hook)
-        "fake-hook-ref"
-      },
-      removeHook = { ref =>
-        removedRef = Some(ref)
-        true
-      })
-    val submissionClient = new Client(
-      kconf,
-      driverBuilder,
-      kubernetesClient,
-      loggingPodStatusWatcher,
-      shutdownHookOpsOverride = Some(fakeOps))
-
-    submissionClient.run()
-
-    assert(registeredHook.isDefined,
-      "a cleanup hook must be registered before pre-resources are applied")
-    assert(removedRef.contains("fake-hook-ref"),
-      "the exact same hook reference returned by addHook must be passed to removeHook")
-  }
-
-  test("SPARK-38079: cleanup hook is still removed if run() fails before completing") {
-    var removedRef: Option[Any] = None
-    val fakeOps = ShutdownHookOps(
-      addHook = { _ => "fake-hook-ref" },
-      removeHook = { ref =>
-        removedRef = Some(ref)
-        true
-      })
+  // SPARK-38079: the three failure branches in run() between pod creation and gate removal --
+  // covering (a) the pod creation call itself failing, (b) the pre-resource creation call
+  // failing after the pod exists, and (c) the gate-removal call failing after pre-resources
+  // exist -- each verified against real-cluster behavior (KubernetesClientException on
+  // AlreadyExists/Invalid/NotFound) before being written as these mock-based tests.
+  test("SPARK-38079: pod creation failure propagates without attempting any pre-resource " +
+      "creation") {
     val podCreationFailure = new RuntimeException("simulated pod creation failure")
     doThrow(podCreationFailure).when(namedPods).create()
     val submissionClient = new Client(
       kconf,
       driverBuilder,
       kubernetesClient,
-      loggingPodStatusWatcher,
-      shutdownHookOpsOverride = Some(fakeOps))
+      loggingPodStatusWatcher)
 
     val thrown = intercept[RuntimeException] {
       submissionClient.run()
     }
 
     assert(thrown eq podCreationFailure)
-    // The cleanup hook must be removed via the `finally` in run() even on this failure path,
-    // since the existing catch block (unchanged by SPARK-38079) already deletes the
-    // pre-resources itself -- the hook has nothing left to do from this point on, exactly as
-    // on the success path.
-    assert(removedRef.contains("fake-hook-ref"),
-      "the cleanup hook must be removed even when run() fails partway through")
+    verify(kubernetesClient, never()).resourceList(ArgumentMatchers.any[Array[HasMetadata]](): _*)
+  }
+
+  test("SPARK-38079: pre-resource creation failure (after the pod exists) deletes the pod " +
+      "and propagates") {
+    val preResourceFailure = new RuntimeException("simulated pre-resource creation failure")
+    doThrow(preResourceFailure).when(resourceList).serverSideApply()
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher)
+
+    val thrown = intercept[RuntimeException] {
+      submissionClient.run()
+    }
+
+    assert(thrown eq preResourceFailure)
+    verify(namedPods).create()
+    verify(namedPods).delete()
+    // The gate is never removed on this failure path.
+    verify(namedPods, never()).edit(ArgumentMatchers.any[java.util.function.UnaryOperator[Pod]]())
+  }
+
+  test("SPARK-38079: gate-removal failure (after pre-resources exist) deletes the pod and " +
+      "the pre-resources, then propagates") {
+    val gateRemovalFailure = new RuntimeException("simulated gate-removal failure")
+    doThrow(gateRemovalFailure)
+      .when(namedPods).edit(ArgumentMatchers.any[java.util.function.UnaryOperator[Pod]]())
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher)
+
+    val thrown = intercept[RuntimeException] {
+      submissionClient.run()
+    }
+
+    assert(thrown eq gateRemovalFailure)
+    verify(namedPods).delete()
+    verify(resourceList).delete()
   }
 
   test("SPARK-37331: The client should create Kubernetes resources with pre resources") {
@@ -450,16 +379,16 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     submissionClient.run()
     val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues.asScala.flatten
 
-    // 2 for pre-resource creation/update, 1 for (post-resource) secret creation, and
-    // 2 for the driver's own config map (SPARK-38079: now also a pre-resource, so it is
-    // sent twice -- once before pod creation, once for the owner-reference refresh)
-    assert(otherCreatedResources.size === 5)
+    // SPARK-38079: the pre-resource CRD and the driver's own config map are both created via
+    // the single (owner-reference-carrying) pre-resource resourceList() call -- 1 for the
+    // CRD, 1 for the config map -- plus 1 for the (post-resource) secret.
+    assert(otherCreatedResources.size === 3)
     val preRes = otherCreatedResources.toArray
       .filter(_.isInstanceOf[CustomResourceDefinition]).toSeq
 
     // Make sure pre-resource creation/owner reference as expected
-    assert(preRes.size === 2)
-    assert(preRes.last === PRE_ADDITIONAL_RESOURCES_WITH_OWNER_REFERENCES.head)
+    assert(preRes.size === 1)
+    assert(preRes.head === PRE_ADDITIONAL_RESOURCES_WITH_OWNER_REFERENCES.head)
 
     // Make sure original resource and config map process are not affected
     val secrets = otherCreatedResources.toArray.filter(_.isInstanceOf[Secret]).toSeq
