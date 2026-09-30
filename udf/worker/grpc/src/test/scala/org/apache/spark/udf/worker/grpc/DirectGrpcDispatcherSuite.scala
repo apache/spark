@@ -20,7 +20,9 @@ import io.grpc.ConnectivityState
 // scalastyle:off funsuite
 import org.scalatest.funsuite.AnyFunSuite
 
-import org.apache.spark.udf.worker.{DirectWorker, LocalTcpConnection, UDFProtoCommunicationPattern, UDFWorkerProperties, UDFWorkerSpecification, UnixDomainSocket, WorkerCapabilities, WorkerConnectionSpec}
+import org.apache.spark.udf.worker.{DirectWorker, LocalTcpConnection,
+  UDFProtoCommunicationPattern, UDFWorkerProperties, UDFWorkerSpecification,
+  UnixDomainSocket, WorkerCapabilities, WorkerConnectionSpec}
 import org.apache.spark.udf.worker.core.WorkerLogger
 
 class DirectGrpcDispatcherSuite extends AnyFunSuite {
@@ -29,20 +31,16 @@ class DirectGrpcDispatcherSuite extends AnyFunSuite {
   private def directSpec(
       properties: UDFWorkerProperties,
       capabilities: Option[WorkerCapabilities] = None): UDFWorkerSpecification = {
-    val builder = UDFWorkerSpecification
-      .newBuilder()
+    val builder = UDFWorkerSpecification.newBuilder()
       .setDirect(DirectWorker.newBuilder().setProperties(properties).build())
     capabilities.foreach(builder.setCapabilities)
     builder.build()
   }
 
-  private def udsProperties: UDFWorkerProperties = UDFWorkerProperties
-    .newBuilder()
-    .setConnection(
-      WorkerConnectionSpec
-        .newBuilder()
-        .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance)
-        .build())
+  private def udsProperties: UDFWorkerProperties = UDFWorkerProperties.newBuilder()
+    .setConnection(WorkerConnectionSpec.newBuilder()
+      .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance)
+      .build())
     .build()
 
   test("requires a connection") {
@@ -53,13 +51,10 @@ class DirectGrpcDispatcherSuite extends AnyFunSuite {
   }
 
   test("requires Unix domain socket transport") {
-    val properties = UDFWorkerProperties
-      .newBuilder()
-      .setConnection(
-        WorkerConnectionSpec
-          .newBuilder()
-          .setTcp(LocalTcpConnection.getDefaultInstance)
-          .build())
+    val properties = UDFWorkerProperties.newBuilder()
+      .setConnection(WorkerConnectionSpec.newBuilder()
+        .setTcp(LocalTcpConnection.getDefaultInstance)
+        .build())
       .build()
     val error = intercept[IllegalArgumentException] {
       new DirectGrpcDispatcher(directSpec(properties))
@@ -75,8 +70,7 @@ class DirectGrpcDispatcherSuite extends AnyFunSuite {
   }
 
   test("requires bidirectional streaming capability") {
-    val capabilities = WorkerCapabilities
-      .newBuilder()
+    val capabilities = WorkerCapabilities.newBuilder()
       .addSupportedCommunicationPatterns(
         UDFProtoCommunicationPattern.UDF_PROTO_COMMUNICATION_PATTERN_UNSPECIFIED)
       .build()
@@ -87,12 +81,12 @@ class DirectGrpcDispatcherSuite extends AnyFunSuite {
   }
 
   test("DIRECT factory creates a DirectGrpcDispatcher") {
-    val capabilities = WorkerCapabilities
-      .newBuilder()
-      .addSupportedCommunicationPatterns(UDFProtoCommunicationPattern.BIDIRECTIONAL_STREAMING)
+    val capabilities = WorkerCapabilities.newBuilder()
+      .addSupportedCommunicationPatterns(
+        UDFProtoCommunicationPattern.BIDIRECTIONAL_STREAMING)
       .build()
-    val dispatcher = new DirectDispatcherFactory()
-      .createDispatcher(directSpec(udsProperties, Some(capabilities)), WorkerLogger.NoOp)
+    val dispatcher = new DirectDispatcherFactory().createDispatcher(
+      directSpec(udsProperties, Some(capabilities)), WorkerLogger.NoOp)
     try {
       assert(dispatcher.isInstanceOf[DirectGrpcDispatcher])
     } finally {
@@ -103,14 +97,11 @@ class DirectGrpcDispatcherSuite extends AnyFunSuite {
   test("requests a backoff reset for every transient failure after endpoint creation") {
     assert((1 to 2).forall { _ =>
       DirectGrpcDispatcher.shouldResetConnectBackoff(
-        ConnectivityState.TRANSIENT_FAILURE,
-        endpointExists = true)
+        ConnectivityState.TRANSIENT_FAILURE, endpointExists = true)
     })
-    assert(
-      !DirectGrpcDispatcher
-        .shouldResetConnectBackoff(ConnectivityState.CONNECTING, endpointExists = true))
-    assert(
-      !DirectGrpcDispatcher
-        .shouldResetConnectBackoff(ConnectivityState.TRANSIENT_FAILURE, endpointExists = false))
+    assert(!DirectGrpcDispatcher.shouldResetConnectBackoff(
+      ConnectivityState.CONNECTING, endpointExists = true))
+    assert(!DirectGrpcDispatcher.shouldResetConnectBackoff(
+      ConnectivityState.TRANSIENT_FAILURE, endpointExists = false))
   }
 }

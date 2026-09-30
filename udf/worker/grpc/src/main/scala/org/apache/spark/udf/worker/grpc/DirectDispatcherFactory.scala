@@ -29,7 +29,7 @@ import org.apache.spark.udf.worker.core.{UDFDispatcherFactory, WorkerDispatcher,
  * [[UDFWorkerSpecification]].
  */
 @Experimental
-class DirectDispatcherFactory extends UDFDispatcherFactory {
+private[spark] class DirectDispatcherFactory extends UDFDispatcherFactory {
 
   override def createDispatcher(
       workerSpec: UDFWorkerSpecification,
