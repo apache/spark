@@ -87,7 +87,8 @@ class SparkPlanSuite extends SharedSparkSession {
         }
         try {
           // DAGScheduler serializes the complete (stage.rdd, stage.func) tuple for a result task.
-          // The shuffle cuts off the upstream RDD lineage, including the columnar scan's cache.
+          // The upstream scan RDD is outside the downstream stage's input lineage.
+          // Captured plans must not reintroduce it through their columnar execution caches.
           val taskFunc = (_: TaskContext, rows: Iterator[InternalRow]) => rows.size
           out.writeObject((stageRDD, taskFunc))
         } finally {
