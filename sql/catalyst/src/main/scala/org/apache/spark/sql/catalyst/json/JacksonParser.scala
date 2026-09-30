@@ -302,7 +302,7 @@ class JacksonParser(
           }
       }
 
-    case _: StringType => (parser: JsonParser) => {
+    case dt: StringType => (parser: JsonParser) => {
       // This must be enabled if we will retrieve the bytes directly from the raw content:
       val oldFeature = parser.getFeatureMask
       val featureToAdd = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION.getMask
@@ -356,7 +356,7 @@ class JacksonParser(
       // to be reset. This ensures that every feature is restored to its previous
       // state as defined by `oldFeature`.
       parser.overrideStdFeatures(oldFeature, ~0)
-      result
+      CharVarcharUtils.applyTextParseSemantics(result, dt)
     }
 
     case TimestampType =>
@@ -636,8 +636,15 @@ class JacksonParser(
       }
     }
 
-    // The JSON map will never have null or duplicated map keys, it's safe to create a
-    // ArrayBasedMapData directly here.
+    // Value conversion can fail after the key is recorded. Do not build MapData from
+    // unpaired buffers: ArrayBasedMapData would throw a cardinality error and hide
+    // the original conversion failure (for example EXCEED_LIMIT_LENGTH).
+    if (keys.length != values.length) {
+      throw badRecordException.get
+    }
+
+    // Preserve every parsed JSON key/value pair, including exact duplicate names.
+    // ArrayBasedMapData is used directly to retain this historical behavior.
     val mapData = ArrayBasedMapData(keys.toArray, values.toArray)
 
     if (badRecordException.isEmpty) {
