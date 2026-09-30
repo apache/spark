@@ -18,7 +18,7 @@
 import time
 import uuid
 
-from pyspark.errors import PySparkPicklingError
+from pyspark.errors import PySparkPicklingError, StreamingQueryException
 from pyspark.sql.tests.streaming.test_streaming_foreach_batch import StreamingTestsForeachBatchMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.testing.utils import eventually, timeout
@@ -116,6 +116,128 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
                 self.spark.catalog.dropTempView(view_name)
             except Exception:
                 pass
+
+    def test_batch_uses_stream_session_for_stateful_aqe(self):
+        # SPARK-44462: the batch runs on the stream's cloned session, which pins the stateful
+        # configs (AQE off) independently of the root session. Proves the isolation this PR adds.
+        root = self.spark
+
+        def process(batch_df, _):
+            batch_count = batch_df.count()
+            root_aqe = root.conf.get("spark.sql.adaptive.enabled")
+            batch_aqe = batch_df.sparkSession.conf.get("spark.sql.adaptive.enabled")
+            same_session = root.session_id == batch_df.sparkSession.session_id
+            if same_session or root_aqe != "true" or batch_aqe != "false":
+                raise AssertionError(
+                    f"batch_count={batch_count}, same_session={same_session}, "
+                    f"AQE root={root_aqe}, batch={batch_aqe}"
+                )
+
+        q = None
+        with self.sql_conf({"spark.sql.adaptive.enabled": "true"}):
+            try:
+                df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+                q = (
+                    df.groupBy("value")
+                    .count()
+                    .writeStream.outputMode("complete")
+                    .foreachBatch(process)
+                    .start()
+                )
+                q.processAllAvailable()
+                self.assertIsNone(q.exception())
+            finally:
+                if q:
+                    q.stop()
+
+    def test_batch_dataframe_in_root_session_sql_is_unsupported(self):
+        # SPARK-44462 contract: the batch DataFrame is bound to the stream's cloned session, so its
+        # cached relation cannot be resolved through a captured root session. Documented behavior.
+        root = self.spark
+
+        def process(batch_df, _):
+            root.sql("SELECT value FROM {batch}", batch=batch_df).collect()
+
+        q = None
+        try:
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            q = df.writeStream.foreachBatch(process).start()
+            self.assertRaises(StreamingQueryException, q.processAllAvailable)
+            self.assertIn("DATAFRAME_NOT_FOUND", str(q.exception()))
+        finally:
+            if q:
+                q.stop()
+
+    def test_batch_dataframe_join_with_root_session_dataframe_is_unsupported(self):
+        # SPARK-44462 contract: the batch DataFrame (cloned session) cannot be combined with a
+        # DataFrame captured from the root session; the client rejects the cross-session join.
+        lookup = self.spark.range(2).selectExpr(
+            "CASE id WHEN 0 THEN 'hello' ELSE 'this' END AS value"
+        )
+
+        def process(batch_df, _):
+            batch_df.join(lookup, "value").collect()
+
+        q = None
+        try:
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            q = df.writeStream.foreachBatch(process).start()
+            self.assertRaises(StreamingQueryException, q.processAllAvailable)
+            self.assertIn("SESSION_NOT_SAME", str(q.exception()))
+        finally:
+            if q:
+                q.stop()
+
+    def test_batch_dataframe_in_batch_session_sql_is_supported(self):
+        # SPARK-44462 migration path: resolve the batch DataFrame through its own (cloned) session
+        # instead of a captured root session.
+        def process(batch_df, _):
+            expected = sorted(row.value for row in batch_df.select("value").collect())
+            actual = sorted(
+                row.value
+                for row in batch_df.sparkSession.sql(
+                    "SELECT value FROM {batch}", batch=batch_df
+                ).collect()
+            )
+            if actual != expected:
+                raise AssertionError(f"SQL rows {actual} != batch rows {expected}")
+
+        q = None
+        try:
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            q = df.writeStream.foreachBatch(process).start()
+            q.processAllAvailable()
+            self.assertTrue(any(p.numInputRows > 0 for p in q.recentProgress))
+            self.assertIsNone(q.exception())
+        finally:
+            if q:
+                q.stop()
+
+    def test_batch_dataframe_join_in_batch_session_is_supported(self):
+        # SPARK-44462 migration path: rebuild the lookup on the batch's own (cloned) session so the
+        # join stays within a single session.
+        def process(batch_df, _):
+            spark = batch_df.sparkSession
+            lookup = spark.range(2).selectExpr(
+                "CASE id WHEN 0 THEN 'hello' ELSE 'this' END AS value"
+            )
+            expected = sorted(row.value for row in batch_df.select("value").collect())
+            actual = sorted(
+                row.value for row in batch_df.join(lookup, "value").select("value").collect()
+            )
+            if actual != expected:
+                raise AssertionError(f"Joined rows {actual} != batch rows {expected}")
+
+        q = None
+        try:
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            q = df.writeStream.foreachBatch(process).start()
+            q.processAllAvailable()
+            self.assertTrue(any(p.numInputRows > 0 for p in q.recentProgress))
+            self.assertIsNone(q.exception())
+        finally:
+            if q:
+                q.stop()
 
     def test_pickling_error(self):
         class NoPickle:

@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, PYTHON_EXEC, QUERY_ID, RUN_ID_STRING, SESSION_ID, STREAM_ID, USER_ID}
+import org.apache.spark.internal.LogKeys.{CLONED_SESSION_ID, DATAFRAME_ID, PYTHON_EXEC, QUERY_ID, RUN_ID_STRING, SESSION_ID, USER_ID}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders}
 import org.apache.spark.sql.connect.IllegalStateErrors
@@ -89,7 +89,7 @@ object StreamingForeachBatchHelper extends Logging {
             logInfo(
               log"[rootSession: ${MDC(SESSION_ID, rootSessionHolder.sessionId)}] " +
                 log"Registered cloned SessionHolder " +
-                log"${MDC(STREAM_ID, clonedSessionId)} for foreachBatch.")
+                log"${MDC(CLONED_SESSION_ID, clonedSessionId)} for foreachBatch.")
           }
           // Read under the lock so close() cannot null the field out between the registration
           // above and the return; a null holder would NPE in the caller instead of failing the
@@ -113,13 +113,14 @@ object StreamingForeachBatchHelper extends Logging {
             allowReconnect = true)
           logInfo(
             log"[rootSession: ${MDC(SESSION_ID, rootSessionHolder.sessionId)}] " +
-              log"Closed cloned SessionHolder ${MDC(STREAM_ID, holder.sessionId)}.")
+              log"Closed cloned SessionHolder ${MDC(CLONED_SESSION_ID, holder.sessionId)}.")
         } catch {
           case NonFatal(ex) =>
             logWarning(
               log"[rootSession: ${MDC(SESSION_ID, rootSessionHolder.sessionId)}] " +
-                log"Error closing cloned SessionHolder ${MDC(STREAM_ID, holder.sessionId)} " +
-                log"for foreachBatch; it may be leaked.",
+                log"Error closing cloned SessionHolder " +
+                log"${MDC(CLONED_SESSION_ID, holder.sessionId)} for foreachBatch; " +
+                log"it may be leaked.",
               ex)
         }
       }
@@ -132,7 +133,7 @@ object StreamingForeachBatchHelper extends Logging {
    */
   private[connect] case class ForeachBatchCleaner(
       runner: Option[StreamingPythonRunner],
-      sessionManager: ForeachBatchSessionManager)
+      sessionManager: Option[ForeachBatchSessionManager])
       extends AutoCloseable {
     override def close(): Unit = {
       runner.foreach { r =>
@@ -142,9 +143,11 @@ object StreamingForeachBatchHelper extends Logging {
             logWarning("Error while stopping streaming Python worker", ex)
         }
       }
-      try sessionManager.close()
-      catch {
-        case NonFatal(_) => // already logged inside close()
+      sessionManager.foreach { sm =>
+        try sm.close()
+        catch {
+          case NonFatal(_) => // already logged inside close()
+        }
       }
     }
   }
@@ -209,8 +212,9 @@ object StreamingForeachBatchHelper extends Logging {
    * provided foreachBatch function `fn`.
    *
    * HACK ALERT: This version does not actually set up Spark Connect session. Directly passes the
-   * DataFrame, so the user code actually runs with legacy DataFrame and session. However, batch
-   * DataFrames are still cached in the cloned SessionHolder for correct session tracking.
+   * DataFrame, so the user code actually runs with legacy DataFrame and session. The batch
+   * DataFrame is not cached in a SessionHolder: the Scala callback never resolves it as a remote
+   * relation, so it needs neither the cloned SessionHolder nor the DataFrame cache.
    */
   def scalaForeachBatchWrapper(payloadBytes: Array[Byte], sessionHolder: SessionHolder)
       : (ForeachBatchFnType, AutoCloseable, AtomicReference[String]) = {
@@ -219,29 +223,23 @@ object StreamingForeachBatchHelper extends Logging {
         .deserialize[ForeachWriterPacket](payloadBytes, Utils.getContextOrSparkClassLoader)
     val fn = foreachBatchPkt.foreachWriter.asInstanceOf[(Dataset[Any], Long) => Unit]
     val encoder = foreachBatchPkt.datasetEncoder.asInstanceOf[AgnosticEncoder[Any]]
-    val sessionManager = new ForeachBatchSessionManager(sessionHolder)
-    val queryIdRef = new AtomicReference[String]()
-    val wrappedFn = dataFrameCachingWrapper(
-      (args: FnArgsWithId) => {
-        // dfId is not used, see hack comment above.
-        try {
-          val ds = if (AgnosticEncoders.UnboundRowEncoder == encoder) {
-            // When the dataset is a DataFrame (Dataset[Row).
-            args.df.asInstanceOf[Dataset[Any]]
-          } else {
-            // Recover the Dataset from the DataFrame using the encoder.
-            args.df.as(encoder)
-          }
-          fn(ds, args.batchId)
-        } catch {
-          case t: Throwable =>
-            logError(s"Calling foreachBatch fn failed", t)
-            throw t
+    val wrappedFn: ForeachBatchFnType = (df: DataFrame, batchId: Long) => {
+      try {
+        val ds = if (AgnosticEncoders.UnboundRowEncoder == encoder) {
+          // When the dataset is a DataFrame (Dataset[Row]).
+          df.asInstanceOf[Dataset[Any]]
+        } else {
+          // Recover the Dataset from the DataFrame using the encoder.
+          df.as(encoder)
         }
-      },
-      sessionManager,
-      queryIdRef)
-    (wrappedFn, ForeachBatchCleaner(None, sessionManager), queryIdRef)
+        fn(ds, batchId)
+      } catch {
+        case t: Throwable =>
+          logError(s"Calling foreachBatch fn failed", t)
+          throw t
+      }
+    }
+    (wrappedFn, ForeachBatchCleaner(None, None), new AtomicReference[String]())
   }
 
   /**
@@ -321,7 +319,7 @@ object StreamingForeachBatchHelper extends Logging {
 
     (
       dataFrameCachingWrapper(foreachBatchRunnerFn, sessionManager, queryIdRef),
-      ForeachBatchCleaner(Some(runner), sessionManager),
+      ForeachBatchCleaner(Some(runner), Some(sessionManager)),
       queryIdRef)
   }
 

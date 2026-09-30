@@ -30,6 +30,10 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   unsupported-operation checks. Existing queries can still restart from their persistent
   checkpoints using the compatibility value recorded in the offset log.
 
+## Upgrading from Structured Streaming 4.2 to 4.3
+
+- Since Spark 4.3, in Spark Connect the DataFrame passed to a Python `foreachBatch` function is bound to the streaming query's own session, a clone of the session that started the query. This matches classic `foreachBatch` and runs the batch under the query's own configuration (including the settings stateful operators depend on) rather than the root session's. Because the batch DataFrame now belongs to a separate session, it cannot be combined with the root session inside the function: a temporary view created from it is not visible to the root session, referencing it from `spark.sql` on the root session fails with `DATAFRAME_NOT_FOUND`, and joining it with a DataFrame captured from the root session fails with `SESSION_NOT_SAME`. Run such operations through the batch DataFrame's own session instead: call `batch_df.sparkSession.sql(...)`, and read or rebuild any other DataFrame on `batch_df.sparkSession` before joining it. To pass results out of the function, write to a table or a global temporary view rather than a session-local temporary view.
+
 ## Upgrading from Structured Streaming 4.1 to 4.2
 
 - Since Spark 4.2, restarting a streaming query from a checkpoint whose metadata file is missing while the offset or commit logs contain data fails with `STREAMING_CHECKPOINT_MISSING_METADATA_FILE`, instead of silently generating a new query ID (which can duplicate data in exactly-once sinks). Restore the metadata file or use a new checkpoint location. To restore the previous behavior, set `spark.sql.streaming.checkpoint.verifyMetadataExists.enabled` to `false`. (See [SPARK-55058](https://issues.apache.org/jira/browse/SPARK-55058) for more details.)
