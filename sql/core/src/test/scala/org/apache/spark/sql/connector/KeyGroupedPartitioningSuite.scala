@@ -3533,6 +3533,16 @@ class KeyGroupedPartitioningSuite
       // Only `t1` orders the two splits of key 1 past the key, by `data`.
       assert((if (table == table1) rows else rows.sorted) === expected)
     }
+
+    // A row-based scan's `ProjectExec` passes the kept `(id)` through, so a sort-merge join on the
+    // partition key needs no sort on either side.
+    val df = sql(s"SELECT a.id, a.data, b.data FROM testcat.ns.$table3 a " +
+      s"JOIN testcat.ns.$table3 b ON a.id = b.id")
+    val smjs = collect(df.queryExecution.executedPlan) { case s: SortMergeJoinExec => s }
+    assert(smjs.size == 1)
+    assert(smjs.head.children.flatMap(collect(_) { case s: SortExec => s }).isEmpty)
+    checkAnswer(df, Seq(Row(1, "aa", "aa"), Row(1, "aa", "bb"), Row(1, "bb", "aa"),
+      Row(1, "bb", "bb"), Row(2, "cc", "cc")))
   }
 
   test("SPARK-47094: SPJ: Support compatible buckets") {
