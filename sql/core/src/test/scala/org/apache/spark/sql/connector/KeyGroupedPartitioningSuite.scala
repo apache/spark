@@ -3486,6 +3486,46 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59899: a scan's reported ordering stops at the first sort order on a pruned " +
+      "column") {
+    // The source reports its ordering over the full table, so a sort order on a column pruned out
+    // of the scan output reaches the scan, as a pruned partition key does. Ordering is
+    // prefix-based, so the scan keeps the leading run of sort orders over its output: `t1` drops
+    // its last order, `t2` a middle one along with every order after it.
+    val table1 = "prune_order_t1"
+    val table2 = "prune_order_t2"
+    def asc(col: String): SortOrder =
+      sort(FieldReference(col), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    createTable(table1, columns, Array(identity("id")), Array(asc("id"), asc("data"), asc("ts")))
+    createTable(table2, columns, Array(identity("id")), Array(asc("id"), asc("ts"), asc("data")))
+    Seq(table1, table2).foreach { table =>
+      // Key 1 is stored in two splits, so grouping the scan by key merges them.
+      sql(s"INSERT INTO testcat.ns.$table VALUES " +
+        "(1, 'bb', cast('2020-01-01' as timestamp)), " +
+        "(1, 'aa', cast('2020-01-02' as timestamp)), " +
+        "(2, 'cc', cast('2020-01-03' as timestamp))")
+    }
+
+    Seq(table1 -> 2, table2 -> 1).foreach { case (table, numKept) =>
+      val scan = collectScans(sql(s"SELECT id, data FROM testcat.ns.$table")
+        .queryExecution.executedPlan).head
+      val reported = scan.ordering.get
+      assert(reported.exists(!_.references.subsetOf(scan.outputSet)),
+        s"test setup: the ordering of $table is on `ts`, which is pruned out of the scan")
+      assert(scan.outputOrdering === reported.take(numKept))
+
+      // A k-way merge binds the scan's ordering against the scan output. A row-based scan like this
+      // one always gets a `ProjectExec`, which truncates the ordering, but a columnar scan may get
+      // nothing between it and the merge that does. So the merge is built right over the scan here.
+      val merged = GroupPartitionsExec(scan, enableSortedMerge = true).execute()
+      assert(merged.isInstanceOf[SortedMergeCoalescedRDD[_]])
+      val rows = merged.map(r => (r.getInt(0), r.getString(1))).collect().toSeq
+      val expected = Seq((1, "aa"), (1, "bb"), (2, "cc"))
+      // Only `t1` orders the two splits of key 1 past the key, by `data`.
+      assert((if (numKept == 2) rows else rows.sorted) === expected)
+    }
+  }
+
   test("SPARK-47094: SPJ: Support compatible buckets") {
     val table1 = "tab1e1"
     val table2 = "table2"
