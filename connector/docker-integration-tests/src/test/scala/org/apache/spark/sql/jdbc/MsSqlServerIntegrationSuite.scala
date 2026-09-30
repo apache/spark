@@ -22,6 +22,8 @@ import java.sql.{Connection, Date, Timestamp}
 import java.time.LocalDateTime
 import java.util.Properties
 
+import scala.util.Using
+
 import org.apache.spark.SparkSQLException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -42,6 +44,22 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class MsSqlServerIntegrationSuite extends SharedJDBCIntegrationSuite {
   override val db = new MsSQLServerDatabaseOnDocker
+
+  override protected def createRestrictedUser(): Option[RestrictedUser] = {
+    val user = "restricted_user"
+    // Has to satisfy the default SQL Server password policy (upper, lower, digit and symbol).
+    val password = "R3str1ct3d_pw!"
+    Using.resource(getConnection()) { conn =>
+      conn.prepareStatement(s"CREATE LOGIN $user WITH PASSWORD = '$password'").executeUpdate()
+      conn.prepareStatement(s"CREATE USER $user FOR LOGIN $user").executeUpdate()
+    }
+    Some(RestrictedUser(
+      url = s"jdbc:sqlserver://$dockerIp:$externalPort;" +
+        "encrypt=true;trustServerCertificate=true",
+      table = "tbl_shared",
+      user = user,
+      password = password))
+  }
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE TABLE tbl (x INT, y VARCHAR (50))").executeUpdate()

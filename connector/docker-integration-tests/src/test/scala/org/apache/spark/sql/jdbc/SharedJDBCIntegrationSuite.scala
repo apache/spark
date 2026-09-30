@@ -54,6 +54,75 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
     batchStmt.close()
   }
 
+  /**
+   * Name of a table that does not exist in the database under test.
+   */
+  protected val nonExistentTableName = "table_that_does_not_exist"
+
+  /**
+   * SQLSTATE the driver reports when [[nonExistentTableName]] is read. None when the suite does
+   * not pin the dialect's SQLSTATE down.
+   */
+  protected def nonExistentTableSQLState: Option[String] = None
+
+  /**
+   * Whether reading [[nonExistentTableName]] is expected to surface the driver's own exception
+   * instead of `JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR`. An engine that reports a missing table with a
+   * SQLSTATE it also uses for syntax errors (e.g. StarRocks reports error 1064/SQLSTATE 42000 for
+   * both) cannot pass this check until its classifier is tightened.
+   */
+  protected def nonExistentTableIsNotSyntaxError: Boolean = true
+
+  /**
+   * A user that can open a session but has no read privilege on [[RestrictedUser.table]], together
+   * with the JDBC URL needed to reach it. The database container is discarded when the suite ends,
+   * so the user does not have to be dropped. None when the suite cannot create such a user.
+   */
+  protected case class RestrictedUser(
+      url: String,
+      table: String,
+      user: String,
+      password: String,
+      expectedSQLState: Option[String] = None)
+
+  protected def createRestrictedUser(): Option[RestrictedUser] = None
+
+  test("SPARK-59369: a non-existent table is not classified as a syntax error") {
+    assume(nonExistentTableIsNotSyntaxError,
+      "this dialect reports missing tables with a SQLSTATE it also uses for syntax errors")
+
+    // The failure has to surface the driver's own SQLException. If the dialect classifies it as a
+    // syntax error, resolveTable wraps it in a SparkException and intercept[SQLException] fails.
+    val e = intercept[SQLException] {
+      spark.read.format("jdbc")
+        .option("url", jdbcUrl)
+        .option("dbtable", nonExistentTableName)
+        .load()
+    }
+    nonExistentTableSQLState.foreach { sqlState =>
+      assertResult(sqlState)(e.getSQLState)
+    }
+  }
+
+  test("SPARK-59369: a missing privilege is not classified as a syntax error") {
+    val restricted = createRestrictedUser()
+    assume(restricted.isDefined, "this dialect cannot create a restricted user")
+
+    val RestrictedUser(url, table, user, password, expectedSQLState) = restricted.get
+    // As above, the driver's own SQLException has to win over JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.
+    val e = intercept[SQLException] {
+      spark.read.format("jdbc")
+        .option("url", url)
+        .option("dbtable", table)
+        .option("user", user)
+        .option("password", password)
+        .load()
+    }
+    expectedSQLState.foreach { sqlState =>
+      assertResult(sqlState)(e.getSQLState)
+    }
+  }
+
   test("SPARK-52184: Wrap external engine syntax error") {
     val ex = intercept[SparkException] {
       spark.read.format("jdbc")

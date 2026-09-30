@@ -39,6 +39,11 @@ import org.apache.spark.tags.DockerTest
 class StarRocksIntegrationSuite extends SharedJDBCIntegrationSuite {
   override val db = new StarRocksDatabaseOnDocker
 
+  // StarRocks reports a missing table as error 1064 with SQLSTATE 42000, the same SQLSTATE it
+  // uses for syntax errors, so MySQLDialect cannot tell the two apart and the shared check has to
+  // be disabled until the StarRocks classifier is tightened.
+  override protected def nonExistentTableIsNotSyntaxError: Boolean = false
+
   override def sleepBeforeTesting(): Unit = Thread.sleep(60000)
 
   override def createSharedTable(conn: Connection): Unit = {

@@ -3290,6 +3290,26 @@ class JDBCSuite extends SharedSparkSession {
     assert(!dialect.isSyntaxErrorBestEffort(new SQLException("Connection reset", "08001")))
   }
 
+  test("SPARK-59369: DB2Dialect classifies only syntax error SQLSTATEs as syntax errors") {
+    val dialect = JdbcDialects.get("jdbc:db2://host:port/foo")
+    assert(dialect.isSyntaxErrorBestEffort(new SQLException("syntax error", "42601")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("undefined object", "42704")))
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException("insufficient privilege", "42501")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("error without SQLSTATE")))
+  }
+
+  test("SPARK-59369: OracleDialect does not classify missing objects or privileges as syntax") {
+    val dialect = JdbcDialects.get("jdbc:oracle:thin:@//host:1521/freepdb1")
+    assert(dialect.isSyntaxErrorBestEffort(
+      new SQLException("ORA-00933: SQL command not properly ended", "42000")))
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException("ORA-00942: table or view does not exist", "42000", 942)))
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException("ORA-01031: insufficient privileges", "42000", 1031)))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("error without SQLSTATE")))
+  }
+
   test("SPARK-45425: Mapped TINYINT to ShortType for MsSqlServerDialect") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     val metadata = new MetadataBuilder().putLong("scale", 1)

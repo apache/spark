@@ -22,6 +22,8 @@ import java.sql.{Connection, Date, Timestamp}
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.{Properties, TimeZone}
 
+import scala.util.Using
+
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -67,6 +69,22 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
   import testImplicits._
 
   override val db = new OracleDatabaseOnDocker
+
+  override protected def createRestrictedUser(): Option[RestrictedUser] = {
+    val user = "restricted_user"
+    val password = "R3str1ct3d_pw"
+    Using.resource(getConnection()) { conn =>
+      conn.prepareStatement(s"CREATE USER $user IDENTIFIED BY $password").executeUpdate()
+      conn.prepareStatement(s"GRANT CREATE SESSION TO $user").executeUpdate()
+    }
+    Some(RestrictedUser(
+      url = s"jdbc:oracle:thin:@//$dockerIp:$externalPort/freepdb1",
+      // Oracle hides a missing privilege behind ORA-00942, the same error it raises for a table
+      // that does not exist, so the lookup has to name the table the suite created in SYSTEM.
+      table = "SYSTEM.tbl_shared",
+      user = user,
+      password = password))
+  }
 
   private val rsOfTsWithTimezone = Seq(
     Row(BigDecimal.valueOf(1), new Timestamp(944046000000L)),

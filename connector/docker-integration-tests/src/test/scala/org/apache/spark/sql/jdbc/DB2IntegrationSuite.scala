@@ -40,6 +40,11 @@ import org.apache.spark.tags.DockerTest
 class DB2IntegrationSuite extends SharedJDBCIntegrationSuite {
   override val db = new DB2DatabaseOnDocker
 
+  override protected def nonExistentTableSQLState: Option[String] = Some("42704")
+
+  // DB2 users are operating-system users, so a restricted user cannot be created over JDBC.
+  override protected def createRestrictedUser(): Option[RestrictedUser] = None
+
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE TABLE tbl (x INTEGER, y VARCHAR(8))").executeUpdate()
     conn.prepareStatement("INSERT INTO tbl VALUES (42,'fred')").executeUpdate()

@@ -247,8 +247,16 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   // See https://docs.oracle.com/cd/E11882_01/appdev.112/e10827/appd.htm#g642406
+  // Oracle reports every class 42 error with SQLSTATE 42000, the ANSI state for
+  // "syntax error or access rule violation", so the SQLSTATE alone cannot identify a syntax
+  // error. Keep out the ORA errors that are known not to be syntax errors: a missing object
+  // (ORA-00942, ORA-39165), an object that cannot be read as a table (ORA-04044, ORA-04063) and
+  // a missing privilege (ORA-01031). The vendor code is the ORA number.
+  private val nonSyntaxErrorCodes = Set(942, 39165, 4044, 4063, 1031)
+
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    "42000".equals(exception.getSQLState)
+    "42000".equals(exception.getSQLState) &&
+      !nonSyntaxErrorCodes.contains(exception.getErrorCode)
   }
 
   /**

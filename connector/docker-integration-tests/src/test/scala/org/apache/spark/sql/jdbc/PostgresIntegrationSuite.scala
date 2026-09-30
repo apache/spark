@@ -32,7 +32,6 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
-import org.apache.spark.util.Utils
 
 /**
  * To run this test suite for a specific version (e.g., postgres:18.2-alpine):
@@ -45,6 +44,25 @@ import org.apache.spark.util.Utils
 @DockerTest
 class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
   override val db = new PostgresDatabaseOnDocker
+
+  override protected def nonExistentTableSQLState: Option[String] = Some("42P01")
+
+  override protected def createRestrictedUser(): Option[RestrictedUser] = {
+    val user = "restricted_user"
+    val password = "restricted_password"
+    // The container is thrown away when the suite ends, so the user only has to be dropped in
+    // case a previous attempt left it behind.
+    Using.resource(getConnection()) { conn =>
+      conn.prepareStatement(s"DROP USER IF EXISTS $user").executeUpdate()
+      conn.prepareStatement(s"CREATE USER $user PASSWORD '$password'").executeUpdate()
+    }
+    Some(RestrictedUser(
+      url = s"jdbc:postgresql://$dockerIp:$externalPort/postgres",
+      table = "tbl_shared",
+      user = user,
+      password = password,
+      expectedSQLState = Some("42501")))
+  }
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE DATABASE foo").executeUpdate()
@@ -383,47 +401,6 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
          |OPTIONS (url '$jdbcUrl', query '$query')
        """.stripMargin.replaceAll("\n", " "))
     assert(sql("select c1, c3 from queryOption").collect().toSet == expectedResult)
-  }
-
-  test("SPARK-59336: do not classify missing table as a syntax error") {
-    val postgresError = intercept[SQLException] {
-      spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("query", "SELECT * FROM table_that_does_not_exist")
-        .load()
-    }
-    assertResult("42P01")(postgresError.getSQLState)
-  }
-
-  test("SPARK-59336: do not classify insufficient privilege as a syntax error") {
-    val restrictedUser = "restricted_user"
-    val restrictedPassword = "restricted_password"
-    val restrictedJdbcUrl = s"jdbc:postgresql://$dockerIp:$externalPort/postgres"
-
-    Utils.tryWithSafeFinally {
-      Using.resource(getConnection()) { conn =>
-        conn.prepareStatement(s"DROP USER IF EXISTS $restrictedUser").executeUpdate()
-        conn.prepareStatement(s"CREATE USER $restrictedUser PASSWORD '$restrictedPassword'")
-          .executeUpdate()
-      }
-
-      val postgresError = intercept[SQLException] {
-        spark.read.format("jdbc")
-          .option("url", restrictedJdbcUrl)
-          .option("dbtable", "bar")
-          .option("user", restrictedUser)
-          .option("password", restrictedPassword)
-          .load()
-      }
-      assertResult("42501")(postgresError.getSQLState)
-      assert(
-        postgresError.getMessage.contains("permission denied"),
-        s"Unexpected PostgreSQL error message: ${postgresError.getMessage}")
-    } {
-      Using.resource(getConnection()) { conn =>
-        conn.prepareStatement(s"DROP USER IF EXISTS $restrictedUser").executeUpdate()
-      }
-    }
   }
 
   test("write byte as smallint") {
