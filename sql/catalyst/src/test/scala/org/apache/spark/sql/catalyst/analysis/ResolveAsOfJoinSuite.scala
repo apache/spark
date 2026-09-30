@@ -279,6 +279,29 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
     }
   }
 
+  test("materializes a nullable struct of an empty struct with a NULL guard") {
+    // The outer struct has one field, so it is rebuilt and needs the guard. The empty inner
+    // struct has no fields to split, so it is kept whole.
+    val emptyField = StructType(StructField("e", StructType(Nil)) :: Nil)
+    val lempty = AttributeReference("n", emptyField)()
+    val rempty = AttributeReference("n", emptyField)()
+    val resolved = ResolveAsOfJoin.apply(asOf(
+      leftExpr = lempty, rightExpr = rempty,
+      l = LocalRelation(lempty), r = LocalRelation(rempty)))
+      .asInstanceOf[AsOfJoin]
+    val ge = resolved.asOfCondition.asInstanceOf[GreaterThanOrEqual]
+    Seq(ge.left -> lempty, ge.right -> rempty).foreach { case (operand, original) =>
+      operand match {
+        case If(IsNull(`original`), Literal(null, _), outer: CreateNamedStruct) =>
+          assert(outer.valExprs match {
+            case Seq(GetStructField(`original`, 0, _)) => true
+            case _ => false
+          }, s"expected the empty inner struct kept whole, got ${outer.valExprs}")
+        case other => fail(s"expected a NULL-guarded struct operand, got $other")
+      }
+    }
+  }
+
   test("materializes a non-nullable struct operand without a NULL guard") {
     val leftNotNull = lstruct.withNullability(false)
     val rightNotNull = rstruct.withNullability(false)

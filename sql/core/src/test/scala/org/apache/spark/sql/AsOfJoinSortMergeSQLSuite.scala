@@ -435,7 +435,10 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         ("CAST(NULL AS STRUCT<a: INT, b: INT>)",
           "named_struct('a', 1, 'b', 1)", "named_struct('a', 5, 'b', 5)"),
         ("CAST(NULL AS STRUCT<e: STRUCT<a: INT>>)",
-          "named_struct('e', named_struct('a', 1))", "named_struct('e', named_struct('a', 5))"))
+          "named_struct('e', named_struct('a', 1))", "named_struct('e', named_struct('a', 5))"),
+        // Its one field makes it split, unlike a plain STRUCT<>. Non-NULL values are all equal.
+        ("CAST(NULL AS STRUCT<e: STRUCT<>>)",
+          "named_struct('e', named_struct())", "named_struct('e', named_struct())"))
       ansiEnabled <- Seq(true, false)
     } {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
