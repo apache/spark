@@ -595,9 +595,22 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
 
   test("Oracle DATE and TIMESTAMP read as TimestampNTZType by default; " +
       "TimestampType under the legacy flag") {
-    // Default: DATE (D) and TIMESTAMP (T) both arrive as JDBC TIMESTAMP (mapDateToTimestamp=true)
-    // and read as their exact NTZ wall-clock values.
-    assertDatetimeReadsAsNtz()
+    // Read the `datetime` table's DATE column D (1991-11-09, no time zone) and TIMESTAMP column T
+    // (1996-01-01 01:23:45) in the driver's default mode (oracle.jdbc.mapDateToTimestamp=true), so
+    // both arrive under JDBC Types.TIMESTAMP.
+    def readDatetime(): DataFrame =
+      spark.read.format("jdbc")
+        .option("url", jdbcUrl)
+        .option("dbtable", "datetime")
+        .load()
+
+    // Default: both Oracle DATE and TIMESTAMP -> TimestampNTZType.
+    val df = readDatetime()
+    assert(df.schema("D").dataType === TimestampNTZType)
+    assert(df.schema("T").dataType === TimestampNTZType)
+    val row = df.select("D", "T").collect().head
+    assert(row.get(0) === LocalDateTime.of(1991, 11, 9, 0, 0, 0))
+    assert(row.get(1) === LocalDateTime.of(1996, 1, 1, 1, 23, 45))
 
     // Sub-second precision: a TIMESTAMP(6) microsecond value round-trips as NTZ without truncation.
     val fracDf = spark.read.format("jdbc")
@@ -610,10 +623,7 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
 
     // Legacy flag on: both fall back to TimestampType.
     withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
-      val legacyDf = spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("dbtable", "datetime")
-        .load()
+      val legacyDf = readDatetime()
       assert(legacyDf.schema("D").dataType === TimestampType)
       assert(legacyDf.schema("T").dataType === TimestampType)
       val legacyRow = legacyDf.select("D", "T").collect().head
@@ -743,23 +753,25 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
   }
 
   test("TimestampNTZType round-trips through an Oracle write and read") {
-    // In LA (non-UTC, with DST) an NTZ value, incl. sub-seconds, must survive a write and read,
-    // since getObject/setObject(LocalDateTime) bypass the java.sql.Timestamp zone bridge.
-    val values = Seq(
-      LocalDateTime.of(1996, 1, 1, 1, 23, 45, 123456000),
-      // 2024-03-10 02:30 has no LA instant (spring-forward gap), so a Timestamp.valueOf-style
-      // conversion would move it an hour; getObject/setObject keep it exact.
-      LocalDateTime.of(2024, 3, 10, 2, 30, 0))
+    // The zoneless NTZ wall-clock (incl. sub-second) must survive a write+read regardless of the
+    // JVM default zone, since getObject/setObject(LocalDateTime) bypass the java.sql.Timestamp zone
+    // bridge. Each (zone, value) case is written and read back and must equal the original.
+    val cases = Seq(
+      (UTC, LocalDateTime.of(1996, 1, 1, 1, 23, 45, 123456000)),
+      (LA, LocalDateTime.of(1996, 1, 1, 1, 23, 45, 123456000)),
+      // 2024-03-10 02:30 has no instant in America/Los_Angeles (spring-forward DST gap); the
+      // java.sql.Timestamp path would shift it an hour, getObject/setObject keep it exact.
+      (LA, LocalDateTime.of(2024, 3, 10, 2, 30, 0)))
     val schema = StructType(Seq(StructField("T", TimestampNTZType)))
-    withDefaultTimeZone(LA) {
-      values.foreach { ldt =>
+    cases.foreach { case (zone, ldt) =>
+      withDefaultTimeZone(zone) {
         spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(ldt))), schema)
           .write.format("jdbc").mode(SaveMode.Overwrite)
           .option("url", jdbcUrl).option("dbtable", "ntz_write_roundtrip").save()
         val dfRead = spark.read.format("jdbc")
           .option("url", jdbcUrl).option("dbtable", "ntz_write_roundtrip").load()
-        assert(dfRead.schema.fields.head.dataType === TimestampNTZType, s"ldt=$ldt")
-        assert(dfRead.collect().head.get(0) === ldt, s"ldt=$ldt")
+        assert(dfRead.schema.fields.head.dataType === TimestampNTZType, s"zone=$zone ldt=$ldt")
+        assert(dfRead.collect().head.get(0) === ldt, s"zone=$zone ldt=$ldt")
       }
     }
   }
