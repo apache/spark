@@ -143,8 +143,6 @@ case class VariantArrayLength(child: Expression, path: Expression)
 
   override def nullable: Boolean = true
 
-  override def nullIntolerant: Boolean = true
-
   override def prettyName: String = "variant_array_length"
 
   override def eval(input: InternalRow): Any = {

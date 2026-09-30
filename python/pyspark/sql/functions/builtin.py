@@ -23445,7 +23445,7 @@ def variant_array_length(v: "ColumnOrName", path: Optional[Union[Column, str]] =
     >>> df.select(variant_array_length(parse_json(df.json), "$.a").alias("r")).collect()
     [Row(r=3), Row(r=None)]
     >>> df.select(variant_array_length(parse_json(lit("[1, 2]"))).alias("r")).collect()
-    [Row(r=2)]
+    [Row(r=2), Row(r=2)]
     """
     from pyspark.sql.classic.column import _to_java_column
 
