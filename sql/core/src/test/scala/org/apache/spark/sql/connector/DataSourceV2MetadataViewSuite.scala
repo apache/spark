@@ -849,10 +849,14 @@ class TestingDelegatingRelationCatalog extends DelegatingCatalogExtension with R
   }
 
   private def delegatedTableExists(ident: Identifier): Boolean = {
-    try {
-      delegate.asInstanceOf[TableCatalog].tableExists(ident)
-    } catch {
-      case _: NoSuchNamespaceException => false
+    if (ident.namespace().length > 1) {
+      false
+    } else {
+      try {
+        delegate.asInstanceOf[TableCatalog].tableExists(ident)
+      } catch {
+        case _: NoSuchNamespaceException => false
+      }
     }
   }
 
