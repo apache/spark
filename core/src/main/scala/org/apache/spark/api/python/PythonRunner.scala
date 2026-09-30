@@ -863,8 +863,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       val initTime = stream.readLong()
       val finishTime = stream.readLong()
       val processingTimeMs = stream.readLong()
-      val boot = bootTime - startTime
-      val init = initTime - bootTime
+      // A reused Python worker records bootTime before waiting for this task, so it can precede
+      // startTime. Use the later timestamp to exclude the worker's idle time from initialization.
+      val pythonWorkerInitializationStartTime = math.max(startTime, bootTime)
+      val boot = pythonWorkerInitializationStartTime - startTime
+      val init = initTime - pythonWorkerInitializationStartTime
       val finish = finishTime - initTime
       val total = finishTime - startTime
 
