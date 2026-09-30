@@ -153,7 +153,7 @@ private[externalUDF] object ExternalUDFMetrics {
 
   def update(target: Map[String, SQLMetric], reported: ExecutionMetrics): Unit = {
     def updateIfPresent(name: String, present: Boolean, value: => Long): Unit = {
-      if (present && value >= 0L) {
+      if (present) {
         target(name) += value
       }
     }

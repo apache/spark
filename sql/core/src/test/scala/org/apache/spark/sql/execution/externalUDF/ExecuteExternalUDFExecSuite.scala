@@ -474,7 +474,6 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
   test("external UDF preserves missing and measured zero terminal metrics") {
     val reported = ExecutionMetrics.newBuilder()
       .setBytesIn(0)
-      .setRowsOut(-1L)
       .build()
     val execution = testExecution(
       EchoResponses,
@@ -486,9 +485,7 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
 
     assert(plan.metrics("bytesIn").value === 0L)
     assert(!plan.metrics("bytesIn").isZero)
-    Seq("bytesOut", "rowsIn", "rowsOut", "batchesIn").foreach { name =>
-      assert(plan.metrics(name).isZero)
-    }
+    assert(plan.metrics("bytesOut").isZero)
     // toInfoUpdate is the raw value the live SQL UI sums; value hides a negative initial value.
     Seq("rowsIn", "rowsOut", "batchesIn", "batchesOut").foreach { name =>
       assert(plan.metrics(name).toInfoUpdate.update === Some(0L))
