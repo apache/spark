@@ -23,13 +23,17 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
 
+import com.fasterxml.jackson.core.{JsonParseException, JsonProcessingException}
+import com.fasterxml.jackson.databind.exc.MismatchedInputException
 import org.apache.hadoop.fs.Path
+import org.apache.logging.log4j.Level
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogFileReader
 import org.apache.spark.deploy.history.EventLogTestHelper._
+import org.apache.spark.internal.config.History
 import org.apache.spark.io.{CompressionCodec, LZ4CompressionCodec}
 import org.apache.spark.util.{JsonProtocol, JsonProtocolSuite, Utils}
 
@@ -107,6 +111,221 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     assert(eventMonster.loggedEvents.size === 2)
     assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJsonString(applicationStart))
     assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJsonString(applicationEnd))
+  }
+
+  test("SPARK-59804: Replay line limit uses UTF-8 bytes") {
+    val start = SparkListenerApplicationStart("x" * 6000, None, 125L, "user", None)
+    val json = JsonProtocol.sparkEventToJsonString(start)
+    assert(json.getBytes(StandardCharsets.UTF_8).length < 8 * 1024)
+    val listener = new EventBufferingListener
+    val conf = new SparkConf(false).set(History.EVENT_LOG_MAX_LINE_LENGTH.key, "8k")
+    val bus = new ReplayListenerBus(ReplayListenerBus.maxLineLength(conf))
+    bus.addListener(listener)
+    val input = new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8))
+    assert(bus.replay(input, "ascii"))
+    assert(listener.loggedEvents.toSeq == Seq(json))
+  }
+
+  test("SPARK-59804: Replay line limit handles raw UTF-8 boundaries and line endings") {
+    // scalastyle:off nonascii
+    val suffixes = Seq("x", "\u00e9", "\u4e2d", "\ud83d\ude00")
+    // scalastyle:on nonascii
+    for {
+      suffix <- suffixes
+      padding <- Seq(8, 8190, 8191, 8192)
+      ending <- Seq("\n", "\r\n", "")
+      delta <- -3 to 2
+    } {
+      // Put the limit inside the final code point, and split UTF-8 sequences across read buffers.
+      val line = "x" * padding + suffix
+      val bytes = line.getBytes(StandardCharsets.UTF_8)
+      val limit = bytes.length + delta
+      val seen = new ArrayBuffer[String]
+      val bus = new ReplayListenerBus(limit)
+      val input = new ByteArrayInputStream((line + ending).getBytes(StandardCharsets.UTF_8))
+      withClue(s"codePoint=${suffix.codePointAt(0)} padding=$padding " +
+          s"ending=${ending.map(_.toInt).mkString(",")} delta=$delta: ") {
+        // Observe raw lines before JSON parsing, without letting Jackson escape the test input.
+        assert(bus.replay(input, "utf8", eventsFilter = line => {
+          seen += line
+          false
+        }))
+        assert(seen.toSeq == (if (delta >= 0) Seq(line) else Seq.empty))
+      }
+    }
+  }
+
+  test("SPARK-59804: Replay line buffer stops retaining oversized content") {
+    for (limit <- Seq(0, 1, 8, 1024)) {
+      val buffer = new ReplayListenerBus.BoundedLineBuffer(limit)
+      for (_ <- 0 until 10000) {
+        buffer.append('x')
+        assert(buffer.length <= limit + 1)
+      }
+      assert(buffer.length == 0)
+      assert(buffer.capacity == 0)
+      assert(buffer.result().isEmpty)
+    }
+  }
+
+  test("SPARK-59804: Replay retains a public no-argument constructor") {
+    val bus = classOf[ReplayListenerBus].getConstructor().newInstance()
+    assert(bus.effectiveMaxLineLength == ReplayListenerBus.DEFAULT_MAX_LINE_LENGTH)
+  }
+
+  test("SPARK-59804: Replay reports the physical location of skipped lines") {
+    val end = JsonProtocol.sparkEventToJsonString(SparkListenerApplicationEnd(1000L))
+    val input = new ByteArrayInputStream(
+      Seq(end, "x" * 2048, end, "x" * 2048).mkString("\n")
+        .getBytes(StandardCharsets.UTF_8))
+    val appender = new LogAppender
+    appender.setThreshold(Level.DEBUG)
+    withLogAppender(appender, level = Some(Level.DEBUG)) {
+      assert(new ReplayListenerBus(1024).replay(input, "skipped-lines"))
+    }
+    val warnings = appender.loggingEvents.filter(_.getLevel == Level.WARN)
+    assert(warnings.size == 1)
+    assert(warnings.head.getMessage.getFormattedMessage.contains("first skipped line: 2"))
+    val debug = appender.loggingEvents.filter(_.getLevel == Level.DEBUG)
+      .map(_.getMessage.getFormattedMessage)
+    assert(debug.contains("Skipped event log line 2 in skipped-lines"))
+    assert(debug.contains("Skipped event log line 4 in skipped-lines"))
+  }
+
+  test("SPARK-59804: Replay bounds malformed line diagnostics") {
+    val line = """{"Event":"SparkListenerJobStart","Job ID":1,"Stage IDs":[],""" +
+      """"Properties":{"bad":1},"padding":"""" + "x" * 10000 + "tail-marker\"}"
+    val appender = new LogAppender
+    withLogAppender(appender) {
+      assert(!new ReplayListenerBus().replay(
+        new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)), "semantic-error"))
+    }
+    val diagnostic = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .find(_.startsWith("Malformed line #1:")).get
+    assert(diagnostic.contains(s"line length: ${line.length} characters"))
+    assert(!diagnostic.contains("tail-marker"))
+    assert(diagnostic.length < 1200)
+  }
+
+  test("SPARK-59804: Replay line limit defaults and maximum supported configuration") {
+    val conf = new SparkConf(false)
+    assert(conf.get(History.EVENT_LOG_MAX_LINE_LENGTH) == 256L * 1024 * 1024)
+    assert(ReplayListenerBus.maxLineLength(conf) == ReplayListenerBus.DEFAULT_MAX_LINE_LENGTH)
+    for (value <- Seq("0", "-1", "512m", "536870913", "576m", "600m", "1g",
+        "2147483647", "3g")) {
+      conf.set(History.EVENT_LOG_MAX_LINE_LENGTH.key, value)
+      assert(ReplayListenerBus.maxLineLength(conf) == ReplayListenerBus.MAX_LINE_LENGTH)
+    }
+  }
+
+  test("SPARK-59804: Replay constructor normalizes the effective line limit") {
+    val maximum = ReplayListenerBus.MAX_LINE_LENGTH
+    for (limit <- Seq(Int.MinValue, -1, 0, maximum, maximum + 1, Int.MaxValue)) {
+      val bus = new ReplayListenerBus(limit)
+      assert(bus.effectiveMaxLineLength == maximum)
+      val listener = new EventBufferingListener
+      bus.addListener(listener)
+      val json = JsonProtocol.sparkEventToJsonString(SparkListenerApplicationEnd(1000L))
+      assert(bus.replay(new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)),
+        "normalized"))
+      assert(listener.loggedEvents.toSeq == Seq(json))
+    }
+    for (limit <- Seq(1, 8192, ReplayListenerBus.DEFAULT_MAX_LINE_LENGTH, maximum - 1)) {
+      assert(new ReplayListenerBus(limit).effectiveMaxLineLength == limit)
+      val conf = new SparkConf(false).set(History.EVENT_LOG_MAX_LINE_LENGTH, limit.toLong)
+      assert(ReplayListenerBus.maxLineLength(conf) == limit)
+    }
+    assert(new ReplayListenerBus().effectiveMaxLineLength ==
+      ReplayListenerBus.DEFAULT_MAX_LINE_LENGTH)
+  }
+
+  test("SPARK-59804: Replay preserves physical line numbers after skipping long lines") {
+    val end = JsonProtocol.sparkEventToJsonString(SparkListenerApplicationEnd(1000L))
+    val appender = new LogAppender
+    val bus = new ReplayListenerBus(1024)
+    val input = new ByteArrayInputStream(
+      (end + "\n" + "x" * 2048 + "\n" + "x" * 2048 + "\n{}\n")
+        .getBytes(StandardCharsets.UTF_8))
+    withLogAppender(appender) {
+      assert(!bus.replay(input, "line-numbers"))
+    }
+    assert(appender.loggingEvents.exists(_.getMessage.getFormattedMessage
+      .contains("Malformed line #4: {}")))
+  }
+
+  test("SPARK-59804: Replay logs physical line numbers before rethrowing JSON errors") {
+    val end = JsonProtocol.sparkEventToJsonString(SparkListenerApplicationEnd(1000L))
+    val mappingError =
+      """{"Event":"org.apache.spark.util.TestListenerEvent","foo":"x","bar":[]}"""
+    for ((malformed, errorClass) <- Seq(
+        ("{bad", classOf[JsonParseException]),
+        (mappingError, classOf[MismatchedInputException]))) {
+      val appender = new LogAppender
+      val bus = new ReplayListenerBus(1024)
+      val input = new ByteArrayInputStream(
+        Seq(end, "x" * 2048, "x" * 2048, malformed, end).mkString("\n")
+          .getBytes(StandardCharsets.UTF_8))
+      withLogAppender(appender) {
+        val error = intercept[JsonProcessingException] {
+          bus.replay(input, "json-errors", maybeTruncated = true)
+        }
+        assert(errorClass.isInstance(error))
+      }
+      val diagnostics = appender.loggingEvents.filter(_.getMessage.getFormattedMessage
+        .contains("Exception parsing Spark event log: json-errors at line 4"))
+      assert(diagnostics.size == 1)
+      assert(diagnostics.head.getThrown == null)
+    }
+  }
+
+  test("SPARK-59804: Replay propagates stream IO errors without reporting a stale parse line") {
+    val error = new IOException("read failure")
+    val end = JsonProtocol.sparkEventToJsonString(SparkListenerApplicationEnd(1000L))
+    val input = new ByteArrayInputStream((end + "\n").getBytes(StandardCharsets.UTF_8)) {
+      override def read(bytes: Array[Byte], offset: Int, length: Int): Int = {
+        if (available() == 0) throw error
+        super.read(bytes, offset, length)
+      }
+    }
+    val bus = new ReplayListenerBus()
+    val listener = new EventBufferingListener
+    bus.addListener(listener)
+    val appender = new LogAppender
+    withLogAppender(appender) {
+      assert(intercept[IOException] {
+        bus.replay(input, "read-error")
+      } eq error)
+    }
+    assert(listener.loggedEvents.toSeq == Seq(end))
+    assert(!appender.loggingEvents.exists(_.getMessage.getFormattedMessage
+      .contains("Exception parsing Spark event log")))
+  }
+
+  test("SPARK-59804: Replay preserves line numbers for truncated logs and filtered iterators") {
+    val end = JsonProtocol.sparkEventToJsonString(SparkListenerApplicationEnd(1000L))
+    val truncated = "{\"Event\":"
+    val appender = new LogAppender
+    val bus = new ReplayListenerBus(1024)
+    val input = new ByteArrayInputStream(
+      ("x" * 2048 + "\n" + end + "\n" + truncated).getBytes(StandardCharsets.UTF_8))
+    withLogAppender(appender) {
+      assert(bus.replay(input, "truncated", maybeTruncated = true,
+        eventsFilter = _ != end))
+      assert(bus.replay(Iterator(end, end, truncated), "iterator", maybeTruncated = true,
+        eventsFilter = _ != end))
+    }
+    val warnings = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("Got JsonParseException"))
+    assert(warnings.size == 2)
+    assert(warnings.forall(_.contains("at line 3,")))
+  }
+
+  test("SPARK-59804: Replay still rejects malformed UTF-8 in skipped lines") {
+    val bytes = Array.fill[Byte](20 * 1024)('x'.toByte) ++ Array(0xff.toByte, '\n'.toByte)
+    val bus = new ReplayListenerBus(1024)
+    intercept[java.nio.charset.MalformedInputException] {
+      bus.replay(new ByteArrayInputStream(bytes), "invalid-utf8")
+    }
   }
 
   /**
