@@ -194,7 +194,7 @@
   },
   "DATA_SOURCE_EXTRANEOUS_FILTERS": {
     "message": [
-      "<type>.pushFilters() returned filters that are not part of the input. Make sure that each returned filter is one of the input filters by reference."
+      "<type>.pushFilters() returned filters that are not part of the input. Make sure that each returned filter is one of the input filters by reference. Input filters: <input>. Extraneous filters: <extraneous>."
     ]
   },
   "DATA_SOURCE_INVALID_RETURN_TYPE": {

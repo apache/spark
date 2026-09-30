@@ -462,7 +462,10 @@ class BasePythonDataSourceTestsMixin:
 
         with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
             self.spark.dataSource.register(TestDataSource)
-            with self.assertRaisesRegex(Exception, "DATA_SOURCE_EXTRANEOUS_FILTERS"):
+            with self.assertRaisesRegex(
+                Exception,
+                "DATA_SOURCE_EXTRANEOUS_FILTERS.*returned filters that are not part of the input",
+            ):
                 self.spark.read.format("test").load().filter("x = 1").show()
 
     def test_filter_pushdown_error(self):
