@@ -15,9 +15,12 @@
 # limitations under the License.
 #
 
+import ast
 import json
+import os
 import unittest
 
+import pyspark
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.errors.error_classes import ERROR_CLASSES_JSON
 from pyspark.errors.utils import ErrorClassesReader
@@ -48,6 +51,63 @@ class ErrorsTest(unittest.TestCase):
             return error_classes_json
 
         json.loads(ERROR_CLASSES_JSON, object_pairs_hook=detect_duplication)
+
+    def test_error_classes_used_in_source_are_valid(self):
+        # Every PySpark exception raised with a literal errorClass must refer to a condition
+        # defined in error-conditions.json, and its literal messageParameters keys must match
+        # the placeholders of the message template. Otherwise building the exception fails and
+        # the intended error message is lost.
+        # Known issues tracked separately. Remove the entry when the linked issue is fixed.
+        known_issues = {
+            # SPARK-57965
+            (
+                os.path.join("pipelines", "spark_connect_graph_element_registry.py"),
+                "UNSUPPORTED_PIPELINES_DATASET_TYPE",
+            ),
+        }
+
+        error_reader = ErrorClassesReader()
+        root = os.path.dirname(pyspark.__file__)
+        failures = []
+        for dirpath, _, filenames in os.walk(root):
+            if "tests" in os.path.relpath(dirpath, root).split(os.sep):
+                continue
+            for filename in filenames:
+                if not filename.endswith(".py"):
+                    continue
+                path = os.path.join(dirpath, filename)
+                relpath = os.path.relpath(path, root)
+                with open(path, encoding="utf-8") as f:
+                    tree = ast.parse(f.read(), filename=path)
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.Call):
+                        continue
+                    func = node.func
+                    name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+                    if not name.startswith("PySpark"):
+                        continue
+                    kwargs = {kw.arg: kw.value for kw in node.keywords}
+                    error_class = kwargs.get("errorClass")
+                    if not (
+                        isinstance(error_class, ast.Constant) and isinstance(error_class.value, str)
+                    ):
+                        continue
+                    if (relpath, error_class.value) in known_issues:
+                        continue
+                    params = kwargs.get("messageParameters", ast.Dict(keys=[], values=[]))
+                    try:
+                        if isinstance(params, ast.Dict) and all(
+                            isinstance(k, ast.Constant) for k in params.keys
+                        ):
+                            keys = [k.value for k in params.keys]
+                            error_reader.get_error_message(error_class.value, {k: "" for k in keys})
+                        else:
+                            # Parameters are not a literal dict, so only check the condition.
+                            error_reader.get_message_template(error_class.value)
+                    except (AssertionError, ValueError) as e:
+                        failures.append(f"{relpath}:{node.lineno}: {e}")
+
+        self.assertEqual(failures, [], "\n".join(failures))
 
     def test_invalid_error_class(self):
         with self.assertRaisesRegex(ValueError, "Cannot find main error class"):
