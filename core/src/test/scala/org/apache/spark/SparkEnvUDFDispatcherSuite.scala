@@ -32,7 +32,7 @@ import org.apache.spark.scheduler.OutputCommitCoordinator
 import org.apache.spark.storage.BlockManager
 import org.apache.spark.udf.worker.{DirectWorker, UDFWorkerSpecification}
 import org.apache.spark.udf.worker.core.{UDFDispatcherFactory, WorkerDispatcher, WorkerLogger}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class SparkEnvUDFDispatcherSuite extends SparkFunSuite {
 
@@ -74,9 +74,19 @@ class SparkEnvUDFDispatcherSuite extends SparkFunSuite {
       .newBuilder()
       .setDirect(DirectWorker.getDefaultInstance)
       .build()
+    val userLoader = new ClassLoader(getClass.getClassLoader) {
+      override def loadClass(name: String, resolve: Boolean): Class[_] = {
+        if (name == SparkEnv.DIRECT_DISPATCHER_FACTORY_CLASS) {
+          throw new IllegalStateException(s"User class loader was asked for $name")
+        }
+        super.loadClass(name, resolve)
+      }
+    }
     val factory = SparkEnv.resolveUDFDispatcherFactory()
-    val e = intercept[SparkException] {
-      factory.createDispatcher(directSpec, WorkerLogger.NoOp)
+    val e = Utils.withContextClassLoader(userLoader) {
+      intercept[SparkException] {
+        factory.createDispatcher(directSpec, WorkerLogger.NoOp)
+      }
     }
     assert(e.getMessage.contains("DIRECT"))
     assert(e.getMessage.contains("spark-udf-worker-grpc"))

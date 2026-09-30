@@ -575,7 +575,7 @@ object SparkEnv extends Logging {
       workerType: String,
       className: String): UDFDispatcherFactory = {
     val cls = try {
-      Utils.classForName[AnyRef](className, initialize = false)
+      classOf[SparkEnv].getClassLoader.loadClass(className)
     } catch {
       case _: ClassNotFoundException =>
         throw dispatcherRuntimeUnavailable(workerType, className)
