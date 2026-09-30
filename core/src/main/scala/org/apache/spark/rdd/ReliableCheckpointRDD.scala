@@ -71,8 +71,10 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
    * Since the original RDD may belong to a prior application, there is no way to know a
    * priori the number of partitions to expect. This method assumes that the original set of
    * checkpoint files are fully preserved in a reliable storage across application lifespans.
-   * When the directory was written by a Spark version that supports SPARK-58883, a
-   * `_num_partitions` file records the expected count and is compared against the files found.
+   * When the directory has a `_num_partitions` file (written on a best-effort basis since
+   * SPARK-58883), the recorded count is compared against the files found. The file is absent
+   * for directories written by older Spark versions and for checkpoints whose best-effort
+   * write failed, so its absence is tolerated rather than treated as proof of either.
    */
   protected override def getPartitions: Array[Partition] = {
     // listStatus can throw exception if path does not exist.
@@ -87,16 +89,17 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
         throw SparkCoreErrors.invalidCheckpointDirectoryError(path, expectedFileName)
       }
     }
-    // If a partition-count metadata file is present and the integrity check is enabled,
-    // verify no trailing files are missing. Directories written by earlier Spark versions
-    // have no such file; a missing file is silently tolerated for backward compatibility.
-    // Set spark.checkpoint.verifyPartitionCount.enabled=false to suppress this check when
-    // recovering a legitimately truncated directory. See SPARK-58883.
+    // If a partition-count metadata file is present and the check is enabled, verify the
+    // recorded count against the files found: fewer means trailing files were lost, more means
+    // files were added that the checkpoint did not write. A missing file (older Spark version
+    // or failed best-effort write) is tolerated. Set
+    // spark.checkpoint.verifyPartitionCount.enabled=false to skip only this comparison when
+    // the directory must be loaded as-is. See SPARK-58883.
     if (context.conf.get(CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED)) {
       ReliableCheckpointRDD.readPartitionCountFromCheckpointDir(context, checkpointPath)
         .foreach { expected =>
           if (inputFiles.length != expected) {
-            throw SparkCoreErrors.checkpointTruncatedDirectoryError(
+            throw SparkCoreErrors.checkpointDirectoryPartitionCountMismatchError(
               cpath, expected, inputFiles.length)
           }
         }
@@ -345,13 +348,17 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       val bufferSize = sc.conf.get(BUFFER_SIZE)
       val fs = countFilePath.getFileSystem(sc.hadoopConfiguration)
       // A cleanup failure must not mask the publication failure being handled, so it is only
-      // logged.
+      // logged, whether reported by a false return value or by an exception.
       def deleteTempFile(): Unit = {
         try {
-          fs.delete(tmpFilePath, false)
+          if (!fs.delete(tmpFilePath, false)) {
+            logWarning(log"Failed to delete ${MDC(TEMP_OUTPUT_PATH, tmpFilePath)}, " +
+              log"it may be left behind in the checkpoint directory")
+          }
         } catch {
           case NonFatal(e) =>
-            logWarning(log"Failed to delete ${MDC(TEMP_OUTPUT_PATH, tmpFilePath)}", e)
+            logWarning(log"Failed to delete ${MDC(TEMP_OUTPUT_PATH, tmpFilePath)}, " +
+              log"it may be left behind in the checkpoint directory", e)
         }
       }
       // Write to a temp path first so readers never see a partial file.
@@ -390,10 +397,11 @@ private[spark] object ReliableCheckpointRDD extends Logging {
 
   /**
    * Read the expected partition count from the checkpoint directory metadata file, if present.
-   * Returns [[None]] when the file is absent (checkpoint written by an older Spark version),
-   * unreadable, or fails validation (unsupported version, checksum mismatch, negative count or
-   * trailing bytes), so callers must tolerate a missing value. Only a payload that passes every
-   * check is authoritative and compared against the files found. See SPARK-58883.
+   * Returns [[None]] when the file is absent (checkpoint written by an older Spark version, or
+   * by a current one whose best-effort write failed), unreadable, or fails validation
+   * (unsupported version, checksum mismatch, negative count or trailing bytes), so callers must
+   * tolerate a missing value. Only a payload that passes every check is authoritative and
+   * compared against the files found. See SPARK-58883.
    */
   private def readPartitionCountFromCheckpointDir(
       sc: SparkContext, checkpointDirPath: String): Option[Int] = {
@@ -435,7 +443,8 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       Some(count)
     } catch {
       case _: FileNotFoundException =>
-        logDebug(s"No partition count file in $checkpointDirPath (older checkpoint)")
+        logDebug(s"No partition count file in $checkpointDirPath (older checkpoint or " +
+          "failed best-effort write), partition count check skipped")
         None
       case NonFatal(e) =>
         logWarning(log"Error reading partition count from ${MDC(PATH, checkpointDirPath)}, " +

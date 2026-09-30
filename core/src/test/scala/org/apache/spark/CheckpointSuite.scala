@@ -800,7 +800,7 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
       val recoveredRDD = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
       checkError(
         exception = intercept[SparkException](recoveredRDD.partitions),
-        condition = "CHECKPOINT_TRUNCATED_DIRECTORY",
+        condition = "CHECKPOINT_DIRECTORY_PARTITION_COUNT_MISMATCH.MISSING_FILES",
         sqlState = Some("58030"),
         parameters = Map(
           "path" -> rdd.getCheckpointFile.get,
@@ -812,6 +812,47 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
       try {
         val suppressedRDD = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
         assert(suppressedRDD.partitions.length === 3)
+      } finally {
+        sc.conf.set(CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED, true)
+      }
+    }
+  }
+
+  test("SPARK-58883: reading a checkpoint directory with extra partition files throws an error") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf().set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+      rdd.collect()
+
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+
+      // Add a contiguous part-00004 that the checkpoint never wrote. The contiguity check
+      // still passes, so only the recorded count can reject it, and the mismatch must be
+      // reported as extra files rather than as truncation. A regression from != to < in the
+      // comparison would leave this directory accepted with 5 partitions.
+      val extraPartFile = new Path(checkpointPath, "part-00004")
+      assert(!fs.exists(extraPartFile), "expected part-00004 not to exist before the copy")
+      writeAllBytes(fs, extraPartFile, readAllBytes(fs, new Path(checkpointPath, "part-00003")))
+
+      val recoveredRDD = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+      checkError(
+        exception = intercept[SparkException](recoveredRDD.partitions),
+        condition = "CHECKPOINT_DIRECTORY_PARTITION_COUNT_MISMATCH.UNEXPECTED_FILES",
+        sqlState = Some("58030"),
+        parameters = Map(
+          "path" -> rdd.getCheckpointFile.get,
+          "expected" -> "4",
+          "found" -> "5"))
+
+      // With the config disabled, all 5 part files load as-is.
+      sc.conf.set(CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED, false)
+      try {
+        val suppressedRDD = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+        assert(suppressedRDD.partitions.length === 5)
       } finally {
         sc.conf.set(CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED, true)
       }
@@ -893,8 +934,9 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
 
       // Valid layout, corrupted count: the 4 count bytes are rewritten to another valid Int (5)
       // while the version and checksum are left intact. Without the checksum this would read
-      // back as an authoritative count of 5 and raise a false CHECKPOINT_TRUNCATED_DIRECTORY
-      // against the 4 files present; the checksum mismatch must send it down the tolerated path.
+      // back as an authoritative count of 5 and raise a false
+      // CHECKPOINT_DIRECTORY_PARTITION_COUNT_MISMATCH against the 4 files present; the checksum
+      // mismatch must send it down the tolerated path.
       assertTolerated("valid layout with corrupted count bytes") {
         val corrupted = originalBytes.clone()
         ByteBuffer.wrap(corrupted).putInt(1, 5)
@@ -922,7 +964,7 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
       checkError(
         exception = intercept[SparkException](
           sc.checkpointFile[Int](rdd.getCheckpointFile.get).partitions),
-        condition = "CHECKPOINT_TRUNCATED_DIRECTORY",
+        condition = "CHECKPOINT_DIRECTORY_PARTITION_COUNT_MISMATCH.MISSING_FILES",
         sqlState = Some("58030"),
         parameters = Map(
           "path" -> rdd.getCheckpointFile.get,
@@ -987,9 +1029,10 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
           assert(rdd.collect().sorted === (1 to 20).toArray)
         }
         assert(rdd.isCheckpointed)
-        assert(logAppender.loggingEvents.exists(
-          _.getMessage.getFormattedMessage.contains("truncation detection will be inactive")),
-          failure)
+        val warnings = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+        assert(warnings.exists(_.contains("truncation detection will be inactive")), failure)
+        // Cleanup succeeded (or was never needed), so no cleanup warning may be added.
+        assert(!warnings.exists(_.contains("Failed to delete")), failure)
 
         // Neither the final file nor the temp file may be left behind.
         val checkpointPath = new Path(rdd.getCheckpointFile.get)
@@ -997,11 +1040,46 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
         assert(!fs.exists(new Path(checkpointPath, "_num_partitions")), failure)
         assert(!fs.exists(new Path(checkpointPath, "._num_partitions-tmp")), failure)
 
-        // The directory reads back as a pre-SPARK-58883 checkpoint: detection inactive.
+        // The directory reads back as a checkpoint without metadata: detection inactive.
         val recovered = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
         assert(recovered.partitions.length === 4)
         assert(recovered.collect().sorted === (1 to 20).toArray)
       }
+    }
+  }
+
+  test("SPARK-58883: a false result from _num_partitions temp file cleanup is reported") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf()
+        .set("spark.hadoop.fs.file.impl", classOf[PartitionCountCleanupFailingFilesystem].getName)
+        .set("spark.hadoop.fs.file.impl.disable.cache", "true")
+        .set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+
+      val logAppender = new LogAppender("_num_partitions cleanup returns false")
+      withLogAppender(logAppender,
+          loggerNames = Seq(classOf[ReliableCheckpointRDD[_]].getName),
+          level = Some(org.apache.logging.log4j.Level.WARN)) {
+        assert(rdd.collect().sorted === (1 to 20).toArray)
+      }
+      assert(rdd.isCheckpointed)
+      // Both the publication failure and the cleanup failure must leave evidence.
+      val warnings = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      assert(warnings.exists(_.contains("truncation detection will be inactive")))
+      assert(warnings.exists(_.contains("Failed to delete")))
+
+      // The temp file is left behind because delete reported false; the final file was never
+      // published. Recovery ignores the temp file and reads back with detection inactive.
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+      assert(!fs.exists(new Path(checkpointPath, "_num_partitions")))
+      assert(fs.exists(new Path(checkpointPath, "._num_partitions-tmp")))
+      val recovered = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+      assert(recovered.partitions.length === 4)
+      assert(recovered.collect().sorted === (1 to 20).toArray)
     }
   }
 }
@@ -1109,5 +1187,17 @@ class PartitionCountRenameThrowingFilesystem extends LocalFileSystem {
       throw new IOException(s"Injected failure renaming $src to $dst")
     }
     super.rename(src, dst)
+  }
+}
+
+/**
+ * A filesystem that fails `_num_partitions` publication after the temp file exists and then
+ * reports the temp file cleanup as failed through a false `delete` result rather than an
+ * exception (SPARK-58883), the way HDFS does when the path could not be removed. The temp file is
+ * intentionally left in place so the test can observe that the false result was not ignored.
+ */
+class PartitionCountCleanupFailingFilesystem extends PartitionCountRenameThrowingFilesystem {
+  override def delete(f: Path, recursive: Boolean): Boolean = {
+    if (f.getName == "._num_partitions-tmp") false else super.delete(f, recursive)
   }
 }

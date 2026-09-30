@@ -202,10 +202,11 @@ private[spark] object SparkCoreErrors {
     )
   }
 
-  def checkpointTruncatedDirectoryError(
+  def checkpointDirectoryPartitionCountMismatchError(
       checkpointDirPath: Path, expected: Int, found: Int): Throwable = {
+    val subClass = if (found < expected) "MISSING_FILES" else "UNEXPECTED_FILES"
     new SparkException(
-      errorClass = "CHECKPOINT_TRUNCATED_DIRECTORY",
+      errorClass = s"CHECKPOINT_DIRECTORY_PARTITION_COUNT_MISMATCH.$subClass",
       messageParameters = Map(
         "path" -> s"$checkpointDirPath",
         "expected" -> s"$expected",

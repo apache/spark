@@ -3170,12 +3170,14 @@ package object config {
   private[spark] val CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED =
     ConfigBuilder("spark.checkpoint.verifyPartitionCount.enabled")
       .internal()
-      .doc("When true, a checkpoint directory written by a Spark version that supports " +
-        "SPARK-58883 records the expected number of partitions in a _num_partitions file, and " +
-        "reading that directory back throws CHECKPOINT_TRUNCATED_DIRECTORY if the on-disk " +
-        "count disagrees with the files found. Set to false to suppress the check when " +
-        "recovering a checkpoint that was legitimately truncated. Has no effect on directories " +
-        "written before SPARK-58883 (no _num_partitions file present).")
+      .doc("Read-time switch for the checkpoint partition-count check (SPARK-58883). Every " +
+        "checkpoint write since SPARK-58883 records the partition count in a _num_partitions " +
+        "file on a best-effort basis, regardless of this setting. When true, reading a " +
+        "directory that has this file throws CHECKPOINT_DIRECTORY_PARTITION_COUNT_MISMATCH if " +
+        "the recorded count disagrees with the part files found. Set to false to skip only " +
+        "that comparison and load the part files present as-is. Has no effect when the file " +
+        "is absent, whether because the directory was written by an older Spark version or " +
+        "because the best-effort write failed.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
