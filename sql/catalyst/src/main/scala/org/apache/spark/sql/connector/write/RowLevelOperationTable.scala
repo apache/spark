@@ -23,7 +23,7 @@ import org.apache.spark.sql.connector.catalog.{Column, SupportsRead, SupportsRow
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
-import org.apache.spark.sql.internal.connector.{SupportsConfigurableSchemaAlignment, SchemaAlignmentConfig}
+import org.apache.spark.sql.internal.connector.{SchemaAlignmentConfig, SupportsConfigurableSchemaAlignment}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
