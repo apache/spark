@@ -500,7 +500,9 @@ message CancelResponse {
 // engine and "out" counts data it returned. Byte counts are data payload
 // bytes and exclude gRPC, HTTP/2, and TLS framing. Timing values are
 // nanoseconds; the wait times [[receive_wall_nanos]] and [[send_wall_nanos]]
-// are not transfer times and MUST NOT be used as rate denominators.
+// are not transfer times and MUST NOT be used as rate denominators. Spark
+// reads each field as a signed 64-bit value and ignores values above
+// 2^63 - 1.
 message ExecutionMetrics {
     // Bytes of [[DataRequest.data]] payload received.
     optional uint64 bytes_in = 1;
@@ -525,8 +527,9 @@ message ExecutionMetrics {
     // Wall time spent handling [[Init]] before sending [[InitResponse]].
     optional uint64 init_wall_nanos = 7;
 
-    // Wall time from sending [[InitResponse]] until the stream's first
-    // terminal event: finish, cancellation, or an execution error.
+    // Wall time from sending [[InitResponse]] until data processing ends,
+    // when the worker has received [[Finish]] and sent all of its output.
+    // Cancellation or an execution error also ends it.
     optional uint64 processing_wall_nanos = 8;
 
     // Wall time spent waiting for the next request from the engine.
@@ -541,6 +544,11 @@ message ExecutionMetrics {
 
     // CPU time consumed executing received data.
     optional uint64 work_cpu_nanos = 12;
+
+    // Wall time from the end of data processing until sending
+    // [[FinishResponse]] or [[CancelResponse]], such as running the finish
+    // callback. Absent if cancellation or an error ended data processing.
+    optional uint64 finish_wall_nanos = 13;
 }
 
 // Worker -> Engine application-level error raised during the

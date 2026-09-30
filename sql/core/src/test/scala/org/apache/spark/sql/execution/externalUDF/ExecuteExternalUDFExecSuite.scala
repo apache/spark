@@ -449,6 +449,7 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
       .setSendWallNanos(10)
       .setWorkWallNanos(11)
       .setWorkCpuNanos(12)
+      .setFinishWallNanos(13)
       .build()
     val execution = testExecution(
       EchoResponses,
@@ -466,7 +467,8 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
     Seq(
       "bytesIn", "bytesOut", "rowsIn", "rowsOut", "batchesIn", "batchesOut",
       "initWallNanos", "processingWallNanos", "receiveWallNanos", "sendWallNanos",
-      "workWallNanos", "workCpuNanos").zipWithIndex.foreach { case (name, index) =>
+      "workWallNanos", "workCpuNanos", "finishWallNanos"
+    ).zipWithIndex.foreach { case (name, index) =>
       assert(plan.metrics(name).value === index + 1L)
     }
   }

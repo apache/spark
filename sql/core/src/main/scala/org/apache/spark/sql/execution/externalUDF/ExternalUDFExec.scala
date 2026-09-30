@@ -141,7 +141,8 @@ private[externalUDF] object ExternalUDFMetrics {
     "receiveWallNanos" -> "time the external UDF worker waited for requests",
     "sendWallNanos" -> "time the external UDF worker was blocked sending responses",
     "workWallNanos" -> "external UDF worker execution time",
-    "workCpuNanos" -> "external UDF worker CPU time")
+    "workCpuNanos" -> "external UDF worker CPU time",
+    "finishWallNanos" -> "external UDF worker finish time")
 
   def create(sc: SparkContext): Map[String, SQLMetric] = {
     sizeMetrics.map { case (name, description) =>
@@ -173,5 +174,6 @@ private[externalUDF] object ExternalUDFMetrics {
     updateIfPresent("sendWallNanos", reported.hasSendWallNanos, reported.getSendWallNanos)
     updateIfPresent("workWallNanos", reported.hasWorkWallNanos, reported.getWorkWallNanos)
     updateIfPresent("workCpuNanos", reported.hasWorkCpuNanos, reported.getWorkCpuNanos)
+    updateIfPresent("finishWallNanos", reported.hasFinishWallNanos, reported.getFinishWallNanos)
   }
 }
