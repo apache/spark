@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, Projec
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.{sideBySide, CharVarcharScanMode, CharVarcharUtils}
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util, Table, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
@@ -47,6 +47,7 @@ import org.apache.spark.sql.execution.datasources.{
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, ChangelogTable, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -622,11 +623,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
             rebuildSession,
             refreshedPlan,
             refreshPhaseEnabled = false)
-          // Direct CHAR/VARCHAR caches keep captured types and padding as the key.
-          // qe.normalized re-runs analysis and can drop that Project under the caller session.
-          // Non-CHAR direct caches use qe.normalized so SPARK-54424 can adopt a new schema.
+          // Unchanged CHAR/VARCHAR keys keep captured types and padding. qe.normalized
+          // re-runs analysis and can miss spark.table(). Schema evolution uses qe.normalized
+          // so SPARK-54424 can adopt added or removed columns.
           val newKey =
-            if (isDirectCharVarcharCache(cd.plan)) {
+            if (isDirectCharVarcharCache(cd.plan) &&
+                cd.plan.output.map(_.name) == refreshedPlan.output.map(_.name)) {
               QueryExecution.normalize(rebuildSession, refreshedPlan)
             } else {
               qe.normalized
@@ -767,10 +769,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
               if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] &&
                 ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, r) =>
             refreshV2RelationTable(r, catalog, ident).map { refreshed =>
-              if (isCharVarcharRelation(r)) {
-                // Keep the captured padding Project; re-analysis would rebuild it from session conf.
+              if (r.output.map(_.name) == refreshed.output.map(_.name)) {
                 project.copy(child = refreshed)
               } else {
+                // Schema changed; drop the stale padding Project and let analysis rebuild it.
                 refreshed
               }
             }
@@ -787,8 +789,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   // Load from the catalog, not the shared relation cache, so a recache after write sees
   // the committed rows instead of the copy pinned when the cache was created.
-  // CHAR/VARCHAR scans keep captured output types: create() rewrites them to annotated STRING.
-  // Other direct caches rebuild output from the fresh table (SPARK-54424).
+  // Rebuild output from the fresh table (SPARK-54424). create() rewrites CHAR/VARCHAR to
+  // annotated STRING; restore first-class types from the catalog schema so re-analysis
+  // matches a fresh spark.table() cache key.
   private def refreshV2RelationTable(
       relation: DataSourceV2Relation,
       catalog: TableCatalog,
@@ -796,13 +799,44 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     val table = CatalogV2Util.getTable(catalog, ident, options = relation.options)
     if (relation.table.id != table.id) {
       None
-    } else if (isCharVarcharRelation(relation)) {
-      Some(relation.copy(table = table))
     } else {
-      Some(
-        DataSourceV2Relation
-          .create(table, Some(catalog), Some(ident), relation.options)
-          .copy(charVarcharScanMode = relation.charVarcharScanMode))
+      val rebuilt = DataSourceV2Relation
+        .create(table, Some(catalog), Some(ident), relation.options)
+        .copy(charVarcharScanMode = relation.charVarcharScanMode)
+      val restored = restoreFirstClassCharVarcharTypes(rebuilt, table, relation)
+      // Same column names: keep captured attributes so CHAR/VARCHAR cache keys still match.
+      // Different names: use the rebuilt output so SPARK-54424 can add or drop columns.
+      if (relation.output.map(_.name) == restored.output.map(_.name)) {
+        Some(relation.copy(table = table))
+      } else {
+        Some(restored)
+      }
+    }
+  }
+
+  private def restoreFirstClassCharVarcharTypes(
+      rebuilt: DataSourceV2Relation,
+      table: Table,
+      original: DataSourceV2Relation): DataSourceV2Relation = {
+    val keepFirstClass =
+      original.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))
+    if (!keepFirstClass) {
+      rebuilt
+    } else {
+      val catalogTypes = CatalogV2Util.v2ColumnsToStructType(table.columns).fields
+        .map(f => f.name -> f.dataType).toMap
+      val newOutput = rebuilt.output.map { attr =>
+        catalogTypes.get(attr.name) match {
+          case Some(dt) if CharVarcharUtils.hasCharVarchar(dt) =>
+            val metadata = new MetadataBuilder().withMetadata(attr.metadata)
+              .remove(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)
+              .build()
+            attr.withDataType(dt).withMetadata(metadata)
+          case _ =>
+            attr
+        }
+      }
+      rebuilt.copy(output = newOutput)
     }
   }
 

@@ -4187,6 +4187,54 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("SPARK-54424: refresh CHAR/VARCHAR table cache on column added") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      withTable(t) {
+        sql(s"CREATE TABLE $t (id INT, data VARCHAR(4)) USING foo")
+        sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+        spark.table(t).cache()
+        assertCached(spark.table(t))
+        checkAnswer(spark.table(t), Seq(Row(1, "a"), Row(2, "b")))
+
+        val change = TableChange.addColumn(Array("category"), StringType, true)
+        catalog("testcat").alterTable(ident, change)
+        spark.sql(s"REFRESH TABLE $t")
+
+        assert(spark.sharedState.cacheManager.numCachedEntries == 1)
+        assertCached(spark.table(t))
+        checkAnswer(spark.table(t), Seq(Row(1, "a", null), Row(2, "b", null)))
+      }
+    }
+  }
+
+  test("SPARK-54424: refresh CHAR/VARCHAR table cache on column removed") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      withTable(t) {
+        sql(s"CREATE TABLE $t (id INT, data VARCHAR(4), category STRING) USING foo")
+        sql(s"INSERT INTO $t VALUES (1, 'a', 'A'), (2, 'b', 'B')")
+        spark.table(t).cache()
+        assertCached(spark.table(t))
+        checkAnswer(spark.table(t), Seq(Row(1, "a", "A"), Row(2, "b", "B")))
+
+        val change = TableChange.deleteColumn(Array("category"), false)
+        catalog("testcat").alterTable(ident, change)
+        spark.sql(s"REFRESH TABLE $t")
+
+        assert(spark.sharedState.cacheManager.numCachedEntries == 1)
+        assertCached(spark.table(t))
+        checkAnswer(spark.table(t), Seq(Row(1, "a"), Row(2, "b")))
+      }
+    }
+  }
+
   test("SPARK-54424: successfully refresh cache with compatible schema changes") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
