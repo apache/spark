@@ -1410,6 +1410,9 @@ class KeyGroupedPartitioningSuite
       // report the same partition key list, [0, 1] of LongType, while the rows behind a key differ:
       // the identity side's key 0 holds id 0, the transform side's holds id 1. The identity side's
       // raw keys have to be reduced onto `flip_low_bit` before the partitions can be paired up.
+      // Read as they stand, an inner join drops the mispaired rows (0 of 2) and a left outer join
+      // null-extends them; the reduce fixes both. Every left row here has a match, so the two join
+      // types expect the same rows.
       val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
       createTable("t1", cols, Array(identity("id")))
       sql("INSERT INTO testcat.ns.t1 VALUES (0, 'a'), (1, 'b')")
@@ -1417,58 +1420,29 @@ class KeyGroupedPartitioningSuite
       createTable("t2", cols, Array(Expressions.apply("flip_low_bit", Expressions.column("id"))))
       sql("INSERT INTO testcat.ns.t2 VALUES (0, 'x'), (1, 'y')")
 
-      val df = sql(
-        "SELECT t1.id, t1.data, t2.data FROM testcat.ns.t1 JOIN testcat.ns.t2 ON t1.id = t2.id")
+      val expected = Seq(Row(0L, "a", "x"), Row(1L, "b", "y"))
+      Seq("JOIN", "LEFT OUTER JOIN").foreach { joinType =>
+        val df = sql(
+          s"SELECT t1.id, t1.data, t2.data FROM testcat.ns.t1 $joinType testcat.ns.t2 " +
+            "ON t1.id = t2.id")
 
-      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-        checkAnswer(df, Seq(Row(0L, "a", "x"), Row(1L, "b", "y")))
-        val plan = stripAQEPlan(df.queryExecution.executedPlan)
-        assert(collectShuffles(plan).isEmpty, "storage-partitioned join should not shuffle")
-        val groupPartitions = collectGroupPartitions(plan)
-        assert(groupPartitions.size == 2,
-          "both sides should be regrouped onto the merged partition keys")
-        assert(groupPartitions.count(_.reducers.exists(_.exists(_.isDefined))) == 1,
-          "and exactly one side should reduce, the identity one onto `flip_low_bit`")
-        // The join subtree, not the whole plan: `ValidateRequirements` walks children and a query
-        // stage is a leaf, so validating an AQE plan checks nothing.
-        val joins = collect(plan) { case smj: SortMergeJoinExec => smj }
-        assert(joins.size == 1, s"test setup: one join to validate:\n$plan")
-        assert(ValidateRequirements.validate(joins.head), "the plan that leaves must hold up")
-      }
-    }
-  }
-
-  test("SPARK-59688: a left outer join over an identity side and a compatible transform " +
-    "returns real rows, not spurious nulls") {
-    withFunction(FlipLowBitFunction) {
-      // Same coinciding-keys shape as the inner-join case above, but a LEFT OUTER join, where the
-      // wrong result shows differently. Every left row here has a match, so both join types should
-      // return the data. Reading the mispaired partitions as they stand makes an inner join drop
-      // the rows and return 0 of 2; an outer join instead keeps the left rows and null-extends
-      // them, returning wrong DATA -- (0, 'a', null) -- that reads like a legitimate no-match
-      // rather than an obviously missing row. The reduce onto `flip_low_bit` fixes both.
-      val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
-      createTable("t1", cols, Array(identity("id")))
-      sql("INSERT INTO testcat.ns.t1 VALUES (0, 'a'), (1, 'b')")
-
-      createTable("t2", cols, Array(Expressions.apply("flip_low_bit", Expressions.column("id"))))
-      sql("INSERT INTO testcat.ns.t2 VALUES (0, 'x'), (1, 'y')")
-
-      val df = sql("SELECT t1.id, t1.data, t2.data " +
-        "FROM testcat.ns.t1 LEFT OUTER JOIN testcat.ns.t2 ON t1.id = t2.id")
-
-      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-        checkAnswer(df, Seq(Row(0L, "a", "x"), Row(1L, "b", "y")))
-        val plan = stripAQEPlan(df.queryExecution.executedPlan)
-        assert(collectShuffles(plan).isEmpty, "storage-partitioned join should not shuffle")
-        val groupPartitions = collectGroupPartitions(plan)
-        assert(groupPartitions.size == 2,
-          "both sides should be regrouped onto the merged partition keys")
-        assert(groupPartitions.count(_.reducers.exists(_.exists(_.isDefined))) == 1,
-          "and exactly one side should reduce, the identity one onto `flip_low_bit`")
-        val joins = collect(plan) { case smj: SortMergeJoinExec => smj }
-        assert(joins.size == 1, s"test setup: one join to validate:\n$plan")
-        assert(ValidateRequirements.validate(joins.head), "the plan that leaves must hold up")
+        withSQLConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+          checkAnswer(df, expected)
+          val plan = stripAQEPlan(df.queryExecution.executedPlan)
+          assert(collectShuffles(plan).isEmpty,
+            s"$joinType: storage-partitioned join should not shuffle")
+          val groupPartitions = collectGroupPartitions(plan)
+          assert(groupPartitions.size == 2,
+            s"$joinType: both sides should be regrouped onto the merged partition keys")
+          assert(groupPartitions.count(_.reducers.exists(_.exists(_.isDefined))) == 1,
+            s"$joinType: exactly one side should reduce, the identity one onto `flip_low_bit`")
+          // The join subtree, not the whole plan: `ValidateRequirements` walks children and a
+          // query stage is a leaf, so validating an AQE plan checks nothing.
+          val joins = collect(plan) { case smj: SortMergeJoinExec => smj }
+          assert(joins.size == 1, s"$joinType: test setup: one join to validate:\n$plan")
+          assert(ValidateRequirements.validate(joins.head),
+            s"$joinType: the plan that leaves must hold up")
+        }
       }
     }
   }
