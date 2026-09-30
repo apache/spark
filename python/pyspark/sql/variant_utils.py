@@ -421,7 +421,9 @@ class VariantUtils:
                 return cls._float_to_json(value, is_float32)
             if isinstance(value, decimal.Decimal):
                 return cls._decimal_to_json(value)
-            if isinstance(value, (datetime.date, datetime.datetime)):
+            if isinstance(value, datetime.datetime):
+                return '"' + cls._timestamp_to_json(value) + '"'
+            if isinstance(value, datetime.date):
                 return '"' + str(value) + '"'
             return str(value)
 
@@ -469,6 +471,26 @@ class VariantUtils:
         """
         context = decimal.Context(prec=VariantUtils.MAX_DECIMAL16_PRECISION)
         return format(d.normalize(context), "f")
+
+    @classmethod
+    def _timestamp_to_json(cls, ts: datetime.datetime) -> str:
+        """
+        Formats a timestamp as "yyyy-MM-dd HH:mm:ss[.fraction][+HH:MM]", where the fraction has
+        no trailing zeros and the offset is present only for timezone-aware timestamps.
+        """
+        s = ts.replace(microsecond=0, tzinfo=None).isoformat(sep=" ")
+        if ts.microsecond:
+            s += ("." + "%06d" % ts.microsecond).rstrip("0")
+        offset = ts.utcoffset()
+        if offset is not None:
+            total_seconds = int(offset.total_seconds())
+            abs_seconds = abs(total_seconds)
+            s += "%s%02d:%02d" % (
+                "-" if total_seconds < 0 else "+",
+                abs_seconds // 3600,
+                abs_seconds // 60 % 60,
+            )
+        return s
 
     @classmethod
     def _to_python(cls, value: bytes, metadata: bytes, pos: int) -> Any:

@@ -3037,16 +3037,16 @@ class TypesTestsMixin:
         self.assertEqual(str(variants[6]), "5.5")
         self.assertEqual(str(variants[7]), "-5.5")
         self.assertEqual(str(variants[8]), '"Mk+mng=="')
-        self.assertEqual(str(variants[9]), '"1940-01-01 12:33:01.123000"')
+        self.assertEqual(str(variants[9]), '"1940-01-01 12:33:01.123"')
         self.assertEqual(str(variants[10]), '"2522-12-31 05:57:13"')
         self.assertEqual(str(variants[11]), '"0001-07-15 17:43:26"')
-        self.assertEqual(str(variants[12]), '"1940-01-01 05:05:13.123000+00:00"')
+        self.assertEqual(str(variants[12]), '"1940-01-01 05:05:13.123+00:00"')
         self.assertEqual(str(variants[13]), '"2522-12-31 05:23:00+00:00"')
         self.assertEqual(str(variants[14]), '"0001-12-30 17:01:01+00:00"')
 
         # Check to_json on timestamps with custom timezones
         self.assertEqual(
-            variants[12].toJson("America/Los_Angeles"), '"1939-12-31 21:05:13.123000-08:00"'
+            variants[12].toJson("America/Los_Angeles"), '"1939-12-31 21:05:13.123-08:00"'
         )
 
         # check toPython
@@ -3879,6 +3879,9 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         def decimal4(unscaled, scale):
             return variant(8, bytes([scale]) + struct.pack("<i", unscaled))
 
+        def timestamp(micros, ntz):
+            return variant(13 if ntz else 12, struct.pack("<q", micros))
+
         # The expected values are what the JVM `to_json` returns for the same variants.
         for v, expected in [
             (double(float("nan")), '"NaN"'),
@@ -3899,11 +3902,17 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
             (decimal4(100, 2), "1"),
             (decimal4(0, 2), "0"),
             (decimal4(-1, 9), "-0.000000001"),
+            (timestamp(1_500_000, ntz=True), '"1970-01-01 00:00:01.5"'),
+            (timestamp(1, ntz=False), '"1970-01-01 00:00:00.000001+00:00"'),
         ]:
             with self.subTest(expected=expected):
                 self.assertEqual(v.toJson(), expected)
                 # The output must always be valid JSON.
                 json.loads(v.toJson())
+
+        self.assertEqual(
+            timestamp(0, ntz=False).toJson("Asia/Kolkata"), '"1970-01-01 05:30:00+05:30"'
+        )
 
     def test_invalid_create_row(self):
         row_class = Row("c1", "c2")
