@@ -439,4 +439,72 @@ class PlanMergingSuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-56677: Merge scalar subqueries with filters on both Join children") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true",
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning") {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT sum(l.a)
+            |   FROM testData2 l JOIN testData2 r ON l.a = r.a),
+            |  (SELECT max(l.a)
+            |   FROM testData2 l JOIN testData2 r ON l.a = r.a
+            |   WHERE l.b > 1 AND r.b > 1)
+          """.stripMargin)
+
+        checkAnswer(df, Row(24, 3) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 1,
+          "Missing or unexpected ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("SPARK-56677: Repeatedly merge filters from both Join children") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true",
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning") {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT sum(l.a)
+            |   FROM testData2 l JOIN testData2 r ON l.a = r.a),
+            |  (SELECT max(l.a)
+            |   FROM testData2 l JOIN testData2 r ON l.a = r.a
+            |   WHERE l.b > 1 AND r.b > 1),
+            |  (SELECT count(*)
+            |   FROM testData2 l JOIN testData2 r ON l.a = r.a
+            |   WHERE l.b = 1 AND r.b = 1)
+          """.stripMargin)
+
+        checkAnswer(df, Row(24, 3, 3) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected ReusedSubqueryExec in the plan")
+      }
+    }
+  }
 }
