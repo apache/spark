@@ -1087,7 +1087,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
     val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
     assert(pushedPlan.exists {
-      case Filter(condition, _) => condition.exists(_.semanticEquals(expected))
+      case scan: DataSourceV2ScanRelation => scan.inferredFilters.exists(_.semanticEquals(expected))
       case _ => false
     }, s"expected rebound nested inferred filter in:\n$pushedPlan")
   }
@@ -1110,7 +1110,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
     val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
     assert(pushedPlan.exists {
-      case Filter(condition, _) => condition.exists(_.semanticEquals(expected))
+      case scan: DataSourceV2ScanRelation => scan.inferredFilters.exists(_.semanticEquals(expected))
       case _ => false
     }, s"expected rebound quoted inferred filter in:\n$pushedPlan")
   }
@@ -1259,7 +1259,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
-  test("Boolean simplification preserves executable inferred filters") {
+  test("Boolean simplification keeps inferred filters out of executable predicates") {
     val schema = StructType(Seq(
       StructField("a", BooleanType, nullable = false),
       StructField("b", BooleanType, nullable = false),
@@ -1279,22 +1279,32 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     val optimized = BooleanSimplification(CombineFilters(
       V2ScanRelationPushDown(Filter(residual, relation))))
     val logicalFilters = optimized.collect { case filter: Filter => filter.condition }
-    assert(logicalFilters.exists(_.references.exists(_.name == "b")),
-      s"the inferred filter must remain executable after Boolean simplification:\n$optimized")
+    assert(!logicalFilters.exists(_.references.exists(_.name == "b")),
+      s"Boolean simplification must not add inferred predicates to a Filter:\n$optimized")
     val scan = optimized.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
     assert(scan.inferredFilters.exists(_.references.exists(_.name == "b")))
     val physicalPlans = new DataSourceV2Strategy(spark).apply(optimized)
-    assert(physicalPlans.exists(_.exists {
+    assert(!physicalPlans.exists(_.exists {
       case filter: org.apache.spark.sql.execution.FilterExec =>
         filter.condition.references.exists(_.name == "b")
       case _ => false
-    }), s"the simplified inferred filter must remain in FilterExec:\n" +
+    }), s"the inferred filter must not reach FilterExec:\n" +
       physicalPlans.mkString("\n"))
   }
 
-  test("inferred filters are evaluated for V1 scans") {
-    checkInferredEvaluatedForScan { tableSchema =>
-      new V1Scan with SupportsSparkFilterEstimation {
+  test("inferred filters remain executable unless the scan opts in") {
+    checkInferredFiltersForScan(evaluate = true) { tableSchema =>
+      new Scan with SupportsSparkFilterEstimation {
+        override def readSchema(): StructType = tableSchema
+
+        override def toBatch: Batch = emptyBatch
+      }
+    }
+  }
+
+  test("inferred filters remain metadata for opted-in V1 scan adapters") {
+    checkInferredFiltersForScan(evaluate = false) { tableSchema =>
+      new V1Scan with SupportsInferredFilterEstimation {
         override def readSchema(): StructType = tableSchema
 
         override def toV1TableScan[T <: BaseRelation with TableScan](
@@ -1311,9 +1321,9 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
-  test("inferred filters are evaluated for local scans") {
-    checkInferredEvaluatedForScan { tableSchema =>
-      new LocalScan with SupportsSparkFilterEstimation {
+  test("inferred filters remain metadata for opted-in local scans") {
+    checkInferredFiltersForScan(evaluate = false) { tableSchema =>
+      new LocalScan with SupportsInferredFilterEstimation {
         override def readSchema(): StructType = tableSchema
 
         override def rows(): Array[InternalRow] = Array.empty
@@ -1461,18 +1471,17 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     (table, relation)
   }
 
-  private def assertInferredFilter(plan: LogicalPlan): Unit = {
+  private def assertInferredFilter(plan: LogicalPlan, evaluate: Boolean = false): Unit = {
     val scan = plan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
     assert(scan.inferredFilters.nonEmpty)
-    assert(plan.exists {
-      case filter: Filter =>
-        scan.inferredFilters.forall(inferred => filter.condition.exists(_.semanticEquals(inferred)))
-      case _ => false
-    }, s"expected inferred filter above the scan:\n$plan")
-    assertInferredEvaluated(plan)
+    val filters = plan.collect { case filter: Filter => filter.condition }
+    assert(scan.inferredFilters.forall { inferred =>
+      filters.exists(_.exists(_.semanticEquals(inferred))) == evaluate
+    }, s"expected inferred filter evaluation = $evaluate:\n$plan")
+    assertInferredEvaluation(plan, evaluate)
   }
 
-  private def assertInferredEvaluated(plan: LogicalPlan): Unit = {
+  private def assertInferredEvaluation(plan: LogicalPlan, evaluate: Boolean): Unit = {
     val scan = plan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
     val physicalPlans = new DataSourceV2Strategy(spark).apply(plan)
     assert(physicalPlans.nonEmpty, s"expected DataSourceV2Strategy to plan:\n$plan")
@@ -1480,11 +1489,12 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       case filter: org.apache.spark.sql.execution.FilterExec => filter.condition
     })
     assert(scan.inferredFilters.forall { inferred =>
-      physicalFilters.exists(_.exists(_.semanticEquals(inferred)))
-    }, s"inferred filters must remain in FilterExec:\n${physicalPlans.mkString("\n")}")
+      physicalFilters.exists(_.exists(_.semanticEquals(inferred))) == evaluate
+    }, s"expected inferred FilterExec evaluation = $evaluate:\n" + physicalPlans.mkString("\n"))
   }
 
-  private def checkInferredEvaluatedForScan(scanFactory: StructType => Scan): Unit = {
+  private def checkInferredFiltersForScan(evaluate: Boolean)(
+      scanFactory: StructType => Scan): Unit = {
     val schema = StructType(Seq(
       StructField("id", LongType, nullable = false),
       StructField("value", LongType, nullable = false)))
@@ -1498,7 +1508,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     val id = relation.output.find(_.name == "id").get
     val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
 
-    assertInferredFilter(pushedPlan)
+    assertInferredFilter(pushedPlan, evaluate)
   }
 
   private def emptyBatch: Batch = new Batch {
@@ -1517,6 +1527,10 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
 
     override def reflectsFullyPushedDownFilters(): Boolean = false
+  }
+
+  private trait SupportsInferredFilterEstimation extends SupportsSparkFilterEstimation {
+    override def useInferredFilterEstimation(): Boolean = true
   }
 
   private class InMemoryCatalystFilterTable(
@@ -1546,7 +1560,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     private var requiredSchema = tableSchema
 
     override def build(): Scan = scanFactory.map(_(requiredSchema)).getOrElse {
-      new Scan with SupportsSparkFilterEstimation {
+      new Scan with SupportsInferredFilterEstimation {
         override def readSchema(): StructType = requiredSchema
 
         override def toBatch: Batch = emptyBatch
@@ -1601,7 +1615,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     var joinPushed: Boolean = false
     private var scanSchema: StructType = tableSchema
 
-    override def build(): Scan = new Scan with SupportsSparkFilterEstimation {
+    override def build(): Scan = new Scan with SupportsInferredFilterEstimation {
       override def readSchema(): StructType = scanSchema
 
       override def toBatch: Batch = emptyBatch

@@ -19,13 +19,13 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Collections, Optional, OptionalLong}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, SortOrder, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, ExpressionSet, Literal, ProjectionOverSchema, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{EstimationUtils, FilterEstimation}
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, DATA_SOURCE_V2_SCAN_RELATION, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.{fromAttributes, toAttributes}
@@ -172,10 +172,11 @@ case class DataSourceV2Relation(
  *                      scan's filters when fusing two scans via a Spark-side scan merge
  *                      (`TableCapability.SCAN_MERGING`).
  * @param inferredFilters Source-guaranteed Catalyst expressions inferred from pushed query
- *                        filters. Spark may add matching logical Filters for optimizer statistics
- *                        when the scan requests Spark-side adjustment. They are not kept when a
- *                        join, aggregate, or variant extraction is pushed, and do not duplicate
- *                        `pushedFilters`.
+ *                        filters. Spark may add matching logical Filters for statistics adjustment.
+ *                        Scans that opt into `useInferredFilterEstimation` keep them as metadata
+ *                        and take the smaller estimate from the original and inferred predicates.
+ *                        They are discarded by join, aggregate, or variant extraction pushdown,
+ *                        and do not duplicate `pushedFilters`.
  * @param mergeableScan whether this scan may be fused with an equivalent scan by a Spark-side scan
  *                      merge (see `TableCapability.SCAN_MERGING`).
  *                      Default false (not mergeable): only the plain column-pruning + filter
@@ -292,7 +293,58 @@ case class DataSourceV2ScanRelation(
     }
   }
 
+  // Keep the complete pushedFilters for scan merging, but estimate only expressions whose
+  // columns and nested fields survive pruning. A pruned nested field cannot be remapped.
+  private[sql] lazy val outputBoundPushedFilters: Seq[Expression] = {
+    val projection = ProjectionOverSchema(output.toStructType, outputSet)
+    pushedFilters.flatMap { filter =>
+      try {
+        val remapped = filter.transformDown {
+          case projection(expr) => expr
+        }
+        Option.when(remapped.references.subsetOf(outputSet))(remapped)
+      } catch {
+        case e: SparkIllegalArgumentException if e.getCondition == "FIELD_NOT_FOUND" => None
+      }
+    }
+  }
+
+  private[sql] def shouldEstimateInferredFilters: Boolean = {
+    inferredFilters.nonEmpty && (scan match {
+      case s: SupportsReportStatistics =>
+        !s.reflectsFullyPushedDownFilters() && s.useInferredFilterEstimation()
+      case _ => false
+    })
+  }
+
+  /**
+   * Include residual filters in the original predicate group before comparing it with the
+   * inferred group. Re-read the unadjusted scan statistics instead of filtering this node's
+   * already adjusted stats, which would count the inferred selectivity a second time.
+   */
+  private[sql] def estimateStatsWithFilters(filters: Seq[Expression]): Option[Statistics] = {
+    estimateStatsWithFilters(computeScanStats(), filters)
+  }
+
+  private def estimateStatsWithFilters(
+      scanStats: Statistics,
+      filters: Seq[Expression]): Option[Statistics] = {
+    val originalCondition = ExpressionSet(outputBoundPushedFilters ++ filters).toSeq
+      .reduceLeftOption(And).getOrElse(Literal.TrueLiteral)
+    FilterEstimation(originalCondition, scanStats, output, childIsLeaf = true)
+      .estimateWithInferredCondition(inferredFilters.reduceLeft(And))
+  }
+
   private def computeFullStats(): Statistics = {
+    val scanStats = computeScanStats()
+    if (conf.cboEnabled && shouldEstimateInferredFilters) {
+      estimateStatsWithFilters(scanStats, Nil).getOrElse(scanStats)
+    } else {
+      scanStats
+    }
+  }
+
+  private def computeScanStats(): Statistics = {
     V2StatisticsUtils.computeStats(scan) match {
       case Some(v2Stats) =>
         DataSourceV2Relation.transformV2Stats(v2Stats, conf.defaultSizeInBytes, output)

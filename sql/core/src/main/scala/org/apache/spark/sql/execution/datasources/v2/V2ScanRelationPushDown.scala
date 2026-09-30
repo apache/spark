@@ -997,8 +997,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         .normalizeExprs(project, sHolder.output)
         .asInstanceOf[Seq[NamedExpression]]
       // Do not retain columns solely for inferred filters. Like the best-effort statistics
-      // adjustment for fully pushed filters, only inferred filters that survive pruning are added
-      // back below.
+      // adjustment for fully pushed filters, only inferred filters that survive pruning are
+      // recorded on the scan below.
       val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
       val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
       val (scan, output) = PushDownUtils.pruneColumns(
@@ -1016,19 +1016,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val projectionFunc = (expr: Expression) => expr transformDown {
         case projectionOverSchema(newExpr) => newExpr
       }
-
-      // Remap pushed filter attributes to the pruned output schema and drop filters whose
-      // references are no longer in the pruned output. Catch FIELD_NOT_FOUND because
-      // ProjectionOverSchema throws when a pushed filter references a nested struct field that was
-      // pruned from the schema. This feeds only the Spark post-pushdown adjustment below; the scan
-      // relation's own pushedFilters keep the complete set (see the next comment).
-      val remappedPushedFilters = sHolder.pushedFilterExpressions.flatMap { filter =>
-        try Some(projectionFunc(filter))
-        catch {
-          case e: SparkIllegalArgumentException if e.getCondition == "FIELD_NOT_FOUND" =>
-            None
-        }
-      }.filter(_.references.subsetOf(AttributeSet(output)))
 
       // Remap inferred filters to the pruned output and drop filters whose references are no
       // longer available.
@@ -1055,7 +1042,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         mergeableScan = !hasBlockingPushdown(sHolder))
 
       val inferredAdjustmentFilters =
-        if (shouldAddSparkPostPushdownAdjustmentFilters(wrappedScan)) {
+        if (!scanRelation.shouldEstimateInferredFilters &&
+            shouldAddSparkPostPushdownAdjustmentFilters(wrappedScan)) {
           remappedInferredFilters
         } else {
           Nil
@@ -1065,11 +1053,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val withFilter = finalFilters.foldLeft[LogicalPlan](scanRelation)((plan, cond) => {
         Filter(cond, plan)
       })
-      // Best effort: column pruning can make fully-pushed filters unavailable in the scan output.
-      // `remappedPushedFilters` already drops those filters, so Spark post-pushdown adjustment can
-      // only re-add predicates that still reference the pruned scan output.
-      val withPostPushdownAdjustmentFilters =
-        withSparkPostPushdownAdjustmentFilters(withFilter, remappedPushedFilters)
+      // Opted-in scans compare original and inferred predicates directly from scan metadata,
+      // including any residual filters. Other scans still use the existing best-effort adjustment
+      // for fully pushed predicates that survive pruning.
+      val withPostPushdownAdjustmentFilters = if (scanRelation.shouldEstimateInferredFilters) {
+        withFilter
+      } else {
+        withSparkPostPushdownAdjustmentFilters(withFilter, scanRelation.outputBoundPushedFilters)
+      }
 
       if (withPostPushdownAdjustmentFilters.output != project) {
         val newProjects = normalizedProjects
@@ -1428,6 +1419,13 @@ case class V1ScanWrapper(
     v1Scan match {
       case r: SupportsReportStatistics => r.reflectsFullyPushedDownFilters()
       case _ => true
+    }
+  }
+
+  override def useInferredFilterEstimation(): Boolean = {
+    v1Scan match {
+      case r: SupportsReportStatistics => r.useInferredFilterEstimation()
+      case _ => false
     }
   }
 }

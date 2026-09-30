@@ -40,8 +40,11 @@ trait SupportsPushDownCatalystFilters extends ScanBuilder {
    * returned by the scan.
    *
    * When `SupportsReportStatistics.reflectsFullyPushedDownFilters` returns `false`, Spark adds
-   * inferred filters whose columns remain in the scan output to the logical Filter for optimizer
-   * statistics. As with fully pushed filters, columns are not retained solely for this adjustment,
+   * inferred predicates as logical filters for statistics adjustment by default. Scans can opt
+   * into separate estimation with `SupportsReportStatistics.useInferredFilterEstimation`. For
+   * those scans, inferred filters remain metadata and are not evaluated by Spark. With CBO
+   * enabled, Spark estimates the original and inferred groups against the same scan statistics
+   * and takes the smaller estimate. Columns are not retained solely for statistics adjustment,
    * and filters that reference pruned columns are dropped.
    *
    * Spark discards inferred filters if a join, aggregate, or variant extraction replaces the scan

@@ -347,7 +347,7 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
       checkSamplePushed(df, pushed = true)
       checkAnswer(df, Seq(Row(3L, "c"), Row(4L, "d"), Row(5L, "e")))
       assertInferredOnLogicalPlan(df, inferred)
-      assertInferredInFilterExec(df, inferred)
+      assertInferredNotInFilterExec(df, inferred)
     } finally {
       sql(s"DROP TABLE IF EXISTS $table")
     }
@@ -362,16 +362,16 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
       s"inferred filter $inferred missing on scan ${scan.inferredFilters}; " +
         s"plan:\n${plan.treeString}")
     val filters = plan.collect { case filter: Filter => filter.condition }
-    assert(filters.exists(containsFilter(_, inferred)),
-      s"inferred filter $inferred should remain in the logical Filter:\n${plan.treeString}")
+    assert(!filters.exists(containsFilter(_, inferred)),
+      s"inferred filter $inferred should remain scan metadata:\n${plan.treeString}")
   }
 
-  private def assertInferredInFilterExec(df: DataFrame, inferred: String): Unit = {
+  private def assertInferredNotInFilterExec(df: DataFrame, inferred: String): Unit = {
     val execFilters = df.queryExecution.executedPlan.collect {
       case filter: FilterExec => filter.condition
     }
-    assert(execFilters.exists(containsFilter(_, inferred)),
-      s"inferred filter $inferred should remain in FilterExec:\n" +
+    assert(!execFilters.exists(containsFilter(_, inferred)),
+      s"inferred filter $inferred should not reach FilterExec:\n" +
         df.queryExecution.executedPlan)
   }
 

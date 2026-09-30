@@ -1294,6 +1294,7 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       }
       override def estimateSizeInBytes(): OptionalLong = OptionalLong.of(64L)
       override def reflectsFullyPushedDownFilters(): Boolean = false
+      override def useInferredFilterEstimation(): Boolean = true
     }
 
     val wrapper = V1ScanWrapper(v1Scan, Nil,
@@ -1304,6 +1305,7 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     assert(stats.numRows().getAsLong === 8L)
     assert(wrapper.estimateSizeInBytes().getAsLong === 64L)
     assert(!wrapper.reflectsFullyPushedDownFilters())
+    assert(wrapper.useInferredFilterEstimation())
   }
 
   test("V1ScanWrapper uses empty/default statistics when V1 scan does not report them") {
@@ -1321,6 +1323,7 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     assert(!stats.numRows().isPresent)
     assert(!wrapper.estimateSizeInBytes().isPresent)
     assert(wrapper.reflectsFullyPushedDownFilters())
+    assert(!wrapper.useInferredFilterEstimation())
   }
 
   test("Spark post-pushdown adjustments are not added for scans without reported stats") {
@@ -1669,7 +1672,7 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       "non-deterministic filter should be retained as a post-scan Filter")
   }
 
-  test("inferred filters remain in logical Filter and FilterExec") {
+  test("inferred filters remain scan metadata") {
     // Rows satisfy j = -i, so i > 2 implies the inferred predicate j < -2.
     val query = spark.read
       .format(classOf[CatalystFilterDataSourceV2].getName)
@@ -1683,16 +1686,16 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     val filters = query.queryExecution.optimizedPlan.collect {
       case filter: LogicalFilter => filter.condition
     }
-    assert(filters.exists(containsFilter(_, inferredFilter)),
-      s"inferred filter $inferredFilter should remain in the logical Filter:\n" +
+    assert(!filters.exists(containsFilter(_, inferredFilter)),
+      s"inferred filter $inferredFilter should remain outside the logical Filter:\n" +
         query.queryExecution.optimizedPlan)
     assert(getScanRelation(query).inferredFilters.exists(containsFilter(_, inferredFilter)),
       "inferred filter should be recorded on the scan relation")
     val execFilters = query.queryExecution.executedPlan.collect {
       case filter: FilterExec => filter.condition
     }
-    assert(execFilters.exists(containsFilter(_, inferredFilter)),
-      s"inferred filter $inferredFilter should remain in FilterExec:\n" +
+    assert(!execFilters.exists(containsFilter(_, inferredFilter)),
+      s"inferred filter $inferredFilter should not reach FilterExec:\n" +
         query.queryExecution.executedPlan)
   }
 
@@ -1705,6 +1708,7 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         // Exact statistics report the seven filtered rows, so Spark must not adjust them again.
         .option(CatalystFilterScanBuilder.REFLECTS_FULLY_PUSHED_DOWN_FILTERS, "true")
         .option(CatalystFilterScanBuilder.REPORTED_ROW_COUNT, "7")
+        .option(CatalystFilterScanBuilder.REPORT_COLUMN_STATS, "true")
         .load()
         .filter($"i" > 2)
       checkAnswer(exactStatsQuery, (3 until 10).map(i => Row(i, -i)))
@@ -1727,16 +1731,61 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         // Pre-filter statistics report all ten input rows, so Spark should adjust them.
         .option(CatalystFilterScanBuilder.REFLECTS_FULLY_PUSHED_DOWN_FILTERS, "false")
         .option(CatalystFilterScanBuilder.REPORTED_ROW_COUNT, "10")
+        .option(CatalystFilterScanBuilder.REPORT_COLUMN_STATS, "true")
         .load()
         .filter($"i" > 2)
       checkAnswer(preFilterStatsQuery, (3 until 10).map(i => Row(i, -i)))
       val preFilterStatsPlan = preFilterStatsQuery.queryExecution.optimizedPlan
       val preFilterStatsScan = getScanRelation(preFilterStatsQuery)
-      assert(preFilterStatsScan.stats.rowCount.contains(BigInt(10)))
-      assert(preFilterStatsPlan.exists {
+      assert(preFilterStatsScan.stats.rowCount.contains(BigInt(8)))
+      assert(preFilterStatsPlan.stats.rowCount.contains(BigInt(8)))
+      assert(preFilterStatsScan.inferredFilters.nonEmpty)
+      assert(!preFilterStatsPlan.exists {
         case filter: LogicalFilter => containsFilter(filter.condition, "j < -2")
         case _ => false
-      }, s"inferred filter should adjust pre-filter scan statistics:\n$preFilterStatsPlan")
+      }, s"inferred predicates should remain metadata when adjusting stats:\n$preFilterStatsPlan")
+    }
+  }
+
+  test("inferred filters use separate estimates only when the scan opts in") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      Seq(false, true).foreach { keepResiduals =>
+        def load(infer: Boolean, estimateInferred: Boolean = true): DataFrame = {
+          spark.read
+            .format(classOf[CatalystFilterDataSourceV2].getName)
+            .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
+              if (infer) CatalystFilterScanBuilder.NEGATE_I_TO_J else "")
+            .option(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION,
+              estimateInferred.toString)
+            .option(CatalystFilterScanBuilder.REPORTED_ROW_COUNT, "10")
+            .option(CatalystFilterScanBuilder.REPORT_COLUMN_STATS, "true")
+            .option(CatalystFilterScanBuilder.KEEP_RESIDUAL_FILTERS, keepResiduals.toString)
+            .load()
+            .filter($"i" > 7)
+        }
+
+        val baseline = load(infer = false).queryExecution.optimizedPlan.stats
+        Seq(false, true).foreach { estimateInferred =>
+          val query = load(infer = true, estimateInferred = estimateInferred)
+          checkAnswer(query, Seq(Row(8, -8), Row(9, -9)))
+          val plan = query.queryExecution.optimizedPlan
+          assert(plan.stats.rowCount.contains(BigInt(if (estimateInferred) 3 else 1)))
+          if (estimateInferred) {
+            assert(plan.stats.rowCount == baseline.rowCount)
+            assert(plan.stats.sizeInBytes == baseline.sizeInBytes)
+          }
+          val scan = getScanRelation(query)
+          assert(scan.inferredFilters.nonEmpty)
+          assert(scan.stats.rowCount.contains(BigInt(if (estimateInferred) 3 else 10)))
+          val filters = plan.collect { case filter: LogicalFilter => filter.condition }
+          assert(filters.nonEmpty == (keepResiduals || !estimateInferred))
+          assert(filters.exists(containsFilter(_, "j < -7")) == !estimateInferred)
+          val execFilters = query.queryExecution.executedPlan.collect {
+            case filter: FilterExec => filter.condition
+          }
+          assert(execFilters.exists(containsFilter(_, "j < -7")) == !estimateInferred)
+        }
+      }
     }
   }
 
@@ -1797,7 +1846,7 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
-  test("inferred filters remain below a non-deterministic residual") {
+  test("inferred filters remain metadata with a non-deterministic residual") {
     val query = spark.read
       .format(classOf[CatalystFilterDataSourceV2].getName)
       .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
@@ -1813,18 +1862,18 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
     assert(execFilters.exists(_.exists(!_.deterministic)),
       s"expected a non-deterministic residual FilterExec:\n${query.queryExecution.executedPlan}")
-    assert(execFilters.exists(containsFilter(_, inferredFilter)),
-      s"inferred filter $inferredFilter should remain in FilterExec:\n" +
+    assert(!execFilters.exists(containsFilter(_, inferredFilter)),
+      s"inferred filter $inferredFilter should not reach FilterExec:\n" +
         query.queryExecution.executedPlan)
     val logicalFilters = query.queryExecution.optimizedPlan.collect {
       case filter: LogicalFilter => filter.condition
     }
-    assert(logicalFilters.exists(containsFilter(_, inferredFilter)),
-      s"inferred filter $inferredFilter should remain in the logical Filter:\n" +
+    assert(!logicalFilters.exists(containsFilter(_, inferredFilter)),
+      s"inferred filter $inferredFilter should remain outside the logical Filter:\n" +
         query.queryExecution.optimizedPlan)
   }
 
-  test("compound inferred filters remain in logical Filter and FilterExec") {
+  test("compound inferred filters remain scan metadata") {
     // i > 2 AND i < 8 implies j < -2 AND j > -8.
     val query = spark.read
       .format(classOf[CatalystFilterDataSourceV2].getName)
@@ -1840,13 +1889,13 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     val execFilters = query.queryExecution.executedPlan.collect {
       case filter: FilterExec => filter.condition
     }
-    assert(execFilters.exists(containsFilter(_, "j < -2")))
-    assert(execFilters.exists(containsFilter(_, "j > -8")))
+    assert(!execFilters.exists(containsFilter(_, "j < -2")))
+    assert(!execFilters.exists(containsFilter(_, "j > -8")))
     val logicalFilters = query.queryExecution.optimizedPlan.collect {
       case filter: LogicalFilter => filter.condition
     }
-    assert(logicalFilters.exists(containsFilter(_, "j < -2")))
-    assert(logicalFilters.exists(containsFilter(_, "j > -8")))
+    assert(!logicalFilters.exists(containsFilter(_, "j < -2")))
+    assert(!logicalFilters.exists(containsFilter(_, "j > -8")))
   }
 
   test("inferred filters do not block join pushdown") {
@@ -1892,16 +1941,16 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     val filters = df.queryExecution.optimizedPlan.collect {
       case filter: LogicalFilter => filter.condition
     }
-    assert(filters.exists(containsFilter(_, inferredFilter)),
-      s"inferred filter $inferredFilter should remain in the logical Filter:\n" +
+    assert(!filters.exists(containsFilter(_, inferredFilter)),
+      s"inferred filter $inferredFilter should remain outside the logical Filter:\n" +
         df.queryExecution.optimizedPlan)
     assert(getScanRelation(df).inferredFilters.exists(containsFilter(_, inferredFilter)),
       "inferred filter should be recorded on the scan relation")
     val execFilters = df.queryExecution.executedPlan.collect {
       case filter: FilterExec => filter.condition
     }
-    assert(execFilters.exists(containsFilter(_, inferredFilter)),
-      s"inferred filter $inferredFilter should remain in FilterExec:\n" +
+    assert(!execFilters.exists(containsFilter(_, inferredFilter)),
+      s"inferred filter $inferredFilter should not reach FilterExec:\n" +
         df.queryExecution.executedPlan)
   }
 
@@ -2335,6 +2384,10 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
       .exists(_.toBoolean)
   private val reportedRowCount =
     Option(options.get(CatalystFilterScanBuilder.REPORTED_ROW_COUNT)).map(_.toLong)
+  private val reportColumnStats =
+    options.getBoolean(CatalystFilterScanBuilder.REPORT_COLUMN_STATS, false)
+  private val keepResidualFilters =
+    options.getBoolean(CatalystFilterScanBuilder.KEEP_RESIDUAL_FILTERS, false)
   private var requiredSchema = TestingV2Source.schema
 
   override def readSchema(): StructType = requiredSchema
@@ -2349,7 +2402,7 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
         s"Non-deterministic filters should not be pushed: ${filters.mkString(", ")}")
     }
     pushedCatalystFilters = filters
-    Nil
+    if (keepResidualFilters) filters else Nil
   }
 
   override def inferredFilters: Seq[CatalystExpression] = deriveInferred(pushedCatalystFilters)
@@ -2361,12 +2414,30 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
     override def numRows(): OptionalLong = reportedRowCount
       .map(rowCount => OptionalLong.of(rowCount))
       .getOrElse(OptionalLong.empty())
+
+    override def columnStats(): util.Map[NamedReference, ColumnStatistics] = {
+      val stats = new util.HashMap[NamedReference, ColumnStatistics]()
+      if (reportColumnStats) {
+        Seq(("i", 0, 9), ("j", -9, 0)).foreach { case (name, lower, upper) =>
+          stats.put(FieldReference.column(name), new ColumnStatistics {
+            override def distinctCount(): OptionalLong = OptionalLong.of(10L)
+            override def min(): Optional[AnyRef] = Optional.of(Int.box(lower))
+            override def max(): Optional[AnyRef] = Optional.of(Int.box(upper))
+            override def nullCount(): OptionalLong = OptionalLong.of(0L)
+          })
+        }
+      }
+      stats
+    }
   }
 
   override def reflectsFullyPushedDownFilters(): Boolean = statsReflectFullyPushedDownFilters
 
+  override def useInferredFilterEstimation(): Boolean =
+    options.getBoolean(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION, true)
+
   override def planInputPartitions(): Array[InputPartition] = {
-    // This source enforces inferred filters and asks Spark to add them for stats adjustment.
+    // This source enforces inferred filters and asks Spark to use them for stats adjustment.
     val enforcedFilters = pushedCatalystFilters ++ inferredFilters
     enforcedFilters.reduceLeftOption(CatalystAnd) match {
       case Some(filter) =>
@@ -2398,7 +2469,10 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
 object CatalystFilterScanBuilder {
   val INFERRED_DERIVATION: String = "inferredDerivation"
   val REFLECTS_FULLY_PUSHED_DOWN_FILTERS: String = "reflectsFullyPushedDownFilters"
+  val USE_INFERRED_FILTER_ESTIMATION: String = "useInferredFilterEstimation"
   val REPORTED_ROW_COUNT: String = "reportedRowCount"
+  val REPORT_COLUMN_STATS: String = "reportColumnStats"
+  val KEEP_RESIDUAL_FILTERS: String = "keepResidualFilters"
   val NEGATE_I_TO_J: String = "negate-i-to-j"
   val CONSTANT_J_LT_100: String = "constant-j-lt-100"
 
@@ -2840,6 +2914,8 @@ class NestedCatalystFilterScanBuilder extends ScanBuilder
   }
 
   override def reflectsFullyPushedDownFilters(): Boolean = false
+
+  override def useInferredFilterEstimation(): Boolean = true
 
   override def planInputPartitions(): Array[InputPartition] = {
     val lowerBound = pushedCatalystFilters.collectFirst {
