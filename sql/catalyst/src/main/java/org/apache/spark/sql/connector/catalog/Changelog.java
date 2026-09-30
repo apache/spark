@@ -29,6 +29,11 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * post-processing (carry-over removal, update detection, net change computation) based on
  * the properties declared by the connector.
  * <p>
+ * Spark uses the connector's {@code equals} and {@code hashCode} implementations when comparing
+ * changelog reads for plan reuse. Implementations that override these methods must include all
+ * captured state affecting the schema, metadata, and data read. Spark also compares the requested
+ * changelog context and each relation's read options.
+ * <p>
  * The columns returned by {@link #columns()} must include the following metadata columns:
  * <ul>
  *   <li>{@code _change_type} (STRING) — the kind of change: {@code insert}, {@code delete},

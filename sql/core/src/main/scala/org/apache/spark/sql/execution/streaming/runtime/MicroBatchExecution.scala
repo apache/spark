@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkIllegalStateException}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.analysis.{ResolveDeduplicate, V2TableReference}
+import org.apache.spark.sql.catalyst.analysis.{ResolveDeduplicate, V2Reference}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, CurrentTimestampNanos, FileSourceMetadataAttribute, LocalTimestamp, LocalTimestampNanos}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
@@ -430,7 +430,7 @@ class MicroBatchExecution(
             val catalogManager = sparkSessionForStream.sessionState.catalogManager
             val streamingCatalog = catalogManager.catalog(catalog.name)
             val v2Relation = DataSourceV2Relation.create(s, Some(streamingCatalog), Some(ident))
-            V2TableReference.createForWriteTarget(v2Relation)
+            V2Reference.createForWriteTarget(v2Relation)
           case Some((catalog, ident)) =>
             DataSourceV2Relation.create(s, Some(catalog), Some(ident))
           case None => DataSourceV2Relation.create(s, None, None)

@@ -2777,6 +2777,23 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+select timestampdiff(NANOSECOND, timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 01:02:04')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`TIMESTAMPDIFF`",
+    "invalidValue" : "'NANOSECOND'",
+    "parameter" : "`unit`"
+  }
+}
+
+
+-- !query
 select timediff(QUARTER, timestamp'2023-08-10 01:02:03', timestamp'2022-01-14 01:02:03')
 -- !query schema
 struct<timestampdiff(QUARTER, TIMESTAMP '2023-08-10 01:02:03', TIMESTAMP '2022-01-14 01:02:03'):bigint>

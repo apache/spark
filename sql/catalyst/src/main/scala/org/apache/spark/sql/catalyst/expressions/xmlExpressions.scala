@@ -86,7 +86,7 @@ case class XmlToStructs(
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
       schema = ExprUtils.evalTypeExpr(schema),
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "from_xml"),
       child = child,
       timeZoneId = None)
 
@@ -173,7 +173,7 @@ case class SchemaOfXml(
 
   def this(child: Expression, options: Expression) = this(
     child = child,
-    options = ExprUtils.convertToMapData(options))
+    options = ExprUtils.convertToMapData(options, "schema_of_xml"))
 
   override def nullable: Boolean = false
 
@@ -274,7 +274,7 @@ case class StructsToXml(
 
   def this(child: Expression, options: Expression) =
     this(
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "to_xml"),
       child = child,
       timeZoneId = None)
 

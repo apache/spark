@@ -38,6 +38,18 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
   private val UNICODE_COLLATION_ID = CollationFactory.collationNameToId("UNICODE")
   private val UTF8_LCASE_COLLATION_ID = CollationFactory.collationNameToId("UTF8_LCASE")
 
+  test("PythonUserDefinedType equality includes the SQL type") {
+    val pyUDT = "org.apache.spark.sql.types.ExamplePythonUDT"
+    val first = new PythonUserDefinedType(StringType, pyUDT, "firstSerializedClass")
+    val same = new PythonUserDefinedType(StringType, pyUDT, "secondSerializedClass")
+    val differentSqlType =
+      new PythonUserDefinedType(StringType("UTF8_LCASE"), pyUDT, "firstSerializedClass")
+
+    assert(first === same)
+    assert(first.hashCode === same.hashCode)
+    assert(first !== differentSqlType)
+  }
+
   test("construct an ArrayType") {
     val array = ArrayType(StringType)
 

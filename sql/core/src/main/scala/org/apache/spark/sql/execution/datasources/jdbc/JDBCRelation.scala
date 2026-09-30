@@ -93,8 +93,10 @@ private[sql] object JDBCRelation extends Logging {
         val (column, columnType) = verifyAndGetNormalizedPartitionColumn(
           schema, partitionColumn.get, resolver, jdbcOptions)
 
-        val lowerBoundValue = toInternalBoundValue(lowerBound.get, columnType, timeZoneId)
-        val upperBoundValue = toInternalBoundValue(upperBound.get, columnType, timeZoneId)
+        val lowerBoundValue = toInternalBoundValue(
+          lowerBound.get, columnType, timeZoneId, JDBC_LOWER_BOUND)
+        val upperBoundValue = toInternalBoundValue(
+          upperBound.get, columnType, timeZoneId, JDBC_UPPER_BOUND)
         JDBCPartitioningInfo(
           column, columnType, lowerBoundValue, upperBoundValue, numPartitions.get)
       }
@@ -198,11 +200,11 @@ private[sql] object JDBCRelation extends Logging {
   private def toInternalBoundValue(
       value: String,
       columnType: DataType,
-      timeZoneId: String): Long = {
+      timeZoneId: String,
+      optionName: String): Long = {
     def parse[T](f: UTF8String => Option[T]): T = {
       f(UTF8String.fromString(value)).getOrElse {
-        throw new IllegalArgumentException(
-          s"Cannot parse the bound value $value as ${columnType.catalogString}")
+        throw QueryCompilationErrors.invalidJdbcPartitionBoundError(optionName, value, columnType)
       }
     }
     columnType match {

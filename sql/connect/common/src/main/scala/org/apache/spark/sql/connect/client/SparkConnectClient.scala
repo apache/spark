@@ -43,7 +43,7 @@ import org.apache.spark.sql.connect.RuntimeConfig
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.util.CloseableIterator
-import org.apache.spark.util.SparkSystemUtils
+import org.apache.spark.util.{SparkFileUtils, SparkSystemUtils}
 
 /**
  * Conceptually the remote spark session that communicates with the server.
@@ -84,6 +84,25 @@ private[sql] class SparkConnectClient(
   private[sql] val sessionId: String = configuration.sessionId.getOrElse(UUID.randomUUID.toString)
 
   private val conf: RuntimeConfig = new RuntimeConfig(this)
+
+  private lazy val serverCapabilities: Set[String] = {
+    val builder = proto.AnalyzePlanRequest
+      .newBuilder()
+      .setSparkVersion(proto.AnalyzePlanRequest.SparkVersion.newBuilder().build())
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+    serverSideSessionId.foreach(builder.setClientObservedServerSideSessionId)
+    bstub
+      .analyzePlan(builder.build())
+      .getSparkVersion
+      .getCapabilitiesList
+      .asScala
+      .toSet
+  }
+
+  private def supportsServerSideMavenArtifacts: Boolean =
+    serverCapabilities.contains(SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY)
 
   // Cached plan compression options.
   private var _planCompressionOptions: Option[Option[PlanCompressionOptions]] = None
@@ -585,16 +604,20 @@ private[sql] class SparkConnectClient(
   /**
    * Add a single artifact to the client session.
    *
-   * Currently only local files with extensions .jar and .class are supported.
+   * Supports local .jar and .class files and Apache Ivy URIs.
    */
-  def addArtifact(path: String): Unit = artifactManager.addArtifact(path)
+  def addArtifact(path: String): Unit = addArtifact(SparkFileUtils.resolveURI(path))
 
   /**
    * Add a single artifact to the client session.
    *
-   * Currently only local files with extensions .jar and .class are supported.
+   * Supports local .jar and .class files and Apache Ivy URIs.
    */
-  def addArtifact(uri: URI): Unit = artifactManager.addArtifact(uri)
+  def addArtifact(uri: URI): Unit = {
+    val serverSide = artifactManager.isServerSideMavenCandidate(uri) &&
+      supportsServerSideMavenArtifacts
+    artifactManager.addArtifact(uri, serverSide)
+  }
 
   /**
    * Add a single in-memory artifact to the session while preserving the directory structure
@@ -636,9 +659,13 @@ private[sql] class SparkConnectClient(
   /**
    * Add multiple artifacts to the session.
    *
-   * Currently only local files with extensions .jar and .class are supported.
+   * Supports local .jar and .class files and Apache Ivy URIs.
    */
-  def addArtifacts(uri: Seq[URI]): Unit = artifactManager.addArtifacts(uri)
+  def addArtifacts(uri: Seq[URI]): Unit = {
+    val serverSide = uri.exists(artifactManager.isServerSideMavenCandidate) &&
+      supportsServerSideMavenArtifacts
+    artifactManager.addArtifacts(uri, serverSide)
+  }
 
   /**
    * Register a [[ClassFinder]] for dynamically generated classes.
@@ -710,6 +737,8 @@ private final class SparkConnectOperationIdException(val operationId: String)
     extends RuntimeException(s"Spark Connect operation ID: $operationId", null, false, false)
 
 object SparkConnectClient {
+  private[connect] val SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY =
+    "serverSideMavenArtifacts.v1"
 
   private[connect] val OPERATION_ID_HEADER = "spark-connect-operation-id"
 

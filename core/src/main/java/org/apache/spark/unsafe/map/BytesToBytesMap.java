@@ -20,6 +20,8 @@ package org.apache.spark.unsafe.map;
 import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Iterator;
 import java.util.LinkedList;
 
@@ -103,9 +105,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private final TaskMemoryManager taskMemoryManager;
 
   /**
-   * A linked list for tracking all allocated data pages so that we can free all of our memory.
+   * A deque for tracking all allocated data pages so that we can free all of our memory.
    */
-  private final LinkedList<MemoryBlock> dataPages = new LinkedList<>();
+  private final Deque<MemoryBlock> dataPages = new ArrayDeque<>();
 
   /**
    * The data page that will be used to store keys and values for new hashtable entries. When this
@@ -147,6 +149,16 @@ public final class BytesToBytesMap extends MemoryConsumer {
   // maximum page size of 2^24 * 8 = ~134 megabytes per page. This change will require us to store
   // full base addresses in the page table for off-heap mode so that we can reconstruct the full
   // absolute memory addresses.
+
+  private enum MapState {
+    READY,
+    RESET_FAILED,
+    DESTRUCTIVE,
+    FREED
+  }
+
+  /** The lifecycle state that controls whether array-dependent operations are legal. */
+  private MapState state = MapState.READY;
 
   /**
    * Whether or not the longArray can grow. We will not insert more elements if it's false.
@@ -299,17 +311,24 @@ public final class BytesToBytesMap extends MemoryConsumer {
     private boolean destructive = false;
     private UnsafeSorterSpillReader reader = null;
 
+    // Used only for non-destructive iteration to walk the data pages in order (a deque has no
+    // random access). The destructive path instead consumes pages from the head of `dataPages`.
+    private Iterator<MemoryBlock> pageIterator = null;
+
     private MapIterator(int numRecords, Location loc, boolean destructive) {
       this.numRecords = numRecords;
       this.loc = loc;
       this.destructive = destructive;
       if (destructive) {
+        state = MapState.DESTRUCTIVE;
         destructiveIterator = this;
         // longArray will not be used anymore if destructive is true, release it now.
         if (longArray != null) {
           freeArray(longArray);
           longArray = null;
         }
+      } else {
+        pageIterator = dataPages.iterator();
       }
     }
 
@@ -323,14 +342,19 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
       try {
         synchronized (this) {
-          int nextIdx = dataPages.indexOf(currentPage) + 1;
-          if (destructive && currentPage != null) {
-            dataPages.remove(currentPage);
-            pageToFree = currentPage;
-            nextIdx--;
+          final MemoryBlock nextPage;
+          if (destructive) {
+            if (currentPage != null) {
+              assert(dataPages.peekFirst() == currentPage);
+              dataPages.removeFirst();
+              pageToFree = currentPage;
+            }
+            nextPage = dataPages.peekFirst();
+          } else {
+            nextPage = pageIterator.hasNext() ? pageIterator.next() : null;
           }
-          if (dataPages.size() > nextIdx) {
-            currentPage = dataPages.get(nextIdx);
+          if (nextPage != null) {
+            currentPage = nextPage;
             pageBaseObject = currentPage.getBaseObject();
             offsetInPage = currentPage.getBaseOffset();
             recordsInPage = UnsafeAlignedOffset.getSize(pageBaseObject, offsetInPage);
@@ -413,7 +437,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
       long released = 0L;
       while (dataPages.size() > 0) {
-        MemoryBlock block = dataPages.getLast();
+        MemoryBlock block = dataPages.peekLast();
         // The currentPage is used, cannot be released
         if (block == currentPage) {
           break;
@@ -435,7 +459,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         writer.close();
         spillWriters.add(writer);
 
-        dataPages.removeLast();
+        dataPages.pollLast();
         released += block.size();
         freePage(block);
 
@@ -466,8 +490,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * The returned iterator is thread-safe. However if the map is modified while iterating over it,
    * the behavior of the returned iterator is undefined.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public MapIterator iterator() {
+    ensureReady();
     return new MapIterator(numValues, new Location(), false);
   }
 
@@ -480,8 +508,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * The returned iterator is thread-safe. However if the map is modified while iterating over it,
    * the behavior of the returned iterator is undefined.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public MapIterator destructiveIterator() {
+    ensureReady();
     updatePeakMemoryUsed();
     return new MapIterator(numValues, new Location(), true);
   }
@@ -534,8 +566,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * The returned iterator is NOT thread-safe. If the map is modified while iterating over it,
    * the behavior of the returned iterator is undefined.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public MapIteratorWithKeyIndex iteratorWithKeyIndex() {
+    ensureReady();
     return new MapIteratorWithKeyIndex();
   }
 
@@ -543,8 +579,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * The maximum number of allowed keys index.
    *
    * The value of allowed keys index is in the range of [0, maxNumKeysIndex - 1].
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public int maxNumKeysIndex() {
+    ensureReady();
     return (int) (longArray.size() / 2);
   }
 
@@ -554,6 +594,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This function always returns the same {@link Location} instance to avoid object allocation.
    * This function is not thread-safe.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength) {
     safeLookup(keyBase, keyOffset, keyLength, loc);
@@ -568,10 +611,19 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This function always returns the same {@link Location} instance to avoid object allocation.
    * This function is not thread-safe.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength, int hash) {
     safeLookup(keyBase, keyOffset, keyLength, loc, hash);
     return loc;
+  }
+
+  private void ensureReady() {
+    if (state != MapState.READY) {
+      throw new IllegalStateException("BytesToBytesMap is not usable in state " + state);
+    }
   }
 
   /**
@@ -580,6 +632,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * This is a thread-safe version of `lookup`, provided that each thread supplies its own
    * {@link Location}. This guarantee excludes probe statistics, which may be inaccurate under
    * concurrent lookup. The map must not be modified concurrently.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc) {
     if (keyOperationsFactory == null) {
@@ -590,6 +645,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         loc,
         Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
     } else {
+      ensureReady();
       safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
     }
   }
@@ -600,8 +656,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * The provided hash is ignored when this map has configured key operations. Each thread must
    * supply its own {@link Location}. Probe statistics may be inaccurate under concurrent lookup,
    * and the map must not be modified concurrently.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
+    ensureReady();
     assert(longArray != null);
     if (keyOperationsFactory != null) {
       safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
@@ -890,8 +950,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
      *
      * @return true if the put() was successful and false if the map reached its capacity or memory
      *         could not be acquired.
+     * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+     * has been freed
      */
     public boolean append(Object kbase, long koff, int klen, Object vbase, long voff, int vlen) {
+      ensureReady();
       assert (klen % 8 == 0);
       assert (vlen % 8 == 0);
       assert (longArray != null);
@@ -1023,17 +1086,17 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * as well as the hash map array itself.
    *
    * This method is idempotent and can be called multiple times.
+   * After this method is called, the map cannot be reused.
    */
   public void free() {
+    state = MapState.FREED;
     updatePeakMemoryUsed();
     if (longArray != null) {
       freeArray(longArray);
       longArray = null;
     }
-    Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
-    while (dataPagesIterator.hasNext()) {
-      MemoryBlock dataPage = dataPagesIterator.next();
-      dataPagesIterator.remove();
+    while (!dataPages.isEmpty()) {
+      MemoryBlock dataPage = dataPages.removeFirst();
       freePage(dataPage);
     }
     assert(dataPages.isEmpty());
@@ -1098,30 +1161,49 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Returns the underline long[] of longArray.
+   * Returns the underlying long array.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public LongArray getArray() {
+    ensureReady();
     assert(longArray != null);
     return longArray;
   }
 
   /**
-   * Reset this map to initialized state.
+   * Resets this map to initialized state. If the replacement pointer array cannot be allocated,
+   * the map remains empty but cannot be used until a later call to this method succeeds. A
+   * successful retry only restores the map itself; callers are responsible for ensuring that any
+   * state kept outside the map, such as spilled data, remains valid.
+   *
+   * @throws SparkOutOfMemoryError if the replacement pointer array cannot be allocated
+   * @throws IllegalStateException if the map has been freed or destructive iteration has begun
    */
   public void reset() {
+    if (state == MapState.FREED || state == MapState.DESTRUCTIVE) {
+      throw new IllegalStateException("BytesToBytesMap cannot be reset in state " + state);
+    }
+    state = MapState.RESET_FAILED;
     updatePeakMemoryUsed();
+    // Put the map into its empty state before allocating so that a failed allocation cannot leave
+    // stale page state. A caller may retry reset(), but cannot use the map until reset succeeds.
     numKeys = 0;
     numValues = 0;
-    freeArray(longArray);
+    canGrowArray = true;
+    currentPage = null;
+    pageCursor = 0;
+    if (longArray != null) {
+      freeArray(longArray);
+    }
     longArray = null;
     while (dataPages.size() > 0) {
       MemoryBlock dataPage = dataPages.removeLast();
       freePage(dataPage);
     }
     allocate(initialCapacity);
-    canGrowArray = true;
-    currentPage = null;
-    pageCursor = 0;
+    state = MapState.READY;
   }
 
   /**

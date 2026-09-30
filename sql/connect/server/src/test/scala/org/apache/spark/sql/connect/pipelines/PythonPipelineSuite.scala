@@ -971,6 +971,22 @@ class PythonPipelineSuite
       .getOrElse(fail(s"Expected an AutoCdcFlow in the graph, got: ${graph.flows}"))
   }
 
+  /**
+   * Builds the graph and runs it through resolution and validation, returning the resolved
+   * [[AutoCdcMergeFlow]]. Unlike [[buildAutoCdcFlow]], this exercises the graph analysis that
+   * rejects invalid change args (e.g. an ignore-null column that is also a key), so a test that
+   * asserts on the resolved flow is guaranteed to describe a usable configuration.
+   */
+  private def resolveAutoCdcMergeFlow(pipelineSource: String): AutoCdcMergeFlow = {
+    val graph = buildGraph(pipelineSource)
+      .resolve(sessionCaseSensitive)
+      .validate(sessionCaseSensitive)
+    graph.resolvedFlow(graphIdentifier("target")) match {
+      case f: AutoCdcMergeFlow => f
+      case other => fail(s"Expected an AutoCdcMergeFlow, got: $other")
+    }
+  }
+
   test("AutoCDC API: minimal flow registers an AutoCdcFlow with default name and SCD1 default") {
     val flow = buildAutoCdcFlow("""
         |@dp.table
@@ -1081,6 +1097,78 @@ class PythonPipelineSuite
 
     assert(
       flow.changeArgs.columnSelection.contains(
+        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("timestamp")))))
+  }
+
+  test(
+    "AutoCDC API: ignore_null_updates=True is forwarded as an all-columns ignore-null " +
+      "selection") {
+    val flow = resolveAutoCdcMergeFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    ignore_null_updates = True,
+        |)
+        |""".stripMargin)
+
+    // "All columns" is an ExcludeColumns selection with an empty list.
+    assert(
+      flow.changeArgs.ignoreNullSelection.contains(ColumnSelection.ExcludeColumns(Seq.empty)))
+  }
+
+  test("AutoCDC API: ignore_null_updates_column_list is forwarded as IncludeColumns") {
+    // Ignore-null include columns must be non-key payload columns, so the source adds one.
+    val flow = resolveAutoCdcMergeFlow("""
+        |@dp.table
+        |def src():
+        |  return (
+        |    spark.readStream.format("rate").load()
+        |    .selectExpr("value", "timestamp", "value + 1 AS payload")
+        |  )
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    ignore_null_updates_column_list = ["payload"],
+        |)
+        |""".stripMargin)
+
+    assert(
+      flow.changeArgs.ignoreNullSelection.contains(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("payload")))))
+  }
+
+  test("AutoCDC API: ignore_null_updates_except_column_list is forwarded as ExcludeColumns") {
+    val flow = resolveAutoCdcMergeFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    ignore_null_updates_except_column_list = ["timestamp"],
+        |)
+        |""".stripMargin)
+
+    assert(
+      flow.changeArgs.ignoreNullSelection.contains(
         ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("timestamp")))))
   }
 

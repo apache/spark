@@ -17,21 +17,22 @@
 
 package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
-import java.time.{Instant, LocalDateTime, ZoneOffset}
+import java.nio.{ByteBuffer, ByteOrder}
+import java.time.{Instant, LocalDateTime, ZoneId, ZoneOffset}
 
 import org.apache.parquet.column.ColumnDescriptor
 import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.filter2.predicate.SparkFilterApi.longColumn
-import org.apache.parquet.io.api.PrimitiveConverter
+import org.apache.parquet.io.api.{Binary, PrimitiveConverter}
 import org.apache.parquet.schema.{LogicalTypeAnnotation, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation.{TimestampLogicalTypeAnnotation, TimeUnit}
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{INT32, INT64}
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{INT32, INT64, INT96}
 import org.apache.parquet.schema.Type.Repetition.REQUIRED
 
-import org.apache.spark.{SparkArithmeticException, SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite, SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
-import org.apache.spark.sql.execution.datasources.parquet.ParentContainerUpdater
+import org.apache.spark.sql.execution.datasources.parquet.{ParentContainerUpdater, ParquetRowConverter}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.unsafe.types.TimestampNanosVal
@@ -165,6 +166,61 @@ class TimestampNanosParquetOpsSuite extends SparkFunSuite {
       TimestampNanosVal.fromParts(farFutureMicros, 0.toShort))
     assert(decodeMicros(ntz, isAdjustedToUTC = false, farFutureMicros) ===
       TimestampNanosVal.fromParts(farFutureMicros, 0.toShort))
+  }
+
+  // ---------- INT96 read (widening a legacy INT96 timestamp to nanos) ----------
+
+  test("isInt96Timestamp matches only the INT96 physical type") {
+    assert(TimestampNanosParquetOps.isInt96Timestamp(Types.primitive(INT96, REQUIRED).named("c")))
+    // INT64 TIMESTAMP(NANOS) and a raw INT64 are not INT96.
+    assert(!TimestampNanosParquetOps.isInt96Timestamp(Types.primitive(INT64, REQUIRED)
+      .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.NANOS)).named("c")))
+    assert(!TimestampNanosParquetOps.isInt96Timestamp(Types.primitive(INT64, REQUIRED).named("c")))
+  }
+
+  test("INT96 read preserves sub-microsecond nanos (both families, precision 9)") {
+    // INT96 stores nanoseconds-of-day, so a foreign file (e.g. Impala/Hive) can carry true
+    // sub-microsecond digits. binaryToSQLTimestamp floors to micros; the converter recovers the
+    // remainder (here ...789) from the raw INT96 instead of hardcoding 0.
+    val binary = int96Binary(julianDay = 2451545, timeOfDayNanos = 45296123456789L)
+    val expectedMicros = ParquetRowConverter.binaryToSQLTimestamp(binary)
+    assert(decodeInt96(ltz, binary) === TimestampNanosVal.fromParts(expectedMicros, 789.toShort))
+    assert(decodeInt96(ntz, binary) === TimestampNanosVal.fromParts(expectedMicros, 789.toShort))
+  }
+
+  test("INT96 read truncates sub-precision nanos at an explicit lower read precision") {
+    // nanosWithinMicro 789 -> truncated to 700 at precision 7 (matching the nanos read path).
+    val ltz7 = TimestampLTZNanosParquetOps(TimestampLTZNanosType(7))
+    val binary = int96Binary(julianDay = 2451545, timeOfDayNanos = 45296123456789L)
+    val expectedMicros = ParquetRowConverter.binaryToSQLTimestamp(binary)
+    assert(decodeInt96(ltz7, binary) === TimestampNanosVal.fromParts(expectedMicros, 700.toShort))
+  }
+
+  test("INT96 read applies the INT96 rebase for LTZ but never for NTZ") {
+    // A pre-1582 Julian day: for LTZ, LEGACY rebase (Julian -> proleptic Gregorian) shifts the
+    // value, CORRECTED does not, and EXCEPTION refuses the ancient value. NTZ never rebases, so its
+    // decode is identical across modes.
+    val ancient = int96Binary(julianDay = 2200000, timeOfDayNanos = 0L)
+    val ltzCorrected = decodeInt96(ltz, ancient, RebaseSpec(LegacyBehaviorPolicy.CORRECTED))
+      .asInstanceOf[TimestampNanosVal]
+    val ltzLegacy = decodeInt96(ltz, ancient, RebaseSpec(LegacyBehaviorPolicy.LEGACY))
+      .asInstanceOf[TimestampNanosVal]
+    assert(ltzLegacy.epochMicros != ltzCorrected.epochMicros)
+    intercept[SparkUpgradeException] {
+      decodeInt96(ltz, ancient, RebaseSpec(LegacyBehaviorPolicy.EXCEPTION))
+    }
+    assert(decodeInt96(ntz, ancient, RebaseSpec(LegacyBehaviorPolicy.LEGACY)) ===
+      decodeInt96(ntz, ancient, RebaseSpec(LegacyBehaviorPolicy.CORRECTED)))
+  }
+
+  test("INT96 read applies the timezone conversion for LTZ but not for NTZ") {
+    // convertTz shifts the LTZ instant by the zone offset; NTZ ignores it (wall-clock semantics).
+    val binary = int96Binary(julianDay = 2451545, timeOfDayNanos = 45296000000000L)
+    val zone = ZoneId.of("America/Los_Angeles")
+    val ltzNoTz = decodeInt96(ltz, binary).asInstanceOf[TimestampNanosVal]
+    val ltzTz = decodeInt96(ltz, binary, convertTz = Some(zone)).asInstanceOf[TimestampNanosVal]
+    assert(ltzTz.epochMicros != ltzNoTz.epochMicros)
+    assert(decodeInt96(ntz, binary, convertTz = Some(zone)) === decodeInt96(ntz, binary))
   }
 
   // ---------- (epochMicros, nanosWithinMicro) -> INT64 epoch-nanos packing ----------
@@ -347,6 +403,34 @@ class TimestampNanosParquetOpsSuite extends SparkFunSuite {
     val converter = ops.newConverter(
       microsField(isAdjustedToUTC), updater, null, None, correctedSpec, correctedSpec)
     converter.asInstanceOf[PrimitiveConverter].addLong(micros)
+    captured
+  }
+
+  // Builds a 12-byte INT96 value: nanoseconds-of-day (little-endian long) followed by the Julian
+  // day (little-endian int), the on-disk layout ParquetRowConverter.binaryToSQLTimestamp reads.
+  private def int96Binary(julianDay: Int, timeOfDayNanos: Long): Binary = {
+    val buf = ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN)
+    buf.putLong(timeOfDayNanos)
+    buf.putInt(julianDay)
+    Binary.fromConstantByteArray(buf.array())
+  }
+
+  private val int96Field: Type = Types.primitive(INT96, REQUIRED).named("c")
+
+  // Builds the extended converter over an INT96 field, feeds one crafted INT96 binary through
+  // addBinary, and returns the decoded TimestampNanosVal. `rebaseSpec` drives the INT96 read rebase
+  // and `convertTz` the optional timezone conversion (both LTZ-only; NTZ ignores them).
+  private def decodeInt96(
+      ops: TimestampNanosParquetOps,
+      binary: Binary,
+      rebaseSpec: RebaseSpec = RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
+      convertTz: Option[ZoneId] = None): Any = {
+    var captured: Any = null
+    val updater = new ParentContainerUpdater {
+      override def set(value: Any): Unit = captured = value
+    }
+    val converter = ops.newConverter(int96Field, updater, null, convertTz, rebaseSpec, rebaseSpec)
+    converter.asInstanceOf[PrimitiveConverter].addBinary(binary)
     captured
   }
 

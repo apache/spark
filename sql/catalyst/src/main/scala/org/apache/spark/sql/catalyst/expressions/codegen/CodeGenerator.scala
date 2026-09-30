@@ -236,13 +236,10 @@ class CodegenContext extends Logging {
      * `filling` catches a definition that references its own id, which would otherwise re-enter and
      * recurse, since `fillCode` is set only after `definition.genCode` returns.
      *
-     * The body goes into a method where it can and is worth it -- a definition that is or holds
-     * another `With`, or a body past the split threshold -- so it is emitted once per scope rather
-     * than once per reference, which for nested `With`s would double per level. A method is only
-     * possible where the definition reads the input row rather than local variables, the condition
-     * `reduceCodeSize` splits under. That is not the same as whole-stage codegen being off: a
-     * whole-stage `Project` or `Filter` passes local variables, while
-     * `SortMergeJoinExec.createJoinKey` and the aggregate output paths generate against a row.
+     * The body goes into a method where it is worth it -- a definition that is or holds another
+     * `With`, or a body past the split threshold -- so it is emitted once per scope rather than
+     * once per reference, which for nested `With`s would double per level. `methodArgs` says what
+     * the method takes, and which definitions cannot have one.
      */
     def fill: Block = {
       if (fillCode.isEmpty) {
@@ -278,38 +275,117 @@ class CodegenContext extends Logging {
          |${value.value} = ${defGen.value};
          |$computed = true;
        """.stripMargin
-      // TODO(SPARK-59295): cover the local-variable case too, by passing the `currentVars` values a
-      //   definition reads into the method as parameters, the way
-      //   `subexpressionEliminationForWholeStageCodegen` does. It needs a decision first:
-      //   `getLocalInputVariableValues` hoists an input variable that is not evaluated yet to
-      //   before the call, which for a reference behind a branch means evaluating it on rows that
-      //   never reach the reference.
-      val canPutInMethod = INPUT_ROW != null && currentVars == null
-      // A definition that is or holds another `With` is the shape whose code doubles per level,
-      // and what this is aimed at. It is not the only one -- a definition referencing a sibling
-      // definition of the same `With` doubles the same way, and codegen accepts that, since the
-      // sibling's slots are in scope while this definition is generated (`With.refsToBind` says
-      // why nothing builds that tree, and that evaluating one raises). What bounds those is not
-      // the length arm below: `body` is assembled after `definition.genCode` already ran
-      // `reduceCodeSize`, so the arm fires only in the band just under the threshold. It is
-      // `reduceCodeSize` itself, which hoists whichever node's code first passes the threshold as
-      // generation walks up, capping what one level contributes, so the code stays linear in the
-      // depth either way. The length arm just keeps the same body from being split once per
-      // reference, which leaves the methods small and the code as large.
+      // A definition that is or holds another `With` is the shape whose code doubles per level, and
+      // what this is aimed at. A definition reading a sibling definition of the same `With` doubles
+      // the same way, but not through this arm: a `CommonExpressionRef` carries `COMMON_EXPR_REF`,
+      // not `WITH_EXPRESSION`, so a short one reaches a method only through the length arm. Nothing
+      // builds that tree today (`With.refsToBind` says why). The length arm keeps one body from
+      // being split once per reference; it fires in the band just under the threshold where
+      // `reduceCodeSize` applies, since `body` is assembled after `definition.genCode` already ran
+      // it.
       val worthAMethod = definition.containsPattern(WITH_EXPRESSION) ||
         body.length > SQLConf.get.methodSplitThreshold
-      if (canPutInMethod && worthAMethod) {
-        val funcName = freshName("computeCommonExpr")
-        val funcFullName = addNewFunction(funcName,
-          s"""
-             |private void $funcName(InternalRow $INPUT_ROW) {
-             |  $body
-             |}
+      (if (worthAMethod) methodArgs else None) match {
+        case Some(args) =>
+          val funcName = freshName("computeCommonExpr")
+          val params = args.map(a => s"${typeName(a.javaType)} ${a.variableName}").mkString(", ")
+          val funcFullName = addNewFunction(funcName,
+            s"""
+               |private void $funcName($params) {
+               |  $body
+               |}
            """.stripMargin)
-        code"$funcFullName($INPUT_ROW);"
-      } else {
-        body
+          code"$funcFullName(${args.map(_.variableName).mkString(", ")});"
+        case None =>
+          body
       }
+    }
+
+    /**
+     * The locals to pass the method, or None where a method is not possible. What it collects are
+     * the values the body would otherwise read from the scope the call replaces it in: the input
+     * row, and an input variable the operator evaluated before generating this expression. Those
+     * variables are declared by code the operator emits ahead of this expression, so they enclose
+     * every reference to this definition; the input row is taken on the operator's word that
+     * `INPUT_ROW` names something in scope where it has this expression generated, which is what
+     * `Expression.reduceCodeSize` takes it on as well.
+     *
+     * A definition that reads an input variable the operator has *not* evaluated yet gets no
+     * method: that variable's code cannot travel into one, since it was generated by the operator
+     * producing the row, against that operator's scope, so it names a local of that scope -- the
+     * column batch's row index, or the input adapter's row. Nor can it be hoisted to before the
+     * call, the way `getLocalInputVariableValues` does for subexpression elimination, since that
+     * evaluates it on rows that reach no reference.
+     *
+     * Nor does a definition that is or holds a node subexpression elimination has computed, for
+     * which see the walk below. The two remaining refusals are local: `canPass` on a value no
+     * parameter can name, and the descriptor length at the end.
+     */
+    private def methodArgs: Option[Seq[VariableValue]] = {
+      val args = mutable.LinkedHashMap.empty[String, VariableValue]
+      // False for a value no parameter can carry: `ExpandExec` hands out a `VariableValue` naming a
+      // slot of a compacted mutable state array, and a `SimpleExprValue` is an expression rather
+      // than a name -- `posexplode_outer` gives its position the nullness `index == -1`, and a
+      // `Byte` or `Short` literal's value is `(byte)1`. A field or a literal needs no parameter and
+      // is read as it stands.
+      def canPass(v: ExprValue): Boolean = v match {
+        case local: VariableValue =>
+          val name = local.variableName
+          val isName = name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
+            name.forall(Character.isJavaIdentifierPart)
+          if (isName) {
+            args.getOrElseUpdate(name, local)
+          }
+          isName
+        case _: GlobalValue | _: LiteralValue => true
+        case _ => false
+      }
+      var possible = INPUT_ROW == null ||
+        canPass(JavaCode.variable(INPUT_ROW, classOf[InternalRow]))
+      val visited = mutable.HashSet.empty[Long]
+      // The definitions of a `With` in the tree walked here, which reach `currentCommonExprs` only
+      // once that `With` is generated. Ids come from one counter, so one map serves every scope.
+      val nestedDefs = mutable.HashMap.empty[Long, Expression]
+      val toVisit = mutable.Stack[Expression](definition)
+      while (possible && toVisit.nonEmpty) {
+        val next = toVisit.pop()
+        // A node subexpression elimination has computed keeps the definition inline. Which values
+        // the body reads there cannot be told from the tree: `Expression.genCode` reads the state,
+        // for a `With` as much as anything else since `With` overrides only `doGenCode`, while
+        // `Alias`, `Collate` and an identity `Cast` override `genCode` and generate their child
+        // again -- two different parameter lists. Refusing also keeps what this collects within
+        // what `getLocalInputVariableValues` collects for the operator's whole expression, which
+        // stops at a state as well and computes the parameters of the methods `ExpandExec` and the
+        // aggregates move this call into.
+        if (subExprEliminationExprs.contains(ExpressionEquals(next))) {
+          possible = false
+        } else {
+          next match {
+            case ref: BoundReference if currentVars != null && currentVars(ref.ordinal) != null =>
+              val input = currentVars(ref.ordinal)
+              possible = input.code == EmptyBlock && canPass(input.value) && canPass(input.isNull)
+            case w: With =>
+              // Only `child` is generated: a definition is generated where a reference reaches it,
+              // so one no reference reaches is not in the body, and what it reads decides nothing.
+              w.defs.foreach(d => nestedDefs.put(d.id.id, d.child))
+              toVisit.push(w.child)
+            case ref: CommonExpressionRef =>
+              // The definition this reference fills, which it does inside this method, so what
+              // that definition reads has to come in as well. One belonging to a `With` in the
+              // tree walked here is in `nestedDefs`; a sibling of this definition, or one of an
+              // enclosing scope, is registered in `currentCommonExprs`.
+              if (visited.add(ref.id.id)) {
+                nestedDefs.get(ref.id.id)
+                  .orElse(currentCommonExprs.get(ref.id.id).map(_.definition))
+                  .foreach(toVisit.push)
+              }
+            case e => toVisit.pushAll(e.children)
+          }
+        }
+      }
+      val params = args.values.toSeq
+      Option.when(
+        possible && isValidParamLength(calculateParamLengthFromExprValues(params)))(params)
     }
   }
 
@@ -1172,7 +1248,72 @@ class CodegenContext extends Logging {
         makeSplitFunction,
         foldFunctions)
 
-      foldFunctions(outerClassFunctionCalls ++ innerClassFunctionCalls)
+      foldFunctions(groupFunctionCalls(
+        (outerClassFunctionCalls ++ innerClassFunctionCalls).toSeq,
+        func,
+        arguments,
+        returnType,
+        makeSplitFunction,
+        foldFunctions))
+    }
+  }
+
+  /**
+   * How many calls to split functions taking `arguments` fit in one method with room to spare
+   * below the 8000 bytes HotSpot compiles; see `groupFunctionCalls`.
+   *
+   * The budget is per call of `splitExpressions`. A method that calls it more than once, as
+   * `ConcatWs` does three times on its vararg path, can hold several sets of calls, each within
+   * the budget, whose sum is not; with a call at about 15 bytes one ungrouped set is at most
+   * about 2500 bytes, so three leave room for the caller's own code, but not much.
+   */
+  private def splitCallsPerMethod(arguments: Seq[(String, String)]): Int = math.max(2,
+    DEFAULT_JVM_HUGE_METHOD_LIMIT / 2 / (MAX_BYTES_PER_SPLIT_CALL + 2 * arguments.length))
+
+  /**
+   * The calls to the functions `splitExpressions` split out, grouped into functions of their own
+   * where there are too many for the calling method to be JIT-compiled, level by level.
+   *
+   * The calls are what is left in the calling method, one per block of code, and a `CASE WHEN`
+   * of a thousand branches has hundreds of blocks: their calls alone take the caller past the
+   * 8000 bytes HotSpot compiles (`CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT`), so the method
+   * every row goes through runs interpreted. A call and its fold compile to at most about 20 bytes
+   * plus 2 for each argument - the invocation, a load per argument, and the fold's store, test
+   * and branch - so the calls are left as they are while they fit in half of that limit, the rest
+   * being the caller's own code, and grouped otherwise. The groups are small, of
+   * `CodeGenerator.SPLIT_CALLS_PER_GROUP` calls, so that C2 can inline the split functions into
+   * each group within its inlining budget; a group of hundreds of calls stays compilable but has
+   * most of its calls left out of inlining, and runs slower. A group is folded with
+   * `foldFunctions` and wrapped with `makeSplitFunction`, which is what
+   * `generateInnerClassesFunctionCalls` does with the functions of one inner class, so every
+   * caller of `splitExpressions` supports it.
+   */
+  private def groupFunctionCalls(
+      calls: Seq[String],
+      funcName: String,
+      arguments: Seq[(String, String)],
+      returnType: String,
+      makeSplitFunction: String => String,
+      foldFunctions: Seq[String] => String,
+      level: Int = 0): Seq[String] = {
+    val callsPerMethod = splitCallsPerMethod(arguments)
+    if (calls.length <= callsPerMethod) {
+      calls
+    } else {
+      val argDefinitionString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
+      val argInvocationString = arguments.map(_._2).mkString(", ")
+      val groupCalls = calls.grouped(SPLIT_CALLS_PER_GROUP).zipWithIndex.map { case (group, i) =>
+        val name = s"${funcName}_group${level}_$i"
+        val code =
+          s"""
+             |private $returnType $name($argDefinitionString) {
+             |  ${makeSplitFunction(foldFunctions(group))}
+             |}
+           """.stripMargin
+        s"${addNewFunction(name, code)}($argInvocationString)"
+      }.toSeq
+      groupFunctionCalls(groupCalls, funcName, arguments, returnType, makeSplitFunction,
+        foldFunctions, level + 1)
     }
   }
 
@@ -1238,13 +1379,31 @@ class CodegenContext extends Logging {
 
     val argDefinitionString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
     val argInvocationString = arguments.map(_._2).mkString(", ")
+    val callsPerMethod = splitCallsPerMethod(arguments)
 
     innerClassToFunctions.flatMap {
       case ((innerClassName, innerClassInstance), innerClassFunctions) =>
         // for performance reasons, the functions are prepended, instead of appended,
         // thus here they are in reversed order
         val orderedFunctions = innerClassFunctions.reverse
-        if (orderedFunctions.size > MERGE_SPLIT_METHODS_THRESHOLD) {
+        if (orderedFunctions.size > callsPerMethod) {
+          // Too many calls for one method to stay JIT-compilable: one merged method per part of
+          // `SPLIT_CALLS_PER_GROUP` calls, the size C2 inlines within its budget (see
+          // `groupFunctionCalls`), whose calls the caller groups further. Each part adds one
+          // method reference to the outer class's constant pool, which the merge exists to
+          // keep small (SPARK-22226): a few entries per part, against the pool's 65535.
+          orderedFunctions.grouped(SPLIT_CALLS_PER_GROUP).zipWithIndex.map { case (part, i) =>
+            val name = s"${funcName}_part$i"
+            val body = foldFunctions(part.map(f => s"$f($argInvocationString)"))
+            val code = s"""
+                |private $returnType $name($argDefinitionString) {
+                |  ${makeSplitFunction(body)}
+                |}
+              """.stripMargin
+            addNewFunctionToClass(name, code, innerClassName)
+            s"$innerClassInstance.$name($argInvocationString)"
+          }.toSeq
+        } else if (orderedFunctions.size > MERGE_SPLIT_METHODS_THRESHOLD) {
           // Adding a new function to each inner class which contains the invocation of all the
           // ones which have been added to that inner class. For example,
           //   private class NestedClass {
@@ -1663,6 +1822,22 @@ object CodeGenerator extends Logging {
   // This is the threshold over which the methods in an inner class are grouped in a single
   // method which is going to be called by the outer class instead of the many small ones
   final val MERGE_SPLIT_METHODS_THRESHOLD = 3
+
+  /**
+   * The most bytecode a call to a split function and its fold take in the calling method,
+   * besides a load per argument; see `CodegenContext.groupFunctionCalls`. Measured with
+   * `javap -c` on generated classes: a `CASE WHEN` call with its fold (invoke, loads, store,
+   * compare and branch) is about 15 bytes, and a call into another nested class, with the
+   * instance loaded through two `getfield`s, is 13 to 15 bytes.
+   */
+  final val MAX_BYTES_PER_SPLIT_CALL = 20
+
+  /**
+   * How many calls to split functions `CodegenContext.groupFunctionCalls` puts in one group: few
+   * enough that the split functions, each of at most `spark.sql.codegen.methodSplitThreshold`
+   * characters of code, can all be inlined into the group by C2.
+   */
+  final val SPLIT_CALLS_PER_GROUP = 8
 
   // The number of named constants that can exist in the class is limited by the Constant Pool
   // limit, 65,536. We cannot know how many constants will be inserted for a class, so we use a

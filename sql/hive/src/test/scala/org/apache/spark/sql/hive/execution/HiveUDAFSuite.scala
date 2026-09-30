@@ -19,24 +19,30 @@ package org.apache.spark.sql.hive.execution
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.hadoop.hive.common.`type`.HiveChar
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDAFEvaluator, GenericUDAFMax}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.{AggregationBuffer, Mode}
 import org.apache.hadoop.hive.ql.util.JavaDataModel
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
+import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory, PrimitiveObjectInspector}
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.{PrimitiveObjectInspectorFactory, PrimitiveObjectInspectorUtils}
+import org.apache.hadoop.hive.serde2.typeinfo.{CharTypeInfo, TypeInfo}
 import test.org.apache.spark.sql.MyDoubleAvg
 
-import org.apache.spark.SPARK_DOC_ROOT
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
+import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
+import org.apache.spark.sql.hive.HiveUDAFFunction
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{CharType, LongType, StringType, VarcharType}
 import org.apache.spark.tags.SlowHiveTest
+import org.apache.spark.unsafe.types.UTF8String
 
 @SlowHiveTest
 class HiveUDAFSuite extends QueryTest
@@ -197,6 +203,90 @@ class HiveUDAFSuite extends QueryTest
           spark.sql("SELECT default.myDoubleAvg(value) as my_avg from temp"),
           Row(105.0))
       }
+    }
+  }
+
+  test("SPARK-59277: Hive UDAF supports first-class CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq(
+        ("CHAR(5) COLLATE UTF8_LCASE", CharType(5), Row("def  ")),
+        ("VARCHAR(7) COLLATE UNICODE_CI", VarcharType(7), Row("def"))
+      ).foreach { case (dataType, expectedType, expectedRow) =>
+        val aggregate = sql(
+          s"""SELECT hive_max(value)
+             |FROM VALUES
+             |  (CAST('abc' AS $dataType)),
+             |  (CAST('def' AS $dataType))
+             |AS input(value)
+             |""".stripMargin)
+        assert(aggregate.schema.head.dataType === expectedType)
+        checkAnswer(aggregate, expectedRow)
+      }
+    }
+  }
+
+  test("SPARK-59277: HiveUDAFFunction keeps analysis type after child constantness changes") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val attr = AttributeReference("value", VarcharType(7))()
+      val original = HiveUDAFFunction(
+        "hive_max",
+        HiveFunctionWrapper(classOf[GenericUDAFMax].getName),
+        Seq(Literal.create(UTF8String.fromString("abc"), VarcharType(7))))
+      assert(original.dataType === VarcharType(7))
+      val copied = original.withNewChildren(Seq(attr)).asInstanceOf[HiveUDAFFunction]
+      assert(copied.dataType === original.dataType)
+      copied.serialize(null)
+    }
+  }
+
+  test("SPARK-59277: Hive UDAF partial buffer type can differ from the final result") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withUserDefinedFunction("char_max" -> true) {
+        sql(
+          s"CREATE TEMPORARY FUNCTION char_max AS " +
+            s"'${classOf[MockPartialStringFinalCharUDAF].getName}'")
+        withTempView("cv_udaf") {
+          Seq("abc", "def").toDF("value").repartition(2).createOrReplaceTempView("cv_udaf")
+          val aggregate = sql("SELECT char_max(CAST(value AS VARCHAR(7))) FROM cv_udaf")
+          assert(aggregate.schema.head.dataType === CharType(5))
+          checkAnswer(aggregate, Row("def  "))
+        }
+      }
+    }
+  }
+
+  test("SPARK-59277: incompatible UDAF partial inspector triggers mismatch error") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // MockPartialStringFinalCharUDAF exposes STRING partial / CHAR(5) final.
+      // Feed LongType as the expected partial type to trigger the mismatch.
+      val udaf = HiveUDAFFunction(
+        "char_max",
+        HiveFunctionWrapper(classOf[MockPartialStringFinalCharUDAF].getName),
+        Seq(Literal("x")),
+        isUDAFBridgeRequired = false,
+        mutableAggBufferOffset = 0,
+        inputAggBufferOffset = 0,
+        partialResultDataType = LongType,
+        dataType = CharType(5))
+      intercept[SparkException] { udaf.serialize(null) }
+    }
+  }
+
+  test("SPARK-59277: incompatible UDAF final inspector triggers mismatch error") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // MockPartialStringFinalCharUDAF exposes CHAR(5) final.
+      // Feed VarcharType(5) as the expected final type: CHAR(5) vs VARCHAR(5)
+      // is incompatible (different bounded-string kind).
+      val udaf = HiveUDAFFunction(
+        "char_max",
+        HiveFunctionWrapper(classOf[MockPartialStringFinalCharUDAF].getName),
+        Seq(Literal("x")),
+        isUDAFBridgeRequired = false,
+        mutableAggBufferOffset = 0,
+        inputAggBufferOffset = 0,
+        partialResultDataType = StringType,
+        dataType = VarcharType(5))
+      intercept[SparkException] { udaf.serialize(null) }
     }
   }
 
@@ -403,5 +493,69 @@ class MockUDAFEvaluator2 extends GenericUDAFEvaluator {
   override def terminate(agg: AggregationBuffer): AnyRef = {
     val buffer = agg.asInstanceOf[MockUDAFBuffer2]
     Array[Object](buffer.nonNullCount: java.lang.Long, buffer.nullCount: java.lang.Long)
+  }
+}
+
+/**
+ * PARTIAL1/PARTIAL2 expose a STRING inspector; FINAL/COMPLETE expose CHAR(5). This keeps the
+ * (partial, final) Catalyst type pair distinct so shuffle serde cannot silently use the result
+ * type for the aggregation buffer.
+ */
+class MockPartialStringFinalCharUDAF extends AbstractGenericUDAFResolver {
+  override def getEvaluator(info: Array[TypeInfo]): GenericUDAFEvaluator =
+    new MockPartialStringFinalCharEvaluator
+}
+
+class MockPartialStringFinalCharBuffer(var max: String)
+    extends GenericUDAFEvaluator.AbstractAggregationBuffer {
+  override def estimate(): Int = 16
+}
+
+class MockPartialStringFinalCharEvaluator extends GenericUDAFEvaluator {
+  private var inputOI: PrimitiveObjectInspector = _
+  private val partialOI = PrimitiveObjectInspectorFactory.javaStringObjectInspector
+  private val finalOI =
+    PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector(new CharTypeInfo(5))
+
+  override def init(mode: Mode, parameters: Array[ObjectInspector]): ObjectInspector = {
+    if (mode == Mode.PARTIAL1 || mode == Mode.COMPLETE) {
+      inputOI = parameters.head.asInstanceOf[PrimitiveObjectInspector]
+    }
+    if (mode == Mode.PARTIAL1 || mode == Mode.PARTIAL2) partialOI else finalOI
+  }
+
+  override def getNewAggregationBuffer: AggregationBuffer =
+    new MockPartialStringFinalCharBuffer(null)
+
+  override def reset(agg: AggregationBuffer): Unit = {
+    agg.asInstanceOf[MockPartialStringFinalCharBuffer].max = null
+  }
+
+  override def iterate(agg: AggregationBuffer, parameters: Array[AnyRef]): Unit = {
+    if (parameters.head != null) {
+      val value = PrimitiveObjectInspectorUtils.getString(parameters.head, inputOI)
+      val buffer = agg.asInstanceOf[MockPartialStringFinalCharBuffer]
+      if (buffer.max == null || value > buffer.max) {
+        buffer.max = value
+      }
+    }
+  }
+
+  override def merge(agg: AggregationBuffer, partial: Object): Unit = {
+    if (partial != null) {
+      val value = partial.asInstanceOf[String]
+      val buffer = agg.asInstanceOf[MockPartialStringFinalCharBuffer]
+      if (buffer.max == null || value > buffer.max) {
+        buffer.max = value
+      }
+    }
+  }
+
+  override def terminatePartial(agg: AggregationBuffer): AnyRef =
+    agg.asInstanceOf[MockPartialStringFinalCharBuffer].max
+
+  override def terminate(agg: AggregationBuffer): AnyRef = {
+    val max = agg.asInstanceOf[MockPartialStringFinalCharBuffer].max
+    if (max == null) null else new HiveChar(max, 5)
   }
 }

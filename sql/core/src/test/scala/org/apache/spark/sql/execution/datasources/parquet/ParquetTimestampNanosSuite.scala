@@ -18,18 +18,20 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.example.data.simple.SimpleGroupFactory
 import org.apache.parquet.hadoop.ParquetFileWriter.Mode
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
+import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{LogicalTypeAnnotation, MessageType, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{INT64, INT96}
 
-import org.apache.spark.{SparkArithmeticException, SparkException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -60,6 +62,46 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
       values.foreach { v =>
         val group = factory.newGroup()
         v.foreach(x => group.add("ts", x))
+        writer.write(group)
+      }
+    } finally {
+      writer.close()
+    }
+  }
+
+  // Builds a 12-byte INT96 value: nanoseconds-of-day (little-endian long) followed by the Julian
+  // day (little-endian int), the on-disk layout ParquetRowConverter.binaryToSQLTimestamp reads.
+  private def int96Binary(julianDay: Int, timeOfDayNanos: Long): Binary = {
+    val buf = ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN)
+    buf.putLong(timeOfDayNanos)
+    buf.putInt(julianDay)
+    Binary.fromConstantByteArray(buf.array())
+  }
+
+  // Writes a foreign INT96 timestamp column (a raw INT96 with no logical annotation, the layout
+  // Impala/Hive emit). INT96 carries no time-zone family in the schema, so the requested read type
+  // decides LTZ vs NTZ. dictionaryEnabled toggles dictionary vs plain encoding so both the
+  // vectorized updater's dictionary-decode and plain-read branches can be exercised.
+  private def writeForeignInt96Parquet(
+      file: File,
+      values: Seq[Binary],
+      dictionaryEnabled: Boolean): Unit = {
+    val schema: MessageType = Types.buildMessage()
+      .optional(INT96)
+      .named("ts")
+      .named("spark_schema")
+    val conf = spark.sessionState.newHadoopConf()
+    val writer = ExampleParquetWriter.builder(new Path(file.toURI))
+      .withType(schema)
+      .withConf(conf)
+      .withDictionaryEncoding(dictionaryEnabled)
+      .withWriteMode(Mode.OVERWRITE)
+      .build()
+    try {
+      val factory = new SimpleGroupFactory(schema)
+      values.foreach { v =>
+        val group = factory.newGroup()
+        group.add("ts", v)
         writer.write(group)
       }
     } finally {
@@ -130,6 +172,77 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
                 |  (TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999'),
                 |  (CAST(NULL AS TIMESTAMP_LTZ(9)))
                 |  AS t(ts)""".stripMargin).collect().toSeq)
+          }
+        }
+      }
+    }
+  }
+
+  test("INT96 vectorized read preserves sub-microsecond nanos from a foreign file") {
+    // Spark only writes micro-aligned INT96, so neither a Spark round-trip nor the widening suite
+    // (which writes through Spark) ever carries sub-microsecond digits. A foreign file (Impala/
+    // Hive) can: INT96 stores nanoseconds-of-day, and the default vectorized reader
+    // (Int96AsTimestampNanosUpdater#putInt96AsNanos) must recover the sub-micro remainder rather
+    // than floor to micros. Julian day 2440588 is 1970-01-01; 45296123456789 ns-of-day is
+    // 12:34:56.123456789, whose .789 remainder a micros floor would drop. Runs both families,
+    // both readers (withAllParquetReaders) and dictionary on/off (the updater's dictionary-decode
+    // and plain-read branches); the row-based decode is pinned in TimestampNanosParquetOpsSuite.
+    withNanosEnabled {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val binary = int96Binary(julianDay = 2440588, timeOfDayNanos = 45296123456789L)
+        Seq(true, false).foreach { dictionaryEnabled =>
+          withAllParquetReaders {
+            withTempPath { dir =>
+              val file = new File(dir, "int96.parquet")
+              writeForeignInt96Parquet(file, Seq.fill(4)(binary), dictionaryEnabled)
+              Seq(
+                TimestampNTZNanosType(9) -> "TIMESTAMP_NTZ '1970-01-01 12:34:56.123456789'",
+                TimestampLTZNanosType(9) -> "TIMESTAMP_LTZ '1970-01-01 12:34:56.123456789'"
+              ).foreach { case (readType, literal) =>
+                withClue(s"readType=$readType dictionary=$dictionaryEnabled") {
+                  val read = spark.read
+                    .schema(StructType(Seq(StructField("ts", readType))))
+                    .parquet(file.getCanonicalPath)
+                  assert(read.schema("ts").dataType === readType)
+                  val expected = spark.sql(s"SELECT $literal AS ts").collect().head
+                  checkAnswer(read, Seq.fill(4)(expected))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("INT96 read of an ancient value fails under EXCEPTION rebase for LTZ") {
+    // A pre-1582 (Julian) INT96 read as the LTZ family under int96RebaseModeInRead=EXCEPTION must
+    // refuse the ambiguous value instead of silently rebasing -- exercising the vectorized
+    // updater's failIfRebase arm (Int96AsTimestampNanosUpdater rebase=true, failIfRebase=true) end
+    // to end; the row-path rebase is pinned in TimestampNanosParquetOpsSuite. Julian day 2200000
+    // is ~year 1311. Both readers are covered by withAllParquetReaders.
+    withNanosEnabled {
+      withSQLConf(
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key -> LegacyBehaviorPolicy.EXCEPTION.toString) {
+        val ancient = int96Binary(julianDay = 2200000, timeOfDayNanos = 0L)
+        withAllParquetReaders {
+          withTempPath { dir =>
+            val file = new File(dir, "int96_ancient.parquet")
+            writeForeignInt96Parquet(file, Seq(ancient), dictionaryEnabled = false)
+            // The vectorized reader throws the SparkUpgradeException directly, while the row-based
+            // reader wraps it in a SparkException (FAILED_READ_FILE); catch their common ancestor
+            // and look for the upgrade exception anywhere in the cause chain.
+            val e = intercept[Exception] {
+              spark.read
+                .schema(StructType(Seq(StructField("ts", TimestampLTZNanosType(9)))))
+                .parquet(file.getCanonicalPath)
+                .collect()
+            }
+            assert(
+              Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null)
+                .exists(_.isInstanceOf[SparkUpgradeException]),
+              s"expected a SparkUpgradeException in the cause chain of: $e")
           }
         }
       }
