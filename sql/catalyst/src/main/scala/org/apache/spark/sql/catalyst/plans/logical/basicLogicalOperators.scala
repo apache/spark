@@ -2773,8 +2773,7 @@ object AsOfJoin {
    */
   private[catalyst] object MatchConditionTypes {
 
-    def isValidOperandType(dataType: DataType): Boolean =
-      RowOrdering.isOrderable(dataType) && !containsEmptyStructType(dataType)
+    def isValidOperandType(dataType: DataType): Boolean = RowOrdering.isOrderable(dataType)
 
     /** Whether the `>=` this join builds can compare the two operands. */
     def areOperandsCompatible(leftType: DataType, rightType: DataType): Boolean = {
@@ -2867,13 +2866,6 @@ object AsOfJoin {
           leftStruct.sameType(rightStruct) && leftStruct.nonEmpty
         case _ => false
       }
-
-    private def containsEmptyStructType(dataType: DataType): Boolean = dataType match {
-      case struct: StructType =>
-        struct.isEmpty || struct.exists(field => containsEmptyStructType(field.dataType))
-      case ArrayType(elementType, _) => containsEmptyStructType(elementType)
-      case _ => false
-    }
   }
 
   /**
@@ -3058,15 +3050,14 @@ object AsOfJoin {
     val leftArray = castArrayElementType(leftOperand, elementType)
     val rightArray = castArrayElementType(rightOperand, elementType)
     elementType match {
-      case struct: StructType =>
+      // An empty struct has no fields to split into, so it takes the whole-value arm below.
+      case struct: StructType if struct.nonEmpty =>
         val leftElement = NamedLambdaVariable("left_elem", struct, nullable = true)
         val rightElement = NamedLambdaVariable("right_elem", struct, nullable = true)
         val leafDiffs = collectStructLeafPairs(leftElement, rightElement, struct).map {
           case (left, right) => buildLeafOrderExpression(left, right, operator)
         }
-        val elementOrder = wrapCompositeOrderExpression(
-          leafDiffs,
-          ArrayType(struct, containsNull = true))
+        val elementOrder = wrapCompositeOrderExpression(leafDiffs)
         ZipWith(
           leftArray,
           rightArray,
@@ -3104,7 +3095,7 @@ object AsOfJoin {
     val leafDiffs = collectStructLeafPairs(leftOperand, rightOperand, structType).map {
       case (left, right) => buildLeafOrderExpression(left, right, operator)
     }
-    wrapCompositeOrderExpression(leafDiffs, structType)
+    wrapCompositeOrderExpression(leafDiffs)
   }
 
   private def collectStructLeafPairs(
@@ -3124,16 +3115,11 @@ object AsOfJoin {
       }
   }
 
-  private def wrapCompositeOrderExpression(
-      diffs: Seq[Expression],
-      compositeType: DataType): Expression = {
+  /** Groups multiple field distances in a struct because their types may differ. */
+  private def wrapCompositeOrderExpression(diffs: Seq[Expression]): Expression = {
     diffs match {
       case Seq(single) => single
-      case _ =>
-        compositeType match {
-          case _: ArrayType => CreateArray(diffs)
-          case _ => CreateStruct(diffs)
-        }
+      case _ => CreateStruct(diffs)
     }
   }
 
