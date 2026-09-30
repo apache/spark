@@ -395,10 +395,13 @@ message Finish {}
 // Worker -> Engine completion message. Carries per-execution summary metrics.
 //
 // Metrics design:
-//   - [[FinishResponse.metrics]] / [[CancelResponse.metrics]]: per-execution
-//     metrics accumulated up to the point of stream termination (e.g. rows
-//     processed, time per phase). Emitted once per [[Execute]] stream,
+//   - [[FinishResponse.execution_metrics]] /
+//     [[CancelResponse.execution_metrics]]: per-execution metrics with
+//     defined semantics (see [[ExecutionMetrics]]), accumulated up to the
+//     point of stream termination. Emitted once per [[Execute]] stream,
 //     regardless of whether the stream ended cleanly or was cancelled.
+//   - [[FinishResponse.metrics]] / [[CancelResponse.metrics]]: free-form,
+//     worker-defined per-execution metrics, sent alongside them.
 //   - [[HeartbeatResponse.metrics]]: worker-global metrics aggregated across
 //     all sessions (e.g. total rows processed, memory usage). Emitted
 //     periodically via the [[Manage]] RPC.
@@ -407,8 +410,9 @@ message Finish {}
 //     introduced as a separate streaming message in a future revision
 //     without changing this contract. TODO(SPARK-56922).
 message FinishResponse {
-    // (Optional) Final metrics accumulated over this Execute stream.
-    optional ExecutionMetrics metrics = 1;
+    // Per-execution metrics accumulated over the session. Free-form;
+    // names are worker-defined.
+    map<string, string> metrics = 1;
 
     // (Optional) Inline finish result returned by the worker.
     // Mirrors [[InitResponse.data]] -- the finish phase allows the
@@ -425,6 +429,11 @@ message FinishResponse {
     // data processing, the terminator is [[CancelResponse]], not
     // [[FinishResponse]]. The engine SHOULD surface this as an exception.
     optional ExecutionError error = 3;
+
+    // (Optional) Final metrics accumulated over this Execute stream, in
+    // the typed fields the engine reads. Measurements that have no field
+    // there belong in [[metrics]].
+    optional ExecutionMetrics execution_metrics = 4;
 }
 
 // Engine -> Worker explicit cancel. Distinct from a gRPC stream error
@@ -469,14 +478,20 @@ message Cancel {
 // accumulated up to the point of cancellation -- even a partial execution
 // may produce useful diagnostics (e.g. rows processed before abort).
 message CancelResponse {
-    // (Optional) Partial metrics accumulated over this Execute stream.
-    optional ExecutionMetrics metrics = 1;
+    // Per-execution metrics accumulated up to cancellation. Free-form;
+    // names are worker-defined. See [[FinishResponse.metrics]] for the
+    // full metrics design.
+    map<string, string> metrics = 1;
 
     // (Optional) Error raised by the cancel callback (if any), invoked
     // when [[Cancel]] is received. The engine SHOULD surface this
     // alongside any prior [[ExecutionError]] (e.g. as a suppressed
     // exception).
     optional ExecutionError error = 2;
+
+    // (Optional) Partial metrics accumulated over this Execute stream up
+    // to cancellation. See [[FinishResponse.execution_metrics]].
+    optional ExecutionMetrics execution_metrics = 3;
 }
 
 // Per-execution metrics accumulated by one Execute stream, as measured by the
@@ -696,7 +711,7 @@ message Heartbeat {
 message HeartbeatResponse {
     // (Optional) Worker-global metrics aggregated across all active sessions
     // (e.g. total rows processed, active session count, memory usage).
-    // Complements the per-execution metrics in [[ExecutionMetrics]].
+    // Complements the per-execution metrics in [[FinishResponse.metrics]].
     // Free-form; names are worker-defined.
     map<string, string> metrics = 1;
 }

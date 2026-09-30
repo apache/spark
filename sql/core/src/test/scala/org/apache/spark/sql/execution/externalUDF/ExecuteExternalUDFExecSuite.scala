@@ -149,12 +149,12 @@ object ExecuteExternalUDFExecSuite {
       closeCount.add(1L)
       val termination = if (cancelOnClose) {
         val response = terminalMetrics.fold(CancelResponse.getDefaultInstance) { metrics =>
-          CancelResponse.newBuilder().setMetrics(metrics).build()
+          CancelResponse.newBuilder().setExecutionMetrics(metrics).build()
         }
         Termination.Cancelled(response)
       } else {
         val response = terminalMetrics.fold(FinishResponse.getDefaultInstance) { metrics =>
-          FinishResponse.newBuilder().setMetrics(metrics).build()
+          FinishResponse.newBuilder().setExecutionMetrics(metrics).build()
         }
         Termination.Finished(response)
       }

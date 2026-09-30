@@ -114,8 +114,10 @@ trait ExternalUDFExec extends UnaryExecNode {
 
   private def recordTerminalMetrics(termination: Termination): Unit = {
     val reported = termination match {
-      case Termination.Finished(response) if response.hasMetrics => Some(response.getMetrics)
-      case Termination.Cancelled(response) if response.hasMetrics => Some(response.getMetrics)
+      case Termination.Finished(response) if response.hasExecutionMetrics =>
+        Some(response.getExecutionMetrics)
+      case Termination.Cancelled(response) if response.hasExecutionMetrics =>
+        Some(response.getExecutionMetrics)
       case _ => None
     }
     reported.foreach(ExternalUDFMetrics.update(metrics, _))
