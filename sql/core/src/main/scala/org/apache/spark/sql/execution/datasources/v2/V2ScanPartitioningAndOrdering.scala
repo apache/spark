@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, COLUMN_NAMES, RELATION_NAME}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{NamedExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.DATA_SOURCE_V2_SCAN_RELATION
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NamedReference}
 import org.apache.spark.sql.connector.read.{SupportsReportOrdering, SupportsReportPartitioning}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, UnknownPartitioning}
@@ -56,8 +57,7 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
               log"Spark ignores the KeyGroupedPartitioning reported by " +
                 log"${MDC(RELATION_NAME, relation.name)} (scan " +
                 log"${MDC(CLASS_NAME, scan.getClass.getName)}) because the partition key columns " +
-                log"cannot be resolved: ${MDC(COLUMN_NAMES, unresolvedColumns.mkString(", "))}. " +
-                log"Storage-partitioned join will not be applied for this scan.")
+                log"cannot be resolved: ${MDC(COLUMN_NAMES, unresolvedColumns.mkString(", "))}.")
             None
           } else {
             sequenceToOption(
@@ -113,23 +113,27 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
   private def unresolvableColumns(
       exprs: Seq[V2Expression],
       relation: LogicalPlan): Seq[String] = {
-    // This is not `V2Expression.references()` because `ApplyTransform` and `BucketTransform`
-    // override it to return only their top-level arguments, which would miss `f(g(missing))`.
+    // Walk `children()` instead of calling `V2Expression.references()`: the conversion resolves
+    // every reference reachable through `arguments()`/`expression()`, while `references()` can
+    // return fewer. `ApplyTransform` returns only its top-level arguments, which would miss
+    // `f(g(missing))`, and a connector-defined `Transform` can return anything.
     def references(expr: V2Expression): Seq[NamedReference] = expr match {
       case ref: NamedReference => Seq(ref)
       case other => other.children().toImmutableArraySeq.flatMap(references)
     }
-    exprs.flatMap(references).distinct.flatMap { ref =>
+    exprs.flatMap(references).flatMap { ref =>
+      val name = ref.fieldNames.toImmutableArraySeq.quoted
       try {
-        if (V2ExpressionUtils.resolveRefOpt[NamedExpression](ref, relation).isDefined) {
+        if (V2ExpressionUtils.resolveRefOpt(ref, relation).isDefined) {
           None
         } else {
-          Some(ref.describe())
+          Some(name)
         }
       } catch {
-        // A missing nested field or an ambiguous name throws instead of returning None.
-        case e: AnalysisException => Some(s"${ref.describe()} (${e.getCondition})")
+        // A nested-field extraction error or an ambiguous reference throws instead of returning
+        // None.
+        case e: AnalysisException => Some(s"$name (${e.getCondition})")
       }
-    }
+    }.distinct
   }
 }

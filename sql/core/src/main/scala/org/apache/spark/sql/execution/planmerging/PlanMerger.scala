@@ -982,10 +982,10 @@ class PlanMerger(
   // may push a different best-effort filter and so prune differently. And a report the merged scan
   // GAINS is not a degradation either. For partitioning that is because an input dropped its own
   // only where none of its keys survived in that scan's output (V2ScanPartitioningAndOrdering's
-  // partitioning pass keeps the report whenever any key survives), not because the source stopped
-  // reporting; the ordering pass has no such guard, so an ordering report is
-  // never dropped by pruning and a gained one can only come from the source. Either way, keeping it
-  // is exactly the win this merge is after.
+  // partitioning pass keeps the report whenever any key survives, unless a reported column cannot
+  // be resolved), not because the source stopped reporting; the ordering pass has no such guard,
+  // so an ordering report is never dropped by pruning and a gained one can only come from the
+  // source. Either way, keeping it is exactly the win this merge is after.
   private def mergeDegradesReporting(
       merged: DataSourceV2ScanRelation,
       requiredKeyGroupedPartitioning: Seq[Expression],

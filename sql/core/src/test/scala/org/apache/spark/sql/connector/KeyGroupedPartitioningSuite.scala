@@ -3553,6 +3553,8 @@ class KeyGroupedPartitioningSuite
 
   private val customReportingCatalogName = "custom_reporting_cat"
   private val customReportingTableName = s"$customReportingCatalogName.ns.$table"
+  private def plusOneKey(column: String): Expression =
+    new GeneralScalarExpression("+", Array[Expression](FieldReference(column), literal(1)))
 
   private def withCustomReportingTable(f: CustomReportingCatalog => Unit): Unit = {
     spark.conf.set(s"spark.sql.catalog.$customReportingCatalogName",
@@ -3565,7 +3567,7 @@ class KeyGroupedPartitioningSuite
         Column.create("data", StringType),
         Column.create("s", new StructType().add("x", IntegerType)))
       createTable(table, reportingColumns, Array(identity("id")), catalog = reportingCatalog)
-      sql(s"INSERT INTO $customReportingCatalogName.ns.$table VALUES " +
+      sql(s"INSERT INTO $customReportingTableName VALUES " +
           "(1, 'aa', named_struct('x', 10)), (2, 'bb', named_struct('x', 20))")
       createTable(table, columns, Array(identity("id")))
       sql(s"INSERT INTO testcat.ns.$table VALUES " +
@@ -3583,7 +3585,7 @@ class KeyGroupedPartitioningSuite
   }
 
   private def customReportingJoinDf(): DataFrame = sql(
-    s"""SELECT t1.data, t2.data FROM $customReportingCatalogName.ns.$table t1
+    s"""SELECT t1.data, t2.data FROM $customReportingTableName t1
        |JOIN testcat.ns.$table t2 ON t1.id = t2.id
        |""".stripMargin)
 
@@ -3612,6 +3614,8 @@ class KeyGroupedPartitioningSuite
       (Seq(nestedTransform), Some("missing")),
       (Seq(identity("id"), identity("missing")), Some("missing")),
       (Seq(identity("missing"), bucket(4, "missing")), Some("missing")),
+      (Seq(plusOneKey("id"), identity("missing")), Some("missing")),
+      (Seq(plusOneKey("missing")), Some("missing")),
       (Seq(identity("s.missing")), Some("s.missing (FIELD_NOT_FOUND)")))
     withCustomReportingTable { reportingCatalog =>
       cases.foreach { case (keys, unresolvedColumns) =>
@@ -3668,8 +3672,7 @@ class KeyGroupedPartitioningSuite
 
   test("SPARK-59721: a reported partition key that cannot be converted still fails") {
     val cases = Seq(
-      (new GeneralScalarExpression("+", Array[Expression](FieldReference("id"), literal(1))),
-        "id + 1"),
+      (plusOneKey("id"), "id + 1"),
       (ApplyTransform("f", Seq(ApplyTransform("g", Seq(FieldReference("id"))))), "g(id)"))
     withCustomReportingTable { reportingCatalog =>
       cases.foreach { case (key, expr) =>
@@ -9463,8 +9466,8 @@ class KeyGroupedPartitioningCatalystRuntimeFilterSuite
  * of the table's own, so a test can report keys on columns the table does not have.
  */
 class CustomReportingCatalog extends InMemoryTableCatalog {
-  @volatile var reportedKeys: Seq[Expression] = Seq.empty
-  @volatile var reportedOrdering: Seq[SortOrder] = Seq.empty
+  var reportedKeys: Seq[Expression] = Seq.empty
+  var reportedOrdering: Seq[SortOrder] = Seq.empty
 
   // scalastyle:off argcount
   override protected def newInMemoryTable(

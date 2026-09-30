@@ -48,19 +48,20 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
 
   /**
    * Variant of `resolveRef` that returns `None` if no attribute matches the reference. It still
-   * throws for a missing nested field or an ambiguous reference.
+   * throws for a nested-field extraction error, such as a missing nested field, or an ambiguous
+   * reference.
    */
-  private[sql] def resolveRefOpt[T <: NamedExpression](
-      ref: NamedReference, plan: LogicalPlan): Option[T] = {
-    plan.resolve(ref.fieldNames.toImmutableArraySeq, conf.resolver).map(_.asInstanceOf[T])
+  private[sql] def resolveRefOpt(
+      ref: NamedReference, plan: LogicalPlan): Option[NamedExpression] = {
+    plan.resolve(ref.fieldNames.toImmutableArraySeq, conf.resolver)
   }
 
   def resolveRef[T <: NamedExpression](ref: NamedReference, plan: LogicalPlan): T = {
-    resolveRefOpt[T](ref, plan).getOrElse {
+    resolveRefOpt(ref, plan).getOrElse {
       val name = ref.fieldNames.toImmutableArraySeq.quoted
       val outputString = plan.output.map(_.name).mkString(",")
       throw QueryCompilationErrors.cannotResolveAttributeError(name, outputString)
-    }
+    }.asInstanceOf[T]
   }
 
   def resolveRefs[T <: NamedExpression](refs: Seq[NamedReference], plan: LogicalPlan): Seq[T] = {

@@ -40,9 +40,8 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
 
   test("SPARK-59721: resolveRefOpt returns None for an unresolvable reference") {
     val plan = LocalRelation(AttributeReference("a", StringType)())
-    assert(V2ExpressionUtils.resolveRefOpt[NamedExpression](FieldReference("a"), plan).isDefined)
-    assert(
-      V2ExpressionUtils.resolveRefOpt[NamedExpression](FieldReference("missing"), plan).isEmpty)
+    assert(V2ExpressionUtils.resolveRefOpt(FieldReference("a"), plan).isDefined)
+    assert(V2ExpressionUtils.resolveRefOpt(FieldReference("missing"), plan).isEmpty)
   }
 
   test("SPARK-59721: resolveRefOpt throws for a missing nested field or an ambiguous reference") {
@@ -50,7 +49,7 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
       LocalRelation(AttributeReference("s", new StructType().add("x", IntegerType))())
     checkError(
       exception = intercept[AnalysisException] {
-        V2ExpressionUtils.resolveRefOpt[NamedExpression](FieldReference("s.missing"), structPlan)
+        V2ExpressionUtils.resolveRefOpt(FieldReference("s.missing"), structPlan)
       },
       condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`missing`", "fields" -> "`x`"))
@@ -59,7 +58,7 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
       AttributeReference("a", StringType)(), AttributeReference("a", StringType)())
     checkError(
       exception = intercept[AnalysisException] {
-        V2ExpressionUtils.resolveRefOpt[NamedExpression](FieldReference("a"), ambiguousPlan)
+        V2ExpressionUtils.resolveRefOpt(FieldReference("a"), ambiguousPlan)
       },
       condition = "AMBIGUOUS_REFERENCE",
       parameters = Map("name" -> "`a`", "referenceNames" -> "[`a`, `a`]"))
