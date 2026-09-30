@@ -30,6 +30,7 @@ import org.scalatest.concurrent.Eventually.{eventually, timeout}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Network.NETWORK_CRYPTO_ENABLED
 import org.apache.spark.security._
 
 class UserCredentialManagerSuite extends SparkFunSuite {
@@ -857,5 +858,79 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     } finally {
       AnotherFakeCredentialProvider.throwOnProperties = false
     }
+  }
+
+  // ========== RPC encryption warning ==========
+
+  private val encryptionWarningFragment = "RPC channel encryption is not configured"
+
+  test("isRpcEncryptionEnabled: false when nothing is configured") {
+    assert(!UserCredentialManager.isRpcEncryptionEnabled(new SparkConf(loadDefaults = false)))
+  }
+
+  test("isRpcEncryptionEnabled: true with SSL RPC encryption") {
+    val conf = new SparkConf(loadDefaults = false).set("spark.ssl.rpc.enabled", "true")
+    assert(UserCredentialManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: true with authentication + network crypto") {
+    val conf = new SparkConf(loadDefaults = false)
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(NETWORK_CRYPTO_ENABLED, true)
+    assert(UserCredentialManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: true with authentication + SASL encryption") {
+    val conf = new SparkConf(loadDefaults = false)
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(SASL_ENCRYPTION_ENABLED, true)
+    assert(UserCredentialManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: false when authentication is enabled without encryption") {
+    // Authentication alone (without crypto/SASL encryption) does not encrypt the channel.
+    val conf = new SparkConf(loadDefaults = false).set(NETWORK_AUTH_ENABLED, true)
+    assert(!UserCredentialManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("warnIfRpcEncryptionDisabled: warns when encryption is not configured") {
+    val appender = new LogAppender(encryptionWarningFragment)
+    withLogAppender(appender) {
+      UserCredentialManager.warnIfRpcEncryptionDisabled(new SparkConf(loadDefaults = false))
+    }
+    assert(appender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains(encryptionWarningFragment)))
+  }
+
+  test("warnIfRpcEncryptionDisabled: does not warn when encryption is configured") {
+    val appender = new LogAppender(encryptionWarningFragment)
+    withLogAppender(appender) {
+      val conf = new SparkConf(loadDefaults = false).set("spark.ssl.rpc.enabled", "true")
+      UserCredentialManager.warnIfRpcEncryptionDisabled(conf)
+    }
+    assert(!appender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains(encryptionWarningFragment)))
+  }
+
+  test("create warns when OIDC is enabled without RPC encryption") {
+    // Guards the wiring: create() must invoke the encryption warning for an enabled config.
+    val appender = new LogAppender(encryptionWarningFragment)
+    withLogAppender(appender) {
+      val conf = createSparkConf() // OIDC enabled, no RPC encryption configured
+      UserCredentialManager.create(
+        conf, (_, _) => (), Some(new CredentialProviderLoader()))
+    }
+    assert(appender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains(encryptionWarningFragment)))
+  }
+
+  test("create does not warn when OIDC is disabled") {
+    val appender = new LogAppender(encryptionWarningFragment)
+    withLogAppender(appender) {
+      val conf = new SparkConf(loadDefaults = false).set(SECURITY_OIDC_ENABLED, false)
+      UserCredentialManager.create(conf, (_, _) => (), Some(new CredentialProviderLoader()))
+    }
+    assert(!appender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains(encryptionWarningFragment)))
   }
 }

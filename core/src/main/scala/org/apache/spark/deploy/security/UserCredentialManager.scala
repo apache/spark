@@ -32,6 +32,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Network.NETWORK_CRYPTO_ENABLED
 import org.apache.spark.security._
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -498,6 +499,13 @@ private[spark] object UserCredentialManager extends Logging {
     if (!sparkConf.get(SECURITY_OIDC_ENABLED)) {
       None
     } else {
+      // Credentials are transmitted to executors over Spark's RPC channel (via
+      // UpdateUserCredentials broadcasts and TaskDescription delivery). If RPC encryption is not
+      // configured, those credentials travel in cleartext. Per the SPIP, enabling credential
+      // propagation without RPC encryption logs a warning by default (a stricter fail-fast mode
+      // may be introduced later based on community feedback).
+      warnIfRpcEncryptionDisabled(sparkConf)
+
       // Enforce the invariant explicitly rather than silently allocating a fresh loader (which
       // SparkContext would not own and therefore never close, leaking provider resources).
       val selectionLoader = loader.getOrElse {
@@ -516,6 +524,45 @@ private[spark] object UserCredentialManager extends Logging {
       val tokenIngestor = new FileTokenIngestor(Paths.get(tokenFile))
       Some(new UserCredentialManager(
         sparkConf, tokenIngestor, onCredentialsUpdate, selectionLoader))
+    }
+  }
+
+  /**
+   * Returns true if Spark's RPC channel encryption is configured, using the same criteria as
+   * [[HadoopDelegationTokenManager]]'s direct-credential-provider check: either SSL-based RPC
+   * encryption (`spark.ssl.rpc.enabled`), or AES-based encryption enabled together with
+   * authentication (`spark.authenticate` plus one of `spark.network.crypto.enabled` /
+   * `spark.authenticate.enableSaslEncryption`).
+   *
+   * NOTE: This condition is intentionally kept identical to the `hasEncryption` check in
+   * `HadoopDelegationTokenManager` (the Kerberos direct-credential-provider path). If the set of
+   * config keys that constitute "RPC encryption is enabled" changes, update both places together.
+   */
+  private[security] def isRpcEncryptionEnabled(sparkConf: SparkConf): Boolean = {
+    sparkConf.getBoolean("spark.ssl.rpc.enabled", false) ||
+      (sparkConf.get(NETWORK_AUTH_ENABLED) &&
+        (sparkConf.get(NETWORK_CRYPTO_ENABLED) || sparkConf.get(SASL_ENCRYPTION_ENABLED)))
+  }
+
+  /**
+   * Logs a warning if OIDC credential propagation is enabled but RPC channel encryption is not
+   * configured, since credentials would then be transmitted over the RPC channel in cleartext.
+   * Unlike [[HadoopDelegationTokenManager]]'s direct-credential-provider path (which fails fast),
+   * this only warns, per the SPIP's default behavior.
+   */
+  private[security] def warnIfRpcEncryptionDisabled(sparkConf: SparkConf): Unit = {
+    if (!isRpcEncryptionEnabled(sparkConf)) {
+      // Reference config keys via `.key` (rather than hardcoded strings) so the message stays in
+      // sync if a key is renamed. `spark.ssl.rpc.enabled` has no Scala ConfigEntry (it is read
+      // directly in TransportConf), so it is spelled out literally here and in
+      // isRpcEncryptionEnabled.
+      val remediation = s"Enable RPC encryption via spark.ssl.rpc.enabled=true, or " +
+        s"${NETWORK_AUTH_ENABLED.key}=true together with one of " +
+        s"${NETWORK_CRYPTO_ENABLED.key} / ${SASL_ENCRYPTION_ENABLED.key}."
+      logWarning(log"OIDC credential propagation is enabled " +
+        log"(${MDC(LogKeys.CONFIG, SECURITY_OIDC_ENABLED.key)}=true) but RPC channel encryption " +
+        log"is not configured. Credentials will be transmitted to executors over an unencrypted " +
+        log"channel. ${MDC(LogKeys.REASON, remediation)}")
     }
   }
 

@@ -1222,7 +1222,10 @@ delegation tokens rather than the original ticket-granting ticket.
 * Service credentials are not written to shuffle files, event logs, or checkpoints.
 * Credentials are carried over Spark's RPC channels and therefore rely on Spark's existing RPC
   encryption configuration. Operators are strongly encouraged to enable RPC encryption whenever
-  credential propagation is enabled. See [Network Encryption](#network-encryption) for details.
+  credential propagation is enabled. If credential propagation is enabled while RPC encryption is
+  not configured, Spark logs a warning at startup, since credentials would otherwise be transmitted
+  to executors over an unencrypted channel. See [Network Encryption](#network-encryption) for
+  details.
 
 ## Custom CredentialProvider
 
