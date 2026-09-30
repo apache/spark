@@ -393,12 +393,16 @@ Security options for the Spark History Server are covered more detail in the
   </tr>
   <tr>
     <td>spark.history.fs.eventLog.maxLineLength</td>
-    <td>512m</td>
+    <td>256m</td>
     <td>
-      Maximum length of a single event log line during replay. Lines longer than this are
-      skipped with a warning instead of being read into memory, which bounds the memory replay
-      can use when an event log is corrupt or unexpectedly large. Setting this to 0 or a
-      negative value disables the limit.<br/>
+      Maximum UTF-8 byte length of a single event log line during replay, excluding the line
+      ending. Longer lines are skipped with a warning, which bounds the memory replay
+      can use when an event log is corrupt or unexpectedly large. Buffer growth, UTF-16 storage
+      and JSON parsing can require several times this limit in heap space. Buffer capacity grows
+      in steps: reducing 256m to 200m or 150m may not reduce the retained buffer; use 128m to
+      reach a smaller capacity. Values at or below
+      0, or above 536870912, use the maximum supported limit of 536870912 bytes (512 MiB).
+      This cap avoids JVM array-size limits but does not guarantee sufficient heap space.<br/>
       Introduced in 4.3.0; also available in 3.5.10, 4.0.5, 4.1.4 and 4.2.1; and in all
       versions after 4.3.0.
     </td>
