@@ -474,6 +474,33 @@ class XmlFunctionsSuite extends SharedSparkSession {
         stop = 21
       )
     )
+
+  }
+
+  test("SPARK-59801: XML functions with non-foldable options") {
+    val df = Seq((Tuple1(1), "<ROW><a>1</a></ROW>", "ROW"))
+      .toDF("a", "xml", "rowTag")
+    val nonFoldableQueries = Seq(
+      "from_xml" -> "from_xml(xml, 'a INT', map('rowTag', rowTag))",
+      "to_xml" -> "to_xml(a, map('rowTag', rowTag))",
+      "schema_of_xml" ->
+        "schema_of_xml('<ROW><a>1</a></ROW>', map('rowTag', rowTag))")
+
+    nonFoldableQueries.foreach { case (functionName, query) =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.selectExpr(query)
+        },
+        condition = "NON_FOLDABLE_ARGUMENT",
+        parameters = Map(
+          "funcName" -> s"`$functionName`",
+          "paramName" -> "`options`",
+          "paramType" -> "\"MAP<STRING, STRING>\""),
+        context = ExpectedContext(
+          fragment = query,
+          start = 0,
+          stop = query.length - 1))
+    }
   }
 
   test("Support from_xml in SQL") {

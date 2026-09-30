@@ -46,6 +46,10 @@ import org.apache.spark.util.ArrayImplicits._
 private[spark] object MavenUtils extends Logging {
   val JAR_IVY_SETTING_PATH_KEY: String = "spark.jars.ivySettings"
 
+  private lazy val testM2Path = new File(
+    SparkFileUtils.createTempDir(namePrefix = "spark-test-m2"),
+    "repository")
+
   private val ivyLock = new ReentrantLock()
   private val ivyLockPollIntervalMs = 100L
 
@@ -152,8 +156,8 @@ private[spark] object MavenUtils extends Logging {
   /** Path of the local Maven cache. */
   private[util] def m2Path: File = {
     if (SparkEnvUtils.isTesting) {
-      // test builds delete the maven cache, and this can cause flakiness
-      new File("dummy", ".m2" + File.separator + "repository")
+      // Keep concurrent test JVMs from deleting each other's local Maven repository.
+      testM2Path
     } else {
       new File(System.getProperty("user.home"), ".m2" + File.separator + "repository")
     }
