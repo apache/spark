@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Expression,
   ExtractValue,
   If,
+  In,
   Literal,
   NamedExpression
 }
@@ -120,12 +121,50 @@ object PivotTransformer extends AliasHelper with SQLConfHelper {
         case _ =>
           newAlias(pivotColumn, Some("__pivot_col"))
       }
-      val extendedGroupingExpressions = groupByExpressions :+ namedPivotCol
+      // SPARK-55569: Collapse non-matching pivot column values to null so the firstAgg produces
+      // at most one group per (groupBy-key, null) instead of one group per distinct non-matching
+      // value. PivotFirst ignores the null group, but the groupBy key is preserved in secondAgg,
+      // keeping the semantics identical to the un-optimized plan. This reduces the number of
+      // groups when the table has many distinct values outside the pivot IN list.
+      // Skip when the pivot column contains an aggregate (SPARK-24722) or when a NULL pivot
+      // value is present (non-matching rows would merge with legitimate null rows).
+      val hasNullPivotValue =
+        evalPivotValues.contains(null)
+      val canCollapse =
+        !pivotColumn.exists(_.isInstanceOf[AggregateFunction]) &&
+        !hasNullPivotValue
+      val effectivePivotCol = if (canCollapse) {
+        val castPivotExprs = pivotValues.map { value =>
+          Cast(value, pivotColumn.dataType,
+            Some(conf.sessionLocalTimeZone))
+        }
+        val nonNullExprs = castPivotExprs
+          .zip(evalPivotValues)
+          .collect { case (expr, v) if v != null => expr }
+        val matchesPivotValue = if (nonNullExprs.nonEmpty) {
+          In(pivotColumn, nonNullExprs)
+        } else {
+          Literal.FalseLiteral
+        }
+        newAlias(
+          If(matchesPivotValue, pivotColumn,
+            Literal(null, pivotColumn.dataType)),
+          Some(namedPivotCol match {
+            case ne: NamedExpression => ne.name
+            case _ => "__pivot_col"
+          }))
+      } else {
+        namedPivotCol
+      }
+      val extendedGroupingExpressions =
+        groupByExpressions :+ effectivePivotCol
       val firstAgg =
-        Aggregate(extendedGroupingExpressions, extendedGroupingExpressions ++ namedAggExps, child)
+        Aggregate(extendedGroupingExpressions,
+          extendedGroupingExpressions ++ namedAggExps, child)
       val pivotAggregates = namedAggExps.map { a =>
         newAlias(
-          PivotFirst(namedPivotCol.toAttribute, a.toAttribute, evalPivotValues)
+          PivotFirst(effectivePivotCol.toAttribute,
+            a.toAttribute, evalPivotValues)
             .toAggregateExpression(),
           Some("__pivot_" + a.sql)
         )
