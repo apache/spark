@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CapturesConfig, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, GlobalTempView, LocalTempView, ResolvedIdentifier, ResolvedPersistentView, SchemaEvolution, SchemaUnsupported, ViewSchemaMode, ViewType}
-import org.apache.spark.sql.catalyst.analysis.V2TableReference
+import org.apache.spark.sql.catalyst.analysis.V2Reference
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, AnalysisOnlyCommand, CreateTempView, CreateView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
@@ -36,7 +36,7 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, NamespaceHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 import org.apache.spark.sql.util.SchemaUtils
@@ -800,7 +800,10 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     plan transform {
       case r: DataSourceV2Relation
           if r.catalog.isDefined && r.identifier.isDefined && r.timeTravelSpec.isEmpty =>
-        V2TableReference.createForTempView(r, viewName.nameParts)
+        r.table match {
+          case changelog: ChangelogTable if changelog.isBounded => r
+          case _ => V2Reference.createForTempView(r, viewName.nameParts)
+        }
     }
   }
 
