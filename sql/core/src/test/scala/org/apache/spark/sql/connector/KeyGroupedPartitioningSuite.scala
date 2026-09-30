@@ -1520,6 +1520,102 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59887: a side shuffled onto a transform of an expression is not paired as it is") {
+    Seq(4, 8).foreach(n => createBucketedIdTable(s"bucket$n", n, numIds = 8))
+    createTable("plain", Array(Column.create("b", LongType), Column.create("data", StringType)),
+      Array.empty)
+    sql("INSERT INTO testcat.ns.plain VALUES " +
+      (0 until 8).map(i => s"($i, 'p$i')").mkString(", "))
+
+    // The first join shuffles `plain` onto `bucket(4, b + 1)`, which is a function of `b`, but not
+    // the same function of it as the third table's `bucket(n, id)` is of `id`. The second join
+    // clusters `plain` on `b`, so pairing the two as they stand, or after reducing `bucket(8, id)`
+    // onto 4 buckets, puts a row with `b = id` on a different partition on each side.
+    Seq(4 -> "false", 8 -> "true").foreach { case (third, allowCompatibleTransforms) =>
+      withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> allowCompatibleTransforms) {
+        val df = sql(
+          s"""SELECT b4.id, p.b, t.id FROM testcat.ns.bucket4 b4
+             |JOIN testcat.ns.plain p ON b4.id = p.b + 1
+             |JOIN testcat.ns.bucket$third t ON p.b = t.id""".stripMargin)
+        checkAnswer(df, (0 until 7).map(b => Row(b + 1L, b.toLong, b.toLong)))
+        // One shuffle per join: `plain` for the first, the first join's output for the second, and
+        // none for the third table. The second join does not shuffle onto the `bucket(4, b + 1)`
+        // layout, since that would move both of its sides.
+        assert(collectShuffles(stripAQEPlan(df.queryExecution.executedPlan)).size == 2)
+      }
+    }
+  }
+
+  test("SPARK-59887: a side shuffled onto a transform of a struct field is not paired as it is") {
+    createBucketedIdTable("bucket4", 4, numIds = 8)
+    val structColumn = Array(
+      Column.create("s", new StructType().add("a", LongType).add("b", LongType)))
+    Seq("ps", "qs").foreach { name =>
+      createTable(name, structColumn, Array.empty)
+      sql(s"INSERT INTO testcat.ns.$name VALUES " +
+        (0 until 8).map(i => s"(named_struct('a', ${i}L, 'b', ${7 - i}L))").mkString(", "))
+    }
+
+    // Each side is shuffled onto the bucket of a different field of `s`, `bucket(4, s.a)` and
+    // `bucket(4, s.b)`. Both are functions of `s`, but not the same one, so the join on `s` must
+    // not pair them as they stand: a row lands in bucket `a % 4` on one side and `b % 4` on the
+    // other.
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val df = sql(
+        """SELECT l.id, r.id FROM
+          |  (SELECT x.id, ps.s FROM testcat.ns.bucket4 x JOIN testcat.ns.ps ps ON x.id = ps.s.a) l
+          |  JOIN
+          |  (SELECT y.id, qs.s FROM testcat.ns.bucket4 y JOIN testcat.ns.qs qs ON y.id = qs.s.b) r
+          |  ON l.s = r.s""".stripMargin)
+      checkAnswer(df, (0 until 8).map(i => Row(i.toLong, (7 - i).toLong)))
+    }
+  }
+
+  test("SPARK-59887: a side is not shuffled onto a transform of a struct field") {
+    createBucketedIdTable("bucket4", 4, numIds = 8)
+    val structType = new StructType().add("a", LongType).add("b", LongType)
+    Seq("ps" -> "s", "rs" -> "t").foreach { case (name, column) =>
+      createTable(name, Array(Column.create(column, structType)), Array.empty)
+      sql(s"INSERT INTO testcat.ns.$name VALUES " +
+        (0 until 8).map(i => s"(named_struct('a', ${i}L, 'b', ${7 - i}L))").mkString(", "))
+    }
+
+    // The first join shuffles `ps` onto `bucket(4, s.a)`. The second join must not shuffle `rs`
+    // onto that layout: that builds `bucket(4, t)` for it, which drops the `.a` and hands the whole
+    // struct to a bucket function over a long.
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val df = sql(
+        """SELECT l.id FROM
+          |  (SELECT x.id, ps.s FROM testcat.ns.bucket4 x JOIN testcat.ns.ps ps ON x.id = ps.s.a) l
+          |  JOIN testcat.ns.rs r ON l.s = r.t""".stripMargin)
+      checkAnswer(df, (0 until 8).map(i => Row(i.toLong)))
+    }
+  }
+
+  test("SPARK-59887: a side is not shuffled onto a transform of an expression") {
+    createBucketedIdTable("bucket4", 4, numIds = 8)
+    createTable("plain", Array(Column.create("b", LongType)), Array.empty)
+    sql("INSERT INTO testcat.ns.plain VALUES " + (0 until 8).map(i => s"(${i - 1})").mkString(", "))
+    createTable("xy", Array(Column.create("x", LongType), Column.create("y", LongType)),
+      Array.empty)
+    sql("INSERT INTO testcat.ns.xy VALUES " +
+      (0 until 8).map(i => s"($i, ${i - 1})").mkString(", "))
+
+    // The first join shuffles `plain` onto `bucket(4, b + 1)`, so its output offers that layout
+    // next to `bucket(4, id)`. The second join must not shuffle `xy` onto the first one. That
+    // builds `bucket(4, y)` for `xy` and drops the `+ 1`, so a row with `b = y` lands in a
+    // different bucket on each side.
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val df = sql(
+        """SELECT b4.id, p.b, q.x FROM testcat.ns.plain p
+          |JOIN testcat.ns.bucket4 b4 ON p.b + 1 = b4.id
+          |JOIN testcat.ns.xy q ON b4.id = q.x AND p.b = q.y""".stripMargin)
+      checkAnswer(df, (0 until 8).map(i => Row(i.toLong, (i - 1).toLong, i.toLong)))
+    }
+  }
+
   test("SPARK-59121: two reduced partitionings are not compatible by their transforms") {
     // 24 ids, so that each leg's two sides really report different key sets and the join reduces
     // them. With 12 ids `bucket(18, id)` is the identity and the leg would be co-partitioned as it

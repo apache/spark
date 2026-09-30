@@ -1943,6 +1943,10 @@ case class KeyedShuffleSpec(
    *
    * The assertion is what makes the reference reading sound. With one reference per expression,
    * "some reference is a cluster key" and "every reference is" are the same statement.
+   *
+   * This says which cluster key an expression is a function of, not which function it is:
+   * `bucket(4, b + 1)` maps to `b` just as `bucket(4, b)` does. Telling those two apart is
+   * `TransformExpression.isSameFunction`'s job.
    */
   lazy val keyPositions: Seq[mutable.BitSet] = {
     val distKeyToPos = mutable.Map.empty[Expression, mutable.BitSet]
@@ -2199,8 +2203,14 @@ case class KeyedShuffleSpec(
       // cannot rewrite it. This also keeps the unprojected spec returned by `createShuffleSpec`
       // for a marked narrowing projection from being chosen as the best spec.
       keyPositions.forall(_.nonEmpty) &&
-      partitioning.expressions.forall { e =>
-        e.isInstanceOf[AttributeReference] || e.isInstanceOf[TransformExpression]
+      partitioning.expressions.forall {
+        case _: AttributeReference => true
+        // `createPartitioning` replaces a transform's argument with the other child's cluster key,
+        // which drops whatever surrounds the key, e.g. the `+ 1` of `bucket(4, b + 1)` or the `.a`
+        // of `bucket(4, s.a)`. Such a spec's own child would then be laid out differently from the
+        // children shuffled onto it.
+        case t: TransformExpression => t.argumentsAreAttributes
+        case _ => false
       } &&
       // Shuffling another child onto these keys evaluates the partition expressions per row to
       // decide where each row goes, and reduced keys are not what those expressions compute.

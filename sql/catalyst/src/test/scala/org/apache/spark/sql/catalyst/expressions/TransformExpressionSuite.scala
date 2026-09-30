@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction}
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
+import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 
 class TransformExpressionSuite extends SparkFunSuite {
 
@@ -39,6 +39,24 @@ class TransformExpressionSuite extends SparkFunSuite {
   private class ComparableFunction extends NamedFunction("test.comparable") {
     override def equals(other: Any): Boolean = other.isInstanceOf[ComparableFunction]
     override def hashCode(): Int = canonicalName().hashCode
+  }
+
+  /** Reduces a bucket count onto any smaller count that divides it. */
+  private object DivisibleBucketFunction
+      extends NamedFunction("test.divisible") with ReducibleFunction[Int, Int] {
+    override def reducer(
+        thisNumBuckets: Int,
+        otherBucketFunction: ReducibleFunction[_, _],
+        otherNumBuckets: Int): Reducer[Int, Int] = {
+      if (thisNumBuckets > otherNumBuckets && thisNumBuckets % otherNumBuckets == 0) {
+        new Reducer[Int, Int] {
+          override def reduce(bucket: Int): Int = bucket % otherNumBuckets
+          override def resultType(): DataType = IntegerType
+        }
+      } else {
+        null
+      }
+    }
   }
 
   private val a = AttributeReference("a", IntegerType)()
@@ -71,8 +89,9 @@ class TransformExpressionSuite extends SparkFunSuite {
   test("SPARK-58769: the two comparisons agree for a function that follows the contract") {
     // `equals` is the finer comparison and the canonical name the coarser one, so a function that
     // overrides both answers both consistently. They still differ in what they take into account:
-    // `isSameFunction` ignores the arguments, because a join compares bucket(4, left.id) against
-    // bucket(4, right.id) and recovers the positions separately, while equality does not.
+    // `isSameFunction` ignores which column an argument is, because a join compares
+    // bucket(4, left.id) against bucket(4, right.id) and recovers the positions separately, while
+    // equality does not.
     val left = bucket(new ComparableFunction, a)
     val right = bucket(new ComparableFunction, b)
     assert(left.function ne right.function, "the fixture must use distinct function instances")
@@ -115,5 +134,33 @@ class TransformExpressionSuite extends SparkFunSuite {
     // The marker rides on the expression, so it survives the attribute rewrites a projection and
     // `GroupPartitionsExec` apply to a reported partitioning.
     assert(left.hasSameReducedKeys(left.withReference(b)))
+  }
+
+  test("SPARK-59887: a transform of an expression is not the same as any transform") {
+    // A join pairs its two sides up by the column each partition expression references, so over
+    // `a = b` it would pair `bucket(4, a + 1)` with `bucket(4, b)`. A row with `a = b` sits in a
+    // different bucket on each side.
+    val fn = new NamedFunction("test.bucket")
+    val overExpression = bucket(fn, Add(a, Literal(1)))
+    assert(bucket(fn, a).isSameFunction(bucket(fn, b)), "two columns are the same function")
+    assert(!overExpression.isSameFunction(bucket(fn, b)))
+    assert(!bucket(fn, b).isSameFunction(overExpression))
+    assert(!overExpression.isSameFunction(overExpression), "not even as itself")
+
+    // A struct field is not the column the pairing uses either: that is the struct.
+    val s = AttributeReference("s", new StructType().add("x", IntegerType))()
+    val overField = bucket(fn, GetStructField(s, 0))
+    assert(!overField.isSameFunction(bucket(fn, b)))
+    assert(!overField.isSameFunction(overField))
+
+    // A reduce pairs the two sides up the same way, so it is refused as well, on either side.
+    val bucket8 = bucket(DivisibleBucketFunction, a, 8)
+    val bucket4 = bucket(DivisibleBucketFunction, b, 4)
+    assert(bucket8.reducers(bucket4).isDefined, "the fixture reduces two columns")
+    val bucket8OfExpression = bucket(DivisibleBucketFunction, Add(a, Literal(1)), 8)
+    val bucket4OfExpression = bucket(DivisibleBucketFunction, Add(b, Literal(1)), 4)
+    assert(bucket8OfExpression.reducers(bucket4).isEmpty)
+    assert(bucket8.reducers(bucket4OfExpression).isEmpty)
+    assert(!bucket8OfExpression.isCompatible(bucket4))
   }
 }
