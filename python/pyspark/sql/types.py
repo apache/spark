@@ -3234,8 +3234,8 @@ def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
 def _check_no_char_varchar(dt: DataType, feature: str) -> None:
     """Reject CHAR/VARCHAR at Python/Arrow host boundaries.
 
-    CHAR/VARCHAR are SQL types. Host APIs should use STRING and CAST on the
-    SQL side. Nested struct/array/map and UDT storage types are included.
+    CHAR/VARCHAR are SQL types. Host APIs must declare STRING instead.
+    Nested struct/array/map and UDT storage types are included.
     """
     if _has_type(dt, (CharType, VarcharType)):
         raise PySparkNotImplementedError(

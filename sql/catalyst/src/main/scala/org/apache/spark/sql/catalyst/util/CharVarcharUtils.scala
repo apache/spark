@@ -35,6 +35,18 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   private[sql] val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
 
   /**
+   * Like [[hasCharVarchar]], but also inspects [[UserDefinedType]] storage types.
+   * Python/Arrow host checks must match PySpark `_has_type`, which unwraps UDTs.
+   */
+  def hasCharVarcharIncludingUDT(dt: DataType): Boolean = {
+    dt.existsRecursively {
+      case _: CharType | _: VarcharType => true
+      case u: UserDefinedType[_] => hasCharVarcharIncludingUDT(u.sqlType)
+      case _ => false
+    }
+  }
+
+  /**
    * Creates a StringRPad expression with the pad literal inheriting the collation from the
    * str expression's data type. This is necessary because StringRPad may be created after
    * CollationTypeCasts has run, so the default pad with StringType companion object would

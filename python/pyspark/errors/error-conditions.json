@@ -156,7 +156,7 @@
   },
   "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON": {
     "message": [
-      "CHAR/VARCHAR is not supported in <feature>. Cast to STRING in SQL instead. Data type: <data_type>."
+      "CHAR/VARCHAR is not supported in <feature>. Use STRING in the declaration. Data type: <data_type>."
     ]
   },
   "CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF": {

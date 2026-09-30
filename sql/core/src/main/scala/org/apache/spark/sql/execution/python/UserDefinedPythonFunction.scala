@@ -64,10 +64,13 @@ case class UserDefinedPythonFunction(
     bufferType: DataType = null) {
 
   def builder(e: Seq[Expression]): Expression = {
-    if (CharVarcharUtils.hasCharVarchar(dataType) ||
-        (bufferType != null && CharVarcharUtils.hasCharVarchar(bufferType))) {
+    if (CharVarcharUtils.hasCharVarcharIncludingUDT(dataType)) {
       throw QueryCompilationErrors.charVarcharNotSupportedInPython(
         "Python UDF return types", dataType.catalogString)
+    }
+    if (bufferType != null && CharVarcharUtils.hasCharVarcharIncludingUDT(bufferType)) {
+      throw QueryCompilationErrors.charVarcharNotSupportedInPython(
+        "Python UDAF buffer schemas", bufferType.catalogString)
     }
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
         || pythonEvalType ==PythonEvalType.SQL_ARROW_BATCHED_UDF
@@ -243,7 +246,7 @@ case class UserDefinedPythonTableFunction(
     NamedParametersSupport.splitAndCheckNamedArguments(exprs, name, SQLConf.get.resolver)
 
     returnType.foreach { rt =>
-      if (CharVarcharUtils.hasCharVarchar(rt)) {
+      if (CharVarcharUtils.hasCharVarcharIncludingUDT(rt)) {
         throw QueryCompilationErrors.charVarcharNotSupportedInPython(
           "Python UDTF return types", rt.catalogString)
       }
@@ -388,6 +391,10 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
 
     val schema = DataType.fromJson(
       PythonWorkerUtils.readUTF(length, dataIn)).asInstanceOf[StructType]
+    if (CharVarcharUtils.hasCharVarcharIncludingUDT(schema)) {
+      throw QueryCompilationErrors.charVarcharNotSupportedInPython(
+        "Python UDTF return types", schema.catalogString)
+    }
 
     // Receive the pickled AnalyzeResult buffer, if any.
     val pickledAnalyzeResult: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)

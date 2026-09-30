@@ -17,9 +17,10 @@
 import unittest
 from decimal import Decimal
 
-from pyspark.errors import AnalysisException, PySparkValueError
+from pyspark.errors import AnalysisException, PySparkNotImplementedError, PySparkValueError
 from pyspark.sql import functions as sf
 from pyspark.sql.types import (
+    CharType,
     DecimalType,
     DoubleType,
     LongType,
@@ -241,6 +242,72 @@ class ArrowPythonAggregatorTestsMixin:
         got = {r["k"]: r["m"] for r in result}
         exp = {r["k"]: r["m"] for r in expected}
         self.assertEqual(got, exp)
+
+    def test_char_varchar_buffer_schema_rejected(self):
+        class BadBuffer(Aggregator):
+            @property
+            def bufferSchema(self):
+                return StructType([StructField("s", CharType(3))])
+
+            @property
+            def outputType(self):
+                return DoubleType()
+
+            def zero(self):
+                return ("",)
+
+            def reduce(self, buffer, value):
+                return buffer
+
+            def merge(self, b1, b2):
+                return b1
+
+            def finish(self, buffer):
+                return 0.0
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            udaf(BadBuffer())
+        self.check_error(
+            exception=pe.exception,
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={
+                "feature": "Python UDAF buffer schemas",
+                "data_type": "struct<s:char(3)>",
+            },
+        )
+
+    def test_char_varchar_output_type_rejected(self):
+        class BadOutput(Aggregator):
+            @property
+            def bufferSchema(self):
+                return StructType([StructField("n", LongType())])
+
+            @property
+            def outputType(self):
+                return CharType(3)
+
+            def zero(self):
+                return (0,)
+
+            def reduce(self, buffer, value):
+                return buffer
+
+            def merge(self, b1, b2):
+                return b1
+
+            def finish(self, buffer):
+                return "a"
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            udaf(BadOutput())
+        self.check_error(
+            exception=pe.exception,
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={
+                "feature": "Python UDF return types",
+                "data_type": "char(3)",
+            },
+        )
 
     def test_named_arguments(self):
         # A named argument (both DataFrame and SQL forms) must feed the aggregator's value tuple,
