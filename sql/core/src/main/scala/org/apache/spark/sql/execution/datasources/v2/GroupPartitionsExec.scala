@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.{IdentityReducer, KeyedPartitioning, KeyLayout, KeyReducer, Partitioning, PartitioningCollection, REPEATS_GROUP, UngroupingOrigin, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{IdentityReducer, KeyedPartitioning, KeyLayout, KeyReducer, Partitioning, PartitioningCollection, REPLICATED_FOR_JOIN, UngroupingOrigin, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.execution.{SafeForKWayMerge, SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -70,11 +70,12 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  *                 attribute it transforms, so it would break canonical equality the same way the
  *                 reducers do. See `doCanonicalize`.
  * @param ungroupingOrigin Why this node's output is left ungrouped on purpose, stamped into
- *                         the layout it reports. It also decides the routing: a stamped spread
- *                         distributes each key's splits across the expected slots (padding with
- *                         empty partitions), [[REPEATS_GROUP]] groups the splits first and
- *                         repeats each group into its expected slots, and `None` groups them,
- *                         one partition per key. See [[UngroupingOrigin]].
+ *                         the layout it reports. It also decides the routing:
+ *                         `SPLIT_FOR_JOIN` and `SPLIT_FOR_ORDERING` distribute each key's
+ *                         splits across the expected slots (padding with empty partitions),
+ *                         [[REPLICATED_FOR_JOIN]] groups the splits first and repeats each group
+ *                         into its expected slots, and `None` groups them, one partition per key.
+ *                         See [[UngroupingOrigin]].
  * @param enableSortedMerge When true, uses [[SortedMergeCoalescedRDD]] to perform a k-way merge
  *                          of the coalesced partitions, preserving the child's output ordering
  *                          end-to-end. Set by [[EnsureRequirements]] when a parent operator
@@ -100,7 +101,7 @@ case class GroupPartitionsExec(
    * Whether each key's splits are distributed across its expected slots, or grouped into one
    * partition per key first. Derived from the origin; see `@param ungroupingOrigin`.
    */
-  def distributePartitions: Boolean = ungroupingOrigin.exists(_ != REPEATS_GROUP)
+  def distributePartitions: Boolean = ungroupingOrigin.exists(_ != REPLICATED_FOR_JOIN)
 
   /**
    * The layout this node was planned to produce, but only while its child still reports the one it
@@ -696,7 +697,7 @@ private[sql] object GroupPartitionsExec {
       reducers: Option[Seq[Option[KeyReducer]]],
       ungroupingOrigin: Option[UngroupingOrigin]): PartitionGrouping = {
     // The routing follows the origin, the same derivation the node itself reports.
-    val distributePartitions = ungroupingOrigin.exists(_ != REPEATS_GROUP)
+    val distributePartitions = ungroupingOrigin.exists(_ != REPLICATED_FOR_JOIN)
     // Project partition keys if join key positions are specified
     val (projectedDataTypes, projectedKeys) =
       joinKeyPositions.fold(

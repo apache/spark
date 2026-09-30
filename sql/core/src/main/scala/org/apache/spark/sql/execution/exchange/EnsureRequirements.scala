@@ -150,7 +150,7 @@ case class EnsureRequirements(
                   expectedPartitionKeys = Some(sortedGroupedKeys),
                   // The keys stay ungrouped so that the ordering the operator reads is the one
                   // derived from them, which is no side of a pairing.
-                  ungroupingOrigin = Some(SPREADS_FOR_ORDERING)
+                  ungroupingOrigin = Some(SPLIT_FOR_ORDERING)
                 )
               }
 
@@ -916,11 +916,11 @@ case class EnsureRequirements(
         GroupPartitionsExec(rawLeft, leftSpec.joinKeyPositions,
           Some(mergedPartitionKeys), leftReducers,
           ungroupingOrigin = Option.when(applyPartialClustering)(
-            if (replicateLeftSide) REPEATS_GROUP else SPREADS_SPLITS)),
+            if (replicateLeftSide) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)),
         GroupPartitionsExec(rawRight, rightSpec.joinKeyPositions,
           Some(mergedPartitionKeys), rightReducers,
           ungroupingOrigin = Option.when(applyPartialClustering)(
-            if (replicateRightSide) REPEATS_GROUP else SPREADS_SPLITS)))
+            if (replicateRightSide) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)))
     }
 
     // The pairing is only worth committing to if both children still declare the same aligned key

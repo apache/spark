@@ -121,7 +121,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // side of an alignment keeps its splits and spreads them. A finished plan is judged on the
     // layouts it holds, so the reason is read off them rather than off a configuration.
     val spread = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
-      .withLayout(_.copy(ungroupingOrigin = Some(SPREADS_SPLITS)))
+      .withLayout(_.copy(ungroupingOrigin = Some(SPLIT_FOR_JOIN)))
     val specs = PartitioningCollection.specsForPairing(spread, cd)
     assert(specs.size == 1, s"one member, one spec, got $specs")
     val spec = specs.head.asInstanceOf[KeyedShuffleSpec]
@@ -136,19 +136,19 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
     // An origin is read for the distribution it is good for. A spread an ordering requirement is
     // read through is no side of a clustering, and a clustering is what asks here.
-    val forOrdering = spread.withLayout(_.copy(ungroupingOrigin = Some(SPREADS_FOR_ORDERING)))
+    val forOrdering = spread.withLayout(_.copy(ungroupingOrigin = Some(SPLIT_FOR_ORDERING)))
     assert(PartitioningCollection.specsForPairing(forOrdering, cd).isEmpty,
       "an origin a clustering does not read is not offered to it")
 
     // The side that repeats a key's whole group is the other half of that alignment, and it is
     // offered the same way.
-    val repeat = spread.withLayout(_.copy(ungroupingOrigin = Some(REPEATS_GROUP)))
+    val repeat = spread.withLayout(_.copy(ungroupingOrigin = Some(REPLICATED_FOR_JOIN)))
     assert(PartitioningCollection.specsForPairing(repeat, cd).size == 1)
 
     // A count the operation pinned is asked as it stands, which `satisfies` asks for every member,
     // the ones whose layout says why they are ungrouped included.
     val four = KeyedPartitioning(Seq(a), (1 to 4).map(InternalRow(_)))
-      .withLayout(_.copy(ungroupingOrigin = Some(SPREADS_SPLITS)))
+      .withLayout(_.copy(ungroupingOrigin = Some(SPLIT_FOR_JOIN)))
     assert(PartitioningCollection
       .specsForPairing(four, ClusteredDistribution(Seq(a), requiredNumPartitions = Some(4)))
       .size == 1, "the size the operation asks for is the one the member reports")
@@ -191,8 +191,8 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     val keys = Seq(InternalRow(1), InternalRow(1), InternalRow(2))
     def stamped(attr: AttributeReference, role: UngroupingOrigin): KeyedPartitioning =
       KeyedPartitioning(Seq(attr), keys).withLayout(_.copy(ungroupingOrigin = Some(role)))
-    val spread = stamped(a, SPREADS_SPLITS)
-    val repeat = stamped(a, REPEATS_GROUP)
+    val spread = stamped(a, SPLIT_FOR_JOIN)
+    val repeat = stamped(a, REPLICATED_FOR_JOIN)
 
     // Grouping spends the claim: the keys are unique afterwards, so there are no splits left to
     // spread and no group left to repeat, and a kept stamp would turn a sound pair of grouped
@@ -202,16 +202,16 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // A concatenation stands for the claim all of its members make: one role survives it, and
     // two roles stand for nothing.
     assert(KeyedPartitioning.concat(Seq(spread, spread)).ungroupingOrigin
-      .contains(SPREADS_SPLITS))
+      .contains(SPLIT_FOR_JOIN))
     assert(KeyedPartitioning.concat(Seq(spread, repeat)).ungroupingOrigin.isEmpty)
 
     // A collection holds one canonical layout its members share, and it agrees the same way. An
     // aligned pair's joined output is the disagreeing case: the zip of a spread side and a
     // repeating side is a layout neither claim describes, so it comes out inert.
     val agreed = PartitioningCollection.fromPartitionings(
-      Seq(spread, stamped(b, SPREADS_SPLITS)))
+      Seq(spread, stamped(b, SPLIT_FOR_JOIN)))
     assert(agreed.partitionings.forall(p => p.asInstanceOf[KeyedPartitioning]
-      .ungroupingOrigin.contains(SPREADS_SPLITS)), "one role, one canonical layout")
+      .ungroupingOrigin.contains(SPLIT_FOR_JOIN)), "one role, one canonical layout")
     val joined = PartitioningCollection.fromPartitionings(Seq(spread, repeat))
     assert(joined.partitionings.forall(_.asInstanceOf[KeyedPartitioning]
       .ungroupingOrigin.isEmpty), "two roles agree on nothing")
@@ -231,18 +231,18 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       // the keys to ascend, which a grouped layout has by construction and an ungrouped one
       // only where something sorted it.
       assert(layout(sorted, None).satisfies(ordering))
-      assert(layout(sorted, Some(SPREADS_FOR_ORDERING)).satisfies(ordering))
+      assert(layout(sorted, Some(SPLIT_FOR_ORDERING)).satisfies(ordering))
       assert(!layout(Seq(1, 2, 1, 2), None).satisfies(ordering),
         "an ungrouped layout nothing sorted does not claim an ordering")
       assert(!layout(Seq(2, 1), None).satisfies(ordering),
         "a grouped layout whose keys do not ascend does not claim an ordering")
       // The two pairing roles were built for a clustering, not for an ordering.
-      assert(!layout(sorted, Some(SPREADS_SPLITS)).satisfies(ordering))
-      assert(!layout(sorted, Some(REPEATS_GROUP)).satisfies(ordering))
+      assert(!layout(sorted, Some(SPLIT_FOR_JOIN)).satisfies(ordering))
+      assert(!layout(sorted, Some(REPLICATED_FOR_JOIN)).satisfies(ordering))
       // A clustering asks that a key's rows share a partition, which no ungrouped layout gives
       // on its own: an alignment side's stamp is read where the pair is judged
       // (`specsForPairing`, pinned above), not here.
-      Seq(None, Some(SPREADS_FOR_ORDERING), Some(SPREADS_SPLITS), Some(REPEATS_GROUP)).foreach {
+      Seq(None, Some(SPLIT_FOR_ORDERING), Some(SPLIT_FOR_JOIN), Some(REPLICATED_FOR_JOIN)).foreach {
         role => assert(!layout(sorted, role).satisfies(clustered))
       }
       assert(layout(Seq(1, 2), None).satisfies(clustered),

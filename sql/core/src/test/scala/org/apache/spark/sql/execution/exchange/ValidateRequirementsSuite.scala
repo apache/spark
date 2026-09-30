@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, KeyedPartitioning, Partitioning, PartitioningCollection, REPEATS_GROUP, SinglePartition, SPREADS_SPLITS, UngroupingOrigin}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, KeyedPartitioning, Partitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SinglePartition, SPLIT_FOR_JOIN, UngroupingOrigin}
 import org.apache.spark.sql.execution.{CoGroupExec, DummySparkPlan, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
@@ -177,14 +177,14 @@ class ValidateRequirementsSuite extends SharedSparkSession {
         keys: Seq[InternalRow]): DummySparkPlan =
       DummySparkPlan(outputPartitioning =
         KeyedPartitioning(Seq(attr), keys).withLayout(_.copy(ungroupingOrigin = Some(role))))
-    val left = side(a, SPREADS_SPLITS, rows)
-    val right = side(b, REPEATS_GROUP, rows)
+    val left = side(a, SPLIT_FOR_JOIN, rows)
+    val right = side(b, REPLICATED_FOR_JOIN, rows)
     val join = ShuffledHashJoinExec(Seq(a), Seq(b), Inner, BuildLeft, None, left, right)
     assert(ValidateRequirements.validate(join),
       s"a spread side and one that repeats the group pair, which is the requirement:\n$join")
 
     // The same key rows in another order do not pair: position by position is the contract.
-    val off = side(b, REPEATS_GROUP, Seq(InternalRow(1), InternalRow(2), InternalRow(1)))
+    val off = side(b, REPLICATED_FOR_JOIN, Seq(InternalRow(1), InternalRow(2), InternalRow(1)))
     assert(!ValidateRequirements.validate(join.copy(right = off)),
       "the same keys in a different order are not aligned")
 
@@ -202,7 +202,7 @@ class ValidateRequirementsSuite extends SharedSparkSession {
 
     // Nor do two sides of the same role pair: an alignment is one of each, and two spreads leave a
     // key's rows split between them with nothing repeating the group.
-    assert(!ValidateRequirements.validate(join.copy(right = side(b, SPREADS_SPLITS, rows))),
+    assert(!ValidateRequirements.validate(join.copy(right = side(b, SPLIT_FOR_JOIN, rows))),
       "two sides that spread the same keys are not an alignment")
 
     // And a pair each side satisfies on its own is still refused when the sides do not line up,
@@ -230,10 +230,10 @@ class ValidateRequirementsSuite extends SharedSparkSession {
         keys: Seq[InternalRow]): DummySparkPlan =
       DummySparkPlan(outputPartitioning =
         KeyedPartitioning(Seq(attr), keys).withLayout(_.copy(ungroupingOrigin = Some(role))))
-    val left = side(a, SPREADS_SPLITS, rows)
+    val left = side(a, SPLIT_FOR_JOIN, rows)
     // The same keys in another order, which a projection onto distinct sorted keys would
     // normalize away.
-    val off = side(b, REPEATS_GROUP, Seq(InternalRow(1), InternalRow(2), InternalRow(1)))
+    val off = side(b, REPLICATED_FOR_JOIN, Seq(InternalRow(1), InternalRow(2), InternalRow(1)))
     assert(!ValidateRequirements.validate(ShuffledHashJoinExec(
       Seq(a), Seq(b), Inner, BuildLeft, None, left, off)),
       "the sides report different layouts, and nothing normalizes them")
@@ -351,17 +351,17 @@ class ValidateRequirementsSuite extends SharedSparkSession {
     def side(partitioning: Partitioning): DummySparkPlan =
       DummySparkPlan(outputPartitioning = partitioning)
     val bothAlternatives = side(PartitioningCollection.fromPartitionings(
-      Seq(keyed(a, REPEATS_GROUP), keyed(b, REPEATS_GROUP))))
+      Seq(keyed(a, REPLICATED_FOR_JOIN), keyed(b, REPLICATED_FOR_JOIN))))
     assert(ValidateRequirements.validate(ShuffledHashJoinExec(
-      Seq(a), Seq(a), Inner, BuildLeft, None, bothAlternatives, side(keyed(a, SPREADS_SPLITS)))),
+      Seq(a), Seq(a), Inner, BuildLeft, None, bothAlternatives, side(keyed(a, SPLIT_FOR_JOIN)))),
       "the member keyed on the join key pairs with the other side")
 
     // The pairing still has to be there: a side whose members are keyed on something else offers
     // nothing to pair with.
     val wrongKeys = side(PartitioningCollection.fromPartitionings(
-      Seq(keyed(b, REPEATS_GROUP), keyed(b, REPEATS_GROUP))))
+      Seq(keyed(b, REPLICATED_FOR_JOIN), keyed(b, REPLICATED_FOR_JOIN))))
     assert(!ValidateRequirements.validate(ShuffledHashJoinExec(
-      Seq(a), Seq(a), Inner, BuildLeft, None, wrongKeys, side(keyed(a, SPREADS_SPLITS)))),
+      Seq(a), Seq(a), Inner, BuildLeft, None, wrongKeys, side(keyed(a, SPLIT_FOR_JOIN)))),
       "a side offering no member keyed on the join keys does not pair")
   }
 
@@ -412,8 +412,8 @@ class ValidateRequirementsSuite extends SharedSparkSession {
       KeyedPartitioning(Seq(attr), rows).withLayout(_.copy(ungroupingOrigin = Some(role)))
     val left = DummySparkPlan(outputPartitioning =
       PartitioningCollection.fromPartitionings(
-        Seq(keyed(b, REPEATS_GROUP), keyed(a, REPEATS_GROUP))))
-    val right = DummySparkPlan(outputPartitioning = keyed(a, SPREADS_SPLITS))
+        Seq(keyed(b, REPLICATED_FOR_JOIN), keyed(a, REPLICATED_FOR_JOIN))))
+    val right = DummySparkPlan(outputPartitioning = keyed(a, SPLIT_FOR_JOIN))
     assert(ValidateRequirements.validate(ShuffledHashJoinExec(
       Seq(a), Seq(a), Inner, BuildLeft, None, left, right)),
       "the second member is the one keyed on the join key, and it pairs")
@@ -429,8 +429,8 @@ class ValidateRequirementsSuite extends SharedSparkSession {
     def side(attr: AttributeReference, role: UngroupingOrigin): DummySparkPlan =
       DummySparkPlan(outputPartitioning =
         KeyedPartitioning(Seq(attr), rows).withLayout(_.copy(ungroupingOrigin = Some(role))))
-    val left = side(a, SPREADS_SPLITS)
-    val right = side(b, REPEATS_GROUP)
+    val left = side(a, SPLIT_FOR_JOIN)
+    val right = side(b, REPLICATED_FOR_JOIN)
     assert(left.outputOrdering.isEmpty && right.outputOrdering.isEmpty,
       "test setup: nothing orders the sides")
     assert(!ValidateRequirements.validate(
