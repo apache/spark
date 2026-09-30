@@ -471,7 +471,7 @@ object OrcUtils extends Logging {
           Some(typeDesc)
         // Spark CHAR/VARCHAR are ORC STRING plus spark.sql.catalyst.type. Native ORC
         // CHAR/VARCHAR from Hive files are recovered by toCatalystSchema. Unbounded
-        // STRING (including collated) stamps StringType.typeName ("string"); collation
+        // STRING (including collated STRING) stamps StringType.typeName ("string"); collation
         // is not recovered from file-only reads.
         case s: StringType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.STRING)
@@ -517,9 +517,9 @@ object OrcUtils extends Logging {
   }
 
   /**
-   * ORC reader schema for Spark CHAR/VARCHAR: always STRING, including when first-class
-   * CHAR/VARCHAR types are enabled. Native ORC CHAR/VARCHAR still apply when the file
-   * itself stores those types.
+   * Returns an ORC reader schema that represents Spark CHAR/VARCHAR as STRING, including when
+   * first-class CHAR/VARCHAR types are enabled. Native ORC CHAR/VARCHAR still apply when the
+   * file itself stores those types.
    */
   private def orcReadSchemaWithoutCharVarchar(dt: DataType): DataType = dt match {
     case s: StructType =>
@@ -560,7 +560,7 @@ object OrcUtils extends Logging {
     } else {
       StructType(dataSchema.fields ++ partitionSchema.fields)
     }
-    // Spark CHAR/VARCHAR on the read schema are Catalyst constraints; ask ORC for STRING.
+    // Spark CHAR/VARCHAR in the read schema are Catalyst constraints; ask ORC for STRING.
     val resultSchemaString =
       OrcUtils.getOrcSchemaString(orcReadSchemaWithoutCharVarchar(readSchema))
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)

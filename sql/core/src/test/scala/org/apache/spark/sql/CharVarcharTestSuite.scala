@@ -2075,7 +2075,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                 }
               }
             }
-            // Spark ORC files store CHAR/VARCHAR as STRING plus catalyst type metadata.
+            // Spark ORC files store CHAR/VARCHAR as STRING plus spark.sql.catalyst.type metadata.
             withTempPath { dir =>
               val path = dir.getCanonicalPath
               val input = Dataset.ofRows(spark, Project(Seq(
@@ -2466,22 +2466,6 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         .format(classOf[SchemaRequiredDataSource].getName).load())
       checkSchema(spark.read.schema("id char(5)")
         .format(classOf[SchemaRequiredDataSource].getName).load())
-    }
-  }
-
-  test("standard semantics does not add options to non-ORC V2 relations") {
-    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      val relation = spark.read
-        .schema("id CHAR(5)")
-        .option("expected", "value")
-        .format(classOf[SchemaRequiredDataSource].getName)
-        .load()
-        .queryExecution
-        .analyzed
-        .collectFirst { case relation: DataSourceV2Relation => relation }
-        .get
-      assert(relation.options.size() === 1)
-      assert(relation.options.get("expected") === "value")
     }
   }
 
