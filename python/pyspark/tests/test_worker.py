@@ -204,6 +204,9 @@ class WorkerMemoryTest(unittest.TestCase):
     def setUp(self):
         class_name = self.__class__.__name__
         conf = SparkConf().set("spark.executor.pyspark.memory", "2g")
+        # Pin spark.task.cpus so a fractional value leaked from another suite via JVM system
+        # properties (shared gateway JVM) cannot split the worker memory limit and flake this.
+        conf = conf.set("spark.task.cpus", "1")
         self.sc = SparkContext("local[4]", class_name, conf=conf)
 
     def test_memory_limit(self):
