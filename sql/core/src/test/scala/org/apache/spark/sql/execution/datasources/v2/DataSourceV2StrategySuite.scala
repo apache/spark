@@ -44,6 +44,7 @@ import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2StrategySuite extends SharedSparkSession {
@@ -1124,6 +1125,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       udfName = Some("inferred_udf"))
     val externalInferredUDF = ExternalUserDefinedFunction(
       name = Some("external_inferred_udf"),
+      workerSpec = UDFWorkerSpecification.getDefaultInstance,
       payload = Array.emptyByteArray,
       dataType = BooleanType,
       children = Nil,
