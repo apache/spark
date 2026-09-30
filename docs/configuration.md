@@ -1708,6 +1708,18 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.ui.store.compact.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enables the experimental compact in-memory UI store and compact SQL metric tracking.
+    Completed tasks use packed column blocks, and job and SQL lists read summaries before
+    loading details. Existing retention limits and metric results are preserved. A configured
+    disk store takes precedence for storage. See the
+    <a href="ui-store-prototype.html">prototype design and benchmark instructions</a>.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.ui.killEnabled</code></td>
   <td>true</td>
   <td>

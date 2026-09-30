@@ -157,7 +157,7 @@ public class LevelDB implements KVStore {
     try (WriteBatch batch = db().createWriteBatch()) {
       byte[] data = serializer.serialize(value);
       synchronized (ti) {
-        updateBatch(batch, value, data, value.getClass(), ti.naturalIndex(), ti.indices());
+        updateBatch(batch, value, data, value.getClass(), ti.naturalIndex(), ti.indices(), null);
         db().write(batch);
       }
     }
@@ -191,10 +191,11 @@ public class LevelDB implements KVStore {
         final Collection<LevelDBTypeInfo.Index> indices = ti.indices();
 
         try (WriteBatch batch = db().createWriteBatch()) {
+          KVStoreBatch pending = new KVStoreBatch();
           while (valueIter.hasNext()) {
             assert serializedValueIter.hasNext();
             updateBatch(batch, valueIter.next(), serializedValueIter.next(), klass,
-              naturalIndex, indices);
+              naturalIndex, indices, pending);
           }
           db().write(batch);
         }
@@ -208,14 +209,19 @@ public class LevelDB implements KVStore {
       byte[] data,
       Class<?> klass,
       LevelDBTypeInfo.Index naturalIndex,
-      Collection<LevelDBTypeInfo.Index> indices) throws Exception {
-    Object existing = getOrNull(naturalIndex.entityKey(null, value), klass);
+      Collection<LevelDBTypeInfo.Index> indices,
+      KVStoreBatch pending) throws Exception {
+    byte[] entityKey = naturalIndex.entityKey(null, value);
+    Object existing = pending == null ? null : pending.put(entityKey, value);
+    if (existing == null) {
+      existing = getOrNull(entityKey, klass);
+    }
 
     PrefixCache cache = new PrefixCache(value);
     byte[] naturalKey = naturalIndex.toKey(naturalIndex.getValue(value));
     for (LevelDBTypeInfo.Index idx : indices) {
       byte[] prefix = cache.getPrefix(idx);
-      idx.add(batch, value, existing, data, naturalKey, prefix);
+      idx.add(batch, value, existing, data, naturalKey, prefix, pending);
     }
   }
 

@@ -745,13 +745,11 @@ private[spark] class AppStatusListener(
         maybeUpdate(stage, now)
       }
 
-      // Store both stage ID and task index in a single long variable for tracking at job level.
-      val taskIndex = (event.stageId.toLong << Integer.SIZE) | event.taskInfo.index
       stage.jobs.foreach { job =>
         job.activeTasks -= activeDelta
         job.completedTasks += completedDelta
         if (completedDelta > 0) {
-          job.completedIndices.add(taskIndex)
+          job.addCompletedIndex(event.stageId, event.taskInfo.index)
         }
         job.failedTasks += failedDelta
         job.killedTasks += killedDelta
@@ -890,6 +888,7 @@ private[spark] class AppStatusListener(
       if (removeStage) {
         liveStages.remove((event.stageInfo.stageId, event.stageInfo.attemptNumber()))
       }
+      kvstore.compact()
       if (stage.status == v1.StageStatus.COMPLETE) {
         appSummary = new AppSummary(appSummary.numCompletedJobs, appSummary.numCompletedStages + 1)
         kvstore.write(appSummary)

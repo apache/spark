@@ -38,6 +38,7 @@ import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.History.HYBRID_STORE_DISK_BACKEND
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend._
+import org.apache.spark.internal.config.Status.COMPACT_UI_STORE_ENABLED
 import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
 import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore._
@@ -164,7 +165,18 @@ private[spark] object KVUtils extends Logging {
           Utils.deleteRecursively(dbPath)
           open(dbPath, metadata, conf, live)
       }
-    }.getOrElse(new InMemoryStore())
+    }.getOrElse(createInMemoryStore(conf))
+  }
+
+  def createInMemoryStore(conf: SparkConf): KVStore = {
+    if (conf.get(COMPACT_UI_STORE_ENABLED)) {
+      val store = new CompactInMemoryStore(new KVStoreProtobufSerializer())
+      store.registerCodec(classOf[TaskDataWrapper], new CompactTaskDataCodec())
+      store.registerCodec(classOf[JobDataWrapper], new CompactJobDataCodec())
+      store
+    } else {
+      new InMemoryStore()
+    }
   }
 
   /** Turns a KVStoreView into a Scala sequence, applying a filter. */

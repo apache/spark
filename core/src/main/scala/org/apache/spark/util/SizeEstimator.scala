@@ -64,7 +64,16 @@ object SizeEstimator extends Logging {
    * deserialized form. This is not the same as the serialized size of the object, which will
    * typically be much smaller.
    */
-  def estimate(obj: AnyRef): Long = estimate(obj, new IdentityHashMap[AnyRef, AnyRef])
+  def estimate(obj: AnyRef): Long =
+    estimate(obj, new IdentityHashMap[AnyRef, AnyRef], useSampling = true)
+
+  /**
+   * Visit every reachable object instead of sampling large reference arrays. This is useful
+   * for benchmarks of representations with different sharing patterns. The object layout
+   * remains an estimate; traversal takes time and temporary memory proportional to the graph.
+   */
+  private[spark] def estimateWithoutSampling(obj: AnyRef): Long =
+    estimate(obj, new IdentityHashMap[AnyRef, AnyRef], useSampling = false)
 
   // Sizes of primitive types
   private val BYTE_SIZE = 1
@@ -173,7 +182,9 @@ object SizeEstimator extends Logging {
    * IdentityHashMap of visited objects, and provides utility methods for enqueueing new objects
    * to visit.
    */
-  private class SearchState(val visited: IdentityHashMap[AnyRef, AnyRef]) {
+  private class SearchState(
+      val visited: IdentityHashMap[AnyRef, AnyRef],
+      val useSampling: Boolean) {
     val stack = new ArrayBuffer[AnyRef]
     var size = 0L
 
@@ -202,8 +213,11 @@ object SizeEstimator extends Logging {
     val shellSize: Long,
     val pointerFields: List[Field]) {}
 
-  private def estimate(obj: AnyRef, visited: IdentityHashMap[AnyRef, AnyRef]): Long = {
-    val state = new SearchState(visited)
+  private def estimate(
+      obj: AnyRef,
+      visited: IdentityHashMap[AnyRef, AnyRef],
+      useSampling: Boolean): Long = {
+    val state = new SearchState(visited, useSampling)
     state.enqueue(obj)
     while (!state.isFinished()) {
       visitSingleObject(state.dequeue(), state)
@@ -254,7 +268,7 @@ object SizeEstimator extends Logging {
       arrSize += alignSize(length.toLong * pointerSize)
       state.size += arrSize
 
-      if (length <= ARRAY_SIZE_FOR_SAMPLING) {
+      if (!state.useSampling || length <= ARRAY_SIZE_FOR_SAMPLING) {
         var arrayIndex = 0
         while (arrayIndex < length) {
           state.enqueue(ScalaRunTime.array_apply(array, arrayIndex).asInstanceOf[AnyRef])
@@ -290,7 +304,7 @@ object SizeEstimator extends Logging {
       drawn.add(index)
       val obj = ScalaRunTime.array_apply(array, index).asInstanceOf[AnyRef]
       if (obj != null) {
-        size += SizeEstimator.estimate(obj, state.visited)
+        size += SizeEstimator.estimate(obj, state.visited, state.useSampling)
       }
     }
     size
