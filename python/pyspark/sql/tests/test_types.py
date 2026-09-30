@@ -3876,6 +3876,9 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         def float32(x):
             return variant(14, struct.pack("<f", x))
 
+        def decimal4(unscaled, scale):
+            return variant(8, bytes([scale]) + struct.pack("<i", unscaled))
+
         # The expected values are what the JVM `to_json` returns for the same variants.
         for v, expected in [
             (double(float("nan")), '"NaN"'),
@@ -3893,6 +3896,9 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
             (float32(1.1), "1.1"),
             (float32(1e10), "1.0E10"),
             (float32(3.4028234663852886e38), "3.4028235E38"),
+            (decimal4(100, 2), "1"),
+            (decimal4(0, 2), "0"),
+            (decimal4(-1, 9), "-0.000000001"),
         ]:
             with self.subTest(expected=expected):
                 self.assertEqual(v.toJson(), expected)

@@ -419,6 +419,8 @@ class VariantUtils:
                 return '"' + base64.b64encode(value).decode("utf-8") + '"'
             if isinstance(value, float):
                 return cls._float_to_json(value, is_float32)
+            if isinstance(value, decimal.Decimal):
+                return cls._decimal_to_json(value)
             if isinstance(value, (datetime.date, datetime.datetime)):
                 return '"' + str(value) + '"'
             return str(value)
@@ -459,6 +461,14 @@ class VariantUtils:
         assert isinstance(exponent, int)
         mantissa = str(digits[0]) + "." + ("".join(map(str, digits[1:])) or "0")
         return ("-" if sign else "") + mantissa + "E" + str(len(digits) - 1 + exponent)
+
+    @classmethod
+    def _decimal_to_json(cls, d: decimal.Decimal) -> str:
+        """
+        Formats a decimal like Java's `BigDecimal.stripTrailingZeros().toPlainString()`.
+        """
+        context = decimal.Context(prec=VariantUtils.MAX_DECIMAL16_PRECISION)
+        return format(d.normalize(context), "f")
 
     @classmethod
     def _to_python(cls, value: bytes, metadata: bytes, pos: int) -> Any:
