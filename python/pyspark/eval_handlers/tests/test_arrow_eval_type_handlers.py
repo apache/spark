@@ -22,7 +22,9 @@ same wire format the serializers produce, so every test constructs its input the
 same way: ``run(0, <input>)`` and assert on the output batches.
 """
 
+import os
 import unittest
+from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._base import get_eval_type_handler
@@ -31,7 +33,9 @@ from pyspark.sql.pandas.serializers import ArrowStreamCoGroupSerializer, ArrowSt
 from pyspark.sql.types import DoubleType, LongType, StructField, StructType
 from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
 from pyspark.util import PythonEvalType
-from pyspark.worker_util import EvalConf, RunnerConf
+
+with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+    from pyspark.worker_util import EvalConf, RunnerConf
 
 if have_pyarrow:
     import pyarrow as pa
