@@ -145,6 +145,26 @@ class WorkerTests(ReusedPySparkTestCase):
         self.assertEqual(sum(range(100)), acc2.value)
         self.assertEqual(sum(range(100)), acc1.value)
 
+    def test_worker_metrics_include_spills(self):
+        accumulator = self.sc.accumulator(0)
+
+        def increment(value):
+            from pyspark import TaskContext, shuffle
+
+            # Supply known spill totals to check their transport into JVM task metrics.
+            shuffle.MemoryBytesSpilled += 7
+            shuffle.DiskBytesSpilled += 9
+            accumulator.add(1)
+            return TaskContext.get().stageId(), value + 1
+
+        result = self.sc.parallelize([1, 2], 1).map(increment).collect()
+        self.assertEqual([value for _, value in result], [2, 3])
+        self.assertEqual(accumulator.value, 2)
+        self.sc._jsc.sc().listenerBus().waitUntilEmpty(10000)
+        stage = self.sc._jsc.sc().statusStore().lastStageAttempt(result[0][0])
+        self.assertEqual(stage.memoryBytesSpilled(), 14)
+        self.assertEqual(stage.diskBytesSpilled(), 18)
+
     def test_reuse_worker_after_take(self):
         rdd = self.sc.parallelize(range(100000), 1)
         self.assertEqual(0, rdd.first())
