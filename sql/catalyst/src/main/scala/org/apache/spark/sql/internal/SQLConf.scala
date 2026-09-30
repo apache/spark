@@ -6804,7 +6804,7 @@ object SQLConf {
       "schema-driven XML parsing, including from_xml and the XML data source, when CHAR/VARCHAR " +
       "keys normalize to the same value. " +
       "EXCEPTION fails the query when duplicate keys are detected. LAST_WIN makes the last " +
-      "inserted key take precedence. Exact repeated XML element names retain their historical " +
+      "inserted key take precedence. Repeated raw XML map keys retain their historical " +
       "last-wins behavior. Ordinary STRING keys retain each parser's historical behavior.")
     .version("3.0.0")
     .enumConf(MapKeyDedupPolicy)

@@ -2888,6 +2888,38 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59274: mixed XML rowTag attributes keep valid siblings") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val xml = """<ROW good="ok" bad="abcdef"/>"""
+      val schema = "good CHAR(2), bad VARCHAR(2)"
+      val opts = "map('attributePrefix', '')"
+      checkAnswer(
+        sql(s"SELECT from_xml('$xml', '$schema', $opts)"),
+        Row(Row("ok", null)))
+      assertParseExceedLimit(
+        s"SELECT from_xml('$xml', '$schema', map('attributePrefix', '', 'mode', 'FAILFAST'))",
+        expectedLimit = "2")
+      withTempPath { path =>
+        Seq(
+          """<ROWS><ROW good="ok" bad="abcdef"/><ROW good="ab" bad="cd"/></ROWS>"""
+        ).toDS().write.text(path.getCanonicalPath)
+        val permissive = spark.read
+          .option("rowTag", "ROW")
+          .option("attributePrefix", "")
+          .schema(schema)
+          .xml(path.getCanonicalPath)
+        checkAnswer(permissive, Seq(Row("ok", null), Row("ab", "cd")))
+        val failFast = spark.read
+          .option("rowTag", "ROW")
+          .option("attributePrefix", "")
+          .option("mode", "FAILFAST")
+          .schema(schema)
+          .xml(path.getCanonicalPath)
+        assertParseExceedLimitError(failFast.collect(), expectedLimit = "2")
+      }
+    }
+  }
+
   test("SPARK-59274: ordinary STRING map duplicate behavior is unchanged") {
     Seq("false", "true").foreach { standardSemantics =>
       withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standardSemantics) {

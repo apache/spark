@@ -26,6 +26,7 @@ import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -480,7 +481,8 @@ class StaxXmlParser(
       keyType: DataType,
       valueType: DataType,
       attributes: Array[Attribute]): MapData = {
-    val kvPairs = ArrayBuffer.empty[(UTF8String, UTF8String, Option[Any])]
+    val lastEntries =
+      mutable.LinkedHashMap.empty[UTF8String, (UTF8String, Option[Any])]
     var badMapException: Option[Throwable] = None
     def mapKey(raw: UTF8String): UTF8String = {
       CharVarcharUtils.applyTextParseSemantics(raw, keyType)
@@ -488,7 +490,8 @@ class StaxXmlParser(
     def appendPair(rawKey: String, value: Option[Any]): Unit = {
       try {
         val rawKeyUtf8 = UTF8String.fromString(rawKey)
-        kvPairs += ((rawKeyUtf8, mapKey(rawKeyUtf8), value))
+        lastEntries.remove(rawKeyUtf8)
+        lastEntries.update(rawKeyUtf8, (mapKey(rawKeyUtf8), value))
       } catch {
         case NonFatal(e) => badMapException = badMapException.orElse(Some(e))
       }
@@ -542,7 +545,7 @@ class StaxXmlParser(
       }
     }
     val mapData = DuplicateMapKeyUtils.buildConstrainedMap(
-      kvPairs, keyType, valueType)
+      lastEntries, keyType, valueType)
     badMapException.foreach(throw _)
     mapData
   }
@@ -562,6 +565,30 @@ class StaxXmlParser(
       }
     }
     convertedValuesMap.toMap
+  }
+
+  /**
+   * Assigns attributes onto `row` one field at a time. Returns the first conversion
+   * failure so callers can keep parse-mode recovery without dropping sibling values.
+   */
+  private def assignAttributes(
+      attributes: Array[Attribute],
+      schema: StructType,
+      row: Array[Any]): Option[Throwable] = {
+    var firstError: Option[Throwable] = None
+    val valuesMap = StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options)
+    valuesMap.foreach { case (f, v) =>
+      getFieldIndex(schema, f).foreach { i =>
+        try {
+          row(i) = convertTo(v, schema(i).dataType)
+        } catch {
+          case e: SparkUpgradeException => throw e
+          case DuplicateMapKeyUtils(e) => throw e
+          case NonFatal(e) => firstError = firstError.orElse(Some(e))
+        }
+      }
+    }
+    firstError
   }
 
   /**
@@ -631,18 +658,11 @@ class StaxXmlParser(
       rootAttributes: Array[Attribute] = Array.empty): InternalRow = {
     val row = new Array[Any](schema.length)
     var badRecordException: Option[Throwable] = None
-    // Convert rowTag attributes under the same recovery accumulator as child fields so
-    // an over-limit CHAR/VARCHAR attribute is a parse-mode failure, not a reader abort.
-    try {
-      convertAttributes(rootAttributes, schema).toSeq.foreach {
-        case (f, v) =>
-          getFieldIndex(schema, f).foreach { row(_) = v }
-      }
-    } catch {
-      case e: SparkUpgradeException => throw e
-      case DuplicateMapKeyUtils(e) => throw e
-      case NonFatal(e) =>
-        badRecordException = Some(e)
+    // Convert each rowTag attribute independently so a CHAR/VARCHAR overflow on one
+    // field does not drop already-converted sibling attributes, and still records the
+    // failure for parse-mode recovery instead of aborting the reader.
+    assignAttributes(rootAttributes, schema, row).foreach { e =>
+      badRecordException = badRecordException.orElse(Some(e))
     }
 
     val wildcardColName = options.wildcardColName

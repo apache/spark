@@ -648,8 +648,8 @@ class JacksonParser(
       throw badRecordException.get
     }
 
-    // The JSON map will never have null or duplicated map keys, it's safe to create a
-    // ArrayBasedMapData directly here.
+    // Preserve every parsed JSON key/value pair, including exact duplicate names.
+    // ArrayBasedMapData is used directly to retain this historical behavior.
     val mapData = ArrayBasedMapData(keys.toArray, values.toArray)
 
     if (badRecordException.isEmpty) {

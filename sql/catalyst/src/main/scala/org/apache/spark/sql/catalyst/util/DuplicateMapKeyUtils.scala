@@ -38,27 +38,19 @@ private[sql] object DuplicateMapKeyUtils {
   def unapply(exception: Throwable): Option[SparkRuntimeException] = cause(exception)
 
   /**
-   * Builds an XML map with a constrained CHAR/VARCHAR key type.
+   * Builds an XML map with a constrained CHAR/VARCHAR key type from a raw-key last-wins
+   * accumulator. Failed values still occupy a slot so normalized collisions are visible.
    *
-   * CHAR/VARCHAR keys: repeated XML keys after namespace handling keep the last value, then
-   * `spark.sql.mapKeyDedupPolicy` applies to normalized keys. Failed values still
-   * occupy a slot so collisions are visible.
+   * CHAR/VARCHAR keys: repeated raw XML keys keep the last value, then
+   * `spark.sql.mapKeyDedupPolicy` applies to normalized keys.
    *
    * Example: parsing `a` and `a ` as CHAR(2) keys raises
    * DUPLICATED_MAP_KEY under EXCEPTION and keeps `a ` -> 2 under LAST_WIN.
-   * Repeated XML keys after namespace handling use last-wins behavior regardless of policy.
    */
   def buildConstrainedMap(
-      entries: Iterable[(UTF8String, UTF8String, Option[Any])],
+      lastEntries: mutable.LinkedHashMap[UTF8String, (UTF8String, Option[Any])],
       keyType: DataType,
       valueType: DataType): MapData = {
-    val lastEntries =
-      mutable.LinkedHashMap.empty[UTF8String, (UTF8String, Option[Any])]
-    entries.foreach { case (rawKey, normalizedKey, value) =>
-      lastEntries.remove(rawKey)
-      lastEntries.update(rawKey, (normalizedKey, value))
-    }
-
     if (SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) ==
         SQLConf.MapKeyDedupPolicy.EXCEPTION) {
       val distinctKeys = keyType match {
@@ -67,16 +59,24 @@ private[sql] object DuplicateMapKeyUtils {
         case _ =>
           new java.util.TreeSet[Any](TypeUtils.getInterpretedOrdering(keyType))
       }
-      lastEntries.valuesIterator.foreach { case (key, _) =>
+      val keys = mutable.ArrayBuffer.empty[Any]
+      val values = mutable.ArrayBuffer.empty[Any]
+      lastEntries.valuesIterator.foreach { case (key, value) =>
         if (!distinctKeys.add(key)) {
           throw QueryExecutionErrors.duplicateMapKeyFoundError(key)
         }
+        value.foreach { v =>
+          keys += key
+          values += v
+        }
       }
+      ArrayBasedMapData(keys.toArray, values.toArray)
+    } else {
+      val builder = new ArrayBasedMapBuilder(keyType, valueType)
+      lastEntries.valuesIterator.foreach { case (normalizedKey, value) =>
+        value.foreach(builder.put(normalizedKey, _))
+      }
+      builder.build()
     }
-    val builder = new ArrayBasedMapBuilder(keyType, valueType)
-    lastEntries.valuesIterator.foreach { case (normalizedKey, value) =>
-      value.foreach(builder.put(normalizedKey, _))
-    }
-    builder.build()
   }
 }
