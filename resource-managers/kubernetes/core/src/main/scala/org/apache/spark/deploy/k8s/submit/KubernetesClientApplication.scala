@@ -173,7 +173,7 @@ private[spark] class Client(
       case NonFatal(e) =>
         logError("Please check \"kubectl auth can-i create [resource]\" first." +
           " It should be yes. And please also check your feature step implementation.")
-        kubernetesClient.pods().resource(createdDriverPod).delete()
+        deletePodAndPreResources(createdDriverPod, preKubernetesResources)
         throw e
     }
 
@@ -195,8 +195,8 @@ private[spark] class Client(
           .build())
     } catch {
       case NonFatal(e) =>
-        kubernetesClient.pods().resource(createdDriverPod).delete()
-        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+        logError("Please check \"kubectl auth can-i patch pod\" first. It should be yes.")
+        deletePodAndPreResources(createdDriverPod, preKubernetesResources)
         throw e
     }
 
@@ -237,6 +237,20 @@ private[spark] class Client(
       logInfo(log"Deployed Spark application ${MDC(APP_NAME, conf.appName)} with " +
         log"application ID ${MDC(APP_ID, conf.appId)} and " +
         log"submission ID ${MDC(SUBMISSION_ID, sId)} into Kubernetes")
+    }
+  }
+
+  // SPARK-38079: best-effort cleanup for the two failure catch blocks between pod creation and
+  // gate removal. The pod and pre-resources are deleted independently -- each wrapped in its
+  // own Utils.tryLogNonFatalError -- so that a failure deleting one (e.g. a delete call itself
+  // hitting a permission or network error) neither masks the original exception the caller is
+  // about to (re)throw nor skips deleting the other.
+  private def deletePodAndPreResources(pod: Pod, preResources: Seq[HasMetadata]): Unit = {
+    Utils.tryLogNonFatalError {
+      kubernetesClient.pods().resource(pod).delete()
+    }
+    Utils.tryLogNonFatalError {
+      kubernetesClient.resourceList(preResources: _*).delete()
     }
   }
 }

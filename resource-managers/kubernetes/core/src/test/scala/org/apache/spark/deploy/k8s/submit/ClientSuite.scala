@@ -110,15 +110,6 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
         .endSpec()
       .build()
 
-  // SPARK-38079: what the driver pod looks like once its pre-resources scheduling gate has
-  // been removed (see run()'s "Remove the pre-resources scheduling gate" step).
-  private def fullExpectedPodGateRemoved(keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
-    new PodBuilder(fullExpectedPod(keyToPaths))
-      .editSpec()
-        .removeMatchingFromSchedulingGates(_.getName == PRE_RESOURCES_SCHEDULING_GATE)
-        .endSpec()
-      .build()
-
   private def podWithOwnerReference(keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
     new PodBuilder(fullExpectedPod(keyToPaths))
       .editMetadata()
@@ -126,6 +117,18 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
         .endMetadata()
       .withApiVersion(DRIVER_POD_API_VERSION)
       .withKind(DRIVER_POD_KIND)
+      .build()
+
+  // SPARK-38079: what the created driver pod (i.e. podWithOwnerReference()) looks like once
+  // its pre-resources scheduling gate has been removed (see run()'s "Remove the pre-resources
+  // scheduling gate" step) -- this is the pod run()'s edit() call is applied against, not the
+  // pre-creation fullExpectedPod(), so this must be based on the former to actually match what
+  // a correct edit() call produces.
+  private def fullExpectedPodGateRemoved(keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
+    new PodBuilder(podWithOwnerReference(keyToPaths))
+      .editSpec()
+        .removeMatchingFromSchedulingGates(_.getName == PRE_RESOURCES_SCHEDULING_GATE)
+        .endSpec()
       .build()
 
   private val ADDITIONAL_RESOURCES_WITH_OWNER_REFERENCES = ADDITIONAL_RESOURCES.map { secret =>
@@ -232,7 +235,12 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     // removed via a single edit() once its pre-resources exist.
     verify(podsWithNamespace).resource(fullExpectedPod())
     verify(namedPods).create()
-    verify(namedPods).edit(ArgumentMatchers.any[java.util.function.UnaryOperator[Pod]]())
+    val editFnCaptor = ArgumentCaptor.forClass(classOf[java.util.function.UnaryOperator[Pod]])
+    verify(namedPods).edit(editFnCaptor.capture())
+    // Actually apply the captured function to a still-gated pod and check the result, rather
+    // than only checking that some function was passed to edit() -- a no-op (or wrong-field)
+    // edit function would satisfy the verify() above without ever removing the gate.
+    assert(editFnCaptor.getValue.apply(podWithOwnerReference()) === fullExpectedPodGateRemoved())
   }
 
   test("The client should create Kubernetes resources") {
@@ -317,8 +325,8 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     verify(kubernetesClient, never()).resourceList(ArgumentMatchers.any[Array[HasMetadata]](): _*)
   }
 
-  test("SPARK-38079: pre-resource creation failure (after the pod exists) deletes the pod " +
-      "and propagates") {
+  test("SPARK-38079: pre-resource creation failure (after the pod exists) deletes both the " +
+      "pod and the pre-resources, then propagates") {
     val preResourceFailure = new RuntimeException("simulated pre-resource creation failure")
     doThrow(preResourceFailure).when(resourceList).serverSideApply()
     val submissionClient = new Client(
@@ -332,8 +340,18 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     }
 
     assert(thrown eq preResourceFailure)
+    // Not just "delete() was called on some mock" -- pods().resource(...) must have been
+    // called with the actual created (gated) pod, i.e. the same pod object this cleanup path
+    // is documented to delete, and resourceList()'s delete() must be reachable via the exact
+    // pre-resources that were passed to the failed serverSideApply() call.
     verify(namedPods).create()
+    verify(podOperations).resource(podWithOwnerReference())
     verify(namedPods).delete()
+    verify(resourceList).delete()
+    val preResourceCalls = createdResourcesArgumentCaptor.getAllValues.asScala
+    assert(preResourceCalls.exists(_.exists(_.isInstanceOf[ConfigMap])),
+      "the failed resourceList() call must have been for the pre-resources (the driver's " +
+        "own config map among them), not some other resource set")
     // The gate is never removed on this failure path.
     verify(namedPods, never()).edit(ArgumentMatchers.any[java.util.function.UnaryOperator[Pod]]())
   }
@@ -354,7 +372,37 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     }
 
     assert(thrown eq gateRemovalFailure)
+    verify(podOperations).resource(podWithOwnerReference())
     verify(namedPods).delete()
+    verify(resourceList).delete()
+    val preResourceCalls = createdResourcesArgumentCaptor.getAllValues.asScala
+    assert(preResourceCalls.exists(_.exists(_.isInstanceOf[ConfigMap])),
+      "the pre-resources deleted here must be the same ones created before the gate-removal " +
+        "attempt, not some other resource set")
+  }
+
+  test("SPARK-38079: a failure deleting the pod during cleanup does not prevent the " +
+      "pre-resources from also being deleted, and the original exception still propagates") {
+    val gateRemovalFailure = new RuntimeException("simulated gate-removal failure")
+    doThrow(gateRemovalFailure)
+      .when(namedPods).edit(ArgumentMatchers.any[java.util.function.UnaryOperator[Pod]]())
+    // The pod-delete step of cleanup itself fails (e.g. a permissions or network error hitting
+    // the delete call) -- this must not mask gateRemovalFailure, nor skip deleting the
+    // pre-resources afterwards.
+    doThrow(new RuntimeException("simulated delete failure")).when(namedPods).delete()
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher)
+
+    val thrown = intercept[RuntimeException] {
+      submissionClient.run()
+    }
+
+    assert(thrown eq gateRemovalFailure,
+      "the original failure that triggered cleanup must still be the one that propagates, " +
+        "not a failure from within the best-effort cleanup itself")
     verify(resourceList).delete()
   }
 
