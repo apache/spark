@@ -233,6 +233,28 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
     }
   }
 
+  test("AT_RUNTIME rejects unsupported datetime-to-variant casts") {
+    Seq(
+      TimeType(TimeType.DEFAULT_PRECISION),
+      TimeType(TimeType.MAX_PRECISION),
+      TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION),
+      TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION)).foreach { writeType =>
+      val errs = new mutable.ArrayBuffer[String]()
+      checkError(
+        exception = intercept[AnalysisException](
+          DataTypeUtils.canWrite("", writeType, VariantType, byName = true,
+            analysis.caseSensitiveResolution, "v", storeAssignmentPolicy,
+            errMsg => errs += errMsg,
+            ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.AT_RUNTIME)),
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+        parameters = Map(
+          "tableName" -> "``",
+          "colName" -> "`v`",
+          "srcType" -> toSQLType(writeType),
+          "targetType" -> toSQLType(VariantType)))
+    }
+  }
+
   test("AT_RUNTIME does not relax UDT field-name validation") {
     // A UDT backed by STRUCT<b, a> written by name into STRUCT<a, b> must be rejected on the
     // field-name mismatch; deferring the ANSI cast check must not unwrap the UDT and silently swap

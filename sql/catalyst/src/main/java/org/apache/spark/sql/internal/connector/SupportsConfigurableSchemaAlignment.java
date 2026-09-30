@@ -24,7 +24,7 @@ import org.apache.spark.sql.connector.catalog.Table;
  * writes to a {@link Table}. It is not consulted for streaming writes, where alignment is
  * delegated to the connector.
  */
-public interface ConfigurableSchemaAlignment extends Table {
+public interface SupportsConfigurableSchemaAlignment extends Table {
 
   /** The schema alignment configuration for writes to this table. */
   SchemaAlignmentConfig schemaAlignmentConfig();

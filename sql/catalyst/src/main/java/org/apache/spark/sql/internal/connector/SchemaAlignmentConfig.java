@@ -21,7 +21,7 @@ import org.apache.spark.sql.connector.catalog.Table;
 
 /**
  * Schema alignment configuration for DSv2 batch/row-level writes to a {@link Table}, exposed via
- * {@link ConfigurableSchemaAlignment}.
+ * {@link SupportsConfigurableSchemaAlignment}.
  */
 public interface SchemaAlignmentConfig {
 

@@ -232,7 +232,8 @@ object DataTypeUtils {
           // Long/decimal -> timestamp can silently overflow, and variant -> complex types doesn't
           // enforce nested field non-nullability. Keep rejecting them for now.
           case (LongType | _: DecimalType, TimestampType) |
-               (VariantType, _: StructType | _: ArrayType | _: MapType) =>
+               (VariantType, _: StructType | _: ArrayType | _: MapType) |
+               (_: TimeType | _: AnyTimestampNanoType, VariantType) =>
             throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
               tableName, context, w.catalogString, r.catalogString)
           case _ => true

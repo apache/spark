@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
-import org.apache.spark.sql.internal.connector.ConfigurableSchemaAlignment
+import org.apache.spark.sql.internal.connector.SupportsConfigurableSchemaAlignment
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
 
 /**
@@ -88,7 +88,7 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
 
   private def ansiStoreAssignmentCastCheck(target: LogicalPlan): AnsiStoreAssignmentCastCheck = {
     target.collectFirst {
-      case ExtractV2Table(table: ConfigurableSchemaAlignment) =>
+      case ExtractV2Table(table: SupportsConfigurableSchemaAlignment) =>
         table.schemaAlignmentConfig().ansiStoreAssignmentCastCheck()
     }.getOrElse(AnsiStoreAssignmentCastCheck.AT_ANALYSIS)
   }
