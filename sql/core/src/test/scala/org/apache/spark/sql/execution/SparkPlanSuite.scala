@@ -23,15 +23,17 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{Partition, SparkEnv, SparkException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
   Attribute, AttributeReference, Expression, ExprId, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
 import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
@@ -39,6 +41,26 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
 class SparkPlanSuite extends SharedSparkSession {
+
+  test("columnar execution cache is not captured by whole-stage codegen references") {
+    val source = ColumnarCacheSerializationSource()
+    val join = SortMergeJoinExec(
+      Seq(Literal(1)), Seq(Literal(1)), Inner, None,
+      ColumnarToRowExec(source), LocalTableScanExec(Nil, Nil, None))
+    val (ctx, code) = WholeStageCodegenExec(join)(0).doCodeGen()
+    assert(ctx.references.exists(_.asInstanceOf[AnyRef] eq join))
+
+    val rdd = source.executeColumnar()
+    assert(source.executeColumnar() eq rdd)
+    val factory = new WholeStageCodegenEvaluatorFactory(
+      Right(code), join.longMetric("numOutputRows"), ctx.references.toArray)
+    val serializer = SparkEnv.get.closureSerializer.newInstance()
+    // The cached RDD holds non-serializable driver state, but the generated evaluator does not
+    // need it. Input iterators are passed separately when the evaluator runs.
+    serializer.deserialize[WholeStageCodegenEvaluatorFactory](serializer.serialize(factory))
+    val readback = serializer.deserialize[SortMergeJoinExec](serializer.serialize(join))
+    readback.cleanupResources()
+  }
 
   test("SPARK-21619 execution of a canonicalized plan should fail") {
     val plan = spark.range(10).queryExecution.executedPlan.canonicalized
@@ -266,6 +288,22 @@ case class ColumnarOp(child: SparkPlan) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
   override protected def withNewChildInternal(newChild: SparkPlan): ColumnarOp =
     copy(child = newChild)
+}
+
+case class ColumnarCacheSerializationSource() extends LeafExecNode {
+  override val output: Seq[Attribute] = Seq(AttributeReference("id", IntegerType)())
+  override val supportsColumnar: Boolean = true
+
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    new RDD[ColumnarBatch](sparkContext, Nil) {
+      val driverOnlyState: AnyRef = new Object
+      override def compute(split: Partition, context: TaskContext): Iterator[ColumnarBatch] =
+        Iterator.empty
+      override protected def getPartitions: Array[Partition] = Array.empty
+    }
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
 }
 
 private case class TestSubqueryExec(child: SparkPlan) extends BaseSubqueryExec {

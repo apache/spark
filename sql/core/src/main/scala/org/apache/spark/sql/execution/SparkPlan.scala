@@ -218,6 +218,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     executeBroadcastBcast.get.asInstanceOf[broadcast.Broadcast[T]]
   }
 
+  @transient
   private val executeColumnarRDD = LazyTry {
     doExecuteColumnar()
   }
