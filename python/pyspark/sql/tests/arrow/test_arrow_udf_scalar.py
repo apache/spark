@@ -43,6 +43,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimeType,
     YearMonthIntervalType,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -478,6 +479,29 @@ class ScalarArrowUDFTestsMixin:
             ],
             result.collect(),
         )
+
+    def test_arrow_udf_time_precision(self):
+        # SPARK-57696: scalar Arrow UDF return type keeps TIME(p) through collect.
+        import pyarrow as pa
+
+        cases = (
+            ("12:34:56", 0, datetime.time(12, 34, 56)),
+            ("12:34:56.123", 3, datetime.time(12, 34, 56, 123000)),
+            ("12:34:56.123456", 6, datetime.time(12, 34, 56, 123456)),
+            ("12:34:56.123456789", 9, datetime.time(12, 34, 56, 123456)),
+        )
+        for literal, precision, expected in cases:
+            with self.subTest(precision=precision):
+                df = self.spark.sql("SELECT CAST('%s' AS TIME(%d)) AS t" % (literal, precision))
+
+                @arrow_udf(TimeType(precision))
+                def ident(v):
+                    assert isinstance(v, pa.Time64Array)
+                    return v
+
+                out = df.select(ident("t").alias("t"))
+                self.assertEqual(out.schema["t"].dataType, TimeType(precision))
+                self.assertEqual(out.collect(), [Row(t=expected)])
 
     def test_arrow_udf_input_variant(self):
         import pyarrow as pa
