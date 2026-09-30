@@ -570,8 +570,8 @@ private[sql] object GroupPartitionsExec {
     // can only differ in `expressions`, since they share one `KeyLayout` (enforced by
     // `PartitioningCollection`). So the grouping is computed once, and the layout it describes
     // is shared by the members below.
-    // When reducers are applied, the stored reduced expressions are re-targeted at each
-    // `KeyedPartitioning`'s own key attribute and reported instead of the original ones. Their
+    // When reducers are applied, the stored reduced expressions are rebuilt over each
+    // `KeyedPartitioning`'s own argument and reported instead of the original ones. Their
     // data types match the reduced partition keys for the identity-vs-transform and
     // single-side-transform reducers; for the both-sides-reduce shape no single transform
     // describes the keys, so the reduce marks it (see `KeyedShuffleSpec.reducersBothWays`).
@@ -604,8 +604,15 @@ private[sql] object GroupPartitionsExec {
                   // `reduced` came from the one member `checkKeyGroupCompatible` paired
                   // this side on, which need not be the member being rewritten. The keys are
                   // reduced once, from the shared key rows, so `reduced` describes them
-                  // whichever member this is, and only the key attribute is re-targeted.
-                  reduced.withReference(expr.references.head)
+                  // whichever member this is. Its argument is a bare column, since the pairing
+                  // admits no other. The member's own argument takes its place, since that need
+                  // not be one. A side shuffled onto this layout reports `bucket(8, b + 1)` next
+                  // to `bucket(8, id)`, or `b + 1` next to an identity `id`.
+                  val argument = expr match {
+                    case t: TransformExpression => t.children
+                    case e => Seq(e)
+                  }
+                  reduced.copy(children = argument)
                 case (expr, None) => expr
               }
             case None => projectedExpressions

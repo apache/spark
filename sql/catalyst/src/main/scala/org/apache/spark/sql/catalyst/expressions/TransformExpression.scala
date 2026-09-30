@@ -66,16 +66,6 @@ case class TransformExpression(
     TransformFunctionId(function.canonicalName(), numBucketsOpt)
 
   /**
-   * Whether every argument is a bare column, an [[Attribute]]. See [[isSameFunction]] for why only
-   * such a transform can be compared with another one. A literal argument is a parameter of the
-   * transform rather than a column, so it does not count.
-   */
-  private[sql] lazy val argumentsAreAttributes: Boolean = children.forall {
-    case _: Literal => true
-    case c => c.isInstanceOf[Attribute]
-  }
-
-  /**
    * Whether this [[TransformExpression]] has the same semantics as `other`.
    * For instance, `bucket(32, c)` is equal to `bucket(32, d)`, but not to `bucket(16, d)` or
    * `year(c)`.
@@ -87,21 +77,10 @@ case class TransformExpression(
    * It compares the transforms only. A caller that compares partition keys has to consult
    * `reducedWith` as well, since a reduced key space is not the one its transform names.
    *
-   * Only a transform whose arguments are all bare columns can be the same as another. The
-   * comparison ignores which column an argument is, and `KeyedShuffleSpec.keyPositions` pairs the
-   * two sides up by the column each expression references. That pairing is sound only when the
-   * argument is the column itself. `KeyedShuffleSpec.createPartitioning` builds a transform over
-   * the other side's join key, which can be an expression or a struct field. `bucket(4, b + 1)` is
-   * a function of `b`, but not the same function of it as `bucket(4, x)` is of `x`, so a join on
-   * `b = x` must not pair the two, and neither may a join on `s = t` pair `bucket(4, s.a)` with
-   * `bucket(4, t.b)`. Such a transform is not the same as any transform, itself included, which
-   * costs a shuffle rather than a match.
-   *
    * @param other the transform expression to compare to
    * @return true if this and `other` has the same semantics w.r.t to transform, false otherwise.
    */
-  def isSameFunction(other: TransformExpression): Boolean =
-    argumentsAreAttributes && other.argumentsAreAttributes && functionId == other.functionId
+  def isSameFunction(other: TransformExpression): Boolean = functionId == other.functionId
 
   /**
    * Whether this [[TransformExpression]]'s function is compatible with the `other`
@@ -113,8 +92,19 @@ case class TransformExpression(
    * @param other the transform expression to compare to
    * @return true if compatible, false if not
    */
-  def isCompatible(other: TransformExpression): Boolean =
-    isSameFunction(other) || reducers(other).isDefined || other.reducers(this).isDefined
+  def isCompatible(other: TransformExpression): Boolean = {
+    if (isSameFunction(other)) {
+      true
+    } else {
+      (function, other.function) match {
+        case (f: ReducibleFunction[_, _], o: ReducibleFunction[_, _]) =>
+          val thisReducer = reducer(f, numBucketsOpt, o, other.numBucketsOpt)
+          val otherReducer = reducer(o, other.numBucketsOpt, f, numBucketsOpt)
+          thisReducer.isDefined || otherReducer.isDefined
+        case _ => false
+      }
+    }
+  }
 
   /**
    * Return a [[Reducer]] for this transform expression on another
@@ -127,10 +117,7 @@ case class TransformExpression(
    */
   def reducers(other: TransformExpression): Option[Reducer[_, _]] = {
     (function, other.function) match {
-      // A reduce pairs the two sides up the same way `isSameFunction` does, so it needs the same
-      // arguments.
-      case (e1: ReducibleFunction[_, _], e2: ReducibleFunction[_, _])
-          if argumentsAreAttributes && other.argumentsAreAttributes =>
+      case(e1: ReducibleFunction[_, _], e2: ReducibleFunction[_, _]) =>
         reducer(e1, numBucketsOpt, e2, other.numBucketsOpt)
       case _ => None
     }

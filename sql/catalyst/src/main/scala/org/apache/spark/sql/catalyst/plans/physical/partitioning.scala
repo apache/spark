@@ -975,7 +975,7 @@ case class KeyedPartitioning(
    * `keysSatisfy` may read the partition keys to decide whether a projection would merge anything.
    * `mayProjectToClusterKeys` holds the permission.
    *
-   * Given the single reference per expression that `supportsExpressions` enforces, that case
+   * Where every partition expression has a single reference, that case
    * coincides with `KeyedShuffleSpec.keyPositions.exists(_.nonEmpty)`, where `createShuffleSpec`
    * takes its `joinKeyPositions` from. They cannot be merged into one derivation, see
    * `positionsCoveringClusterKeys`.
@@ -1375,11 +1375,7 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
     // through here.
     //
     // Every admitted member stays, because `isCompatibleWith` answers for any of them and the
-    // collection cannot know which one the other side matched. The cost is that
-    // `ShuffleSpecCollection.canCreatePartitioning` is a `forall` over members whose keyed half is
-    // false without `v2BucketingShuffleEnabled`, so a groupable keyed member beside a usable
-    // non-keyed one would cost the collection its role as a shuffle template. No operator is known
-    // to report that mixture.
+    // collection cannot know which one the other side matched.
     val filtered =
       partitionings.filter(PartitioningCollection.maySatisfyAfterProjection(_, distribution))
     ShuffleSpecCollection(filtered.map(_.createShuffleSpec(distribution)))
@@ -1588,15 +1584,21 @@ sealed trait ShuffleSpec {
    * co-partitioned with the `other`, and therefore no shuffle is required when joining the two
    * sides.
    *
-   * Note that Spark assumes this to be reflexive, symmetric and transitive.
+   * Note that Spark assumes this to be reflexive, symmetric and transitive. Some specs are not
+   * reflexive:
+   *  - a [[RangeShuffleSpec]], whose boundaries are sampled;
+   *  - a [[KeyedShuffleSpec]] with a partition expression that is neither a column nor a transform
+   *    of columns, e.g. `b + 1`, `s.a` or `bucket(4, b + 1)`.
+   * None of them answers [[canCreatePartitioning]], which keeps the planner from picking one as
+   * the layout to shuffle the other children onto.
    */
   def isCompatibleWith(other: ShuffleSpec): Boolean
 
   /**
    * Whether this shuffle spec can be used to create partitionings for the other children. A
-   * [[ShuffleSpecCollection]] answers for the whole choice, since the planner asks it of a child's
-   * spec as a whole. Building the partitioning is [[LeafShuffleSpec.createPartitioning]], and that
-   * is always one member's job.
+   * [[ShuffleSpecCollection]] can when any of its members can. Building the partitioning is
+   * [[LeafShuffleSpec.createPartitioning]], and that is always one member's job, so the planner
+   * builds it from a member that can.
    */
   def canCreatePartitioning: Boolean
 
@@ -1873,8 +1875,8 @@ case class CoalescedHashShuffleSpec(
  *                          keys, and this is this side's own expression marked with the pairing
  *                          that reduced it (`TransformExpression.reducedWith`). Stored as-is from
  *                          the expression pair that produced the reducer; the only structural
- *                          consumer, `GroupPartitionsExec`, re-targets it at each reported
- *                          `KeyedPartitioning`'s own key attribute in `outputPartitioning` and
+ *                          consumer, `GroupPartitionsExec`, rebuilds it over each reported
+ *                          `KeyedPartitioning`'s own argument in `outputPartitioning` and
  *                          normalizes it positionally in `doCanonicalize`, so the attribute it
  *                          carries here is not load-bearing.
  */
@@ -1892,8 +1894,8 @@ case class KeyReducer(reducer: Reducer[_, _], reducedExpression: TransformExpres
  * @param transform the partition transform, re-targeted at the identity side's key attribute
  */
 case class IdentityReducer(transform: TransformExpression) extends Reducer[Any, Any] {
-  // `transform` has a single leaf attribute (`KeyedPartitioning.supportsExpressions`), which is
-  // bound to ordinal 0 of the single-value row `reduce` evaluates it against.
+  // `transform` is over a single bare column (`KeyedShuffleSpec.isExpressionCompatible` admits no
+  // other), which is bound to ordinal 0 of the single-value row `reduce` evaluates it against.
   @transient private lazy val bound: Expression =
     BindReferences.bindReference(transform, AttributeSeq(transform.references.toSeq))
 
@@ -1941,12 +1943,16 @@ case class KeyedShuffleSpec(
    * `KeyedPartitioning.positionsCoveringClusterKeys` counts it. See that method for why the two
    * stay apart.
    *
-   * The assertion is what makes the reference reading sound. With one reference per expression,
-   * "some reference is a cluster key" and "every reference is" are the same statement.
+   * Only an expression with a single reference maps to a position. With one reference, "some
+   * reference is a cluster key" and "every reference is" are the same statement, which is what
+   * makes the reference reading sound. A scan reports no other expression
+   * (`KeyedPartitioning.supportsExpressions`), but `createPartitioning` builds one over the other
+   * side's join key, e.g. `bucket(4, b + c)` from `b + c`. No single cluster key stands for it, so
+   * it maps to nothing. `canCreatePartitioning` and `areKeysCompatible` then turn the spec away,
+   * and `KeyedPartitioning.createShuffleSpec` projects the position away.
    *
-   * This says which cluster key an expression is a function of, not which function it is:
-   * `bucket(4, b + 1)` maps to `b` just as `bucket(4, b)` does. Telling those two apart is
-   * `TransformExpression.isSameFunction`'s job.
+   * This says which cluster key an expression is a function of, not which function it is.
+   * `bucket(4, b + 1)` maps to `b` just as `bucket(4, b)` does, see `argumentsAreColumns`.
    */
   lazy val keyPositions: Seq[mutable.BitSet] = {
     val distKeyToPos = mutable.Map.empty[Expression, mutable.BitSet]
@@ -1955,8 +1961,11 @@ case class KeyedShuffleSpec(
     }
     partitioning.expressions.map { e =>
       val refs = e.references
-      assert(refs.size == 1, s"Expected exactly one child from $e, but found ${refs.size}")
-      distKeyToPos.getOrElse(refs.head.canonicalized, mutable.BitSet.empty)
+      if (refs.size == 1) {
+        distKeyToPos.getOrElse(refs.head.canonicalized, mutable.BitSet.empty)
+      } else {
+        mutable.BitSet.empty
+      }
     }
   }
 
@@ -2065,7 +2074,15 @@ case class KeyedShuffleSpec(
       left: Expression,
       right: Expression,
       allowReduce: Boolean): Boolean = {
-    if (TransformExpression.hasReducedKeys(left) || TransformExpression.hasReducedKeys(right)) {
+    val overExpression = Seq(left, right).exists {
+      case t: TransformExpression => !argumentsAreColumns(t)
+      case _ => false
+    }
+    if (overExpression) {
+      // A transform of an expression pairs with nothing, see `argumentsAreColumns`.
+      false
+    } else if (
+        TransformExpression.hasReducedKeys(left) || TransformExpression.hasReducedKeys(right)) {
       // Reduced keys are in a key space that neither transform names, so comparing the transforms
       // says nothing about whether the two sides are laid out the same way. The pair that was
       // reduced together is laid out the same way, since its two sides came out of one reduce onto
@@ -2089,6 +2106,21 @@ case class KeyedShuffleSpec(
       }
     }
   }
+
+  /**
+   * Whether every argument of `transform` is a bare column. `isExpressionCompatible` asks it of
+   * both sides before it compares anything, and `canCreatePartitioning` asks it of a template.
+   *
+   * `keyPositions` pairs two sides up by the column each expression references. That pairing
+   * describes one key space only when the argument is the column itself. `bucket(4, b + 1)` is a
+   * function of `b`, but not the same function of it as `bucket(4, x)` is of `x`. Nor is
+   * `bucket(4, s.a)` the same function of `s` as `bucket(4, t.b)` is of `t`. Reducing an identity
+   * side onto such a transform would also evaluate `id + 1` on keys the query never computes it
+   * for, which can overflow. So a spec over one pairs with nothing, itself included (see
+   * [[ShuffleSpec.isCompatibleWith]]).
+   */
+  private def argumentsAreColumns(transform: TransformExpression): Boolean =
+    transform.children.forall(_.isInstanceOf[Attribute])
 
   /**
    * Whether a join may reduce one or both sides' partition keys onto a common key space, which is
@@ -2139,8 +2171,8 @@ case class KeyedShuffleSpec(
           if (otherReducer.isEmpty) {
             // Only this side reduces. The reducer contract is r(f1(x)) = f2(x) where "=" matches
             // both value and data type, so the reduced keys equal the target transform applied to
-            // this side's child. Report the target transform (re-targeted at the reporting
-            // partitioning's key attribute by `GroupPartitionsExec`) instead of the un-reduced
+            // this side's child. Report the target transform (rebuilt over the reporting
+            // partitioning's own argument by `GroupPartitionsExec`) instead of the un-reduced
             // `e1`, whose type can differ from the reduced keys. A connector that violates the
             // contract with a reducer of a different result type fails the reduced-types check in
             // `EnsureRequirements`, since the other side's keys are typed by the target transform.
@@ -2169,8 +2201,8 @@ case class KeyedShuffleSpec(
 
       // Identity transform on this side, arbitrary transform on the other side: create a reducer
       // that applies the other's transform to the raw identity values. Each partition expression
-      // is guaranteed to have exactly one leaf child (asserted in keyPositions), which
-      // `IdentityReducer` binds to ordinal 0.
+      // has exactly one reference here, since `keyPositions` maps any other to no position and
+      // `areKeysCompatible` admitted this pair. `IdentityReducer` binds it to ordinal 0.
       case (a: AttributeReference, t: TransformExpression) =>
         (Some(KeyReducer(IdentityReducer(t.withReference(a)), t)), None)
 
@@ -2209,7 +2241,7 @@ case class KeyedShuffleSpec(
         // which drops whatever surrounds the key, e.g. the `+ 1` of `bucket(4, b + 1)` or the `.a`
         // of `bucket(4, s.a)`. Such a spec's own child would then be laid out differently from the
         // children shuffled onto it.
-        case t: TransformExpression => t.argumentsAreAttributes
+        case t: TransformExpression => argumentsAreColumns(t)
         case _ => false
       } &&
       // Shuffling another child onto these keys evaluates the partition expressions per row to
@@ -2299,7 +2331,7 @@ case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {
   }
 
   override def canCreatePartitioning: Boolean =
-    specs.forall(_.canCreatePartitioning)
+    specs.exists(_.canCreatePartitioning)
 
   override def flatten: Seq[LeafShuffleSpec] = specs.flatMap(_.flatten)
 }

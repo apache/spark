@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, DirectShufflePartitionID, Expression, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, DirectShufflePartitionID, Expression, GetStructField, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, Reducer, ReducibleFunction, ScalarFunction}
@@ -758,6 +758,84 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       assert(spec(bucket8.reducedTogetherWith(bucket4))
         .isCompatibleWith(spec(bucket4.reducedTogetherWith(bucket8))),
         "two sides reduced together share one key space")
+    }
+  }
+
+  test("SPARK-59887: a spec over a transform of an expression pairs with nothing") {
+    // A join pairs its two sides up by the column each partition expression references. Over
+    // `a = b` it would pair `bucket(4, a + 1)` with `bucket(4, b)`, and over `s = b` it would pair
+    // `bucket(4, s.x)` with `bucket(4, b)`. A row with `a = b` sits in a different bucket on each
+    // side.
+    val fn = new FakeBucket
+    val a = $"a".long
+    val b = $"b".long
+    val s = $"s".struct(new StructType().add("x", LongType))
+    // A spec clustered on the column its one partition expression references.
+    def keyed(expression: Expression): KeyedShuffleSpec =
+      KeyedShuffleSpec(
+        KeyedPartitioning(Seq(expression), Seq(InternalRow(0L), InternalRow(1L))),
+        ClusteredDistribution(expression.references.toSeq))
+    def bucket(argument: Expression, numBuckets: Int): TransformExpression =
+      TransformExpression(fn, Seq(argument), Some(numBuckets))
+    def spec(argument: Expression, numBuckets: Int): KeyedShuffleSpec =
+      keyed(bucket(argument, numBuckets))
+    // Whether the two sides of one reduce, `bucket(8, argument)` with `bucket(4, b)`, pair up.
+    def pairedByReduce(argument: Expression): Boolean =
+      keyed(bucket(argument, 8).reducedTogetherWith(bucket(b, 4)))
+        .isCompatibleWith(keyed(bucket(b, 4).reducedTogetherWith(bucket(argument, 8))))
+    val overColumn = spec(a, 4)
+    val column = spec(b, 4)
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      assert(overColumn.isCompatibleWith(column), "two columns pair up")
+      assert(overColumn.canCreatePartitioning)
+      assert(spec(a, 8).areKeysCompatible(column, allowReduce = true),
+        "the fixture reduces two columns")
+      assert(pairedByReduce(a), "two columns reduced together share one key space")
+      assert(keyed(b).areKeysCompatible(overColumn, allowReduce = true),
+        "an identity side reduces onto a column's transform")
+
+      Seq("an expression" -> (a + 1L), "a struct field" -> GetStructField(s, 0)).foreach {
+        case (shape, argument) =>
+          val over = spec(argument, 4)
+          assert(!over.isCompatibleWith(column), s"over $shape")
+          assert(!column.isCompatibleWith(over), s"over $shape, the other way round")
+          assert(!over.isCompatibleWith(over), s"over $shape, not even with itself")
+          assert(!over.canCreatePartitioning, s"over $shape, nor a layout to shuffle onto")
+
+          // A reduce pairs the two sides up the same way, so it is refused as well, whichever
+          // side reduces. So is a pair an earlier join reduced together, and an identity side.
+          assert(!spec(argument, 8).areKeysCompatible(column, allowReduce = true), s"over $shape")
+          assert(!column.areKeysCompatible(spec(argument, 8), allowReduce = true), s"over $shape")
+          assert(!over.areKeysCompatible(spec(b, 8), allowReduce = true), s"over $shape")
+          assert(!pairedByReduce(argument), s"over $shape, reduced together")
+          assert(!keyed(b).areKeysCompatible(over, allowReduce = true),
+            s"over $shape, reducing an identity side")
+
+          // One such member does not keep a sibling from serving as the layout.
+          assert(ShuffleSpecCollection(Seq(over, overColumn)).canCreatePartitioning)
+      }
+    }
+  }
+
+  test("SPARK-59901: an expression over two columns maps to no cluster key") {
+    // A one-side shuffle builds its partition expression over the other side's join key, which can
+    // reference two columns. No single cluster key stands for it.
+    val a = $"a".long
+    val b = $"b".long
+    Seq(a + b, TransformExpression(new FakeBucket, Seq(a + b), Some(4))).foreach { e =>
+      val twoColumns = KeyedShuffleSpec(
+        KeyedPartitioning(Seq(e), Seq(InternalRow(0L), InternalRow(1L))),
+        ClusteredDistribution(Seq(a, b)))
+      assert(twoColumns.keyPositions.forall(_.isEmpty), s"$e")
+      assert(!twoColumns.isCompatibleWith(twoColumns), s"$e")
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        assert(!twoColumns.canCreatePartitioning, s"$e")
+      }
     }
   }
 

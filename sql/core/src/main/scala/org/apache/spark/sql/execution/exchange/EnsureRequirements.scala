@@ -377,12 +377,14 @@ case class EnsureRequirements(
     val shouldConsiderMinParallelism = children.zip(specs).forall { case (child, spec) =>
       spec.forall(!_.canCreatePartitioning) || child.isInstanceOf[ShuffleExchangeLike]
     }
-    // Choose all the specs that can be used to shuffle other children
+    // Choose all the specs that can be used to shuffle other children, keeping only the members
+    // that can serve as the layout. Any other member would build a partitioning its own child is
+    // not laid out on.
     val candidateSpecs = children.zip(specs).collect {
       case (child, Some(spec)) if spec.canCreatePartitioning &&
           (!shouldConsiderMinParallelism ||
             child.outputPartitioning.numPartitions >= conf.defaultNumShufflePartitions) =>
-        child -> spec
+        child -> spec.flatten.filter(_.canCreatePartitioning)
     }
     // Rank on two things at once. A child with no `ShuffleExchangeLike` node comes first, since
     // keeping it costs nothing. For instance, if we have:
@@ -393,9 +395,9 @@ case class EnsureRequirements(
     //
     // What the winner contributes is its members, the alternatives the layout is picked from below.
     // Empty when no child can serve as the layout.
-    val bestMembers: Seq[LeafShuffleSpec] = candidateSpecs.maxByOption { case (child, spec) =>
-      (!child.isInstanceOf[ShuffleExchangeLike], spec.flatten.map(_.numPartitions).max)
-    }.toSeq.flatMap(_._2.flatten)
+    val bestMembers: Seq[LeafShuffleSpec] = candidateSpecs.maxByOption { case (child, members) =>
+      (!child.isInstanceOf[ShuffleExchangeLike], members.map(_.numPartitions).max)
+    }.toSeq.flatMap(_._2)
 
     // A `ShuffleSpecCollection` answers `isCompatibleWith` if *any* of its members does, so the
     // winner alone does not say which member the sides agreed on. The projection pushed into a
@@ -1133,8 +1135,8 @@ case class EnsureRequirements(
       // the skew of joining on keys that are coarser than the join keys. Key order and duplicated
       // cluster keys don't matter.
       def allClusterKeysCovered: Boolean =
-        // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
-        // attribute per partition expression.
+        // Every column a partition expression references counts as covered. A scan reports one
+        // per expression (`KeyedPartitioning.supportsExpressions`).
         distribution.allClusterKeysAmong(partitioning.expressions.flatMap(_.references))
 
       // The coverage requirement is a comparison of expressions, while `keysMaySatisfy` can end in
