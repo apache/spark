@@ -297,6 +297,36 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
+  test("SPARK-59683: preserve-only CHAR/VARCHAR without SerDe stays unsupported") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val input = Seq("ab").toDF("c")
+      val exception = intercept[Exception] {
+        QueryTest.executePlan(
+          createScriptTransformationExec(
+            script = "cat",
+            output = Seq(AttributeReference("c", CharType(4))()),
+            child = input.queryExecution.sparkPlan,
+            ioschema = defaultIOSchema),
+          spark.sqlContext)
+      }
+      var cur: Throwable = exception
+      var sparkException: SparkException = null
+      while (cur != null && sparkException == null) {
+        cur match {
+          case s: SparkException => sparkException = s
+          case _ =>
+        }
+        cur = cur.getCause
+      }
+      assert(sparkException != null, exception)
+      assert(sparkException.getCondition === "_LEGACY_ERROR_TEMP_2265")
+      assert(sparkException.getMessageParameters.get("dt") === "CharType")
+    }
+  }
+
   test("script transformation should not swallow errors from upstream operators (no serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
 

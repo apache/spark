@@ -79,6 +79,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
+  // Snapshot on the driver. SparkPlan.session is @transient, so executor `conf` is the
+  // default SQLConf and would ignore withSQLConf / session standard-semantics.
+  private val standardCharVarcharSemantics: Boolean = conf.charVarcharStandardSemantics
+
   override def doExecute(): RDD[InternalRow] = {
     val broadcastedHadoopConf =
       new SerializableConfiguration(session.sessionState.newHadoopConf())
@@ -218,8 +222,14 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   private lazy val outputFieldWriters: Seq[String => Any] = output.map { attr =>
     val converter = CatalystTypeConverters.createToCatalystConverter(attr.dataType)
     attr.dataType match {
-      case _: CharType | _: VarcharType =>
-        // First-class CHAR/VARCHAR must not use Hive LazySimpleSerDe's null-on-error path.
+      case dt @ (_: CharType | _: VarcharType) =>
+        // Preserve-only keeps CHAR/VARCHAR in the schema but does not apply SQL pad/overflow.
+        // Match CHAR/VARCHAR before `_: StringType` (they extend StringType).
+        if (!standardCharVarcharSemantics) {
+          throw QueryExecutionErrors.outputDataTypeUnsupportedByNodeWithoutSerdeError(
+            nodeName, dt)
+        }
+        // Do not use the SerDe null-on-error wrapper; that would hide EXCEED_LIMIT_LENGTH.
         (data: String) =>
           if (data == ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
             null
@@ -267,7 +277,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
           IntervalUtils.castStringToDTInterval(UTF8String.fromString(data), start, end)),
         converter)
       case dt @ (_: ArrayType | _: MapType | _: StructType)
-          if CharVarcharUtils.hasCharVarchar(dt) =>
+          if standardCharVarcharSemantics && CharVarcharUtils.hasCharVarchar(dt) =>
         val physicalType = ScriptTransformationIOSchema.toUnboundedStringType(dt)
         // JSON object keys are strings. Cast them to the declared map key type after parsing.
         val jsonType = ScriptTransformationIOSchema.toJsonMapKeyType(physicalType)

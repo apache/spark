@@ -513,6 +513,30 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     }
   }
 
+  test("SPARK-59683: preserve-only does not rewrite LazySimpleSerDe CHAR/VARCHAR") {
+    withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val output = Seq(
+        AttributeReference("c", CharType(4))(),
+        AttributeReference("v", VarcharType(5))(),
+        AttributeReference("nested", ArrayType(CharType(4)))())
+      scala.util.Try(HiveScriptIOSchema.initOutputSerDe(hiveIOSchema, output).get) match {
+        case scala.util.Success((_, soi)) =>
+          val typeName = soi.getAllStructFieldRefs.get(0).getFieldObjectInspector.getTypeName
+          assert(typeName === "char(4)",
+            s"preserve-only must not rewrite CHAR to STRING, found $typeName")
+          assert(soi.getAllStructFieldRefs.get(1).getFieldObjectInspector.getTypeName ===
+            "varchar(5)")
+          assert(soi.getAllStructFieldRefs.get(2).getFieldObjectInspector.getTypeName ===
+            "array<char(4)>")
+        case scala.util.Failure(_) =>
+          // Hive TypeInfo may reject CHAR on this lineage. The standard-semantics
+          // rewrite would have succeeded with STRING inspectors.
+      }
+    }
+  }
+
   test("SPARK-32400: TRANSFORM doesn't support CalendarIntervalType/UserDefinedType (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {

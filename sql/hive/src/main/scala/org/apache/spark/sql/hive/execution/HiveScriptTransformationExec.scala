@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveInspectors
 import org.apache.spark.sql.hive.HiveShim._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
 
@@ -273,15 +274,17 @@ object HiveScriptIOSchema extends HiveInspectors {
   }
 
   /**
-   * Hive LazySimpleSerDe CHAR/VARCHAR types truncate on deserialize. Map them to STRING so
-   * Spark applies first-class length checks. Only LazySimpleSerDe and subclasses get this
-   * rewrite; other SerDes keep the declared CHAR/VARCHAR schema.
+   * Hive LazySimpleSerDe CHAR/VARCHAR types truncate on deserialize. Under standard
+   * semantics, map them to STRING so Spark applies length checks. Only LazySimpleSerDe
+   * and subclasses get this rewrite; other SerDes keep the declared schema.
+   * preserveCharVarcharTypeInfo without standard semantics is unchanged.
    */
   private def outputTypesForSerDe(
       serdeClassName: String,
       columnTypes: Seq[DataType]): Seq[DataType] = {
     val serdeClass = Utils.classForName[AbstractSerDe](serdeClassName)
-    if (classOf[LazySimpleSerDe].isAssignableFrom(serdeClass)) {
+    if (SQLConf.get.charVarcharStandardSemantics &&
+        classOf[LazySimpleSerDe].isAssignableFrom(serdeClass)) {
       columnTypes.map(ScriptTransformationIOSchema.toUnboundedStringType)
     } else {
       columnTypes
