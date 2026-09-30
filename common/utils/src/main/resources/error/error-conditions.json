@@ -6919,6 +6919,12 @@
     ],
     "sqlState" : "42K0G"
   },
+  "PROTOBUF_DESCRIPTOR_FILE_READ_FAILED" : {
+    "message" : [
+      "Failed to read Protobuf descriptor file at path: <filePath>. <error>"
+    ],
+    "sqlState" : "42K0G"
+  },
   "PROTOBUF_FIELD_MISSING" : {
     "message" : [
       "Searching for <field> in Protobuf schema at <protobufSchema> gave <matchSize> matches. Candidates: <matches>."
