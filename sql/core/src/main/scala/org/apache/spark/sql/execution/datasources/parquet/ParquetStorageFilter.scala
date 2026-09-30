@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.spark.{SparkContext, SparkEnv, TaskContext}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.Executor
 import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
 import org.apache.spark.sql.catalyst.expressions.{And, BasePredicate, BloomFilterMightContain, BoundReference, Expression, Predicate}
@@ -120,9 +120,13 @@ class ParquetStorageFilter private (
     val metrics: StorageFilterMetrics,
     val maxSplicedRowGroupBytes: Long) extends Serializable {
 
-  // Codegen-produced predicates can be awkward to serialize from driver to executor, so we defer
-  // construction to first use on the executor.
-  @transient private lazy val predicate: BasePredicate = {
+  /**
+   * The predicate this filter evaluates, which the reader resolves once and then runs per row. It
+   * is handed out rather than wrapped, because resolving the `lazy val` costs a volatile read that
+   * a per-row loop would otherwise pay. Codegen-produced predicates can be awkward to serialize
+   * from driver to executor, so it is built on first use on the executor.
+   */
+  @transient lazy val preparedPredicate: BasePredicate = {
     // The field below is nulled the first time this runs, and the copy that reaches every task is
     // the driver's. So a driver-side evaluation would leave each executor building a predicate from
     // nothing, which is named here rather than left to an NPE from `Predicate.create`.
@@ -144,13 +148,6 @@ class ParquetStorageFilter private (
     boundExpression = null
     created
   }
-
-  /**
-   * The predicate this filter evaluates, which the reader resolves once and then runs per row. It
-   * is handed out rather than wrapped, because resolving the `lazy val` costs a volatile read that
-   * a per-row loop would otherwise pay.
-   */
-  def preparedPredicate: BasePredicate = predicate
 }
 
 object ParquetStorageFilter {
@@ -228,7 +225,7 @@ object ParquetStorageFilter {
    *  - no referenced column is named like the synthetic row-index metadata column. This reader
    *    finds that column by name and writes row indexes over whatever the file holds (SPARK-40059),
    *    so such a column would read back differently depending on how its row group was read, from
-   *    the survivor queues where the row group was spliced, from the overwritten vector where it
+   *    the survivor queue where the row group was spliced, from the overwritten vector where it
    *    was not.
    *
    * Nothing here asks whether the expression is safe to evaluate on every row. The reader evaluates
@@ -245,21 +242,43 @@ object ParquetStorageFilter {
   }
 
   /**
-   * Rethrows, as it is, an error the reader met while applying a storage filter that it must not
-   * absorb by giving the filter up. Two kinds are not the reader's to absorb, and both are asked
-   * the way the rest of Spark asks them:
+   * Rethrows an error the reader met while applying a storage filter that it must not absorb by
+   * giving the filter up. Two kinds are not the reader's to absorb, and both are asked the way the
+   * rest of Spark asks them:
    *  - a pending task kill, since the error may be the kill's interrupt surfacing through a UDF
    *    that wrapped it. `PythonRunner` reads a kill off the task context in the same way.
-   *  - a fatal error in the cause chain, found by `Executor.isFatalError` as deep as the executor
-   *    itself looks, which is `spark.executor.killOnFatalError.depth`.
+   *  - a fatal error in the cause chain, found by `Executor.isFatalError`.
    *
-   * As it is, because a `TaskKilledException` of the reader's own would be read as a corrupt file
-   * under `ignoreCorruptFiles`.
+   * Either goes out wrapped, see [[mustPropagate]].
    */
   def rethrowIfMustPropagate(e: Throwable): Unit = {
+    if (isKilled || Executor.isFatalError(e, fatalErrorDepth - 1)) throw mustPropagate(e)
+  }
+
+  /**
+   * Throws a pending task kill, for the reader's loops that can run long without returning to
+   * `FileScanRDD`, which is where a plain read meets one.
+   */
+  def throwIfKilled(): Unit = {
+    if (isKilled) {
+      val reason = TaskContext.get().getKillReason().getOrElse("unknown reason")
+      throw mustPropagate(new TaskKilledException(reason))
+    }
+  }
+
+  /**
+   * `e` wrapped in a checked [[SparkException]]. Under `ignoreCorruptFiles`, `FileScanRDD` reads
+   * any `RuntimeException` or `IOException` from a reader as a corrupt file and skips the rest of
+   * it, which would drop rows and hide the kill or the fatal error. The executor still reports a
+   * killed task as killed. It still finds a fatal cause too, since the check above looks one level
+   * less deep than `spark.executor.killOnFatalError.depth`, the level this wrapper adds.
+   */
+  private def mustPropagate(e: Throwable): SparkException =
+    new SparkException("A storage filter met a task kill or a fatal error it must not absorb", e)
+
+  private def isKilled: Boolean = {
     val context = TaskContext.get()
-    val killed = context != null && context.isInterrupted()
-    if (killed || Executor.isFatalError(e, fatalErrorDepth)) throw e
+    context != null && context.isInterrupted()
   }
 
   // Read the way `SparkUncaughtExceptionHandler` reads it, since there may be no SparkEnv.

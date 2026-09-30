@@ -152,8 +152,10 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
   }
 
   /**
-   * The conjuncts of `afterScanFilters` the file format can evaluate at the storage layer for late
-   * materialization, to prune the IO of the columns the filter does not reference.
+   * The conjuncts of the scan's filter the file format can evaluate at the storage layer for late
+   * materialization, to prune the IO of the columns the filter does not reference. They are taken
+   * from `normalizedFilters`, so they carry the relation's own column names, as the pushed data
+   * filters do, rather than the spelling the query used.
    *
    * They stay in the post-scan `Filter` as well, the way a pushed data filter does. The reader is
    * offered them, not obliged to honor them, so the plan keeps the exact check. What it costs is
@@ -171,8 +173,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
    *    about batch support rather than naming a format.
    *
    * The rest are per conjunct:
-   *  - It is deterministic. The reader drops the rows the conjunct rejects and the post-scan
-   *    `Filter` evaluates it again on the rows it keeps, so the two evaluations have to agree.
+   *  - It is deterministic, which every one of `normalizedFilters` is. The reader drops the rows
+   *    the conjunct rejects and the post-scan `Filter` evaluates it again on the rows it keeps, so
+   *    the two evaluations have to agree.
    *  - It references at least one column, and every column it references is a projected data
    *    column. A reference to something the scan does not read cannot be evaluated by the reader.
    *  - [[FileFormat.supportsStorageFilter]] accepts it. That is where the expression shapes and
@@ -185,7 +188,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
    * predicate outside the generated code. Nothing is offered in that case.
    */
   private def storageFiltersFor(
-      afterScanFilters: ExpressionSet,
+      normalizedFilters: Seq[Expression],
       fsRelation: HadoopFsRelation,
       readDataColumns: Seq[Attribute],
       outputDataSchema: StructType): Seq[Expression] = {
@@ -195,17 +198,10 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
     if (!fsRelation.fileFormat.supportBatch(sparkSession, resultSchema)) return Nil
 
     val dataAttrs = AttributeSet(readDataColumns)
-    // Over `toSeq` rather than the set, because `ExpressionSet.filter` hands the predicate
-    // `e.canonicalized`, which drops attribute names and metadata, and a format deciding by either
-    // would answer about an expression it will never be given. Normalized to the relation's own
-    // column names, as the pushed data filters are, because the analyzer spells a reference the way
-    // the query did, while the reader sees the names of the schema it reads.
-    val offered = DataSourceStrategy.normalizeExprs(afterScanFilters.toSeq, readDataColumns)
-      .filter { expr =>
-        val refs = expr.references
-        expr.deterministic && refs.nonEmpty && refs.subsetOf(dataAttrs) &&
-          fsRelation.fileFormat.supportsStorageFilter(expr)
-      }
+    val offered = normalizedFilters.filter { expr =>
+      val refs = expr.references
+      refs.nonEmpty && refs.subsetOf(dataAttrs) && fsRelation.fileFormat.supportsStorageFilter(expr)
+    }
     if (offered.isEmpty) return Nil
     val storageKeyAttrs = AttributeSet.fromAttributeSets(offered.map(_.references))
     if (dataAttrs.subsetOf(storageKeyAttrs)) Nil else offered
@@ -356,10 +352,10 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val outputDataSchema = (readDataColumns ++ generatedMetadataColumns).toStructType
 
       // Offered conjuncts become `storageFilters` on the scan and stay in the post-scan Filter too.
-      // This runs here rather than next to `afterScanFilters` because eligibility depends on
-      // `outputDataSchema`.
-      val storageFilters =
-        storageFiltersFor(afterScanFilters, fsRelation, readDataColumns, outputDataSchema)
+      // This runs here because eligibility depends on `outputDataSchema`. Deduplicated through an
+      // `ExpressionSet`, as `afterScanFilters` is.
+      val storageFilters = storageFiltersFor(
+        ExpressionSet(normalizedFilters).toSeq, fsRelation, readDataColumns, outputDataSchema)
 
       // The output rows will be produced during file scan operation in three steps:
       //  (1) File format reader populates a `Row` with `readDataColumns` and

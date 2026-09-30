@@ -34,7 +34,6 @@ import org.apache.parquet.filter2.columnindex.RowRanges;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnPath;
 import org.apache.parquet.internal.filter2.columnindex.ColumnIndexStore.MissingOffsetIndexException;
-import org.apache.parquet.schema.Type;
 
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
@@ -155,8 +154,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
    */
   private PageReadStore dataPages;
 
-  /** Whether {@link #logFilterGivenUpOnError} has already reported. */
-  private boolean loggedFilterGivenUpOnError;
+  /** Whether {@link #reportOnce} has already reported. */
+  private boolean reportedGivingUp;
 
   /**
    * Whether {@code parquet.filter.columnindex.enabled} is false, so this file's page index must not
@@ -168,9 +167,10 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   private boolean pageIndexDisabled;
 
   /**
-   * Whether a partial read has failed for want of an offset index. If so, no part of a row group is
-   * read for the rest of this split. The pushed data filter's own page pruning still applies, since
-   * parquet builds those ranges and hands back whole any block it has no index for.
+   * Whether a partial read has failed for want of an offset index. If so, the storage filter no
+   * longer narrows a row group for the rest of this split. The pushed data filter's own page
+   * pruning still applies, since parquet builds those ranges and hands back whole any block it has
+   * no index for.
    */
   private boolean partialReadUnavailable;
 
@@ -212,7 +212,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   private long[] prepaidValueBytes;
   /**
    * The survivor vectors the current batch is built on. This reader owns them until the next batch
-   * releases them, so a read that throws in between leaves them reachable for {@link #close()}.
+   * releases them, so a consumer that stops between batches, such as a limit or the end of the
+   * task, leaves them for {@link #close()} to free.
    */
   private WritableColumnVector[] publishedKeyVectors;
   /** {@link #initBatch}'s vectors, which this reader closes. */
@@ -329,8 +330,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     try {
       keep = storageFilter.preparedPredicate().eval(keyRow.getRow(0));
     } catch (Exception e) {
-      ParquetStorageFilter.rethrowIfMustPropagate(e);
-      logFilterGivenUpOnError(e, FILE_GIVEN_UP_ON_EVALUATION);
+      giveUpOnError(e, FILE_GIVEN_UP_ON_EVALUATION);
       keep = true;
     }
     if (!keep) {
@@ -427,23 +427,20 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     // The non-key columns phase 2 reads. If this file has none of them, the filter saves nothing,
     // since phase 1 already reads every column the file has for every row. The reader then
     // declines it. The planner already declines a projection of key columns alone, so this catches
-    // a file missing every projected non-key column.
-    List<Type> requestedFields = requestedSchema.getFields();
-    boolean anyNonKeyPresent = false;
-    for (int i = 0; i < requestedFields.size() && !anyNonKeyPresent; i++) {
-      anyNonKeyPresent = !keyTopLevelNames.contains(requestedFields.get(i).getName())
-          && !missingColumns.contains(parquetColumn.children().apply(i));
-    }
-    if (!anyNonKeyPresent) return;
-    nonKeyColumns = requestedColumns.stream()
+    // a file missing every projected non-key leaf, which also covers the row-index column and a
+    // struct none of whose requested fields the file has.
+    List<ColumnDescriptor> nonKey = requestedColumns.stream()
         .filter(column -> !keyTopLevelNames.contains(column.getPath()[0]))
         .toList();
+    if (nonKey.stream().noneMatch(column -> fileSchema.containsPath(column.getPath()))) return;
+    nonKeyColumns = nonKey;
     nonKeyPaths = ParquetBlockAccounting.pathsOf(nonKeyColumns);
 
     // Resolved here, past the two returns above, because `ValueCopier.forType` rejects a type the
     // reader cannot copy, and a file the reader has already declined must not be failed over one.
     KeyColumn[] keys = new KeyColumn[presentKeyPositions.size()];
     StructField[] fields = sparkRequestedSchema.fields();
+    int fixedBytesPerRow = 0;
     for (int i = 0; i < keys.length; i++) {
       int rowPosition = presentKeyPositions.get(i);
       int batchSlot = keyIndices[rowPosition];
@@ -456,8 +453,9 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
       // one adds the int offset and int length that point at the byte child, plus what the child
       // itself is allocated per row before a value is written, which is four bytes of data, one per
       // WritableColumnVector.DEFAULT_ARRAY_LENGTH, and a null byte for each of them.
-      keyFixedBytesPerRow += variableLength ? 1 + 4 + 4 + 4 + 4 : 1 + type.defaultSize();
+      fixedBytesPerRow += variableLength ? 1 + 4 + 4 + 4 + 4 : 1 + type.defaultSize();
     }
+    keyFixedBytesPerRow = fixedBytesPerRow;
     keyOnlyColumns = Arrays.stream(keys).map(KeyColumn::descriptor).toList();
     prepaidValueBytes = new long[keys.length];
     // Last, since a non-null `keyColumns` is what says the filter is applied to this file.
@@ -481,6 +479,9 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     StorageFilterMetrics m = storageFilter.metrics();
     List<BlockMetaData> blocks = fileReader.getRowGroups();
     while (nextBlockIndex < blocks.size()) {
+      // A plain read goes back to `FileScanRDD`, which checks for a task kill, after every batch.
+      // This loop can pass any number of row groups the filter empties without emitting one.
+      ParquetStorageFilter.throwIfKilled();
       int blockIdx = nextBlockIndex++;
       long blockRowCount = blocks.get(blockIdx).getRowCount();
 
@@ -549,6 +550,9 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
       try {
         dataPages = fileReader.readFilteredRowGroup(blockIdx, finalRanges);
       } catch (MissingOffsetIndexException e) {
+        // Parquet turns any IOException reading an offset index into this, a kill's interrupt
+        // included, which must not be taken for a missing index.
+        ParquetStorageFilter.throwIfKilled();
         // The message only, since parquet has already logged the failed index read with its stack
         // trace.
         LOG.warn("Reading the rest of {} without page-level storage filtering, because parquet "
@@ -606,8 +610,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   /**
    * Counts a file the filter rejects whole, which happens when every key column is missing from it
    * and the predicate is constant-false for the value the reader would have materialized. Every row
-   * group counts as skipped, with every projected byte of the rows the pushed data filter kept as
-   * avoided, which is what the counters mean for a row group the filter empties.
+   * group the pushed data filter left rows in counts as skipped, with every projected byte of those
+   * rows as avoided, which is what the counters mean for a row group the filter empties.
    */
   private void recordFileSkipped() {
     StorageFilterMetrics m = storageFilter.metrics();
@@ -721,6 +725,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     // volatile read the loop would pay per row.
     BasePredicate predicate = storageFilter.preparedPredicate();
     while (remaining > 0) {
+      // Per chunk, since this decodes and evaluates a whole row group before its first batch.
+      ParquetStorageFilter.throwIfKilled();
       int num = (int) Math.min((long) capacity, remaining);
       try {
         for (int i = 0; i < keyScratchVectors.length; i++) {
@@ -728,12 +734,13 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
           readers[i].readBatch(num, keyScratchVectors[i], null, null);
         }
       } catch (Exception e) {
-        // A corrupt page shows here, since parquet reads a chunk's bytes up front but decodes a
-        // page only when it is read. Giving the row group up hands it to phase 2 whole, which reads
-        // the same pages in the same batches as a plain scan. So the page fails at the same batch,
-        // after the same rows, and `ignoreCorruptFiles` keeps what it keeps of a plain read.
-        ParquetStorageFilter.rethrowIfMustPropagate(e);
-        logFilterGivenUpOnError(e, ROW_GROUP_GIVEN_UP_ON_DECODING);
+        // A corrupt page whose decoding raises an exception shows here, since parquet reads a
+        // chunk's bytes up front but decodes a page only when it is read. Giving the row group up
+        // hands it to phase 2 whole, which reads the same pages in the same batches as a plain
+        // scan. So the page fails at the same batch, after the same rows, and `ignoreCorruptFiles`
+        // keeps what it keeps of a plain read. A codec that reports corruption as an Error, as
+        // hadoop-lzo's `InternalError` does, is not caught here and fails before the first batch.
+        giveUpOnError(e, ROW_GROUP_GIVEN_UP_ON_DECODING);
         return null;
       }
       keyScratchBatch.setNumRows(num);
@@ -750,7 +757,19 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
           finalRangesBuilder.addSelectedRow(blockRow);
           if (blockRow != previousSurvivor + 1) survivorRangeCount++;
           previousSurvivor = blockRow;
-          if (spliceCurrentRowGroup) splicedBytes += appendSurvivorRowToAccumulators(r);
+          if (spliceCurrentRowGroup) {
+            try {
+              splicedBytes += appendSurvivorRowToAccumulators(r);
+            } catch (RuntimeException e) {
+              // A survivor vector that cannot grow, which `WritableColumnVector.reserve` reports as
+              // a RuntimeException even when an OutOfMemoryError is behind it. The buffer is this
+              // reader's own and optional, so this gives splicing up rather than the filter, and
+              // the memory goes back at once. A plain read never allocates it.
+              reportOnce(e, SPLICING_GIVEN_UP_ON_ALLOCATION);
+              abandonSplicing();
+              splicedBytes = 0L;
+            }
+          }
           // Both parts of what this row group keeps grow per survivor, so they are weighed together
           // here.
           long rangeBytes = survivorRangeCount * ROW_RANGE_BYTES;
@@ -770,10 +789,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
           // This is not narrowed by type. A built-in expression can throw a plain JDK error
           // (`timestamp_seconds` of a decimal), and a Hive UDF throws a checked SparkException.
           // Rethrowing would fail a query a plain read answers, or drop the rest of the file
-          // silently under `ignoreCorruptFiles`. Only a task kill or a fatal error is rethrown,
-          // first. A failed copy of a surviving key lands here too, and gets the same answer.
-          ParquetStorageFilter.rethrowIfMustPropagate(e);
-          logFilterGivenUpOnError(e, ROW_GROUP_GIVEN_UP_ON_EVALUATION);
+          // silently under `ignoreCorruptFiles`. Only a task kill or a fatal error is rethrown.
+          giveUpOnError(e, ROW_GROUP_GIVEN_UP_ON_EVALUATION);
           return null;
         }
       }
@@ -920,14 +937,30 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
           + "columns read as raised an error. The filter is still applied above the scan, so the "
           + "answer is unchanged";
 
+  /** A survivor vector that could not grow gave one row group's splicing up. */
+  private static final String SPLICING_GIVEN_UP_ON_ALLOCATION =
+      "Reading the key columns of a row group of {} a second time rather than buffering them, "
+          + "because a vector holding the surviving key values could not grow. The storage filter "
+          + "is still applied";
+
   /**
-   * Reports the first time this reader gives the filter up on an error, in one of the messages
+   * Gives the filter up on an error, after rethrowing one the reader must not absorb, a task kill
+   * or a fatal error. Every catch that gives the filter up goes through here, so none can absorb
+   * those by leaving the rethrow out.
+   */
+  private void giveUpOnError(Exception e, String message) {
+    ParquetStorageFilter.rethrowIfMustPropagate(e);
+    reportOnce(e, message);
+  }
+
+  /**
+   * Reports the first time this reader gives something up on an error, in one of the messages
    * above. Once per reader, which is once per split, because a file whose values do that tends to
    * do it again.
    */
-  private void logFilterGivenUpOnError(Exception e, String message) {
-    if (loggedFilterGivenUpOnError) return;
-    loggedFilterGivenUpOnError = true;
+  private void reportOnce(Exception e, String message) {
+    if (reportedGivingUp) return;
+    reportedGivingUp = true;
     LOG.warn(message, e, MDC.of(LogKeys.PATH, fileReader.getFile()));
   }
 

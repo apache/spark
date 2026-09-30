@@ -1961,8 +1961,9 @@ object SQLConf {
         "parquet.filter.columnindex.enabled to false makes the reader fall back to skipping " +
         "whole row groups in which the filter rejects every row. A row group with a surviving " +
         "row then reads its key columns twice. A file without a page index falls back the same " +
-        "way. The page index and that conf also apply to the page-level filtering of pushed " +
-        "data filters, with or without this feature. " +
+        "way. A read with pushed data filters already relies on the page index, and that conf " +
+        "turns it off there too. A read with no pushed data filter relies on it only with this " +
+        "feature. " +
         "Note that the surviving key values of a whole row group are buffered before that row " +
         "group's first batch is produced, so a task holds up to one extra copy of the key " +
         "columns for one row group.")
