@@ -3292,19 +3292,34 @@ class JDBCSuite extends SharedSparkSession {
 
   test("SPARK-59369: DB2Dialect classifies only syntax error SQLSTATEs as syntax errors") {
     val dialect = JdbcDialects.get("jdbc:db2://host:port/foo")
-    assert(dialect.isSyntaxErrorBestEffort(new SQLException("syntax error", "42601")))
+    // The 426xx subclass is DB2's syntax error family.
+    assert(dialect.isSyntaxErrorBestEffort(new SQLException("invalid token", "42601")))
+    assert(dialect.isSyntaxErrorBestEffort(new SQLException("invalid name", "42602")))
+    assert(dialect.isSyntaxErrorBestEffort(new SQLException("unterminated string", "42603")))
+    assert(dialect.isSyntaxErrorBestEffort(new SQLException("invalid constant", "42604")))
+    // Other class 42 subclasses are not syntax errors.
     assert(!dialect.isSyntaxErrorBestEffort(new SQLException("undefined object", "42704")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("undefined column", "42703")))
     assert(!dialect.isSyntaxErrorBestEffort(
       new SQLException("insufficient privilege", "42501")))
     assert(!dialect.isSyntaxErrorBestEffort(new SQLException("error without SQLSTATE")))
   }
 
-  test("SPARK-59369: OracleDialect does not classify missing objects or privileges as syntax") {
+  test("SPARK-59369: OracleDialect classifies only syntax error ORA codes as syntax errors") {
     val dialect = JdbcDialects.get("jdbc:oracle:thin:@//host:1521/freepdb1")
     assert(dialect.isSyntaxErrorBestEffort(
-      new SQLException("ORA-00933: SQL command not properly ended", "42000")))
+      new SQLException("ORA-00900: invalid SQL statement", "42000", 900)))
+    assert(dialect.isSyntaxErrorBestEffort(
+      new SQLException("ORA-00933: SQL command not properly ended", "42000", 933)))
+    assert(dialect.isSyntaxErrorBestEffort(
+      new SQLException("ORA-01756: quoted string not properly terminated", "42000", 1756)))
+    // Not syntax errors, even though Oracle reports them with SQLSTATE 42000.
     assert(!dialect.isSyntaxErrorBestEffort(
       new SQLException("ORA-00942: table or view does not exist", "42000", 942)))
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException("ORA-00980: synonym translation is no longer valid", "42000", 980)))
+    assert(!dialect.isSyntaxErrorBestEffort(
+      new SQLException("ORA-01775: looping chain of synonyms", "42000", 1775)))
     assert(!dialect.isSyntaxErrorBestEffort(
       new SQLException("ORA-01031: insufficient privileges", "42000", 1031)))
     assert(!dialect.isSyntaxErrorBestEffort(new SQLException("error without SQLSTATE")))

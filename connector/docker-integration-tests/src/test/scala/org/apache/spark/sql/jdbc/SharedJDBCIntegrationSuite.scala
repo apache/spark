@@ -66,14 +66,6 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
   protected def nonExistentTableSQLState: Option[String] = None
 
   /**
-   * Whether reading [[nonExistentTableName]] is expected to surface the driver's own exception
-   * instead of `JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR`. An engine that reports a missing table with a
-   * SQLSTATE it also uses for syntax errors (e.g. StarRocks reports error 1064/SQLSTATE 42000 for
-   * both) cannot pass this check until its classifier is tightened.
-   */
-  protected def nonExistentTableIsNotSyntaxError: Boolean = true
-
-  /**
    * A user that can open a session but has no read privilege on [[RestrictedUser.table]], together
    * with the JDBC URL needed to reach it. The database container is discarded when the suite ends,
    * so the user does not have to be dropped. None when the suite cannot create such a user.
@@ -88,9 +80,6 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
   protected def createRestrictedUser(): Option[RestrictedUser] = None
 
   test("SPARK-59369: a non-existent table is not classified as a syntax error") {
-    assume(nonExistentTableIsNotSyntaxError,
-      "this dialect reports missing tables with a SQLSTATE it also uses for syntax errors")
-
     // The failure has to surface the driver's own SQLException. If the dialect classifies it as a
     // syntax error, resolveTable wraps it in a SparkException and intercept[SQLException] fails.
     val e = intercept[SQLException] {

@@ -246,17 +246,62 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
-  // See https://docs.oracle.com/cd/E11882_01/appdev.112/e10827/appd.htm#g642406
   // Oracle reports every class 42 error with SQLSTATE 42000, the ANSI state for
   // "syntax error or access rule violation", so the SQLSTATE alone cannot identify a syntax
-  // error. Keep out the ORA errors that are known not to be syntax errors: a missing object
-  // (ORA-00942, ORA-39165), an object that cannot be read as a table (ORA-04044, ORA-04063) and
-  // a missing privilege (ORA-01031). The vendor code is the ORA number.
-  private val nonSyntaxErrorCodes = Set(942, 39165, 4044, 4063, 1031)
+  // error and the ORA code (available through SQLException.getErrorCode) has to be used instead.
+  // The codes below are the parsing errors from the Oracle error message manual. Parsing-section
+  // codes that are not syntax errors, such as ORA-00942 (missing table) and ORA-00980 (invalid
+  // synonym target), and semantic errors such as ORA-01775 (synonym loop), are deliberately left
+  // out. The list is conservative: a missing code only means the driver's exception is surfaced.
+  // See https://docs.oracle.com/cd/A58617_01/server.804/a58312/newch220.htm (00900-00999)
+  private val syntaxErrorCodes = Set(
+    900,  // invalid SQL statement
+    901,  // invalid CREATE command
+    905,  // missing keyword
+    906,  // missing left parenthesis
+    907,  // missing right parenthesis
+    908,  // missing NULL keyword
+    911,  // invalid character
+    914,  // missing ADD keyword
+    917,  // missing comma
+    920,  // invalid relational operator
+    921,  // unexpected end of SQL command
+    922,  // missing or invalid option
+    923,  // FROM keyword not found where expected
+    924,  // missing BY keyword
+    925,  // missing INTO keyword
+    926,  // missing VALUES keyword
+    927,  // missing equal sign
+    928,  // missing SELECT keyword
+    933,  // SQL command not properly ended
+    936,  // missing expression
+    940,  // invalid ALTER command
+    946,  // missing TO keyword
+    950,  // invalid DROP option
+    952,  // missing GROUP keyword
+    954,  // missing IDENTIFIED keyword
+    956,  // missing or invalid auditing option
+    958,  // missing CHECK keyword
+    965,  // column aliases not allowed for "*"
+    966,  // missing TABLE keyword
+    967,  // missing WHERE keyword
+    968,  // missing INDEX keyword
+    969,  // missing ON keyword
+    970,  // missing WITH keyword
+    971,  // missing SET keyword
+    982,  // missing plus sign
+    992,  // invalid format for REVOKE command
+    993,  // missing GRANT keyword
+    994,  // missing OPTION keyword
+    996,  // the concatenate operator is ||, not |
+    1740, // missing double quote in identifier
+    1741, // illegal zero-length identifier
+    1742, // comment not terminated properly
+    1756) // quoted string not properly terminated
 
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
     "42000".equals(exception.getSQLState) &&
-      !nonSyntaxErrorCodes.contains(exception.getErrorCode)
+      syntaxErrorCodes.contains(exception.getErrorCode)
   }
 
   /**

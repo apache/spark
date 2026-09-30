@@ -42,8 +42,10 @@ class DB2IntegrationSuite extends SharedJDBCIntegrationSuite {
 
   override protected def nonExistentTableSQLState: Option[String] = Some("42704")
 
-  // DB2 users are operating-system users, so a restricted user cannot be created over JDBC.
-  override protected def createRestrictedUser(): Option[RestrictedUser] = None
+  // DB2 users are operating-system users, so a restricted user cannot be created over JDBC and
+  // the shared privilege check is excluded.
+  override protected def excluded: Seq[String] =
+    Seq("SPARK-59369: a missing privilege is not classified as a syntax error")
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE TABLE tbl (x INTEGER, y VARCHAR(8))").executeUpdate()
