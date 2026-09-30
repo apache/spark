@@ -597,12 +597,10 @@ class ApproxTopKSuite extends SharedSparkSession {
         parameters = Map("argName" -> "`k`", "argValue" -> invalidK.toString)
       )
     }
+    // Every row carries a NULL state, so no other row can raise the error on its own: the
+    // assertion holds only if the row-evaluated NULL state itself validates `k`.
     withTempView("estimate_invalid_k") {
-      sql(
-        s"""SELECT approx_top_k_accumulate(expr) AS state
-           |FROM VALUES 0, 1, 1 AS tab(expr)
-           |UNION ALL
-           |SELECT $nullSketchState AS state""".stripMargin)
+      spark.range(2).selectExpr(s"$nullSketchState AS state")
         .createOrReplaceTempView("estimate_invalid_k")
       checkError(
         exception = intercept[SparkRuntimeException] {
@@ -1359,6 +1357,58 @@ class ApproxTopKSuite extends SharedSparkSession {
 
       val est = sql("SELECT approx_top_k_estimate(com) FROM combined")
       checkAnswer(est, Row(Seq(Row(null, 5))))
+    }
+  }
+
+  test("SPARK-59818: combine over NULL sketches is independent of partition placement") {
+    withTempView("combine_null_partitions") {
+      // Many NULL rows alongside a single real sketch, so that some partial aggregates see
+      // only NULL rows and have to serialize a buffer no update ever populated.
+      sql(
+        """SELECT approx_top_k_accumulate(CAST(expr AS BIGINT)) AS state
+          |FROM VALUES 0, 1, 1 AS tab(expr)""".stripMargin)
+        .union(
+          spark.range(200).selectExpr(
+            """CAST(NULL AS STRUCT<sketch: BINARY, maxItemsTracked: INT,
+              |  itemDataType: BIGINT, itemDataTypeDDL: STRING>) AS state""".stripMargin))
+        .createOrReplaceTempView("combine_null_partitions")
+      Seq("1", "8", "64").foreach { partitions =>
+        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> partitions) {
+          val res = sql(
+            """SELECT approx_top_k_estimate(approx_top_k_combine(state), 2)
+              |FROM combine_null_partitions""".stripMargin)
+          checkAnswer(res, Row(Seq(Row(1L, 2), Row(0L, 1))))
+        }
+      }
+    }
+  }
+
+  test("SPARK-59818: combine over only NULL sketches keeps usable state metadata") {
+    withTempView("combine_all_null") {
+      spark.range(4).selectExpr(s"$nullSketchState AS state")
+        .createOrReplaceTempView("combine_all_null")
+      val combined = sql("SELECT approx_top_k_combine(state) AS state FROM combine_all_null")
+      // The combined state must still carry a concrete item type, so that it can be estimated.
+      assert(combined.collect().head.getStruct(0).getString(3) === "item INT NOT NULL")
+      checkAnswer(
+        sql("""SELECT approx_top_k_estimate(approx_top_k_combine(state), 3)
+              |FROM combine_all_null""".stripMargin),
+        Row(Seq.empty))
+    }
+  }
+
+  test("SPARK-59818: combine still rejects sketches of different item types") {
+    withTempView("combine_int", "combine_string") {
+      sql("SELECT approx_top_k_accumulate(expr) AS state FROM VALUES 0, 1 AS tab(expr)")
+        .createOrReplaceTempView("combine_int")
+      sql("SELECT approx_top_k_accumulate(expr) AS state FROM VALUES 'x', 'y' AS tab(expr)")
+        .createOrReplaceTempView("combine_string")
+      intercept[SparkRuntimeException] {
+        sql(
+          """SELECT approx_top_k_combine(state) FROM (
+            |  SELECT state FROM combine_int UNION ALL SELECT state FROM combine_string)"""
+            .stripMargin).collect()
+      }
     }
   }
 
