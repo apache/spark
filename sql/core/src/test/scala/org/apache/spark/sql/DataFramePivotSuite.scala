@@ -654,4 +654,107 @@ class DataFramePivotSuite extends SharedSparkSession {
       checkAnswer(nanDf, Row(null, null, 20L))
     }
   }
+
+  test("SPARK-55569: pivot pushes a filter on the pivot column values") {
+    val df = Seq(
+      ("dotNET", 2012, 10000),
+      ("Java", 2012, 20000),
+      ("dotNET", 2013, 48000),
+      ("Java", 2013, 30000),
+      ("C#", 2013, 15000)
+    ).toDF("course", "year", "earnings")
+
+    val pivoted = df
+      .groupBy("year")
+      .pivot("course", Seq("dotNET", "Java"))
+      .agg(sum("earnings"))
+
+    val analyzed = pivoted.queryExecution.analyzed
+    // The fast-path group-by key should contain an If that collapses
+    // non-matching pivot column values to null.
+    assert(analyzed.exists { node =>
+      node.expressions.exists(_.exists {
+        case catalyst.expressions.If(_, _,
+          catalyst.expressions.Literal(null, _)) => true
+        case _ => false
+      })
+    }, s"Expected If(..., col, null):\n${analyzed.treeString}")
+
+    // Results are identical to the un-optimized plan.
+    checkAnswer(pivoted,
+      Seq(Row(2012, 10000, 20000), Row(2013, 48000, 30000)))
+  }
+
+  test("SPARK-55569: NULL pivot value skips the collapse optimization") {
+    // When a NULL pivot value is present, the collapse optimization is
+    // skipped because non-matching rows mapped to null would merge with
+    // legitimate null-key rows. Results must still be correct.
+    val df = Seq(
+      (Some("a"), 1), (Some("b"), 2), (None, 3)
+    ).toDF("key", "value")
+
+    val pivoted = df.groupBy().pivot("key", Seq("a", null))
+      .agg(sum("value"))
+
+    // a=1 (key='a'), null=3 (key IS NULL)
+    checkAnswer(pivoted, Row(1, 3))
+  }
+
+  test("SPARK-55569: pivot filter is not pushed for aggregate pivot column") {
+    val df = Seq(
+      ("dotNET", 2012, 10000),
+      ("Java", 2012, 20000)
+    ).toDF("course", "year", "earnings")
+
+    val ex = intercept[AnalysisException] {
+      df.groupBy("year")
+        .pivot(min("course"), Seq("dotNET"))
+        .agg(sum("earnings"))
+        .collect()
+    }
+    assert(ex.getCondition == "GROUP_BY_AGGREGATE",
+      s"Expected GROUP_BY_AGGREGATE but got ${ex.getCondition}")
+  }
+
+  test("SPARK-55569: pivot filter with multiple aggregates") {
+    val df = Seq(
+      ("a", 1, 10), ("b", 2, 20), ("a", 3, 30), ("c", 4, 40)
+    ).toDF("key", "v1", "v2")
+
+    val pivoted = df.groupBy()
+      .pivot("key", Seq("a", "b"))
+      .agg(sum("v1"), avg("v2"))
+
+    val analyzed = pivoted.queryExecution.analyzed
+    assert(analyzed.exists { node =>
+      node.expressions.exists(_.exists {
+        case catalyst.expressions.If(_, _,
+          catalyst.expressions.Literal(null, _)) => true
+        case _ => false
+      })
+    }, "Expected If(..., col, null) in the plan")
+
+    checkAnswer(pivoted, Row(4, 20.0, 2, 20.0))
+  }
+
+  test("SPARK-55569: group-by key with only non-pivot values is preserved") {
+    // A group-by key (year=2014) whose only rows have pivot column values
+    // outside the IN list still appears with all-NULL pivot outputs.
+    // The optimization collapses non-matching values to null in the
+    // group-by, reducing the number of groups, but does not remove rows.
+    val df = Seq(
+      ("dotNET", 2012, 10000),
+      ("Java", 2012, 20000),
+      ("C#", 2014, 15000)
+    ).toDF("course", "year", "earnings")
+
+    val pivoted = df.groupBy("year")
+      .pivot("course", Seq("dotNET", "Java"))
+      .agg(sum("earnings"))
+
+    // year=2014 appears with null pivot columns because no row
+    // in that year matches any pivot value.
+    checkAnswer(pivoted,
+      Seq(Row(2012, 10000, 20000), Row(2014, null, null)))
+  }
 }

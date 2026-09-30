@@ -1701,7 +1701,7 @@ table courseSales
 -- !query analysis
 Project [year#x, __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x[0] AS dotNET#xL, __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x[1] AS Java#xL]
 +- Aggregate [year#x], [year#x, pivotfirst(course#x, sum(coursesales.earnings)#xL, dotNET, Java, 0, 0) AS __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x]
-   +- Aggregate [year#x, course#x], [year#x, course#x, sum(earnings#x) AS sum(coursesales.earnings)#xL]
+   +- Aggregate [year#x, if (course#x IN (cast(dotNET as string),cast(Java as string))) course#x else null], [year#x, if (course#x IN (cast(dotNET as string),cast(Java as string))) course#x else null AS course#x, sum(earnings#x) AS sum(coursesales.earnings)#xL]
       +- Project [year#x, course#x, earnings#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
@@ -1721,7 +1721,7 @@ table courseSales
 -- !query analysis
 Project [c#x, __pivot_sum(e) AS s AS `sum(e) AS s`#x[0] AS firstYear_s#xL, __pivot_avg(e) AS a AS `avg(e) AS a`#x[0] AS firstYear_a#x, __pivot_sum(e) AS s AS `sum(e) AS s`#x[1] AS secondYear_s#xL, __pivot_avg(e) AS a AS `avg(e) AS a`#x[1] AS secondYear_a#x]
 +- Aggregate [c#x], [c#x, pivotfirst(y#x, sum(e) AS s#xL, 2012, 2013, 0, 0) AS __pivot_sum(e) AS s AS `sum(e) AS s`#x, pivotfirst(y#x, avg(e) AS a#x, 2012, 2013, 0, 0) AS __pivot_avg(e) AS a AS `avg(e) AS a`#x]
-   +- Aggregate [c#x, y#x], [c#x, y#x, sum(e#x) AS sum(e) AS s#xL, avg(e#x) AS avg(e) AS a#x]
+   +- Aggregate [c#x, if (y#x IN (cast(2012 as int),cast(2013 as int))) y#x else null], [c#x, if (y#x IN (cast(2012 as int),cast(2013 as int))) y#x else null AS y#x, sum(e#x) AS sum(e) AS s#xL, avg(e#x) AS avg(e) AS a#x]
       +- Project [year#x AS y#x, course#x AS c#x, earnings#x AS e#x]
          +- SubqueryAlias coursesales
             +- View (`courseSales`, [course#x, year#x, earnings#x])
@@ -1768,7 +1768,7 @@ join yearsWithComplexTypes on `year` = y
 -- !query analysis
 Project [year#x, __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x[0] AS {1, a}#xL, __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x[1] AS {2, b}#xL]
 +- Aggregate [year#x], [year#x, pivotfirst(s#x, sum(coursesales.earnings)#xL, [1,a], [2,b], 0, 0) AS __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x]
-   +- Aggregate [year#x, s#x], [year#x, s#x, sum(earnings#x) AS sum(coursesales.earnings)#xL]
+   +- Aggregate [year#x, if (s#x IN (cast(named_struct(col1, 1, col2, a) as struct<col1:int,col2:string>),cast(named_struct(col1, 2, col2, b) as struct<col1:int,col2:string>))) s#x else null], [year#x, if (s#x IN (cast(named_struct(col1, 1, col2, a) as struct<col1:int,col2:string>),cast(named_struct(col1, 2, col2, b) as struct<col1:int,col2:string>))) s#x else null AS s#x, sum(earnings#x) AS sum(coursesales.earnings)#xL]
       +- Project [earnings#x, year#x, s#x]
          +- Join Inner, (year#x = y#x)
             :- SubqueryAlias coursesales
