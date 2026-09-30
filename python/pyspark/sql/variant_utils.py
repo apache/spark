@@ -19,6 +19,7 @@ import base64
 import datetime
 import decimal
 import json
+import math
 import struct
 from array import array
 from typing import Any, Callable, Dict, List, NamedTuple, Tuple
@@ -403,6 +404,9 @@ class VariantUtils:
 
             return cls._handle_array(value, pos, handle_array)
         else:
+            is_float32 = (
+                variant_type is float and cls._get_type_info(value, pos)[1] == VariantUtils.FLOAT
+            )
             value = cls._get_scalar(variant_type, value, metadata, pos, zone_id)
             if value is None:
                 return "null"
@@ -413,9 +417,48 @@ class VariantUtils:
             if isinstance(value, bytes):
                 # decoding simply converts byte array to string
                 return '"' + base64.b64encode(value).decode("utf-8") + '"'
+            if isinstance(value, float):
+                return cls._float_to_json(value, is_float32)
             if isinstance(value, (datetime.date, datetime.datetime)):
                 return '"' + str(value) + '"'
             return str(value)
+
+    # The helpers below format scalars the same way as the JVM `Variant.toJson`, so that
+    # `VariantVal.toJson` and the `to_json` SQL function produce the same output.
+
+    @classmethod
+    def _float_to_json(cls, f: float, is_float32: bool) -> str:
+        """
+        Formats a double or float like Java's `Double.toString` and `Float.toString`. Non-finite
+        values are quoted because they are not valid JSON numbers.
+        """
+        if math.isnan(f):
+            return '"NaN"'
+        if math.isinf(f):
+            return '"Infinity"' if f > 0 else '"-Infinity"'
+
+        def round_trips(s: str) -> bool:
+            if not is_float32:
+                return float(s) == f
+            try:
+                return struct.pack("<f", float(s)) == struct.pack("<f", f)
+            except OverflowError:
+                return False
+
+        # Like Java, pick the shortest correctly rounded decimal that round-trips, using at least
+        # 2 significant digits (e.g. Double.MIN_VALUE is "4.9E-324", not "5.0E-324").
+        for precision in range(2, 18):
+            s = "%.*e" % (precision - 1, f)
+            if round_trips(s):
+                break
+        d = decimal.Decimal(s).normalize()
+        if d.is_zero() or 1e-3 <= abs(f) < 1e7:
+            plain = format(d, "f")
+            return plain if "." in plain else plain + ".0"
+        sign, digits, exponent = d.as_tuple()
+        assert isinstance(exponent, int)
+        mantissa = str(digits[0]) + "." + ("".join(map(str, digits[1:])) or "0")
+        return ("-" if sign else "") + mantissa + "E" + str(len(digits) - 1 + exponent)
 
     @classmethod
     def _to_python(cls, value: bytes, metadata: bytes, pos: int) -> Any:

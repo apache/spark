@@ -2955,10 +2955,10 @@ class TypesTestsMixin:
             ("-int4", "-69633", -69633),
             ("int8", "4295033089", 4295033089),
             ("-int8", "-4294967297", -4294967297),
-            ("float4", "3.402e+38", 3.402e38),
-            ("-float4", "-3.402e+38", -3.402e38),
-            ("float8", "1.79769e+308", 1.79769e308),
-            ("-float8", "-1.79769e+308", -1.79769e308),
+            ("float4", "3.402E38", 3.402e38),
+            ("-float4", "-3.402E38", -3.402e38),
+            ("float8", "1.79769E308", 1.79769e308),
+            ("-float8", "-1.79769E308", -1.79769e308),
             ("dec4", "123.456", Decimal("123.456")),
             ("-dec4", "-321.654", Decimal("-321.654")),
             ("dec8", "429.4967297", Decimal("429.4967297")),
@@ -3863,6 +3863,41 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
     def test_struct_field_type_name(self):
         struct_field = StructField("a", IntegerType())
         self.assertRaises(TypeError, struct_field.typeName)
+
+    def test_variant_to_json_matches_jvm_format(self):
+        import struct
+
+        def variant(type_info, payload):
+            return VariantVal(bytes([type_info << 2]) + payload, bytes([1, 0, 0]))
+
+        def double(x):
+            return variant(7, struct.pack("<d", x))
+
+        def float32(x):
+            return variant(14, struct.pack("<f", x))
+
+        # The expected values are what the JVM `to_json` returns for the same variants.
+        for v, expected in [
+            (double(float("nan")), '"NaN"'),
+            (double(float("inf")), '"Infinity"'),
+            (double(float("-inf")), '"-Infinity"'),
+            (double(0.0), "0.0"),
+            (double(-0.0), "-0.0"),
+            (double(123.0), "123.0"),
+            (double(0.001), "0.001"),
+            (double(1e7), "1.0E7"),
+            (double(1.5e-5), "1.5E-5"),
+            (double(-1e20), "-1.0E20"),
+            (double(5e-324), "4.9E-324"),
+            (float32(float("nan")), '"NaN"'),
+            (float32(1.1), "1.1"),
+            (float32(1e10), "1.0E10"),
+            (float32(3.4028234663852886e38), "3.4028235E38"),
+        ]:
+            with self.subTest(expected=expected):
+                self.assertEqual(v.toJson(), expected)
+                # The output must always be valid JSON.
+                json.loads(v.toJson())
 
     def test_invalid_create_row(self):
         row_class = Row("c1", "c2")
