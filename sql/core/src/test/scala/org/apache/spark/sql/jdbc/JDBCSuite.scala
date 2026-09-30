@@ -2575,6 +2575,29 @@ class JDBCSuite extends SharedSparkSession {
       specifiedPrecision, null) == Some(DecimalType.SYSTEM_DEFAULT))
   }
 
+  test("SPARK-59891: TeradataDialect classifies only syntax error codes as syntax errors") {
+    val dialect = JdbcDialects.get("jdbc:teradata")
+    def teradataError(code: Int, sqlState: String, message: String): SQLException =
+      new SQLException(s"[Teradata Database] [Error $code] [SQLState $sqlState] $message",
+        sqlState, code)
+
+    Seq(
+      3706 -> "Syntax error: expected something between the word 'PEOPLE' and the 'FORM' keyword.",
+      3707 -> "Syntax error, expected something like a name.",
+      3708 -> "Syntax error, 'X' should be deleted.",
+      3709 -> "Syntax error, replace 'X'.").foreach { case (code, message) =>
+      assert(dialect.isSyntaxErrorBestEffort(teradataError(code, "42000", message)))
+    }
+    Seq(
+      (3523, "42000", "The user does not have SELECT access to TEST.PEOPLE."),
+      (3524, "42000", "The user does not have SELECT access to database TEST."),
+      (3807, "42S02", "Object 'TEST.MISSING' does not exist."),
+      (3810, "42S22", "Column/Parameter 'TEST.PEOPLE.MISSING' does not exist.")
+    ).foreach { case (code, sqlState, message) =>
+      assert(!dialect.isSyntaxErrorBestEffort(teradataError(code, sqlState, message)))
+    }
+  }
+
     test("Checking metrics correctness with JDBC") {
     val foobarCnt = spark.table("foobar").count()
     val res = InputOutputMetricsHelper.run(sql("SELECT * FROM foobar").toDF())
