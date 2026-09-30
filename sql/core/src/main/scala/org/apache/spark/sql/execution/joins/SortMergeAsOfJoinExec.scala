@@ -408,6 +408,7 @@ private[joins] class SortMergeAsOfJoinScanner(
    */
   private def findFirstForward(leftRow: InternalRow): InternalRow = {
     val iter = rightGroupBuffer.generateIterator()
+    val needsCopy = rightGroupBuffer.isSpillBacked
     var asOfSeen = false
 
     joinedRow.withLeft(leftRow)
@@ -418,8 +419,7 @@ private[joins] class SortMergeAsOfJoinScanner(
       if (holds(boundAsOfCond)) {
         asOfSeen = true
         if (residualHolds) {
-          // No copy: the caller projects this row before the buffer iterator moves again.
-          return rightRow
+          return retainMatch(rightRow, needsCopy)
         }
       } else if (asOfSeen) {
         // Past the tolerance bound, so no later row passes the as-of condition.
