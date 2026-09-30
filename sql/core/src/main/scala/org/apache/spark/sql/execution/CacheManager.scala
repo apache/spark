@@ -47,7 +47,7 @@ import org.apache.spark.sql.execution.datasources.{
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, ChangelogTable, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.types.{DataType, MetadataBuilder}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -625,10 +625,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
             refreshPhaseEnabled = false)
           // Unchanged CHAR/VARCHAR keys keep captured types and padding. qe.normalized
           // re-runs analysis and can miss spark.table(). Schema evolution uses qe.normalized
-          // so SPARK-54424 can adopt added or removed columns.
+          // so SPARK-54424 can adopt added, removed, or widened columns.
           val newKey =
             if (isDirectCharVarcharCache(cd.plan) &&
-                cd.plan.output.map(_.name) == refreshedPlan.output.map(_.name)) {
+                sameLogicalOutput(cd.plan.output, refreshedPlan.output)) {
               QueryExecution.normalize(rebuildSession, refreshedPlan)
             } else {
               qe.normalized
@@ -769,7 +769,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
               if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] &&
                 ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, r) =>
             refreshV2RelationTable(r, catalog, ident).map { refreshed =>
-              if (r.output.map(_.name) == refreshed.output.map(_.name)) {
+              if (sameLogicalOutput(r.output, refreshed.output)) {
                 project.copy(child = refreshed)
               } else {
                 // Schema changed; drop the stale padding Project and let analysis rebuild it.
@@ -804,9 +804,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         .create(table, Some(catalog), Some(ident), relation.options)
         .copy(charVarcharScanMode = relation.charVarcharScanMode)
       val restored = restoreFirstClassCharVarcharTypes(rebuilt, table, relation)
-      // Same column names: keep captured attributes so CHAR/VARCHAR cache keys still match.
-      // Different names: use the rebuilt output so SPARK-54424 can add or drop columns.
-      if (relation.output.map(_.name) == restored.output.map(_.name)) {
+      // Keep captured attributes only when the logical schema is unchanged. Name equality
+      // is not enough: VARCHAR(4) to VARCHAR(8) must rebuild output from the catalog.
+      if (sameLogicalOutput(relation.output, restored.output)) {
         Some(relation.copy(table = table))
       } else {
         Some(restored)
@@ -837,6 +837,22 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         }
       }
       rebuilt.copy(output = newOutput)
+    }
+  }
+
+  // Compare name, nullability, and CHAR/VARCHAR (or annotated STRING) logical types.
+  private def sameLogicalOutput(left: Seq[Attribute], right: Seq[Attribute]): Boolean = {
+    left.length == right.length && left.zip(right).forall { case (a, b) =>
+      a.name == b.name && a.nullable == b.nullable &&
+        logicalCharVarcharType(a) == logicalCharVarcharType(b)
+    }
+  }
+
+  private def logicalCharVarcharType(attr: Attribute): DataType = {
+    if (CharVarcharUtils.hasCharVarchar(attr.dataType)) {
+      attr.dataType
+    } else {
+      CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType)
     }
   }
 

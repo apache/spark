@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, DataSourceV2ScanRelation, ReplaceTableExec}
 import org.apache.spark.sql.functions.{lit, sum}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType, VarcharType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
@@ -4231,6 +4231,30 @@ class DataSourceV2DataFrameSuite
         assert(spark.sharedState.cacheManager.numCachedEntries == 1)
         assertCached(spark.table(t))
         checkAnswer(spark.table(t), Seq(Row(1, "a"), Row(2, "b")))
+      }
+    }
+  }
+
+  test("SPARK-54424: refresh CHAR/VARCHAR table cache on type change") {
+    val t = "testcat.ns1.ns2.tbl"
+    withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      withTable(t) {
+        sql(s"CREATE TABLE $t (id INT, data VARCHAR(4)) USING foo")
+        sql(s"INSERT INTO $t VALUES (1, 'a')")
+        spark.table(t).cache()
+        assertCached(spark.table(t))
+        checkAnswer(spark.table(t), Seq(Row(1, "a")))
+
+        sql(s"ALTER TABLE $t ALTER COLUMN data TYPE VARCHAR(8)")
+        sql(s"INSERT INTO $t VALUES (2, 'abcdef')")
+        spark.sql(s"REFRESH TABLE $t")
+
+        assert(spark.sharedState.cacheManager.numCachedEntries == 1)
+        assertCached(spark.table(t))
+        assert(spark.table(t).schema("data").dataType === VarcharType(8))
+        checkAnswer(spark.table(t), Seq(Row(1, "a"), Row(2, "abcdef")))
       }
     }
   }
