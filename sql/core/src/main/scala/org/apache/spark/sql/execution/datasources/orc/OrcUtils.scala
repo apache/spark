@@ -211,22 +211,25 @@ object OrcUtils extends Logging {
   def readOrcSchemasInParallel(
     files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean,
     ignoreMissingFiles: Boolean): Seq[StructType] = {
-    // Read outside `parmap`: its worker threads do not inherit the caller's `SQLConf` thread-local,
-    // so `SQLConf.get` there would fall back to defaults and never take the archive branch.
-    val archiveEnabled = SQLConf.get.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
+    // The `parmap` workers do not inherit the task thread's `SQLConf` thread-local. Capture it so
+    // schema conversion observes settings such as first-class CHAR/VARCHAR instead of defaults.
+    val existingConf = SQLConf.get
+    val archiveEnabled = existingConf.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
     // The signature is fixed by `SchemaMergeUtils.mergeSchemasInParallel`'s `schemaReader` type,
     // so the glob comes from `conf`, which that caller builds with the user options via
     // `newHadoopConfWithOptions`.
     val archivePathFilter = Option(conf.get(FileSourceOptions.ARCHIVE_PATH_FILTER))
       .filter(_.nonEmpty).map(FileSourceOptions.compileArchivePathFilter)
     ThreadUtils.parmap(files, "readingOrcSchemas", 8) { currentFile =>
-      if (archiveEnabled && SupportsArchiveFormat.isArchivePath(currentFile.getPath)) {
-        readArchiveSchemas(conf, currentFile, ignoreCorruptFiles, ignoreMissingFiles,
-          archivePathFilter = archivePathFilter,
-          stopAtFirst = false)
-      } else {
-        OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
-          .map(toCatalystSchema).toSeq
+      SQLConf.withExistingConf(existingConf) {
+        if (archiveEnabled && SupportsArchiveFormat.isArchivePath(currentFile.getPath)) {
+          readArchiveSchemas(conf, currentFile, ignoreCorruptFiles, ignoreMissingFiles,
+            archivePathFilter = archivePathFilter,
+            stopAtFirst = false)
+        } else {
+          OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
+            .map(toCatalystSchema).toSeq
+        }
       }
     }.flatten
   }
@@ -469,8 +472,8 @@ object OrcUtils extends Logging {
           val typeDesc = new TypeDescription(ops.orcCategory)
           typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, dt.typeName)
           Some(typeDesc)
-        // Spark CHAR/VARCHAR are ORC STRING plus spark.sql.catalyst.type. Native ORC
-        // CHAR/VARCHAR from Hive files are recovered by toCatalystSchema. Unbounded
+        // Spark CHAR/VARCHAR are stored as ORC STRING with spark.sql.catalyst.type metadata.
+        // Native ORC CHAR/VARCHAR from Hive files are recovered by toCatalystSchema. Unbounded
         // STRING (including collated STRING) stamps StringType.typeName ("string"); collation
         // is not recovered from file-only reads.
         case s: StringType =>
@@ -518,8 +521,8 @@ object OrcUtils extends Logging {
 
   /**
    * Returns an ORC reader schema that represents Spark CHAR/VARCHAR as STRING, including when
-   * first-class CHAR/VARCHAR types are enabled. Native ORC CHAR/VARCHAR still apply when the
-   * file itself stores those types.
+   * first-class CHAR/VARCHAR types are enabled. Native ORC CHAR/VARCHAR semantics still apply
+   * when the file itself stores those types.
    */
   private def orcReadSchemaWithoutCharVarchar(dt: DataType): DataType = dt match {
     case s: StructType =>

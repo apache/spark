@@ -698,6 +698,21 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
     }
   }
 
+  test("SPARK-58814: parallel schema merging preserves first-class CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTempPath { dir =>
+        val input = spark.range(1).selectExpr(
+          "cast('ab' AS CHAR(4)) AS c",
+          "array(cast('xy' AS VARCHAR(3))) AS a")
+        input.write.orc(dir.getCanonicalPath)
+
+        val readBack = spark.read.option("mergeSchema", "true").orc(dir.getCanonicalPath)
+        assert(DataType.equalsIgnoreNullability(readBack.schema, input.schema))
+        checkAnswer(readBack.selectExpr("concat('<', c, '>')", "a"), Row("<ab  >", Seq("xy")))
+      }
+    }
+  }
+
   test("Check BloomFilter creation") {
     testBloomFilterCreation(Kind.BLOOM_FILTER_UTF8) // After ORC-101
   }

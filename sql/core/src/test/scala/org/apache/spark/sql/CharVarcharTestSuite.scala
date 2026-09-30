@@ -2099,7 +2099,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                 withView(view) {
                   sql(s"CREATE TABLE $table (v VARCHAR(4)) USING orc LOCATION '$path'")
                   sql(s"CREATE VIEW $view AS SELECT v FROM $table")
-                  // The view was created under standard semantics; the caller session is not.
+                  // The view was created under standard semantics, but the caller session does not
+                  // use them.
                   withSQLConf(
                       SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
                       SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
