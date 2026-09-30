@@ -51,7 +51,10 @@ public class VectorizedByteStreamSplitValuesReader
   /** Width of each value in bytes (4 for FLOAT/INT32, 8 for DOUBLE/INT64). */
   private final int typeWidth;
 
-  /** Total number of values in the current page. */
+  /**
+   * Number of values encoded in the current page. For a column with definition levels this
+   * excludes nulls, so it can be smaller than the page value count.
+   */
   private int valueCount;
 
   /** Raw encoded page data: W streams of valueCount bytes each. */
@@ -87,18 +90,24 @@ public class VectorizedByteStreamSplitValuesReader
     // the page is truncated or has trailing bytes, and the stream boundaries derived from
     // its length may be wrong.
     if (totalBytes % typeWidth != 0) {
-      throw new ParquetDecodingException("Corrupted BYTE_STREAM_SPLIT page: page length " +
+      throw new ParquetDecodingException("Corrupted BYTE_STREAM_SPLIT page: page data length " +
         totalBytes + " is not a multiple of the value width " + typeWidth);
     }
-    this.valueCount = totalBytes / typeWidth;
+    int encodedValues = totalBytes / typeWidth;
     // Without definition levels the page value count must match the encoded values exactly.
-    // Otherwise it includes nulls and is only an upper bound, so a page that is off by whole
-    // values is not detected here: its values are decoded with the wrong stream stride, and
-    // only a read or skip past the last encoded value fails.
-    if (exactValueCount ? this.valueCount != valueCount : this.valueCount > valueCount) {
-      throw new ParquetDecodingException("Corrupted BYTE_STREAM_SPLIT page: " +
-        this.valueCount + " encoded values do not match the page value count " + valueCount);
+    if (exactValueCount && encodedValues != valueCount) {
+      throw new ParquetDecodingException("Corrupted BYTE_STREAM_SPLIT page: " + encodedValues +
+        " encoded values do not match the page value count " + valueCount);
     }
+    // Otherwise the page value count includes nulls and is only an upper bound, so a page that
+    // is off by whole values is not detected here, and its values are decoded with the wrong
+    // stream stride. With fewer encoded values than non-null rows, a read or skip past the
+    // last encoded value fails. With more, the page is not detected.
+    if (encodedValues > valueCount) {
+      throw new ParquetDecodingException("Corrupted BYTE_STREAM_SPLIT page: " + encodedValues +
+        " encoded values exceed the page value count " + valueCount);
+    }
+    this.valueCount = encodedValues;
     this.offset = 0;
     this.pageData = new byte[totalBytes];
     // Read the entire page into pageData. ByteBufferInputStream.slice() returns a
@@ -186,9 +195,14 @@ public class VectorizedByteStreamSplitValuesReader
 
   @Override
   public Binary readBinary(int len) {
-    byte[] result = new byte[len];
+    // Each value has one byte in each of the typeWidth streams.
+    if (len != typeWidth) {
+      throw new IllegalArgumentException(
+        "Cannot read a value of length " + len + " from values of width " + typeWidth);
+    }
+    byte[] result = new byte[typeWidth];
     int idx = nextIndex();
-    for (int b = 0; b < len; b++) {
+    for (int b = 0; b < typeWidth; b++) {
       result[b] = pageData[b * valueCount + idx];
     }
     return Binary.fromConstantByteArray(result);

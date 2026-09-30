@@ -38,9 +38,10 @@ import org.apache.spark.sql.types._
  * Uses parquet-mr's ByteStreamSplitValuesWriter to encode data, then reads it
  * back with the vectorized reader and verifies correctness. An abstract base
  * covers the shared test matrix (batch reads, single-value reads, skip, direct
- * buffers, extreme values) for all numeric types; concrete sub-classes supply
- * only the type-specific writer/reader/comparison methods. FLBA is tested in a
- * standalone suite because its reader API differs (readBinary vs typed batch).
+ * buffers, extreme values, and bounds checks of every read and skip against the
+ * page) for INT32, INT64, FLOAT, DOUBLE and FIXED_LEN_BYTE_ARRAY of width 5;
+ * concrete sub-classes supply only the type-specific writer/reader/comparison
+ * methods. A standalone suite covers FIXED_LEN_BYTE_ARRAY of other widths.
  */
 abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFunSuite {
 
@@ -106,9 +107,12 @@ abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFun
     reader
   }
 
-  private def readAndVerify(data: Array[T], useDirect: Boolean = false): Unit = {
+  private def readAndVerify(
+      data: Array[T],
+      useDirect: Boolean = false,
+      exactValueCount: Boolean = false): Unit = {
     val page = encode(data)
-    val reader = newReader(page, data.length, useDirect)
+    val reader = newReader(page, data.length, useDirect, exactValueCount)
     val cv = new OnHeapColumnVector(data.length, sparkType)
     try {
       readBatch(reader, data.length, cv, 0)
@@ -267,11 +271,9 @@ abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFun
           check.foreach { f =>
             for (i <- 0 until 6) withClue(s"row $i")(f(cv, i, toBytes(data(4 + i))))
           }
-          // Nothing is left, but empty reads and skips are still allowed.
+          // Nothing is left, but an empty read or skip is still allowed.
           op(reader, 0, cv)
-          skipBatch(reader, 0)
-          readBatch(reader, 0, cv, 0)
-          assertCorrupted(name)(readSingle(reader))
+          assertCorrupted("single read")(readSingle(reader))
         } finally {
           cv.close()
         }
@@ -324,7 +326,7 @@ abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFun
     val page = encode(Array.tabulate(10)(i => sequentialValue(i)))
     for (extra <- 1 until typeWidth) {
       assertCorrupted(s"extra $extra bytes") {
-        newReader(page ++ Array.fill[Byte](extra)(1), 11)
+        newReader(page ++ Array.fill[Byte](extra)(1), 10)
       }
     }
     for (missing <- 1 until typeWidth) {
@@ -362,16 +364,19 @@ abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFun
     val page = encode(data)
     assertCorrupted("one value short")(newReader(page, 11, exactValueCount = true))
     assertCorrupted("empty page")(newReader(Array.emptyByteArray, 1, exactValueCount = true))
-
-    val reader = newReader(page, data.length, exactValueCount = true)
-    val cv = new OnHeapColumnVector(data.length, sparkType)
-    try {
-      readBatch(reader, data.length, cv, 0)
-      for (i <- data.indices) assertEqual(data(i), getFromVector(cv, i), s"mismatch at $i")
-    } finally {
-      cv.close()
-    }
+    // A matching count is accepted.
+    readAndVerify(data, exactValueCount = true)
     newReader(Array.emptyByteArray, 0, exactValueCount = true)
+  }
+
+  test("single-value readBinary with a length other than the value width fails") {
+    val data = Array.tabulate(10)(i => sequentialValue(i))
+    val reader = newReader(encode(data), data.length)
+    for (len <- Seq(typeWidth - 1, typeWidth + 1)) {
+      withClue(s"len = $len")(intercept[IllegalArgumentException](reader.readBinary(len)))
+    }
+    // The rejected reads do not consume a value.
+    assertEqual(data(0), readSingle(reader), "mismatch at index 0")
   }
 
   test("empty page") {
@@ -399,6 +404,12 @@ private object BssWriterHelper {
     writer.close()
     bytes
   }
+
+  def encodeFLBA(data: Array[Array[Byte]], typeWidth: Int): Array[Byte] =
+    encode(
+      new FixedLenByteArrayByteStreamSplitValuesWriter(
+        typeWidth, data.length, data.length * typeWidth, new DirectByteBufferAllocator())
+    )(w => data.foreach(b => w.writeBytes(Binary.fromConstantByteArray(b))))
 }
 
 class ParquetByteStreamSplitEncodingIntegerSuite
@@ -572,10 +583,7 @@ class ParquetByteStreamSplitEncodingFLBAWidth5Suite
   override protected def toBytes(v: Array[Byte]): Array[Byte] = v
 
   override protected def encode(data: Array[Array[Byte]]): Array[Byte] =
-    BssWriterHelper.encode(
-      new FixedLenByteArrayByteStreamSplitValuesWriter(
-        typeWidth, data.length, data.length * typeWidth, new DirectByteBufferAllocator())
-    )(w => data.foreach(b => w.writeBytes(Binary.fromConstantByteArray(b))))
+    BssWriterHelper.encodeFLBA(data, typeWidth)
 
   override protected def readBatch(
       r: VectorizedByteStreamSplitValuesReader,
@@ -602,21 +610,13 @@ class ParquetByteStreamSplitEncodingFLBAWidth5Suite
     Array.fill[Byte](typeWidth)(0), Array.fill[Byte](typeWidth)(-1),
     Array.fill[Byte](typeWidth)(Byte.MinValue), Array.fill[Byte](typeWidth)(Byte.MaxValue))
   override protected def singleTestValue: Array[Byte] = Array[Byte](1, 2, 3, 4, 5)
-
-  override protected def assertEqual(
-      expected: Array[Byte], actual: Array[Byte], msg: String): Unit = {
-    assert(expected.toSeq === actual.toSeq, msg)
-  }
 }
 
 class ParquetByteStreamSplitEncodingFLBASuite extends SparkFunSuite {
   private val random = new Random(42)
 
   private def writeFLBA(data: Array[Array[Byte]], typeWidth: Int): Array[Byte] =
-    BssWriterHelper.encode(
-      new FixedLenByteArrayByteStreamSplitValuesWriter(
-        typeWidth, data.length, data.length * typeWidth, new DirectByteBufferAllocator())
-    )(w => data.foreach(b => w.writeBytes(Binary.fromConstantByteArray(b))))
+    BssWriterHelper.encodeFLBA(data, typeWidth)
 
   private def readAndVerifyFLBA(data: Array[Array[Byte]], typeWidth: Int): Unit = {
     val page = writeFLBA(data, typeWidth)
@@ -647,11 +647,6 @@ class ParquetByteStreamSplitEncodingFLBASuite extends SparkFunSuite {
   test("read FLBA - width 3") {
     readAndVerifyFLBA(
       Array.fill(200)(Array.fill(3)(random.nextInt(256).toByte)), typeWidth = 3)
-  }
-
-  test("read FLBA - width 5") {
-    readAndVerifyFLBA(
-      Array.fill(150)(Array.fill(5)(random.nextInt(256).toByte)), typeWidth = 5)
   }
 
   test("read FLBA - width 7") {

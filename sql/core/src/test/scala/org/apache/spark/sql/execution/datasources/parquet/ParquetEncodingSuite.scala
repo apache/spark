@@ -26,8 +26,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.column.ParquetProperties.WriterVersion.PARQUET_1_0
 import org.apache.parquet.example.data.simple.SimpleGroup
-import org.apache.parquet.hadoop.ParquetOutputFormat
+import org.apache.parquet.hadoop.{ParquetFileReader, ParquetOutputFormat}
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.MessageTypeParser
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
@@ -38,6 +39,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 // TODO: this needs a lot more testing but it's currently not easy to test with the parquet
 // writer abstractions. Revisit.
@@ -505,19 +507,18 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
         }
         val writer = builder.build()
         try {
-          (0 until size).foreach { i =>
+          expected.foreach { row =>
             val record = new SimpleGroup(schema)
-            record.add("int_col", i * 7919)
-            record.add("long_col", i * 1000003L * (if (i % 2 == 0) 1 else -1))
-            record.add("float_col", i * 0.1f)
-            record.add("double_col", i * -0.001)
-            record.add("flba_col", Binary.fromConstantByteArray(flba(i)))
-            if (i % 3 != 0) record.add("int_nullable", i * 7)
-            if (i % 5 != 0) record.add("double_nullable", i * 0.5)
-            val values = arr(i)
-            if (values != null) {
+            record.add("int_col", row.getInt(0))
+            record.add("long_col", row.getLong(1))
+            record.add("float_col", row.getFloat(2))
+            record.add("double_col", row.getDouble(3))
+            record.add("flba_col", Binary.fromConstantByteArray(row.getAs[Array[Byte]](4)))
+            if (!row.isNullAt(5)) record.add("int_nullable", row.getInt(5))
+            if (!row.isNullAt(6)) record.add("double_nullable", row.getDouble(6))
+            if (!row.isNullAt(7)) {
               val list = record.addGroup("arr")
-              values.foreach { v =>
+              row.getSeq[java.lang.Float](7).foreach { v =>
                 val element = list.addGroup("list")
                 if (v != null) element.add("element", v.floatValue())
               }
@@ -528,13 +529,16 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
           writer.close()
         }
 
-        val footer = readAllFootersWithoutSummaryFiles(
-          path.getParent, hadoopConf).head.getParquetMetadata
-        val columnChunks = footer.getBlocks.asScala.head.getColumns.asScala
-        assert(columnChunks.length === 8)
-        columnChunks.foreach { chunk =>
-          assert(chunk.getEncodings.contains(Encoding.BYTE_STREAM_SPLIT),
-            s"Column ${chunk.getPath} should use BYTE_STREAM_SPLIT encoding")
+        val in = HadoopInputFile.fromPath(path, hadoopConf)
+        Utils.tryWithResource(ParquetFileReader.open(in)) { reader =>
+          val columnChunks = reader.getFooter.getBlocks.asScala.head.getColumns.asScala
+          assert(columnChunks.length === 8)
+          columnChunks.foreach { chunk =>
+            assert(chunk.getEncodings.contains(Encoding.BYTE_STREAM_SPLIT),
+              s"Column ${chunk.getPath} should use BYTE_STREAM_SPLIT encoding")
+            assert(reader.readOffsetIndex(chunk).getPageCount > 1,
+              s"Column ${chunk.getPath} should have multiple pages")
+          }
         }
 
         withMemoryModes { offHeapMode =>
