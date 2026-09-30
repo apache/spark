@@ -3486,6 +3486,65 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59899: a scan's reported ordering keeps only partition key sort orders past a " +
+      "pruned column") {
+    // The source reports its ordering over the full table, so a sort order on a column pruned out
+    // of the scan output reaches the scan, as a pruned partition key does. Ordering is
+    // prefix-based, so the scan keeps the leading run of sort orders over its output: `t1` drops
+    // its last order, `t2` a middle one along with every order after it. Each split holds a single
+    // key, so a sort order on the partition key still holds past that run: `t3` keeps `id`.
+    val table1 = "prune_order_t1"
+    val table2 = "prune_order_t2"
+    val table3 = "prune_order_t3"
+    def asc(col: String): SortOrder =
+      sort(FieldReference(col), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    createTable(table1, columns, Array(identity("id")), Array(asc("id"), asc("data"), asc("ts")))
+    createTable(table2, columns, Array(identity("id")), Array(asc("id"), asc("ts"), asc("data")))
+    createTable(table3, columns, Array(identity("id")), Array(asc("ts"), asc("id")))
+    Seq(table1, table2, table3).foreach { table =>
+      // Key 1 is stored in two splits, so grouping the scan by key merges them.
+      sql(s"INSERT INTO testcat.ns.$table VALUES " +
+        "(1, 'bb', cast('2020-01-01' as timestamp)), " +
+        "(1, 'aa', cast('2020-01-02' as timestamp)), " +
+        "(2, 'cc', cast('2020-01-03' as timestamp))")
+    }
+
+    // The positions, in the reported ordering, of the sort orders each scan keeps.
+    Seq(table1 -> Seq(0, 1), table2 -> Seq(0), table3 -> Seq(1)).foreach { case (table, kept) =>
+      val scan = collectScans(sql(s"SELECT id, data FROM testcat.ns.$table")
+        .queryExecution.executedPlan).head
+      val reported = scan.ordering.get
+      assert(reported.exists(!_.references.subsetOf(scan.outputSet)),
+        s"test setup: the ordering of $table is on `ts`, which is pruned out of the scan")
+      assert(scan.outputOrdering === kept.map(reported))
+
+      // Without the merge, coalescing the two splits of key 1 keeps only the sort order on the
+      // partition key, which is constant within each group.
+      assert(GroupPartitionsExec(scan).outputOrdering ===
+        reported.filter(_.child.semanticEquals(scan.output.head)))
+
+      // A k-way merge binds the scan's ordering against the scan output. A row-based scan like this
+      // one always gets a `ProjectExec`, which truncates the ordering, but a columnar scan may get
+      // nothing between it and the merge that does. So the merge is built right over the scan here.
+      val merged = GroupPartitionsExec(scan, enableSortedMerge = true).execute()
+      assert(merged.isInstanceOf[SortedMergeCoalescedRDD[_]])
+      val rows = merged.map(r => (r.getInt(0), r.getString(1))).collect().toSeq
+      val expected = Seq((1, "aa"), (1, "bb"), (2, "cc"))
+      // Only `t1` orders the two splits of key 1 past the key, by `data`.
+      assert((if (table == table1) rows else rows.sorted) === expected)
+    }
+
+    // A row-based scan's `ProjectExec` passes the kept `(id)` through, so a sort-merge join on the
+    // partition key needs no sort on either side.
+    val df = sql(s"SELECT a.id, a.data, b.data FROM testcat.ns.$table3 a " +
+      s"JOIN testcat.ns.$table3 b ON a.id = b.id")
+    val smjs = collect(df.queryExecution.executedPlan) { case s: SortMergeJoinExec => s }
+    assert(smjs.size == 1)
+    assert(smjs.head.children.flatMap(collect(_) { case s: SortExec => s }).isEmpty)
+    checkAnswer(df, Seq(Row(1, "aa", "aa"), Row(1, "aa", "bb"), Row(1, "bb", "aa"),
+      Row(1, "bb", "bb"), Row(2, "cc", "cc")))
+  }
+
   test("SPARK-47094: SPJ: Support compatible buckets") {
     val table1 = "tab1e1"
     val table2 = "table2"
