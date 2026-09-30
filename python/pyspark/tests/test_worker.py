@@ -31,7 +31,7 @@ except ImportError:
 from py4j.protocol import Py4JJavaError
 
 from pyspark import SparkConf, SparkContext
-from pyspark.testing.utils import PySparkTestCase, QuietTest, ReusedPySparkTestCase, eventually
+from pyspark.testing.utils import QuietTest, ReusedPySparkTestCase, eventually
 
 
 class WorkerTests(ReusedPySparkTestCase):
@@ -185,7 +185,19 @@ class WorkerTests(ReusedPySparkTestCase):
             self.assertRegex(str(e), "exception with 中")
 
 
-class WorkerReuseTest(PySparkTestCase):
+class WorkerReuseTest(ReusedPySparkTestCase):
+    @classmethod
+    def conf(cls):
+        # Pin spark.python.use.daemon=true. Worker reuse (hence stable worker PIDs) only
+        # happens on the daemon path; the simple-worker path spawns a fresh process per
+        # task. Sibling suites here run with use.daemon=false and, because all suites in
+        # this file share one gateway JVM, whichever launches it first leaks its conf into
+        # the JVM system properties (SPARK-59885). Pinning it keeps this reuse assertion
+        # independent of test ordering.
+        conf = super().conf()
+        conf.set("spark.python.use.daemon", "true")
+        return conf
+
     @eventually(catch_assertions=True)
     def test_reuse_worker_of_parallelize_range(self):
         rdd = self.sc.parallelize(range(20), 8)
@@ -287,7 +299,15 @@ class WorkerSegfaultNonDaemonTest(WorkerSegfaultTest):
         return _conf
 
 
-class WorkerPoolCrashTest(PySparkTestCase):
+class WorkerPoolCrashTest(ReusedPySparkTestCase):
+    @classmethod
+    def conf(cls):
+        # Pin daemon so worker reuse (stable PIDs) is independent of test ordering; see
+        # WorkerReuseTest.conf for the shared-gateway leak rationale (SPARK-59885).
+        conf = super().conf()
+        conf.set("spark.python.use.daemon", "true")
+        return conf
+
     def test_worker_crash(self):
         # SPARK-47565: Kill a worker that is currently idling
         rdd = self.sc.parallelize(range(20), 4)
