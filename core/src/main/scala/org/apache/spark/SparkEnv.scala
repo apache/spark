@@ -51,21 +51,20 @@ import org.apache.spark.shuffle.{ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.shuffle.streaming.MultiShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.udf.worker.UDFWorkerSpecification
-import org.apache.spark.udf.worker.core.{UDFDispatcherFactory, UDFDispatcherManager,
-  WorkerDispatcher, WorkerLogger}
+import org.apache.spark.udf.worker.core.{UDFDispatcherFactory, UDFDispatcherManager, WorkerDispatcher, WorkerLogger}
 import org.apache.spark.util.{RpcUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkUDFWorkerLogger
 
 /**
- * :: DeveloperApi ::
- * Holds all the runtime environment objects for a running Spark instance (either master or worker),
- * including the serializer, RpcEnv, block manager, map output tracker, etc. Currently
- * Spark code finds the SparkEnv through a global variable, so all the threads can access the same
- * SparkEnv. It can be accessed by SparkEnv.get (e.g. after creating a SparkContext).
+ * :: DeveloperApi :: Holds all the runtime environment objects for a running Spark instance
+ * (either master or worker), including the serializer, RpcEnv, block manager, map output tracker,
+ * etc. Currently Spark code finds the SparkEnv through a global variable, so all the threads can
+ * access the same SparkEnv. It can be accessed by SparkEnv.get (e.g. after creating a
+ * SparkContext).
  */
 @DeveloperApi
-class SparkEnv (
+class SparkEnv(
     val executorId: String,
     private[spark] val rpcEnv: RpcEnv,
     val serializer: Serializer,
@@ -77,7 +76,8 @@ class SparkEnv (
     val securityManager: SecurityManager,
     val metricsSystem: MetricsSystem,
     val outputCommitCoordinator: OutputCommitCoordinator,
-    val conf: SparkConf) extends Logging {
+    val conf: SparkConf)
+    extends Logging {
 
   // The two shuffle managers are peers keyed by kind, not a default and an override: a shuffle is
   // routed to one or the other by its dependency type via `shuffleManagerFor`, so neither is ever
@@ -104,28 +104,28 @@ class SparkEnv (
 
   /**
    * The `BlockingShuffleManager` (configured by spark.shuffle.manager), which serves all regular,
-   * materialized shuffle dependencies and owns block-by-id resolution. Use this when the intent is
-   * specifically the blocking manager -- e.g. inspecting its concrete type. To serve a specific
-   * shuffle's reads/writes, use `shuffleManagerFor`, which routes by dependency type; to resolve a
-   * block by id, use `shuffleBlockResolver`.
+   * materialized shuffle dependencies and owns block-by-id resolution. Use this when the intent
+   * is specifically the blocking manager -- e.g. inspecting its concrete type. To serve a
+   * specific shuffle's reads/writes, use `shuffleManagerFor`, which routes by dependency type; to
+   * resolve a block by id, use `shuffleBlockResolver`.
    */
   private[spark] def blockingShuffleManager: BlockingShuffleManager = _blockingShuffleManager
 
   /**
    * The `PipelinedShuffleManager` (configured by spark.shuffle.manager.incremental, defaulting to
-   * the built-in streaming manager) that serves pipelined shuffle dependencies. A pipelined shuffle
-   * is read incrementally and served out-of-band, so this manager never provides a
+   * the built-in streaming manager) that serves pipelined shuffle dependencies. A pipelined
+   * shuffle is read incrementally and served out-of-band, so this manager never provides a
    * `ShuffleBlockResolver` of its own.
    */
   private[spark] def pipelinedShuffleManager: PipelinedShuffleManager = _pipelinedShuffleManager
 
   /**
    * The `ShuffleBlockResolver` used to resolve shuffle blocks by id (reads, push-merge, and
-   * decommission migration), or `None` before the shuffle manager is initialized. Block resolution
-   * is only ever needed for regular, materialized shuffles, so it always comes from the blocking
-   * manager (the only manager that produces block-manager-addressed blocks); a pipelined shuffle is
-   * served out-of-band and never resolved here. Callers that only need to resolve a block should
-   * use this rather than reaching through a `ShuffleManager`.
+   * decommission migration), or `None` before the shuffle manager is initialized. Block
+   * resolution is only ever needed for regular, materialized shuffles, so it always comes from
+   * the blocking manager (the only manager that produces block-manager-addressed blocks); a
+   * pipelined shuffle is served out-of-band and never resolved here. Callers that only need to
+   * resolve a block should use this rather than reaching through a `ShuffleManager`.
    */
   private[spark] def shuffleBlockResolver: Option[ShuffleBlockResolver] =
     Option(_blockingShuffleManager).map(_.shuffleBlockResolver)
@@ -135,20 +135,22 @@ class SparkEnv (
    * (route a shuffle by its dependency) or `blockingShuffleManager` (the blocking manager
    * explicitly), so the routing decision is explicit at the call site.
    */
-  @deprecated("use shuffleManagerFor(dependency) to route a shuffle by type, or " +
-    "blockingShuffleManager for the blocking manager explicitly", "4.3.0")
+  @deprecated(
+    "use shuffleManagerFor(dependency) to route a shuffle by type, or " +
+      "blockingShuffleManager for the blocking manager explicitly",
+    "4.3.0")
   def shuffleManager: ShuffleManager = _blockingShuffleManager
 
   /**
    * The `ShuffleManager` that serves the given shuffle, chosen by dependency type: a
    * [[PipelinedShuffleDependency]] is served by the pipelined manager
-   * (spark.shuffle.manager.incremental, defaulting to the built-in streaming manager), every other
-   * [[ShuffleDependency]] by the blocking manager (spark.shuffle.manager). This is the single
-   * routing point for shuffle I/O; the decision is a pure function of the dependency, so the driver
-   * (at `registerShuffle`) and every executor (at `getWriter` / `getReader`) agree without any
-   * shared routing state or config re-read -- the dependency (a serialized field, deterministic on
-   * driver and executors) is always in hand at these sites, so no shuffleId -> manager tracking is
-   * needed.
+   * (spark.shuffle.manager.incremental, defaulting to the built-in streaming manager), every
+   * other [[ShuffleDependency]] by the blocking manager (spark.shuffle.manager). This is the
+   * single routing point for shuffle I/O; the decision is a pure function of the dependency, so
+   * the driver (at `registerShuffle`) and every executor (at `getWriter` / `getReader`) agree
+   * without any shared routing state or config re-read -- the dependency (a serialized field,
+   * deterministic on driver and executors) is always in hand at these sites, so no shuffleId ->
+   * manager tracking is needed.
    *
    * Whether a job may use a pipelined dependency at all is a separate, scheduler-level decision
    * (see the fail-fast checks in `DAGScheduler`); this method only picks the implementation.
@@ -182,8 +184,10 @@ class SparkEnv (
   /**
    * Wait for the ShuffleManager to be initialized within the specified timeout.
    *
-   * @param timeoutMs Maximum time to wait in milliseconds
-   * @return true if the ShuffleManager was initialized within the timeout, false otherwise
+   * @param timeoutMs
+   *   Maximum time to wait in milliseconds
+   * @return
+   *   true if the ShuffleManager was initialized within the timeout, false otherwise
    */
   private[spark] def waitForShuffleManagerInit(timeoutMs: Long): Boolean = {
     shuffleManagerInitLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
@@ -192,7 +196,8 @@ class SparkEnv (
   /**
    * Check if the ShuffleManager has been initialized.
    *
-   * @return true if the ShuffleManager is initialized, false otherwise
+   * @return
+   *   true if the ShuffleManager is initialized, false otherwise
    */
   private[spark] def isShuffleManagerInitialized: Boolean = {
     _blockingShuffleManager != null
@@ -208,34 +213,44 @@ class SparkEnv (
 
   /**
    * A key for PythonWorkerFactory cache.
-   * @param pythonExec The python executable to run the Python worker.
-   * @param workerModule The worker module to be called in the worker, e.g., "pyspark.worker".
-   * @param daemonModule The daemon module name to reuse the worker, e.g., "pyspark.daemon".
-   * @param envVars The environment variables for the worker.
+   * @param pythonExec
+   *   The python executable to run the Python worker.
+   * @param workerModule
+   *   The worker module to be called in the worker, e.g., "pyspark.worker".
+   * @param daemonModule
+   *   The daemon module name to reuse the worker, e.g., "pyspark.daemon".
+   * @param envVars
+   *   The environment variables for the worker.
    */
   private case class PythonWorkersKey(
-      pythonExec: String, workerModule: String, daemonModule: String, envVars: Map[String, String])
+      pythonExec: String,
+      workerModule: String,
+      daemonModule: String,
+      envVars: Map[String, String])
   private val pythonWorkers = mutable.HashMap[PythonWorkersKey, PythonWorkerFactory]()
 
   /**
-   * :: Experimental ::
-   * Dispatcher factory to generate UDF worker dispatchers
-   * using the new UDF framework proposed in SPARK-55278.
-   * Initialized on first use via [[getExternalUDFDispatcher]].
+   * :: Experimental :: Dispatcher factory to generate UDF worker dispatchers using the new UDF
+   * framework proposed in SPARK-55278. Initialized on first use via [[getExternalUDFDispatcher]].
    */
   // Guarded by this SparkEnv's monitor, together with isStopped.
   private var udfDispatcherManager: Option[UDFDispatcherManager] = None
 
+  /**
+   * Builds the factory for this env. Overridable from tests so the shutdown race can be exercised
+   * without a user-supplied class name.
+   */
+  private[spark] def createUDFDispatcherFactory(): UDFDispatcherFactory = {
+    SparkEnv.resolveUDFDispatcherFactory(conf)
+  }
+
   private def createUDFDispatcherManager(): UDFDispatcherManager = {
-    val factory = SparkEnv.resolveUDFDispatcherFactory(
-      conf, SparkContext.isDriver(executorId))
-    new UDFDispatcherManager(factory, new SparkUDFWorkerLogger())
+    new UDFDispatcherManager(createUDFDispatcherFactory(), new SparkUDFWorkerLogger())
   }
 
   /**
-   * :: Experimental ::
-   * Returns the [[WorkerDispatcher]] for the given worker
-   * specification via the [[UDFDispatcherManager]].
+   * :: Experimental :: Returns the [[WorkerDispatcher]] for the given worker specification via
+   * the [[UDFDispatcherManager]].
    */
   private[spark] def getExternalUDFDispatcher(
       workerSpec: UDFWorkerSpecification): WorkerDispatcher = {
@@ -263,9 +278,9 @@ class SparkEnv (
 
   /**
    * Versioned credential store for OIDC-based user credentials on both driver and executors.
-   * Updated via `UpdateUserCredentials` RPC and `TaskDescription` credential delivery.
-   * Read by connector-specific credential providers (e.g., SparkOidcAwsCredentialsProvider).
-   * Contains serialized `UserCredentials` (no raw identity token).
+   * Updated via `UpdateUserCredentials` RPC and `TaskDescription` credential delivery. Read by
+   * connector-specific credential providers (e.g., SparkOidcAwsCredentialsProvider). Contains
+   * serialized `UserCredentials` (no raw identity token).
    *
    * The version field is a monotonically increasing counter assigned by `UserCredentialManager`
    * on each credential renewal. It is used to guard against stale credentials from delayed
@@ -311,8 +326,10 @@ class SparkEnv (
             Utils.deleteRecursively(new File(path))
           } catch {
             case e: Exception =>
-              logWarning(log"Exception while deleting Spark temp dir: " +
-                log"${MDC(LogKeys.PATH, path)}", e)
+              logWarning(
+                log"Exception while deleting Spark temp dir: " +
+                  log"${MDC(LogKeys.PATH, path)}",
+                e)
           }
         case None => // We just need to delete tmp dir created by driver, so do nothing on executor
       }
@@ -327,8 +344,9 @@ class SparkEnv (
       useDaemon: Boolean): (PythonWorker, Option[PythonWorkerHandle]) = {
     synchronized {
       val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
-      val workerFactory = pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(
-          pythonExec, workerModule, daemonModule, envVars, useDaemon))
+      val workerFactory = pythonWorkers.getOrElseUpdate(
+        key,
+        new PythonWorkerFactory(pythonExec, workerModule, daemonModule, envVars, useDaemon))
       if (workerFactory.useDaemonEnabled != useDaemon) {
         throw SparkException.internalError("PythonWorkerFactory is already created with " +
           s"useDaemon = ${workerFactory.useDaemonEnabled}, but now is requested with " +
@@ -345,7 +363,11 @@ class SparkEnv (
       envVars: Map[String, String],
       useDaemon: Boolean): (PythonWorker, Option[PythonWorkerHandle]) = {
     createPythonWorker(
-      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, useDaemon)
+      pythonExec,
+      workerModule,
+      PythonWorkerFactory.defaultDaemonModule,
+      envVars,
+      useDaemon)
   }
 
   private[spark] def createPythonWorker(
@@ -354,8 +376,7 @@ class SparkEnv (
       daemonModule: String,
       envVars: Map[String, String]): (PythonWorker, Option[PythonWorkerHandle]) = {
     val useDaemon = conf.get(Python.PYTHON_USE_DAEMON)
-    createPythonWorker(
-      pythonExec, workerModule, daemonModule, envVars, useDaemon)
+    createPythonWorker(pythonExec, workerModule, daemonModule, envVars, useDaemon)
   }
 
   private[spark] def destroyPythonWorker(
@@ -376,7 +397,11 @@ class SparkEnv (
       envVars: Map[String, String],
       worker: PythonWorker): Unit = {
     destroyPythonWorker(
-      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
+      pythonExec,
+      workerModule,
+      PythonWorkerFactory.defaultDaemonModule,
+      envVars,
+      worker)
   }
 
   private[spark] def releasePythonWorker(
@@ -397,12 +422,18 @@ class SparkEnv (
       envVars: Map[String, String],
       worker: PythonWorker): Unit = {
     releasePythonWorker(
-      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
+      pythonExec,
+      workerModule,
+      PythonWorkerFactory.defaultDaemonModule,
+      envVars,
+      worker)
   }
 
   private[spark] def initializeShuffleManager(): Unit = {
-    Preconditions.checkState(null == _blockingShuffleManager,
-      "Shuffle manager already initialized to %s", _blockingShuffleManager)
+    Preconditions.checkState(
+      null == _blockingShuffleManager,
+      "Shuffle manager already initialized to %s",
+      _blockingShuffleManager)
     try {
       val isDriver = SparkContext.isDriver(executorId)
       // The blocking manager (spark.shuffle.manager) serves all regular, materialized shuffle
@@ -428,7 +459,8 @@ class SparkEnv (
         // Resolve short aliases ("sort", "tungsten-sort", "streaming") the same way the blocking
         // manager does, so spark.shuffle.manager.incremental accepts the same values.
         ShuffleManager.resolveShortName(conf.get(config.SHUFFLE_MANAGER_INCREMENTAL)),
-        conf, isDriver) match {
+        conf,
+        isDriver) match {
         case pipelined: PipelinedShuffleManager => pipelined
         case other =>
           throw new IllegalArgumentException(
@@ -455,7 +487,8 @@ class SparkEnv (
 
   /**
    * Initialize the StreamingShuffleOutputTracker if the configured shuffle manager requires one
-   * and one does not already exist. This method is idempotent -- calling it multiple times is safe.
+   * and one does not already exist. This method is idempotent -- calling it multiple times is
+   * safe.
    */
   private def initializeStreamingShuffleOutputTracker(): Unit = {
     if (_streamingShuffleOutputTracker.isDefined) {
@@ -496,8 +529,8 @@ class SparkEnv (
           tracker.asInstanceOf[StreamingShuffleOutputTrackerMaster],
           conf))
     } else {
-      tracker.trackerEndpoint = RpcUtils.makeDriverRef(
-        StreamingShuffleOutputTracker.ENDPOINT_NAME, conf, rpcEnv)
+      tracker.trackerEndpoint =
+        RpcUtils.makeDriverRef(StreamingShuffleOutputTracker.ENDPOINT_NAME, conf, rpcEnv)
     }
     _streamingShuffleOutputTracker = Some(tracker)
   }
@@ -505,8 +538,10 @@ class SparkEnv (
   private[spark] def initializeMemoryManager(
       numUsableCores: Int,
       offHeapAllowed: Boolean = true): Unit = {
-    Preconditions.checkState(null == memoryManager,
-      "Memory manager already initialized to %s", _memoryManager)
+    Preconditions.checkState(
+      null == memoryManager,
+      "Memory manager already initialized to %s",
+      _memoryManager)
     val memoryManagerConf = if (offHeapAllowed) {
       conf
     } else {
@@ -524,49 +559,93 @@ object SparkEnv extends Logging {
 
   private[spark] val driverSystemName = "sparkDriver"
   private[spark] val executorSystemName = "sparkExecutor"
+  private[spark] val REMOVED_DISPATCHER_FACTORY_KEY = "spark.udf.worker.dispatcherFactory"
 
   /**
-   * :: Experimental ::
-   * Resolves the [[UDFDispatcherFactory]] used to create dispatchers for external UDF
-   * workers (SPARK-55278), from `spark.udf.worker.dispatcherFactory`.
-   *
-   * The factory is loaded reflectively rather than named here: `core` depends on
-   * `udf-worker-proto` and `udf-worker-core` only, so that neither it nor its consumers
-   * carry a gRPC dependency. Every concrete dispatcher therefore lives in a module that
-   * core cannot reference at compile time, and the implementation has to be selected by
-   * configuration.
-   *
-   * When the config is unset the returned factory throws on first use rather than at
-   * SparkEnv creation, so applications that never run an external UDF are unaffected.
+   * Spark-owned implementation of direct worker creation. A string, not a compile-time reference:
+   * `core` depends on `udf-worker-proto` and `udf-worker-core` only, so the gRPC runtime stays
+   * out of this module. This is not a user extension point.
    */
-  private[spark] def resolveUDFDispatcherFactory(
-      conf: SparkConf,
-      isDriver: Boolean): UDFDispatcherFactory = {
-    conf.get(UDF.DISPATCHER_FACTORY) match {
-      case Some(className) =>
-        // Validate before constructing so that a misconfigured class is reported against
-        // the config key, rather than as a ClassCastException from the call site.
-        val cls = Utils.classForName[AnyRef](className, initialize = false)
-        if (!classOf[UDFDispatcherFactory].isAssignableFrom(cls)) {
-          throw new SparkException(
-            s"${UDF.DISPATCHER_FACTORY.key} is set to $className, which does not implement " +
-              s"${classOf[UDFDispatcherFactory].getName}.")
-        }
-        Utils.instantiateSerializerOrShuffleManager[UDFDispatcherFactory](
-          className, conf, isDriver)
+  private[spark] val DIRECT_DISPATCHER_FACTORY_CLASS =
+    "org.apache.spark.udf.worker.grpc.DirectDispatcherFactory"
 
-      case None =>
-        new UDFDispatcherFactory {
-          override def createDispatcher(
-              workerSpec: UDFWorkerSpecification,
-              logger: WorkerLogger): WorkerDispatcher = {
-            throw new UnsupportedOperationException(
-              "No UDF dispatcher factory is configured, so external UDF workers cannot be " +
-                s"created. Set ${UDF.DISPATCHER_FACTORY.key} to the name of a " +
-                s"${classOf[UDFDispatcherFactory].getName} implementation.")
-          }
-        }
+  /**
+   * :: Experimental :: Resolves the Spark-owned [[UDFDispatcherFactory]] for external UDF workers
+   * (SPARK-55278). The factory routes from the closed `worker` oneof in
+   * [[UDFWorkerSpecification]], rather than from a second configuration value.
+   *
+   * A user-supplied class name is never loaded. The old class-name setting was introduced after
+   * the last release and is rejected explicitly if present.
+   */
+  private[spark] def resolveUDFDispatcherFactory(conf: SparkConf): UDFDispatcherFactory = {
+    if (conf.contains(REMOVED_DISPATCHER_FACTORY_KEY)) {
+      throw new SparkException(
+        s"$REMOVED_DISPATCHER_FACTORY_KEY has been removed. Custom dispatcher classes " +
+          "are not supported; worker creation and runtime behavior belong in " +
+          "UDFWorkerSpecification.")
     }
+    new UDFDispatcherFactory {
+      override def createDispatcher(
+          workerSpec: UDFWorkerSpecification,
+          logger: WorkerLogger): WorkerDispatcher = {
+        workerSpec.getWorkerCase match {
+          case UDFWorkerSpecification.WorkerCase.DIRECT =>
+            loadBuiltInDispatcherFactory(
+              workerSpec.getWorkerCase.toString,
+              DIRECT_DISPATCHER_FACTORY_CLASS).createDispatcher(workerSpec, logger)
+          case workerCase =>
+            throw new UnsupportedOperationException(
+              s"No built-in UDF dispatcher is available for worker type $workerCase. " +
+                "Worker creation must be selected by UDFWorkerSpecification.worker.")
+        }
+      }
+    }
+  }
+
+  /**
+   * Loads a Spark-owned factory. A missing runtime is reported against the worker type, because
+   * `spark-udf-worker-grpc` is intentionally absent from the engine classpath until its gRPC
+   * dependencies are shaded.
+   */
+  private def loadBuiltInDispatcherFactory(
+      workerType: String,
+      className: String): UDFDispatcherFactory = {
+    val cls =
+      try {
+        Utils.classForName[AnyRef](className, initialize = false)
+      } catch {
+        case _: ClassNotFoundException =>
+          throw dispatcherRuntimeUnavailable(workerType, className)
+        case _: LinkageError =>
+          throw dispatcherRuntimeUnavailable(workerType, className)
+      }
+    if (!classOf[UDFDispatcherFactory].isAssignableFrom(cls)) {
+      throw new SparkException(
+        s"Worker type $workerType resolved to $className, which does not implement " +
+          s"${classOf[UDFDispatcherFactory].getName}.")
+    }
+    try {
+      cls.getConstructor().newInstance().asInstanceOf[UDFDispatcherFactory]
+    } catch {
+      case _: ClassNotFoundException =>
+        throw dispatcherRuntimeUnavailable(workerType, className)
+      case _: LinkageError =>
+        throw dispatcherRuntimeUnavailable(workerType, className)
+      case e: ReflectiveOperationException =>
+        throw new SparkException(
+          s"Could not construct the built-in dispatcher factory $className for worker type " +
+            s"$workerType.",
+          e)
+    }
+  }
+
+  private def dispatcherRuntimeUnavailable(
+      workerType: String,
+      className: String): SparkException = {
+    new SparkException(
+      s"Spark could not load the built-in dispatcher implementation ($className) for " +
+        s"worker type $workerType. The direct dispatcher comes from the " +
+        "spark-udf-worker-grpc module, which is not on the Spark runtime classpath yet.")
   }
 
   def set(e: SparkEnv): Unit = {
@@ -589,7 +668,8 @@ object SparkEnv extends Logging {
       listenerBus: LiveListenerBus,
       numCores: Int,
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
-    assert(conf.contains(DRIVER_HOST_ADDRESS),
+    assert(
+      conf.contains(DRIVER_HOST_ADDRESS),
       s"${DRIVER_HOST_ADDRESS.key} is not set on the driver!")
     assert(conf.contains(DRIVER_PORT), s"${DRIVER_PORT.key} is not set on the driver!")
     val bindAddress = conf.get(DRIVER_BIND_ADDRESS)
@@ -610,13 +690,12 @@ object SparkEnv extends Logging {
       numCores,
       ioEncryptionKey,
       listenerBus = listenerBus,
-      mockOutputCommitCoordinator = mockOutputCommitCoordinator
-    )
+      mockOutputCommitCoordinator = mockOutputCommitCoordinator)
   }
 
   /**
-   * Create a SparkEnv for an executor.
-   * In coarse-grained mode, the executor provides an RpcEnv that is already instantiated.
+   * Create a SparkEnv for an executor. In coarse-grained mode, the executor provides an RpcEnv
+   * that is already instantiated.
    */
   private[spark] def createExecutorEnv(
       conf: SparkConf,
@@ -626,16 +705,8 @@ object SparkEnv extends Logging {
       numCores: Int,
       ioEncryptionKey: Option[Array[Byte]],
       isLocal: Boolean): SparkEnv = {
-    val env = create(
-      conf,
-      executorId,
-      bindAddress,
-      hostname,
-      None,
-      isLocal,
-      numCores,
-      ioEncryptionKey
-    )
+    val env =
+      create(conf, executorId, bindAddress, hostname, None, isLocal, numCores, ioEncryptionKey)
     // Set the memory manager since it needs to be initialized explicitly
     env.initializeMemoryManager(numCores)
     SparkEnv.set(env)
@@ -671,14 +742,22 @@ object SparkEnv extends Logging {
 
     ioEncryptionKey.foreach { _ =>
       if (!(securityManager.isEncryptionEnabled() || securityManager.isSslRpcEnabled())) {
-        logWarning("I/O encryption enabled without RPC encryption: keys will be visible on the " +
-          "wire.")
+        logWarning(
+          "I/O encryption enabled without RPC encryption: keys will be visible on the " +
+            "wire.")
       }
     }
 
     val systemName = if (isDriver) driverSystemName else executorSystemName
-    val rpcEnv = RpcEnv.create(systemName, bindAddress, advertiseAddress, port.getOrElse(-1), conf,
-      securityManager, numUsableCores, !isDriver)
+    val rpcEnv = RpcEnv.create(
+      systemName,
+      bindAddress,
+      advertiseAddress,
+      port.getOrElse(-1),
+      conf,
+      securityManager,
+      numUsableCores,
+      !isDriver)
 
     // Figure out which port RpcEnv actually bound to in case the original port is 0 or occupied.
     if (isDriver) {
@@ -693,8 +772,8 @@ object SparkEnv extends Logging {
     val closureSerializer = new JavaSerializer(conf)
 
     def registerOrLookupEndpoint(
-        name: String, endpointCreator: => RpcEndpoint):
-      RpcEndpointRef = {
+        name: String,
+        endpointCreator: => RpcEndpoint): RpcEndpointRef = {
       if (isDriver) {
         logInfo(log"Registering ${MDC(LogKeys.ENDPOINT_NAME, name)}")
         rpcEnv.setupEndpoint(name, endpointCreator)
@@ -713,9 +792,12 @@ object SparkEnv extends Logging {
 
     // Have to assign trackerEndpoint after initialization as MapOutputTrackerEndpoint
     // requires the MapOutputTracker itself
-    mapOutputTracker.trackerEndpoint = registerOrLookupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+    mapOutputTracker.trackerEndpoint = registerOrLookupEndpoint(
+      MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(
-        rpcEnv, mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
+        rpcEnv,
+        mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
+        conf))
 
     val blockManagerPort = if (isDriver) {
       conf.get(DRIVER_BLOCK_MANAGER_PORT)
@@ -728,10 +810,13 @@ object SparkEnv extends Logging {
         conf,
         "shuffle",
         numUsableCores,
-        sslOptions = Some(securityManager.getRpcSSLOptions())
-      )
-      Some(new ExternalBlockStoreClient(transConf, securityManager,
-        securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT)))
+        sslOptions = Some(securityManager.getRpcSSLOptions()))
+      Some(
+        new ExternalBlockStoreClient(
+          transConf,
+          securityManager,
+          securityManager.isAuthenticationEnabled(),
+          conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT)))
     } else {
       None
     }
@@ -750,7 +835,8 @@ object SparkEnv extends Logging {
             externalShuffleClient
           } else {
             None
-          }, blockManagerInfo,
+          },
+          blockManagerInfo,
           mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
           isDriver)),
       registerOrLookupEndpoint(
@@ -760,8 +846,15 @@ object SparkEnv extends Logging {
       isDriver)
 
     val blockTransferService =
-      new NettyBlockTransferService(conf, securityManager, serializerManager, bindAddress,
-        advertiseAddress, blockManagerPort, numUsableCores, blockManagerMaster.driverEndpoint)
+      new NettyBlockTransferService(
+        conf,
+        securityManager,
+        serializerManager,
+        bindAddress,
+        advertiseAddress,
+        blockManagerPort,
+        numUsableCores,
+        blockManagerMaster.driverEndpoint)
 
     // NB: blockManager is not valid until initialize() is called later.
     //     SPARK-45762 introduces a change where the ShuffleManager is initialized later
@@ -799,7 +892,8 @@ object SparkEnv extends Logging {
     val outputCommitCoordinator = mockOutputCommitCoordinator.getOrElse {
       new OutputCommitCoordinator(conf, isDriver)
     }
-    val outputCommitCoordinatorRef = registerOrLookupEndpoint("OutputCommitCoordinator",
+    val outputCommitCoordinatorRef = registerOrLookupEndpoint(
+      "OutputCommitCoordinator",
       new OutputCommitCoordinatorEndpoint(rpcEnv, outputCommitCoordinator))
     outputCommitCoordinator.coordinatorRef = Some(outputCommitCoordinatorRef)
 
@@ -821,7 +915,8 @@ object SparkEnv extends Logging {
     // called, and we only need to do it for driver. Because driver may run as a service, and if we
     // don't delete this tmp dir when sc is stopped, then will create too many tmp dirs.
     if (isDriver) {
-      val sparkFilesDir = Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
+      val sparkFilesDir =
+        Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
       envInstance.driverTmpDir = Some(sparkFilesDir)
     }
 
@@ -846,8 +941,7 @@ object SparkEnv extends Logging {
     val jvmInformation = Seq(
       ("Java Version", s"$javaVersion ($javaVendor)"),
       ("Java Home", javaHome),
-      ("Scala Version", versionString)
-    ).sorted
+      ("Scala Version", versionString)).sorted
 
     // Spark properties
     // This includes the scheduling mode whether or not it is configured (used by SparkUI)
@@ -876,7 +970,9 @@ object SparkEnv extends Logging {
     // Add Hadoop properties, it will not ignore configs including in Spark. Some spark
     // conf starting with "spark.hadoop" may overwrite it.
     val hadoopProperties = hadoopConf.asScala
-      .map(entry => (entry.getKey, entry.getValue)).toSeq.sorted
+      .map(entry => (entry.getKey, entry.getValue))
+      .toSeq
+      .sorted
     Map[String, Seq[(String, String)]](
       "JVM Information" -> jvmInformation,
       "Spark Properties" -> sparkProperties.toImmutableArraySeq,
@@ -890,21 +986,23 @@ object SparkEnv extends Logging {
 /**
  * Container for versioned OIDC user credentials.
  *
- * @param version Monotonically increasing counter assigned by `UserCredentialManager` on each
- *                credential renewal. Used to prevent stale credentials from overwriting fresher
- *                ones on executors.
- * @param bytes   Serialized `UserCredentials` payload (no raw identity token).
+ * @param version
+ *   Monotonically increasing counter assigned by `UserCredentialManager` on each credential
+ *   renewal. Used to prevent stale credentials from overwriting fresher ones on executors.
+ * @param bytes
+ *   Serialized `UserCredentials` payload (no raw identity token).
  */
 private[spark] case class VersionedCredentials(version: Long, bytes: Array[Byte])
 
 private[spark] object VersionedCredentials {
+
   /**
-   * Atomically update a credential store only if the given version is strictly newer
-   * than what is currently stored. This prevents stale credentials (e.g., from a delayed
-   * `TaskDescription`) from overwriting fresher credentials delivered via RPC broadcast.
+   * Atomically update a credential store only if the given version is strictly newer than what is
+   * currently stored. This prevents stale credentials (e.g., from a delayed `TaskDescription`)
+   * from overwriting fresher credentials delivered via RPC broadcast.
    *
-   * Uses `AtomicReference.updateAndGet` to ensure the check-and-set is atomic even
-   * when called concurrently from multiple task threads and the RPC dispatcher thread.
+   * Uses `AtomicReference.updateAndGet` to ensure the check-and-set is atomic even when called
+   * concurrently from multiple task threads and the RPC dispatcher thread.
    */
   def updateIfNewer(
       store: AtomicReference[VersionedCredentials],
