@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{CLASS_NAME, COLUMN_NAMES}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, COLUMN_NAMES, RELATION_NAME}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{NamedExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -49,17 +49,19 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
         if d.keyGroupedPartitioning.isEmpty =>
       val catalystPartitioning = scan.outputPartitioning() match {
         case kgp: KeyGroupedPartitioning =>
-          val unresolvedColumns = unresolvableColumns(kgp.keys().toImmutableArraySeq, relation)
+          val keys = kgp.keys()
+          val unresolvedColumns = unresolvableColumns(keys.toImmutableArraySeq, relation)
           val partitioning = if (unresolvedColumns.nonEmpty) {
             logWarning(
-              log"Spark ignores the reported ${MDC(CLASS_NAME, kgp.getClass.getSimpleName)} " +
-                log"because the partition key columns cannot be resolved: " +
-                log"${MDC(COLUMN_NAMES, unresolvedColumns.mkString(", "))}. " +
+              log"Spark ignores the KeyGroupedPartitioning reported by " +
+                log"${MDC(RELATION_NAME, relation.name)} (scan " +
+                log"${MDC(CLASS_NAME, scan.getClass.getName)}) because the partition key columns " +
+                log"cannot be resolved: ${MDC(COLUMN_NAMES, unresolvedColumns.mkString(", "))}. " +
                 log"Storage-partitioned join will not be applied for this scan.")
             None
           } else {
             sequenceToOption(
-              kgp.keys().map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog))
+              keys.map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog))
                 .toImmutableArraySeq)
           }
           // Keep the partitioning when at least one of its keys is still in the scan output: the
@@ -87,12 +89,15 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
   private def ordering(plan: LogicalPlan) = plan.transformDownWithPruning(
       _.containsPattern(DATA_SOURCE_V2_SCAN_RELATION)) {
     case d @ ExtractV2ScanInfo(relation, scan: SupportsReportOrdering, _) =>
-      val unresolvedColumns =
-        unresolvableColumns(scan.outputOrdering().toImmutableArraySeq, relation)
+      val reportedOrdering = scan.outputOrdering()
+      val unresolvedColumns = unresolvableColumns(reportedOrdering.toImmutableArraySeq, relation)
       if (unresolvedColumns.nonEmpty) {
         logWarning(
-          log"Spark ignores the reported ordering because the ordering columns cannot be " +
-            log"resolved: ${MDC(COLUMN_NAMES, unresolvedColumns.mkString(", "))}.")
+          log"Spark ignores the ordering reported by ${MDC(RELATION_NAME, relation.name)} " +
+            log"(scan ${MDC(CLASS_NAME, scan.getClass.getName)}) because the ordering columns " +
+            log"cannot be resolved: ${MDC(COLUMN_NAMES, unresolvedColumns.mkString(", "))}.")
+        // With no reported ordering, DataSourceV2ScanExecBase.outputOrdering may still derive one
+        // from a kept key-grouped partitioning, which does not depend on the dropped report.
         d.copy(ordering = None)
       } else {
         // The ordering is kept as reported, even where it references columns pruned out of the
@@ -100,7 +105,7 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
         // pruned column, which still hold. `DataSourceV2ScanRelation.doCanonicalize` and
         // `DataSourceV2ScanExecBase.outputOrdering` restrict it to the scan output instead.
         val ordering =
-          V2ExpressionUtils.toCatalystOrdering(scan.outputOrdering(), relation, relation.funCatalog)
+          V2ExpressionUtils.toCatalystOrdering(reportedOrdering, relation, relation.funCatalog)
         d.copy(ordering = Some(ordering))
       }
   }
@@ -108,17 +113,23 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
   private def unresolvableColumns(
       exprs: Seq[V2Expression],
       relation: LogicalPlan): Seq[String] = {
+    // This is not `V2Expression.references()` because `ApplyTransform` and `BucketTransform`
+    // override it to return only their top-level arguments, which would miss `f(g(missing))`.
     def references(expr: V2Expression): Seq[NamedReference] = expr match {
       case ref: NamedReference => Seq(ref)
       case other => other.children().toImmutableArraySeq.flatMap(references)
     }
-    exprs.flatMap(references).distinct.filter { ref =>
+    exprs.flatMap(references).distinct.flatMap { ref =>
       try {
-        V2ExpressionUtils.resolveRefOpt[NamedExpression](ref, relation).isEmpty
+        if (V2ExpressionUtils.resolveRefOpt[NamedExpression](ref, relation).isDefined) {
+          None
+        } else {
+          Some(ref.describe())
+        }
       } catch {
         // A missing nested field or an ambiguous name throws instead of returning None.
-        case _: AnalysisException => true
+        case e: AnalysisException => Some(s"${ref.describe()} (${e.getCondition})")
       }
-    }.map(_.describe())
+    }
   }
 }

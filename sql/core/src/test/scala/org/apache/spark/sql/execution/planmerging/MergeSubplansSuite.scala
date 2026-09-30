@@ -2927,9 +2927,10 @@ class MergeSubplansSuite extends PlanTest {
 
   test("SPARK-40259: merge DSv2 scans that report empty key-grouped partitioning or ordering") {
     // A source implementing SupportsReportPartitioning/SupportsReportOrdering but reporting nothing
-    // yields Some(Nil), not None (V2ScanPartitioningAndOrdering sets the field unconditionally). An
-    // empty report carries no partitioning/ordering to drop, so the merge should still proceed --
-    // the gate tests the inner Seq, not the Option. The fused plan is the plain column union.
+    // yields Some(Nil), not None (V2ScanPartitioningAndOrdering sets the field unless a reported
+    // column cannot be resolved). An empty report carries no partitioning/ordering to drop, so the
+    // merge should still proceed -- the gate tests the inner Seq, not the Option. The fused plan is
+    // the plain column union.
     def assertMerges(withEmptyField: DataSourceV2ScanRelation => DataSourceV2ScanRelation): Unit = {
       val sub1 = ScalarSubquery(withEmptyField(v2ScanReading("a")).groupBy()(sum($"a").as("sum_a")))
       val sub2 = ScalarSubquery(withEmptyField(v2ScanReading("b")).groupBy()(sum($"b").as("sum_b")))

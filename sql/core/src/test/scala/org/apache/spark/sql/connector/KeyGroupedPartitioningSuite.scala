@@ -17,14 +17,13 @@
 package org.apache.spark.sql.connector
 
 import java.sql.Timestamp
-import java.util
 import java.util.Collections
 
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.rdd.SortedMergeCoalescedRDD
-import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, ExprId, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
@@ -3403,97 +3402,6 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  private val customReportingCatalogName = "custom_reporting_cat"
-
-  private def withCustomReportingTable(f: CustomReportingCatalog => Unit): Unit = {
-    spark.conf.set(s"spark.sql.catalog.$customReportingCatalogName",
-      classOf[CustomReportingCatalog].getName)
-    val reportingCatalog = spark.sessionState.catalogManager.catalog(customReportingCatalogName)
-      .asInstanceOf[CustomReportingCatalog]
-    try {
-      val reportingColumns = Array(
-        Column.create("id", IntegerType),
-        Column.create("data", StringType),
-        Column.create("s", new StructType().add("x", IntegerType)))
-      createTable(table, reportingColumns, Array(identity("id")), catalog = reportingCatalog)
-      sql(s"INSERT INTO $customReportingCatalogName.ns.$table VALUES " +
-          "(1, 'aa', named_struct('x', 10)), (2, 'bb', named_struct('x', 20))")
-      createTable(table, columns, Array(identity("id")))
-      sql(s"INSERT INTO testcat.ns.$table VALUES " +
-          "(1, 'cc', cast('2020-01-03' as timestamp)), " +
-          "(2, 'dd', cast('2020-01-04' as timestamp))")
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-        f(reportingCatalog)
-      }
-    } finally {
-      reportingCatalog.reportedKeys = Seq.empty
-      reportingCatalog.reportedOrdering = Seq.empty
-      reportingCatalog.clearTables()
-      spark.conf.unset(s"spark.sql.catalog.$customReportingCatalogName")
-    }
-  }
-
-  private def customReportingJoin(warningText: String): (SparkPlan, BatchScanExec, Seq[String]) = {
-    val df = sql(
-      s"""SELECT t1.data, t2.data FROM $customReportingCatalogName.ns.$table t1
-         |JOIN testcat.ns.$table t2 ON t1.id = t2.id
-         |""".stripMargin)
-    val logAppender = new LogAppender("custom reported partitioning or ordering")
-    withLogAppender(logAppender, level = Some(Level.WARN)) {
-      checkAnswer(df, Seq(Row("aa", "cc"), Row("bb", "dd")))
-    }
-    val warnings = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
-      .filter(_.contains(warningText)).toSeq
-    val plan = df.queryExecution.executedPlan
-    val reportingScans = collectScans(plan).filter(_.scan.isInstanceOf[CustomReportingScan])
-    assert(reportingScans.length == 1)
-    (plan, reportingScans.head, warnings)
-  }
-
-  test("SPARK-59721: an unresolvable reported partition key falls back to unknown partitioning") {
-    val nestedTransform =
-      ApplyTransform("f", Seq(ApplyTransform("g", Seq(FieldReference("missing")))))
-    val cases = Seq[(Seq[Expression], Option[String])](
-      (Seq(identity("id")), None),
-      (Seq(bucket(4, "missing")), Some("missing")),
-      (Seq(nestedTransform), Some("missing")),
-      (Seq(identity("id"), identity("missing")), Some("missing")),
-      (Seq(identity("missing"), bucket(4, "missing")), Some("missing")),
-      (Seq(identity("s.missing")), Some("s.missing")))
-    withCustomReportingTable { reportingCatalog =>
-      cases.foreach { case (keys, unresolvedColumns) =>
-        reportingCatalog.reportedKeys = keys
-        val (plan, reportingScan, warnings) =
-          customReportingJoin("partition key columns cannot be resolved")
-        val keysString = keys.map(_.describe()).mkString(", ")
-        unresolvedColumns match {
-          case Some(columnsString) =>
-            assert(warnings.nonEmpty, s"no warning for keys [$keysString]")
-            assert(warnings.forall(_.contains(s"resolved: $columnsString.")), warnings)
-            assert(reportingScan.keyGroupedPartitioning.isEmpty, keysString)
-            assert(collectShuffles(plan).nonEmpty, keysString)
-          case None =>
-            assert(warnings.isEmpty, warnings)
-            assert(reportingScan.keyGroupedPartitioning.isDefined, keysString)
-        }
-      }
-    }
-  }
-
-  test("SPARK-59721: an unresolvable reported ordering column is ignored") {
-    withCustomReportingTable { reportingCatalog =>
-      reportingCatalog.reportedKeys = Seq(identity("id"))
-      reportingCatalog.reportedOrdering = Seq(
-        sort(FieldReference("missing"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
-      val (_, reportingScan, warnings) =
-        customReportingJoin("ordering columns cannot be resolved")
-      assert(warnings.nonEmpty)
-      assert(warnings.forall(_.contains("resolved: missing.")), warnings)
-      assert(reportingScan.ordering.isEmpty)
-      assert(reportingScan.keyGroupedPartitioning.isDefined)
-    }
-  }
-
   test("SPARK-59248: self-join with a pruned partition key keeps plans canonicalizable") {
     // Same-table join where the extra partition key `data` is pruned from both scan instances. This
     // exercises canonicalization/plan-equality over scans whose reported partitioning carries a key
@@ -3641,6 +3549,139 @@ class KeyGroupedPartitioningSuite
     assert(smjs.head.children.flatMap(collect(_) { case s: SortExec => s }).isEmpty)
     checkAnswer(df, Seq(Row(1, "aa", "aa"), Row(1, "aa", "bb"), Row(1, "bb", "aa"),
       Row(1, "bb", "bb"), Row(2, "cc", "cc")))
+  }
+
+  private val customReportingCatalogName = "custom_reporting_cat"
+  private val customReportingTableName = s"$customReportingCatalogName.ns.$table"
+
+  private def withCustomReportingTable(f: CustomReportingCatalog => Unit): Unit = {
+    spark.conf.set(s"spark.sql.catalog.$customReportingCatalogName",
+      classOf[CustomReportingCatalog].getName)
+    val reportingCatalog = spark.sessionState.catalogManager.catalog(customReportingCatalogName)
+      .asInstanceOf[CustomReportingCatalog]
+    try {
+      val reportingColumns = Array(
+        Column.create("id", IntegerType),
+        Column.create("data", StringType),
+        Column.create("s", new StructType().add("x", IntegerType)))
+      createTable(table, reportingColumns, Array(identity("id")), catalog = reportingCatalog)
+      sql(s"INSERT INTO $customReportingCatalogName.ns.$table VALUES " +
+          "(1, 'aa', named_struct('x', 10)), (2, 'bb', named_struct('x', 20))")
+      createTable(table, columns, Array(identity("id")))
+      sql(s"INSERT INTO testcat.ns.$table VALUES " +
+          "(1, 'cc', cast('2020-01-03' as timestamp)), " +
+          "(2, 'dd', cast('2020-01-04' as timestamp))")
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        f(reportingCatalog)
+      }
+    } finally {
+      reportingCatalog.reportedKeys = Seq.empty
+      reportingCatalog.reportedOrdering = Seq.empty
+      reportingCatalog.clearTables()
+      spark.conf.unset(s"spark.sql.catalog.$customReportingCatalogName")
+    }
+  }
+
+  private def customReportingJoinDf(): DataFrame = sql(
+    s"""SELECT t1.data, t2.data FROM $customReportingCatalogName.ns.$table t1
+       |JOIN testcat.ns.$table t2 ON t1.id = t2.id
+       |""".stripMargin)
+
+  private def customReportingJoin(warningText: String): (SparkPlan, BatchScanExec, Seq[String]) = {
+    val df = customReportingJoinDf()
+    val logAppender = new LogAppender("custom reported partitioning or ordering")
+    withLogAppender(logAppender, level = Some(Level.WARN)) {
+      checkAnswer(df, Seq(Row("aa", "cc"), Row("bb", "dd")))
+    }
+    val warnings = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .filter(_.contains(warningText)).toSeq
+    val plan = df.queryExecution.executedPlan
+    val reportingScans = collectScans(plan).filter(_.scan.isInstanceOf[CustomReportingScan])
+    assert(reportingScans.length == 1)
+    (plan, reportingScans.head, warnings)
+  }
+
+  test("SPARK-59721: an unresolvable reported partition key falls back to unknown partitioning") {
+    val nestedTransform =
+      ApplyTransform("f", Seq(ApplyTransform("g", Seq(FieldReference("missing")))))
+    // CustomReportingCatalog is not a FunctionCatalog, so a `bucket` key would be dropped even with
+    // a resolvable column. The warning assertion shows the unresolvable column is what drops it.
+    val cases = Seq[(Seq[Expression], Option[String])](
+      (Seq(identity("id")), None),
+      (Seq(bucket(4, "missing")), Some("missing")),
+      (Seq(nestedTransform), Some("missing")),
+      (Seq(identity("id"), identity("missing")), Some("missing")),
+      (Seq(identity("missing"), bucket(4, "missing")), Some("missing")),
+      (Seq(identity("s.missing")), Some("s.missing (FIELD_NOT_FOUND)")))
+    withCustomReportingTable { reportingCatalog =>
+      cases.foreach { case (keys, unresolvedColumns) =>
+        reportingCatalog.reportedKeys = keys
+        val (plan, reportingScan, warnings) =
+          customReportingJoin("partition key columns cannot be resolved")
+        val keysString = keys.map(_.describe()).mkString(", ")
+        unresolvedColumns match {
+          case Some(columnsString) =>
+            assert(warnings.nonEmpty, s"no warning for keys [$keysString]")
+            assert(warnings.forall(_.contains(s"reported by $customReportingTableName ")), warnings)
+            assert(warnings.forall(_.contains(classOf[CustomReportingScan].getName)), warnings)
+            assert(warnings.forall(_.contains(s"resolved: $columnsString.")), warnings)
+            assert(reportingScan.keyGroupedPartitioning.isEmpty, keysString)
+            assert(collectShuffles(plan).nonEmpty, keysString)
+          case None =>
+            assert(warnings.isEmpty, warnings)
+            assert(reportingScan.keyGroupedPartitioning.isDefined, keysString)
+            assert(collectShuffles(plan).isEmpty, keysString)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59721: an unresolvable reported ordering column is ignored") {
+    withCustomReportingTable { reportingCatalog =>
+      withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true") {
+        reportingCatalog.reportedKeys = Seq(identity("id"))
+        reportingCatalog.reportedOrdering = Seq(
+          sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+        val (_, keptScan, keptWarnings) =
+          customReportingJoin("ordering columns cannot be resolved")
+        assert(keptWarnings.isEmpty, keptWarnings)
+        assert(keptScan.ordering.map(_.map(_.child.references.map(_.name).toSeq)) ==
+          Some(Seq(Seq("id"))))
+
+        reportingCatalog.reportedOrdering = Seq(
+          sort(FieldReference("missing"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+        val (_, reportingScan, warnings) =
+          customReportingJoin("ordering columns cannot be resolved")
+        assert(warnings.nonEmpty)
+        assert(warnings.forall(_.contains(s"reported by $customReportingTableName ")), warnings)
+        assert(warnings.forall(_.contains(classOf[CustomReportingScan].getName)), warnings)
+        assert(warnings.forall(_.contains("resolved: missing.")), warnings)
+        assert(reportingScan.ordering.isEmpty)
+        assert(reportingScan.keyGroupedPartitioning.isDefined)
+        val derivedOrdering = reportingScan.outputOrdering.map { o =>
+          (o.child.references.map(_.name).toSeq, o.direction)
+        }
+        assert(derivedOrdering == Seq((Seq("id"), Ascending)))
+      }
+    }
+  }
+
+  test("SPARK-59721: a reported partition key that cannot be converted still fails") {
+    val cases = Seq(
+      (new GeneralScalarExpression("+", Array[Expression](FieldReference("id"), literal(1))),
+        "id + 1"),
+      (ApplyTransform("f", Seq(ApplyTransform("g", Seq(FieldReference("id"))))), "g(id)"))
+    withCustomReportingTable { reportingCatalog =>
+      cases.foreach { case (key, expr) =>
+        reportingCatalog.reportedKeys = Seq(key)
+        checkError(
+          exception = intercept[AnalysisException] {
+            customReportingJoinDf().collect()
+          },
+          condition = "_LEGACY_ERROR_TEMP_3054",
+          parameters = Map("expr" -> expr))
+      }
+    }
   }
 
   test("SPARK-47094: SPJ: Support compatible buckets") {
@@ -9430,7 +9471,7 @@ class CustomReportingCatalog extends InMemoryTableCatalog {
       name: String,
       columns: Array[Column],
       partitioning: Array[Transform],
-      properties: util.Map[String, String],
+      properties: java.util.Map[String, String],
       constraints: Array[Constraint],
       distribution: Distribution,
       ordering: Array[SortOrder],
