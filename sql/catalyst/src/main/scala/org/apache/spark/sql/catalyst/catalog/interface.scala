@@ -1184,8 +1184,7 @@ case class HiveTableRelation(
     dataCols: Seq[AttributeReference],
     partitionCols: Seq[AttributeReference],
     tableStats: Option[Statistics] = None,
-    @transient prunedPartitions: Option[Seq[CatalogTablePartition]] = None,
-    charVarcharScanMode: Option[CharVarcharScanMode] = None)
+    @transient prunedPartitions: Option[Seq[CatalogTablePartition]] = None)
   extends LeafNode with MultiInstanceRelation with NormalizeableRelation {
   assert(tableMeta.identifier.database.isDefined,
     "Table identifier " + tableMeta.identifier.quotedString + " is missing database name. " +
@@ -1197,11 +1196,6 @@ case class HiveTableRelation(
   override def output: Seq[AttributeReference] = dataCols ++ partitionCols
 
   def isPartitioned: Boolean = partitionCols.nonEmpty
-
-  def hasCharVarchar: Boolean = output.exists { attr =>
-    CharVarcharUtils.hasCharVarchar(attr.dataType) ||
-      CharVarcharUtils.getRawType(attr.metadata).exists(CharVarcharUtils.hasCharVarchar)
-  }
 
   override def doCanonicalize(): HiveTableRelation = copy(
     tableMeta = CatalogTable.normalize(tableMeta),

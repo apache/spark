@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CaseInsensitiveMap, CharVarcharScanMode, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils, SupportsArchiveFormat}
@@ -427,30 +427,16 @@ object OrcUtils extends Logging {
    * Given a `StructType` object, this methods converts it to corresponding string representation
    * in ORC.
    */
-  def getOrcSchemaString(dt: DataType): String = {
-    getOrcSchemaString(dt, CharVarcharScanMode(SQLConf.get.charVarcharStandardSemantics))
-  }
-
-  private def getOrcSchemaString(
-      dt: DataType,
-      charVarcharScanMode: CharVarcharScanMode): String = dt match {
+  def getOrcSchemaString(dt: DataType): String = dt match {
     case s: StructType =>
       val fieldTypes = s.fields.map { f =>
-        s"${quoteIdentifier(f.name)}:" +
-          s"${getOrcSchemaString(f.dataType, charVarcharScanMode)}"
+        s"${quoteIdentifier(f.name)}:${getOrcSchemaString(f.dataType)}"
       }
       s"struct<${fieldTypes.mkString(",")}>"
     case a: ArrayType =>
-      s"array<${getOrcSchemaString(a.elementType, charVarcharScanMode)}>"
+      s"array<${getOrcSchemaString(a.elementType)}>"
     case m: MapType =>
-      s"map<${getOrcSchemaString(m.keyType, charVarcharScanMode)}," +
-        s"${getOrcSchemaString(m.valueType, charVarcharScanMode)}>"
-    // Under standard semantics, keep Spark responsible for CHAR/VARCHAR assignment and scan
-    // checks. Native ORC would truncate or pad before Spark can validate the original value.
-    // Preserve-only mode retains the native constrained schema and its legacy enforcement.
-    case _: CharType | _: VarcharType
-        if charVarcharScanMode == CharVarcharScanMode.SparkStandard =>
-      StringType.catalogString
+      s"map<${getOrcSchemaString(m.keyType)},${getOrcSchemaString(m.valueType)}>"
     case _: DayTimeIntervalType | _: TimestampNTZType => LongType.catalogString
     case _: YearMonthIntervalType => IntegerType.catalogString
     // Framework types (TimeType, nanosecond timestamps) supply their own ORC schema string.
@@ -533,6 +519,27 @@ object OrcUtils extends Logging {
   }
 
   /**
+   * Maps CHAR/VARCHAR to STRING for ORC reader schema only. Unlike
+   * [[CharVarcharUtils.replaceCharVarcharWithString]], this always rewrites, including when
+   * first-class CHAR/VARCHAR types are enabled.
+   */
+  private def orcReadSchemaWithoutCharVarchar(dt: DataType): DataType = dt match {
+    case s: StructType =>
+      StructType(s.fields.map { f =>
+        f.copy(dataType = orcReadSchemaWithoutCharVarchar(f.dataType))
+      })
+    case a: ArrayType =>
+      ArrayType(orcReadSchemaWithoutCharVarchar(a.elementType), a.containsNull)
+    case m: MapType =>
+      MapType(
+        orcReadSchemaWithoutCharVarchar(m.keyType),
+        orcReadSchemaWithoutCharVarchar(m.valueType),
+        m.valueContainsNull)
+    case _: CharType | _: VarcharType => StringType
+    case other => other
+  }
+
+  /**
    * Returns the result schema to read from ORC file. In addition, It sets
    * the schema string to 'orc.mapred.input.schema' so ORC reader can use later.
    *
@@ -542,8 +549,6 @@ object OrcUtils extends Logging {
    * @param resultSchema Result data schema created after pruning cols.
    * @param partitionSchema Schema of partitions.
    * @param conf Hadoop Configuration.
-   * @param charVarcharScanMode This mode is bound during analysis when first-class types are
-   *                            enabled.
    * @return Returns the result schema as string.
    */
   def orcResultSchemaString(
@@ -551,16 +556,16 @@ object OrcUtils extends Logging {
       dataSchema: StructType,
       resultSchema: StructType,
       partitionSchema: StructType,
-      conf: Configuration,
-      charVarcharScanMode: Option[CharVarcharScanMode]): String = {
-    val mode = charVarcharScanMode.getOrElse(CharVarcharScanMode.PreserveNative)
-    val resultSchemaString = if (canPruneCols) {
-      OrcUtils.getOrcSchemaString(resultSchema, mode)
+      conf: Configuration): String = {
+    val readSchema = if (canPruneCols) {
+      resultSchema
     } else {
-      OrcUtils.getOrcSchemaString(
-        StructType(dataSchema.fields ++ partitionSchema.fields),
-        mode)
+      StructType(dataSchema.fields ++ partitionSchema.fields)
     }
+    // First-class CHAR/VARCHAR must not be published as ORC char(n)/varchar(n) on read:
+    // that asks ORC to silently clip STRING columns before Spark can check length.
+    val resultSchemaString =
+      OrcUtils.getOrcSchemaString(orcReadSchemaWithoutCharVarchar(readSchema))
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
     resultSchemaString
   }

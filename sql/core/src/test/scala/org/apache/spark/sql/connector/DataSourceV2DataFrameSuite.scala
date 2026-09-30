@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, DataSourceV2ScanRelation, ReplaceTableExec}
 import org.apache.spark.sql.functions.{lit, sum}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType, VarcharType}
+import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
@@ -3886,46 +3886,6 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-58814: V2 temp view keeps creation-time CHAR/VARCHAR policy") {
-    val t = "testcat.ns1.ns2.tbl"
-    val preserveConf = Seq(
-      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
-    val standardConf = Seq(
-      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
-    withTable(t) {
-      withTempView("v") {
-        withSQLConf(preserveConf: _*) {
-          sql(s"CREATE TABLE $t (v VARCHAR(4)) USING foo")
-        }
-        withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
-          sql(s"INSERT INTO $t VALUES ('abcdef')")
-        }
-        withSQLConf(standardConf: _*) {
-          spark.table(t).select("v").createOrReplaceTempView("v")
-        }
-        withSQLConf(preserveConf: _*) {
-          checkError(
-            exception = intercept[SparkRuntimeException] {
-              spark.table("v").collect()
-            },
-            condition = "EXCEED_LIMIT_LENGTH",
-            parameters = Map("limit" -> "4"))
-        }
-      }
-      withTempView("v_native") {
-        withSQLConf(preserveConf: _*) {
-          spark.table(t).select("v").createOrReplaceTempView("v_native")
-        }
-        withSQLConf(standardConf: _*) {
-          // Cast so collect does not run session write-side VARCHAR checks on the output.
-          checkAnswer(spark.table("v_native").selectExpr("CAST(v AS STRING)"), Row("abcdef"))
-        }
-      }
-    }
-  }
-
   test("SPARK-53924: temp view on DSv2 table detects VARCHAR/CHAR type changes") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -4184,78 +4144,6 @@ class DataSourceV2DataFrameSuite
       // verify cache reflects latest schema and data
       assertCached(spark.table(t))
       checkAnswer(spark.table(t), Seq(Row(1, 10, null), Row(2, 20, null), Row(3, 30, null)))
-    }
-  }
-
-  test("SPARK-54424: refresh CHAR/VARCHAR table cache on column added") {
-    val t = "testcat.ns1.ns2.tbl"
-    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
-    withSQLConf(
-        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
-      withTable(t) {
-        sql(s"CREATE TABLE $t (id INT, data VARCHAR(4)) USING foo")
-        sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
-        spark.table(t).cache()
-        assertCached(spark.table(t))
-        checkAnswer(spark.table(t), Seq(Row(1, "a"), Row(2, "b")))
-
-        val change = TableChange.addColumn(Array("category"), StringType, true)
-        catalog("testcat").alterTable(ident, change)
-        spark.sql(s"REFRESH TABLE $t")
-
-        assert(spark.sharedState.cacheManager.numCachedEntries == 1)
-        assertCached(spark.table(t))
-        checkAnswer(spark.table(t), Seq(Row(1, "a", null), Row(2, "b", null)))
-      }
-    }
-  }
-
-  test("SPARK-54424: refresh CHAR/VARCHAR table cache on column removed") {
-    val t = "testcat.ns1.ns2.tbl"
-    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
-    withSQLConf(
-        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
-      withTable(t) {
-        sql(s"CREATE TABLE $t (id INT, data VARCHAR(4), category STRING) USING foo")
-        sql(s"INSERT INTO $t VALUES (1, 'a', 'A'), (2, 'b', 'B')")
-        spark.table(t).cache()
-        assertCached(spark.table(t))
-        checkAnswer(spark.table(t), Seq(Row(1, "a", "A"), Row(2, "b", "B")))
-
-        val change = TableChange.deleteColumn(Array("category"), false)
-        catalog("testcat").alterTable(ident, change)
-        spark.sql(s"REFRESH TABLE $t")
-
-        assert(spark.sharedState.cacheManager.numCachedEntries == 1)
-        assertCached(spark.table(t))
-        checkAnswer(spark.table(t), Seq(Row(1, "a"), Row(2, "b")))
-      }
-    }
-  }
-
-  test("SPARK-54424: refresh CHAR/VARCHAR table cache on type change") {
-    val t = "testcat.ns1.ns2.tbl"
-    withSQLConf(
-        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
-      withTable(t) {
-        sql(s"CREATE TABLE $t (id INT, data VARCHAR(4)) USING foo")
-        sql(s"INSERT INTO $t VALUES (1, 'a')")
-        spark.table(t).cache()
-        assertCached(spark.table(t))
-        checkAnswer(spark.table(t), Seq(Row(1, "a")))
-
-        sql(s"ALTER TABLE $t ALTER COLUMN data TYPE VARCHAR(8)")
-        sql(s"INSERT INTO $t VALUES (2, 'abcdef')")
-        spark.sql(s"REFRESH TABLE $t")
-
-        assert(spark.sharedState.cacheManager.numCachedEntries == 1)
-        assertCached(spark.table(t))
-        assert(spark.table(t).schema("data").dataType === VarcharType(8))
-        checkAnswer(spark.table(t), Seq(Row(1, "a"), Row(2, "abcdef")))
-      }
     }
   }
 

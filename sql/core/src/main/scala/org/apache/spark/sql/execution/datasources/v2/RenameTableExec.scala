@@ -23,24 +23,23 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
-import org.apache.spark.sql.execution.TableCacheDescriptor
 import org.apache.spark.storage.StorageLevel
 
 /**
  * Physical plan node for renaming a table.
  */
-private[sql] case class RenameTableExec(
+case class RenameTableExec(
     catalog: TableCatalog,
     oldIdent: Identifier,
     newIdent: Identifier,
-    invalidateCache: () => Seq[TableCacheDescriptor],
+    invalidateCache: () => Option[StorageLevel],
     cacheTable: (SparkSession, LogicalPlan, Option[String], StorageLevel) => Unit)
   extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val oldCaches = invalidateCache()
+    val optOldStorageLevel = invalidateCache()
     catalog.invalidateTable(oldIdent)
 
     // If new identifier consists of a table name only, the table should be renamed in place.
@@ -50,29 +49,13 @@ private[sql] case class RenameTableExec(
     } else newIdent
     catalog.renameTable(oldIdent, qualifiedNewIdent)
 
-    val table = if (oldCaches.nonEmpty) {
-      Some(catalog.loadTable(qualifiedNewIdent))
-    } else {
-      None
-    }
-    oldCaches.foreach { cache =>
-      val rewritten = cache.plan.transformUp {
-        case relation: DataSourceV2Relation
-            if relation.catalog.contains(catalog) && relation.identifier.contains(oldIdent) =>
-          val restored = relation.copy(
-            table = table.get,
-            catalog = Some(catalog),
-            identifier = Some(qualifiedNewIdent))
-          restored.copyTagsFrom(relation)
-          restored.setAnalyzed()
-          restored
-      }
+    optOldStorageLevel.foreach { oldStorageLevel =>
+      val tbl = catalog.loadTable(qualifiedNewIdent)
+      val newRelation = DataSourceV2Relation.create(tbl, Some(catalog), Some(qualifiedNewIdent))
       cacheTable(
-        session.sharedState.cacheManager.sessionForCharVarcharScanMode(
-          session, cache.charVarcharScanMode, cache.plan),
-        rewritten,
-        Some(qualifiedNewIdent.quoted),
-        cache.storageLevel)
+        session,
+        newRelation,
+        Some(qualifiedNewIdent.quoted), oldStorageLevel)
     }
     Seq.empty
   }

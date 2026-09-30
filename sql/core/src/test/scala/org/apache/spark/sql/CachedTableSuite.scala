@@ -33,11 +33,10 @@ import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AsOfVersion
-import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, Project, SHUFFLE_HASH}
-import org.apache.spark.sql.catalyst.util.{CharVarcharScanMode, DateTimeConstants}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.CatalogPlugin
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
@@ -45,11 +44,10 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.connector.catalog.TruncatableTable
-import org.apache.spark.sql.execution.{CachedData, ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.command.CommandUtils
-import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
@@ -59,7 +57,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.util.PartitionKeyedAccumulator
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
-import org.apache.spark.storage.StorageLevel.{DISK_ONLY, MEMORY_AND_DISK_2, MEMORY_ONLY}
+import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.{AccumulatorContext, Utils}
@@ -2349,37 +2347,14 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
-  // SPARK-58814 CHAR/VARCHAR cache invariant coverage (scope freeze):
-  // In scope: two bound identities (PreserveNative, SparkStandard) and the analyzer
-  // padding Project. This covers capture, identity, mutation matching, and replay for those cases.
-  // Out of scope: Hive INSERT uncache-vs-recache, continuous-write invalidation,
-  // AQE recacheByPlan, Legacy identity (SPARK-59751), CACHE TABLE pin of a SparkStandard
-  // padding Project, view rename multi-entry capture.
-  // Capture  - non-first-class CHAR relations keep an unbound scan mode
-  // Identity - CHAR/VARCHAR scan modes do not split caches for non-CHAR relations
-  // Mutation - catalog V2 recache; refreshTable V1 recache; RENAME TABLE time travel;
-  //            RENAME TABLE does not promote a dependent query cache;
-  //            V1 table rename restores both bound modes;
-  //            micro-batch WriteToDataSourceV2 invalidates both bound modes
-  // Replay   - same recache/rename tests assert retained mode and storage level;
-  //            PreserveNative padding inversion uses a fresh DataFrame after recache
   test("RENAME TABLE manages cache with time travel plans correctly") {
     val t = "testcat.tbl"
     val tRenamed = "testcat.tbl_renamed"
     val ident = Identifier.of(Array(), "tbl")
     val version1 = "v1"
     val version2 = "v2"
-    val boundModes = Seq(
-      (Seq(
-        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
-        MEMORY_ONLY, "MEMORY_ONLY", CharVarcharScanMode.PreserveNative),
-      (Seq(
-        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"),
-        DISK_ONLY, "DISK_ONLY", CharVarcharScanMode.SparkStandard))
     withTable(t, tRenamed, "cached_tt1", "cached_tt2") {
-      sql(s"CREATE TABLE $t (id int, data varchar(4)) USING foo")
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
       sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
 
       // pin v1
@@ -2392,328 +2367,23 @@ class CachedTableSuite extends SharedSparkSession
 
       sql(s"INSERT INTO $t VALUES (4, 'e'), (5, 'f')")
 
-      // Cache both mode-specific variants using a short display name. Rename lookup must use the
-      // resolved table identity rather than the spelling captured by CACHE TABLE.
-      val previousCatalog = spark.catalog.currentCatalog()
-      try {
-        spark.catalog.setCurrentCatalog("testcat")
-        boundModes.foreach { case (modeConf, storageLevel, storageLevelName, _) =>
-          withSQLConf(modeConf: _*) {
-            sql(s"CACHE TABLE ${ident.name()} OPTIONS('storageLevel' '$storageLevelName')")
-            assertCached(sql(s"SELECT * FROM $t"))
-            assert(spark.table(t).storageLevel === storageLevel)
-          }
-        }
-      } finally {
-        spark.catalog.setCurrentCatalog(previousCatalog)
-      }
+      // cache base and both versions
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
       sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
       assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
       sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
       assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
 
-      assert(cacheManager.numCachedEntries == 4)
+      // must have 3 cache entries
+      assert(cacheManager.numCachedEntries == 3)
 
+      // rename base table
       sql(s"ALTER TABLE $t RENAME TO tbl_renamed")
 
-      // Time-travel and dependent caches are invalidated; both direct mode variants are restored.
-      assert(cacheManager.numCachedEntries == 2)
-      boundModes.foreach { case (modeConf, storageLevel, _, expectedMode) =>
-        withSQLConf(modeConf: _*) {
-          val renamed = sql(s"SELECT * FROM $tRenamed")
-          assertCached(renamed)
-          assert(spark.table(tRenamed).storageLevel === storageLevel)
-          val mode = cacheManager.lookupCachedData(renamed).flatMap { cached =>
-            cached.plan.collectFirst {
-              case relation: DataSourceV2Relation => relation.charVarcharScanMode
-            }.flatten
-          }
-          assert(mode.contains(expectedMode))
-        }
-      }
-    }
-  }
-
-  test("RENAME TABLE does not promote a dependent query cache to a table cache") {
-    val t = "testcat.tbl"
-    val tRenamed = "testcat.tbl_renamed"
-    withTable(t, tRenamed, "cached_query") {
-      sql(s"CREATE TABLE $t (id int, data string) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, 'a')")
-      sql(s"CACHE TABLE cached_query AS SELECT * FROM $t")
-      assertCached(sql("SELECT * FROM cached_query"))
-
-      sql(s"ALTER TABLE $t RENAME TO tbl_renamed")
-
-      assert(!spark.catalog.isCached(tRenamed))
-      assert(cacheManager.numCachedEntries == 0)
-    }
-  }
-
-  test("V2 cache descriptor lookup searches every relation in a dependent query") {
-    val left = "testcat.left_tbl"
-    val right = "testcat.right_tbl"
-    withTable(left, right) {
-      sql(s"CREATE TABLE $left (id int) USING foo")
-      sql(s"CREATE TABLE $right (id int) USING foo")
-      sql(s"INSERT INTO $left VALUES (1)")
-      sql(s"INSERT INTO $right VALUES (1)")
-
-      val joined = sql(s"SELECT * FROM $left JOIN $right USING (id)").cache()
-      try {
-        checkAnswer(joined, Row(1))
-        val rightRelation = spark.table(right).queryExecution.analyzed.collectFirst {
-          case relation: DataSourceV2Relation => relation
-        }.get
-        assert(cacheManager.lookupCacheDescriptorsByV2Relation(rightRelation).size == 1)
-        assert(cacheManager.lookupCacheDescriptorsByV2Relation(
-          rightRelation, directNamedCacheOnly = true).isEmpty)
-      } finally {
-        joined.unpersist()
-      }
-    }
-  }
-
-  test("catalog V2 recache preserves all bound CHAR/VARCHAR scan modes") {
-    val t = "testcat.tbl"
-    val preserveConf = Seq(
-      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
-    val standardConf = Seq(
-      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
-
-    withTable(t) {
-      withSQLConf(preserveConf: _*) {
-        sql(s"CREATE TABLE $t (id int, data varchar(4)) USING foo")
-        sql(s"INSERT INTO $t VALUES (1, 'a')")
-      }
-
-      def cachedData(modeConf: Seq[(String, String)]): CachedData = {
-        withSQLConf(modeConf: _*) {
-          cacheManager.lookupCachedData(sql(s"SELECT * FROM $t")).getOrElse {
-            fail(s"Expected $t to be cached for $modeConf")
-          }
-        }
-      }
-
-      def scanMode(modeConf: Seq[(String, String)]): Option[CharVarcharScanMode] = {
-        cachedData(modeConf).plan.collectFirst {
-          case relation: DataSourceV2Relation => relation.charVarcharScanMode
-        }.flatten
-      }
-
-      withSQLConf(preserveConf: _*) {
-        sql(s"CACHE TABLE $t OPTIONS('storageLevel' 'MEMORY_ONLY')")
-        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a"))
-      }
-      withSQLConf(standardConf: _*) {
-        sql(s"CACHE TABLE $t OPTIONS('storageLevel' 'DISK_ONLY')")
-        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a"))
-      }
-
-      withSQLConf(preserveConf: _*) {
-        sql(s"INSERT INTO $t VALUES (2, 'b')")
-      }
-
-      withSQLConf(preserveConf: _*) {
-        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b")))
-      }
-      withSQLConf(standardConf: _*) {
-        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b")))
-      }
-      assert(scanMode(preserveConf).contains(CharVarcharScanMode.PreserveNative))
-      assert(scanMode(standardConf).contains(CharVarcharScanMode.SparkStandard))
-      assert(
-        cachedData(preserveConf).cachedRepresentation.cacheBuilder.storageLevel === MEMORY_ONLY)
-      assert(cachedData(standardConf).cachedRepresentation.cacheBuilder.storageLevel === DISK_ONLY)
-    }
-  }
-
-  test("PreserveNative recache keeps independent read-side padding") {
-    val t = "testcat.pad_tbl"
-    val preserveConf = Seq(
-      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
-    def withPadding(enabled: Boolean): Seq[(String, String)] = {
-      preserveConf :+ (SQLConf.READ_SIDE_CHAR_PADDING.key -> enabled.toString)
-    }
-    def hasPadding(ds: Dataset[_]): Boolean = ds.queryExecution.analyzed.exists {
-      case project @ Project(_, child) =>
-        ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, child)
-      case _ => false
-    }
-    def roundTrip(cachePadding: Boolean, recachePadding: Boolean): Unit = {
-      withTable(t) {
-        withSQLConf(withPadding(cachePadding): _*) {
-          sql(s"CREATE TABLE $t (id int, data char(4)) USING foo")
-          sql(s"INSERT INTO $t VALUES (1, 'a')")
-          sql(s"CACHE TABLE $t")
-          assert(hasPadding(spark.table(t)) === cachePadding)
-        }
-        withSQLConf(withPadding(recachePadding): _*) {
-          sql(s"INSERT INTO $t VALUES (2, 'b')")
-        }
-        withSQLConf(withPadding(cachePadding): _*) {
-          val fresh = spark.table(t)
-          assertCached(fresh)
-          assert(hasPadding(fresh) === cachePadding)
-          checkAnswer(fresh.select("id"), Seq(Row(1), Row(2)))
-        }
-      }
-    }
-    roundTrip(cachePadding = false, recachePadding = true)
-    roundTrip(cachePadding = true, recachePadding = false)
-  }
-
-  test("composite PreserveNative cache keeps mixed read-side padding") {
-    val charTbl = "testcat.mixed_pad_char"
-    val varcharTbl = "testcat.mixed_pad_varchar"
-    val preserveConf = Seq(
-      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
-    def withPadding(enabled: Boolean): Seq[(String, String)] = {
-      preserveConf :+ (SQLConf.READ_SIDE_CHAR_PADDING.key -> enabled.toString)
-    }
-    def paddedTableNames(ds: Dataset[_]): Set[String] = {
-      ds.queryExecution.analyzed.collect {
-        case project @ Project(_, child: DataSourceV2Relation)
-            if ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, child) =>
-          child.identifier.map(_.name()).getOrElse("")
-      }.toSet
-    }
-    withTable(charTbl, varcharTbl, "mixed_pad_join") {
-      withSQLConf(withPadding(true): _*) {
-        sql(s"CREATE TABLE $charTbl (id int, data char(4)) USING foo")
-        sql(s"CREATE TABLE $varcharTbl (id int, data varchar(4)) USING foo")
-        sql(s"INSERT INTO $charTbl VALUES (1, 'a')")
-        sql(s"INSERT INTO $varcharTbl VALUES (1, 'a')")
-        sql(
-          s"""CACHE TABLE mixed_pad_join AS
-             |SELECT c.id, c.data AS cdata, v.data AS vdata
-             |FROM $charTbl c JOIN $varcharTbl v ON c.id = v.id""".stripMargin)
-        val cached = sql("SELECT * FROM mixed_pad_join")
-        assertCached(cached)
-        assert(paddedTableNames(cached) === Set("mixed_pad_char"))
-      }
-      withSQLConf(withPadding(false): _*) {
-        sql(s"INSERT INTO $charTbl VALUES (2, 'b')")
-        sql(s"INSERT INTO $varcharTbl VALUES (2, 'b')")
-      }
-      withSQLConf(withPadding(true): _*) {
-        val fresh = sql("SELECT * FROM mixed_pad_join")
-        assertCached(fresh)
-        assert(paddedTableNames(fresh) === Set("mixed_pad_char"))
-        checkAnswer(fresh.select("id"), Seq(Row(1), Row(2)))
-      }
-    }
-  }
-
-  test("CHAR/VARCHAR scan modes do not split caches for non-CHAR relations") {
-    val t = "testcat.int_only"
-    val preserveConf = Seq(
-      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
-    val standardConf = Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
-
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING foo")
-      sql(s"INSERT INTO $t VALUES (1)")
-      val initialCacheCount = cacheManager.numCachedEntries
-
-      withSQLConf(preserveConf: _*) {
-        sql(s"CACHE TABLE $t")
-      }
-      withSQLConf(standardConf: _*) {
-        assertCached(sql(s"SELECT * FROM $t"))
-        sql(s"CACHE TABLE $t")
-      }
-
-      assert(cacheManager.numCachedEntries === initialCacheCount + 1)
-      val cached = cacheManager.lookupCachedData(sql(s"SELECT * FROM $t")).get
-      val scanMode = cached.plan.collectFirst {
-        case relation: DataSourceV2Relation => relation.charVarcharScanMode
-      }.flatten
-      assert(scanMode.isEmpty)
-    }
-  }
-
-  test("non-first-class CHAR relations keep an unbound scan mode") {
-    withSQLConf(
-        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
-        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
-      withTable("unbound_char") {
-        sql("CREATE TABLE unbound_char (c char(4)) USING parquet")
-        val scanMode = spark.table("unbound_char").queryExecution.analyzed.collectFirst {
-          case relation: LogicalRelation => relation.charVarcharScanMode
-        }.flatten
-        assert(scanMode.isEmpty)
-      }
-    }
-  }
-
-  test("refreshTable recaches all bound CHAR/VARCHAR V1 scan modes") {
-    val preserveConf = Seq(
-      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
-    val standardConf = Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
-
-    withTable("cached_cv") {
-      sql("CREATE TABLE cached_cv (id int, data varchar(4)) USING parquet")
-      sql("INSERT INTO cached_cv VALUES (1, 'a')")
-
-      def cachedData(modeConf: Seq[(String, String)]): CachedData = {
-        withSQLConf(modeConf: _*) {
-          cacheManager.lookupCachedData(sql("SELECT * FROM cached_cv")).getOrElse {
-            fail(s"Expected cached_cv to be cached for $modeConf")
-          }
-        }
-      }
-
-      def scanMode(modeConf: Seq[(String, String)]): Option[CharVarcharScanMode] = {
-        cachedData(modeConf).plan.collectFirst {
-          case relation: LogicalRelation => relation.charVarcharScanMode
-        }.flatten
-      }
-
-      withSQLConf(preserveConf: _*) {
-        sql("CACHE TABLE cached_cv OPTIONS('storageLevel' 'MEMORY_ONLY')")
-        checkAnswer(sql("SELECT * FROM cached_cv"), Row(1, "a"))
-      }
-      withSQLConf(standardConf: _*) {
-        sql("CACHE TABLE cached_cv OPTIONS('storageLevel' 'DISK_ONLY')")
-        checkAnswer(sql("SELECT * FROM cached_cv"), Row(1, "a"))
-      }
-
-      withSQLConf(preserveConf: _*) {
-        checkCacheLoading(sql("SELECT * FROM cached_cv"), isLoaded = true)
-      }
-      withSQLConf(standardConf: _*) {
-        checkCacheLoading(sql("SELECT * FROM cached_cv"), isLoaded = true)
-      }
-
-      withSQLConf(preserveConf: _*) {
-        spark.catalog.refreshTable("cached_cv")
-      }
-
-      withSQLConf(preserveConf: _*) {
-        checkCacheLoading(sql("SELECT * FROM cached_cv"), isLoaded = false)
-      }
-      withSQLConf(standardConf: _*) {
-        checkCacheLoading(sql("SELECT * FROM cached_cv"), isLoaded = false)
-      }
-      withSQLConf(preserveConf: _*) {
-        checkAnswer(sql("SELECT * FROM cached_cv"), Row(1, "a"))
-      }
-      withSQLConf(standardConf: _*) {
-        checkAnswer(sql("SELECT * FROM cached_cv"), Row(1, "a"))
-      }
-      assert(scanMode(preserveConf).contains(CharVarcharScanMode.PreserveNative))
-      assert(scanMode(standardConf).contains(CharVarcharScanMode.SparkStandard))
-      assert(
-        cachedData(preserveConf).cachedRepresentation.cacheBuilder.storageLevel === MEMORY_ONLY)
-      assert(
-        cachedData(standardConf).cachedRepresentation.cacheBuilder.storageLevel === DISK_ONLY)
+      // assert cache was cleared and renamed table (current version) was cached again
+      assert(cacheManager.numCachedEntries == 1)
+      assertCached(sql(s"SELECT * FROM $tRenamed"))
     }
   }
 

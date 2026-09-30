@@ -1247,11 +1247,9 @@ class Analyzer(
 
     // Resolve V2Reference nodes inside temp view plans. These are created by
     // V2Reference.createForTempView. We only need to resolve it when returning
-    // the plan of temp views (in resolveViews and unwrapRelationPlan). Keep the stored
-    // CHAR/VARCHAR scan mode and policy Project; CHAR_VARCHAR_STANDARD_SEMANTICS is
-    // persisted at view creation.
+    // the plan of temp views (in resolveViews and unwrapRelationPlan).
     private def resolveTableReferencesInTempView(plan: LogicalPlan): LogicalPlan = {
-      plan.transformDown {
+      plan.resolveOperatorsUp {
         case r: V2Reference if r.context.isInstanceOf[V2Reference.TemporaryViewContext] =>
           relationResolution.resolveReference(r)
       }

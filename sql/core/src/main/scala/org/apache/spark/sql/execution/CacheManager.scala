@@ -23,16 +23,16 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.analysis.{ApplyCharTypePaddingHelper, EliminateSubqueryAliases}
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, Project, ResolvedHint, View}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ResolvedHint, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
-import org.apache.spark.sql.catalyst.util.{sideBySide, CharVarcharScanMode, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
@@ -47,7 +47,6 @@ import org.apache.spark.sql.execution.datasources.{
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, ChangelogTable, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.types.{DataType, MetadataBuilder}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -65,20 +64,6 @@ case class CachedData(
        |""".stripMargin
 }
 
-private[sql] case class TableCacheDescriptor(
-    plan: LogicalPlan,
-    storageLevel: StorageLevel) {
-  def charVarcharScanMode: Option[CharVarcharScanMode] =
-    plan.collectFirst {
-      case r: DataSourceV2Relation if r.charVarcharScanMode.isDefined =>
-        r.charVarcharScanMode.get
-      case r: LogicalRelation if r.charVarcharScanMode.isDefined =>
-        r.charVarcharScanMode.get
-      case r: HiveTableRelation if r.charVarcharScanMode.isDefined =>
-        r.charVarcharScanMode.get
-    }
-}
-
 /**
  * Provides support in a SQLContext for caching query results and automatically using these cached
  * results when subsequent queries are executed.  Data is cached using byte buffers stored in an
@@ -88,36 +73,6 @@ private[sql] case class TableCacheDescriptor(
  * Internal to Spark SQL. All its public APIs take analyzed plans and will normalize them before
  * further usage, or take [[Dataset]] and get its normalized plan. See `QueryExecution.normalize`
  * for more details about plan normalization.
- *
- * CHAR/VARCHAR cache lifecycle (SPARK-58814). Explicit Legacy identity is tracked in SPARK-59751.
- *
- * Capture: first-class CHAR/VARCHAR relations bind PreserveNative or SparkStandard in analysis.
- * The analyzer-generated read-side Project is part of that captured policy. None means no mode
- * was bound, including relations with no CHAR/VARCHAR columns.
- *
- * Identity: ordinary cache substitution uses sameResult, which includes the bound mode. The two
- * bound modes are distinct keys. Relations without CHAR/VARCHAR columns do not split.
- *
- * Mutation matching: write, refresh, and rename discovery ignore only the scan mode (and, for
- * catalog-less V2, Table instance and extra write options). V1 matches BaseRelation. Catalog V2
- * matches catalog and identifier. Catalog-less V2 matches table name and path. Rename restores
- * every direct table cache, including padding Projects, and drops dependents and time travel.
- * V1 rename restores every bound-mode direct table cache. WriteToDataSourceV2 invalidates by
- * V2 identity, not ordinary sameResult. CACHE TABLE pin does not unwrap a padding Project:
- * that Project's child is a cleaned scan, and substituting it as the pinned relation makes
- * later reads miss the cache. Views do not split CHAR/VARCHAR identity on CACHE TABLE, so
- * view rename retains the pre-existing single-entry restoration behavior.
- *
- * In scope: defects that exist only because CHAR/VARCHAR has two bound identities or an
- * analyzer padding Project, and that can be fixed without changing general pin substitution.
- * Out of scope (SPARK-59751 or pre-existing): Hive INSERT dropping caches instead of recaching,
- * continuous-write invalidation, AQE recacheByPlan, Legacy identity, CACHE TABLE pin of a
- * SparkStandard padding Project, view rename capturing more than one cache entry.
- *
- * Replay: rebuild and rename restoration clone a session, set both CHAR/VARCHAR SQLConf flags
- * for the captured mode, and never mutate the caller session. Direct V2 recache loads a fresh
- * Table from the catalog onto the existing relation (keeping output types, scan mode, and
- * padding Project). The rebuilt cache key is that refreshed plan, not a re-analyzed copy.
  */
 class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
@@ -309,18 +264,14 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         isSameName(name, catalogTable.identifier.nameParts, resolver) &&
           (includeTimeTravel || !isTimeTravelRelation(relation))
 
-      case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec, _) =>
+      case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec) =>
         val nameInCache = v2Ident.toQualifiedNameParts(catalog)
         isSameName(name, nameInCache, resolver) && (includeTimeTravel || timeTravelSpec.isEmpty)
-
-      case project @ Project(_, child)
-          if ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, child) =>
-        isMatchedTableOrView(child, name, resolver, includeTimeTravel)
 
       case v: View =>
         isSameName(name, v.desc.identifier.nameParts, resolver)
 
-      case HiveTableRelation(catalogTable, _, _, _, _, _) =>
+      case HiveTableRelation(catalogTable, _, _, _, _) =>
         isSameName(name, catalogTable.identifier.nameParts, resolver)
 
       case _ => false
@@ -345,27 +296,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       nameInCache: Seq[String],
       resolver: Resolver): Boolean = {
     nameInCache.length == name.length && nameInCache.zip(name).forall(resolver.tupled)
-  }
-
-  private def isDirectNamedCache(
-      plan: LogicalPlan,
-      name: Seq[String],
-      resolver: Resolver): Boolean = {
-    EliminateSubqueryAliases(plan) match {
-      case LogicalRelationWithTable(_, Some(catalogTable)) =>
-        isSameName(name, catalogTable.identifier.nameParts, resolver)
-      case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec, _) =>
-        val nameInCache = v2Ident.toQualifiedNameParts(catalog)
-        isSameName(name, nameInCache, resolver) && timeTravelSpec.isEmpty
-      case HiveTableRelation(catalogTable, _, _, _, _, _) =>
-        isSameName(name, catalogTable.identifier.nameParts, resolver)
-      case v: View =>
-        isSameName(name, v.desc.identifier.nameParts, resolver)
-      case project @ Project(_, child)
-          if ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, child) =>
-        isDirectNamedCache(child, name, resolver)
-      case _ => false
-    }
   }
 
   private def uncacheByCondition(
@@ -430,147 +360,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Re-caches every entry whose plan contains a [[LogicalRelation]] for `relation`.
-   * Unlike [[recacheByPlan]], this ignores CHAR/VARCHAR scan-mode identity so a V1 write
-   * invalidates preserve-only, standard, and unbound cache entries for that BaseRelation.
-   */
-  def recacheByV1Relation(spark: SparkSession, relation: BaseRelation): Unit = {
-    recacheByCondition(spark, cd => cd.plan.exists {
-      case logical: LogicalRelation => logical.relation == relation
-      case _ => false
-    })
-  }
-
-  /**
-   * Re-caches every entry whose plan contains the given catalog-less [[DataSourceV2Relation]].
-   * The scan mode is ignored only for this mutation-specific match so an unbound write target
-   * invalidates preserve-only and standard cache entries without weakening normal cache identity.
-   */
-  def recacheByV2Relation(spark: SparkSession, relation: DataSourceV2Relation): Unit = {
-    recacheByCondition(spark, cd => cd.plan.exists {
-      case cached: DataSourceV2Relation =>
-        cached.sameResultWithUnboundCharVarcharScanMode(relation)
-      case _ => false
-    })
-  }
-
-  /**
-   * Removes cache entries whose plans contain the given catalog-less
-   * [[DataSourceV2Relation]]. The scan mode is ignored only for this mutation-specific match.
-   */
-  def uncacheByV2Relation(
-      spark: SparkSession,
-      relation: DataSourceV2Relation,
-      cascade: Boolean,
-      blocking: Boolean = false): Unit = {
-    uncacheByCondition(
-      spark,
-      {
-        case cached: DataSourceV2Relation =>
-          cached.sameResultWithUnboundCharVarcharScanMode(relation)
-        case _ => false
-      },
-      cascade,
-      blocking)
-  }
-
-  /**
-   * Describes cache entries containing the given V2 relation, ignoring scan mode for the relation
-   * match. If `directNamedCacheOnly` is true, returns only direct table caches, including those
-   * wrapped in an analyzer-generated CHAR/VARCHAR read-side projection.
-   */
-  def lookupCacheDescriptorsByV2Relation(
-      relation: DataSourceV2Relation,
-      directNamedCacheOnly: Boolean = false): Seq[TableCacheDescriptor] = {
-    cachedData.flatMap { cd =>
-      val hasRelation = if (directNamedCacheOnly) {
-        directV2TableRelation(cd.plan)
-          .exists(_.sameResultWithUnboundCharVarcharScanMode(relation))
-      } else {
-        cd.plan.exists {
-          case cached: DataSourceV2Relation =>
-            cached.sameResultWithUnboundCharVarcharScanMode(relation)
-          case _ => false
-        }
-      }
-      if (hasRelation) {
-        Some(TableCacheDescriptor(
-          cd.plan,
-          cd.cachedRepresentation.cacheBuilder.storageLevel))
-      } else {
-        None
-      }
-    }
-  }
-
-  /**
-   * Direct table or view caches for `name`, including analyzer CHAR/VARCHAR padding Projects.
-   * Dependent query caches are omitted so rename can restore only the object's own entries.
-   */
-  def lookupDirectCacheDescriptorsByName(
-      name: Seq[String],
-      resolver: Resolver): Seq[TableCacheDescriptor] = {
-    lookupDirectCacheDescriptorsByNames(Seq(name), resolver)
-  }
-
-  /**
-   * Direct named caches matching any of `names` from one cache snapshot.
-   */
-  def lookupDirectCacheDescriptorsByNames(
-      names: Seq[Seq[String]],
-      resolver: Resolver): Seq[TableCacheDescriptor] = {
-    val groups = names.map(_ => Seq.newBuilder[TableCacheDescriptor])
-    cachedData.foreach { cd =>
-      names.indices.foreach { i =>
-        if (isDirectNamedCache(cd.plan, names(i), resolver)) {
-          groups(i) += TableCacheDescriptor(
-            cd.plan, cd.cachedRepresentation.cacheBuilder.storageLevel)
-        }
-      }
-    }
-    groups.flatMap(_.result()).distinct
-  }
-
-  /**
-   * Clone of `spark` with both CHAR/VARCHAR SQLConf flags set for `mode`. Used by rename
-   * restore so SparkStandard cannot inherit the caller's PRESERVE value.
-   */
-  private[sql] def sessionForCharVarcharScanMode(
-      spark: SparkSession,
-      mode: Option[CharVarcharScanMode],
-      plan: LogicalPlan): SparkSession = {
-    val restore = spark.cloneSession()
-    val policy = cacheRebuildPolicy(plan)
-    mode.foreach { m =>
-      CharVarcharScanMode.configure(
-        restore.sessionState.conf,
-        m,
-        nativeCharVarcharTypes = policy.nativeTypes)
-    }
-    restore.sessionState.conf.setConfString(
-      SQLConf.READ_SIDE_CHAR_PADDING.key,
-      policy.readSidePadding.toString)
-    restore
-  }
-
-  /**
-   * Returns the resolved V2 relation for a direct table cache. An analyzer-generated
-   * CHAR/VARCHAR projection is part of a direct cache; arbitrary projections are not.
-   */
-  private def directV2TableRelation(plan: LogicalPlan): Option[DataSourceV2Relation] = {
-    EliminateSubqueryAliases(plan) match {
-      case relation: DataSourceV2Relation if relation.timeTravelSpec.isEmpty =>
-        Some(relation)
-      case project @ Project(_, relation: DataSourceV2Relation)
-          if relation.timeTravelSpec.isEmpty &&
-            relation.charVarcharScanMode.exists(
-              ApplyCharTypePaddingHelper.isReadSidePaddingProject(project, relation, _)) =>
-        Some(relation)
-      case _ => None
-    }
-  }
-
-  /**
    * Re-caches all cache entries that reference the given table name.
    */
   def recacheTableOrView(
@@ -598,8 +387,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       cd.cachedRepresentation.cacheBuilder.clearCache()
       tryRebuildCacheEntry(spark, cd).foreach { entry =>
         this.synchronized {
-          // sameResult includes scan mode, so a PreserveNative sibling must not suppress
-          // SparkStandard (or a padded vs unpadded PreserveNative key).
           if (lookupCachedDataInternal(entry.plan).nonEmpty) {
             logWarning("While recaching, data was already added to cache.")
           } else {
@@ -613,130 +400,18 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   private def tryRebuildCacheEntry(spark: SparkSession, cd: CachedData): Option[CachedData] = {
-    val policy = cacheRebuildPolicy(cd.plan)
-    val rebuildSession = sessionForCacheRebuild(spark, policy)
-    rebuildSession.withActive {
-      try {
-        val keepCaptured = policy.mixedModes || policy.mixedPadding
-        tryRefreshPlan(rebuildSession, cd.plan, keepCaptured).map { refreshedPlan =>
-          val qe = QueryExecution.create(
-            rebuildSession,
-            refreshedPlan,
-            refreshPhaseEnabled = false)
-          // Unchanged CHAR/VARCHAR keys keep captured types and padding. qe.normalized
-          // re-runs analysis and can miss spark.table(). Schema evolution uses qe.normalized
-          // so SPARK-54424 can adopt added, removed, or widened columns.
-          val newKey =
-            if (isDirectCharVarcharCache(cd.plan) &&
-                sameLogicalOutput(cd.plan.output, refreshedPlan.output)) {
-              QueryExecution.normalize(rebuildSession, refreshedPlan)
-            } else {
-              qe.normalized
-            }
-          val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
-          cd.copy(plan = newKey, cachedRepresentation = newCache)
-        }
-      } catch {
-        case NonFatal(e) =>
-          logWarning(log"Failed to rebuild cache entry while attempting to recache", e)
-          None
+    val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
+    sessionWithConfigsOff.withActive {
+      tryRefreshPlan(sessionWithConfigsOff, cd.plan).map { refreshedPlan =>
+        val qe = QueryExecution.create(
+          sessionWithConfigsOff,
+          refreshedPlan,
+          refreshPhaseEnabled = false)
+        val newKey = qe.normalized
+        val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
+        cd.copy(plan = newKey, cachedRepresentation = newCache)
       }
     }
-  }
-
-  // Clone only the configs-off session when a mode must be applied, so catalog plugins stay
-  // shared with the caller. CHAR/VARCHAR confs are set on that clone, never on `spark`.
-  private def sessionForCacheRebuild(
-      spark: SparkSession,
-      policy: CacheRebuildPolicy): SparkSession = {
-    val base = getOrCloneSessionWithConfigsOff(spark)
-    // Mixed bound modes or mixed padding must not share one configure() / padding flag.
-    if (policy.mixedModes || policy.mixedPadding ||
-        (policy.mode.isEmpty && !policy.readSidePadding)) {
-      base
-    } else {
-      val session = if (base eq spark) spark.cloneSession() else base
-      policy.mode.foreach { m =>
-        CharVarcharScanMode.configure(
-          session.sessionState.conf,
-          m,
-          nativeCharVarcharTypes = policy.nativeTypes)
-      }
-      session.sessionState.conf.setConfString(
-        SQLConf.READ_SIDE_CHAR_PADDING.key,
-        policy.readSidePadding.toString)
-      session
-    }
-  }
-
-  private case class CacheRebuildPolicy(
-      mode: Option[CharVarcharScanMode],
-      mixedModes: Boolean,
-      mixedPadding: Boolean,
-      nativeTypes: Boolean,
-      readSidePadding: Boolean)
-
-  // One plan walk for rebuild session flags. Mixed bound modes or mixed padding skip a
-  // global configure so each subtree keeps the mode and padding already stored on that node.
-  private def cacheRebuildPolicy(plan: LogicalPlan): CacheRebuildPolicy = {
-    var mode: Option[CharVarcharScanMode] = None
-    var mixed = false
-    var native = false
-    var padding = false
-    var paddedChildren = List.empty[LogicalPlan]
-    var charRels = List.empty[LogicalPlan]
-    plan.foreach {
-      case r: DataSourceV2Relation =>
-        r.charVarcharScanMode.foreach { m =>
-          if (mode.exists(_ != m)) mixed = true else if (mode.isEmpty) mode = Some(m)
-        }
-        if (r.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))) native = true
-        if (isCharVarcharRelation(r)) charRels ::= r
-      case r: LogicalRelation =>
-        r.charVarcharScanMode.foreach { m =>
-          if (mode.exists(_ != m)) mixed = true else if (mode.isEmpty) mode = Some(m)
-        }
-        if (r.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))) native = true
-        if (isCharVarcharRelation(r)) charRels ::= r
-      case r: HiveTableRelation =>
-        r.charVarcharScanMode.foreach { m =>
-          if (mode.exists(_ != m)) mixed = true else if (mode.isEmpty) mode = Some(m)
-        }
-        if (r.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))) native = true
-        if (isCharVarcharRelation(r)) charRels ::= r
-      case project @ Project(_, child)
-          if ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, child) =>
-        padding = true
-        child.foreach {
-          case r: DataSourceV2Relation => paddedChildren ::= r
-          case r: LogicalRelation => paddedChildren ::= r
-          case r: HiveTableRelation => paddedChildren ::= r
-          case _ =>
-        }
-      case _ =>
-    }
-    val mixedPadding =
-      charRels.exists(r => paddedChildren.exists(_ eq r)) &&
-        charRels.exists(r => !paddedChildren.exists(_ eq r))
-    CacheRebuildPolicy(
-      mode = if (mixed) None else mode,
-      mixedModes = mixed,
-      mixedPadding = mixedPadding,
-      nativeTypes = native,
-      readSidePadding = padding)
-  }
-
-  private def isCharVarcharRelation(r: LogicalPlan): Boolean = r match {
-    case rel: DataSourceV2Relation =>
-      rel.charVarcharScanMode.isDefined ||
-        rel.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))
-    case rel: LogicalRelation =>
-      rel.charVarcharScanMode.isDefined ||
-        rel.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))
-    case rel: HiveTableRelation =>
-      rel.charVarcharScanMode.isDefined ||
-        rel.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))
-    case _ => false
   }
 
   /**
@@ -752,119 +427,24 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    *
    * @return the refreshed plan if refresh succeeds, None otherwise
    */
-  private def tryRefreshPlan(
-      spark: SparkSession,
-      plan: LogicalPlan,
-      keepCapturedShape: Boolean): Option[LogicalPlan] = {
+  private def tryRefreshPlan(spark: SparkSession, plan: LogicalPlan): Option[LogicalPlan] = {
     try {
-      if (keepCapturedShape) {
-        // Keep each relation's stored mode and policy Project; only refresh Table instances.
-        Some(V2TableRefreshUtil.refresh(spark, plan))
-      } else {
-        EliminateSubqueryAliases(plan) match {
-          case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
-              if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] =>
-            refreshV2RelationTable(r, catalog, ident)
-          case project @ Project(_, r @ ExtractV2CatalogAndIdentifier(catalog, ident))
-              if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] &&
-                ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, r) =>
-            refreshV2RelationTable(r, catalog, ident).map { refreshed =>
-              if (sameLogicalOutput(r.output, refreshed.output)) {
-                project.copy(child = refreshed)
-              } else {
-                // Schema changed; drop the stale padding Project and let analysis rebuild it.
-                refreshed
-              }
-            }
-          case _ =>
-            Some(V2TableRefreshUtil.refresh(spark, plan))
-        }
+      EliminateSubqueryAliases(plan) match {
+        case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
+            if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] =>
+          val table = CatalogV2Util.getTable(catalog, ident, options = r.options)
+          if (r.table.id == table.id) {
+            Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), r.options))
+          } else {
+            None
+          }
+        case _ =>
+          Some(V2TableRefreshUtil.refresh(spark, plan))
       }
     } catch {
       case NonFatal(e) =>
         logWarning(log"Failed to refresh plan while attempting to recache", e)
         None
-    }
-  }
-
-  // Load from the catalog, not the shared relation cache, so a recache after write sees
-  // the committed rows instead of the copy pinned when the cache was created.
-  // Rebuild output from the fresh table (SPARK-54424). create() rewrites CHAR/VARCHAR to
-  // annotated STRING; restore first-class types from the catalog schema so re-analysis
-  // matches a fresh spark.table() cache key.
-  private def refreshV2RelationTable(
-      relation: DataSourceV2Relation,
-      catalog: TableCatalog,
-      ident: Identifier): Option[DataSourceV2Relation] = {
-    val table = CatalogV2Util.getTable(catalog, ident, options = relation.options)
-    if (relation.table.id != table.id) {
-      None
-    } else {
-      val rebuilt = DataSourceV2Relation
-        .create(table, Some(catalog), Some(ident), relation.options)
-        .copy(charVarcharScanMode = relation.charVarcharScanMode)
-      val restored = restoreFirstClassCharVarcharTypes(rebuilt, table, relation)
-      // Keep captured attributes only when the logical schema is unchanged. Name equality
-      // is not enough: VARCHAR(4) to VARCHAR(8) must rebuild output from the catalog.
-      if (sameLogicalOutput(relation.output, restored.output)) {
-        Some(relation.copy(table = table))
-      } else {
-        Some(restored)
-      }
-    }
-  }
-
-  private def restoreFirstClassCharVarcharTypes(
-      rebuilt: DataSourceV2Relation,
-      table: Table,
-      original: DataSourceV2Relation): DataSourceV2Relation = {
-    val keepFirstClass =
-      original.output.exists(a => CharVarcharUtils.hasCharVarchar(a.dataType))
-    if (!keepFirstClass) {
-      rebuilt
-    } else {
-      val catalogTypes = CatalogV2Util.v2ColumnsToStructType(table.columns).fields
-        .map(f => f.name -> f.dataType).toMap
-      val newOutput = rebuilt.output.map { attr =>
-        catalogTypes.get(attr.name) match {
-          case Some(dt) if CharVarcharUtils.hasCharVarchar(dt) =>
-            val metadata = new MetadataBuilder().withMetadata(attr.metadata)
-              .remove(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)
-              .build()
-            attr.withDataType(dt).withMetadata(metadata)
-          case _ =>
-            attr
-        }
-      }
-      rebuilt.copy(output = newOutput)
-    }
-  }
-
-  // Compare name, nullability, and CHAR/VARCHAR (or annotated STRING) logical types.
-  private def sameLogicalOutput(left: Seq[Attribute], right: Seq[Attribute]): Boolean = {
-    left.length == right.length && left.zip(right).forall { case (a, b) =>
-      a.name == b.name && a.nullable == b.nullable &&
-        logicalCharVarcharType(a) == logicalCharVarcharType(b)
-    }
-  }
-
-  private def logicalCharVarcharType(attr: Attribute): DataType = {
-    if (CharVarcharUtils.hasCharVarchar(attr.dataType)) {
-      attr.dataType
-    } else {
-      CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType)
-    }
-  }
-
-  private def isDirectCharVarcharCache(plan: LogicalPlan): Boolean = {
-    EliminateSubqueryAliases(plan) match {
-      case r: DataSourceV2Relation => isCharVarcharRelation(r)
-      case r: LogicalRelation => isCharVarcharRelation(r)
-      case r: HiveTableRelation => isCharVarcharRelation(r)
-      case project @ Project(_, child)
-          if ApplyCharTypePaddingHelper.isAnyReadSidePaddingProject(project, child) =>
-        child.find(isCharVarcharRelation).isDefined
-      case _ => false
     }
   }
 

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.V2TableReference.TableInfo
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
-import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharScanMode}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.connector.catalog.Column
@@ -65,8 +65,6 @@ private[sql] sealed abstract class V2Reference
 
   def context: Context
 
-  def charVarcharScanMode: Option[CharVarcharScanMode]
-
   override def newInstance(): V2Reference
 
   override def name: String = V2TableUtil.toQualifiedName(catalog, identifier)
@@ -79,9 +77,7 @@ private[sql] sealed abstract class V2Reference
   }
 
   def toRelation(table: Table): DataSourceV2Relation = {
-    DataSourceV2Relation(
-      table, output, Some(catalog), Some(identifier), options,
-      charVarcharScanMode = charVarcharScanMode)
+    DataSourceV2Relation(table, output, Some(catalog), Some(identifier), options)
   }
 }
 
@@ -92,8 +88,7 @@ private[sql] case class V2TableReference private[analysis](
     options: CaseInsensitiveStringMap,
     info: TableInfo,
     output: Seq[AttributeReference],
-    context: Context,
-    charVarcharScanMode: Option[CharVarcharScanMode] = None) extends V2Reference {
+    context: Context) extends V2Reference {
 
   override def newInstance(): V2TableReference = {
     copy(output = output.map(_.newInstance()))
@@ -119,8 +114,7 @@ private[sql] case class V2ChangelogReference private[analysis](
     changelog: ChangelogTable,
     info: TableInfo,
     output: Seq[AttributeReference],
-    context: Context,
-    charVarcharScanMode: Option[CharVarcharScanMode] = None) extends V2Reference {
+    context: Context) extends V2Reference {
 
   override def newInstance(): V2ChangelogReference = {
     copy(output = output.map(_.newInstance()))
@@ -179,10 +173,9 @@ private[sql] object V2Reference {
     val ref = relation.table match {
       case changelog: ChangelogTable =>
         V2ChangelogReference(catalog, identifier, relation.options, changelog, info,
-          relation.output, context, relation.charVarcharScanMode)
+          relation.output, context)
       case _ =>
-        V2TableReference(catalog, identifier, relation.options, info, relation.output, context,
-          relation.charVarcharScanMode)
+        V2TableReference(catalog, identifier, relation.options, info, relation.output, context)
     }
     ref.copyTagsFrom(relation)
     ref

@@ -43,7 +43,6 @@ import org.apache.spark.sql.connector.catalog.{TableCatalog, V1Table, V1View}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.CommandExecutionMode
-import org.apache.spark.sql.execution.TableCacheDescriptor
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -203,33 +202,19 @@ case class AlterTableRenameCommand(
     } else {
       val table = catalog.getTableMetadata(oldName)
       DDLUtils.verifyAlterTableType(catalog, table, isView)
-      val cacheManager = sparkSession.sharedState.cacheManager
-      val resolver = sparkSession.sessionState.conf.resolver
-      val oldCaches = {
-        val catalogName = sparkSession.sessionState.catalogManager.currentCatalog.name()
-        val lookedUp = cacheManager.lookupDirectCacheDescriptorsByNames(
-          Seq(oldName.nameParts, catalogName +: oldName.nameParts), resolver)
-        if (lookedUp.nonEmpty) {
-          lookedUp
-        } else {
-          val cached = cacheManager.lookupCachedData(
-            sparkSession.table(oldName.unquotedString))
-          cached.toSeq.map { cd =>
-            TableCacheDescriptor(cd.plan, cd.cachedRepresentation.cacheBuilder.storageLevel)
-          }
-        }
-      }
-      if (oldCaches.nonEmpty) {
+      // If `optStorageLevel` is defined, the old table was cached.
+      val optCachedData = sparkSession.sharedState.cacheManager.lookupCachedData(
+        sparkSession.table(oldName.unquotedString))
+      val optStorageLevel = optCachedData.map(_.cachedRepresentation.cacheBuilder.storageLevel)
+      if (optStorageLevel.isDefined) {
         CommandUtils.uncacheTableOrView(sparkSession, oldName)
       }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan
       // back into the hive metastore cache
       catalog.refreshTable(oldName)
       catalog.renameTable(oldName, newName)
-      oldCaches.foreach { cache =>
-        val restoreSession = cacheManager.sessionForCharVarcharScanMode(
-          sparkSession, cache.charVarcharScanMode, cache.plan)
-        restoreSession.catalog.cacheTable(newName.unquotedString, cache.storageLevel)
+      optStorageLevel.foreach { storageLevel =>
+        sparkSession.catalog.cacheTable(newName.unquotedString, storageLevel)
       }
     }
     Seq.empty[Row]

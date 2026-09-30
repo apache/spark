@@ -23,6 +23,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -69,7 +70,9 @@ case class SaveIntoDataSourceCommand(
     }
 
     try {
-      sparkSession.sharedState.cacheManager.recacheByV1Relation(sparkSession, relation)
+      val logicalRelation = LogicalRelation(relation, toAttributes(relation.schema), None,
+        false, None)
+      sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, logicalRelation)
     } catch {
       case NonFatal(_) =>
         // some data source can not support return a valid relation, e.g. `KafkaSourceProvider`

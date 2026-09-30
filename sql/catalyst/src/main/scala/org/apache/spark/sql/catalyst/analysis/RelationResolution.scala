@@ -345,10 +345,7 @@ class RelationResolution(
                 writePrivileges == null && !u.isStreaming
               cached <- lookupSharedRelationCache(catalog, ident, t, tableKey.stateOptions)
             } yield {
-              // A shared cache entry may have been analyzed under another session's CHAR/VARCHAR
-              // policy. Rebind it in this analysis instead of inheriting that session's scan mode.
-              val updatedRelation =
-                cached.copy(options = finalOptions, charVarcharScanMode = None)
+              val updatedRelation = cached.copy(options = finalOptions)
               updatedRelation.copyTagsFrom(cached)
               val nameParts = ident.toQualifiedNameParts(catalog)
               val aliasedRelation = SubqueryAlias(nameParts, updatedRelation)
@@ -604,24 +601,14 @@ class RelationResolution(
       output = ref.output,
       catalog = Some(resolvedCatalog),
       identifier = Some(ref.identifier),
-      options = ref.options,
-      charVarcharScanMode = ref.charVarcharScanMode)
+      options = ref.options)
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, ref: V2TableReference): LogicalPlan = {
     cached transform {
       case r: DataSourceV2Relation if matchesReference(r, ref) =>
         V2ReferenceUtils.validateLoadedTable(r.table, ref)
-        // Temp-view refs store creation-time CHAR/VARCHAR policy (the setting is persisted).
-        // Shared table-cache hits for other contexts clear the mode so this analysis rebinds.
-        val reboundMode = ref.context match {
-          case _: V2Reference.TemporaryViewContext => ref.charVarcharScanMode
-          case _ => None
-        }
-        r.copy(
-          output = ref.output,
-          options = ref.options,
-          charVarcharScanMode = reboundMode)
+        r.copy(output = ref.output, options = ref.options)
     }
   }
 
