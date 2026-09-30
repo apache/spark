@@ -73,7 +73,7 @@ from pyspark.serializers import (
     CPickleSerializer,
     SpecialLengths,
     write_int,
-    write_long,
+    write_with_length,
 )
 from pyspark.sql.conversion import (
     ArrowBatchTransformer,
@@ -128,12 +128,23 @@ from pyspark.worker_util import (
 )
 
 
-def report_times(outfile, boot, init, finish, processing_time_ms):
-    write_int(SpecialLengths.TIMING_DATA, outfile)
-    write_long(int(1000 * boot), outfile)
-    write_long(int(1000 * init), outfile)
-    write_long(int(1000 * finish), outfile)
-    write_long(processing_time_ms, outfile)
+def report_metrics(
+    outfile, boot, init, finish, execution_duration_ms, memory_bytes_spilled, disk_bytes_spilled
+):
+    """Write the worker metrics as a length-prefixed JSON report after METRICS_DATA."""
+    payload = json.dumps(
+        {
+            "bootTimestampMs": int(1000 * boot),
+            "initTimestampMs": int(1000 * init),
+            "finishTimestampMs": int(1000 * finish),
+            "pythonExecutionDurationMs": execution_duration_ms,
+            "memoryBytesSpilled": memory_bytes_spilled,
+            "diskBytesSpilled": disk_bytes_spilled,
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+    write_int(SpecialLengths.METRICS_DATA, outfile)
+    write_with_length(payload, outfile)
 
 
 def chain(f, g):
@@ -4542,13 +4553,13 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             serializer._flush_per_batch = True
         run_process = pipelined_process if is_pipelined else process
 
-        processing_start_time = time.time()
+        execution_start_time = time.time()
         with capture_outputs():
             if profiler:
                 profiler.profile(run_process)
             else:
                 run_process()
-        processing_time_ms = int(1000 * (time.time() - processing_start_time))
+        execution_duration_ms = int(1000 * (time.time() - execution_start_time))
 
         # Cleanup
         # Reset task context to None. This is a guard code to avoid residual context when worker
@@ -4559,15 +4570,21 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         handle_worker_exception(e, outfile)
         sys.exit(-1)
     finish_time = time.time()
-    report_times(outfile, boot_time, init_time, finish_time, processing_time_ms)
-    write_long(shuffle.MemoryBytesSpilled, outfile)
-    write_long(shuffle.DiskBytesSpilled, outfile)
+    report_metrics(
+        outfile,
+        boot_time,
+        init_time,
+        finish_time,
+        execution_duration_ms,
+        shuffle.MemoryBytesSpilled,
+        shuffle.DiskBytesSpilled,
+    )
 
     # Mark the beginning of the accumulators section of the output
     write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
     send_accumulator_updates(outfile)
 
-    # Check end of stream — raises if the finish signal is not received correctly.
+    # Check end of stream - raises if the finish signal is not received correctly.
     # Note: this call might fail due to other reasons (e.g. channel broke)
     # which will terminate the worker process.
     try:
