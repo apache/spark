@@ -2075,8 +2075,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                 }
               }
             }
-            // Spark ORC writes CHAR/VARCHAR as STRING plus catalyst type metadata, not native
-            // ORC char(n)/varchar(n). Over-length values are Spark's to reject on scan.
+            // Spark ORC files store CHAR/VARCHAR as STRING plus catalyst type metadata.
             withTempPath { dir =>
               val path = dir.getCanonicalPath
               val input = Dataset.ofRows(spark, Project(Seq(
@@ -2100,8 +2099,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                 withView(view) {
                   sql(s"CREATE TABLE $table (v VARCHAR(4)) USING orc LOCATION '$path'")
                   sql(s"CREATE VIEW $view AS SELECT v FROM $table")
-                  // Keep first-class output enabled in the caller so this isolates whether ORC
-                  // honors the standard semantics captured while resolving the view body.
+                  // The view was created under standard semantics; the caller session is not.
                   withSQLConf(
                       SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
                       SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {

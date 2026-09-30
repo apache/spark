@@ -469,12 +469,10 @@ object OrcUtils extends Logging {
           val typeDesc = new TypeDescription(ops.orcCategory)
           typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, dt.typeName)
           Some(typeDesc)
-        // Write CHAR/VARCHAR as ORC STRING plus spark.sql.catalyst.type, not native
-        // ORC CHAR/VARCHAR. Native ORC maxLength would truncate/pad independently of
-        // Spark store assignment. Hive-written native CHAR still round-trips on read
-        // via toCatalystSchema. Unbounded STRING (including collated) stamps
-        // StringType.typeName ("string"), matching Avro: this PR does not round-trip
-        // collation on file-only reads.
+        // Spark CHAR/VARCHAR are ORC STRING plus spark.sql.catalyst.type. Native ORC
+        // CHAR/VARCHAR from Hive files are recovered by toCatalystSchema. Unbounded
+        // STRING (including collated) stamps StringType.typeName ("string"); collation
+        // is not recovered from file-only reads.
         case s: StringType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.STRING)
           typeDesc.setAttribute(
@@ -519,9 +517,9 @@ object OrcUtils extends Logging {
   }
 
   /**
-   * Maps CHAR/VARCHAR to STRING for ORC reader schema only. Unlike
-   * [[CharVarcharUtils.replaceCharVarcharWithString]], this always rewrites, including when
-   * first-class CHAR/VARCHAR types are enabled.
+   * ORC reader schema for Spark CHAR/VARCHAR: always STRING, including when first-class
+   * CHAR/VARCHAR types are enabled. Native ORC CHAR/VARCHAR still apply when the file
+   * itself stores those types.
    */
   private def orcReadSchemaWithoutCharVarchar(dt: DataType): DataType = dt match {
     case s: StructType =>
@@ -562,8 +560,7 @@ object OrcUtils extends Logging {
     } else {
       StructType(dataSchema.fields ++ partitionSchema.fields)
     }
-    // First-class CHAR/VARCHAR must not be published as ORC char(n)/varchar(n) on read:
-    // that asks ORC to silently clip STRING columns before Spark can check length.
+    // Spark CHAR/VARCHAR on the read schema are Catalyst constraints; ask ORC for STRING.
     val resultSchemaString =
       OrcUtils.getOrcSchemaString(orcReadSchemaWithoutCharVarchar(readSchema))
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
