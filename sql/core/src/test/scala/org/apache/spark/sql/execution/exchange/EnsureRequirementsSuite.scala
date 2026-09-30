@@ -2053,7 +2053,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         s"the unsorted keys are spread into order, got ${newChild.getClass.getSimpleName} " +
           s"with ${groupings.size} grouping nodes")
       assert(groupings.head.distributePartitions)
-      assert(groupings.head.ungroupingOrigin == Some(SPREADS_FOR_ORDERING))
+      assert(groupings.head.ungroupingOrigin == Some(SPLIT_FOR_ORDERING))
       val layout = newChild.outputPartitioning.asInstanceOf[KeyedPartitioning]
       assert(!layout.isGrouped)
       assert(layout.partitionKeys.map(_.row.getInt(0)) == Seq(1, 1, 2))
@@ -2652,9 +2652,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // either side and a left outer join the right one, so both get one spread and one repeating
     // side.
     assert(stampsOf(smj(Inner, threeSplits, twoKeys)) ===
-      Seq((Some(SPREADS_SPLITS), false), (Some(REPEATS_GROUP), false)))
+      Seq((Some(SPLIT_FOR_JOIN), false), (Some(REPLICATED_FOR_JOIN), false)))
     assert(stampsOf(smj(LeftOuter, threeSplits, twoKeys)) ===
-      Seq((Some(SPREADS_SPLITS), false), (Some(REPEATS_GROUP), false)))
+      Seq((Some(SPLIT_FOR_JOIN), false), (Some(REPLICATED_FOR_JOIN), false)))
 
     // The mirrored left outer join picks the left side, which it may not duplicate: the spread
     // is skipped and both sides group.

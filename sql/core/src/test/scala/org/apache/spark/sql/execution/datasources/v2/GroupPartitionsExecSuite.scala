@@ -21,7 +21,7 @@ import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder, TransformExpression}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyReducer, OrderedDistribution, Partitioning, PartitioningCollection, REPEATS_GROUP, SPREADS_SPLITS, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyReducer, OrderedDistribution, Partitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, DaysFunctionWithToYearsReducerWithLongResult, DaysToYearsReducerWithLongResult, Reducer, YearsFunctionWithToYearsReducerWithLongResult}
 import org.apache.spark.sql.execution.{DummySparkPlan, LeafExecNode, SafeForKWayMerge}
@@ -50,7 +50,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       val childKp = KeyedPartitioning(Seq(exprA, exprB), keys)
         .withLayout(_.copy(isCollapsed = childCollapsed))
       GroupPartitionsExec(DummySparkPlan(outputPartitioning = childKp), joinKeyPositions,
-        expected, ungroupingOrigin = Option.when(distribute)(SPREADS_SPLITS))
+        expected, ungroupingOrigin = Option.when(distribute)(SPLIT_FOR_JOIN))
         .outputPartitioning.asInstanceOf[KeyedPartitioning]
     }
     def keyOf(a: Int): InternalRowComparableWrapper =
@@ -590,7 +590,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(2))))
     val gpe = GroupPartitionsExec(child,
       expectedPartitionKeys = Some(Seq(keyOf(1) -> 1, keyOf(2) -> 3, keyOf(3) -> 1)),
-      ungroupingOrigin = Some(SPREADS_SPLITS))
+      ungroupingOrigin = Some(SPLIT_FOR_JOIN))
     gpe.execute()
 
     assert(gpe.metrics("numInputPartitions").value === 3)
@@ -609,7 +609,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       InternalRowComparableWrapper(row(a), Seq(exprA))
     val child = ExecutableKeyedLeaf(
       KeyedPartitioning(Seq(exprA), Seq(row(1), row(1), row(2)))
-        .withLayout(_.copy(ungroupingOrigin = Some(SPREADS_SPLITS))))
+        .withLayout(_.copy(ungroupingOrigin = Some(SPLIT_FOR_JOIN))))
 
     val grouped = GroupPartitionsExec(child)
     val groupedOut = grouped.outputPartitioning.asInstanceOf[KeyedPartitioning]
@@ -620,11 +620,11 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // the stamp: a repeating side groups first.
     val restamped = GroupPartitionsExec(child,
       expectedPartitionKeys = Some(Seq(keyOf(1) -> 2, keyOf(2) -> 1)),
-      ungroupingOrigin = Some(REPEATS_GROUP))
+      ungroupingOrigin = Some(REPLICATED_FOR_JOIN))
     assert(!restamped.distributePartitions, "a repeating side groups first")
     val restampedOut = restamped.outputPartitioning.asInstanceOf[KeyedPartitioning]
     assert(!restampedOut.isGrouped)
-    assert(restampedOut.ungroupingOrigin.contains(REPEATS_GROUP))
+    assert(restampedOut.ungroupingOrigin.contains(REPLICATED_FOR_JOIN))
   }
 
   test("SPARK-59671: an alignment that settles every key spends its stamp") {
@@ -636,8 +636,8 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2))))
     val gpe = GroupPartitionsExec(child,
       expectedPartitionKeys = Some(Seq(keyOf(1) -> 1, keyOf(2) -> 1)),
-      ungroupingOrigin = Some(SPREADS_SPLITS))
-    assert(gpe.ungroupingOrigin.contains(SPREADS_SPLITS),
+      ungroupingOrigin = Some(SPLIT_FOR_JOIN))
+    assert(gpe.ungroupingOrigin.contains(SPLIT_FOR_JOIN),
       "the node keeps the stamp it was handed, and the routing it derives")
     val out = gpe.outputPartitioning.asInstanceOf[KeyedPartitioning]
     assert(out.isGrouped && out.ungroupingOrigin.isEmpty)

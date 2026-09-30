@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference,
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, PartitioningCollection, REPEATS_GROUP, SPREADS_SPLITS}
+import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN}
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryBaseTable, InMemoryCatalystRuntimeFilterCatalog, InMemoryTable, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions._
@@ -9989,7 +9989,7 @@ class KeyGroupedPartitioningSuite
       assert(joins.forall(j => keyedPartitioningsOf(Seq(j)).forall(_.ungroupingOrigin.isEmpty)),
         s"a zipped pair reports no claim of its own:\n$plan")
       val origins = collectAllGroupPartitions(plan).flatMap(_.ungroupingOrigin).distinct
-      assert(origins.contains(SPREADS_SPLITS) && origins.contains(REPEATS_GROUP),
+      assert(origins.contains(SPLIT_FOR_JOIN) && origins.contains(REPLICATED_FOR_JOIN),
         s"one side spreads and the other repeats, got $origins:\n$plan")
       assert(collect(df.queryExecution.executedPlan) { case r: AQEShuffleReadExec => r }
         .exists(_.hasCoalescedPartition),
@@ -10162,7 +10162,7 @@ class KeyGroupedPartitioningSuite
       val joins = collect(plan) { case j: ShuffledJoin => j }
       assert(joins.size == 1, s"test setup: one storage-partitioned join:\n$plan")
       assert(keyedPartitioningsOf(Seq(joins.head)).exists(k =>
-        !k.isGrouped && k.ungroupingOrigin.contains(SPREADS_SPLITS)),
+        !k.isGrouped && k.ungroupingOrigin.contains(SPLIT_FOR_JOIN)),
         s"test setup: the join reports its spread side verbatim:\n$plan")
       assert(collectAllGroupPartitions(plan).exists(g =>
         g.child.collectFirst { case _: SortMergeJoinExec => () }.isDefined &&

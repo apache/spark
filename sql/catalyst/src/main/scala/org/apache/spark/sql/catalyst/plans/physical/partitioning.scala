@@ -439,13 +439,13 @@ sealed trait UngroupingOrigin
 
 // One side of a partially clustered alignment: it keeps its splits and spreads them across the
 // slots its key is expected in.
-case object SPREADS_SPLITS extends UngroupingOrigin
+case object SPLIT_FOR_JOIN extends UngroupingOrigin
 
 // The other side of that alignment: it repeats each key's whole group in every slot of it.
-case object REPEATS_GROUP extends UngroupingOrigin
+case object REPLICATED_FOR_JOIN extends UngroupingOrigin
 
 // A spread an operator's ordering requirement is read through, which pairs with nothing.
-case object SPREADS_FOR_ORDERING extends UngroupingOrigin
+case object SPLIT_FOR_ORDERING extends UngroupingOrigin
 
 /**
  * The physical layout of the partitions a [[KeyedPartitioning]] describes, which is everything
@@ -507,7 +507,7 @@ case object SPREADS_FOR_ORDERING extends UngroupingOrigin
  *                         own such a layout never holds a key's rows together. The two
  *                         alignment roles are read only where a pair is judged
  *                         (`KeyedPartitioning.pairsUngrouped`). An ordering pairs nothing,
- *                         which `None` and [[SPREADS_FOR_ORDERING]] answer.
+ *                         which `None` and [[SPLIT_FOR_ORDERING]] answer.
  *                         See [[UngroupingOrigin]].
  */
 
@@ -932,7 +932,7 @@ case class KeyedPartitioning(
     // roles answer no: they were built for a clustering, not for an ordering.
     case o: OrderedDistribution =>
       super.satisfies0(o) ||
-        (ungroupingOrigin.forall(_ == SPREADS_FOR_ORDERING) &&
+        (ungroupingOrigin.forall(_ == SPLIT_FOR_ORDERING) &&
           keysSatisfy(o) && keysSortedFor(o))
     // A clustering asks that rows sharing a cluster key share a partition, which an ungrouped
     // layout never gives on its own. Not even an alignment side: its claim is about the pair it
@@ -951,7 +951,7 @@ case class KeyedPartitioning(
    * member as it stands.
    */
   private[sql] def pairsUngrouped(required: ClusteredDistribution): Boolean =
-    ungroupingOrigin.exists(r => r == SPREADS_SPLITS || r == REPEATS_GROUP) &&
+    ungroupingOrigin.exists(r => r == SPLIT_FOR_JOIN || r == REPLICATED_FOR_JOIN) &&
       required.requiredNumPartitions.forall(_ == numPartitions) &&
       keysSatisfy(required)
 
@@ -2170,9 +2170,10 @@ case class KeyedShuffleSpec(
     //  1. both distributions have the same number of clustering keys
     //  2. both partitioning have the same number of partitions
     //  3. where either side is ungrouped on purpose, the pair is one of each: the side that
-    //     spreads a key's splits and the side that repeats the group (`UngroupingOrigin`). An
-    //     unstamped ungrouped layout serves no clustering, so only `compatibleAsIs` can offer
-    //     one here, and its builder settles the side with a grouping node.
+    //     spreads a key's splits (`SPLIT_FOR_JOIN`) and the side that repeats the group
+    //     (`REPLICATED_FOR_JOIN`). An unstamped ungrouped layout serves no clustering, so only
+    //     `compatibleAsIs` can offer one here, and its builder settles the side with a grouping
+    //     node.
     //  4. partition expressions from both sides are compatible, which means:
     //    4.1 both sides have the same number of partition expressions
     //    4.2 for each pair of partition expressions at the same index, the corresponding
@@ -2189,7 +2190,7 @@ case class KeyedShuffleSpec(
         ((partitioning.ungroupingOrigin, otherPartitioning.ungroupingOrigin) match {
           case (None, None) => true
           case (Some(l), Some(r)) =>
-            Set(l, r) == Set(SPREADS_SPLITS, REPEATS_GROUP)
+            Set(l, r) == Set(SPLIT_FOR_JOIN, REPLICATED_FOR_JOIN)
           case _ => false
         }) &&
         areKeysCompatible(otherSpec, allowReduce = false) &&
