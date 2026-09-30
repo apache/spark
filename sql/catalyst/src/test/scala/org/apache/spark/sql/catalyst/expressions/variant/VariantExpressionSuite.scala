@@ -737,22 +737,32 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on nonascii
     testVariantGet("[1, 2, 3]", "$[2147483647]", IntegerType, null)
 
-    // `['...']` decodes escapes: `\'` -> quote, `"` literal, both quotes in one key.
+    // Single-quoted keys decode escapes and allow unescaped double quotes.
     testVariantGet("""{"a'b": 1}""", """$['a\'b']""", IntegerType, 1)
     testVariantGet("""{"a\"b": 2}""", """$['a"b']""", IntegerType, 2)
-    testVariantGet("""{"a'\"b": 3}""", """$['a\'"b']""", IntegerType, 3)
-    // `\\` -> backslash, and the short control escapes.
+    // Backslash, short control, and slash escapes.
     testVariantGet("""{"a\\b": 4}""", """$['a\\b']""", IntegerType, 4)
     testVariantGet("""{"a\tb": 5}""", """$['a\tb']""", IntegerType, 5)
     testVariantGet("""{"a\nb": 6}""", """$['a\nb']""", IntegerType, 6)
-    // `\uXXXX` (vertical tab U+000B); the `\u` is split across strings so Scala leaves it literal.
+    testVariantGet("""{"a\bb": 11}""", """$['a\bb']""", IntegerType, 11)
+    testVariantGet("""{"a\fb": 12}""", """$['a\fb']""", IntegerType, 12)
+    testVariantGet("""{"a\rb": 13}""", """$['a\rb']""", IntegerType, 13)
+    testVariantGet("""{"a/b": 14}""", """$['a\/b']""", IntegerType, 14)
+    // Unicode escape for vertical tab. Split `\u` so Scala leaves it literal.
     testVariantGet("{\"a\\" + "u000bb\": 7}", "$['a\\" + "u000bb']", IntegerType, 7)
-    // `["..."]` escapes symmetrically: `\"` -> quote, `'` literal, `\\` -> backslash.
+    // Double-quoted keys decode escapes and allow unescaped single quotes.
     testVariantGet("""{"a\"b": 8}""", """$["a\"b"]""", IntegerType, 8)
     testVariantGet("""{"a'b": 9}""", """$["a'b"]""", IntegerType, 9)
-    testVariantGet("""{"a\\b": 10}""", """$["a\\b"]""", IntegerType, 10)
-    // Unknown escapes stay literal.
-    testVariantGet("""{"a\\xb": 9}""", """$['a\xb']""", IntegerType, 9)
+    // Unknown, malformed Unicode, and cross-delimiter escapes remain literal.
+    testVariantGet("""{"a\\xb": 15}""", """$['a\xb']""", IntegerType, 15)
+    testVariantGet("""{"a\\u12G4b": 17}""", "$['a\\" + "u12G4b']", IntegerType, 17)
+    testVariantGet("""{"a\\\"b": 18}""", """$['a\"b']""", IntegerType, 18)
+    testVariantGet("""{"a\\'b": 19}""", """$["a\'b"]""", IntegerType, 19)
+    testVariantGet(
+      "{\"a\\" + "uD83D\\" + "uDE00b\": 20}",
+      "$['a\\" + "uD83D\\" + "uDE00b']",
+      IntegerType,
+      20)
 
     Seq("variant_get" -> true, "try_variant_get" -> false).foreach {
       case (name, failOnError) =>
@@ -1656,6 +1666,22 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInsertRecoverableError("""{"a.b": 5}""", """$['a.b'].c""", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$['a.b'].c", "failedAt" -> "$['a.b']", "functionName" -> "`variant_insert`"))
+    checkInsertRecoverableError("""{"a.'b": 5}""", """$["a.'b"].c""", Literal(2),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$[\"a.'b\"].c", "failedAt" -> "$[\"a.'b\"]",
+        "functionName" -> "`variant_insert`"))
+    checkInsertRecoverableError("""{"a.'\"b": 5}""", """$['a.\'"b'].c""", Literal(2),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map(
+        "path" -> """$['a.\'"b'].c""",
+        "failedAt" -> """$["a.'\"b"]""",
+        "functionName" -> "`variant_insert`"))
+    checkInsertRecoverableError("""{"a.\\nb": 5}""", """$['a.\\nb'].c""", Literal(2),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map(
+        "path" -> """$['a.\\nb'].c""",
+        "failedAt" -> """$['a.\\nb']""",
+        "functionName" -> "`variant_insert`"))
 
     // Structs and maps are rejected at analysis.
     Seq(

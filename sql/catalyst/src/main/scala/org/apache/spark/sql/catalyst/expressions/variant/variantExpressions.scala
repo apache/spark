@@ -369,34 +369,59 @@ object VariantPathParser extends RegexParsers {
 
   override def skipWhitespace: Boolean = false
 
-  // Parse a key segment: `.name`, `['name']`, or `["name"]`. Dot notation is taken literally;
-  // both bracket forms are unescaped by `unescapeQuotedKey`.
+  // Parse `.name`, `['name']`, or `["name"]`. Dot keys are literal; bracket keys decode escapes.
   private def key: Parser[VariantPathSegment] =
     '.' ~> "[^\\.\\[]+".r ^^ ObjectExtraction |
       "['" ~> """(?:\\[\s\S]|[^'\\])*""".r <~ "']" ^^ { k =>
-        ObjectExtraction(unescapeQuotedKey(k))
+        ObjectExtraction(unescapeQuotedKey(k, '\''))
       } |
       "[\"" ~> """(?:\\[\s\S]|[^"\\])*""".r <~ "\"]" ^^ { k =>
-        ObjectExtraction(unescapeQuotedKey(k))
+        ObjectExtraction(unescapeQuotedKey(k, '"'))
       }
 
-  // Matches one escape: `\uXXXX`, or a backslash plus any single character.
+  // Match `\uXXXX` or a backslash followed by any character. Unknown escapes remain literal.
   private val escapeSeq = """\\(u[0-9a-fA-F]{4}|[\s\S])""".r
 
-  // Decodes `\\`, `\'`, `\"`, `\b \t \n \f \r`, and `\uXXXX`; any other `\x` is left literal.
-  private def unescapeQuotedKey(raw: String): String =
+  // Decode RFC 9535 escapes. Unknown and malformed escapes remain literal for compatibility.
+  // A quote is escapable only when it matches the surrounding delimiter.
+  private def unescapeQuotedKey(raw: String, quote: Char): String =
     if (raw.indexOf('\\') < 0) raw
-    else escapeSeq.replaceAllIn(raw, m => Regex.quoteReplacement(decodeEscape(m.group(1))))
+    else escapeSeq.replaceAllIn(raw, m =>
+      Regex.quoteReplacement(decodeEscape(m.group(1), quote)))
 
-  private def decodeEscape(esc: String): String = esc match {
+  private def decodeEscape(esc: String, quote: Char): String = esc match {
     case "b" => "\b"
-    case "t" => "\t"
-    case "n" => "\n"
     case "f" => "\f"
+    case "n" => "\n"
     case "r" => "\r"
-    case s if s.length == 5 => Integer.parseInt(s.substring(1), 16).toChar.toString  // \uXXXX
-    case "\\" | "'" | "\"" => esc      // the escaped character itself
-    case other => "\\" + other         // unknown escape: keep the backslash
+    case "t" => "\t"
+    case "/" => "/"
+    case "\\" => "\\"
+    case "'" if quote == '\'' => "'"
+    case "\"" if quote == '"' => "\""
+    case s if s.length == 5 => Integer.parseInt(s.substring(1), 16).toChar.toString
+    case other => "\\" + other
+  }
+
+  // Return a bracket segment that parses back to `key`.
+  private[variant] def quoteKey(key: String, quote: Char): String = {
+    val result = new java.lang.StringBuilder(key.length + 4).append('[').append(quote)
+    var i = 0
+    while (i < key.length) {
+      key.charAt(i) match {
+        case '\\' => result.append("\\\\")
+        case c if c == quote => result.append('\\').append(c)
+        case '\b' => result.append("\\b")
+        case '\f' => result.append("\\f")
+        case '\n' => result.append("\\n")
+        case '\r' => result.append("\\r")
+        case '\t' => result.append("\\t")
+        case c if c < 0x20 => result.append("\\u%04x".format(c.toInt))
+        case c => result.append(c)
+      }
+      i += 1
+    }
+    result.append(quote).append(']').toString
   }
 
   private val parser: Parser[List[VariantPathSegment]] = phrase(root ~> rep(key | index))
