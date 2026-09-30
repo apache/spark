@@ -132,7 +132,8 @@ case class SortMergeAsOfJoinExec(
         asOfCondition, orderExpression,
         joinType, condition,
         numOutputRows, spillSize, isBackward,
-        inMemoryThreshold, sizeInBytesSpillThreshold, spillThreshold
+        inMemoryThreshold, sizeInBytesSpillThreshold, spillThreshold,
+        TaskContext.getPartitionId()
       )
       TaskContext.get().addTaskCompletionListener[Unit](_ => scanner.close())
       scanner.iterator
@@ -175,7 +176,8 @@ private[joins] class SortMergeAsOfJoinScanner(
     isBackwardJoin: Boolean,
     inMemoryThreshold: Int,
     sizeInBytesSpillThreshold: Long,
-    spillThreshold: Int) {
+    spillThreshold: Int,
+    partitionIndex: Int) {
 
   private val joinedOutput = leftOutput ++ rightOutput
   private val joinedRow = new JoinedRow()
@@ -188,10 +190,17 @@ private[joins] class SortMergeAsOfJoinScanner(
     UnsafeProjection.create(nullableRefs, joinedOutput)
   }
 
-  private val boundAsOfCond = bindReference(asOfCondition, joinedOutput)
+  // Compile the as-of and residual conditions to `Predicate`s. They are evaluated per
+  // right-buffer row, and `BasePredicate.eval` returns a primitive boolean -- avoiding the
+  // interpreted expression walk and per-operand boxing of a bound `Expression.eval` on this
+  // scan (which has no whole-stage codegen).
+  private val boundAsOfCond: BasePredicate = Predicate.create(asOfCondition, joinedOutput)
+  private val boundResidualCond: Option[BasePredicate] =
+    residualCondition.map(Predicate.create(_, joinedOutput))
+  boundAsOfCond.initialize(partitionIndex)
+  boundResidualCond.foreach(_.initialize(partitionIndex))
+  // The order expression yields the distance value (not a boolean), so it stays a bound Expression.
   private val boundOrderExpr = bindReference(orderExpression, joinedOutput)
-  private val boundResidualCond =
-    residualCondition.map(bindReference(_, joinedOutput))
 
   private val equiKeyOrdering: Option[BaseOrdering] =
     if (leftKeys.nonEmpty) {
@@ -357,6 +366,12 @@ private[joins] class SortMergeAsOfJoinScanner(
     rightDone = true
   }
 
+  // No residual condition means every as-of match is accepted.
+  private def residualHolds(row: InternalRow): Boolean = boundResidualCond match {
+    case Some(pred) => pred.eval(row)
+    case None => true
+  }
+
   /**
    * Find the best matching right row using forward-only scan.
    *
@@ -404,13 +419,8 @@ private[joins] class SortMergeAsOfJoinScanner(
       val rightRow = iter.next()
       joinedRow.withRight(rightRow)
 
-      val asOfSatisfied = boundAsOfCond.eval(joinedRow)
-      if (asOfSatisfied != null && asOfSatisfied.asInstanceOf[Boolean]) {
-        val residualSatisfied = boundResidualCond.forall { cond =>
-          val result = cond.eval(joinedRow)
-          result != null && result.asInstanceOf[Boolean]
-        }
-        if (residualSatisfied) {
+      if (boundAsOfCond.eval(joinedRow)) {
+        if (residualHolds(joinedRow)) {
           // Last match wins (closest right.t to left.t)
           bestMatch = retainMatch(rightRow, needsCopy)
         }
@@ -438,13 +448,8 @@ private[joins] class SortMergeAsOfJoinScanner(
       val rightRow = iter.next()
       joinedRow.withRight(rightRow)
 
-      val asOfSatisfied = boundAsOfCond.eval(joinedRow)
-      if (asOfSatisfied != null && asOfSatisfied.asInstanceOf[Boolean]) {
-        val residualSatisfied = boundResidualCond.forall { cond =>
-          val result = cond.eval(joinedRow)
-          result != null && result.asInstanceOf[Boolean]
-        }
-        if (residualSatisfied) {
+      if (boundAsOfCond.eval(joinedRow)) {
+        if (residualHolds(joinedRow)) {
           val distance = boundOrderExpr.eval(joinedRow)
           if (distance != null) {
             if (bestMatch == null || distanceOrdering.lt(distance, bestDistance)) {
