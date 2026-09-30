@@ -70,6 +70,10 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
 
   private def ordering(plan: LogicalPlan) = plan.transformDown {
     case d @ ExtractV2ScanInfo(relation, scan: SupportsReportOrdering, _) =>
+      // The ordering is kept as reported, even where it references columns pruned out of the scan
+      // output: truncating it here would also drop the sort orders on a partition key past a
+      // pruned column, which still hold. `DataSourceV2ScanExecBase.outputOrdering` restricts it
+      // to the scan output instead.
       val ordering =
         V2ExpressionUtils.toCatalystOrdering(scan.outputOrdering(), relation, relation.funCatalog)
       d.copy(ordering = Some(ordering))
