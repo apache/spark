@@ -447,6 +447,70 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     verify(resourceList).delete()
   }
 
+  test("SPARK-38079: a pod template's spec.nodeName is translated to an equivalent " +
+      "nodeSelector, since a pod cannot be created with both nodeName and (non-empty) " +
+      "schedulingGates set") {
+    val podWithPinnedNodeName = new PodBuilder(BUILT_DRIVER_POD)
+      .editSpec()
+        .withNodeName("some-specific-node")
+        .endSpec()
+      .build()
+    val specWithPinnedNodeName = KubernetesDriverSpec(
+      SparkPod(podWithPinnedNodeName, BUILT_DRIVER_CONTAINER),
+      Nil,
+      ADDITIONAL_RESOURCES,
+      RESOLVED_JAVA_OPTIONS)
+    when(driverBuilder.buildFromFeatures(kconf, kubernetesClient))
+      .thenReturn(specWithPinnedNodeName)
+
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher)
+    submissionClient.run()
+
+    assert(gatedPod.getSpec.getNodeName === null,
+      "a gated pod must never carry spec.nodeName -- the API server rejects creating one " +
+        "with both nodeName and schedulingGates set")
+    assert(gatedPod.getSpec.getNodeSelector.get("kubernetes.io/hostname") ===
+      "some-specific-node",
+      "the pinned node must still be honored, via an equivalent nodeSelector instead")
+    assert(!gatedPod.getSpec.getSchedulingGates.isEmpty,
+      "the gate itself must still be present -- this is not a general nodeName removal")
+  }
+
+  test("SPARK-38079: a pod template's spec.nodeName is discarded, not translated, if an " +
+      "explicit spark.kubernetes.driver.node.selector.kubernetes.io/hostname is already set " +
+      "-- that explicit configuration must win, not be silently overwritten") {
+    val podWithPinnedNodeNameAndExplicitSelector = new PodBuilder(BUILT_DRIVER_POD)
+      .editSpec()
+        .withNodeName("template-pinned-node")
+        .addToNodeSelector("kubernetes.io/hostname", "explicitly-configured-node")
+        .endSpec()
+      .build()
+    val specWithBoth = KubernetesDriverSpec(
+      SparkPod(podWithPinnedNodeNameAndExplicitSelector, BUILT_DRIVER_CONTAINER),
+      Nil,
+      ADDITIONAL_RESOURCES,
+      RESOLVED_JAVA_OPTIONS)
+    when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(specWithBoth)
+
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher)
+    submissionClient.run()
+
+    assert(gatedPod.getSpec.getNodeName === null)
+    assert(gatedPod.getSpec.getNodeSelector.get("kubernetes.io/hostname") ===
+      "explicitly-configured-node",
+      "the explicit spark.kubernetes.driver.node.selector.* value (applied earlier, by " +
+        "BasicDriverFeatureStep, in builder.buildFromFeatures()) must not be overwritten by " +
+        "the nodeName-derived fallback")
+  }
+
   test("SPARK-37331: The client should create Kubernetes resources with pre resources") {
     val sparkConf = new SparkConf(false)
       .set(Config.CONTAINER_IMAGE, "spark-executor:latest")

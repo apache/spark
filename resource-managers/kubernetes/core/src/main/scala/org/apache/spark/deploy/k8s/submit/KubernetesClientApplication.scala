@@ -121,8 +121,24 @@ private[spark] class Client(
         .withMountPath(SPARK_CONF_DIR_INTERNAL)
         .endVolumeMount()
       .build()
+    // SPARK-38079: a pod template (spark.kubernetes.driver.podTemplateFile) may already pin
+    // spec.nodeName to a specific node. The Kubernetes API rejects creating a pod that has
+    // both a non-empty spec.nodeName and a non-empty spec.schedulingGates (added below) --
+    // "nodeName cannot be set until all schedulingGates have been cleared" -- since nodeName
+    // is meant to be set only once nothing (including scheduling) stands between the pod and
+    // that node. Translate it to an equivalent kubernetes.io/hostname nodeSelector entry
+    // instead, which (unlike nodeName) is created and read normally on a gated pod and has
+    // the same effect once the scheduler runs -- unless spark.kubernetes.driver.node.selector.
+    // kubernetes.io/hostname (via BasicDriverFeatureStep, applied earlier in
+    // builder.buildFromFeatures() above) already set that same key: that explicit user
+    // configuration always wins, so it is never overwritten by this fallback.
+    val pinnedNodeName = Option(resolvedDriverSpec.pod.pod.getSpec.getNodeName)
+      .filter(_.nonEmpty)
+      .filter(_ => !Option(resolvedDriverSpec.pod.pod.getSpec.getNodeSelector)
+        .exists(_.containsKey("kubernetes.io/hostname")))
     val resolvedDriverPod = new PodBuilder(resolvedDriverSpec.pod.pod)
       .editSpec()
+        .withNodeName(null)
         .addToContainers(resolvedDriverContainer)
         .addNewVolume()
           .withName(SPARK_CONF_VOLUME_DRIVER)
@@ -131,6 +147,9 @@ private[spark] class Client(
             .withName(configMapName)
             .endConfigMap()
           .endVolume()
+        .addToNodeSelector(
+          pinnedNodeName.map(nodeName => Map("kubernetes.io/hostname" -> nodeName))
+            .getOrElse(Map.empty[String, String]).asJava)
         // SPARK-38079: holds the pod unschedulable -- so kubelet cannot attempt to mount
         // anything on it -- until its pre-resources exist (see below). Only removed once
         // that is true, right before the watch loop; see the "Remove the pre-resources
