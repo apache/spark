@@ -2640,13 +2640,30 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(
         sql("""SELECT from_json(CAST('{"a":1}' AS CHAR(12)), 'a INT')"""),
         sql("""SELECT from_json('{"a":1}     ', 'a INT')"""))
-      // With a space delimiter, CHAR padding shows up as empty CSV fields.
+      // With a space delimiter, CHAR padding tokenizes into extra empty fields.
       checkAnswer(
         sql(
           """SELECT schema_of_csv(
             |  CAST('1' AS CHAR(3)),
             |  map('delimiter', ' '))""".stripMargin),
         Row("STRUCT<_c0: INT, _c1: STRING, _c2: STRING>"))
+      checkAnswer(
+        sql(
+          """SELECT from_csv(
+            |  CAST('1' AS CHAR(3)),
+            |  '_c0 INT',
+            |  map('delimiter', ' '))""".stripMargin),
+        Row(Row(1)))
+      checkError(
+        exception = intercept[SparkException] {
+          sql(
+            """SELECT from_csv(
+              |  CAST('1' AS CHAR(3)),
+              |  '_c0 INT',
+              |  map('delimiter', ' ', 'mode', 'FAILFAST'))""".stripMargin).collect()
+        },
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> "[1]", "failFastMode" -> "FAILFAST"))
       Seq(
         "CAST('1 ' AS VARCHAR(2))",
         "CAST('1 ' AS STRING)").foreach { input =>
