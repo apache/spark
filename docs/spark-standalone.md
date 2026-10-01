@@ -804,6 +804,21 @@ whose own setting travels with its registration -- an application that disabled 
 and its hold requests are rejected, while its hold status stays visible. The same controls remain
 available on the driver web UI.
 
+Scripts can hold and resume an application through the `/app/hold/` and `/app/resume/` endpoints
+the buttons submit to. Like the buttons, a request must be a POST carrying the application ID as
+`id` and the random per-UI `csrfToken`, the value of the hidden `csrfToken` field in the Master
+web UI page, which does not change for the lifetime of the Master. A request without a valid
+token is rejected with 403, and one without the trailing slash is only redirected, without
+taking effect. For example:
+
+```bash
+curl -X POST -d "id=<app-id>" -d "csrfToken=<csrf-token>" http://<master-host>:8080/app/hold/
+```
+
+If the Master web UI requires authentication, reading the token and sending the request both
+need the same credentials. The request is forwarded to the driver asynchronously, so its outcome
+shows up afterwards in the `held` and `draining` fields of the Master's `/json/` endpoint.
+
 
 # Running Alongside Hadoop
 
