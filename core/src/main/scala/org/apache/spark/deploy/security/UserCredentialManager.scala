@@ -528,15 +528,14 @@ private[spark] object UserCredentialManager extends Logging {
   }
 
   /**
-   * Returns true if Spark's RPC channel encryption is configured, using the same criteria as
-   * [[HadoopDelegationTokenManager]]'s direct-credential-provider check: either SSL-based RPC
-   * encryption (`spark.ssl.rpc.enabled`), or AES-based encryption enabled together with
-   * authentication (`spark.authenticate` plus one of `spark.network.crypto.enabled` /
-   * `spark.authenticate.enableSaslEncryption`).
+   * Returns true if Spark's RPC channel encryption is configured: either SSL-based RPC encryption
+   * (`spark.ssl.rpc.enabled`), or authentication (`spark.authenticate`) together with either
+   * AES-based encryption (`spark.network.crypto.enabled`) or the separate (deprecated) SASL-based
+   * encryption (`spark.authenticate.enableSaslEncryption`).
    *
-   * NOTE: This condition is intentionally kept identical to the `hasEncryption` check in
-   * `HadoopDelegationTokenManager` (the Kerberos direct-credential-provider path). If the set of
-   * config keys that constitute "RPC encryption is enabled" changes, update both places together.
+   * This is shared with [[HadoopDelegationTokenManager]]'s direct-credential-provider check so the
+   * two credential-propagation paths cannot drift apart: that path fails startup via `require()`,
+   * while OIDC propagation only warns (see [[warnIfRpcEncryptionDisabled]]).
    */
   private[security] def isRpcEncryptionEnabled(sparkConf: SparkConf): Boolean = {
     sparkConf.getBoolean("spark.ssl.rpc.enabled", false) ||

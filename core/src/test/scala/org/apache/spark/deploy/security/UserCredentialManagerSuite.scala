@@ -893,6 +893,18 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     assert(!UserCredentialManager.isRpcEncryptionEnabled(conf))
   }
 
+  test("isRpcEncryptionEnabled: false when network crypto is enabled without authentication") {
+    // spark.network.crypto.enabled only takes effect with spark.authenticate=true; on its own it
+    // does not encrypt anything, so it must not be treated as RPC encryption.
+    val conf = new SparkConf(loadDefaults = false).set(NETWORK_CRYPTO_ENABLED, true)
+    assert(!UserCredentialManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: false when SASL encryption is enabled without authentication") {
+    val conf = new SparkConf(loadDefaults = false).set(SASL_ENCRYPTION_ENABLED, true)
+    assert(!UserCredentialManager.isRpcEncryptionEnabled(conf))
+  }
+
   test("warnIfRpcEncryptionDisabled: warns when encryption is not configured") {
     val appender = new LogAppender(encryptionWarningFragment)
     withLogAppender(appender) {
