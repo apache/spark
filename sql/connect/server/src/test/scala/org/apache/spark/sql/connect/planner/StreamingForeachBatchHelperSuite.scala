@@ -123,7 +123,7 @@ class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSu
     val batchDf = spark.newSession().range(1).toDF()
 
     val manager = new StreamingForeachBatchHelper.ForeachBatchSessionManager(
-      SparkConnectTestUtils.createDummySessionHolder(spark))
+      SparkConnectTestUtils.createDummySessionHolder(spark), useClonedSession = true)
     val clonedHolder = manager.getOrCreateClonedSessionHolder(batchDf)
     // The id is pinned for the whole query: every batch resolves to the same holder.
     assert(manager.getOrCreateClonedSessionHolder(batchDf) eq clonedHolder)
@@ -141,7 +141,8 @@ class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSu
     closingRoot.close()
     assert(closingRoot.isClosing)
     val managerOnClosingRoot =
-      new StreamingForeachBatchHelper.ForeachBatchSessionManager(closingRoot)
+      new StreamingForeachBatchHelper.ForeachBatchSessionManager(
+        closingRoot, useClonedSession = true)
     checkError(
       exception = intercept[SparkIllegalStateException](
         managerOnClosingRoot.getOrCreateClonedSessionHolder(batchDf)),

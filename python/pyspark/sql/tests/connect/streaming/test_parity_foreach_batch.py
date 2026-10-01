@@ -239,6 +239,35 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
             if q:
                 q.stop()
 
+    def test_disabling_fix_restores_root_session_behavior(self):
+        # With the fix disabled, the batch DataFrame is bound to the root session again, so it can
+        # be combined with a DataFrame captured from the root session.
+        with self.sql_conf(
+            {"spark.sql.connect.streaming.foreachBatch.useClonedSession": "false"}
+        ):
+            lookup = self.spark.range(2).selectExpr(
+                "CASE id WHEN 0 THEN 'hello' ELSE 'this' END AS value"
+            )
+
+            def process(batch_df, _):
+                expected = sorted(row.value for row in batch_df.select("value").collect())
+                actual = sorted(
+                    row.value for row in batch_df.join(lookup, "value").select("value").collect()
+                )
+                if actual != expected:
+                    raise AssertionError(f"Joined rows {actual} != batch rows {expected}")
+
+            q = None
+            try:
+                df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+                q = df.writeStream.foreachBatch(process).start()
+                q.processAllAvailable()
+                self.assertTrue(any(p.numInputRows > 0 for p in q.recentProgress))
+                self.assertIsNone(q.exception())
+            finally:
+                if q:
+                    q.stop()
+
     def test_pickling_error(self):
         class NoPickle:
             def __reduce__(self):

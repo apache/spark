@@ -37,6 +37,7 @@ import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.{SessionHolder, SessionKey}
 import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.execution.python.PythonWorkerEnvironment
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.Utils
@@ -58,8 +59,14 @@ object StreamingForeachBatchHelper extends Logging {
    *
    * Lifecycle is driven by the query: created on first batch, closed on query termination via
    * `ForeachBatchCleaner`. Not designed for concurrent batches (streaming runs them serially).
+   *
+   * When `useClonedSession` is false (the fix disabled via
+   * `spark.sql.connect.streaming.foreachBatch.useClonedSession`), no cloned holder is created and
+   * the root holder is used instead, restoring the pre-fix behavior.
    */
-  private[connect] class ForeachBatchSessionManager(rootSessionHolder: SessionHolder)
+  private[connect] class ForeachBatchSessionManager(
+      rootSessionHolder: SessionHolder,
+      useClonedSession: Boolean)
       extends Logging {
     @volatile private var _clonedSessionHolder: SessionHolder = null
     // Set by close(). Registration must not happen again afterwards: the holder never expires by
@@ -69,7 +76,12 @@ object StreamingForeachBatchHelper extends Logging {
 
     def getOrCreateClonedSessionHolder(batchDf: DataFrame): SessionHolder = {
       val existing = _clonedSessionHolder
-      if (existing != null) {
+      if (!useClonedSession) {
+        // Gated off: keep the pre-fix behavior by caching the batch DataFrame in the root holder
+        // and binding the worker to the root session, so it can still be combined with the root
+        // session (at the cost of not running under the stream session's configuration).
+        rootSessionHolder
+      } else if (existing != null) {
         existing
       } else {
         synchronized {
@@ -272,7 +284,9 @@ object StreamingForeachBatchHelper extends Logging {
 
     val (dataOut, dataIn) = runner.init()
 
-    val sessionManager = new ForeachBatchSessionManager(sessionHolder)
+    val useClonedSession = sessionHolder.session.sessionState.conf.getConf(
+      SQLConf.CONNECT_STREAMING_FOREACH_BATCH_USE_CLONED_SESSION)
+    val sessionManager = new ForeachBatchSessionManager(sessionHolder, useClonedSession)
     val queryIdRef = new AtomicReference[String]()
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {
