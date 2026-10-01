@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.pipelines.graph
 
+import java.util.concurrent.ConcurrentHashMap
+
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -52,17 +54,36 @@ trait GraphOperations {
     }.toMap
   }
 
-  /** Map from dataset identifier to all reachable upstream destinations, including itself. */
-  private lazy val upstreamDestinations =
-    mutable.HashMap
-      .empty[TableIdentifier, Set[TableIdentifier]]
-      .withDefault(key => dfsInternal(startDestination = key, downstream = false))
+  /**
+   * Datasets one hop upstream of each dataset: for an output, the union of the inputs of the
+   * flows writing to it. Used by [[dfsInternal]] to look up a node's neighbors directly.
+   */
+  private lazy val immediateUpstreamDatasets: Map[TableIdentifier, Set[TableIdentifier]] =
+    flowNodes.values.groupBy(_.output).map {
+      case (output, nodes) => output -> nodes.flatMap(_.inputs).toSet
+    }
 
-  /** Map from dataset identifier to all reachable downstream destinations, including itself. */
-  private lazy val downstreamDestinations =
-    mutable.HashMap
-      .empty[TableIdentifier, Set[TableIdentifier]]
-      .withDefault(key => dfsInternal(startDestination = key, downstream = true))
+  /** Datasets one hop downstream of each dataset: the outputs of the flows consuming it. */
+  private lazy val immediateDownstreamDatasets: Map[TableIdentifier, Set[TableIdentifier]] = {
+    val builder = mutable.Map.empty[TableIdentifier, mutable.Set[TableIdentifier]]
+    flowNodes.values.foreach { node =>
+      node.inputs.foreach { input =>
+        builder.getOrElseUpdate(input, mutable.Set.empty) += node.output
+      }
+    }
+    builder.map { case (dataset, downstream) => dataset -> downstream.toSet }.toMap
+  }
+
+  /**
+   * Memoized reachable-dataset sets, keyed by (start dataset, downstream?). The graph is
+   * immutable, so a computed set stays valid for its lifetime.
+   */
+  private val reachableDatasets =
+    new ConcurrentHashMap[(TableIdentifier, Boolean), Set[TableIdentifier]]()
+
+  /** Memoized reachable-flow sets, keyed by (start flow, downstream?). */
+  private val reachableFlows =
+    new ConcurrentHashMap[(TableIdentifier, Boolean), Set[TableIdentifier]]()
 
   /**
    * Performs a DFS starting from `startNode` and returns the set of nodes (datasets) reached.
@@ -96,9 +117,9 @@ trait GraphOperations {
         && currNode != startDestination)) {
         visited.add(currNode)
         val neighbors = if (downstream) {
-          flowNodes.values.filter(_.inputs.contains(currNode)).map(_.output)
+          immediateDownstreamDatasets.getOrElse(currNode, Set.empty)
         } else {
-          flowNodes.values.filter(_.output == currNode).flatMap(_.inputs)
+          immediateUpstreamDatasets.getOrElse(currNode, Set.empty)
         }
         nextNodes = neighbors.toList ++ nextNodes
       }
@@ -141,13 +162,20 @@ trait GraphOperations {
   private def reachabilitySet(
       destinationIdentifier: TableIdentifier,
       downstream: Boolean): Set[TableIdentifier] = {
-    if (downstream) downstreamDestinations(destinationIdentifier)
-    else upstreamDestinations(destinationIdentifier)
+    reachableDatasets.computeIfAbsent(
+      (destinationIdentifier, downstream),
+      (_: (TableIdentifier, Boolean)) => dfsInternal(destinationIdentifier, downstream))
   }
 
   /** Returns the set of flows reachable from `flowIdentifier` via output (child) edges. */
   def downstreamFlows(flowIdentifier: TableIdentifier): Set[TableIdentifier] = {
     assert(flowNodes.contains(flowIdentifier), s"$flowIdentifier is not a valid start flow")
+    reachableFlows.computeIfAbsent(
+      (flowIdentifier, true),
+      (_: (TableIdentifier, Boolean)) => computeDownstreamFlows(flowIdentifier))
+  }
+
+  private def computeDownstreamFlows(flowIdentifier: TableIdentifier): Set[TableIdentifier] = {
     val downstreamDatasets = reachabilitySet(flowNodes(flowIdentifier).output, downstream = true)
     flowNodes.values.filter(_.inputs.exists(downstreamDatasets.contains)).map(_.identifier).toSet
   }
@@ -155,6 +183,12 @@ trait GraphOperations {
   /** Returns the set of flows reachable from `flowIdentifier` via input (parent) edges. */
   def upstreamFlows(flowIdentifier: TableIdentifier): Set[TableIdentifier] = {
     assert(flowNodes.contains(flowIdentifier), s"$flowIdentifier is not a valid start flow")
+    reachableFlows.computeIfAbsent(
+      (flowIdentifier, false),
+      (_: (TableIdentifier, Boolean)) => computeUpstreamFlows(flowIdentifier))
+  }
+
+  private def computeUpstreamFlows(flowIdentifier: TableIdentifier): Set[TableIdentifier] = {
     val upstreamDatasets =
       flowNodes(flowIdentifier).inputs.flatMap(reachabilitySet(_, downstream = false))
     flowNodes.values.filter(e => upstreamDatasets.contains(e.output)).map(_.identifier).toSet
