@@ -106,8 +106,17 @@ class ExecutorResizeDriverPlugin extends DriverPlugin with Logging {
       .list()
       .getItems.asScala
 
-    pods.filter(_.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL) != null).foreach { pod =>
-      val execId = pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL)
+    val executorPods = pods.flatMap { pod =>
+      pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL) match {
+        case "EXECID" | null =>
+          // The exec label has not yet been assigned
+          None
+        case id =>
+          Some((id, pod))
+      }
+    }
+
+    executorPods.foreach { case (execId, pod) =>
       try {
         val metrics = kubernetesClient.top().pods().metrics(namespace, pod.getMetadata.getName)
 
