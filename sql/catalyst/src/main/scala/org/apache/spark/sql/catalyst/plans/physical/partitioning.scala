@@ -953,11 +953,11 @@ case class KeyedPartitioning(
         }
 
       case o @ OrderedDistribution(_) if SQLConf.get.v2BucketingAllowSorting =>
-        // `EnsureRequirements` orders the key rows by the attributes the expressions are over, and
-        // nothing makes a reducer order-preserving, so that ordering says nothing about reduced
-        // keys. This is the local gate. A reduced position always carries a transform and an
-        // `ORDER BY` cannot name one, so the match below already refuses every case a query can
-        // reach. Do not read the first clause as redundant.
+        // `EnsureRequirements` compares the key rows position by position under the required
+        // ordering. Nothing makes a reducer order-preserving, so that comparison says nothing
+        // about reduced keys. This is the local gate. A reduced position always carries a
+        // transform and an `ORDER BY` cannot name one, so the match below already refuses every
+        // case a query can reach. Do not read the first clause as redundant.
         // An out-of-set key can break the ascending sequence of the declared keys, so a marked
         // layout keeps a global ordering claim only for a single partition (see the `@param`).
         expressionsDescribeKeys && o.areAllClusterKeysMatched(expressions) &&

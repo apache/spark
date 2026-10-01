@@ -139,10 +139,16 @@ case class EnsureRequirements(
               // OrderedDistribution requires grouped KeyedPartitioning with sorted keys
               // according to the distribution's ordering.
               val satisfyingKeyedPartitioning = resolution.fold(identity, _._1)
-              // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees
-              // one attribute per partition expression.
-              val attrs = satisfyingKeyedPartitioning.expressions.flatMap(_.references)
-              val keyRowOrdering = RowOrdering.create(o.ordering, attrs)
+              // A key row holds the values of the partition expressions. `keysSatisfy` admits a
+              // partitioning here only when those expressions are the ordering's, position by
+              // position, so each sort order reads its position of the key row. The expression
+              // need not be a bare column, e.g. a shuffled side's join key `100 - b`.
+              val keyRowOrdering = RowOrdering.create(
+                o.ordering.zipWithIndex.map { case (order, i) =>
+                  SortOrder(BoundReference(i, order.child.dataType, nullable = true),
+                    order.direction, order.nullOrdering, Seq.empty)
+                },
+                Nil)
               val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
               val keys = satisfyingKeyedPartitioning.partitionKeys
               // An empty zip is vacuously sorted, which is the answer for a single key.
