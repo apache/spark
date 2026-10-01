@@ -2013,14 +2013,22 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
               Seq("abcdef").toDF("c").write.format(format).save(dir.getCanonicalPath)
               Seq("CHAR", "VARCHAR").foreach { typ =>
                 withClue(s"$format $sourceVersion $typ: ") {
-                  val readDf = spark.read.schema(s"c $typ(4)").format(format)
-                    .load(dir.getCanonicalPath)
-                  checkError(
-                    exception = intercept[SparkRuntimeException] {
-                      readDf.collect()
-                    },
-                    condition = "EXCEED_LIMIT_LENGTH",
-                    parameters = Map("limit" -> "4"))
+                  // CSV's default PERMISSIVE mode treats a length overflow as a corrupt
+                  // field (null). FAILFAST surfaces EXCEED_LIMIT_LENGTH, matching from_csv.
+                  val reader = spark.read.schema(s"c $typ(4)").format(format)
+                  if (format == "csv") {
+                    val csvDf = reader.option("mode", "FAILFAST")
+                      .load(dir.getCanonicalPath)
+                    assertParseExceedLimitError(csvDf.collect(), expectedLimit = "4")
+                  } else {
+                    val readDf = reader.load(dir.getCanonicalPath)
+                    checkError(
+                      exception = intercept[SparkRuntimeException] {
+                        readDf.collect()
+                      },
+                      condition = "EXCEED_LIMIT_LENGTH",
+                      parameters = Map("limit" -> "4"))
+                  }
                 }
               }
             }
