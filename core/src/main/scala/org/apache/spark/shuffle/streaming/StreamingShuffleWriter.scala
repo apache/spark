@@ -476,7 +476,8 @@ class StreamingShuffleWriter[K, V](
           // A single row is never split across buffers (see the TODO above), so an oversized row
           // grows its buffer past BUFFER_SIZE and inflates the tracked memory budget. Warn
           // (throttled) so operators can raise the block size or writer memory instead of
-          // overshoot. When a row trips both thresholds the memory warning takes precedence.
+          // overshoot. When a row trips both thresholds the more severe memory warning takes
+          // precedence.
           val rowSize = timestampedBuffer.buffer.writerIndex() - dataStartPos
           if (rowSize > MAX_BUFFER_BYTES / 4) {
             hugeRowWarningThrottler(
