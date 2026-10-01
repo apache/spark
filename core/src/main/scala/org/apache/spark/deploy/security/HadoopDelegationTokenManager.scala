@@ -30,7 +30,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
@@ -78,11 +78,10 @@ private[spark] class HadoopDelegationTokenManager(
     "Both principal and keytab must be defined, or neither.")
 
   if (sparkConf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED)) {
-    require(UserCredentialManager.isRpcEncryptionEnabled(sparkConf),
+    require(SecurityManager.isRpcEncryptionEnabled(sparkConf),
       "RPC channel encryption must be enabled when " +
-      "spark.security.directCredentialProviders.enabled is true: either " +
-      "spark.ssl.rpc.enabled=true, or spark.authenticate=true together with " +
-      "spark.network.crypto.enabled or spark.authenticate.enableSaslEncryption. " +
+      s"${DIRECT_CREDENTIAL_PROVIDERS_ENABLED.key} is true. " +
+      s"${SecurityManager.rpcEncryptionRemediation} " +
       "Credential tokens must not be transmitted over unencrypted channels.")
   }
 

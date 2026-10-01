@@ -28,11 +28,10 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
-import org.apache.spark.internal.config.Network.NETWORK_CRYPTO_ENABLED
 import org.apache.spark.security._
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -528,40 +527,27 @@ private[spark] object UserCredentialManager extends Logging {
   }
 
   /**
-   * Returns true if Spark's RPC channel encryption is configured: either SSL-based RPC encryption
-   * (`spark.ssl.rpc.enabled`), or authentication (`spark.authenticate`) together with either
-   * AES-based encryption (`spark.network.crypto.enabled`) or the separate (deprecated) SASL-based
-   * encryption (`spark.authenticate.enableSaslEncryption`).
-   *
-   * This is shared with [[HadoopDelegationTokenManager]]'s direct-credential-provider check so the
-   * two credential-propagation paths cannot drift apart: that path fails startup via `require()`,
-   * while OIDC propagation only warns (see [[warnIfRpcEncryptionDisabled]]).
-   */
-  private[security] def isRpcEncryptionEnabled(sparkConf: SparkConf): Boolean = {
-    sparkConf.getBoolean("spark.ssl.rpc.enabled", false) ||
-      (sparkConf.get(NETWORK_AUTH_ENABLED) &&
-        (sparkConf.get(NETWORK_CRYPTO_ENABLED) || sparkConf.get(SASL_ENCRYPTION_ENABLED)))
-  }
-
-  /**
    * Logs a warning if OIDC credential propagation is enabled but RPC channel encryption is not
-   * configured, since credentials would then be transmitted over the RPC channel in cleartext.
+   * configured, since credentials may then be transmitted over the RPC channel in cleartext.
    * Unlike [[HadoopDelegationTokenManager]]'s direct-credential-provider path (which fails fast),
-   * this only warns, per the SPIP's default behavior.
+   * this only warns, per the SPIP's default behavior (a stricter fail-fast mode may be introduced
+   * later based on community feedback).
+   *
+   * The encryption predicate and the remediation hint are shared with
+   * [[HadoopDelegationTokenManager]]'s `require()` via [[SecurityManager]], so the warning and the
+   * fail-fast message cannot drift apart.
    */
   private[security] def warnIfRpcEncryptionDisabled(sparkConf: SparkConf): Unit = {
-    if (!isRpcEncryptionEnabled(sparkConf)) {
-      // Reference config keys via `.key` (rather than hardcoded strings) so the message stays in
-      // sync if a key is renamed. `spark.ssl.rpc.enabled` has no Scala ConfigEntry (it is read
-      // directly in TransportConf), so it is spelled out literally here and in
-      // isRpcEncryptionEnabled.
-      val remediation = s"Enable RPC encryption via spark.ssl.rpc.enabled=true, or " +
-        s"${NETWORK_AUTH_ENABLED.key}=true together with one of " +
-        s"${NETWORK_CRYPTO_ENABLED.key} / ${SASL_ENCRYPTION_ENABLED.key}."
+    if (!SecurityManager.isRpcEncryptionEnabled(sparkConf)) {
+      // The remediation hint is emitted as plain log text (not an MDC(REASON, ...)) so it does not
+      // pollute the structured `reason` field, which is used elsewhere for operation-failure
+      // reasons. We say credentials "may be" (not "will be") transmitted in cleartext because the
+      // channel could still be protected outside Spark (e.g. a service mesh or a private network),
+      // which Spark cannot detect.
       logWarning(log"OIDC credential propagation is enabled " +
         log"(${MDC(LogKeys.CONFIG, SECURITY_OIDC_ENABLED.key)}=true) but RPC channel encryption " +
-        log"is not configured. Credentials will be transmitted to executors over an unencrypted " +
-        log"channel. ${MDC(LogKeys.REASON, remediation)}")
+        log"is not configured. Credentials may be transmitted to executors over an unencrypted " +
+        log"channel. " + log"${MDC(LogKeys.MESSAGE, SecurityManager.rpcEncryptionRemediation)}")
     }
   }
 

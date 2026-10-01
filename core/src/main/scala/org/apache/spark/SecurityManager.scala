@@ -86,8 +86,7 @@ private[spark] class SecurityManager(
 
   private var secretKey: String = _
 
-  private val sslRpcEnabled = sparkConf.getBoolean(
-    "spark.ssl.rpc.enabled", false)
+  private val sslRpcEnabled = sparkConf.getBoolean(SSL_RPC_ENABLED_CONF, false)
 
   logInfo(log"SecurityManager: authentication ${MDC(LogKeys.AUTH_ENABLED,
     if (authOn) "enabled" else "disabled")}" +
@@ -275,6 +274,12 @@ private[spark] class SecurityManager(
 
   /**
    * Checks whether network encryption should be enabled.
+   *
+   * This reports only whether AES/SASL *network* encryption is in effect, and treats SSL RPC as
+   * *disabling* it (AES/SASL and SSL RPC are mutually exclusive transports). To ask instead "is
+   * the RPC channel encrypted at all?" (treating SSL RPC as encryption and requiring
+   * `spark.authenticate` for the AES/SASL path), use [[SecurityManager.isRpcEncryptionEnabled]].
+   *
    * @return Whether to enable encryption when connecting to services that support it.
    */
   def isEncryptionEnabled(): Boolean = {
@@ -454,4 +459,45 @@ private[spark] object SecurityManager {
 
   // key used to store the spark secret in the Hadoop UGI
   val SECRET_LOOKUP_KEY = new Text("sparkCookie")
+
+  // `spark.ssl.rpc.enabled` has no Scala ConfigEntry (it is read directly in TransportConf), so
+  // its key is defined here as a single source of truth for the code that needs to read it.
+  private[spark] val SSL_RPC_ENABLED_CONF = "spark.ssl.rpc.enabled"
+
+  /**
+   * Returns true if Spark's RPC channel is encrypted by any supported mechanism: SSL-based RPC
+   * encryption (`spark.ssl.rpc.enabled`), or authentication (`spark.authenticate`) enabled
+   * together with either AES-based encryption (`spark.network.crypto.enabled`) or the separate
+   * (deprecated) SASL-based encryption (`spark.authenticate.enableSaslEncryption`).
+   *
+   * This is intentionally distinct from the instance method
+   * [[SecurityManager.isEncryptionEnabled]]:
+   *  - `isEncryptionEnabled` reports whether AES/SASL *network* encryption is in effect and
+   *    treats SSL RPC as *disabling* it (returning false when `spark.ssl.rpc.enabled` is set),
+   *    because AES/SASL and SSL RPC are mutually exclusive transports. It also does not require
+   *    `spark.authenticate`, so it can return true for a configuration that does not actually
+   *    encrypt the channel.
+   *  - This predicate instead answers "is the RPC channel encrypted at all?", treating SSL RPC
+   *    as encryption and requiring `spark.authenticate` for the AES/SASL path. It must not be
+   *    replaced by `isEncryptionEnabled`.
+   *
+   * It is shared by the two credential-propagation paths so they cannot drift apart: the
+   * direct-credential-provider path in `HadoopDelegationTokenManager` fails startup via
+   * `require()`, while OIDC credential propagation only warns.
+   */
+  private[spark] def isRpcEncryptionEnabled(conf: SparkConf): Boolean = {
+    conf.getBoolean(SSL_RPC_ENABLED_CONF, false) ||
+      (conf.get(NETWORK_AUTH_ENABLED) &&
+        (conf.get(Network.NETWORK_CRYPTO_ENABLED) || conf.get(SASL_ENCRYPTION_ENABLED)))
+  }
+
+  /**
+   * Human-readable remediation describing how to enable RPC channel encryption. Shared by the
+   * OIDC credential-propagation warning and the direct-credential-provider `require()` message so
+   * the two stay in sync with [[isRpcEncryptionEnabled]].
+   */
+  private[spark] def rpcEncryptionRemediation: String =
+    s"Enable RPC encryption via $SSL_RPC_ENABLED_CONF=true, or ${NETWORK_AUTH_ENABLED.key}=true " +
+      s"together with one of ${Network.NETWORK_CRYPTO_ENABLED.key} / " +
+      s"${SASL_ENCRYPTION_ENABLED.key}."
 }
