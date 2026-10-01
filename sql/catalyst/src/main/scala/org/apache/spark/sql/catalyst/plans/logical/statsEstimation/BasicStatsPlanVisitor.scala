@@ -58,8 +58,10 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     val estimate = p match {
       case ScanOperation(projects, filtersStayUp, filtersPushDown,
           scan: DataSourceV2ScanRelation) if scan.shouldEstimateInferredFilters =>
-        // Gather the original predicates across filters and deterministic projections. Estimate
-        // them together with the fully pushed originals against the scan's unadjusted statistics.
+        // Gather residual predicates through filters and deterministic projections, and include the
+        // fully pushed predicates. Estimate this original group and the scan's inferred predicates
+        // separately from the same unadjusted scan statistics. Since the inferred predicates are
+        // implied by the originals, use the smaller row count to avoid counting their effect twice.
         scan.estimateStatsWithFilters(filtersPushDown ++ filtersStayUp).flatMap { stats =>
           if (projects == scan.output) {
             Some(stats)

@@ -1051,21 +1051,23 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val withFilter = finalFilters.foldLeft[LogicalPlan](scanRelation)((plan, cond) => {
         Filter(cond, plan)
       })
-      // Opted-in scans compare original and inferred predicates directly from scan metadata,
-      // including any residual filters. Other scans still use the existing best-effort adjustment
-      // for fully pushed predicates that survive pruning.
-      val withPostPushdownAdjustmentFilters =
-        withSparkPostPushdownAdjustmentFilters(withFilter, scanRelation.outputBoundPushedFilters)
+      // useInferredFilterEstimation() enables separate estimates for original predicates
+      // (including residuals) and inferred predicates; CBO uses the smaller estimate.
+      // When shouldEstimateInferredFilters is true, skip re-adding fully pushed predicates as
+      // adjustment Filters. Otherwise, re-add those that survive pruning when
+      // reflectsFullyPushedDownFilters() is false.
+      val withAdjustmentFilters =
+        withPostPushdownAdjustmentFilters(withFilter, scanRelation.outputBoundPushedFilters)
 
-      if (withPostPushdownAdjustmentFilters.output != project) {
+      if (withAdjustmentFilters.output != project) {
         val newProjects = normalizedProjects
           .map(projectionFunc)
           .asInstanceOf[Seq[NamedExpression]]
         Project(
           restoreOriginalOutputNames(newProjects, project.map(_.name)),
-          withPostPushdownAdjustmentFilters)
+          withAdjustmentFilters)
       } else {
-        withPostPushdownAdjustmentFilters
+        withAdjustmentFilters
       }
   }
 
@@ -1256,7 +1258,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       sHolder.joinedRelationsPushedDownOperators, optRelationName)
   }
 
-  private def withSparkPostPushdownAdjustmentFilters(
+  private def withPostPushdownAdjustmentFilters(
       plan: LogicalPlan,
       pushedFilters: Seq[Expression]): LogicalPlan = {
     pushedFilters.reduceLeftOption(And) match {
