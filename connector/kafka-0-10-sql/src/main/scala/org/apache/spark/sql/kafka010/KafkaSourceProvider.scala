@@ -37,6 +37,7 @@ import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsTruncate, Write, WriteBuilder}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsStreamingUpdateAsAppend}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
@@ -807,10 +808,19 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   }
 
   private def convertToSpecifiedParams(parameters: Map[String, String]): Map[String, String] = {
-    parameters
+    // Optional operator-configured denylist of Kafka client option names (without the "kafka."
+    // prefix). Empty by default, which allows every option and preserves the previous behavior.
+    val disallowed = SQLConf.get.getConf(StaticSQLConf.KAFKA_DISALLOWED_OPTIONS)
+      .map(_.toLowerCase(Locale.ROOT)).toSet
+    val stripped = parameters
       .keySet
       .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
       .map { k => k.drop(6) -> parameters(k) }
-      .toMap
+    stripped.foreach { case (key, _) =>
+      if (disallowed.contains(key.toLowerCase(Locale.ROOT))) {
+        throw KafkaExceptions.disallowedOption(key, StaticSQLConf.KAFKA_DISALLOWED_OPTIONS.key)
+      }
+    }
+    stripped.toMap
   }
 }

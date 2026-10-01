@@ -202,6 +202,21 @@ class ApplyInPandasTestsMixin:
         assert_frame_equal(expected2, result2)
         assert_frame_equal(expected3, result3)
 
+    def test_output_batch_split_preserves_result(self):
+        # A small worker output-batch cap splits a group's output Arrow batch into several
+        # pieces before it is sent to the JVM. The result must be unchanged by the split.
+        df = self.spark.range(1000).selectExpr("id", "1 as k")
+
+        def add_one(pdf):
+            return pdf.assign(id=pdf.id + 1)
+
+        conf = {"spark.sql.execution.pythonUDF.arrow.workerOutputBatchMaxBytes": 128}
+        with self.sql_conf(conf):
+            result = df.groupby("k").applyInPandas(add_one, "id long, k int").sort("id").toPandas()
+
+        expected = df.toPandas().assign(id=lambda p: p.id + 1)
+        assert_frame_equal(expected.reset_index(drop=True), result.reset_index(drop=True))
+
     def test_array_type_correct(self):
         df = self.data.withColumn("arr", sf.array(sf.col("id"))).repartition(1, "id")
 

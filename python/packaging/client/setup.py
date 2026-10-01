@@ -146,6 +146,7 @@ try:
     connect_packages = [
         "pyspark",
         "pyspark.cloudpickle",
+        "pyspark.eval_handlers",
         "pyspark.messages",
         "pyspark.messages.socket",
         "pyspark.mllib",

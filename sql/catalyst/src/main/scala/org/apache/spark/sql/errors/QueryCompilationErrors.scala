@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamedRelation, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -1381,8 +1381,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def cannotUsePreservedDatabaseAsCurrentDatabaseError(database: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1068",
-      messageParameters = Map("database" -> database))
+      errorClass = "CANNOT_USE_RESERVED_DATABASE_AS_CURRENT",
+      messageParameters = Map("database" -> toSQLId(database)))
   }
 
   def createExternalTableWithoutLocationError(): Throwable = {
@@ -2370,6 +2370,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "tableName" -> toSQLId(tableName),
         "capturedTableId" -> capturedTableId,
         "currentTableId" -> currentTableId))
+  }
+
+  def changelogChangedAfterAnalysis(
+      tableName: String,
+      changedProperties: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.CHANGELOG_METADATA_MISMATCH",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "changedProperties" -> changedProperties.mkString(", ")))
   }
 
   def columnsChangedAfterAnalysis(
@@ -3695,6 +3705,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "dateType" -> DateType.catalogString,
         "timestampType" -> TimestampType.catalogString,
         "dataType" -> column.dataType.catalogString))
+  }
+
+  def invalidJdbcPartitionBoundError(
+      optionName: String,
+      value: String,
+      dataType: DataType): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_JDBC_PARTITION_BOUND",
+      messageParameters = Map(
+        "option" -> toDSOption(optionName),
+        "value" -> toSQLConfVal(value),
+        "dataType" -> toSQLType(dataType)))
   }
 
   def tableOrViewAlreadyExistsError(name: String): Throwable = {

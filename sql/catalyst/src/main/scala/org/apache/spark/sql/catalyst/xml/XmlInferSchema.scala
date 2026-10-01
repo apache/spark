@@ -178,7 +178,7 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     try {
       val xsd = xsdSchema.orElse(Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema))
       xsd.foreach { schema =>
-        schema.newValidator().validate(new StreamSource(new StringReader(xml)))
+        ValidatorUtil.newValidator(schema).validate(new StreamSource(new StringReader(xml)))
       }
       parser = StaxXmlParserUtils.filteredReader(xml)
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
@@ -205,6 +205,9 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
         Some(StructType(Nil))
       case e: FileNotFoundException if !options.ignoreMissingFiles => throw e
       case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
+      // ValidatorUtil.newValidator throws this when the JAXP implementation cannot
+      // disable external access; that is an environment error, not a bad record.
+      case e: UnsupportedOperationException => throw e
       case e @ (_: IOException | _: RuntimeException) if options.ignoreCorruptFiles =>
         logWarning("Skipped the rest of the content in the corrupted file", e)
         Some(StructType(Nil))

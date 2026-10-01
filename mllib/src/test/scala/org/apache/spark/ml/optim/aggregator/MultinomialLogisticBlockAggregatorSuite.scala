@@ -132,6 +132,33 @@ class MultinomialLogisticBlockAggregatorSuite extends SparkFunSuite with MLlibTe
     assert(aggNoIntercept.gradient.size === numFeatures * numClasses)
   }
 
+  test("reused buffer with zero intercept") {
+    val coefficients = Vectors.dense(
+      1.0, 2.0, -2.0, 3.0, 0.0, -1.0,
+      4.0, 0.0, -3.0)
+    val fullBlock = InstanceBlock.fromInstances(scaledInstances.toImmutableArraySeq)
+    val expectedAggregator = getNewAggregator(instances, coefficients,
+      fitIntercept = true, fitWithMean = false)
+    expectedAggregator.add(fullBlock)
+    val expectedLoss = expectedAggregator.loss
+    val expectedGradient = expectedAggregator.gradient
+
+    val denseBlocks = Seq(
+      InstanceBlock.fromInstances(scaledInstances.take(2).toImmutableArraySeq),
+      InstanceBlock.fromInstances(scaledInstances.takeRight(1).toImmutableArraySeq))
+    val sparseBlocks = denseBlocks.map { block =>
+      new InstanceBlock(block.labels, block.weights, block.matrix.toSparseRowMajor)
+    }
+
+    Seq(denseBlocks, sparseBlocks).foreach { blocks =>
+      val aggregator = getNewAggregator(instances, coefficients,
+        fitIntercept = true, fitWithMean = false)
+      blocks.foreach(aggregator.add)
+      assert(aggregator.loss ~== expectedLoss relTol 1e-9)
+      assert(aggregator.gradient ~== expectedGradient relTol 1e-9)
+    }
+  }
+
   test("check correctness: fitIntercept = false") {
     val coefArray = Array(1.0, 2.0, -2.0, 3.0, 0.0, -1.0)
     val numFeatures = instances.head.features.size
