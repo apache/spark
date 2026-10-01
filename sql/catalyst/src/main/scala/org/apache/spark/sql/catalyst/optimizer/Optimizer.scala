@@ -2311,17 +2311,15 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
    * Inlines any `With` in an inferred predicate. `RewriteWithExpression` keeps a `With` where it
    * cannot pre-evaluate the definition -- a conditional branch, for one -- and such a `With` can
    * reach a constraint and be carried, through an equi-join key, into a filter inferred for the
-   * other side. A `With` is opaque to filter pushdown (`DataSourceStrategy` cannot translate one),
-   * so an inferred filter -- a redundant predicate planted precisely to be pushed down -- must not
-   * hold one. Inlining recomputes the definition at each reference, a copy the memoized form avoids
-   * when the definition is read more than once; that is a worthwhile trade for a redundant filter
-   * whose point is to reach the data source, and the definition is deterministic (only
-   * deterministic constraints are planted), so the inlined and memoized forms agree.
+   * other side. `ReplaceNullWithFalseInPredicate` has no `With` case in its recursion and stops at
+   * one, and `V2ExpressionBuilder` has none either, so a predicate holding one translates to
+   * nothing for a source that takes V2 predicates. The definition is deterministic -- only
+   * deterministic constraints are planted -- so inlining gives the same answer, at the cost of
+   * evaluating it where each reference stood rather than once.
    *
-   * This rule is already non-idempotent -- hence "Infer Filters" being a `Once` batch in
-   * `excludedOnceBatches` -- and inlining adds one more non-idempotent step: a re-run would
-   * re-derive the un-inlined `With` constraint and no longer match the inlined filter already
-   * planted. Keep the batch `Once` and excluded.
+   * The batch is already `Once` and in `excludedOnceBatches`; inlining gives it one more reason to
+   * be. A re-run re-derives the un-inlined `With` constraint, which no longer matches the inlined
+   * filter already planted, so it plants another copy. Keep the batch `Once` and excluded.
    */
   private def inlineWiths(e: Expression): Expression =
     e.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {

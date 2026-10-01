@@ -465,14 +465,51 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  /**
+   * Every conjunct of every `Filter` in `plan` that reads `attr`. Conjuncts, not whole conditions:
+   * the `Filter` planting site puts the inferred predicates and the user's own condition in one
+   * `And`, and only the inferred ones are inlined.
+   */
+  private def conjunctsReading(plan: LogicalPlan, attr: Attribute): Seq[Expression] =
+    plan.collect { case Filter(cond, _) => cond }
+      .flatMap(splitConjunctivePredicates)
+      .filter(_.references.contains(attr))
+
+  /**
+   * Asserts that `plan` holds a branch predicate inferred over `attr`, that each of the inlined
+   * definitions stands where a reference to it stood, and that nothing of the `With` is left --
+   * neither the node nor a reference, since a substitution that dropped the definitions would
+   * leave the references dangling and the predicate unevaluable. The definitions are spelled out
+   * rather than derived from `attr`, so a nested definition cannot be witnessed by the one it
+   * reads.
+   */
+  private def assertInlinedBranchPredicate(
+      plan: LogicalPlan,
+      attr: Attribute,
+      inlinedDef: Expression,
+      moreDefs: Expression*): Unit = {
+    val conjuncts = conjunctsReading(plan, attr)
+    val branchConjuncts = conjuncts.filter(_.exists(_.isInstanceOf[CaseWhen]))
+    assert(branchConjuncts.nonEmpty,
+      s"no inferred branch predicate over $attr; found: $conjuncts\n$plan")
+    branchConjuncts.foreach { cond =>
+      assert(!cond.exists(_.isInstanceOf[With]), s"planted predicate carries a With: $cond")
+      assert(!cond.exists(_.isInstanceOf[CommonExpressionRef]),
+        s"planted predicate carries a dangling CommonExpressionRef: $cond")
+      (inlinedDef +: moreDefs).foreach { d =>
+        assert(cond.exists(_.semanticEquals(d)),
+          s"$d was not substituted into its references: $cond")
+      }
+    }
+  }
+
   test("SPARK-59922: an inferred filter does not carry a With") {
     val x = testRelation.subquery("x")
     val y = testRelation.subquery("y")
 
     // The left user filter keeps a With inside a conditional branch. The branch references
     // only x.a, an equi-join key, so InferFiltersFromConstraints substitutes it through the
-    // key and plants a matching filter on the right (over y.a). A With is opaque to filter
-    // pushdown, so the inferred filter must not carry one -- the user's own filter still may.
+    // key and plants a matching filter on the right (over y.a) from `inferNewFilter`.
     val xa = x.output.head
     val branchWith = With(xa + xa) { case Seq(r) => (r > 1) && (r < 10) }
     val leftPredicate = CaseWhen(Seq((xa > 0) -> branchWith), Some(Literal(false)))
@@ -486,18 +523,52 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .getOrElse(fail("expected a Join in the analyzed plan"))
 
     val optimized = Optimize.execute(originalQuery)
+    assertInlinedBranchPredicate(optimized, ya, ya + ya)
+    // The user's own predicate is still there in `With` form -- an inferred inlined copy may be
+    // planted beside it, since the inlined constraint travels back across the key.
+    assert(conjunctsReading(optimized, xa).exists(_.exists(_.isInstanceOf[With])),
+      s"the user's own branch With was inlined too:\n$optimized")
+  }
 
-    // Conditions over the right side that carry the propagated CaseWhen branch predicate.
-    val inferred = optimized.collect {
-      case Filter(cond, _) if cond.references.contains(ya) => cond
-    }.filter(_.exists(_.isInstanceOf[CaseWhen]))
+  test("SPARK-59922: a filter inferred for a Filter node does not carry a With") {
+    val x = testRelation.subquery("x")
+    val Seq(xa, xb, _) = x.output
 
-    // PREMISE: the branch predicate was inferred and planted on the right side.
-    assert(inferred.nonEmpty, s"no inferred branch filter over the right side:\n$optimized")
+    // No join: the equality is a constraint of the Filter itself, so the substituted copy is
+    // planted by the `case filter @ Filter` site rather than by `inferNewFilter`. Two definitions,
+    // so an inlining that only handled the first would leave the second's reference behind.
+    val branchWith = With(xa + xa, xa * xa) { case Seq(sum, product) =>
+      (sum > 1) && (product < 10)
+    }
+    val condition = (xa === xb) && CaseWhen(Seq((xa > 0) -> branchWith), Some(Literal(false)))
 
-    // The inferred filter must not carry a With.
-    assert(inferred.forall(cond => !cond.exists(_.isInstanceOf[With])),
-      s"inferred filter carries a With:\n${inferred.mkString("\n")}")
+    val optimized = Optimize.execute(x.where(condition).analyze)
+    assertInlinedBranchPredicate(optimized, xb, xb + xb, xb * xb)
+  }
+
+  test("SPARK-59922: a nested With in an inferred filter is inlined at both levels") {
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
+
+    // The inner definition reads the outer one's reference, so both levels have to be substituted:
+    // leaving either one closed over a reference leaves a `With` behind.
+    val xa = x.output.head
+    val nested = With(xa + xa) { case Seq(outer) =>
+      CaseWhen(Seq((xa > 0) -> With(outer + Literal(1)) { case Seq(inner) =>
+        (inner > 1) && (inner < 10)
+      }), Some(Literal(false)))
+    }
+
+    val originalQuery = x.where(nested)
+      .join(y, Inner, Some("x.a".attr === "y.a".attr))
+      .analyze
+    val ya = originalQuery.collectFirst { case j: Join => j.right.output.head }
+      .getOrElse(fail("expected a Join in the analyzed plan"))
+
+    val optimized = Optimize.execute(originalQuery)
+    // The inner definition, not just the outer one it reads: `ya + ya` alone is a sub-node of it,
+    // so witnessing only that would pass on a predicate that dropped the `+ 1`.
+    assertInlinedBranchPredicate(optimized, ya, ya + ya + Literal(1))
   }
 
 }

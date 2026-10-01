@@ -292,8 +292,11 @@ object With {
 
   /**
    * The expression `withExpr` stands for: each of its definitions substituted into its references,
-   * so a definition is evaluated once per reference rather than once. A reference an enclosing
-   * `With` defines is left alone, for that one to bind.
+   * so a definition is evaluated where each reference stood rather than once for all of them. A
+   * reference an enclosing `With` defines is left alone, for that one to bind.
+   *
+   * Expects ids that canonicalization has not renumbered. `canonicalized` numbers them per scope,
+   * so two scopes can hold one id and a reference would bind to the wrong definition.
    */
   private[sql] def inlineDefinitions(withExpr: With): Expression = {
     val definitions = withExpr.defs.map(d => d.id -> d.child).toMap
