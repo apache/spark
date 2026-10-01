@@ -124,7 +124,7 @@ class StreamingShuffleWriter[K, V](
   // Holds per-shard state. Public for testing.
   private[streaming] val shards: Array[ShardState] = Array.tabulate(numPartitions)(ShardState(_))
 
-  // Bounds the bytes held by allocated buffers. Public for testing.
+  // Public for testing.
   private[streaming] val allocatedBufferBytesSemaphore: Semaphore =
     new Semaphore(MAX_BUFFER_BYTES.toInt)
 
