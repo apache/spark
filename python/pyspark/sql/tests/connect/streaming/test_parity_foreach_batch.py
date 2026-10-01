@@ -242,9 +242,7 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
     def test_disabling_fix_restores_root_session_behavior(self):
         # With the fix disabled, the batch DataFrame is bound to the root session again, so it can
         # be combined with a DataFrame captured from the root session.
-        with self.sql_conf(
-            {"spark.sql.connect.streaming.foreachBatch.useClonedSession": "false"}
-        ):
+        with self.sql_conf({"spark.sql.connect.streaming.foreachBatch.useClonedSession": "false"}):
             lookup = self.spark.range(2).selectExpr(
                 "CASE id WHEN 0 THEN 'hello' ELSE 'this' END AS value"
             )
