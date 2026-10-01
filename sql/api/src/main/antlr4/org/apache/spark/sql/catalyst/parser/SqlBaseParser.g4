@@ -775,7 +775,8 @@ autoCdcParameters
         | autoCdcSequenceByClause
         | autoCdcColumnsClause
         | autoCdcStoredAsClause
-        | autoCdcTrackHistoryClause)*
+        | autoCdcTrackHistoryClause
+        | autoCdcIgnoreNullClause)*
     ;
 
 autoCdcDeleteClause
@@ -800,6 +801,12 @@ autoCdcTrackHistoryClause
     : TRACK HISTORY ON (
         LEFT_PAREN trackCols=identifierSeq RIGHT_PAREN |
         ASTERISK EXCEPT LEFT_PAREN nonTrackCols=identifierSeq RIGHT_PAREN)
+    ;
+
+autoCdcIgnoreNullClause
+    : IGNORE NULL UPDATES (ON (
+        LEFT_PAREN ignoreNullCols=identifierSeq RIGHT_PAREN |
+        ASTERISK EXCEPT LEFT_PAREN ignoreNullExceptCols=identifierSeq RIGHT_PAREN))?
     ;
 
 identifierReference
@@ -2497,6 +2504,7 @@ ansiNonReserved
     | UNSET
     | UNTIL
     | UPDATE
+    | UPDATES
     | USE
     | VALUE
     | VALUES
@@ -2970,6 +2978,7 @@ nonReserved
     | UNSET
     | UNTIL
     | UPDATE
+    | UPDATES
     | USE
     | USER
     | VALUE

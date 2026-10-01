@@ -363,6 +363,12 @@ class RunnerConf(Conf):
         return self.get("spark.sql.session.timeZone", None, lower_str=False)
 
     @property
+    def window_bound_types(self) -> list[str]:
+        # Per-UDF window frame bound type ("unbounded" or "bounded"), one entry per window UDF,
+        # sent comma-separated by the window operator.
+        return [t.strip().lower() for t in self.get("window_bound_types").split(",")]
+
+    @property
     def arrow_max_records_per_batch(self) -> int:
         return int(self.get("spark.sql.execution.arrow.maxRecordsPerBatch", 10000))
 

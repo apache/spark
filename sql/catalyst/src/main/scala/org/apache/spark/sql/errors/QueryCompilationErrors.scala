@@ -1381,8 +1381,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def cannotUsePreservedDatabaseAsCurrentDatabaseError(database: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1068",
-      messageParameters = Map("database" -> database))
+      errorClass = "CANNOT_USE_RESERVED_DATABASE_AS_CURRENT",
+      messageParameters = Map("database" -> toSQLId(database)))
   }
 
   def createExternalTableWithoutLocationError(): Throwable = {
@@ -2370,6 +2370,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "tableName" -> toSQLId(tableName),
         "capturedTableId" -> capturedTableId,
         "currentTableId" -> currentTableId))
+  }
+
+  def changelogChangedAfterAnalysis(
+      tableName: String,
+      changedProperties: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.CHANGELOG_METADATA_MISMATCH",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "changedProperties" -> changedProperties.mkString(", ")))
   }
 
   def columnsChangedAfterAnalysis(

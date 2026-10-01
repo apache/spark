@@ -113,4 +113,15 @@ class SparkKubernetesDiagnosticsSetterSuite extends SparkFunSuite
     verify(clientProvider, never()).create(any(classOf[SparkConf]))
     verifyNoInteractions(driverPodOperations)
   }
+
+  test("SPARK-59666: setDiagnostics should not create a client without a driver pod name") {
+    val diagnostics = new Throwable("Fake diagnostics stack trace")
+    val conf = new SparkConf()
+      .set(KUBERNETES_DRIVER_MASTER_URL, k8sClusterManagerUrl)
+      .set(KUBERNETES_NAMESPACE, namespace)
+
+    setter.setDiagnostics(diagnostics, conf)
+
+    verify(clientProvider, never()).create(any(classOf[SparkConf]))
+  }
 }

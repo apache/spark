@@ -15,9 +15,14 @@
 # limitations under the License.
 #
 
+"""Framework-level tests for the eval type handler pipeline (``_base``).
+
+Handler-flavor tests live alongside their module, e.g. the Arrow handlers in
+``test_arrow_eval_type_handlers``.
+"""
+
 import unittest
 
-from pyspark.eval_handlers._arrow import ArrowScalarUDFHandler
 from pyspark.eval_handlers._base import (
     BatchEvalTypeHandler,
     CoGroupedEvalTypeHandler,
@@ -31,9 +36,6 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamGroupSerializer,
     ArrowStreamSerializer,
 )
-from pyspark.sql.types import LongType
-from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
-from pyspark.util import PythonEvalType
 
 
 class _RunnerConf:
@@ -41,15 +43,11 @@ class _RunnerConf:
     the handlers under test read."""
 
     use_large_var_types = False
+    assign_cols_by_name = True
+    map_in_batch_legacy_accept_any_iterable = False
 
 
 class EvalTypeHandlerTests(unittest.TestCase):
-    def test_scalar_arrow_udf_is_registered(self):
-        self.assertIs(
-            get_eval_type_handler(PythonEvalType.SQL_SCALAR_ARROW_UDF),
-            ArrowScalarUDFHandler,
-        )
-
     def test_category_bases_are_abstract(self):
         # The interface and the three category bases must not be instantiable:
         # they leave ``run`` abstract.
@@ -104,19 +102,28 @@ class EvalTypeHandlerTests(unittest.TestCase):
         self.assertEqual(list(handler.run(0, iter([1, 2, 3]))), [2, 4, 6])
 
     def test_duplicate_eval_type_rejected(self):
-        def _define_duplicate():
-            class _Dup(BatchEvalTypeHandler["pa.RecordBatch"]):
-                eval_type = PythonEvalType.SQL_SCALAR_ARROW_UDF
+        unused_eval_type = -2
 
-                def run(self, split_index, data):
-                    return data
+        class _First(BatchEvalTypeHandler["pa.RecordBatch"]):
+            eval_type = unused_eval_type
 
-        self.assertRaises(AssertionError, _define_duplicate)
-        # The failed definition must not clobber the existing registration.
-        self.assertIs(
-            get_eval_type_handler(PythonEvalType.SQL_SCALAR_ARROW_UDF),
-            ArrowScalarUDFHandler,
-        )
+            def run(self, split_index, data):
+                return data
+
+        try:
+
+            def _define_duplicate():
+                class _Dup(BatchEvalTypeHandler["pa.RecordBatch"]):
+                    eval_type = unused_eval_type
+
+                    def run(self, split_index, data):
+                        return data
+
+            self.assertRaises(AssertionError, _define_duplicate)
+            # The failed definition must not clobber the existing registration.
+            self.assertIs(get_eval_type_handler(unused_eval_type), _First)
+        finally:
+            _eval_type_handlers.pop(unused_eval_type, None)
 
     def test_abstract_handler_with_eval_type_rejected(self):
         # A subclass that declares an eval_type but leaves run abstract must be
@@ -130,78 +137,6 @@ class EvalTypeHandlerTests(unittest.TestCase):
 
         self.assertRaises(AssertionError, _define_abstract)
         self.assertNotIn(unused_eval_type, _eval_type_handlers)
-
-
-@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-class ArrowScalarUDFHandlerTests(unittest.TestCase):
-    def test_end_to_end_output(self):
-        import pyarrow as pa
-
-        # One UDF reading column 0 (a pa.Array) and returning column + 1.
-        def add_one(col):
-            return pa.array([v.as_py() + 1 for v in col], type=pa.int64())
-
-        udfs = [(add_one, [0], {}, LongType())]
-        handler = ArrowScalarUDFHandler(udfs=udfs, runner_conf=_RunnerConf(), eval_conf=None)
-
-        batch = pa.RecordBatch.from_arrays([pa.array([1, 2, 3], type=pa.int64())], ["_0"])
-        out = list(handler.run(0, iter([batch])))
-
-        self.assertEqual(len(out), 1)
-        self.assertEqual(out[0].num_columns, 1)
-        self.assertEqual(out[0].column(0).to_pylist(), [2, 3, 4])
-
-    def test_output_schema_enforced(self):
-        import pyarrow as pa
-
-        # The UDF returns int32, but the declared return type is LongType (int64).
-        # run must enforce the declared schema onto the output batch.
-        def add_one(col):
-            return pa.array([v.as_py() + 1 for v in col], type=pa.int32())
-
-        udfs = [(add_one, [0], {}, LongType())]
-        handler = ArrowScalarUDFHandler(udfs=udfs, runner_conf=_RunnerConf(), eval_conf=None)
-
-        batch = pa.RecordBatch.from_arrays([pa.array([10, 20], type=pa.int64())], ["_0"])
-        out = list(handler.run(0, iter([batch])))
-        # The int32 the UDF produced is coerced to the declared LongType (int64).
-        self.assertEqual(out[0].schema.field(0).type, pa.int64())
-        self.assertEqual(out[0].column(0).to_pylist(), [11, 21])
-
-
-@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-class CoGroupedBatchTests(unittest.TestCase):
-    def test_deserialized_co_group_is_a_pair_of_lists(self):
-        # CoGroupedBatch must match what ArrowStreamCoGroupSerializer yields: the
-        # serializer eagerly materializes each side as a list, not an iterator.
-        import io
-
-        import pyarrow as pa
-
-        from pyspark.serializers import write_int
-
-        def arrow_bytes(batches):
-            buf = io.BytesIO()
-            ArrowStreamSerializer().dump_stream(iter(batches), buf)
-            return buf.getvalue()
-
-        left = pa.RecordBatch.from_arrays([pa.array([1, 2])], ["_0"])
-        right = pa.RecordBatch.from_arrays([pa.array([9])], ["_0"])
-
-        stream = io.BytesIO()
-        write_int(2, stream)  # two DataFrames in the co-group
-        stream.write(arrow_bytes([left]))
-        stream.write(arrow_bytes([right]))
-        write_int(0, stream)  # end of stream
-        stream.seek(0)
-
-        groups = list(ArrowStreamCoGroupSerializer().load_stream(stream))
-        self.assertEqual(len(groups), 1)
-        left_side, right_side = groups[0]
-        self.assertIsInstance(left_side, list)
-        self.assertIsInstance(right_side, list)
-        self.assertEqual([b.num_rows for b in left_side], [2])
-        self.assertEqual([b.num_rows for b in right_side], [1])
 
 
 if __name__ == "__main__":

@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = AttributeReference("a", IntegerType)()
@@ -1540,6 +1540,59 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59688: a cogroup does not pair two key spaces as they stand") {
+    val idL = AttributeReference("idL", LongType)()
+    val idR = AttributeReference("idR", LongType)()
+    // `flip_low_bit` permutes its key space, so the two sides report the same key list, [0, 1],
+    // while a key stands for different rows on each. A cogroup has no reduce branch:
+    // `checkKeyGroupCompatible` declines for anything that is not a `ShuffledJoin`, so
+    // `pickCoPartitionTarget` pairs the children on `isCompatibleWith` alone. Reading that pair as
+    // it stands would hand the user's function rows that do not belong together, and unlike a join
+    // there is no equi-predicate to drop them again.
+    val keys = Seq(InternalRow(0L), InternalRow(1L))
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(idL), keys))
+    val right = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(FlipLowBitFunction, Seq(idR))), keys))
+    assert(left.outputPartitioning.satisfies(ClusteredDistribution(Seq(idL))) &&
+      right.outputPartitioning.satisfies(ClusteredDistribution(Seq(idR))),
+      "test setup: each side answers its own clustering, so only the pairing is in question")
+
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val cogroup = FlatMapCoGroupsInPandasExec(
+      Seq(idL), Seq(idR), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      val result = EnsureRequirements.apply(cogroup)
+      val shuffles = result.collect { case s: ShuffleExchangeExec => s }
+      assert(shuffles.size == 1,
+        s"one side must be laid out on the other rather than read as it stands:\n$result")
+      // Which side, and onto what: the transform side is the one laid out, on the identity side's
+      // keys, so the answer is not merely "something was shuffled".
+      assert(shuffles.head.outputPartitioning match {
+        case k: KeyedPartitioning => k.expressions == Seq(idR) && k.numPartitions == keys.size
+        case _ => false
+      }, s"the transform side must be laid out on the identity side's keys, got " +
+        s"${shuffles.head.outputPartitioning}\n$result")
+      assert(EnsureRequirements.apply(result) == result, "and the rule must be idempotent")
+
+      // Positive control: this path still pairs a side with one that holds the same key space, so
+      // the refusal above is the two key spaces' doing rather than the pairing always failing.
+      val sameSpace = cogroup.copy(left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+        Seq(TransformExpression(FlipLowBitFunction, Seq(idL))), keys)))
+      assert(EnsureRequirements.apply(sameSpace).collect {
+        case s: ShuffleExchangeExec => s
+      }.isEmpty, "two sides holding one key space must still be read as they stand")
+    }
+  }
+
   test("SPARK-59256: a collection is ranked on its best member, not on whichever came first") {
     val id = AttributeReference("id", IntegerType)()
     val t1 = AttributeReference("t1", IntegerType)()
@@ -1774,19 +1827,27 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val right = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyedPartitioning(Seq(days(aR), years(bR)), rightKeys))
 
-    // No `withSQLConf` on purpose. `pushPartValues` is on by default, which is all the push branch
-    // needs, so this is what a user gets out of the box.
-    val smj = SortMergeJoinExec(Seq(xL, yL), Seq(aR, bR), Inner, None, left, right)
-    val planned = EnsureRequirements.apply(smj)
+    // `pushPartValues` stays at its default (on), which is all the push branch needs.
+    def assertPairingPushesKeys(expected: Int, clue: String): Unit = {
+      val smj = SortMergeJoinExec(Seq(xL, yL), Seq(aR, bR), Inner, None, left, right)
+      val planned = EnsureRequirements.apply(smj)
 
-    // Without the pairing, the left's first member is taken and its `days(yL)` is matched against
-    // `days(aR)`, which names the other join key, so the join declines and both sides are shuffled
-    // onto the default partitioning.
-    assert(planned.collect { case s: ShuffleExchangeExec => s }.isEmpty,
-      "the second member pairs with the other side, so neither side is shuffled")
-    assert(groupPartitionsNodes(planned).map(_.expectedKeyCount) ===
-      Seq(Some(3), Some(3)),
-      "both sides are pushed the union of the two key sets")
+      // Without the pairing, the left's first member is taken and its `days(yL)` is matched
+      // against `days(aR)`, which names the other join key, so the join declines and both sides
+      // are shuffled onto the default partitioning.
+      assert(planned.collect { case s: ShuffleExchangeExec => s }.isEmpty,
+        "the second member pairs with the other side, so neither side is shuffled")
+      assert(groupPartitionsNodes(planned).map(_.expectedKeyCount) ===
+        Seq(Some(expected), Some(expected)), clue)
+    }
+
+    // The unset arm is what pins the shipped default: an explicit true would keep passing if
+    // `createWithDefault(true)` were reverted. It pushes the intersection of the two key sets;
+    // the pinned-off rollback arm pushes their union.
+    assertPairingPushesKeys(1, "the unset default pushes the intersection of the key sets")
+    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false") {
+      assertPairingPushesKeys(3, "filtering off pushes the union of the key sets")
+    }
   }
 
   test("SPARK-59256: no agreeing pair leaves the join alone however many members each side has") {

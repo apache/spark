@@ -53,6 +53,8 @@ import org.apache.spark.sql.catalyst.expressions.{
   SpecialFrameBoundary,
   SpecifiedWindowFrame,
   SubtractTimestamps,
+  SupportTrimmedCharInput,
+  TimeBucket,
   TimestampAddInterval,
   WindowSpecDefinition
 }
@@ -711,6 +713,16 @@ abstract class TypeCoercionHelper {
           }
           .getOrElse(b) // If there is no applicable conversion, leave expression unchanged.
 
+      case t: TimeBucket =>
+        val children = t.children.zip(t.inputTypes).zipWithIndex.map {
+          case ((in, _), index) if index > 0 && in.dataType.isInstanceOf[TimeType] =>
+            // TIME-to-timestamp depends on CURRENT_DATE, so require an explicit cast.
+            in
+          case ((in, expected), _) =>
+            implicitCast(in, expected).getOrElse(in)
+        }
+        t.withNewChildren(children)
+
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
           case (in, expected) =>
@@ -734,12 +746,16 @@ abstract class TypeCoercionHelper {
 
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do
-        // general implicit casting. Also promote CHAR/VARCHAR to STRING here: these
-        // expressions skip ImplicitCastInputTypes, so without this the length constraint would
-        // remain on the child.
+        // general implicit casting. Also promote CHAR/VARCHAR to STRING here because these
+        // expressions skip ImplicitCastInputTypes. Expressions that trim CHAR padding themselves
+        // retain the original type so they can distinguish CHAR from VARCHAR and STRING.
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
           case (in, expected) =>
-            charVarcharToPlainString(in.dataType, expected)
+            val promotedType = e match {
+              case _: SupportTrimmedCharInput => None
+              case _ => charVarcharToPlainString(in.dataType, expected)
+            }
+            promotedType
               .map(dt => if (dt == in.dataType) in else Cast(in, dt))
               .getOrElse {
                 if (in.dataType == NullType && !expected.acceptsType(NullType)) {

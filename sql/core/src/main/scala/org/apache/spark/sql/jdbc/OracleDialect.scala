@@ -154,6 +154,8 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     sqlType match {
       case Types.NUMERIC =>
         val scale = if (null != md) md.build().getLong("scale") else 0L
+        val defaultScale = if (conf.legacyOracleNumberMappingEnabled) 10
+          else DecimalType.DEFAULT_SCALE
         size match {
           // Handle NUMBER fields that have no precision/scale in special way
           // because JDBC ResultSetMetaData converts this to 0 precision and -127 scale
@@ -161,12 +163,12 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
           // https://github.com/apache/spark/pull/8780#issuecomment-145598968
           // and
           // https://github.com/apache/spark/pull/8780#issuecomment-144541760
-          case 0 => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+          case 0 => Option(DecimalType(DecimalType.MAX_PRECISION, defaultScale))
           // Handle FLOAT fields in a special way because JDBC ResultSetMetaData converts
           // this to NUMERIC with -127 scale
           // Not sure if there is a more robust way to identify the field as a float (or other
           // numeric types that do not specify a scale.
-          case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+          case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, defaultScale))
           case _ => None
         }
       case TIMESTAMP_TZ | TIMESTAMP_LTZ =>
