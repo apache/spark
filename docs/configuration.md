@@ -1750,7 +1750,9 @@ Apart from these, the following properties are also available, and may be useful
     executors (through either <code>spark.shuffle.service.enabled</code> or a
     <code>ShuffleDataIO</code> with reliable storage), and the cluster manager can hold
     executors: Standalone, YARN, and Kubernetes with
-    <code>spark.kubernetes.allocation.pods.allocator=direct</code>.
+    <code>spark.kubernetes.allocation.pods.allocator=direct</code>. On a Standalone Master,
+    this also gates the <code>hold</code> and <code>resume</code> actions of the
+    <a href="spark-standalone.html#rest-api">Master REST API</a>.
   </td>
   <td>4.4.0</td>
 </tr>

@@ -654,6 +654,20 @@ via <code>http://[host:port]/[version]/submissions/[action]</code> where
     <td>4.0.0</td>
   </tr>
   <tr>
+    <td><code>hold</code></td>
+    <td>POST</td>
+    <td>Hold a running Spark application, given its application ID rather than a submission ID.
+      See <a href="#held-applications">Held Applications</a>.</td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
+    <td><code>resume</code></td>
+    <td>POST</td>
+    <td>Resume a held Spark application, given its application ID rather than a submission ID.
+      See <a href="#held-applications">Held Applications</a>.</td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
     <td><code>status</code></td>
     <td>GET</td>
     <td>Check the status of a Spark job.</td>
@@ -818,6 +832,28 @@ curl -X POST -d "id=<app-id>" -d "csrfToken=<csrf-token>" http://<master-host>:8
 If the Master web UI requires authentication, reading the token and sending the request both
 need the same credentials. The request is forwarded to the driver asynchronously, so its outcome
 shows up afterwards in the `held` and `draining` fields of the Master's `/json/` endpoint.
+
+Scripts can also use the `hold` and `resume` actions of the [REST API](#rest-api), which need no
+CSRF token. They take the application ID rather than a submission ID, so they work for
+applications submitted in client mode too, and they are gated the same way, by
+`spark.ui.holdEnabled` on the Master and on the application. The response only tells whether the
+request was forwarded to the driver; poll the `held` and `draining` fields of the Master's
+`/json/` endpoint for the outcome.
+
+```bash
+$ curl -XPOST http://IP:PORT/v1/submissions/hold/app-20260930120000-0000
+{
+  "action" : "HoldApplicationResponse",
+  "appId" : "app-20260930120000-0000",
+  "message" : "Requesting application app-20260930120000-0000 to hold.",
+  "serverSparkVersion" : "4.4.0",
+  "success" : true
+}
+```
+
+Like the other actions of the REST API, `hold` and `resume` check no ACLs, and a browser can be
+made to send them from another site. Require a signed `Authorization` header with `JWSFilter` as
+described in [REST API](#rest-api), or disable the REST API with `spark.master.rest.enabled=false`.
 
 
 # Running Alongside Hadoop
