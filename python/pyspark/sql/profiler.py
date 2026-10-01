@@ -127,7 +127,7 @@ class _ProfileResultsParamV2(AccumulatorParam["ProfileResultsV2"]):
                     value1[key].get("sampling", {}), result.get("sampling", {})
                 )
                 if sampling:
-                    value1[key]["sampling"] = {}
+                    value1[key]["sampling"] = sampling
         return value1
 
 
@@ -139,16 +139,15 @@ class WorkerSamplingProfiler:
     SamplingProfiler is a profiler for sampling profiling.
     """
 
-    _sampling_thread = None
-
     def __init__(
         self,
         task_context: "TaskContext",
-        sampling_interval: float = 1000,
+        sampling_interval: float = 100,
     ) -> None:
         self._callstack_data = {}
         self._task_context = task_context
         self._sampling_interval = sampling_interval
+        self._sampling_thread = None
         self._stop_event = threading.Event()
 
     def __enter__(self) -> "WorkerSamplingProfiler":
