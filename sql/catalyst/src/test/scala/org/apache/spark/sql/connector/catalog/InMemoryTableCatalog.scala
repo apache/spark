@@ -168,8 +168,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   }
 
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
-    createTable(
-      ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
       Distributions.unspecified(), Array.empty, None, None, tableInfo.constraints())
   }
 

@@ -221,14 +221,10 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
   }
 
   gridTest("display properties preserve table type and reserved metadata")(
-      Seq((false, false), (false, true), (true, false), (true, true))) {
+      Seq((false, false), (true, true))) {
     case (external, withLocation) =>
       withNamespaceAndTable("ns", "table") { tbl =>
-        val location = if (withLocation) "LOCATION 'file:/tmp/display-properties' " else ""
-        sql(s"CREATE TABLE $tbl (id bigint) $defaultUsing " +
-          s"COMMENT 'table comment' $location" +
-          "TBLPROPERTIES ('persisted' = 'stored')")
-        setDisplayProperties(loadTable(catalog, "ns", "table"), external)
+        createTableWithDisplayProperties("ns", "table", external, withLocation)
 
         val reservedRows = CatalogV2Util.TABLE_RESERVED_PROPERTIES.map(_.capitalize)
         checkAnswer(

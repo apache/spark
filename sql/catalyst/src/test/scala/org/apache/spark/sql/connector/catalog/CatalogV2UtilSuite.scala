@@ -42,7 +42,8 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     when(table.properties()).thenReturn(util.Map.of(
       "persisted", "stored", TableCatalog.PROP_EXTERNAL, "true"))
 
-    assert(CatalogV2Util.tablePropertiesForDisplay(table) === Map("persisted" -> "stored"))
+    assert(CatalogV2Util.tablePropertiesForDisplay(
+      table.properties(), table.displayProperties(), new SQLConf) === Map("persisted" -> "stored"))
   }
 
   test("tablePropertiesForDisplay ignores reserved display keys and preserves stored values") {
@@ -55,9 +56,26 @@ class CatalogV2UtilSuite extends SparkFunSuite {
       .withDisplayProperties(displayProperties)
       .build(), "table")
 
-    assert(CatalogV2Util.tablePropertiesForDisplay(table) ===
+    assert(CatalogV2Util.tablePropertiesForDisplay(
+      table.properties(), table.displayProperties(), new SQLConf) ===
       Map("persisted" -> "stored", "catalog-label" -> "catalog-value"))
     assert(table.properties() === util.Map.of("persisted", "stored"))
+  }
+
+  test("tablePropertiesForDisplay redacts stored and display-only values") {
+    val conf = new SQLConf
+    conf.setConf(SQLConf.SQL_OPTIONS_REDACTION_PATTERN, "(?i)catalog-label".r)
+    val properties = util.Map.of("password", "stored-password", "persisted", "stored")
+    val displayProperties = util.Map.of(
+      "catalog-label", "catalog-value", "secret", "display-secret", "persisted", "display-value")
+
+    assert(CatalogV2Util.tablePropertiesForDisplay(properties, displayProperties, conf) === Map(
+      "password" -> "*********(redacted)",
+      "catalog-label" -> "*********(redacted)",
+      "secret" -> "*********(redacted)",
+      "persisted" -> "stored"))
+    assert(properties.get("password") === "stored-password")
+    assert(displayProperties.get("secret") === "display-secret")
   }
 
   private def catalogWithStateOptions(keys: java.util.Set[String]): TableCatalog = {
