@@ -89,18 +89,15 @@ object MathUtils {
 
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
-  // Positive modulo (`pmod`). For a divisor `n > 0` the result is in `[0, n)` (for the
-  // float/double overloads, when both inputs are finite); for `n < 0` it shares the sign of the
-  // dividend `a`. Unlike `floorMod`, whose result takes the sign of `n`, this matches the `pmod`
-  // SQL function / `HashPartitioning` semantics, and it is shared by `Pmod`'s eval and codegen
-  // paths so the two never diverge.
+  // Positive modulo (`pmod`): for `n > 0` the result lies in `[0, n)` (for the float/double
+  // overloads, when both inputs are finite); for `n < 0` it takes the sign of the dividend `a`
+  // (unlike `floorMod`, which takes the sign of `n`). Matches the `pmod` SQL function and
+  // `HashPartitioning`, and is shared by `Pmod`'s eval and codegen so the two never diverge.
   //
-  // For `n > 0` the integral result is `Math.floorMod(a, n)`, which skips the redundant second
-  // `% n` of the original `(a % n + n) % n`. For `n < 0` the `(r + n) % n` is retained to preserve
-  // the released result; note it can silently wrap for `Int`/`Long` when `r + n` overflows
-  // (`n < -2^30` / `n < -2^62`), e.g. `pmod(-1, Int.MinValue)` is `Int.MaxValue` -- a pre-existing
-  // quirk left to a separate change. `Byte`/`Short` delegate to the `Int` overload. The
-  // float/double overloads keep the `% n` because `r + n` can round up to exactly `n`.
+  // Integral `n > 0` uses `Math.floorMod`. The `n < 0` path can silently wrap for `Int`/`Long`
+  // when `r + n` overflows (large-magnitude negative `n`), e.g. `pmod(-1, Int.MinValue)` returns
+  // `Int.MaxValue`; tracked by SPARK-59934. `Byte`/`Short` delegate to `Int`; the float/double
+  // overloads keep `% n` because `r + n` can round up to exactly `n`.
 
   def pmod(a: Int, n: Int): Int = {
     if (n > 0) {

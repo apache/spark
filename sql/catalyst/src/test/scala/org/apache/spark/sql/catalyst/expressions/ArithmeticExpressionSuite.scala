@@ -597,7 +597,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     // Pre-existing Int/Long wrap-around, pinned so the released results stay exact: the retained
     // `(r + n) % n` overflows for n < -2^30 / n < -2^62. Without overflow `(r + n) % n == r`, so
     // these are the only inputs that tell the two apart. These assertions characterize the current
-    // released behavior; fixing the wrap-around is deferred to a separate change.
+    // released behavior; fixing the wrap-around is tracked by SPARK-59934.
     checkEvaluation(Pmod(Literal(-1), Literal(Int.MinValue)), Int.MaxValue)
     checkEvaluation(Pmod(Literal(-1L), Literal(Long.MinValue)), Long.MaxValue)
 
