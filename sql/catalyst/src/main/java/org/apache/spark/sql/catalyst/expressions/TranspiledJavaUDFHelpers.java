@@ -225,8 +225,16 @@ public final class TranspiledJavaUDFHelpers {
   public static UTF8String repeat(UTF8String a, Long times) {
     if (a == null || times == null) return null;
     if (times <= 0L) return UTF8String.EMPTY_UTF8;
+    // Bound `times` first: a count no int can hold (e.g. `"ab" * (1L << 62)`) must throw
+    // the error class, not wrap the product to a non-positive long and fall through to
+    // `repeat(0)` returning the empty string where CPython raises OverflowError.
+    if (times > Integer.MAX_VALUE) {
+      throw TranspiledJavaUDFErrors.arithmeticOverflow("integer overflow");
+    }
     // The PRODUCT: bounding only `times` let `"abcd" * 600000000` throw a
-    // bare ArithmeticException inside `UTF8String.repeat`.
+    // bare ArithmeticException inside `UTF8String.repeat`. With `times` now
+    // int-bounded, both factors fit `Integer.MAX_VALUE`, so the product fits a
+    // long and cannot itself overflow.
     if ((long) a.numBytes() * times > Integer.MAX_VALUE) {
       throw TranspiledJavaUDFErrors.arithmeticOverflow("integer overflow");
     }
