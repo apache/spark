@@ -565,6 +565,9 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       val left = Literal(convert(7))
       val right = Literal(convert(3))
       checkEvaluation(Pmod(left, right), convert(1))
+      // Negative dividend with a positive divisor exercises the n > 0 fast path for every numeric
+      // type (not just Int), where a negative remainder is folded into [0, n).
+      checkEvaluation(Pmod(Literal(convert(-7)), Literal(convert(3))), convert(2))
       checkEvaluation(Pmod(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Pmod(left, Literal.create(null, right.dataType)), null)
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
@@ -585,12 +588,16 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Pmod(Literal(7.2D), Literal(4.1D)), 3.1000000000000005)
     checkEvaluation(Pmod(Literal(Decimal(0.7)), Literal(Decimal(0.2))), Decimal(0.1))
     checkEvaluation(Pmod(Literal(2L), Literal(Long.MaxValue)), 2L)
+    // A negative Long dividend beyond the Int range with a positive divisor, so the Long overload
+    // (rather than a narrowed Int) must handle the fast path. floorMod(-10000000000, 3) == 2.
+    checkEvaluation(Pmod(Literal(-10000000000L), Literal(3L)), 2L)
     checkEvaluation(Pmod(positiveShort, negativeShort), positiveShort.toShort)
     checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
     checkEvaluation(Pmod(positiveLong, negativeLong), positiveLong)
     // Pre-existing Int/Long wrap-around, pinned so the released results stay exact: the retained
     // `(r + n) % n` overflows for n < -2^30 / n < -2^62. Without overflow `(r + n) % n == r`, so
-    // these are the only inputs that tell the two apart.
+    // these are the only inputs that tell the two apart. These assertions characterize the current
+    // released behavior; fixing the wrap-around is deferred to a separate change.
     checkEvaluation(Pmod(Literal(-1), Literal(Int.MinValue)), Int.MaxValue)
     checkEvaluation(Pmod(Literal(-1L), Literal(Long.MinValue)), Long.MaxValue)
 

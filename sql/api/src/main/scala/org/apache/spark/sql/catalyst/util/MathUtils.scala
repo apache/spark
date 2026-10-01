@@ -90,29 +90,34 @@ object MathUtils {
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
   // Positive modulo (`pmod`). For a divisor `n > 0` the result is in `[0, n)` (for the
-  // float/double overloads, when both inputs are finite). For `n < 0` it shares the sign of the
-  // dividend `a`, except that for `Int`/`Long` the retained `(r + n) % n` below silently wraps
-  // when `r + n` overflows (`n < -2^30` / `n < -2^62`), e.g. `pmod(-1, Int.MinValue)` is
-  // `Int.MaxValue`; that pre-existing behavior is kept as-is. Unlike `floorMod`, whose result
-  // takes the sign of `n`, this matches the `pmod` SQL function / `HashPartitioning` semantics.
-  // Shared by `Pmod`'s eval and codegen paths so the two never diverge.
+  // float/double overloads, when both inputs are finite); for `n < 0` it shares the sign of the
+  // dividend `a`. Unlike `floorMod`, whose result takes the sign of `n`, this matches the `pmod`
+  // SQL function / `HashPartitioning` semantics, and it is shared by `Pmod`'s eval and codegen
+  // paths so the two never diverge.
   //
-  // For `n > 0` the integral result is exactly `Math.floorMod(a, n)`: a negative `r = a % n` only
-  // needs `n` added, so the second `% n` is skipped. `n > 0` is tested first because it is
-  // predictable (and constant for `HashPartitioning`'s literal divisor), and the fix-up
-  // `r + (n & (r >> 31))` is branchless, so hash-like dividends do not mispredict on the sign of
-  // `r`. For `n < 0` the `% n` is retained to preserve the original result. `Byte`/`Short`
-  // delegate to the `Int` overload; their values are too small for `r + n` to overflow. The
-  // float/double overloads always keep the `% n` because `r + n` can round up to exactly `n`.
+  // For `n > 0` the integral result is `Math.floorMod(a, n)`, which skips the redundant second
+  // `% n` of the original `(a % n + n) % n`. For `n < 0` the `(r + n) % n` is retained to preserve
+  // the released result; note it can silently wrap for `Int`/`Long` when `r + n` overflows
+  // (`n < -2^30` / `n < -2^62`), e.g. `pmod(-1, Int.MinValue)` is `Int.MaxValue` -- a pre-existing
+  // quirk left to a separate change. `Byte`/`Short` delegate to the `Int` overload. The
+  // float/double overloads keep the `% n` because `r + n` can round up to exactly `n`.
 
   def pmod(a: Int, n: Int): Int = {
-    val r = a % n
-    if (n > 0) r + (n & (r >> 31)) else if (r >= 0) r else (r + n) % n
+    if (n > 0) {
+      Math.floorMod(a, n)
+    } else {
+      val r = a % n
+      if (r >= 0) r else (r + n) % n
+    }
   }
 
   def pmod(a: Long, n: Long): Long = {
-    val r = a % n
-    if (n > 0) r + (n & (r >> 63)) else if (r >= 0) r else (r + n) % n
+    if (n > 0) {
+      Math.floorMod(a, n)
+    } else {
+      val r = a % n
+      if (r >= 0) r else (r + n) % n
+    }
   }
 
   def pmod(a: Byte, n: Byte): Byte = pmod(a.toInt, n.toInt).toByte
