@@ -496,9 +496,9 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val Seq(k, _) = left.output
     val Seq(k2, w) = right.output
     // With the equality to substitute through, the `With` conjunct becomes one the right side can
-    // hold on its own, and `InferFiltersFromConstraints` plants it. It has to be planted as the
-    // expression it stands for: a `With` is opaque to `DataSourceStrategy`'s filter translation, so
-    // planting one would cost the pushdown this filter exists for.
+    // hold on its own, and `InferFiltersFromConstraints` plants it. Splitting the conjunction the
+    // `With` hides leaves each conjunct one read of the definition, so it is planted as the
+    // comparisons it stands for rather than as a `With`.
     val condition = (k === k2) && With(k * w) { case Seq(ref) => ref >= 2 && ref <= 6 }
     val optimized = Optimize.execute(left.join(right, Inner, Some(condition)).analyze)
     val planted = filterConjuncts(optimized)

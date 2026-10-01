@@ -189,10 +189,11 @@ trait ConstraintHelper {
    * cannot pre-evaluate the definition, in a join condition or a conditional branch, and everything
    * downstream reads constraints as plain, individually true predicates: `IsNotNull` inference
    * walks them, one is substituted into another, and `InferFiltersFromConstraints` plants them as
-   * filters to be pushed down and translated for a data source. A `With` is opaque to the first and
-   * the last, and a conjunction hidden inside one is never matched against the conjuncts an
-   * operator already carries. So a `With` is read as the expression it stands for, where no single
-   * constraint is left holding two copies of a definition.
+   * filters. A `With` hides its attributes from `IsNotNull` inference, a predicate holding one
+   * translates to nothing for a source that takes V2 predicates, and a conjunction hidden inside
+   * one is never matched against the conjuncts an operator already carries. So a `With` is read as
+   * the expression it stands for, where no single constraint is left holding two copies of a
+   * definition.
    */
   protected def asConstraints(predicates: Seq[Expression]): ExpressionSet =
     ExpressionSet(predicates.flatMap(splitConjunctsReadingWiths))
