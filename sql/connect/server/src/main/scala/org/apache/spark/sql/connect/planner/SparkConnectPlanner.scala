@@ -3654,20 +3654,23 @@ class SparkConnectPlanner(
           throw ex
       }
 
+    // Set the query id so the sanity check in dataFrameCachingWrapper can use it.
+    foreachBatchQueryIdRef.foreach(_.set(query.id.toString))
+    // Register the cleaner with the query if foreachBatch is used. Do this before
+    // registerNewStreamingQuery so that if that call throws, the cleaner is already wired to reap
+    // the cloned SessionHolder a batch may have created (it never expires by inactivity, so an
+    // unregistered one would leak until server shutdown).
+    foreachBatchRunnerCleaner.foreach { cleaner =>
+      sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
+        query,
+        cleaner)
+    }
     // Register the new query so that its reference is cached and is stopped on session timeout.
     SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
       sessionHolder,
       query,
       executeHolder.sparkSessionTags,
       executeHolder.operationId)
-    // Set the query id so the sanity check in dataFrameCachingWrapper can use it.
-    foreachBatchQueryIdRef.foreach(_.set(query.id.toString))
-    // Register the cleaner with the query if foreachBatch is used.
-    foreachBatchRunnerCleaner.foreach { cleaner =>
-      sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
-        query,
-        cleaner)
-    }
     executeHolder.eventsManager.postFinished()
 
     val resultBuilder = WriteStreamOperationStartResult
