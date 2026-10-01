@@ -161,6 +161,24 @@ class ExecutorResizePluginSuite
     verify(podMetricOperations, never()).metrics(anyString(), anyString())
   }
 
+  test("Pod with placeholder executor ID label should be skipped") {
+    val plugin = createPlugin()
+    val pod = new PodBuilder()
+      .withNewMetadata()
+        .withName("spark-executor-1")
+        .addToLabels(SPARK_APP_ID_LABEL, appId)
+        .addToLabels(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+        .addToLabels(SPARK_EXECUTOR_ID_LABEL, "EXECID")
+      .endMetadata()
+      .build()
+
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
+
+    verify(podMetricOperations, never()).metrics(anyString(), anyString())
+  }
+
   test("SPARK-59840: Inactive executor pods are excluded from the listing") {
     val plugin = createPlugin()
     when(podList.getItems).thenReturn(Collections.emptyList())
