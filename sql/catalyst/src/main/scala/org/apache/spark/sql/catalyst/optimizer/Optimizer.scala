@@ -1943,7 +1943,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       val newFilters = filter.constraints --
         (child.constraints ++ asConstraints(splitConjunctivePredicates(condition)))
       if (newFilters.nonEmpty) {
-        Filter(And(newFilters.reduce(And), condition), child)
+        Filter(And(inlineWiths(newFilters.reduce(And)), condition), child)
       } else {
         filter
       }
@@ -1994,9 +1994,28 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     if (newPredicates.isEmpty) {
       plan
     } else {
-      Filter(newPredicates.reduce(And), plan)
+      Filter(inlineWiths(newPredicates.reduce(And)), plan)
     }
   }
+
+  /**
+   * Inlines any `With` in an inferred predicate. An inferred filter is a redundant predicate
+   * planted to be pushed down, and a `With` is opaque to that pushdown -- `DataSourceStrategy`
+   * cannot translate one. Inlining recomputes the definition at each reference, a copy the
+   * memoized form avoided when the definition is read more than once; it is a worthwhile trade
+   * here, since this filter exists to reach the data source and the definition is deterministic
+   * (only deterministic constraints are planted), so the inlined and memoized forms agree.
+   * `RewriteWithExpression` has already run by the time this rule plants a filter, so a `With`
+   * left here would otherwise survive into the plan.
+   *
+   * Inlining makes this rule non-idempotent: a re-run would re-derive the opaque `With` constraint
+   * from the untouched join condition and no longer match the inlined filter already planted. That
+   * is safe only because "Infer Filters" is a `Once` batch in `excludedOnceBatches`; keep it so.
+   */
+  private def inlineWiths(e: Expression): Expression =
+    e.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+      case w: With => With.inlineDefinitions(w)
+    }
 }
 
 /**
