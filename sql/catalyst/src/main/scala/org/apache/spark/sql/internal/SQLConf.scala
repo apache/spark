@@ -4999,6 +4999,7 @@ object SQLConf {
         "is bound to the root session: this lets it be combined with the root session inside " +
         "the function, but the batch no longer runs under the stream session's configuration.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
