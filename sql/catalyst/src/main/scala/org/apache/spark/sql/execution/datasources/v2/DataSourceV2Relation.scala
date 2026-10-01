@@ -419,8 +419,8 @@ case class DataSourceV2ScanRelation(
           .map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
       ),
       // pushedFilters may reference columns pruned out of `output` (see the field doc), so they are
-      // normalized against the relation's full output rather than `output`. The same holds for
-      // inferredFilters.
+      // normalized against the relation's full output rather than `output`. inferredFilters only
+      // reference `output` (pruneColumns drops the rest), so the same normalization is safe.
       pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, relation.output)),
       inferredFilters = inferredFilters.map(QueryPlan.normalizeExpressions(_, relation.output))
     )

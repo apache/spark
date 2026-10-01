@@ -35,9 +35,14 @@ trait SupportsPushDownCatalystFilters extends ScanBuilder {
   def pushFilters(filters: Seq[Expression]): Seq[Expression]
 
   /**
-   * Returns additional filters inferred from eligible query filters passed to [[pushFilters]].
-   * Each inferred filter must be implied by those query filters and satisfied by every row
-   * returned by the scan.
+   * Returns additional filters inferred from query filters passed to [[pushFilters]].
+   * Spark calls this method only after passing at least one deterministic, subquery-free query
+   * filter to the Catalyst [[pushFilters]] callback. If the builder also implements
+   * `SupportsPushDownFilters` or `SupportsPushDownV2Filters`, Spark uses that API instead and does
+   * not collect inferred filters through this interface.
+   *
+   * Each inferred filter must be implied by those query filters and evaluate to SQL `true`
+   * (never `false` or `null`) for every row returned by the scan.
    *
    * When `SupportsReportStatistics.reflectsFullyPushedDownFilters` returns `false`, Spark adds
    * inferred predicates as logical filters for statistics adjustment by default. Scans can opt
@@ -52,12 +57,16 @@ trait SupportsPushDownCatalystFilters extends ScanBuilder {
    *
    * Inferred filters must be deterministic, contain no subqueries, user-defined expressions,
    * aggregate expressions, window expressions, or generators, resolve to well-typed Boolean
-   * expressions, and not duplicate fully pushed filters. Spark ignores invalid inferred filters.
+   * expressions, and not duplicate fully pushed filters. They must be evaluable after column
+   * binding, without further analyzer or optimizer rewrites. Spark ignores invalid inferred
+   * filters.
    *
    * Column references must be represented by `AttributeReference`. A nested column is represented
    * by a dotted name, with path parts containing dots quoted using Spark SQL identifier syntax.
    * For example, nested column `tz` in `location` is `location.tz`, while nested column `c.d` in
    * top-level column `a.b` is represented as `` `a.b`.`c.d` ``.
+   * Sources must not report ordinal-based field accessors such as `GetStructField` or
+   * `GetArrayStructFields`; Spark resolves the dotted names against the relation's schema.
    */
   def inferredFilters: Seq[Expression] = Nil
 

@@ -1747,6 +1747,34 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
+  gridTest("inferred filters do not duplicate fully pushed filters")(
+      Seq(false, true)) { estimateInferred =>
+    val query = spark.read
+      .format(classOf[CatalystFilterDataSourceV2].getName)
+      .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
+        CatalystFilterScanBuilder.REPEAT_PUSHED_FILTERS)
+      .option(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION,
+        estimateInferred.toString)
+      .load()
+      .filter($"i" > 2)
+
+    checkAnswer(query, (3 until 10).map(i => Row(i, -i)))
+    val scan = getScanRelation(query)
+    assert(scan.pushedFilters.exists(containsFilter(_, "i > 2")))
+    assert(scan.inferredFilters.isEmpty)
+    val filters = query.queryExecution.optimizedPlan.collect {
+      case filter: LogicalFilter => filter.condition
+    }
+    assert(filters.size == 1)
+    val pushed = CatalystGreaterThan(scan.output.find(_.name == "i").get, CatalystLiteral(2))
+    assert(filters.head.collect { case expr if expr.semanticEquals(pushed) => expr }.size == 1)
+    val execFilters = query.queryExecution.executedPlan.collect {
+      case filter: FilterExec => filter.condition
+    }
+    assert(execFilters.size == 1)
+    assert(execFilters.head.collect { case expr if expr.semanticEquals(pushed) => expr }.size == 1)
+  }
+
   test("inferred filters use separate estimates only when the scan opts in") {
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       Seq(false, true).foreach { keepResiduals =>
@@ -2119,8 +2147,6 @@ class ValuesReaderFactory(requiredSchema: StructType) extends PartitionReaderFac
   }
 }
 
-object ValuesReaderFactory extends ValuesReaderFactory(TestingV2Source.schema)
-
 class SimpleReaderFactory(requiredSchema: StructType) extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val RangeInputPartition(start, end) = partition
@@ -2475,6 +2501,7 @@ object CatalystFilterScanBuilder {
   val KEEP_RESIDUAL_FILTERS: String = "keepResidualFilters"
   val NEGATE_I_TO_J: String = "negate-i-to-j"
   val CONSTANT_J_LT_100: String = "constant-j-lt-100"
+  val REPEAT_PUSHED_FILTERS: String = "repeat-pushed-filters"
 
   // Always reports the same inferred filter (j < 100), regardless of the pushed filters. Rows are
   // (i, j) with j = -i in [0, 9], so it drops nothing. Used to prove that inferred-filter
@@ -2511,7 +2538,10 @@ object CatalystFilterScanBuilder {
 
   private val derivations
       : Map[String, Seq[CatalystExpression] => Seq[CatalystExpression]] =
-    Map(NEGATE_I_TO_J -> negateIToJ, CONSTANT_J_LT_100 -> constantJLt100)
+    Map(
+      NEGATE_I_TO_J -> negateIToJ,
+      CONSTANT_J_LT_100 -> constantJLt100,
+      REPEAT_PUSHED_FILTERS -> ((filters: Seq[CatalystExpression]) => filters))
 
   private[connector] def derivation(
       options: CaseInsensitiveStringMap): Seq[CatalystExpression] => Seq[CatalystExpression] = {

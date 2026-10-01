@@ -22,16 +22,15 @@ import java.util.{Locale, OptionalLong}
 import scala.collection.mutable
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
-import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAMES, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
+import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAME, COLUMN_NAMES, EXPR, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, BoundReference, Cast, Expression, ExpressionSet, ExprId, IntegerLiteral, LateralColumnAliasReference, Literal, NamedExpression, OuterReference, OuterScopeReference, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, BoundReference, Cast, Expression, ExpressionSet, ExprId, GetArrayStructFields, GetStructField, IntegerLiteral, LateralColumnAliasReference, Literal, NamedExpression, OuterReference, OuterScopeReference, PredicateHelper, ProjectionOverSchema, RuntimeReplaceable, SortOrder, SubqueryExpression, Unevaluable, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{CollapseGroupedSumOfCount, CollapseProject}
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LocalRelation, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
 import org.apache.spark.sql.catalyst.plans.logical.PlanHelper
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.EXTERNAL_UDF
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
@@ -1310,17 +1309,22 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           _: OuterReference | _: OuterScopeReference => true
       case _ => false
     }
+    val hasUnevaluableExpression = filter.exists {
+      case _: AttributeReference => false
+      case _: Unevaluable | _: RuntimeReplaceable => true
+      case _ => false
+    }
     val hasValidStructure = filter.deterministic &&
       !SubqueryExpression.hasSubquery(filter) &&
-      !filter.containsPattern(EXTERNAL_UDF) &&
       !filter.exists(_.isInstanceOf[UserDefinedExpression]) &&
-      !hasInvalidColumnReference
+      !hasInvalidColumnReference && !hasUnevaluableExpression
     val filterPlan = Filter(filter, LocalRelation(output))
     val valid = hasValidStructure && filter.resolved && filter.dataType == BooleanType &&
       filter.checkInputDataTypes().isSuccess &&
       PlanHelper.specialExpressionsInUnsupportedOperator(filterPlan).isEmpty
     if (!valid) {
-      logWarning(s"Ignoring invalid inferred filter reported by the data source: $filter")
+      logWarning(log"Ignoring invalid inferred filter reported by the data source: " +
+        log"${MDC(EXPR, filter)}")
     }
     valid
   }
@@ -1328,6 +1332,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   private def rebindInferredFilter(
       filter: Expression,
       output: Seq[AttributeReference]): Option[Expression] = {
+    // Check the source expression before resolving dotted names into field accessors. A stored
+    // ordinal may refer to a different field in the source's schema than in the relation's schema.
+    val hasStoredOrdinal = filter.exists {
+      case _: GetStructField | _: GetArrayStructFields => true
+      case _ => false
+    }
+    if (hasStoredOrdinal) {
+      logWarning(log"Ignoring inferred filter with a source-reported field ordinal: " +
+        log"${MDC(EXPR, filter)}")
+      return None
+    }
+
     val outputPlan = LocalRelation(output)
     var unresolvedAttribute: Option[String] = None
     try {
@@ -1343,14 +1359,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
       unresolvedAttribute match {
         case Some(name) =>
-          logWarning(
-            s"Ignoring inferred filter with an unknown data source column '$name': $filter")
+          logWarning(log"Ignoring inferred filter with an unknown data source column " +
+            log"'${MDC(COLUMN_NAME, name)}': ${MDC(EXPR, filter)}")
           None
         case None => Some(rebound)
       }
     } catch {
       case e: AnalysisException =>
-        logWarning(s"Ignoring inferred filter that cannot be resolved: $filter", e)
+        logWarning(log"Ignoring inferred filter that cannot be resolved: ${MDC(EXPR, filter)}", e)
         None
     }
   }

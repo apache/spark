@@ -42,7 +42,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, VariantType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.UTF8String
@@ -1261,6 +1261,79 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
+  gridTest("inferred filters reject source-reported field ordinals")(
+      Seq(false, true)) { estimateInferred =>
+    val struct = StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType)))
+    val reportedStruct = StructType(struct.fields.reverse)
+    val schema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("s", struct),
+      StructField("arr", ArrayType(struct))))
+    val invalidInferredFilters = Seq(
+      LessThanOrEqual(
+        GetStructField(AttributeReference("s", reportedStruct)(), 0, Some("b")), Literal(0)),
+      EqualTo(
+        GetArrayStructFields(AttributeReference("arr", ArrayType(reportedStruct))(),
+          reportedStruct("b"), 0, 2, containsNull = true),
+        CreateArray(Seq(Literal(0)))))
+
+    invalidInferredFilters.foreach { inferred =>
+      assert(inferred.resolved && inferred.dataType == BooleanType)
+      val relation = DataSourceV2Relation.create(
+        new InMemoryCatalystFilterTable(schema, inferred, estimateInferred = estimateInferred),
+        None,
+        None,
+        CaseInsensitiveStringMap.empty)
+      val pushedPlan = V2ScanRelationPushDown(
+        Filter(EqualTo(relation.output.head, Literal(1L)), relation))
+      val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+
+      assert(scan.inferredFilters.isEmpty,
+        s"a source field ordinal must be rejected before rebinding: $inferred\n$pushedPlan")
+      assert(!pushedPlan.exists {
+        case Filter(condition, _) => condition.exists {
+          case _: GetStructField | _: GetArrayStructFields => true
+          case _ => false
+        }
+        case _ => false
+      })
+    }
+  }
+
+  gridTest("inferred filters exclude unevaluable and runtime-replaceable expressions")(
+      Seq(false, true)) { estimateInferred =>
+    val schema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("ts", TimestampType)))
+    val id = AttributeReference("id", LongType, nullable = false)()
+    val ts = AttributeReference("ts", TimestampType)()
+    val invalidInferredFilters = Seq(
+      IsNotNull(TimeWindow(ts, "1 minute", "1 minute", "0 second")),
+      EqualTo(SortOrder(id, Ascending), Literal(1L)),
+      LessThan(new Nvl(id, Literal(0L)), Literal(100L)),
+      new Between(id, Literal(-100L), Literal(100L)))
+
+    invalidInferredFilters.foreach { inferred =>
+      assert(inferred.dataType == BooleanType)
+      if (!inferred.exists(_.isInstanceOf[TimeWindow])) {
+        assert(inferred.resolved)
+      }
+      val relation = DataSourceV2Relation.create(
+        new InMemoryCatalystFilterTable(schema, inferred, estimateInferred = estimateInferred),
+        None,
+        None,
+        CaseInsensitiveStringMap.empty)
+      val condition = EqualTo(relation.output.head, Literal(1L))
+      val pushedPlan = V2ScanRelationPushDown(Filter(condition, relation))
+      val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+
+      assert(scan.inferredFilters.isEmpty,
+        s"inferred filter requiring earlier rewrites must be ignored: $inferred\n$pushedPlan")
+      val filters = pushedPlan.collect { case Filter(predicate, _) => predicate }
+      assert(filters.size == 1 && filters.head.semanticEquals(condition))
+    }
+  }
+
   test("Boolean simplification keeps inferred filters out of executable predicates") {
     val schema = StructType(Seq(
       StructField("a", BooleanType, nullable = false),
@@ -1538,7 +1611,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
   private class InMemoryCatalystFilterTable(
       tableSchema: StructType,
       inferredFilter: Expression,
-      scanFactory: Option[StructType => Scan] = None) extends Table with SupportsRead {
+      scanFactory: Option[StructType => Scan] = None,
+      estimateInferred: Boolean = true) extends Table with SupportsRead {
 
     override def name(): String = "in-memory-catalyst-filter-table"
 
@@ -1548,13 +1622,15 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       EnumSet.of(TableCapability.BATCH_READ)
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
-      new InMemoryCatalystFilterScanBuilder(tableSchema, inferredFilter, scanFactory)
+      new InMemoryCatalystFilterScanBuilder(
+        tableSchema, inferredFilter, scanFactory, estimateInferred)
   }
 
   private class InMemoryCatalystFilterScanBuilder(
       tableSchema: StructType,
       inferredFilter: Expression,
-      scanFactory: Option[StructType => Scan])
+      scanFactory: Option[StructType => Scan],
+      estimateInferred: Boolean)
     extends ScanBuilder
     with SupportsPushDownCatalystFilters
     with SupportsPushDownRequiredColumns {
@@ -1562,10 +1638,12 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     private var requiredSchema = tableSchema
 
     override def build(): Scan = scanFactory.map(_(requiredSchema)).getOrElse {
-      new Scan with SupportsInferredFilterEstimation {
+      new Scan with SupportsSparkFilterEstimation {
         override def readSchema(): StructType = requiredSchema
 
         override def toBatch: Batch = emptyBatch
+
+        override def useInferredFilterEstimation(): Boolean = estimateInferred
       }
     }
 
