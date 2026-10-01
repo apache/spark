@@ -812,6 +812,11 @@ class Analyzer(
       extendedResolutionRules ++
       Seq(NameStreamingSources) : _*),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
+    // Resolution has converged by here, so a transpiled UDF option that is still unresolved never
+    // will be. Drop it and let the call fall back to interpreted Python rather than hand
+    // CheckAnalysis an unresolved child to report on.
+    Batch("Drop Unresolved Transpiled UDF Options", Once,
+      DropUnresolvedTranspiledPythonUDFOptions),
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
       postHocResolutionRules: _*),

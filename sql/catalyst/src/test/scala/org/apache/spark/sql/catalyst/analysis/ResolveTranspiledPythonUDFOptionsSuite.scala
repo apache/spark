@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference, Concat, Expression, Literal, PythonUDF, TranspiledPythonUDF}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference, Cast, Concat, Expression, Literal, PythonUDF, TranspiledPythonUDF}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types.{ByteType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType}
@@ -30,7 +31,7 @@ import org.apache.spark.sql.types.{ByteType, DecimalType, DoubleType, FloatType,
  * resolved argument types. func=null in the leaf PythonUDF is intentional: these structural
  * tests don't execute Python.
  */
-class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
+class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest with AnalysisTest {
 
   private def pyUDF(children: Seq[Expression]): PythonUDF =
     PythonUDF("udf", null, LongType, children,
@@ -236,5 +237,26 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
       val pruned = prune(node, LocalRelation(s, n))
       assert(pruned.transpiledOptions == (if (survives) List(opt) else Nil))
     }
+  }
+
+  // SPARK-59090 probe (added on top of SPARK-55210): an option that matches its
+  // category but can never resolve must be DROPPED by analysis so the call falls
+  // back to interpreted Python, rather than failing the whole query at
+  // CheckAnalysis. `cast(binary as bigint)` matches the "binary" category yet the
+  // Cast is unresolved (binary is not castable to bigint), so this is exactly the
+  // shape that needs the drop-unresolved rule. Without that rule (SPARK-59090 not
+  // folded in), full analysis throws DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION
+  // instead of dropping -- which is the failure this test pins.
+  test("SPARK-59090: full analysis drops an unresolvable category-matching option") {
+    val a = $"a".binary
+    val neverResolves = Cast(a, LongType)
+    assert(!neverResolves.resolved, "cast(binary,long) must be unresolved")
+    val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(neverResolves),
+      List(List("binary")))
+    val plan = Project(Seq(Alias(node, "r")()), LocalRelation(a))
+    val analyzed = getAnalyzer.executeAndCheck(plan, new QueryPlanningTracker)
+    val out = analyzed.expressions.flatMap(_.collect { case t: TranspiledPythonUDF => t }).head
+    assert(out.transpiledOptions.isEmpty,
+      "an unresolvable option must be dropped so the call falls back to Python")
   }
 }
