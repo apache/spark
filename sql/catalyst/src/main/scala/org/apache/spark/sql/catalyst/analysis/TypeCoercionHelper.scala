@@ -53,7 +53,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   SpecialFrameBoundary,
   SpecifiedWindowFrame,
   SubtractTimestamps,
-  SupportTrimmedCharInput,
   TimeBucket,
   TimestampAddInterval,
   WindowSpecDefinition
@@ -747,14 +746,10 @@ abstract class TypeCoercionHelper {
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do
         // general implicit casting. Also promote CHAR/VARCHAR to STRING here because these
-        // expressions skip ImplicitCastInputTypes. Expressions that trim CHAR padding themselves
-        // retain the original type so they can distinguish CHAR from VARCHAR and STRING.
+        // expressions skip ImplicitCastInputTypes.
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
           case (in, expected) =>
-            val promotedType = e match {
-              case _: SupportTrimmedCharInput => None
-              case _ => charVarcharToPlainString(in.dataType, expected)
-            }
+            val promotedType = charVarcharToPlainString(in.dataType, expected)
             promotedType
               .map(dt => if (dt == in.dataType) in else Cast(in, dt))
               .getOrElse {
