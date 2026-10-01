@@ -2157,13 +2157,12 @@ object VariantExplode {
     }
   }
 
-  // Appends `key` to `parentPath`: dot notation for dot-safe keys, else the single-quoted bracket
-  // form `['...']` with `key` escaped by `escapeKey`.
+  // Use dot notation for dot-safe keys and single-quoted bracket notation for other keys.
   private def appendObjectPath(parentPath: String, key: String): String = {
     if (isDotSafeKey(key)) {
       s"$parentPath.$key"
     } else {
-      s"$parentPath['${escapeKey(key)}']"
+      s"$parentPath${VariantPathParser.quoteKey(key, '\'')}"
     }
   }
 
@@ -2175,30 +2174,6 @@ object VariantExplode {
     def isPart(c: Char): Boolean = isStart(c) || (c >= '0' && c <= '9')
     key.nonEmpty && isStart(key.charAt(0)) &&
       (1 until key.length).forall(i => isPart(key.charAt(i)))
-  }
-
-  // Escapes `key` for the single-quoted `['...']` form (RFC 9535 section 2.7 normalized-name
-  // escaping): `\` and `'` are backslash-escaped, `\b \t \n \f \r` for those controls, other
-  // controls (U+0000..U+001F) become `\uXXXX`, and everything else (including `"`) stays literal.
-  private def escapeKey(key: String): String = {
-    val sb = new java.lang.StringBuilder(key.length)
-    var i = 0
-    while (i < key.length) {
-      val c = key.charAt(i)
-      c match {
-        case '\\' => sb.append("\\\\")
-        case '\'' => sb.append("\\'")
-        case '\b' => sb.append("\\b")
-        case '\t' => sb.append("\\t")
-        case '\n' => sb.append("\\n")
-        case '\f' => sb.append("\\f")
-        case '\r' => sb.append("\\r")
-        case _ if c < 0x20 => sb.append("\\u%04x".format(c.toInt))
-        case _ => sb.append(c)
-      }
-      i += 1
-    }
-    sb.toString
   }
 }
 
