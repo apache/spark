@@ -226,10 +226,16 @@ class SparkEnv (
   // Guarded by this SparkEnv's monitor, together with isStopped.
   private var udfDispatcherManager: Option[UDFDispatcherManager] = None
 
+  /**
+   * Builds the factory for this env. Overridable from tests so the shutdown race
+   * can be exercised without a user-supplied class name.
+   */
+  private[spark] def createUDFDispatcherFactory(): UDFDispatcherFactory = {
+    SparkEnv.resolveUDFDispatcherFactory()
+  }
+
   private def createUDFDispatcherManager(): UDFDispatcherManager = {
-    val factory = SparkEnv.resolveUDFDispatcherFactory(
-      conf, SparkContext.isDriver(executorId))
-    new UDFDispatcherManager(factory, new SparkUDFWorkerLogger())
+    new UDFDispatcherManager(createUDFDispatcherFactory(), new SparkUDFWorkerLogger())
   }
 
   /**
@@ -526,47 +532,82 @@ object SparkEnv extends Logging {
   private[spark] val executorSystemName = "sparkExecutor"
 
   /**
-   * :: Experimental ::
-   * Resolves the [[UDFDispatcherFactory]] used to create dispatchers for external UDF
-   * workers (SPARK-55278), from `spark.udf.worker.dispatcherFactory`.
-   *
-   * The factory is loaded reflectively rather than named here: `core` depends on
-   * `udf-worker-proto` and `udf-worker-core` only, so that neither it nor its consumers
-   * carry a gRPC dependency. Every concrete dispatcher therefore lives in a module that
-   * core cannot reference at compile time, and the implementation has to be selected by
-   * configuration.
-   *
-   * When the config is unset the returned factory throws on first use rather than at
-   * SparkEnv creation, so applications that never run an external UDF are unaffected.
+   * Spark-owned implementation of direct worker creation. A string, not a compile-time
+   * reference: `core` depends on `udf-worker-proto` and `udf-worker-core` only, so the
+   * gRPC runtime stays out of this module. This is not a user extension point.
    */
-  private[spark] def resolveUDFDispatcherFactory(
-      conf: SparkConf,
-      isDriver: Boolean): UDFDispatcherFactory = {
-    conf.get(UDF.DISPATCHER_FACTORY) match {
-      case Some(className) =>
-        // Validate before constructing so that a misconfigured class is reported against
-        // the config key, rather than as a ClassCastException from the call site.
-        val cls = Utils.classForName[AnyRef](className, initialize = false)
-        if (!classOf[UDFDispatcherFactory].isAssignableFrom(cls)) {
-          throw new SparkException(
-            s"${UDF.DISPATCHER_FACTORY.key} is set to $className, which does not implement " +
-              s"${classOf[UDFDispatcherFactory].getName}.")
-        }
-        Utils.instantiateSerializerOrShuffleManager[UDFDispatcherFactory](
-          className, conf, isDriver)
+  private[spark] val DIRECT_DISPATCHER_FACTORY_CLASS =
+    "org.apache.spark.udf.worker.grpc.DirectDispatcherFactory"
 
-      case None =>
-        new UDFDispatcherFactory {
-          override def createDispatcher(
-              workerSpec: UDFWorkerSpecification,
-              logger: WorkerLogger): WorkerDispatcher = {
+  /**
+   * :: Experimental ::
+   * Resolves the Spark-owned [[UDFDispatcherFactory]] for external UDF workers
+   * (SPARK-55278). The factory routes from the closed `worker` oneof in
+   * [[UDFWorkerSpecification]], rather than from a second configuration value.
+   *
+   * A user-supplied class name is never loaded.
+   */
+  private[spark] def resolveUDFDispatcherFactory(): UDFDispatcherFactory = {
+    new UDFDispatcherFactory {
+      override def createDispatcher(
+          workerSpec: UDFWorkerSpecification,
+          logger: WorkerLogger): WorkerDispatcher = {
+        workerSpec.getWorkerCase match {
+          case UDFWorkerSpecification.WorkerCase.DIRECT =>
+            loadBuiltInDispatcherFactory(
+              workerSpec.getWorkerCase.toString,
+              DIRECT_DISPATCHER_FACTORY_CLASS).createDispatcher(workerSpec, logger)
+          case workerCase =>
             throw new UnsupportedOperationException(
-              "No UDF dispatcher factory is configured, so external UDF workers cannot be " +
-                s"created. Set ${UDF.DISPATCHER_FACTORY.key} to the name of a " +
-                s"${classOf[UDFDispatcherFactory].getName} implementation.")
-          }
+              s"No built-in UDF dispatcher is available for worker type $workerCase. " +
+                "Worker creation must be selected by UDFWorkerSpecification.worker.")
         }
+      }
     }
+  }
+
+  /**
+   * Loads a Spark-owned factory. A missing runtime is reported against the worker
+   * type, because `spark-udf-worker-grpc` is intentionally absent from the engine
+   * classpath until its gRPC dependencies are shaded.
+   */
+  private def loadBuiltInDispatcherFactory(
+      workerType: String,
+      className: String): UDFDispatcherFactory = {
+    val cls = try {
+      classOf[SparkEnv].getClassLoader.loadClass(className)
+    } catch {
+      case _: ClassNotFoundException =>
+        throw dispatcherRuntimeUnavailable(workerType, className)
+      case _: LinkageError =>
+        throw dispatcherRuntimeUnavailable(workerType, className)
+    }
+    if (!classOf[UDFDispatcherFactory].isAssignableFrom(cls)) {
+      throw new SparkException(
+        s"Worker type $workerType resolved to $className, which does not implement " +
+          s"${classOf[UDFDispatcherFactory].getName}.")
+    }
+    try {
+      cls.getConstructor().newInstance().asInstanceOf[UDFDispatcherFactory]
+    } catch {
+      case _: ClassNotFoundException =>
+        throw dispatcherRuntimeUnavailable(workerType, className)
+      case _: LinkageError =>
+        throw dispatcherRuntimeUnavailable(workerType, className)
+      case e: Exception =>
+        throw new SparkException(
+          s"Could not construct the built-in dispatcher factory $className for worker " +
+            s"type $workerType.", e)
+    }
+  }
+
+  private def dispatcherRuntimeUnavailable(
+      workerType: String,
+      className: String): SparkException = {
+    new SparkException(
+      s"Spark could not load the built-in dispatcher implementation ($className) for " +
+        s"worker type $workerType. The direct dispatcher comes from the " +
+        "spark-udf-worker-grpc module, which is not on the Spark runtime classpath yet.")
   }
 
   def set(e: SparkEnv): Unit = {

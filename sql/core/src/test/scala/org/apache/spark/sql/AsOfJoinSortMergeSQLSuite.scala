@@ -212,6 +212,28 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Row(180.15) :: Nil)
   }
 
+  test("TIMESTAMP MATCH_CONDITION with legacy intervals") {
+    // The distance is then a CalendarInterval, which has no ordering. Only Nearest reads it.
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      for ((op, tag) <- Seq(">=" -> "r10", ">" -> "r9", "<=" -> "r10", "<" -> "r11")) {
+        checkSortMergeAsOf(
+          sql(
+            s"""
+               |SELECT r.tag
+               |FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts)
+               |ASOF JOIN VALUES
+               |  (TIMESTAMP '2026-06-29 08:00:00', 'r8'),
+               |  (TIMESTAMP '2026-06-29 09:00:00', 'r9'),
+               |  (TIMESTAMP '2026-06-29 10:00:00', 'r10'),
+               |  (TIMESTAMP '2026-06-29 11:00:00', 'r11'),
+               |  (TIMESTAMP '2026-06-29 12:00:00', 'r12') AS r(ts, tag)
+               |  MATCH_CONDITION (t.ts $op r.ts)
+               |""".stripMargin),
+          Row(tag) :: Nil)
+      }
+    }
+  }
+
   test("DATE scalar MATCH_CONDITION") {
     checkSortMergeAsOf(
       sql(
@@ -923,6 +945,114 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |  MATCH_CONDITION (t.a <= r.a)
           |""".stripMargin),
       Row(Seq(1, 6)) :: Nil)
+  }
+
+  test("forward MATCH_CONDITION with NULL array elements picks the smallest right row") {
+    // NULL elements sort first: [null] < [null, null] < [5]. [null] equals the left row.
+    val nullInt = "CAST(NULL AS INT)"
+    Seq("<=" -> "n", "<" -> "nn").foreach { case (op, tag) =>
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES (ARRAY($nullInt)) AS t(a)
+             |ASOF JOIN VALUES
+             |  (ARRAY($nullInt), 'n'),
+             |  (ARRAY($nullInt, $nullInt), 'nn'),
+             |  (ARRAY(5), 'five') AS r(a, tag)
+             |  MATCH_CONDITION (t.a $op r.a)
+             |""".stripMargin),
+        Row(tag) :: Nil)
+    }
+  }
+
+  test("forward MATCH_CONDITION with a NULL struct field picks the smallest right row") {
+    // A NULL field sorts first, so {null, 5} < {null, 7} < {0, 1}. {null, 5} equals the left row.
+    val nullInt = "CAST(NULL AS INT)"
+    for {
+      (left, right) <- Seq("t.k" -> "r.k", "(t.k.f, t.k.seq)" -> "(r.k.f, r.k.seq)")
+      (op, tag) <- Seq("<=" -> "s5", "<" -> "s7")
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES (named_struct('f', $nullInt, 'seq', 5)) AS t(k)
+             |ASOF JOIN VALUES
+             |  (named_struct('f', $nullInt, 'seq', 5), 's5'),
+             |  (named_struct('f', $nullInt, 'seq', 7), 's7'),
+             |  (named_struct('f', 0, 'seq', 1), 's1') AS r(k, tag)
+             |  MATCH_CONDITION ($left $op $right)
+             |""".stripMargin),
+        Row(tag) :: Nil)
+    }
+  }
+
+  test("forward MATCH_CONDITION with a leading STRING field picks the smallest right row") {
+    // {b, 5} equals the left row. {c, 1} < {d, 0}, but the STRING field distance is 1 for both,
+    // so a distance picks {d, 0}.
+    for {
+      (left, right) <- Seq("t.k" -> "r.k", "(t.k.s, t.k.n)" -> "(r.k.s, r.k.n)")
+      (op, tag) <- Seq("<=" -> "b5", "<" -> "c1")
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES (named_struct('s', 'b', 'n', 5)) AS t(k)
+             |ASOF JOIN VALUES
+             |  (named_struct('s', 'b', 'n', 5), 'b5'),
+             |  (named_struct('s', 'c', 'n', 1), 'c1'),
+             |  (named_struct('s', 'd', 'n', 0), 'd0') AS r(k, tag)
+             |  MATCH_CONDITION ($left $op $right)
+             |""".stripMargin),
+        Row(tag) :: Nil)
+    }
+  }
+
+  test("forward MATCH_CONDITION skips a closer row that fails a non-equi ON predicate") {
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT r.k
+          |FROM VALUES (10, 5) AS t(k, lim)
+          |ASOF JOIN VALUES (12, 9), (15, 1), (20, 0) AS r(k, v)
+          |  MATCH_CONDITION (t.k <= r.k)
+          |  ON r.v < t.lim
+          |""".stripMargin),
+      Row(15) :: Nil)
+  }
+
+  // (right - left) overflows the type for the far row, and for DECIMAL for both rows. So a
+  // distance-based scan throws or gives a wrong answer.
+  Seq(
+    ("INT", "-100", "-50", "2147483647"),
+    ("BIGINT", "-100", "-50", "9223372036854775807"),
+    ("DECIMAL(38, 0)", "-99999999999999999999999999999999999999", "1", "2"),
+    ("INTERVAL YEAR TO MONTH",
+      "INTERVAL '-100' MONTH", "INTERVAL '-50' MONTH", "INTERVAL '178956970-7' YEAR TO MONTH"),
+    ("INTERVAL DAY TO SECOND",
+      "INTERVAL '-100' DAY", "INTERVAL '-50' DAY", "INTERVAL '106751991' DAY")
+  ).foreach { case (dataType, left, near, far) =>
+    test(s"forward $dataType MATCH_CONDITION picks the closest row when right - left overflows") {
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+          Seq("<=", "<").foreach { op =>
+            checkSortMergeAsOf(
+              sql(
+                s"""
+                   |SELECT r.tag
+                   |FROM VALUES (CAST($left AS $dataType)) AS t(k)
+                   |ASOF JOIN VALUES
+                   |  (CAST($near AS $dataType), 'near'),
+                   |  (CAST($far AS $dataType), 'far') AS r(k, tag)
+                   |  MATCH_CONDITION (t.k $op r.k)
+                   |""".stripMargin),
+              Row("near") :: Nil)
+          }
+        }
+      }
+    }
   }
 
   test("ARRAY<STRUCT> MATCH_CONDITION with fields of different types") {
