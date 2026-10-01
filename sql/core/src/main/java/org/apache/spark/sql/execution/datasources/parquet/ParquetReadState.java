@@ -108,7 +108,7 @@ abstract class ParquetReadState {
         // Only a store parquet filtered itself indexes its rows, and only its pages carry the first
         // row index that places them in the row group. Pages read whole would each place their
         // first row at 0, and the ranges would then select the wrong rows with no error.
-        throw new IllegalStateException(String.format(
+        throw ParquetStorageFilter.internalError(String.format(
             "Row ranges were given for column %s, but its pages carry no row indexes to find "
                 + "those rows by", descriptor));
       }

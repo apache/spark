@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.parquet.bytes.ByteBufferInputStream
 import org.apache.parquet.filter2.columnindex.RowRanges
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.execution.datasources.parquet.VectorizedRleValuesReaderTestUtils._
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types.IntegerType
@@ -129,7 +129,7 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
   test("row ranges without row indexes are refused") {
     // Pages from a store with no row indexes carry no first row index either, so each would place
     // its first row at 0 and the ranges would select the wrong rows. Failing is the only answer.
-    val e = intercept[IllegalStateException] {
+    val e = intercept[SparkException] {
       ParquetTestAccess.newState(
         intColumnDescriptor(1), isRequired = false, rowRanges = rowRangesOf(Array(3, 4, 5)))
     }

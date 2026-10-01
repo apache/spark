@@ -40,7 +40,9 @@ import org.apache.spark.internal.SparkLoggerFactory;
  * What a partial read of a Parquet file transfers, and whether one is possible at all, answered
  * from the footer the {@link ParquetFileReader} already holds. Every method here is metadata
  * arithmetic and causes no IO of its own, which is what lets a reader report these numbers per row
- * group.
+ * group. For a strict subset of a block that holds only once the block's column index store is
+ * built, see {@link #compressedBytesForRowRanges}. A walk before that would read the offset indexes
+ * itself and cache a store over the reader's current columns.
  *
  * <p>One instance per reader, which reads one split of a file, because the warning below is
  * reported once per instance.
@@ -99,7 +101,7 @@ final class ParquetBlockAccounting {
    *       {@code calculateOffsetRanges} does. The store is guaranteed to exist here, so the walk is
    *       pure metadata arithmetic. For ranges a reader narrowed itself, which column-index
    *       filtering had no hand in, that guarantee is an ordering one, since the reader's own read
-   *       of those ranges built the store first.
+   *       of those ranges built the store first. A new caller has to keep that order.
    * </ul>
    *
    * <p>Columns absent from this physical file (schema evolution) contribute nothing, which is
@@ -141,8 +143,7 @@ final class ParquetBlockAccounting {
         // only mean the block's store was built while a narrower schema was requested than this
         // walk asks about, an ordering bug rather than a property of the file, and the footer tells
         // the two apart. It is reported rather than thrown, because this walk only produces a
-        // counter, and `ignoreCorruptFiles` turns any exception from a reader into a silently
-        // truncated file, so a byte metric must not be able to change the answer.
+        // counter, which must not be able to fail a read.
         if (chunk.getOffsetIndexReference() != null && !loggedMissingStoreEntry) {
           loggedMissingStoreEntry = true;
           LOG.warn("Miscounting the storage filter's avoided bytes for {}: column {} of row "
@@ -157,8 +158,6 @@ final class ParquetBlockAccounting {
       if (pageCount == 0) {
         continue;
       }
-      // The dictionary page is read whenever any data page of the chunk is, so count it here the
-      // same way parquet's ColumnIndexFilterUtils.calculateOffsetRanges does.
       total += dictionaryPageSize(chunk, offsetIndex);
       for (int i = 0; i < pageCount; i++) {
         long from = offsetIndex.getFirstRowIndex(i);

@@ -72,7 +72,7 @@ interface ValueCopier {
   static ValueCopier forType(DataType dt) {
     ValueCopier copier = forTypeOrNull(dt);
     if (copier == null) {
-      throw new IllegalStateException(
+      throw ParquetStorageFilter.internalError(
           "Splicing storage-filter pushdown does not support key type: " + dt);
     }
     return copier;

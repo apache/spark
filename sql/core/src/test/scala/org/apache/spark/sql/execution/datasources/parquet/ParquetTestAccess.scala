@@ -183,15 +183,9 @@ object ParquetTestAccess {
 
   // -------- shared helper --------
 
-  private def rethrow(e: ReflectiveOperationException): RuntimeException = {
-    val cause = e match {
-      case ite: InvocationTargetException => ite.getCause
-      case other => other
-    }
-    cause match {
-      case re: RuntimeException => throw re
-      case er: Error => throw er
-      case _ => throw new RuntimeException(cause)
-    }
+  // What the reflected call itself threw, checked or not, so a test sees the method's own error.
+  private def rethrow(e: ReflectiveOperationException): Throwable = e match {
+    case ite: InvocationTargetException => ite.getCause
+    case other => other
   }
 }

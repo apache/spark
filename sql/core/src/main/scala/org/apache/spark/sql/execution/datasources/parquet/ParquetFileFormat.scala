@@ -206,15 +206,21 @@ class ParquetFileFormat
    * whatever the subclass does.
    */
   override def supportsStorageFilterPushdown(sparkSession: SparkSession): Boolean =
-    getSqlConf(sparkSession).parquetStorageFilterPushdownEnabled &&
-      getClass == classOf[ParquetFileFormat]
+    getSqlConf(sparkSession).parquetStorageFilterPushdownEnabled && isExactlyParquetFileFormat
+
+  /**
+   * Whether this is `ParquetFileFormat` itself rather than a subclass, which both storage-filter
+   * entry points ask. Private, so a subclass cannot opt in by overriding one of them and still be
+   * declined by the other.
+   */
+  private def isExactlyParquetFileFormat: Boolean = getClass == classOf[ParquetFileFormat]
 
   override def supportsStorageFilter(expr: Expression): Boolean =
     ParquetStorageFilter.isSupportedStorageFilter(expr)
 
   /** See `StorageFilterMetrics` for what each of these counts. */
   override def storageFilterMetrics(sparkContext: SparkContext): Map[String, SQLMetric] =
-    StorageFilterMetrics.create(sparkContext).toMap
+    StorageFilterMetrics.create(sparkContext)
 
   override def buildReaderWithStorageFilters(
       sparkSession: SparkSession,
@@ -230,7 +236,7 @@ class ParquetFileFormat
     // The same subclass exclusion as `supportsStorageFilterPushdown`, asked again because this
     // entry point is reachable without the planner having asked it, and `None` sends the caller to
     // the ordinary builder, which is the one a subclass overrides.
-    if (getClass != classOf[ParquetFileFormat]) {
+    if (!isExactlyParquetFileFormat) {
       None
     } else {
       Some(buildParquetReader(sparkSession, dataSchema, partitionSchema, requiredSchema, filters,

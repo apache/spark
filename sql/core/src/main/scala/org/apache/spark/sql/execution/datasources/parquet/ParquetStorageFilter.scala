@@ -23,24 +23,30 @@ import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
 import org.apache.spark.sql.catalyst.expressions.{And, BasePredicate, BloomFilterMightContain, BoundReference, Expression, Predicate}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.Utils
 
 /**
  * The SQL metrics the reader updates while applying a [[ParquetStorageFilter]], created by
  * `ParquetFileFormat.storageFilterMetrics`. Every counter is scoped to what the storage filter
- * saved against a read of the same projection without one. None counts what it cost. A row group
- * whose filter was given up reads its key columns twice and counts nothing, so the counters can
- * show a saving on a scan that read more than it would have with the feature off.
+ * saved against a read of the same projection without one. The one cost taken off is a second
+ * key read in a row group that gave splicing up, below. A row group whose filter was given up
+ * reads its key columns twice and counts nothing, so the counters can show a saving on a scan
+ * that read more than it would have with the feature off. Nor do they take off the offset indexes
+ * phase 2 reads for a narrowed row group when no data filter is pushed, which a plain read does not
+ * read. Bytes are the compressed bytes the reader did not ask parquet for. The file system can
+ * still fetch some of them, for example when a vectored read merges nearby ranges.
  *
- *  - [[rowGroupsSkipped]] counts row groups whose data columns were never read.
- *  - [[rowsExcludedByRowGroup]] sums those skipped row groups' rows, counting per block the rows
- *    that survived the pushed data filter.
+ *  - [[rowGroupsSkipped]] counts row groups whose non-key columns were never read. Phase 1 read
+ *    their key columns, so key bytes are never counted as avoided. In a file that has none of its
+ *    key columns, nothing of a skipped row group was read.
+ *  - [[rowsExcludedByRowGroup]] sums those row groups' rows that the pushed data filter's column
+ *    index kept.
  *  - [[rowsExcludedWithinRowGroup]] sums rows excluded inside row groups that were kept.
  *  - [[bytesAvoidedByRowGroup]] sums, per skipped row group, the non-key bytes a plain read of this
- *    projection would have transferred for the rows that survived the pushed data filter. Phase 1
- *    reads the key columns of every block, so key bytes are never part of it.
+ *    projection would have asked for over those rows.
  *  - [[bytesAvoidedByPageFiltering]] sums, per kept row group, that same non-key baseline minus the
- *    bytes phase 2 read, which is what `finalRanges` page selection pruned. A row group that gave
- *    splicing up reads its key columns again in phase 2, which is taken off, down to zero.
+ *    bytes phase 2 read, which is the pages it skipped. A row group that gave splicing up reads its
+ *    key columns again in phase 2, which is taken off, down to zero.
  *
  * The row counters' suffix says where a row was excluded, not whether reading it was avoided. A row
  * excluded inside a kept row group may have been read as part of a page that held a survivor, or
@@ -53,20 +59,12 @@ case class StorageFilterMetrics(
     bytesAvoidedByRowGroup: SQLMetric,
     bytesAvoidedByPageFiltering: SQLMetric) {
 
-  /** Counts a row group whose data columns the filter kept the reader from touching at all. */
+  /** Counts a row group whose non-key columns the filter kept the reader from reading at all. */
   def recordRowGroupSkipped(excludedRows: Long, avoidedBytes: Long): Unit = {
     rowGroupsSkipped.add(1L)
     rowsExcludedByRowGroup.add(excludedRows)
     bytesAvoidedByRowGroup.add(avoidedBytes)
   }
-
-  /** These counters keyed for the scan, which carries them without naming any of them. */
-  def toMap: Map[String, SQLMetric] = Map(
-    StorageFilterMetrics.ROW_GROUPS_SKIPPED -> rowGroupsSkipped,
-    StorageFilterMetrics.ROWS_EXCLUDED_BY_ROW_GROUP -> rowsExcludedByRowGroup,
-    StorageFilterMetrics.ROWS_EXCLUDED_WITHIN_ROW_GROUP -> rowsExcludedWithinRowGroup,
-    StorageFilterMetrics.BYTES_AVOIDED_BY_ROW_GROUP -> bytesAvoidedByRowGroup,
-    StorageFilterMetrics.BYTES_AVOIDED_BY_PAGE_FILTERING -> bytesAvoidedByPageFiltering)
 }
 
 object StorageFilterMetrics {
@@ -79,21 +77,24 @@ object StorageFilterMetrics {
   val BYTES_AVOIDED_BY_ROW_GROUP = "storageFilterBytesAvoidedByRowGroup"
   val BYTES_AVOIDED_BY_PAGE_FILTERING = "storageFilterBytesAvoidedByPageFiltering"
 
-  /** A fresh set of counters, with the labels the SQL UI shows. */
-  def create(sparkContext: SparkContext): StorageFilterMetrics = StorageFilterMetrics(
-    rowGroupsSkipped =
+  /**
+   * A fresh set of counters, with the labels the SQL UI shows, keyed for the scan, which carries
+   * them without naming any of them.
+   */
+  def create(sparkContext: SparkContext): Map[String, SQLMetric] = Map(
+    ROW_GROUPS_SKIPPED ->
       SQLMetrics.createMetric(sparkContext, "row groups skipped by storage filter"),
-    rowsExcludedByRowGroup =
+    ROWS_EXCLUDED_BY_ROW_GROUP ->
       SQLMetrics.createMetric(sparkContext, "rows excluded by storage filter (whole row group)"),
-    rowsExcludedWithinRowGroup =
+    ROWS_EXCLUDED_WITHIN_ROW_GROUP ->
       SQLMetrics.createMetric(sparkContext, "rows excluded by storage filter (within row group)"),
-    bytesAvoidedByRowGroup = SQLMetrics.createSizeMetric(
+    BYTES_AVOIDED_BY_ROW_GROUP -> SQLMetrics.createSizeMetric(
       sparkContext, "bytes avoided by storage filter (whole row group)"),
-    bytesAvoidedByPageFiltering = SQLMetrics.createSizeMetric(
+    BYTES_AVOIDED_BY_PAGE_FILTERING -> SQLMetrics.createSizeMetric(
       sparkContext, "bytes avoided by storage filter (page filtering)"))
 
   /**
-   * The counters the scan carries back, which are the ones [[create]] made: the map is this
+   * The counters the scan carries back, which are the ones [[create]] made. The map is this
    * format's own transport, and a scan with storage filters on a Parquet relation has no other.
    */
   def fromMap(metrics: Map[String, SQLMetric]): StorageFilterMetrics = StorageFilterMetrics(
@@ -130,9 +131,10 @@ class ParquetStorageFilter private (
     // The field below is nulled the first time this runs, and the copy that reaches every task is
     // the driver's. So a driver-side evaluation would leave each executor building a predicate from
     // nothing, which is named here rather than left to an NPE from `Predicate.create`.
-    require(boundExpression != null,
-      "a storage filter must only be evaluated on an executor, and this copy has released the " +
-        "expression it would build its predicate from")
+    if (boundExpression == null) {
+      throw SparkException.internalError("a storage filter must only be evaluated on an " +
+        "executor, and this copy has released the expression it would build its predicate from")
+    }
     val created = Predicate.create(boundExpression)
     // A prepared bloom reaches the executor as a binary Literal inside this expression, up to
     // `spark.sql.optimizer.runtime.bloomFilter.maxNumBits` of it, while `created` holds the
@@ -228,11 +230,8 @@ object ParquetStorageFilter {
    *    the survivor queue where the row group was spliced, from the overwritten vector where it
    *    was not.
    *
-   * Nothing here asks whether the expression is safe to evaluate on every row. The reader evaluates
-   * the predicate without the conjuncts that precede it in the plan, so one that throws on a row an
-   * earlier conjunct would have rejected throws where a plain scan does not. That is handled where
-   * it arises. The reader gives the filter up for the row group and reads it plainly, and the
-   * post-scan `Filter` then evaluates every conjunct in its own order.
+   * Nothing here asks whether the expression is safe to evaluate on every row. The reader handles
+   * that where it arises, see [[rethrowIfMustPropagate]].
    */
   def isSupportedStorageFilter(expr: Expression): Boolean = expr match {
     case bloom: BloomFilterMightContain =>
@@ -242,44 +241,103 @@ object ParquetStorageFilter {
   }
 
   /**
-   * Rethrows an error the reader met while applying a storage filter that it must not absorb by
-   * giving the filter up. Two kinds are not the reader's to absorb, and both are asked the way the
-   * rest of Spark asks them:
-   *  - a pending task kill, since the error may be the kill's interrupt surfacing through a UDF
-   *    that wrapped it. `PythonRunner` reads a kill off the task context in the same way.
-   *  - a fatal error in the cause chain, found by `Executor.isFatalError`.
+   * Rethrows an error the reader met while evaluating a storage filter, if it must not fall back
+   * on it by giving the filter up. The checks run in the executor's own order:
+   *  - a fatal error goes out as it is, kill or no kill.
+   *  - a pending task kill goes out wrapped, see [[throwIfKilled]]. The error may be the kill's
+   *    interrupt surfacing through a UDF that wrapped it. `PythonRunner` reads a kill off the task
+   *    context in the same way.
+   *  - a fatal error deeper in the cause chain, found by `Executor.isFatalError` as deep as the
+   *    executor would look had the post-scan Filter raised `e`, which it raises as it is, goes out
+   *    as itself, so the executor finds it at the top whatever wraps it on the way.
    *
-   * Either goes out wrapped, see [[mustPropagate]].
+   * An `InternalError` among those goes out in a checked wrapper. `FileScanRDD` would take a bare
+   * one for a corrupt file under `ignoreCorruptFiles`, where a plain plan raises it from the
+   * post-scan Filter, outside that catch. The executor finds it under the wrapper and the
+   * FAILED_READ_FILE around that at a `spark.executor.killOnFatalError.depth` of 3 or more, the
+   * default being 5.
+   *
+   * Anything else is the filter's own error, which the post-scan Filter raises again for a row it
+   * does evaluate, so the reader falls back on it.
    */
-  def rethrowIfMustPropagate(e: Throwable): Unit = {
-    if (isKilled || Executor.isFatalError(e, fatalErrorDepth - 1)) throw mustPropagate(e)
+  def rethrowIfMustPropagate(e: Throwable): Unit = rethrowIfMustPropagate(e, fromRead = false)
+
+  /**
+   * As [[rethrowIfMustPropagate]], for an error decoding the key pages, with three differences:
+   *  - a plain read raises that from the reader, where `FileScanRDD` wraps it in FAILED_READ_FILE
+   *    before the executor looks, so a fatal error deeper in the chain has to sit one level
+   *    shallower to count.
+   *  - an `InternalError` is corrupt data, as `DataSourceUtils.shouldIgnoreCorruptFileException`
+   *    takes it.
+   *  - a key vector that cannot grow (see [[isVectorGrowthFailure]]) is phase 1's own, since
+   *    phase 1 decodes into vectors only this reader allocates. Giving the extra work up is the
+   *    answer to that.
+   * The reader falls back on those, and the plain read of the same pages meets the corrupt data
+   * again, or allocates what a plain read allocates.
+   */
+  def rethrowIfMustPropagateFromRead(e: Throwable): Unit =
+    rethrowIfMustPropagate(e, fromRead = true)
+
+  private def rethrowIfMustPropagate(e: Throwable, fromRead: Boolean): Unit = {
+    def corrupt(t: Throwable): Boolean = fromRead && t.isInstanceOf[InternalError]
+    def out(fatal: Throwable): Throwable = fatal match {
+      case internal: InternalError =>
+        new SparkException("A storage filter met a fatal error it must not absorb", internal)
+      case other => other
+    }
+    if (Executor.isFatalError(e, 1) && !corrupt(e)) throw out(e)
+    throwIfKilled(e)
+    if (fromRead && isVectorGrowthFailure(e)) return
+    if (Executor.isFatalError(e, if (fromRead) fatalErrorDepth - 1 else fatalErrorDepth)) {
+      // The one `Executor.isFatalError` found, which no SparkOutOfMemoryError can precede.
+      val fatal = Iterator.iterate(e)(_.getCause).find(Utils.isFatalError).get
+      if (!corrupt(fatal)) throw out(fatal)
+    }
   }
+
+  /**
+   * Whether `e` is how `WritableColumnVector.reserve` reports a vector that cannot grow: a plain
+   * `RuntimeException`, caused by an `OutOfMemoryError` or by nothing, for a capacity past what a
+   * vector can hold.
+   */
+  private def isVectorGrowthFailure(e: Throwable): Boolean =
+    e.getClass == classOf[RuntimeException] &&
+      (e.getCause == null || e.getCause.isInstanceOf[OutOfMemoryError])
 
   /**
    * Throws a pending task kill, for the reader's loops that can run long without returning to
    * `FileScanRDD`, which is where a plain read meets one.
    */
-  def throwIfKilled(): Unit = {
-    if (isKilled) {
-      val reason = TaskContext.get().getKillReason().getOrElse("unknown reason")
-      throw mustPropagate(new TaskKilledException(reason))
+  def throwIfKilled(): Unit = throwIfKilled(null)
+
+  /**
+   * Throws a pending task kill, wrapped in a checked [[SparkException]] around `surfaced`, the
+   * error the kill surfaced as, if any. Under `ignoreCorruptFiles`, `FileScanRDD` would log any
+   * `RuntimeException` or `IOException` from a reader as a corrupt file and go on to open the
+   * split's remaining files, since it checks for a kill only between batches. The executor reports
+   * the task as killed either way.
+   */
+  private def throwIfKilled(surfaced: Throwable): Unit = {
+    val context = TaskContext.get()
+    if (context != null && context.isInterrupted()) {
+      val cause =
+        if (surfaced != null) surfaced else new TaskKilledException(context.getKillReason().get)
+      throw new SparkException("A storage filter met a task kill it must not absorb", cause)
     }
   }
 
   /**
-   * `e` wrapped in a checked [[SparkException]]. Under `ignoreCorruptFiles`, `FileScanRDD` reads
-   * any `RuntimeException` or `IOException` from a reader as a corrupt file and skips the rest of
-   * it, which would drop rows and hide the kill or the fatal error. The executor still reports a
-   * killed task as killed. It still finds a fatal cause too, since the check above looks one level
-   * less deep than `spark.executor.killOnFatalError.depth`, the level this wrapper adds.
+   * Throws `SparkException.internalError(message, cause)`, for a broken invariant of this reader.
+   * The exception is checked, so `FileScanRDD` cannot read it as a corrupt file under
+   * `ignoreCorruptFiles` and skip the rest of the file silently. Typed as returning a
+   * `RuntimeException` only so that Java code can write `throw internalError(...)` without
+   * declaring a checked exception. It never returns.
    */
-  private def mustPropagate(e: Throwable): SparkException =
-    new SparkException("A storage filter met a task kill or a fatal error it must not absorb", e)
+  def internalError(message: String, cause: Throwable): RuntimeException =
+    throw SparkException.internalError(message, cause)
 
-  private def isKilled: Boolean = {
-    val context = TaskContext.get()
-    context != null && context.isInterrupted()
-  }
+  /** [[internalError]] with no cause. */
+  def internalError(message: String): RuntimeException = internalError(message, null)
 
   // Read the way `SparkUncaughtExceptionHandler` reads it, since there may be no SparkEnv.
   private def fatalErrorDepth: Int = Option(SparkEnv.get).map(_.conf.get(KILL_ON_FATAL_ERROR_DEPTH))

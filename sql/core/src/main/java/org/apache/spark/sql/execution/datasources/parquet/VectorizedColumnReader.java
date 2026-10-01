@@ -103,6 +103,21 @@ public class VectorizedColumnReader {
   private final String datetimeRebaseMode;
   private final ParsedVersion writerVersion;
 
+  /** A reader of the rows the store names, as {@code rowRanges = null} below. */
+  public VectorizedColumnReader(
+      ColumnDescriptor descriptor,
+      boolean isRequired,
+      PageReadStore pageReadStore,
+      ZoneId convertTz,
+      String datetimeRebaseMode,
+      String datetimeRebaseTz,
+      String int96RebaseMode,
+      String int96RebaseTz,
+      ParsedVersion writerVersion) throws IOException {
+    this(descriptor, isRequired, pageReadStore, null, convertTz, datetimeRebaseMode,
+        datetimeRebaseTz, int96RebaseMode, int96RebaseTz, writerVersion);
+  }
+
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
       boolean isRequired,
