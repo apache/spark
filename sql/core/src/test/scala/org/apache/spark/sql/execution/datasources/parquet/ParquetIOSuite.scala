@@ -2486,26 +2486,30 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   }
 
   /**
-   * Writes 100 non-null values of a nullable INT32 column to a single uncompressed PLAIN page,
-   * lets `corrupt` modify the bytes of its definition levels, and returns the error of reading
-   * the file with the vectorized reader.
+   * Writes 100 rows of `column` to a single uncompressed data page, lets `corrupt` modify the
+   * RLE section that starts with `03 00 00 00 C8 01 01` (the 4-byte length 3, then one RLE run
+   * with header 100 << 1 and value 1), and returns the error of reading the file with the
+   * vectorized reader. For a nullable INT32 column that is the definition levels; for a
+   * BOOLEAN column written as a V2 page it is the RLE-encoded values.
    */
-  private def readCorruptedDefinitionLevels(corrupt: (Array[Byte], Int) => Unit): Throwable = {
+  private def readCorruptedRleSection(
+      column: String,
+      writerVersion: String = "PARQUET_1_0")(
+      corrupt: (Array[Byte], Int) => Unit): Throwable = {
     var error: Throwable = null
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      spark.range(100).selectExpr("if(id < 0, null, cast(id as int)) as a").coalesce(1)
+      spark.range(100).selectExpr(column).coalesce(1)
         .write
         .option(ParquetOutputFormat.ENABLE_DICTIONARY, "false")
+        .option(ParquetOutputFormat.WRITER_VERSION, writerVersion)
         .option("compression", "uncompressed")
         .parquet(path)
       val file = dir.listFiles().filter(_.getName.endsWith(".parquet")).head
       val bytes = Files.readAllBytes(file.toPath)
-      // The definition levels of the only data page: the 4-byte length 3, then one RLE run
-      // with header 100 << 1 (varint 0xC8 0x01) and value 1.
-      val levels = Array[Byte](3, 0, 0, 0, 0xC8.toByte, 0x01, 1)
+      val section = Array[Byte](3, 0, 0, 0, 0xC8.toByte, 0x01, 1)
       val offsets = bytes.indices.filter { i =>
-        bytes.slice(i, i + levels.length).sameElements(levels)
+        bytes.slice(i, i + section.length).sameElements(section)
       }
       assert(offsets.size == 1)
       corrupt(bytes, offsets.head)
@@ -2528,9 +2532,30 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   private def causes(e: Throwable): Seq[Throwable] =
     Iterator.iterate(e)(_.getCause).takeWhile(_ != null).toSeq
 
+  /** Sets the 4-byte length at `offset` to Int.MaxValue, far more than the rest of the page. */
+  private def setMaxLength(bytes: Array[Byte], offset: Int): Unit =
+    Array(0xFF, 0xFF, 0xFF, 0x7F).zipWithIndex.foreach { case (b, i) =>
+      bytes(offset + i) = b.toByte
+    }
+
+  /**
+   * Checks that the page error is reported once with the column, directly on top of the
+   * `ParquetDecodingException` about the invalid length.
+   */
+  private def assertInvalidLengthReportsColumn(e: Throwable, column: String): Unit = {
+    val pageErrors = causes(e).filter(_.getMessage.startsWith("could not read page"))
+    assert(pageErrors.size == 1, e)
+    assert(pageErrors.head.getMessage.contains(s"in col [$column]"), e)
+    assert(pageErrors.head.getCause.isInstanceOf[ParquetDecodingException], e)
+    assert(pageErrors.head.getCause.getMessage.contains(
+      s"Corrupted RLE data: invalid length ${Int.MaxValue}"), e)
+  }
+
   test("SPARK-59832: vectorized reader fails on truncated definition levels") {
     // Shorten the run to 64 values (header 64 << 1 = varint 0x80 0x01).
-    val e = readCorruptedDefinitionLevels((bytes, offset) => bytes(offset + 4) = 0x80.toByte)
+    val e = readCorruptedRleSection("if(id < 0, null, cast(id as int)) as a") {
+      (bytes, offset) => bytes(offset + 4) = 0x80.toByte
+    }
     assert(causes(e).exists {
       case c: ParquetDecodingException => c.getMessage.contains("Corrupted RLE data")
       case _ => false
@@ -2538,18 +2563,13 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("SPARK-59832: invalid definition level length reports the column") {
-    val e = readCorruptedDefinitionLevels { (bytes, offset) =>
-      // Length Int.MaxValue, far more than the rest of the page.
-      Array(0xFF, 0xFF, 0xFF, 0x7F).zipWithIndex.foreach { case (b, i) =>
-        bytes(offset + i) = b.toByte
-      }
-    }
-    val pageError = causes(e).collectFirst {
-      case c: java.io.IOException if c.getMessage.startsWith("could not read page") => c
-    }
-    assert(pageError.exists(_.getMessage.contains("[a]")), e)
-    assert(pageError.exists(_.getCause.getMessage.contains(
-      s"Corrupted RLE data: invalid length ${Int.MaxValue}")), e)
+    val e = readCorruptedRleSection("if(id < 0, null, cast(id as int)) as a")(setMaxLength)
+    assertInvalidLengthReportsColumn(e, "a")
+  }
+
+  test("SPARK-59832: invalid length of RLE booleans in a V2 page reports the column") {
+    val e = readCorruptedRleSection("id >= 0 as b", writerVersion = "PARQUET_2_0")(setMaxLength)
+    assertInvalidLengthReportsColumn(e, "b")
   }
 }
 

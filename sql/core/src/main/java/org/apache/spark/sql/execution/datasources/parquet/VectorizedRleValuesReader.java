@@ -99,6 +99,10 @@ public final class VectorizedRleValuesReader extends ValuesReader
     if (fixedWidth) {
       // Initialize for repetition and definition levels
       if (readLength) {
+        if (in.available() < 4) {
+          throw new ParquetDecodingException("Corrupted RLE data: the 4-byte length is cut off, " +
+            "only " + in.available() + " bytes are left in the page");
+        }
         int length = readIntLittleEndian();
         if (length < 0 || length > in.available()) {
           throw new ParquetDecodingException("Corrupted RLE data: invalid length " + length +
@@ -109,7 +113,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
     } else {
       // Initialize for values
       if (in.available() > 0) {
-        init(in.read());
+        int width = in.read();
+        if (width > 32) {
+          throw new ParquetDecodingException("Corrupted RLE data: invalid bit width " + width);
+        }
+        init(width);
       } else {
         // No encoded values (e.g. an all-null page). Do not treat this as a bit width of 0,
         // which would decode every value as 0; any read fails in `readNextGroup` instead.

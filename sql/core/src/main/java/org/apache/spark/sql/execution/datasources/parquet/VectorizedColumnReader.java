@@ -131,7 +131,7 @@ public class VectorizedColumnReader {
       try {
         this.dictionary = dictionaryPage.getEncoding().initDictionary(descriptor, dictionaryPage);
         this.isCurrentPageDictionaryEncoded = true;
-      } catch (IOException e) {
+      } catch (IOException | ParquetDecodingException e) {
         throw new IOException("could not decode the dictionary for " + descriptor, e);
       }
     } else {
@@ -363,7 +363,7 @@ public class VectorizedColumnReader {
 
     try {
       dataColumn.initFromPage(pageValueCount, in);
-    } catch (IOException | ParquetDecodingException e) {
+    } catch (IOException e) {
       throw new IOException("could not read page in col " + descriptor, e);
     }
     // for PARQUET-246 (See VectorizedDeltaByteArrayReader.setPreviousValues)
@@ -452,7 +452,7 @@ public class VectorizedColumnReader {
     try {
       initDataReader(pageValueCount, page.getDataEncoding(), page.getData().toInputStream());
       return pageValueCount;
-    } catch (IOException e) {
+    } catch (IOException | ParquetDecodingException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
     }
   }

@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.ByteBuffer
 import java.util.PrimitiveIterator
+import java.util.concurrent.{Callable, ExecutionException, TimeUnit}
 
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-import org.apache.parquet.bytes.ByteBufferInputStream
+import org.apache.parquet.bytes.{ByteBufferInputStream, BytesInput, BytesUtils}
 import org.apache.parquet.column.ColumnDescriptor
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
@@ -35,25 +34,49 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.datasources.parquet.VectorizedRleValuesReaderTestUtils._
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Focused correctness tests for `VectorizedRleValuesReader.readBatch` PACKED-mode decoding,
  * covering patterns the P0 optimization cares about: run boundaries, batch boundaries, and
  * nested def-level grouping. Uses the same reflection bridge as the benchmark.
+ *
+ * The SPARK-59832 tests check that corrupted or truncated input fails with a
+ * `ParquetDecodingException` instead of returning wrong values, looping forever or allocating
+ * a huge buffer, and that reads ending exactly at the end of the encoded values still work.
  */
 class VectorizedRleValuesReaderSuite extends SparkFunSuite {
 
   import VectorizedRleValuesReaderSuite._
 
-  /** Runs `f` in another thread, so that a reader that never returns fails the test. */
-  private def interceptCorrupted(f: => Any): Unit = {
-    // scalastyle:off awaitresult
-    // Await.result, unlike ThreadUtils.awaitResult, rethrows the exception unwrapped.
-    val e = intercept[ParquetDecodingException] {
-      Await.result(Future(f)(ExecutionContext.global), 30.seconds)
+  // Runs the reads that may never return before SPARK-59832. A thread per read, so that a read
+  // stuck in a loop does not block the following ones.
+  private lazy val executor = ThreadUtils.newDaemonCachedThreadPool("rle-reader-suite")
+
+  override def afterAll(): Unit = {
+    try {
+      executor.shutdownNow()
+    } finally {
+      super.afterAll()
     }
-    // scalastyle:on awaitresult
-    assert(e.getMessage.contains("Corrupted RLE data"), e.getMessage)
+  }
+
+  /**
+   * Runs `f` in another thread, so that a reader that never returns fails the test, and checks
+   * that it fails with a `ParquetDecodingException` whose message contains `expected`.
+   */
+  private def interceptCorrupted(expected: String)(f: => Any): Unit = {
+    val future = executor.submit(new Callable[Any] {
+      override def call(): Any = f
+    })
+    val e = intercept[ParquetDecodingException] {
+      try {
+        future.get(30, TimeUnit.SECONDS)
+      } catch {
+        case e: ExecutionException => throw e.getCause
+      }
+    }
+    assert(e.getMessage.contains("Corrupted RLE data: " + expected), e.getMessage)
   }
 
   test("PACKED: alternating null/non-null (many single-element runs)") {
@@ -114,7 +137,7 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
 
   test("PACKED group larger than initial 16-int currentBuffer (triggers buffer grow)") {
     // ~1024 alternating values produce one PACKED block well beyond the initial 16-int buffer,
-    // exercising `new int[currentCount]` in readNextGroup.
+    // exercising `new int[currentCount]` in readGroup.
     val defLevels = Array.tabulate(1024)(i => i & 1)
     runAndAssert(defLevels, maxDef = 1, batchSize = 1024, withDefLevels = false)
   }
@@ -152,7 +175,7 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
   test("PACKED: multi-buffer stream with packed run crossing buffer boundary") {
     // Exercises the MultiBufferInputStream.slice() path where the packed bytes span a buffer
     // boundary, causing slice() to return a freshly-allocated contiguous buffer with
-    // position() == 0 (the base-0 pos branch in readNextGroup).
+    // position() == 0 (the base-0 pos branch in readGroup).
     val n = 256
     val defLevels = Array.tabulate(n)(i => i & 1)
     val bitWidth = 1
@@ -210,28 +233,28 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
       val reader = new VectorizedRleValuesReader()
       reader.initFromPage(20, in())
       val c = new OnHeapColumnVector(20, IntegerType)
-      interceptCorrupted(reader.readIntegers(20, c, 0))
+      interceptCorrupted(PastEnd)(reader.readIntegers(20, c, 0))
     }
     streams(dictIdPage(Array.fill(10)(3), bitWidth = 4)).foreach { in =>
       val reader = new VectorizedRleValuesReader()
       reader.initFromPage(20, in())
-      interceptCorrupted(reader.skipIntegers(20))
+      interceptCorrupted(PastEnd)(reader.skipIntegers(20))
     }
     streams(dictIdPage(Array.fill(10)(3), bitWidth = 4)).foreach { in =>
       val reader = new VectorizedRleValuesReader()
       reader.initFromPage(20, in())
       (0 until 10).foreach(_ => assert(reader.readInteger() == 3))
-      interceptCorrupted(reader.readInteger())
+      interceptCorrupted(PastEnd)(reader.readInteger())
     }
   }
 
   test("SPARK-59832: truncated booleans fail instead of looping forever") {
     val encoded = encodeRle(Array.fill(10)(1), 1)
-    streams(intLE(encoded.length) ++ encoded).foreach { in =>
+    streams(BytesUtils.intToBytes(encoded.length) ++ encoded).foreach { in =>
       val reader = new VectorizedRleValuesReader(1)
       reader.initFromPage(20, in())
       val c = new OnHeapColumnVector(20, BooleanType)
-      interceptCorrupted(reader.readBooleans(20, c, 0))
+      interceptCorrupted(PastEnd)(reader.readBooleans(20, c, 0))
     }
   }
 
@@ -251,7 +274,7 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
       ParquetTestAccess.resetForNewBatch(state, n)
       val values = new OnHeapColumnVector(n, IntegerType)
       val defLevels = if (withDefLevels) new OnHeapColumnVector(n, IntegerType) else null
-      interceptCorrupted {
+      interceptCorrupted(PastEnd) {
         ParquetTestAccess.readBatch(reader, state, values, defLevels, valueReader, integerUpdater)
       }
     }
@@ -297,7 +320,7 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
     val repLevelsVec = new OnHeapColumnVector(n, IntegerType)
     val defLevelsVec = new OnHeapColumnVector(n, IntegerType)
     val values = new OnHeapColumnVector(n, IntegerType)
-    interceptCorrupted {
+    interceptCorrupted(PastEnd) {
       ParquetTestAccess.readBatchRepeated(repReader, state, repLevelsVec, defReader,
         defLevelsVec, values, valueReader, integerUpdater)
     }
@@ -306,20 +329,20 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
   test("SPARK-59832: reading past a page with bit width 0 fails") {
     // With bit width 0 the page is one implicit run of `valueCount` zeros; the bytes that
     // follow belong to the next section of the page and must not be decoded as levels.
-    val trailing = varint(((1L << 27) << 1) | 1) ++ Array[Byte](1, 2, 3)
+    val trailing = Array[Byte](3, 1, 2, 3)
     val reader = new VectorizedRleValuesReader(0)
     reader.initFromPage(5, ByteBufferInputStream.wrap(ByteBuffer.wrap(trailing)))
     val c = new OnHeapColumnVector(6, IntegerType)
     c.putInts(0, 6, -1)
     reader.readIntegers(5, c, 0)
     assert((0 until 5).forall(c.getInt(_) == 0))
-    interceptCorrupted(reader.readIntegers(1, c, 5))
+    interceptCorrupted(PastEnd)(reader.readIntegers(1, c, 5))
   }
 
   test("SPARK-59832: invalid level length is rejected") {
     val payload = Array[Byte](10, 20, 30, 40)
     Seq(-1, -4, -5, payload.length + 1, Int.MaxValue).foreach { length =>
-      streams(intLE(length) ++ payload).foreach { in =>
+      streams(BytesUtils.intToBytes(length) ++ payload).foreach { in =>
         val reader = new VectorizedRleValuesReader(1)
         val e = intercept[ParquetDecodingException](reader.initFromPage(8, in()))
         assert(e.getMessage.contains(s"Corrupted RLE data: invalid length $length"),
@@ -328,26 +351,64 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-59832: bit-packed run longer than the remaining bytes is rejected") {
-    def check(bitWidth: Int, numGroups: Long, data: Array[Byte]): Unit = {
+  test("SPARK-59832: invalid bit-packed run is rejected before allocating its buffer") {
+    def check(bitWidth: Int, numGroups: Long, data: Array[Byte])(expected: String): Unit = {
       val page = Array(bitWidth.toByte) ++ varint((numGroups << 1) | 1) ++ data
       streams(page).foreach { in =>
         val reader = new VectorizedRleValuesReader()
         reader.initFromPage(10, in())
         val c = new OnHeapColumnVector(10, IntegerType)
-        interceptCorrupted(reader.readIntegers(10, c, 0))
+        interceptCorrupted(expected)(reader.readIntegers(10, c, 0))
       }
     }
     // Truncated last group. This was already rejected before (by `in.slice`), even when the
     // bytes cover every value read. parquet-java and Arrow accept it, for compatibility with
     // writers that do not pad the last group.
-    check(bitWidth = 4, numGroups = 2, data = Array.fill[Byte](5)(0x11))
+    check(bitWidth = 4, numGroups = 2, data = Array.fill[Byte](5)(0x11))(
+      "bit-packed run of 2 groups needs 8 bytes, but only 5 bytes are left")
     // numGroups * 8 and numGroups * bitWidth overflow to 0.
-    check(bitWidth = 8, numGroups = 1L << 29, data = encodeRle(Array.fill(10)(3), 8))
+    check(bitWidth = 8, numGroups = 1L << 29, data = encodeRle(Array.fill(10)(3), 8))(
+      s"bit-packed run of ${1 << 29} groups is too long")
     // numGroups * 8 and numGroups * bitWidth overflow to negative values.
-    check(bitWidth = 2, numGroups = Int.MaxValue, data = Array.fill[Byte](16)(0))
+    check(bitWidth = 2, numGroups = Int.MaxValue, data = Array.fill[Byte](16)(0))(
+      s"bit-packed run of ${Int.MaxValue} groups is too long")
     // Would allocate an int[2^30] buffer before noticing that only 3 bytes are left.
-    check(bitWidth = 1, numGroups = 1L << 27, data = Array[Byte](1, 2, 3))
+    check(bitWidth = 1, numGroups = 1L << 27, data = Array[Byte](1, 2, 3))(
+      s"bit-packed run of ${1 << 27} groups needs ${1 << 27} bytes, but only 3 bytes are left")
+  }
+
+  test("SPARK-59832: data ending inside a run header or an RLE value fails") {
+    // The continuation byte of the run header is missing, and an RLE run of 10 without its
+    // value.
+    Seq(Array[Byte](4, 0x80.toByte), Array[Byte](4, 0x14)).foreach { page =>
+      streams(page).foreach { in =>
+        val reader = new VectorizedRleValuesReader()
+        reader.initFromPage(10, in())
+        val c = new OnHeapColumnVector(10, IntegerType)
+        interceptCorrupted("failed to read from input stream")(reader.readIntegers(10, c, 0))
+      }
+    }
+  }
+
+  test("SPARK-59832: cut-off level length is rejected") {
+    streams(Array[Byte](3, 0)).foreach { in =>
+      val reader = new VectorizedRleValuesReader(1)
+      val e = intercept[ParquetDecodingException](reader.initFromPage(8, in()))
+      assert(e.getMessage.contains(
+        "Corrupted RLE data: the 4-byte length is cut off, only 2 bytes are left in the page"),
+        e.getMessage)
+    }
+  }
+
+  test("SPARK-59832: invalid dictionary id bit width is rejected") {
+    Seq(33, 255).foreach { bitWidth =>
+      streams(Array[Byte](bitWidth.toByte, 0x14, 0)).foreach { in =>
+        val reader = new VectorizedRleValuesReader()
+        val e = intercept[ParquetDecodingException](reader.initFromPage(10, in()))
+        assert(e.getMessage.contains(s"Corrupted RLE data: invalid bit width $bitWidth"),
+          e.getMessage)
+      }
+    }
   }
 
   test("SPARK-59832: dictionary ids of an empty page are not decoded as 0") {
@@ -357,7 +418,7 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
     val c = new OnHeapColumnVector(5, IntegerType)
     reader.readIntegers(0, c, 0)
     reader.skipIntegers(0)
-    interceptCorrupted(reader.readIntegers(5, c, 0))
+    interceptCorrupted(PastEnd)(reader.readIntegers(5, c, 0))
   }
 
   test("SPARK-59832: runs of length 0 are skipped") {
@@ -393,7 +454,7 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
     val booleans = Array.tabulate(37)(i => if (i < 20) 1 else i % 2)
     val encoded = encodeRle(booleans, 1)
     // The level length covers exactly the rest of the page.
-    streams(intLE(encoded.length) ++ encoded).foreach { in =>
+    streams(BytesUtils.intToBytes(encoded.length) ++ encoded).foreach { in =>
       val reader = new VectorizedRleValuesReader(1)
       reader.initFromPage(booleans.length, in())
       val c = new OnHeapColumnVector(booleans.length, BooleanType)
@@ -420,19 +481,10 @@ private object VectorizedRleValuesReaderSuite {
   private def dictIdPage(ids: Array[Int], bitWidth: Int): Array[Byte] =
     Array(bitWidth.toByte) ++ encodeRle(ids, bitWidth)
 
-  private def intLE(i: Int): Array[Byte] =
-    ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(i).array()
+  private val PastEnd = "reading past the end of the encoded values"
 
-  private def varint(value: Long): Array[Byte] = {
-    val out = Array.newBuilder[Byte]
-    var v = value
-    while ((v & ~0x7FL) != 0) {
-      out += ((v & 0x7F) | 0x80).toByte
-      v >>>= 7
-    }
-    out += v.toByte
-    out.result()
-  }
+  private def varint(value: Long): Array[Byte] =
+    BytesInput.fromUnsignedVarLong(value).toByteArray
 
   /**
    * Runs readBatch end-to-end and asserts null-bits, non-null values, and def levels.
