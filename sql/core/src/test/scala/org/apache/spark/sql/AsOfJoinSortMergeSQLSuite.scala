@@ -453,12 +453,11 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     for {
       (nullStruct, one, five) <- Seq(
         ("CAST(NULL AS STRUCT<a: INT>)", "named_struct('a', 1)", "named_struct('a', 5)"),
-        // Two fields make the `<=` distance {NULL, NULL}, not NULL, so only the guard stops it.
         ("CAST(NULL AS STRUCT<a: INT, b: INT>)",
           "named_struct('a', 1, 'b', 1)", "named_struct('a', 5, 'b', 5)"),
         ("CAST(NULL AS STRUCT<e: STRUCT<a: INT>>)",
           "named_struct('e', named_struct('a', 1))", "named_struct('e', named_struct('a', 5))"),
-        // Its one field makes it split, unlike a plain STRUCT<>. Non-NULL values are all equal.
+        // Non-NULL values of this type are all equal.
         ("CAST(NULL AS STRUCT<e: STRUCT<>>)",
           "named_struct('e', named_struct())", "named_struct('e', named_struct())"))
       ansiEnabled <- Seq(true, false)

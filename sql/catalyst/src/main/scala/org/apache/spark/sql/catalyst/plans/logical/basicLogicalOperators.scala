@@ -2946,18 +2946,18 @@ object AsOfJoin {
       leftOperand: Expression,
       rightOperand: Expression,
       operator: MatchComparisonOperator): (Expression, Expression) = {
-    val (leftForCompare, rightForCompare) =
-      alignOperandsForComparison(leftOperand, rightOperand)
     val orderExpression = buildOrderExpression(leftOperand, rightOperand, operator)
+    // Compare the operands as they are: a comparison already matches struct fields by position,
+    // and a NULL struct stays NULL, so it never matches.
     operator match {
       case GreaterThanOrEqualOp =>
-        (GreaterThanOrEqual(leftForCompare, rightForCompare), orderExpression)
+        (GreaterThanOrEqual(leftOperand, rightOperand), orderExpression)
       case GreaterThanOp =>
-        (GreaterThan(leftForCompare, rightForCompare), orderExpression)
+        (GreaterThan(leftOperand, rightOperand), orderExpression)
       case LessThanOrEqualOp =>
-        (LessThanOrEqual(leftForCompare, rightForCompare), orderExpression)
+        (LessThanOrEqual(leftOperand, rightOperand), orderExpression)
       case LessThanOp =>
-        (LessThan(leftForCompare, rightForCompare), orderExpression)
+        (LessThan(leftOperand, rightOperand), orderExpression)
     }
   }
 
@@ -2979,36 +2979,6 @@ object AsOfJoin {
           leftOperand, rightOperand, leftType.asInstanceOf[StructType], operator)
       case _ =>
         buildLeafOrderExpression(leftOperand, rightOperand, operator)
-    }
-  }
-
-  /**
-   * Tuple/struct operands may use different field names on each side. Rewrite them to positional
-   * structs with matching schemas so comparison and ordering type-check. A NULL struct stays NULL,
-   * as in a plain comparison: a NULL operand never matches, and a NULL inner struct is less than
-   * any non-NULL struct.
-   */
-  private def alignOperandsForComparison(
-      leftOperand: Expression,
-      rightOperand: Expression): (Expression, Expression) = {
-    decomposeStructOperands(leftOperand, rightOperand) match {
-      case Some(pairs) =>
-        val aligned = pairs.map { case (left, right) =>
-          alignOperandsForComparison(left, right)
-        }
-        (keepNullStruct(leftOperand, CreateStruct(aligned.map(_._1))),
-          keepNullStruct(rightOperand, CreateStruct(aligned.map(_._2))))
-      case None =>
-        (leftOperand, rightOperand)
-    }
-  }
-
-  /** A rebuilt struct is never NULL, so return NULL when the original struct is NULL. */
-  private def keepNullStruct(original: Expression, rebuilt: Expression): Expression = {
-    if (original.nullable) {
-      If(IsNull(original), Literal(null, rebuilt.dataType), rebuilt)
-    } else {
-      rebuilt
     }
   }
 
@@ -3147,26 +3117,6 @@ object AsOfJoin {
     diffs match {
       case Seq(single) => single
       case _ => CreateStruct(diffs)
-    }
-  }
-
-  /** Positional struct fields when both operands are the same struct shape. */
-  private def decomposeStructOperands(
-      leftOperand: Expression,
-      rightOperand: Expression): Option[Seq[(Expression, Expression)]] = {
-    if (MatchConditionTypes.usesStructDecomposition(
-        leftOperand.dataType, rightOperand.dataType)) {
-      val leftStruct = leftOperand.dataType.asInstanceOf[StructType]
-      val rightStruct = rightOperand.dataType.asInstanceOf[StructType]
-      val leftFields = structFieldExprs(leftOperand, leftStruct)
-      val rightFields = structFieldExprs(rightOperand, rightStruct)
-      if (leftFields.length == rightFields.length) {
-        Some(leftFields.zip(rightFields))
-      } else {
-        None
-      }
-    } else {
-      None
     }
   }
 
