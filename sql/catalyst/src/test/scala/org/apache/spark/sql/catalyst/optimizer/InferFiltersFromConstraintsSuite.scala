@@ -465,4 +465,39 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-59922: an inferred filter does not carry a With") {
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
+
+    // The left user filter keeps a With inside a conditional branch. The branch references
+    // only x.a, an equi-join key, so InferFiltersFromConstraints substitutes it through the
+    // key and plants a matching filter on the right (over y.a). A With is opaque to filter
+    // pushdown, so the inferred filter must not carry one -- the user's own filter still may.
+    val xa = x.output.head
+    val branchWith = With(xa + xa) { case Seq(r) => (r > 1) && (r < 10) }
+    val leftPredicate = CaseWhen(Seq((xa > 0) -> branchWith), Some(Literal(false)))
+
+    val originalQuery = x.where(leftPredicate)
+      .join(y, Inner, Some("x.a".attr === "y.a".attr))
+      .analyze
+
+    // The right relation's equi-join key; exprIds are stable through optimization.
+    val ya = originalQuery.collectFirst { case j: Join => j.right.output.head }
+      .getOrElse(fail("expected a Join in the analyzed plan"))
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Conditions over the right side that carry the propagated CaseWhen branch predicate.
+    val inferred = optimized.collect {
+      case Filter(cond, _) if cond.references.contains(ya) => cond
+    }.filter(_.exists(_.isInstanceOf[CaseWhen]))
+
+    // PREMISE: the branch predicate was inferred and planted on the right side.
+    assert(inferred.nonEmpty, s"no inferred branch filter over the right side:\n$optimized")
+
+    // The inferred filter must not carry a With.
+    assert(inferred.forall(cond => !cond.exists(_.isInstanceOf[With])),
+      s"inferred filter carries a With:\n${inferred.mkString("\n")}")
+  }
+
 }

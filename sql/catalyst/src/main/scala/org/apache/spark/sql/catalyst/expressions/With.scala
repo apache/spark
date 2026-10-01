@@ -290,6 +290,19 @@ object With {
     With(replaced(commonExprRefs), commonExprDefs)
   }
 
+  /**
+   * The expression `withExpr` stands for: each of its definitions substituted into its references,
+   * so a definition is evaluated once per reference rather than once. A reference an enclosing
+   * `With` defines is left alone, for that one to bind.
+   */
+  private[sql] def inlineDefinitions(withExpr: With): Expression = {
+    val definitions = withExpr.defs.map(d => d.id -> d.child).toMap
+    withExpr.child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
+      // A reference to an enclosing `With` is left alone: it is a leaf, so the scan stops there.
+      case ref: CommonExpressionRef => definitions.getOrElse(ref.id, ref)
+    }
+  }
+
   private[sql] def childContainsUnsupportedAggExpr(withExpr: With): Boolean = {
     lazy val commonExprIds = withExpr.defs.map(_.id).toSet
     withExpr.child.exists {

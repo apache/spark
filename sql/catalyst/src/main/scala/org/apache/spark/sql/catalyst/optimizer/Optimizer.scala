@@ -2252,7 +2252,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       val newFilters = filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition))
       if (newFilters.nonEmpty) {
-        Filter(And(newFilters.reduce(And), condition), child)
+        Filter(And(inlineWiths(newFilters.reduce(And)), condition), child)
       } else {
         filter
       }
@@ -2303,9 +2303,30 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     if (newPredicates.isEmpty) {
       plan
     } else {
-      Filter(newPredicates.reduce(And), plan)
+      Filter(inlineWiths(newPredicates.reduce(And)), plan)
     }
   }
+
+  /**
+   * Inlines any `With` in an inferred predicate. `RewriteWithExpression` keeps a `With` where it
+   * cannot pre-evaluate the definition -- a conditional branch, for one -- and such a `With` can
+   * reach a constraint and be carried, through an equi-join key, into a filter inferred for the
+   * other side. A `With` is opaque to filter pushdown (`DataSourceStrategy` cannot translate one),
+   * so an inferred filter -- a redundant predicate planted precisely to be pushed down -- must not
+   * hold one. Inlining recomputes the definition at each reference, a copy the memoized form avoids
+   * when the definition is read more than once; that is a worthwhile trade for a redundant filter
+   * whose point is to reach the data source, and the definition is deterministic (only
+   * deterministic constraints are planted), so the inlined and memoized forms agree.
+   *
+   * This rule is already non-idempotent -- hence "Infer Filters" being a `Once` batch in
+   * `excludedOnceBatches` -- and inlining adds one more non-idempotent step: a re-run would
+   * re-derive the un-inlined `With` constraint and no longer match the inlined filter already
+   * planted. Keep the batch `Once` and excluded.
+   */
+  private def inlineWiths(e: Expression): Expression =
+    e.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+      case w: With => With.inlineDefinitions(w)
+    }
 }
 
 /**
