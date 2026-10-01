@@ -48,7 +48,7 @@ import org.apache.spark.sql.execution.{
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
-import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.execution.ui.SparkPlanGraphNode
 import org.apache.spark.sql.execution.window.{Final, Partial, WindowGroupLimitExec, WindowGroupLimitMode}
@@ -1601,6 +1601,25 @@ class KeyGroupedPartitioningSuite
             assert(!keyedPartitioningsOf(shuffles).exists(_.references.exists(_.name == "y")))
           }
         }
+      }
+
+      test("SPARK-59887: a broadcast join's layout over a join key is not paired as it is " +
+          s"($key)") {
+        createKeyTables()
+        createBucketedIdTable("bucket4", 4, numIds = 8)
+
+        // An inner broadcast join reports the streamed side's layout over the build side's join
+        // key too, so the first join also offers the bucket of `plain`'s key. That needs no conf
+        // beyond the defaults. The second join clusters `plain` on `b`, so pairing that layout with
+        // `bucket(4, id)` as it stands puts a row with `b = id` on a different partition on each
+        // side.
+        val df = sql(
+          s"""SELECT /*+ BROADCAST(p) */ k.id, p.b, t.id FROM testcat.ns.keys k
+             |JOIN testcat.ns.plain p ON k.id = $key
+             |JOIN testcat.ns.bucket4 t ON p.b = t.id""".stripMargin)
+        checkAnswer(df, (0 until 8).map(b => Row(keyOf(b), b.toLong, b.toLong)))
+        assert(collect(df.queryExecution.executedPlan) { case j: BroadcastHashJoinExec => j }
+          .nonEmpty, "the first join is a broadcast join")
       }
   }
 
