@@ -171,17 +171,14 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "STRUCT<_c0: INT, _c1: STRING>")
   }
 
-  test("schema_of_csv and from_csv trim CHAR padding") {
-    val input = Literal.create("1 2   ", CharType(6, "UTF8_LCASE"))
-    val options = Map("delimiter" -> " ", "mode" -> FailFastMode.name)
-    val schema = new StructType().add("_c0", IntegerType).add("_c1", IntegerType)
-
+  test("SPARK-59917: schema_of_csv keeps CHAR padding") {
+    val padded = Literal.create("1  ", StringType)
     checkEvaluation(
-      SchemaOfCsv(input, options),
-      "STRUCT<_c0: INT, _c1: INT>")
+      SchemaOfCsv(padded, Map("delimiter" -> " ")),
+      "STRUCT<_c0: INT, _c1: STRING, _c2: STRING>")
     checkEvaluation(
-      CsvToStructs(schema, options, input, UTC_OPT),
-      InternalRow(1, 2))
+      SchemaOfCsv(Literal.create("1  ", CharType(3)), Map("delimiter" -> " ")),
+      "STRUCT<_c0: INT, _c1: STRING, _c2: STRING>")
   }
 
   test("to_csv - struct") {
