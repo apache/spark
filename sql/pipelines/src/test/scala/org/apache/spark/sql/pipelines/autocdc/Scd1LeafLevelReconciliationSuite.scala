@@ -248,11 +248,55 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
     checkAnswer(
       result.orderBy(F.col("id")),
       Seq(
-        Row(1, "after", Row(2L, 5L, Map(value -> 4L))),
+        Row(1, "after", Row(null, 5L, Map(value -> 4L))),
         Row(2, "other", Row(null, 2L, Map(value -> 1L))),
-        Row(3, null, Row(2L, 3L, Map(value -> 2L)))
+        Row(3, null, Row(null, 3L, Map(value -> 2L)))
       )
     )
+  }
+
+  test("collapseMicrobatchRowsPerKey collapses keys whose latest event is a delete into " +
+    "row-wide deletes") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add(metadataColName, metadataSchema)
+    val value = encodedPath("value")
+    val input = dataFrameOf(schema)(
+      Row(1, "first", Row(null, 1L, Map(value -> 1L))),
+      Row(1, null, Row(3L, null, null)),
+      Row(1, "second", Row(null, 2L, Map(value -> 2L))),
+      Row(2, null, Row(2L, null, null))
+    )
+
+    val result = collapseMicrobatchRowsPerKey(input)
+
+    checkAnswer(
+      result.orderBy(F.col("id")),
+      Seq(
+        Row(1, null, Row(3L, null, null)),
+        Row(2, null, Row(2L, null, null))
+      )
+    )
+  }
+
+  test("collapseMicrobatchRowsPerKey collapses keys into upserts on delete and upsert " +
+    "sequencing ties") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add(metadataColName, metadataSchema)
+    val value = encodedPath("value")
+    val input = dataFrameOf(schema)(
+      Row(1, "upsert", Row(null, 2L, Map(value -> 2L))),
+      Row(1, null, Row(2L, null, null))
+    )
+
+    val result = collapseMicrobatchRowsPerKey(input)
+
+    // Leaf selection between events with equal sequencing values is undefined, so only the CDC
+    // metadata is deterministic.
+    checkAnswer(result.select(F.col(metadataColName)), Row(Row(null, 2L, Map(value -> 2L))))
   }
 
   test("collapseMicrobatchRowsPerKey reconstructs nested structs from selected leaves") {

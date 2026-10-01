@@ -302,8 +302,12 @@ private[pipelines] object Scd1LeafLevelReconciliation {
    * @param resolvedSequencingType The resolved type of CDC sequencing values.
    * @param microbatchDf Microbatch rows whose CDC metadata and version maps have already been
    *                     populated. Version-map keys must match the DataFrame's column names.
-   * @return One row per key, with the greatest delete and upsert sequences and an entry for every
-   *         user-data leaf in the aggregated version map.
+   * @return One row per key, representing either an upsert or a delete as determined by
+   *         [[Scd1BatchProcessor.representsDelete]] on the key's greatest delete and upsert
+   *         sequences. An upsert row carries its greatest upsert sequence and an entry for every
+   *         user-data leaf in the aggregated version map, with a null delete sequence. A delete
+   *         row carries only its greatest delete sequence, with a null upsert sequence and
+   *         version map.
    */
   private[autocdc] def collapseMicrobatchRowsPerKey(
       changeArgs: ChangeArgs,
@@ -350,6 +354,12 @@ private[pipelines] object Scd1LeafLevelReconciliation {
     val aggregatedLeaves =
       leafAuthorshipContexts.map(LeafAuthorshipResult(_, aggregatedPerKeyDf))
 
+    // Whether each collapsed row represents the key's net delete rather than its net upsert.
+    val aggregatedDeleteSequence = F.col(aggregatedDeleteSequenceColName)
+    val aggregatedUpsertSequence = F.col(aggregatedUpsertSequenceColName)
+    val collapsedRowRepresentsDelete =
+      Scd1BatchProcessor.representsDelete(aggregatedDeleteSequence, aggregatedUpsertSequence)
+
     // Reconstruct the `microbatchDf` but using the aggregated results per key. The resulting
     // dataframe has the same shape as the `microbatchDf`, but a single row per key, representing
     // the latest authored values per column in the microbatch.
@@ -359,12 +369,20 @@ private[pipelines] object Scd1LeafLevelReconciliation {
         lazy val isKeyField = changeArgs.keys.exists(key => resolver(key.name, field.name))
 
         if (isCdcMetadataField) {
-          // Reconstruct the CDC metadata column using the aggregated row-wide upsert/delete
-          // sequences, as well as the aggregated version map.
+          // A collapsed row represents the key's net change across the microbatch: either a net
+          // upsert or a net delete, never both. Its CDC metadata upholds the same invariant as a
+          // row-level CDC event: exactly one of the delete and upsert sequences is non-null, and
+          // only upserts carry a version map. Nulling the shadowed sequence loses nothing. A net
+          // delete is the key's latest event and authors every leaf, so the key's upserts no
+          // longer matter. A net upsert's version map already records every leaf that a delete
+          // still authors, so its delete sequence is redundant.
           Scd1BatchProcessor.constructCdcMetadataCol(
-            deleteSequence = F.col(aggregatedDeleteSequenceColName),
-            upsertSequence = F.col(aggregatedUpsertSequenceColName),
-            versionMap = versionMapFrom(aggregatedLeaves, resolvedSequencingType),
+            deleteSequence = F.when(collapsedRowRepresentsDelete, aggregatedDeleteSequence),
+            upsertSequence = F.when(!collapsedRowRepresentsDelete, aggregatedUpsertSequence),
+            versionMap = F.when(
+              !collapsedRowRepresentsDelete,
+              versionMapFrom(aggregatedLeaves, resolvedSequencingType)
+            ),
             sequencingType = resolvedSequencingType
           ).as(field.name, field.metadata)
         } else if (isKeyField) {
