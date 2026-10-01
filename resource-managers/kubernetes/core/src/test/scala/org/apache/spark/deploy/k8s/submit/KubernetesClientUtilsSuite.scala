@@ -131,19 +131,11 @@ class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("SPARK-38079: configMapNameDriver generates a distinct name on every call, unlike " +
       "configMapNameExecutor") {
-    // Two prior attempts at this exact change (PRs #38574 and #47549/#47555/#47556) turned
-    // both configMapNameDriver and configMapNameExecutor into defs; the latter broke executor
-    // config maps, because it is called independently in two different places that must agree
-    // on the same name (KubernetesClusterSchedulerBackend creates the config map,
-    // BasicExecutorFeatureStep references it by name for every executor) -- a `def` call in
-    // each would never produce the same name twice. configMapNameDriver has no such
-    // requirement: KubernetesClientApplication.Client.run() is its only call site, calling it
-    // once into a local val it reuses for that whole submission. So only configMapNameDriver
-    // is changed here, confirmed by this test to actually vary from call to call -- which is
-    // the fix for SPARK-38079 review comment #4129910528 (a submission's cleanup deleting a
-    // live config map of the same name belonging to a different, still-running submission
-    // from the same JVM, e.g. via InProcessLauncher) -- while configMapNameExecutor (unchanged)
-    // keeps returning the one name every executor of a running application must still agree on.
+    // configMapNameExecutor must keep returning the one name every executor of a running
+    // application agrees on (it is created once by KubernetesClusterSchedulerBackend and
+    // referenced by name independently by BasicExecutorFeatureStep for every executor), while
+    // configMapNameDriver -- called once per submission, into a local val reused for that
+    // whole submission -- has no such requirement and must vary across submissions instead.
     assert(KubernetesClientUtils.configMapNameDriver !==
       KubernetesClientUtils.configMapNameDriver)
     assert(KubernetesClientUtils.configMapNameExecutor ===

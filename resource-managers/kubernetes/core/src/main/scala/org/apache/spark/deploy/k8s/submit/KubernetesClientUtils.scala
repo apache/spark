@@ -57,18 +57,15 @@ object KubernetesClientUtils extends Logging {
   @Since("3.1.0")
   val configMapNameExecutor: String = configMapName(s"spark-exec-${KubernetesUtils.uniqueID()}")
 
-  // SPARK-38079: unlike configMapNameExecutor above, this is a `def`, not a `val` -- it is
-  // called exactly once per submission (Client.run(), into a local val reused for that
-  // submission), so there is no cross-call consistency requirement to preserve, unlike
+  // SPARK-38079: a `def`, not a `val` -- it is called exactly once per submission
+  // (Client.run(), into a local val reused for that submission), so unlike
   // configMapNameExecutor (set up once by KubernetesClusterSchedulerBackend, then read
-  // independently by BasicExecutorFeatureStep for every executor -- which is exactly why two
-  // prior attempts at this same change, PRs #38574 and #47549/#47555/#47556, broke executor
-  // config maps when they also turned configMapNameExecutor into a def; neither touched
-  // configMapNameDriver's single call site). As a `val`, this name was shared by every
-  // submission from the same JVM (e.g. via InProcessLauncher) for the life of the JVM, which
-  // is harmless on its own, but combined with this config map becoming a pre-resource,
-  // meant a failed submission's cleanup could delete-by-name a different, still-running
-  // submission's live config map of that same name.
+  // independently by BasicExecutorFeatureStep for every executor, so every call must agree on
+  // the same name), there is no cross-call consistency requirement to preserve here. A `val`
+  // would instead share this name across every submission from the same JVM (e.g. via
+  // InProcessLauncher) for the life of the JVM, which, now that this config map is a
+  // pre-resource, would let a failed submission's cleanup delete-by-name a different,
+  // still-running submission's live config map of that same name.
   @Since("3.1.0")
   def configMapNameDriver: String = configMapName(s"spark-drv-${KubernetesUtils.uniqueID()}")
 

@@ -178,13 +178,13 @@ private[spark] class Client(
     // SPARK-38079: some of the pre-resources above (e.g. the Kerberos keytab/delegation token
     // secrets, the driver Kubernetes credentials secret) carry credentials. Now that the
     // driver pod exists, its UID is known, so each pre-resource's owner reference can be set
-    // before -- and included in -- the single call that creates it. Because the pod itself
-    // is still scheduling-gated, nothing can be scheduled against it (so nothing can attempt
-    // to mount these resources) until they exist, exactly as before this refactor -- but
-    // unlike before, they are never ownerless at any point after this call: either it
-    // succeeds and every pre-resource already has an owner reference, or it fails and none
-    // of them (that made it to the server) are left referencing anything, since the driver
-    // pod that would have owned them is deleted in the catch block below.
+    // before -- and included in -- the single call that creates it. The pod itself is still
+    // scheduling-gated, so nothing can be scheduled against it (and so nothing can attempt to
+    // mount these resources) until they exist -- but they are never ownerless at any point
+    // after this call: either it succeeds and every pre-resource already has an owner
+    // reference, or it fails and none of them (that made it to the server) are left
+    // referencing anything, since the driver pod that would have owned them is deleted in the
+    // catch block below.
     try {
       addOwnerReference(createdDriverPod, preKubernetesResources)
       kubernetesClient.resourceList(preKubernetesResources: _*).forceConflicts().serverSideApply()
@@ -200,11 +200,10 @@ private[spark] class Client(
     // letting the scheduler proceed with this pod. If this process is terminated abruptly
     // before this point (e.g. Ctrl-C, SIGTERM, or a fatal JVM error), the driver pod is left
     // behind still gated -- inert (kubelet cannot schedule/mount anything on a gated pod) and
-    // visible as `Pending`/`SchedulingGated` via any standard pod listing, unlike an orphaned
-    // credential-bearing Secret under the pre-refactor design. That is a substantially lower-
+    // visible as `Pending`/`SchedulingGated` via any standard pod listing. That is a low-
     // severity leak, in the same class Spark already accepts elsewhere for a process killed
-    // right after pod creation (e.g. Ctrl-C before the watch loop below starts) -- so, unlike
-    // that prior design, no shutdown hook is registered to guard this window.
+    // right after pod creation (e.g. Ctrl-C before the watch loop below starts), so no
+    // shutdown hook is registered to guard this window.
     try {
       kubernetesClient.pods().inNamespace(conf.namespace).withName(driverPodName).edit(
         (currentPod: Pod) => new PodBuilder(currentPod)
@@ -267,7 +266,7 @@ private[spark] class Client(
   // resourceList(...).delete() deletes the given items sequentially and stops at the first
   // non-404 exception, so pre-resources are deleted one at a time here rather than as a single
   // resourceList(...).delete() call, which could otherwise leave every pre-resource after the
-  // one that failed undeleted (review comment #4129910518).
+  // one that failed undeleted.
   private def deletePodAndPreResources(pod: Pod, preResources: Seq[HasMetadata]): Unit = {
     Utils.tryLogNonFatalError {
       kubernetesClient.pods().resource(pod).delete()
