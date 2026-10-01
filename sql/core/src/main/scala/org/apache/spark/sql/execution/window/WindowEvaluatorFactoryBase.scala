@@ -47,17 +47,16 @@ trait WindowEvaluatorFactoryBase {
   def numSegmentTreeFallbackFrames: Option[SQLMetric] = None
 
   /**
-   * Fail fast if the buffered partition is too large for the frames that will process it.
+   * Fail fast if the buffered partition has more rows than window execution can handle.
    *
-   * The window output logic tracks the row index within a partition and the window bounds in
-   * 32-bit `Int`s, so most frames cannot handle partitions with more than `Int.MaxValue` rows
-   * (see [[WindowFunctionFrame.supportsLargePartition]]). Rather than silently producing wrong
-   * results in that case, throw a clear user-facing error. Only frames that explicitly declare
-   * large-partition support (LEAD/LAG and unbounded-offset frames) are exempt.
+   * Window execution tracks the row index within a partition and the window bounds in 32-bit
+   * `Int`s (including the row index the driver passes to [[WindowFunctionFrame.write]], and the
+   * row accounting in the spill-backed `UnsafeExternalSorter`). A partition with more than
+   * `Int.MaxValue` rows would overflow those counters and silently produce wrong results, so
+   * throw a clear user-facing error instead.
    */
-  protected def checkPartitionSizeLimit(
-      numRows: Long, frames: Array[WindowFunctionFrame]): Unit = {
-    if (numRows > Int.MaxValue && frames.exists(!_.supportsLargePartition)) {
+  protected def checkPartitionSizeLimit(numRows: Long): Unit = {
+    if (numRows > Int.MaxValue) {
       throw QueryExecutionErrors.windowFunctionPartitionSizeExceedsLimitError(numRows)
     }
   }
