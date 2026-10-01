@@ -57,17 +57,6 @@ if have_pyarrow:
     from pyspark.sql.conversion import ArrowBatchTransformer
 
 
-class _RunnerConf:
-    """Minimal stand-in for the worker's RunnerConf, exposing only the fields
-    the handlers under test read."""
-
-    use_large_var_types = False
-    assign_cols_by_name = True
-    map_in_batch_legacy_accept_any_iterable = False
-    # One bound type per window UDF; the bounded test overrides this per instance.
-    window_bound_types = ["unbounded"]
-
-
 class _SumAggregator:
     """Incremental ``Aggregator`` stub: sums non-null inputs, with a ``(sum, count)`` buffer.
 
@@ -136,7 +125,9 @@ def _scalar_handler(handler_cls, udf):
 
     The scalar UDF tuple is ``(func, args_offsets, kwargs_offsets, return_type)``.
     """
-    return handler_cls(udfs=[(udf, [0], {}, LongType())], runner_conf=_RunnerConf(), eval_conf=None)
+    return handler_cls(
+        udfs=[(udf, [0], {}, LongType())], runner_conf=RunnerConf({}), eval_conf=None
+    )
 
 
 def _grouped_handler(handler_cls, udf, arg_offsets, num_udf_args):
@@ -146,7 +137,7 @@ def _grouped_handler(handler_cls, udf, arg_offsets, num_udf_args):
     """
     return handler_cls(
         udfs=[(udf, arg_offsets, _RETURN_TYPE, num_udf_args)],
-        runner_conf=_RunnerConf(),
+        runner_conf=RunnerConf({}),
         eval_conf=None,
     )
 
@@ -240,7 +231,7 @@ class ArrowMapUDFHandlerTests(unittest.TestCase):
                 yield _batch(v=[c.as_py() * 2 for c in batch.column("v")])
 
         handler = ArrowMapUDFHandler(
-            udfs=[(double_v, None, None, None)], runner_conf=_RunnerConf(), eval_conf=None
+            udfs=[(double_v, None, None, None)], runner_conf=RunnerConf({}), eval_conf=None
         )
         out = list(handler.run(0, iter([_struct_batch(v=[1, 2, 3])])))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [2, 4, 6])
@@ -320,7 +311,7 @@ class ArrowGroupedAggUDFHandlerTests(unittest.TestCase):
             return sum(c.as_py() for c in col)
 
         handler = ArrowGroupedAggUDFHandler(
-            udfs=[(sum_udf, [0], {}, LongType())], runner_conf=_RunnerConf(), eval_conf=None
+            udfs=[(sum_udf, [0], {}, LongType())], runner_conf=RunnerConf({}), eval_conf=None
         )
         out = list(handler.run(0, _one_group(_batch(v=[1, 2, 3]), _batch(v=[4]))))
         self.assertEqual(out[0].column("_0").to_pylist(), [10])
@@ -334,7 +325,7 @@ class ArrowGroupedAggIterUDFHandlerTests(unittest.TestCase):
             return sum(c.as_py() for col in col_iter for c in col)
 
         handler = ArrowGroupedAggIterUDFHandler(
-            udfs=[(sum_iter_udf, [0], {}, LongType())], runner_conf=_RunnerConf(), eval_conf=None
+            udfs=[(sum_iter_udf, [0], {}, LongType())], runner_conf=RunnerConf({}), eval_conf=None
         )
         out = list(handler.run(0, _one_group(_batch(v=[10]), _batch(v=[20]))))
         self.assertEqual(out[0].column("_0").to_pylist(), [30])
@@ -347,10 +338,10 @@ class ArrowWindowAggUDFHandlerTests(unittest.TestCase):
         def sum_udf(col):
             return sum(c.as_py() for c in col)
 
-        conf = _RunnerConf()
-        conf.window_bound_types = ["unbounded"]
         handler = ArrowWindowAggUDFHandler(
-            udfs=[(sum_udf, [0], {}, LongType())], runner_conf=conf, eval_conf=None
+            udfs=[(sum_udf, [0], {}, LongType())],
+            runner_conf=RunnerConf({"window_bound_types": "unbounded"}),
+            eval_conf=None,
         )
         out = list(handler.run(0, _one_group(_batch(v=[1, 2, 3]))))
         self.assertEqual(out[0].column("_0").to_pylist(), [6, 6, 6])
@@ -360,10 +351,10 @@ class ArrowWindowAggUDFHandlerTests(unittest.TestCase):
         def sum_udf(col):
             return sum(c.as_py() for c in col)
 
-        conf = _RunnerConf()
-        conf.window_bound_types = ["bounded"]
         handler = ArrowWindowAggUDFHandler(
-            udfs=[(sum_udf, [0, 1, 2], {}, LongType())], runner_conf=conf, eval_conf=None
+            udfs=[(sum_udf, [0, 1, 2], {}, LongType())],
+            runner_conf=RunnerConf({"window_bound_types": "bounded"}),
+            eval_conf=None,
         )
         # Row 0 frame [0, 1) -> [10]; row 1 frame [0, 2) -> [10, 20].
         out = list(handler.run(0, _one_group(_batch(begin=[0, 0], end=[1, 2], v=[10, 20]))))
