@@ -32,7 +32,8 @@ case class ShowTablePropertiesExec(
 
   override protected def run(): Seq[InternalRow] = {
     // The reserved properties are accessible through DESCRIBE
-    val properties = conf.redactOptions(CatalogV2Util.tablePropertiesForDisplay(catalogTable))
+    val properties = CatalogV2Util.tablePropertiesForDisplay(
+      catalogTable.properties(), catalogTable.displayProperties(), conf)
     propertyKey match {
       case Some(p) =>
         val propValue = properties

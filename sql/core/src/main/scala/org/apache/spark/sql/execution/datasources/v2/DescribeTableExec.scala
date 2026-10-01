@@ -203,7 +203,8 @@ case class DescribeTableExec(
         }
       })
     val properties =
-      conf.redactOptions(CatalogV2Util.tablePropertiesForDisplay(table)).toList
+      CatalogV2Util.tablePropertiesForDisplay(
+        tableProperties, table.displayProperties(), conf).toList
         .sortBy(_._1).map {
         case (key, value) => key + "=" + value
       }.mkString("[", ",", "]")

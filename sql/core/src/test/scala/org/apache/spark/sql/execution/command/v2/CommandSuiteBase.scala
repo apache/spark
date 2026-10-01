@@ -80,6 +80,21 @@ trait CommandSuiteBase extends SharedSparkSession {
       .asInstanceOf[InMemoryTable]
   }
 
+  def createTableWithDisplayProperties(
+      namespace: String,
+      table: String,
+      external: Boolean = false,
+      withLocation: Boolean = false): Unit = {
+    val location = if (withLocation) "LOCATION 'file:/tmp/display-properties' " else ""
+    sql(s"CREATE TABLE $catalog.$namespace.$table (id bigint) $defaultUsing " +
+      s"COMMENT 'table comment' $location" +
+      "TBLPROPERTIES ('persisted' = 'stored')")
+    setDisplayProperties(loadTable(catalog, namespace, table), external)
+  }
+
+  /**
+   * Sets display-only test metadata. When external is true, also marks the stored table external.
+   */
   def setDisplayProperties(table: InMemoryTable, external: Boolean = false): Unit = {
     if (external) {
       table.properties.put(TableCatalog.PROP_EXTERNAL, "true")

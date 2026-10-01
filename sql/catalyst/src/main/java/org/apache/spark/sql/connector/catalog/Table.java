@@ -103,10 +103,12 @@ public interface Table extends Relation {
    * precedence, and reserved keys such as {@link TableCatalog#PROP_EXTERNAL} and
    * {@link TableCatalog#PROP_LOCATION} are ignored in this map. Table type and other reserved
    * metadata are read from {@code properties()}.
+   * After a stored property is removed, Spark displays the entry for that key if it remains in
+   * this map.
    *
-   * <p>{@code ALTER TABLE ... SET/UNSET TBLPROPERTIES} only changes {@code properties()}.
-   * Display-only entries are controlled by the catalog and cannot be removed with
-   * {@code UNSET TBLPROPERTIES}.
+   * <p>Spark passes {@code ALTER TABLE ... SET/UNSET TBLPROPERTIES} to
+   * {@link TableCatalog#alterTable} without consulting this map. Catalogs should apply these
+   * changes to {@code properties()} and keep display-only entries unchanged.
    *
    * <p>For now, {@code SHOW TABLE EXTENDED} omits these entries for the built-in session catalog
    * and its {@link CatalogExtension}s.
@@ -114,6 +116,7 @@ public interface Table extends Relation {
    * <p>These entries may be transient and are excluded from {@code SHOW CREATE TABLE}. The
    * default implementation returns an empty map.
    *
+   * @return a non-null map with non-null keys and values
    * @since 4.4.0
    */
   default Map<String, String> displayProperties() {

@@ -93,11 +93,7 @@ public class TableInfo {
     /**
      * Sets additional display-only properties.
      *
-     * <p>Spark leaves these properties empty when calling
-     * {@code TableCatalog.createTable}, {@code TableCatalog.createTableLike},
-     * {@code StagingTableCatalog.stageCreate}, {@code StagingTableCatalog.stageReplace}, and
-     * {@code StagingTableCatalog.stageCreateOrReplace}.
-     *
+     * @param displayProperties a non-null map with non-null keys and values
      * @see Table#displayProperties()
      * @since 4.4.0
      */
