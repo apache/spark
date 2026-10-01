@@ -323,8 +323,8 @@ object LiteralFirstIntFunction extends ScalarFunction[Int] with ReducibleFunctio
 /**
  * A bucket function that implements BOTH reducer overloads: the deprecated `reducer(int, ..., int)`
  * always returns null (not reducible via the old API), while the new `reducer(Literal[], ...)`
- * returns a GCD-based reducer. Used to verify that the dispatch falls back to the generalized
- * overload when the deprecated one returns null (not only when it throws).
+ * returns a GCD-based reducer. Used to verify that the dispatch uses the generalized overload and
+ * never consults the deprecated one.
  */
 object DualApiBucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
   override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
@@ -591,8 +591,8 @@ class StructBacked(val n: Int) extends Serializable
 
 /**
  * A UDT whose `sqlType` is a [[StructType]]: a literal of this type carries an [[InternalRow]]
- * value, yet its `dataType` is the UDT, not `StructType`. This is the case a `DataType`-based
- * container check misses but a value-based one catches.
+ * value, yet its `dataType` is the UDT, not `StructType`. A check for container types alone would
+ * miss it, which is why `noComplexLiteralParams` also refuses [[UserDefinedType]]s.
  */
 class StructBackedUDT extends UserDefinedType[StructBacked] {
   override def sqlType: DataType = StructType(Seq(StructField("n", IntegerType, nullable = false)))
@@ -605,10 +605,10 @@ class StructBackedUDT extends UserDefinedType[StructBacked] {
 
 /**
  * A transform whose declared input type at the literal position is a UDT ([[StructBackedUDT]]).
- * Used to make the value-based `noComplexLiteralParams` guard load-bearing: a UDT-over-struct
- * literal matches the declared input type (so `literalParamsMatchInputTypes` passes), yet its value
- * is an [[InternalRow]], so only the value-based guard can reject it. The reducer returns
- * unconditionally, so reaching it at all is the leak.
+ * Used to make `noComplexLiteralParams`' UDT clause load-bearing: a UDT-over-struct literal matches
+ * the declared input type (so `literalParamsMatchInputTypes` passes), yet its value is an
+ * [[InternalRow]], so only that clause rejects it. The reducer returns unconditionally, so reaching
+ * it at all is the leak.
  */
 object UdtParamFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
   override def inputTypes(): Array[DataType] = Array(new StructBackedUDT, LongType)
@@ -679,9 +679,8 @@ object ThrowingReducerFunction extends ScalarFunction[Int] with ReducibleFunctio
 
 /**
  * A bucket-like function implementing BOTH reducer overloads: the deprecated int overload succeeds
- * (returns a reducer), while the generalized Literal[] overload throws. Used to verify the
- * single-int dispatch is lazy -- it must not invoke (and log the throw from) the generalized
- * overload once the deprecated one already produced a reducer.
+ * (returns a reducer), while the generalized Literal[] overload throws. Used to verify that a
+ * throwing generalized overload is final: it is logged, and the deprecated overload is not tried.
  */
 object DeprecatedOkGeneralizedThrowsFunction
     extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {

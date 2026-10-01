@@ -152,8 +152,12 @@ public interface ReducibleFunction<I, O> {
    *     <li>otherFunction = hours</li>
    * </ul>
    *
+   *
    * @param otherFunction the other function
    * @return a reduction function if it is reducible, null if not.
+   * @implNote This default delegates to
+   *     {@link #reducer(Literal[], ReducibleFunction, Literal[])}, so an implementation of that
+   *     overload must not call back into this method.
    */
   default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction) {
     return reducer(new Literal<?>[0], otherFunction, new Literal<?>[0]);

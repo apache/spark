@@ -6334,8 +6334,8 @@ class KeyGroupedPartitioningSuite
     // Exercises the new Literal[]-based reducer path end-to-end: bucket(4) and
     // bucket(2) differ, so SPJ can only avoid the shuffle if BucketFunction's reducer
     // (now implemented via Literal[] params) correctly returns a GCD-based Reducer.
-    // BucketFunction overrides only the new API, so this also covers the deprecated->new
-    // fallback: the single-int dispatch tries reducer(int, ...) first (UOE), then the Literal[].
+    // BucketFunction overrides only the new API, which the dispatch tries first, so no fallback to
+    // the deprecated overload is involved.
     val table1 = "bucket_compat1"
     val table2 = "bucket_compat2"
 
