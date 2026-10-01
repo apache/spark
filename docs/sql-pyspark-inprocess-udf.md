@@ -60,7 +60,8 @@ Nested field nullability may differ if the actual values satisfy the declared nu
 child slices, are copied to remove offsets that Arrow Java's CDI importer cannot
 read. Compatible results retain zero-copy transfer.
 Before exporting a result, the runtime performs full Arrow validation, including interior
-offsets and UTF-8 data. This adds validation work proportional to the result size.
+offsets. Like worker UDFs, it does not validate UTF-8 in string results, because Spark
+strings may contain invalid UTF-8 (for example, `CAST(X'FF' AS STRING)`).
 
 The API produces a regular `PythonUDF` expression with an in-process evaluation
 type. Spark's existing `ArrowEvalPython` planning rules handle aggregation,
@@ -83,10 +84,10 @@ vectors are released on task completion, early termination and failure. The runt
 each exported result until the next invocation for that task or task cleanup, after the JVM
 has released its references. The runtime drops its Python references on the interpreter
 thread, so releasing JVM results does not trigger Python finalizers on Spark task threads.
-Cleanup can remain queued behind another task's invocation. If task completion overlaps
-an active iterator call, cleanup waits for that call to finish. With pipelined Python worker
-execution enabled, result rows are copied before returning them to downstream consumers,
-so those rows remain valid after the task releases its Arrow vectors.
+Cleanup can remain queued behind another task's invocation. When a consumer on another
+thread, such as a pipelined Python worker's writer, pulls result rows, cleanup triggered by
+task completion waits for an active iterator call to finish, and each row is copied before it
+is returned, so it remains valid after the task releases its Arrow vectors.
 
 UDF deserialization uses PySpark's bundled cloudpickle. Each task registers its
 own function instance once and passes a small handle for subsequent batches.

@@ -1547,6 +1547,46 @@ class BootstrapFailureProbe {
         finally:
             conf.set(key, previous)
 
+    def test_pipelined_worker_reads_materialized_nested_results_across_batches(self):
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.functions import arrow_udf
+
+        conf = self.spark.sparkContext._jvm.org.apache.spark.SparkEnv.get().conf()
+        key = "spark.python.udf.pipelined.enabled"
+        previous = conf.get(key, "false")
+        conf.set(key, "true")
+        try:
+            # The worker's writer thread consumes these rows; each must outlive its batch.
+            pair = inprocess_udf("array<string>")(
+                lambda s: pa.array([[v, v] for v in s.to_pylist()], pa.list_(pa.string()))
+            )
+            joined = arrow_udf(lambda a: pc.binary_join(a, "-"), "string")
+            with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "3"}):
+                df = self.spark.range(10, numPartitions=2).selectExpr("CAST(id AS STRING) AS s")
+                rows = df.select(joined(pair("s"))).collect()
+            self.assertEqual([r[0] for r in rows], [f"{i}-{i}" for i in range(10)])
+        finally:
+            conf.set(key, previous)
+
+    def test_computed_and_reordered_arguments_with_pass_through_columns(self):
+        import pyarrow.compute as pc
+
+        from pyspark.inprocess import inprocess_udf
+
+        concat = inprocess_udf("string")(lambda a, b: pc.binary_join_element_wise(a, b, ":"))
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "3"}):
+            df = self.spark.range(10, numPartitions=2).selectExpr(
+                "id", "CAST(id AS STRING) AS s", "repeat('x', CAST(id AS INT)) AS pad"
+            )
+            # Computed and reordered arguments, while id and pad pass through unchanged.
+            rows = df.select("id", "pad", concat(df.pad, df.s.substr(1, 1))).collect()
+        self.assertEqual(
+            [tuple(r) for r in rows], [(i, "x" * i, "x" * i + ":" + str(i)[0]) for i in range(10)]
+        )
+
     def test_duplicate_names_in_udf_arguments_are_rejected(self):
         import pyarrow as pa
 

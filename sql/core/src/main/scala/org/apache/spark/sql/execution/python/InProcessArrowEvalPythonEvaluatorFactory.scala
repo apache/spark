@@ -26,11 +26,10 @@ import org.apache.arrow.c.{ArrowArray, ArrowSchema}
 import org.apache.arrow.util.AutoCloseables
 import org.apache.arrow.vector.VectorSchemaRoot
 
-import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
-import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, PythonUDF}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, PythonUDF, UnsafeProjection}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
@@ -61,6 +60,27 @@ class InProcessArrowEvalPythonEvaluatorFactory(
   private[python] def runtimeSession: InProcessPythonRuntime.InterpreterSession =
     InProcessPythonRuntime.currentSession
 
+  /**
+   * `evaluate` writes each projected row to Arrow before pulling the next input row, so the
+   * arguments need not be copied out of it. If they are exactly the input columns, the input
+   * row is used as is; otherwise they are written into a reused unsafe row buffer.
+   */
+  override protected def createInputProjection(
+      inputs: Seq[Expression],
+      partitionIndex: Int): InternalRow => InternalRow = {
+    val identity = inputs.length == childOutput.length && inputs.zip(childOutput).forall {
+      case (a: Attribute, c) => a.exprId == c.exprId
+      case _ => false
+    }
+    if (identity) {
+      row => row
+    } else {
+      val projection = UnsafeProjection.create(inputs, childOutput)
+      projection.initialize(partitionIndex)
+      projection
+    }
+  }
+
   override protected def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
       argMetas: Array[Array[ArgumentMetadata]],
@@ -88,7 +108,11 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     val arrowSchema = ArrowUtils.toArrowSchema(inputSchema, timeZoneId, largeVarTypes)
     // Capture before consuming input: an old task must never join a later context's session.
     val runtime = runtimeSession
-    val copyResult = Option(SparkEnv.get).exists(_.conf.get(PYTHON_UDF_PIPELINED_EXECUTION))
+    // Task completion listeners run on the thread that evaluates this partition. Only a
+    // consumer on another thread, such as a pipelined Python writer or a TRANSFORM feed
+    // thread, can race with cleanup; it needs IteratorResources and a materialized row.
+    val evaluatingThread = Thread.currentThread()
+    lazy val materializeResult = UnsafeProjection.create(udfs.map(_.dataType).toArray)
     val handles = functions.map(_ => UUID.randomUUID().toString)
     var registered = false
     var writer: ArrowWriter = null
@@ -130,12 +154,27 @@ class InProcessArrowEvalPythonEvaluatorFactory(
         available
       }
 
-      override def hasNext: Boolean = resources.use(false) { hasNextInput }
+      override def hasNext: Boolean = {
+        if (Thread.currentThread() eq evaluatingThread) {
+          hasNextInput
+        } else {
+          resources.use(false) { hasNextInput }
+        }
+      }
 
       private def endOfInput: Nothing =
         throw new NoSuchElementException("End of in-process UDF input")
 
-      override def next(): InternalRow = resources.use[InternalRow](endOfInput) {
+      override def next(): InternalRow = {
+        if (Thread.currentThread() eq evaluatingThread) {
+          nextRow()
+        } else {
+          // Do not return a row backed by vectors that task completion can close.
+          resources.use[InternalRow](endOfInput) { materializeResult(nextRow()) }
+        }
+      }
+
+      private def nextRow(): InternalRow = {
         if (!hasNextInput) endOfInput
         try {
           if (!batchIter.hasNext) {
@@ -220,9 +259,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
             val columns = results.toArray[ColumnVector]
             batchIter = new ColumnarBatch(columns, count).rowIterator().asScala
           }
-          val row = batchIter.next()
-          // A pipelined consumer may still read this row after task completion closes vectors.
-          if (copyResult) row.copy() else row
+          batchIter.next()
         } catch {
           case t: Throwable => Utils.tryWithSafeFinally { throw t } { resources.close() }
         }

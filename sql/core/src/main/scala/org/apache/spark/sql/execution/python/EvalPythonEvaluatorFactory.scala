@@ -43,6 +43,18 @@ abstract class EvalPythonEvaluatorFactory(
       schema: StructType,
       context: TaskContext): Iterator[InternalRow]
 
+  /**
+   * Projects the UDF arguments of each input row. The default copies non-primitive argument
+   * values out of the input row.
+   */
+  protected def createInputProjection(
+      inputs: Seq[Expression],
+      partitionIndex: Int): InternalRow => InternalRow = {
+    val projection = MutableProjection.create(inputs, childOutput)
+    projection.initialize(partitionIndex)
+    projection
+  }
+
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] =
     new EvalPythonPartitionEvaluator
 
@@ -103,8 +115,7 @@ abstract class EvalPythonEvaluatorFactory(
           }
         }.toArray
       }.toArray
-      val projection = MutableProjection.create(allInputs.toSeq, childOutput)
-      projection.initialize(context.partitionId())
+      val projection = createInputProjection(allInputs.toSeq, context.partitionId())
       val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
         StructField(s"_$i", dt)
       }.toArray)

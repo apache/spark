@@ -131,6 +131,31 @@ def _nullable_type(data_type: pa.DataType) -> pa.DataType:
     return data_type
 
 
+def _binary_layout(data_type: pa.DataType) -> pa.DataType:
+    # Same physical layout with string types replaced by binary, so full validation checks
+    # offsets without UTF-8. Spark strings may hold invalid UTF-8, which workers accept too.
+    if pa.types.is_string(data_type):
+        return pa.binary()
+    if pa.types.is_large_string(data_type):
+        return pa.large_binary()
+    if pa.types.is_struct(data_type):
+        return pa.struct([f.with_type(_binary_layout(f.type)) for f in data_type])
+    if pa.types.is_list(data_type):
+        field = data_type.value_field
+        return pa.list_(field.with_type(_binary_layout(field.type)))
+    if pa.types.is_large_list(data_type):
+        field = data_type.value_field
+        return pa.large_list(field.with_type(_binary_layout(field.type)))
+    if pa.types.is_map(data_type):
+        field = data_type.item_field
+        return pa.map_(
+            _binary_layout(data_type.key_type),
+            field.with_type(_binary_layout(field.type)),
+            keys_sorted=data_type.keys_sorted,
+        )
+    return data_type
+
+
 # The predicate is deliberately conservative: hidden nulls may request a check, but a
 # null-free superset proves that all visible values satisfy the required-field contract.
 NullCheckPlan = tuple[Callable[[pa.Array], bool], NullChecker]
@@ -276,7 +301,8 @@ def _validate_result(
     if _nullable_type(result.type) != _nullable_type(expected_type):
         raise TypeError(f"In-process UDF returned {result.type}; expected {expected_type}")
     # Validate every offset before null checks, normalization or JVM buffer access.
-    result.validate(full=True)
+    layout = _binary_layout(result.type)
+    (result if layout == result.type else result.view(layout)).validate(full=True)
     checker = null_checker if null_checker is not None else _null_checker(expected_type)
     if checker is not None:
         checker(result)

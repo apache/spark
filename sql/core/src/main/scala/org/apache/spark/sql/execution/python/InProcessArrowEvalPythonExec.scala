@@ -30,7 +30,17 @@ case class InProcessArrowEvalPythonExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     InProcessPythonUDFBuilder.checkConfiguration(conf)
-    super.doExecute()
+    // Unlike EvalPythonExec, do not copy every input row: the evaluator consumes each row
+    // before pulling the next one, copying it into the queue and writing its arguments to
+    // Arrow on the same thread.
+    val inputRDD = child.execute()
+    if (conf.usePartitionEvaluator) {
+      inputRDD.mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+        evaluatorFactory.createEvaluator().eval(index, iter)
+      }
+    }
   }
 
   override protected def evaluatorFactory: EvalPythonEvaluatorFactory = {

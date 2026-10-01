@@ -46,6 +46,7 @@ if _have_arrow_cdi:
     from pyarrow.cffi import ffi
 
     from pyspark.inprocess.runtime import (
+        _binary_layout,
         _inprocess_invoke,
         _inprocess_register,
         _inprocess_release,
@@ -124,13 +125,42 @@ class InProcessRuntimeTests(unittest.TestCase):
         result = MagicMock(spec=pa.Array)
         result.type = pa.string()
         result.__len__.return_value = 2
-        result.validate.side_effect = pa.ArrowInvalid("invalid result offsets")
+        view = result.view.return_value
+        view.validate.side_effect = pa.ArrowInvalid("invalid result offsets")
         with patch("pyspark.inprocess.runtime._with_schema") as normalize:
             with self.assertRaisesRegex(pa.ArrowInvalid, "invalid result offsets"):
                 _validate_result(result, 2, pa.string())
-            result.validate.assert_called_once_with(full=True)
+            result.view.assert_called_once_with(pa.binary())
+            view.validate.assert_called_once_with(full=True)
             normalize.assert_not_called()
             result.buffers.assert_not_called()
+
+    def test_full_validation_accepts_invalid_utf8_like_spark_strings(self):
+        # Spark strings may hold invalid UTF-8, e.g. CAST(X'FF' AS STRING); workers accept them.
+        strings = pa.array([b"\xff", None, b"ok"], pa.binary()).view(pa.string())
+        values = [
+            strings,
+            pa.StructArray.from_arrays([strings], names=["s"]),
+            pa.ListArray.from_arrays(pa.array([0, 1, 3], pa.int32()), strings),
+            pa.MapArray.from_arrays(
+                pa.array([0, 1, 3], pa.int32()), pa.array(["a", "b", "c"]), strings
+            ),
+        ]
+        for value in values:
+            with self.subTest(type=value.type):
+                result = _validate_result(value, len(value), value.type)
+                self.assertEqual(
+                    result.view(_binary_layout(result.type)),
+                    value.view(_binary_layout(value.type)),
+                )
+
+    def test_full_validation_rejects_invalid_interior_string_offsets(self):
+        offsets = pa.array([0, 5, 2], pa.int32()).buffers()[1]
+        value = pa.Array.from_buffers(pa.string(), 2, [None, offsets, pa.py_buffer(b"hello")])
+        for result in [value, pa.StructArray.from_arrays([value], names=["s"])]:
+            with self.subTest(type=result.type):
+                with self.assertRaisesRegex(pa.ArrowInvalid, "non-monotonic offset"):
+                    _validate_result(result, 2, result.type)
 
     def test_sorted_map_metadata_is_normalized_including_nested_maps(self):
         sorted_type = pa.map_(pa.string(), pa.int64(), keys_sorted=True)
