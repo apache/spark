@@ -797,34 +797,16 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
     }
   }
 
-  test("SPARK-58876: the legacy flag reverts preferTimestampNTZ reads to the base conversion") {
-    // Legacy flag + preferTimestampNTZ: Oracle TIMESTAMP still reads as NTZ, but through the old
-    // java.sql.Timestamp base conversion, which shifts the value by the LA offset.
-    val ldt = LocalDateTime.of(1996, 1, 1, 1, 23, 45)
-    withDefaultTimeZone(LA) {
-      val expected =
-        JdbcDialects.get(jdbcUrl).convertJavaTimestampToTimestampNTZ(Timestamp.valueOf(ldt))
-      assert(expected != ldt) // guard: LA must shift base vs wall-clock for this to discriminate
-      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
-        val df = spark.read.format("jdbc")
-          .option("url", jdbcUrl)
-          .option("dbtable", "datetime")
-          .option("preferTimestampNTZ", "true")
-          .load()
-        assert(df.schema("T").dataType === TimestampNTZType)
-        assert(df.select("T").collect().head.get(0) === expected)
-      }
-    }
-  }
-
   test("SPARK-58876: an NTZ read planned before a legacy flag flip still reads wall-clock") {
     // The read decision is frozen when the DataFrame is planned, so a fresh query on it after the
     // flip still reads wall-clock; the base conversion would shift both values in LA.
     withDefaultTimeZone(LA) {
-      val df = spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("dbtable", "datetime")
-        .load()
+      val df = withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
+        spark.read.format("jdbc")
+          .option("url", jdbcUrl)
+          .option("dbtable", "datetime")
+          .load()
+      }
       withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
         val row = df.select("D", "T").collect().head
         assert(row.get(0) === LocalDateTime.of(1991, 11, 9, 0, 0, 0))

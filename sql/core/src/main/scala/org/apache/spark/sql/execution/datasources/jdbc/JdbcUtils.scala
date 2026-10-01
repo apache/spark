@@ -518,7 +518,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
       conn: Connection,
       dialect: JdbcDialect,
       dataType: DataType,
-      metadata: Metadata,
       options: JDBCOptions): JDBCValueSetter = dataType match {
     case IntegerType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
@@ -740,7 +739,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       }
       val stmt = conn.prepareStatement(insertStmt)
       val setters =
-        rddSchema.fields.map(f => makeSetter(conn, dialect, f.dataType, f.metadata, options))
+        rddSchema.fields.map(f => makeSetter(conn, dialect, f.dataType, options))
       val nullTypes = rddSchema.fields.map(f => getJdbcType(f.dataType, dialect).jdbcNullType)
       val numFields = rddSchema.fields.length
 

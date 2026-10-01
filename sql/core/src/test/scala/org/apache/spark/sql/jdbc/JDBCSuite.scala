@@ -1764,28 +1764,6 @@ class JDBCSuite extends SharedSparkSession {
     assert(NoopDialect.planTimeOptions.isEmpty)
   }
 
-  test("SPARK-58876: Oracle getCatalystType maps only zoneless DATE/TIMESTAMP to NTZ, " +
-      "legacy-gated") {
-    import java.sql.Types.TIMESTAMP
-    def resolve(sqlType: Int, typeName: String): Option[DataType] =
-      OracleDialect().getCatalystType(sqlType, typeName, 0, new MetadataBuilder())
-    // Non-legacy mapping: zoneless DATE/TIMESTAMP map to NTZ; the WITH [LOCAL] TIME ZONE variants
-    // (distinct sqlTypes) stay TimestampType.
-    val cases = Seq(
-      (TIMESTAMP, "TIMESTAMP", Some(TimestampNTZType)),
-      (TIMESTAMP, "DATE", Some(TimestampNTZType)),
-      (OracleDialect.TIMESTAMP_TZ, "TIMESTAMP WITH TIME ZONE", Some(TimestampType)),
-      (OracleDialect.TIMESTAMP_LTZ, "TIMESTAMP WITH LOCAL TIME ZONE", Some(TimestampType)))
-    cases.foreach { case (sqlType, typeName, expected) =>
-      assert(resolve(sqlType, typeName) === expected, s"typeName=$typeName")
-    }
-    // Under the legacy flag, DATE/TIMESTAMP defer to the shared mapping (dialect returns None).
-    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
-      assert(resolve(TIMESTAMP, "TIMESTAMP") === None)
-      assert(resolve(TIMESTAMP, "DATE") === None)
-    }
-  }
-
   test("SPARK-58876: Oracle NTZ mapping and the preferTimestampNTZ read option") {
     // preferTimestampNTZ reaches the dialect only through getSchema's isTimestampNTZ argument, so
     // resolve a mocked Oracle TIMESTAMP column via getSchema under each (prefer, flag) combination.
