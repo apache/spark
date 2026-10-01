@@ -762,6 +762,54 @@ class UDFProfiler2TestsMixin:
         self.spark.profile.clear()
         self.assertEqual(0, len(self.profile_results), str(list(self.profile_results)))
 
+    @property
+    def sampling_profile_results(self):
+        return self.spark._profiler_collector._sampling_profile_results
+
+    def test_sampling_profiler_udf(self):
+        import time
+
+        @udf("long")
+        def busy_add1(x):
+            # Sleep so the sampling thread reliably catches this frame on the stack.
+            time.sleep(0.05)
+            return x + 1
+
+        # Without the conf enabled, no sampling results are collected.
+        self.spark.range(5, numPartitions=1).select(busy_add1("id")).collect()
+        self.assertEqual(0, len(self.sampling_profile_results))
+
+        with self.sql_conf(
+            {
+                "spark.sql.pyspark.udf.profiler": "sampling",
+                "spark.sql.pyspark.udf.profiler.samplingInterval": "10",
+            }
+        ):
+            self.spark.range(10, numPartitions=1).select(busy_add1("id")).collect()
+
+        results = self.sampling_profile_results
+        # One partition -> one task -> one call-tree keyed by task.
+        self.assertEqual(1, len(results), str(list(results)))
+
+        # Flatten the per-thread call trees and assert the UDF frame was sampled.
+        idents = []
+
+        def collect_idents(node):
+            for key, child in node.items():
+                if key == "count":
+                    continue
+                idents.append(key)
+                collect_idents(child)
+
+        for result in results.values():
+            for thread_tree in result["callstack"].values():
+                collect_idents(thread_tree)
+
+        self.assertTrue(
+            any("busy_add1" in ident for ident in idents),
+            f"UDF frame not found in samples: {idents}",
+        )
+
 
 class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
     def setUp(self) -> None:
