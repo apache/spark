@@ -247,9 +247,10 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.executor.rollPolicy")
       .doc("Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME, " +
         "TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS, PEAK_JVM_ONHEAP_MEMORY, " +
-        "PEAK_JVM_OFFHEAP_MEMORY, ACTIVE_TASKS, OUTLIER (default), and OUTLIER_NO_FALLBACK. " +
+        "PEAK_JVM_OFFHEAP_MEMORY, TOTAL_SHUFFLE_WRITE, DISK_USED, ACTIVE_TASKS, " +
+        "OUTLIER (default), and OUTLIER_NO_FALLBACK. " +
         "When executor roll happens, Spark uses this policy to choose " +
-        "an executor and decommission it. The built-in policies are based on executor summary." +
+        "an executor and decommission it. The built-in policies are based on executor summary. " +
         "ID policy chooses an executor with the smallest executor ID. " +
         "ADD_TIME policy chooses an executor with the smallest add-time. " +
         "TOTAL_GC_TIME policy chooses an executor with the biggest total task GC time. " +
@@ -266,7 +267,7 @@ private[spark] object Config extends Logging {
         "It is recommended to use it with " +
         "spark.kubernetes.executor.minTasksPerExecutorBeforeRolling " +
         "because newly started executors usually have no active tasks. " +
-        "OUTLIER policy chooses an executor with outstanding statistics which is bigger than" +
+        "OUTLIER policy chooses an executor with outstanding statistics which is bigger than " +
         "at least two standard deviation from the mean in average task time, " +
         "total task time, total task GC time, and the number of failed tasks if exists. " +
         "If there is no outlier it works like TOTAL_DURATION policy. " +
