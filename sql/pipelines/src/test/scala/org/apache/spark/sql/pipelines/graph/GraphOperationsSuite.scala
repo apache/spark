@@ -22,9 +22,9 @@ import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistration
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * Tests for the flow/dataset reachability queries in [[GraphOperations]]. These exercise the
- * memoized `upstreamFlows` / `downstreamFlows` / `upstreamDatasets` against graphs whose expected
- * reachability is known by inspection, and verify that repeated calls are served from the cache.
+ * Tests for the flow/dataset reachability queries in [[GraphOperations]]. These exercise
+ * `upstreamFlows` / `downstreamFlows` / `upstreamDatasets` against graphs whose expected
+ * reachability is known by inspection, and verify that repeated queries avoid re-traversal.
  */
 class GraphOperationsSuite extends PipelineTest with SharedSparkSession {
 
@@ -78,25 +78,39 @@ class GraphOperationsSuite extends PipelineTest with SharedSparkSession {
     assert(graph.downstreamFlows(id("c")) == Set(id("d")))
   }
 
-  test("repeated queries are served from the memoization cache") {
+  test("repeated reachability queries do not re-traverse the graph") {
     val session = spark
     import session.implicits._
 
-    val graph = new TestGraphRegistrationContext(spark) {
+    val resolved = new TestGraphRegistrationContext(spark) {
       registerMaterializedView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
       registerMaterializedView("b", query = readFlowFunc("a"))
       registerMaterializedView("c", query = readFlowFunc("b"))
     }.resolveToDataflowGraph()
+    val graph = new CountingGraph(resolved)
 
-    // Equal across calls, and the second call returns the identical cached instance.
-    val up1 = graph.upstreamFlows(id("c"))
-    val up2 = graph.upstreamFlows(id("c"))
-    assert(up1 == Set(id("a"), id("b")))
-    assert(up1 eq up2)
+    assert(graph.upstreamFlows(id("c")) == Set(id("a"), id("b")))
+    assert(graph.downstreamFlows(id("a")) == Set(id("b"), id("c")))
+    val traversalsAfterFirstPass = graph.dfsCalls
+    assert(traversalsAfterFirstPass > 0, "expected the first queries to traverse the graph")
 
-    val down1 = graph.downstreamFlows(id("a"))
-    val down2 = graph.downstreamFlows(id("a"))
-    assert(down1 == Set(id("b"), id("c")))
-    assert(down1 eq down2)
+    // The same queries are now memoized, so they return equal results without re-traversing.
+    assert(graph.upstreamFlows(id("c")) == Set(id("a"), id("b")))
+    assert(graph.downstreamFlows(id("a")) == Set(id("b"), id("c")))
+    assert(graph.dfsCalls == traversalsAfterFirstPass, "repeated queries should not re-traverse")
+  }
+
+  /** A graph that counts `dfsInternal` traversals, to assert reachability queries are memoized. */
+  private class CountingGraph(graph: DataflowGraph)
+      extends DataflowGraph(graph.flows, graph.tables, graph.sinks, graph.views) {
+    var dfsCalls: Int = 0
+
+    override def dfsInternal(
+        startDestination: TableIdentifier,
+        downstream: Boolean,
+        stopAtMaterializationPoints: Boolean): Set[TableIdentifier] = {
+      dfsCalls += 1
+      super.dfsInternal(startDestination, downstream, stopAtMaterializationPoints)
+    }
   }
 }

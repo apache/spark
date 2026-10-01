@@ -75,13 +75,9 @@ trait GraphOperations {
   }
 
   /**
-   * Memoized reachable-dataset sets, keyed by (start dataset, downstream?). The graph is
-   * immutable, so a computed set stays valid for its lifetime.
+   * Memoized reachable-flow sets, keyed by (start flow, downstream?). The graph is immutable, so a
+   * computed set stays valid for its lifetime.
    */
-  private val reachableDatasets =
-    new ConcurrentHashMap[(TableIdentifier, Boolean), Set[TableIdentifier]]()
-
-  /** Memoized reachable-flow sets, keyed by (start flow, downstream?). */
   private val reachableFlows =
     new ConcurrentHashMap[(TableIdentifier, Boolean), Set[TableIdentifier]]()
 
@@ -161,11 +157,8 @@ trait GraphOperations {
    */
   private def reachabilitySet(
       destinationIdentifier: TableIdentifier,
-      downstream: Boolean): Set[TableIdentifier] = {
-    reachableDatasets.computeIfAbsent(
-      (destinationIdentifier, downstream),
-      (_: (TableIdentifier, Boolean)) => dfsInternal(destinationIdentifier, downstream))
-  }
+      downstream: Boolean): Set[TableIdentifier] =
+    dfsInternal(destinationIdentifier, downstream)
 
   /** Returns the set of flows reachable from `flowIdentifier` via output (child) edges. */
   def downstreamFlows(flowIdentifier: TableIdentifier): Set[TableIdentifier] = {
