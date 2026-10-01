@@ -624,6 +624,12 @@ class JacksonParser(
    * Finish a JSON value that failed conversion. `skipChildren` only works at
    * START_OBJECT / START_ARRAY; if the converter already consumed tokens inside a nested
    * object, leftover FIELD_NAMEs would otherwise leak as keys of the enclosing map.
+   *
+   * The `_` branch is for a converter that stopped on a scalar inside a nested
+   * value. The loop advances until Jackson's nesting depth returns to this map,
+   * which is the nested value's END_OBJECT / END_ARRAY (or EOF if truncated).
+   * A null parsing context is treated as "keep draining" so leftover tokens
+   * cannot be misread as the next map key.
    */
   private def skipRemainingValue(parser: JsonParser, mapDepth: Int): Unit = {
     parser.getCurrentToken match {
@@ -632,11 +638,10 @@ class JacksonParser(
       case END_OBJECT | END_ARRAY | null =>
         // The value converter already consumed through its boundary.
       case _ =>
-        // Still inside a nested value: skip until Jackson returns to this map.
         var token = parser.getCurrentToken
         while (token != null &&
-            parser.getParsingContext != null &&
-            parser.getParsingContext.getNestingDepth > mapDepth) {
+            (parser.getParsingContext == null ||
+              parser.getParsingContext.getNestingDepth > mapDepth)) {
           token = parser.nextToken()
         }
     }
@@ -652,8 +657,11 @@ class JacksonParser(
       valueType: DataType): MapData = {
     val constrainedKeys =
       keyType.isInstanceOf[CharType] || keyType.isInstanceOf[VarcharType]
-    // CHAR/VARCHAR maps always drain to END_OBJECT so mapKeyDedupPolicy is applied
-    // before a stored length error. Partial results still control STRING maps.
+    // CHAR/VARCHAR maps always drain to END_OBJECT, even when
+    // jsonEnablePartialResults is false. Dedup and length checks need the
+    // full object; aborting at the first bad value would leak inner FIELD_NAMEs
+    // as outer keys and skip mapKeyDedupPolicy. STRING maps still abort at the
+    // first NonFatal unless partial results are enabled.
     val drainErrors = constrainedKeys || enablePartialResults
     val mapDepth = parser.getParsingContext.getNestingDepth
 
@@ -747,17 +755,18 @@ class JacksonParser(
       }
     }
 
+    // Dedup runs on the drained object before any stored conversion failure is
+    // rethrown. A normalization collision therefore surfaces as DUPLICATED_MAP_KEY
+    // in preference to EXCEED_LIMIT_LENGTH (oversize key) or a value-conversion
+    // error. LAST_WIN resolves the collision and then reports the stored failure
+    // (PERMISSIVE keeps the partial map via PartialMapDataResultException).
     val mapData = DuplicateMapKeyUtils.buildConstrainedMap(
       lastEntries, keyType, valueType)
-
-    // Ordinary value or key conversion failures invalidate the whole map. Delay throwing
-    // until the closing brace has been consumed and constrained-key dedup has run.
-    badMapException.foreach(throw _)
-
-    if (partialResultException.isEmpty) {
+    val firstError = badMapException.orElse(partialResultException)
+    if (firstError.isEmpty) {
       mapData
     } else {
-      throw PartialMapDataResultException(mapData, partialResultException.get)
+      throw PartialMapDataResultException(mapData, firstError.get)
     }
   }
 
