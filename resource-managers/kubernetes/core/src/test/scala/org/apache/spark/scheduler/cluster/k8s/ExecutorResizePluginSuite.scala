@@ -381,7 +381,7 @@ class ExecutorResizePluginSuite
     assert(countSkipLogs(2) === 1)
   }
 
-  Seq("statefulset", "deployment").foreach { allocator =>
+  Seq("statefulset").foreach { allocator =>
     test(s"init returns early when pods allocator is '$allocator'") {
       val plugin = new ExecutorResizeDriverPlugin()
       val sparkConf = new SparkConf().set(KUBERNETES_ALLOCATION_PODS_ALLOCATOR, allocator)
@@ -392,6 +392,22 @@ class ExecutorResizePluginSuite
       val result = plugin.init(sc, pluginCtx)
 
       assert(result.isEmpty)
+    }
+  }
+
+  test("SPARK-59918: init schedules the resize task when pods allocator is 'deployment'") {
+    val plugin = new ExecutorResizeDriverPlugin()
+    val sparkConf = new SparkConf().set(KUBERNETES_ALLOCATION_PODS_ALLOCATOR, "deployment")
+    val sc = mock(classOf[SparkContext])
+    when(sc.conf).thenReturn(sparkConf)
+    val pluginCtx = mock(classOf[PluginContext])
+    try {
+      assert(plugin.init(sc, pluginCtx).isEmpty)
+      val field = plugin.getClass.getDeclaredField("periodicService")
+      field.setAccessible(true)
+      assert(field.get(plugin).asInstanceOf[ScheduledThreadPoolExecutor].getQueue.size === 1)
+    } finally {
+      plugin.shutdown()
     }
   }
 

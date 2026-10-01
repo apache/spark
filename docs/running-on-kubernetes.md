@@ -579,7 +579,8 @@ change to the application code. They apply to executor pods of every resource pr
 
 The resize plugins are registered via `spark.plugins` and run in the driver, while the recovery mode is
 built into the executor pod allocator and needs no plugin. All three features require the default
-`direct` pods allocator (`spark.kubernetes.allocation.pods.allocator`).
+`direct` pods allocator (`spark.kubernetes.allocation.pods.allocator`), except that the memory resize
+plugin also supports the `deployment` pods allocator.
 
 ### Executor Memory Resize
 
