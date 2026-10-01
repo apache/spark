@@ -50,8 +50,7 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
   override protected def createRestrictedUser(): Option[RestrictedUser] = {
     val user = "restricted_user"
     val password = "restricted_password"
-    // The container is thrown away when the suite ends, so the user only has to be dropped in
-    // case a previous attempt left it behind.
+    // Drop first so that a re-run against a reused container stays idempotent.
     Using.resource(getConnection()) { conn =>
       conn.prepareStatement(s"DROP USER IF EXISTS $user").executeUpdate()
       conn.prepareStatement(s"CREATE USER $user PASSWORD '$password'").executeUpdate()
@@ -61,7 +60,8 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
       table = "tbl_shared",
       user = user,
       password = password,
-      expectedSQLState = Some("42501")))
+      expectedSQLState = Some("42501"),
+      expectedMessage = Some("permission denied")))
   }
 
   override def dataPreparation(conn: Connection): Unit = {

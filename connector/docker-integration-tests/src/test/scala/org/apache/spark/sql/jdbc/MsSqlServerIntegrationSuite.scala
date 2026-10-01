@@ -50,11 +50,20 @@ class MsSqlServerIntegrationSuite extends SharedJDBCIntegrationSuite {
     // Has to satisfy the default SQL Server password policy (upper, lower, digit and symbol).
     val password = "R3str1ct3d_pw!"
     Using.resource(getConnection()) { conn =>
+      // Drop first so that a re-run against a reused container stays idempotent.
+      Using.resource(conn.createStatement().executeQuery(
+        s"SELECT COUNT(*) FROM sys.server_principals WHERE name = '$user'")) { rs =>
+        if (rs.next() && rs.getInt(1) > 0) {
+          conn.prepareStatement(s"DROP USER IF EXISTS $user").executeUpdate()
+          conn.prepareStatement(s"DROP LOGIN $user").executeUpdate()
+        }
+      }
       conn.prepareStatement(s"CREATE LOGIN $user WITH PASSWORD = '$password'").executeUpdate()
       conn.prepareStatement(s"CREATE USER $user FOR LOGIN $user").executeUpdate()
     }
     Some(RestrictedUser(
-      url = s"jdbc:sqlserver://$dockerIp:$externalPort;" +
+      // The user and tbl_shared both live in master, so name it explicitly.
+      url = s"jdbc:sqlserver://$dockerIp:$externalPort;databaseName=master;" +
         "encrypt=true;trustServerCertificate=true",
       table = "tbl_shared",
       user = user,

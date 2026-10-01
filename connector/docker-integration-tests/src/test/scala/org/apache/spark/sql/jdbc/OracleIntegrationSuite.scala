@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.time.{Duration, LocalDateTime, Period}
-import java.util.{Properties, TimeZone}
+import java.util.{Locale, Properties, TimeZone}
 
 import scala.util.Using
 
@@ -74,6 +74,15 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
     val user = "restricted_user"
     val password = "R3str1ct3d_pw"
     Using.resource(getConnection()) { conn =>
+      // Drop first so that a re-run against a reused container stays idempotent. Oracle folds
+      // unquoted identifiers to upper case.
+      Using.resource(conn.createStatement().executeQuery(
+        s"SELECT COUNT(*) FROM all_users WHERE username = '${user.toUpperCase(Locale.ROOT)}'")) {
+        rs =>
+          if (rs.next() && rs.getInt(1) > 0) {
+            conn.prepareStatement(s"DROP USER $user").executeUpdate()
+          }
+      }
       conn.prepareStatement(s"CREATE USER $user IDENTIFIED BY $password").executeUpdate()
       conn.prepareStatement(s"GRANT CREATE SESSION TO $user").executeUpdate()
     }

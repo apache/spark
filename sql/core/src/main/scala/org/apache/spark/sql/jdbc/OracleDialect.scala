@@ -249,11 +249,12 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   // Oracle reports every class 42 error with SQLSTATE 42000, the ANSI state for
   // "syntax error or access rule violation", so the SQLSTATE alone cannot identify a syntax
   // error and the ORA code (available through SQLException.getErrorCode) has to be used instead.
-  // The codes below are the parsing errors from the Oracle error message manual. Parsing-section
-  // codes that are not syntax errors, such as ORA-00942 (missing table) and ORA-00980 (invalid
-  // synonym target), and semantic errors such as ORA-01775 (synonym loop), are deliberately left
-  // out. The list is conservative: a missing code only means the driver's exception is surfaced.
-  // See https://docs.oracle.com/cd/A58617_01/server.804/a58312/newch220.htm (00900-00999)
+  // The codes below are the parsing errors documented for ORA-00900 onwards and ORA-01740
+  // onwards. Parsing-section codes that are not syntax errors, such as ORA-00942 (missing table)
+  // and ORA-00980 (invalid synonym target), and semantic errors such as ORA-01775 (synonym loop),
+  // are deliberately left out. The list is conservative: a missing code only means the driver's
+  // own exception is surfaced. See Oracle Database Error Messages:
+  // https://docs.oracle.com/en/database/oracle/oracle-database/21/errmg/index.html
   private val syntaxErrorCodes = Set(
     900,  // invalid SQL statement
     901,  // invalid CREATE command

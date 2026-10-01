@@ -67,15 +67,16 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
 
   /**
    * A user that can open a session but has no read privilege on [[RestrictedUser.table]], together
-   * with the JDBC URL needed to reach it. The database container is discarded when the suite ends,
-   * so the user does not have to be dropped. None when the suite cannot create such a user.
+   * with the JDBC URL needed to reach it. The container is fresh for every suite run, so the
+   * suite only has to create the user. None when the suite cannot create such a user.
    */
   protected case class RestrictedUser(
       url: String,
       table: String,
       user: String,
       password: String,
-      expectedSQLState: Option[String] = None)
+      expectedSQLState: Option[String] = None,
+      expectedMessage: Option[String] = None)
 
   protected def createRestrictedUser(): Option[RestrictedUser] = None
 
@@ -95,9 +96,12 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
 
   test("SPARK-59369: a missing privilege is not classified as a syntax error") {
     val restricted = createRestrictedUser()
+    // Safety net for a suite that neither creates a user nor excludes this test through
+    // `excluded`; the six JDBC suites all do one or the other.
     assume(restricted.isDefined, "this dialect cannot create a restricted user")
 
-    val RestrictedUser(url, table, user, password, expectedSQLState) = restricted.get
+    val RestrictedUser(url, table, user, password, expectedSQLState, expectedMessage) =
+      restricted.get
     // As above, the driver's own SQLException has to win over JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.
     val e = intercept[SQLException] {
       spark.read.format("jdbc")
@@ -109,6 +113,9 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
     }
     expectedSQLState.foreach { sqlState =>
       assertResult(sqlState)(e.getSQLState)
+    }
+    expectedMessage.foreach { message =>
+      assert(e.getMessage.contains(message), s"Unexpected error message: ${e.getMessage}")
     }
   }
 
