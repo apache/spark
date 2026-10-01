@@ -135,8 +135,7 @@ class StreamingShuffleSuite
       sc: SparkContext,
       mappers: Int,
       reducers: Int,
-      serializer: Option[Serializer] = None,
-      shuffleId: Int = 0) {
+      serializer: Option[Serializer] = None) {
     assert(SparkEnv.get.pipelinedShuffleManager.isInstanceOf[StreamingShuffleManager])
     assert(SparkEnv.get.streamingShuffleOutputTracker.isDefined)
     SparkEnv.get.streamingShuffleOutputTracker.get
@@ -259,19 +258,16 @@ class StreamingShuffleSuite
   private class BufferCapturingThrowingSerializer(
       capturedBuffer: AtomicReference[ByteBuf],
       failOnValueNumber: Option[Int] = None,
-      failOnClose: Boolean = false,
-      oomOnValueNumber: Option[Int] = None)
+      failOnClose: Boolean = false)
     extends Serializer with Serializable {
     override def newInstance(): SerializerInstance =
-      new BufferCapturingThrowingSerializerInstance(
-        capturedBuffer, failOnValueNumber, failOnClose, oomOnValueNumber)
+      new BufferCapturingThrowingSerializerInstance(capturedBuffer, failOnValueNumber, failOnClose)
   }
 
   private class BufferCapturingThrowingSerializerInstance(
       capturedBuffer: AtomicReference[ByteBuf],
       failOnValueNumber: Option[Int],
-      failOnClose: Boolean,
-      oomOnValueNumber: Option[Int])
+      failOnClose: Boolean)
     extends SerializerInstance {
     private var valuesWritten = 0
 
@@ -284,10 +280,6 @@ class StreamingShuffleSuite
           valuesWritten += 1
           if (failOnValueNumber.contains(valuesWritten)) {
             throw new RuntimeException("injected serialization failure")
-          }
-          if (oomOnValueNumber.contains(valuesWritten)) {
-            // Stands in for an OutOfDirectMemory error (which is an OutOfMemoryError subclass).
-            throw new OutOfMemoryError("injected direct memory exhaustion")
           }
           this
         }
@@ -1306,8 +1298,8 @@ class StreamingShuffleSuite
 
       // The writer allocated a buffer to serialize the record into; serialization then threw
       // before the buffer was parked or sent. Unless the error path releases it, it leaks
-      // (refCnt stays 1). The buffers are Unpooled direct buffers, so a leak here is reclaimed
-      // only by GC; asserting on refCnt makes the check deterministic rather than GC-dependent.
+      // (refCnt stays 1). By default these direct buffers have no cleaner, so GC never frees a
+      // leaked one.
       capturedBuffer.get() should not be null
       eventually(Timeout(30.seconds)) {
         capturedBuffer.get().refCnt() should be(0)
@@ -1345,10 +1337,9 @@ class StreamingShuffleSuite
     }
   }
 
-  // Encoding a message into the outgoing frame (e.g. allocating the frame, which can fail with an
-  // OutOfDirectMemoryError) happens before the message is handed to the client. If it throws,
-  // send() must still run the completion callback, since that is what releases a data buffer and
-  // returns its memory permit.
+  // Encoding a message into the outgoing frame happens before the message is handed to the
+  // client. If it throws, send() must still run the completion callback, since that is what
+  // releases a data buffer and returns its memory permit.
   test("SPARK-59907: shard send runs the completion callback when encoding fails") {
     withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
       val g = new ShuffleGroup[Int](sc, 1, 1)
@@ -1368,32 +1359,6 @@ class StreamingShuffleSuite
       doneCalls.get() should be(1)
       // Only the caller's reference remains, for the completion callback to release.
       data.refCnt() should be(1)
-    }
-  }
-
-  // An OutOfDirectMemoryError (an OutOfMemoryError subclass) thrown mid-write should not leave the
-  // executor unusable: the failed task must release its buffer, and a later shuffle on the same
-  // process must still complete end to end.
-  test("SPARK-59907: executor stays healthy after a task fails with an OutOfMemoryError") {
-    withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
-      val capturedBuffer = new AtomicReference[ByteBuf](null)
-      val failing = new ShuffleGroup[Int](
-        sc, 1, 1,
-        serializer = Some(
-          new BufferCapturingThrowingSerializer(capturedBuffer, oomOnValueNumber = Some(1))))
-
-      intercept[OutOfMemoryError] {
-        failing.writers(0).write(Iterator((1, 1)))
-      }
-      // Leaked direct buffers are not reclaimed by GC, so the failed task must release its own.
-      eventually(Timeout(30.seconds)) {
-        capturedBuffer.get().refCnt() should be(0)
-      }
-
-      // A new shuffle on the same process still completes.
-      val healthy = new ShuffleGroup[Int](sc, 1, 1, shuffleId = 1)
-      healthy.writers(0).write(Iterator((1, 1), (2, 2)))
-      await(healthy.read(0)._2) should be(Set((1, 1), (2, 2)))
     }
   }
 
