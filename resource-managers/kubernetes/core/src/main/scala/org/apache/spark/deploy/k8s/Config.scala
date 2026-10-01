@@ -269,7 +269,9 @@ private[spark] object Config extends Logging {
         "because newly started executors usually have no active tasks. " +
         "OUTLIER policy chooses an executor with outstanding statistics which is bigger than " +
         "at least two standard deviation from the mean in average task time, " +
-        "total task time, total task GC time, and the number of failed tasks if exists. " +
+        "total task time, total task GC time, the number of failed tasks, " +
+        "peak JVM on-heap memory, peak JVM off-heap memory, total shuffle write, " +
+        "and disk used if exists. " +
         "If there is no outlier it works like TOTAL_DURATION policy. " +
         "OUTLIER_NO_FALLBACK policy picks an outlier using the OUTLIER policy above. " +
         "If there is no outlier then no executor will be rolled.")
