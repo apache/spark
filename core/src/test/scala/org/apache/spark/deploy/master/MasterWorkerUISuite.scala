@@ -121,7 +121,7 @@ class MasterWorkerUISuite extends MasterSuiteBase {
           // the webuiaddress intentionally points to the local web ui.
           // explicitly construct reverse proxy url targeting the master
           val JString(workerId) = workerSummaryJson \ "id"
-          val url = s"$masterUrl/proxy/${workerId}/json"
+          val url = s"$masterUrl/proxy/${workerId}/json/"
           val workerResponse = parse(Utils
             .tryWithResource(Source.fromURL(url))(_.getLines().mkString("\n")))
           (workerResponse \ "cores").extract[Int] should be (2)

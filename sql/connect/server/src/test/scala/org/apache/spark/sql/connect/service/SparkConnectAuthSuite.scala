@@ -51,10 +51,8 @@ class SparkConnectAuthSuite extends SparkConnectServerTest {
     super.sparkConf
       .set(tokenKey, token)
       .set(markerKey, "visible")
+      .set(Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key, classOf[CallTrackingInterceptor].getName)
   }
-
-  override protected def extraServerConfs: Seq[(String, String)] = Seq(
-    Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key -> classOf[CallTrackingInterceptor].getName)
 
   test("Test local authentication") {
     val session = SparkSession
