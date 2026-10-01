@@ -37,13 +37,14 @@ import io.grpc.StatusRuntimeException
 import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.connect.ResourceHelper
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{IvyTestUtils, MavenUtils, ThreadUtils, Utils}
+import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
@@ -51,11 +52,38 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
   private val sessionId = UUID.randomUUID.toString()
   private val sessionKey = SessionKey("c1", sessionId)
+  private val ivySettingsDir = Utils.createTempDir(namePrefix = "connect-ivy-settings")
+  private val mavenCoordinate = MavenCoordinate("my.connect.driver", "mylib", "0.1")
+  private val mavenRepository = IvyTestUtils.createLocalRepositoryForTests(
+    mavenCoordinate,
+    dependencies = None,
+    rootDir = Some(ivySettingsDir.toPath.resolve("repository").toFile))
+  private val ivySettings = ivySettingsDir.toPath.resolve("ivysettings.xml")
+  Files.writeString(
+    ivySettings,
+    s"""<ivysettings>
+       |  <settings defaultResolver="connect"/>
+       |  <resolvers>
+       |    <ibiblio name="connect" m2compatible="true" root="${mavenRepository.toURI}"/>
+       |  </resolvers>
+       |</ivysettings>""".stripMargin)
+
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf.set(MavenUtils.JAR_IVY_SETTING_PATH_KEY, ivySettings.toString)
+  }
 
   override def beforeEach(): Unit = {
     super.beforeEach()
     SparkConnectService.sessionManager.invalidateAllSessions()
     SparkConnectService.sessionManager.initializeBaseSession(() => spark.newSession())
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      super.afterAll()
+    } finally {
+      Utils.deleteRecursively(ivySettingsDir)
+    }
   }
 
   class DummyStreamObserver(p: Promise[AddArtifactsResponse])
@@ -280,6 +308,23 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     }
   }
 
+  private def uploadedArtifactEntry(
+      name: String,
+      path: Path): proto.AddArtifactsRequest.ArtifactEntry = {
+    val bytes = ByteString.copyFrom(Files.readAllBytes(path))
+    val crc = new CRC32()
+    crc.update(bytes.toByteArray)
+    val artifact = proto.AddArtifactsRequest.SingleChunkArtifact
+      .newBuilder()
+      .setName(name)
+      .setData(
+        proto.AddArtifactsRequest.ArtifactChunk
+          .newBuilder()
+          .setData(bytes)
+          .setCrc(crc.getValue))
+    proto.AddArtifactsRequest.ArtifactEntry.newBuilder().setArtifact(artifact).build()
+  }
+
   private def addChunkedArtifact(
       handler: SparkConnectAddArtifactsHandler,
       name: String,
@@ -351,21 +396,6 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
       new DummyStreamObserver(promise),
       resolvedMavenArtifacts = Map(ivyUri -> Seq(resolved)))
     try {
-      def uploaded(name: String, path: Path): proto.AddArtifactsRequest.ArtifactEntry = {
-        val bytes = ByteString.copyFrom(Files.readAllBytes(path))
-        val crc = new CRC32()
-        crc.update(bytes.toByteArray)
-        val artifact = proto.AddArtifactsRequest.SingleChunkArtifact
-          .newBuilder()
-          .setName(name)
-          .setData(
-            proto.AddArtifactsRequest.ArtifactChunk
-              .newBuilder()
-              .setData(bytes)
-              .setCrc(crc.getValue))
-        proto.AddArtifactsRequest.ArtifactEntry.newBuilder().setArtifact(artifact).build()
-      }
-
       val request = AddArtifactsRequest
         .newBuilder()
         .setSessionId(sessionId)
@@ -373,7 +403,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
         .setBatch(
           proto.AddArtifactsRequest.Batch
             .newBuilder()
-            .addEntries(uploaded(
+            .addEntries(uploadedArtifactEntry(
               "classes/smallClassFile.class",
               inputFilePath.resolve("smallClassFile.class")))
             .addEntries(
@@ -382,7 +412,8 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
                 .setMavenDependency(proto.AddArtifactsRequest.MavenDependency
                   .newBuilder()
                   .setUri(ivyUri.toString)))
-            .addEntries(uploaded("jars/smallJar.jar", inputFilePath.resolve("smallJar.jar")))
+            .addEntries(
+              uploadedArtifactEntry("jars/smallJar.jar", inputFilePath.resolve("smallJar.jar")))
             .build())
         .build()
 
@@ -403,6 +434,81 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
       assert(handler.getArtifactContents("jars/resolved.jar").sameElements(resolvedBytes))
       assert(handler.getArtifactChecksum("jars/resolved.jar") == resolvedCrc.getValue)
       assert(response.getArtifacts(1).getIsCrcSuccessful)
+    } finally {
+      handler.forceCleanUp()
+    }
+  }
+
+  test("server-side Maven dependency uses the driver Ivy settings") {
+    val promise = Promise[AddArtifactsResponse]()
+    val handler = new TestAddArtifactsHandler(new DummyStreamObserver(promise))
+    try {
+      val request = AddArtifactsRequest
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setUserContext(proto.UserContext.newBuilder().setUserId("c1"))
+        .setBatch(
+          proto.AddArtifactsRequest.Batch
+            .newBuilder()
+            .addEntries(
+              proto.AddArtifactsRequest.ArtifactEntry
+                .newBuilder()
+                .setMavenDependency(
+                  proto.AddArtifactsRequest.MavenDependency
+                    .newBuilder()
+                    .setUri(s"ivy://${mavenCoordinate.toString}"))))
+        .build()
+
+      handler.onNext(request)
+      handler.onCompleted()
+
+      val response = ThreadUtils.awaitResult(promise.future, 5.seconds)
+      val jarName =
+        s"jars/${mavenCoordinate.groupId}_${mavenCoordinate.artifactId}-" +
+          s"${mavenCoordinate.version}.jar"
+      assert(handler.getFinalArtifacts == Seq(jarName))
+      assert(response.getArtifactsCount == 1)
+      assert(response.getArtifacts(0).getName == jarName)
+      assert(response.getArtifacts(0).getIsCrcSuccessful)
+    } finally {
+      handler.forceCleanUp()
+    }
+  }
+
+  test("failing Maven dependency does not register a preceding upload") {
+    val error = Promise[Throwable]()
+    val observer = new StreamObserver[AddArtifactsResponse] {
+      override def onNext(value: AddArtifactsResponse): Unit = {}
+      override def onError(throwable: Throwable): Unit = error.success(throwable)
+      override def onCompleted(): Unit = {}
+    }
+    val handler = new TestAddArtifactsHandler(observer)
+    try {
+      val request = AddArtifactsRequest
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setUserContext(proto.UserContext.newBuilder().setUserId("c1"))
+        .setBatch(
+          proto.AddArtifactsRequest.Batch
+            .newBuilder()
+            .addEntries(
+              uploadedArtifactEntry(
+                "classes/smallClassFile.class",
+                inputFilePath.resolve("smallClassFile.class")))
+            .addEntries(
+              proto.AddArtifactsRequest.ArtifactEntry
+                .newBuilder()
+                .setMavenDependency(
+                  proto.AddArtifactsRequest.MavenDependency
+                    .newBuilder()
+                    .setUri("ivy://invalid-coordinate"))))
+        .build()
+
+      handler.onNext(request)
+      handler.onCompleted()
+
+      ThreadUtils.awaitResult(error.future, 5.seconds)
+      assert(handler.getFinalArtifacts.isEmpty)
     } finally {
       handler.forceCleanUp()
     }

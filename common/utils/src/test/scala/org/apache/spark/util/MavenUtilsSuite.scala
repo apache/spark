@@ -18,7 +18,7 @@
 package org.apache.spark.util
 
 import java.io.{File, OutputStream, PrintStream}
-import java.net.URI
+import java.net.{InetAddress, ServerSocket, URI}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import java.util.concurrent.{CancellationException, CountDownLatch, Executors, TimeUnit}
@@ -105,19 +105,31 @@ class MavenUtilsSuite
     }
   }
 
-  test("runtime resolver configures Ivy network timeouts") {
-    val settings = MavenUtils.buildIvySettings(None, Some(tempIvyPath))
+  test("runtime resolver configures network timeouts for default and custom Ivy settings") {
+    val settingsFile = Paths.get(tempIvyPath, "timeout-ivysettings.xml")
+    Files.writeString(
+      settingsFile,
+      s"""<ivysettings>
+         |  <settings defaultResolver="custom"/>
+         |  <resolvers>
+         |    <ibiblio name="custom" m2compatible="true"
+         |      root="${Paths.get(tempIvyPath).toUri}"/>
+         |  </resolvers>
+         |</ivysettings>""".stripMargin)
+    val settingsToTest = Seq(
+      MavenUtils.buildIvySettings(None, Some(tempIvyPath)),
+      MavenUtils.loadIvySettings(settingsFile.toString, None, Some(tempIvyPath)))
 
-    MavenUtils.setResolverTimeouts(settings, connectTimeoutMs = 1234, readTimeoutMs = 5678)
+    settingsToTest.foreach { settings =>
+      MavenUtils.setResolverTimeouts(settings, connectTimeoutMs = 1234, readTimeoutMs = 5678)
 
-    val resolvers = settings.getDefaultResolver
-      .asInstanceOf[ChainResolver]
-      .getResolvers
-      .asScala
-      .collect { case resolver: AbstractResolver => resolver }
-    assert(resolvers.nonEmpty)
-    assert(resolvers.forall(_.getTimeoutConstraint.getConnectionTimeout == 1234))
-    assert(resolvers.forall(_.getTimeoutConstraint.getReadTimeout == 5678))
+      val resolvers = settings.getResolvers.asScala.collect {
+        case resolver: AbstractResolver => resolver
+      }
+      assert(resolvers.nonEmpty)
+      assert(resolvers.forall(_.getTimeoutConstraint.getConnectionTimeout == 1234))
+      assert(resolvers.forall(_.getTimeoutConstraint.getReadTimeout == 5678))
+    }
   }
 
   test("add dependencies works correctly") {
@@ -279,6 +291,68 @@ class MavenUtilsSuite
         SparkThreadUtils.awaitResultNoSparkExceptionConversion(first, 5.seconds)
       }
     } finally {
+      executor.shutdownNow()
+    }
+  }
+
+  test("runtime dependency resolver cancels active Ivy resolution") {
+    val executor = Executors.newFixedThreadPool(2)
+    implicit val executionContext: ExecutionContext =
+      ExecutionContext.fromExecutorService(executor)
+    val server = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+    val requestAccepted = new CountDownLatch(1)
+    val releaseRequest = new CountDownLatch(1)
+    val serverFuture = Future {
+      val socket = server.accept()
+      try {
+        requestAccepted.countDown()
+        releaseRequest.await()
+      } finally {
+        socket.close()
+      }
+    }
+    try {
+      val settings = Paths.get(tempIvyPath, "cancellable-ivysettings.xml")
+      Files.writeString(
+        settings,
+        s"""<ivysettings>
+           |  <settings defaultResolver="blocked"/>
+           |  <resolvers>
+           |    <ibiblio name="blocked" m2compatible="true"
+           |      root="http://127.0.0.1:${server.getLocalPort}"/>
+           |  </resolvers>
+           |</ivysettings>""".stripMargin)
+      val cancelled = new AtomicBoolean(false)
+      val resolver = new RuntimeDependencyResolver(
+        ivySettingsPath = Some(settings.toString),
+        ivyPath = Some(Paths.get(tempIvyPath, "cancelled").toString))
+      val resolution = Future {
+        resolver.resolve(
+          URI.create("ivy://my.runtime.active:mylib:0.1"),
+          resolverTimeoutMs,
+          resolverTimeoutMs,
+          isCancelled = () => cancelled.get())
+      }
+
+      assert(requestAccepted.await(5, TimeUnit.SECONDS))
+      cancelled.set(true)
+      intercept[CancellationException] {
+        SparkThreadUtils.awaitResultNoSparkExceptionConversion(resolution, 5.seconds)
+      }
+
+      val next = MavenCoordinate("my.runtime.after.cancel", "mylib", "0.1")
+      IvyTestUtils.withRepository(next, None, None) { repo =>
+        val resolved = MavenUtils.resolveMavenCoordinates(
+          next.toString,
+          MavenUtils.buildIvySettings(Some(repo), Some(tempIvyPath)),
+          transitive = true,
+          isTest = true)
+        assert(resolved.nonEmpty)
+      }
+    } finally {
+      releaseRequest.countDown()
+      server.close()
+      SparkThreadUtils.awaitResultNoSparkExceptionConversion(serverFuture, 5.seconds)
       executor.shutdownNow()
     }
   }
