@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
+import org.apache.parquet.column.Encoding
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.hadoop.util.HadoopInputFile
 
@@ -190,6 +191,62 @@ class ParquetColumnIndexSuite extends ParquetTest with SharedSparkSession {
       val parquetDf = spark.read.parquet(file.getCanonicalPath)
       actions.foreach { action =>
         checkAnswer(action(parquetDf), action(df))
+      }
+    }
+  }
+
+  test("SPARK-59831: reading unaligned pages - BYTE_STREAM_SPLIT") {
+    // BYTE_STREAM_SPLIT is enabled for the floating point columns, whose pages are split by
+    // size. The pages of _1 are split by size with v1 pages, where it is PLAIN encoded, and by
+    // row count with v2 pages, where its DELTA_BINARY_PACKED values are tiny. With v1 pages
+    // the DOUBLE columns buffer as many bytes per row as _1 and get the same pages, so only
+    // the FLOAT columns are unaligned with _1. With v2 pages all of them are. In the unaligned
+    // columns, the rows outside the row ranges are skipped within the BYTE_STREAM_SPLIT pages.
+    // _2 and _3 are required, and _4 and _5 have nulls.
+    val df = spark.range(0, 2000).selectExpr(
+      "id as _1",
+      "cast(id as float) as _2",
+      "cast(id as double) as _3",
+      "if(id >= 400 and id < 450, null, cast(id as float)) as _4",
+      "if(id % 3 = 0, null, cast(id as double)) as _5")
+    Seq("PARQUET_1_0", "PARQUET_2_0").foreach { version =>
+      withTempPath { file =>
+        df.coalesce(1)
+          .write
+          .option("parquet.writer.version", version)
+          .option("parquet.enable.dictionary", "false")
+          .option("parquet.enable.bytestreamsplit", "true")
+          .option("parquet.page.size", "1024")
+          .option("parquet.page.row.count.limit", "500")
+          .parquet(file.getCanonicalPath)
+
+        val parquetFile = file.listFiles().filter(_.getName.startsWith("part")).head
+        val in = HadoopInputFile.fromPath(
+          new Path(parquetFile.getCanonicalPath), spark.sessionState.newHadoopConf())
+        Utils.tryWithResource(ParquetFileReader.open(in)) { reader =>
+          val columns = reader.getFooter.getBlocks.get(0).getColumns.asScala
+            .map(c => c.getPath.toDotString -> c).toMap
+          def pageFirstRows(name: String): Set[Long] = {
+            val offsetIndex = reader.readOffsetIndex(columns(name))
+            (0 until offsetIndex.getPageCount).map(offsetIndex.getFirstRowIndex).toSet
+          }
+          Seq("_2", "_3", "_4", "_5").foreach { name =>
+            assert(columns(name).getEncodings.contains(Encoding.BYTE_STREAM_SPLIT), name)
+          }
+          val filterPages = pageFirstRows("_1")
+          assert(filterPages.size > 1)
+          val unaligned =
+            if (version == "PARQUET_1_0") Seq("_2", "_4") else Seq("_2", "_3", "_4", "_5")
+          unaligned.foreach { name =>
+            // Some row range starts or ends inside a page of this column.
+            assert(!filterPages.subsetOf(pageFirstRows(name)), s"$version $name")
+          }
+        }
+
+        val parquetDf = spark.read.parquet(file.getCanonicalPath)
+        actions.foreach { action =>
+          checkAnswer(action(parquetDf), action(df))
+        }
       }
     }
   }
