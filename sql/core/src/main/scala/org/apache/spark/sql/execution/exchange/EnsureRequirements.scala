@@ -142,11 +142,15 @@ case class EnsureRequirements(
               // A key row holds the values of the partition expressions. `keysSatisfy` admits a
               // partitioning here only when those expressions are the ordering's, position by
               // position, so each sort order reads its position of the key row. The expression
-              // need not be a bare column, e.g. a shuffled side's join key `100 - b`.
+              // need not be a bare column. A join can report the other side's join key, e.g.
+              // `100 - b`.
+              assert(o.areAllClusterKeysMatched(satisfyingKeyedPartitioning.expressions),
+                "the partition expressions must be the ordering's, position by position")
               val keyRowOrdering = RowOrdering.create(
-                o.ordering.zipWithIndex.map { case (order, i) =>
-                  SortOrder(BoundReference(i, order.child.dataType, nullable = true),
-                    order.direction, order.nullOrdering, Seq.empty)
+                o.ordering.zip(satisfyingKeyedPartitioning.keyDataTypes).zipWithIndex.map {
+                  case ((order, dataType), i) =>
+                    order.copy(child = BoundReference(i, dataType, nullable = true),
+                      sameOrderExpressions = Seq.empty)
                 },
                 Nil)
               val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
@@ -533,15 +537,17 @@ case class EnsureRequirements(
           .orElse(reorderJoinKeysRecursively(
             leftKeys, rightKeys, leftPartitioning, None))
       case (Some(kp: KeyedPartitioning), _) =>
-        // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
-        // attribute per partition expression.
+        // A scan reports one column per partition expression. A side a join laid out on another
+        // side's keys can report an expression over several, e.g. `b + c`. `reorder` then sees
+        // more columns than keys and gives up.
         val leafExprs = kp.expressions.flatMap(_.references)
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, leftKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, None, rightPartitioning))
       case (_, Some(kp: KeyedPartitioning)) =>
-        // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
-        // attribute per partition expression.
+        // A scan reports one column per partition expression. A side a join laid out on another
+        // side's keys can report an expression over several, e.g. `b + c`. `reorder` then sees
+        // more columns than keys and gives up.
         val leafExprs = kp.expressions.flatMap(_.references)
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, rightKeys)
             .orElse(reorderJoinKeysRecursively(
