@@ -383,12 +383,6 @@ class Catalog:
 
         .. versionadded:: 4.2.0
 
-        Notes
-        -----
-        For V2 tables, this also includes the table's display-only properties. These entries
-        may be transient and unsuitable for copying into ``CREATE TABLE`` or ``ALTER TABLE``.
-        Use :meth:`getCreateTableString` to obtain the table's DDL.
-
         Parameters
         ----------
         tableName : str
@@ -398,6 +392,12 @@ class Catalog:
         -------
         dict
             Map of property key to value.
+
+        Notes
+        -----
+        For V2 tables, the returned dict also includes display-only properties, which may be
+        transient. These entries are excluded from the table DDL returned by
+        :meth:`getCreateTableString`.
 
         Examples
         --------

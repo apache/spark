@@ -104,6 +104,13 @@ public interface Table extends Relation {
    * {@link TableCatalog#PROP_LOCATION} are ignored in this map. Table type and other reserved
    * metadata are read from {@code properties()}.
    *
+   * <p>{@code ALTER TABLE ... SET/UNSET TBLPROPERTIES} only changes {@code properties()}.
+   * Display-only entries are controlled by the catalog and cannot be removed with
+   * {@code UNSET TBLPROPERTIES}.
+   *
+   * <p>For now, {@code SHOW TABLE EXTENDED} omits these entries for the built-in session catalog
+   * and its {@link CatalogExtension}s.
+   *
    * <p>These entries may be transient and are excluded from {@code SHOW CREATE TABLE}. The
    * default implementation returns an empty map.
    *

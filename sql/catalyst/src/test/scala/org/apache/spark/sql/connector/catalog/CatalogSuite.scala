@@ -107,14 +107,20 @@ class CatalogSuite extends SparkFunSuite {
     val table = catalog.createTable(testIdent, new TableInfo.Builder()
       .withColumns(columns)
       .withProperties(util.Map.of("persisted", "stored"))
-      .withDisplayProperties(util.Map.of("catalog-label", "catalog-value"))
-      .build())
-    val loaded = catalog.loadTable(testIdent)
+      .build()).asInstanceOf[InMemoryBaseTable]
+    table.setDisplayProperties(util.Map.of("catalog-label", "catalog-value"))
+    table.setVersion("3")
+    table.setValidatedVersion("2")
+    val loaded = catalog.loadTable(testIdent).asInstanceOf[InMemoryBaseTable]
     assert(loaded ne table)
     assert(loaded.displayProperties() === util.Map.of("catalog-label", "catalog-value"))
+    assert(loaded.version() === "3")
+    assert(loaded.validatedVersion() === "2")
     catalog.pinTable(testIdent, "snapshot")
 
-    catalog.alterTable(testIdent, TableChange.setProperty("persisted", "updated"))
+    val altered = catalog.alterTable(testIdent, TableChange.setProperty("persisted", "updated"))
+      .asInstanceOf[InMemoryBaseTable]
+    assert(altered.validatedVersion() === "2")
     assert(CatalogV2Util.tablePropertiesForDisplay(catalog.loadTable(testIdent)) ===
       Map("persisted" -> "updated", "catalog-label" -> "catalog-value"))
     assert(CatalogV2Util.tablePropertiesForDisplay(catalog.loadTable(testIdent, "snapshot")) ===
