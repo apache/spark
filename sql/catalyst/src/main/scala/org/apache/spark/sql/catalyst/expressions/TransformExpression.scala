@@ -36,9 +36,9 @@ import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, MapType, St
  * questions are answered by this one value, so "same function" and "same reduced key space" cannot
  * disagree about which transforms are the same.
  *
- * It carries no exprIds (a column argument is [[TransformFunctionId.ArgumentShape.Column]], not the
- * attribute), so an expression can hold one in a plain field and expression equality still answers
- * the same after canonicalization.
+ * It carries no exprIds (a column argument is [[TransformFunctionId.ArgumentShape.ColumnRef]], not
+ * the attribute), so an expression can hold one in a plain field and expression equality still
+ * answers the same after canonicalization.
  *
  * @param canonicalName the transform function's canonical name
  * @param argumentShapes one entry per argument, in order. Positions are part of the identity, so
@@ -66,7 +66,7 @@ object TransformFunctionId {
      * part of the identity -- the two sides of a join reference different columns by construction,
      * and `KeyedShuffleSpec.keyPositions` reconciles them separately.
      */
-    case object Column extends ArgumentShape
+    case object ColumnRef extends ArgumentShape
   }
 }
 
@@ -113,7 +113,7 @@ case class TransformExpression(
     val shapes = children.map {
       case l: Literal => Some(ArgumentShape.Param(l))
       case t: TransformExpression => t.functionId.map(ArgumentShape.Nested(_))
-      case c if TransformExpression.isColumnRef(c) => Some(ArgumentShape.Column)
+      case c if TransformExpression.isColumnRef(c) => Some(ArgumentShape.ColumnRef)
       case _ => None
     }
     if (shapes.forall(_.isDefined)) {
