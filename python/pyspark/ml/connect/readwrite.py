@@ -14,17 +14,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import cast, Type, TYPE_CHECKING, Union, Dict, Any
+
+# TODO: The type design of RemoteMLWriter is not very good. In saveInstance,
+# we try to call session() with a connect session, but the session() method
+# accepts a classic session. What's make it worse is that mypy considers some
+# of the branches as unreachable. We need a full re-design of this module.
+# mypy: disable-error-code="arg-type"
+
+from typing import TYPE_CHECKING, Any, Dict, Type, Union, cast
 
 import pyspark.sql.connect.proto as pb2
-from pyspark.ml.connect.serialize import serialize_ml_params, deserialize, deserialize_param
-from pyspark.ml.util import MLWriter, MLReader, RL
+from pyspark.ml.connect.serialize import deserialize, deserialize_param, serialize_ml_params
+from pyspark.ml.util import RL, MLReader, MLWriter
 from pyspark.ml.wrapper import JavaWrapper
 
 if TYPE_CHECKING:
     from pyspark.core.context import SparkContext
-    from pyspark.sql.connect.session import SparkSession
     from pyspark.ml.util import JavaMLReadable, JavaMLWritable
+    from pyspark.sql.connect.session import SparkSession
 
 
 class RemoteMLWriter(MLWriter):
@@ -58,17 +65,17 @@ class RemoteMLWriter(MLWriter):
         shouldOverwrite: bool = False,
         optionMap: Dict[str, Any] = {},
     ) -> None:
-        from pyspark.ml.wrapper import JavaModel, JavaEstimator, JavaTransformer
-        from pyspark.ml.evaluation import JavaEvaluator
-        from pyspark.ml.pipeline import Pipeline, PipelineModel
         from pyspark.ml.classification import OneVsRest, OneVsRestModel
         from pyspark.ml.clustering import PowerIterationClustering
+        from pyspark.ml.evaluation import JavaEvaluator
+        from pyspark.ml.pipeline import Pipeline, PipelineModel
         from pyspark.ml.tuning import (
             CrossValidator,
             CrossValidatorModel,
             TrainValidationSplit,
             TrainValidationSplitModel,
         )
+        from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer
 
         # Spark Connect ML is built on scala Spark.ML, that means we're only
         # supporting JavaModel or JavaEstimator or JavaEvaluator
@@ -119,21 +126,21 @@ class RemoteMLWriter(MLWriter):
 
             RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             pl_writer = PipelineWriter(instance)
-            pl_writer.session(session)  # type: ignore[arg-type]
+            pl_writer.session(session)
             pl_writer.save(path)
         elif isinstance(instance, PipelineModel):
             from pyspark.ml.pipeline import PipelineModelWriter
 
             RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             plm_writer = PipelineModelWriter(instance)
-            plm_writer.session(session)  # type: ignore[arg-type]
+            plm_writer.session(session)
             plm_writer.save(path)
         elif isinstance(instance, CrossValidator):
             from pyspark.ml.tuning import CrossValidatorWriter
 
             RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             cv_writer = CrossValidatorWriter(instance)
-            cv_writer.session(session)  # type: ignore[arg-type]
+            cv_writer.session(session)
             cv_writer.save(path)
         elif isinstance(instance, CrossValidatorModel):
             from pyspark.ml.tuning import CrossValidatorModelWriter
@@ -141,7 +148,7 @@ class RemoteMLWriter(MLWriter):
             RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             cvm_writer = CrossValidatorModelWriter(instance)
             cvm_writer.optionMap = optionMap
-            cvm_writer.session(session)  # type: ignore[arg-type]
+            cvm_writer.session(session)
             cvm_writer.save(path)
         elif isinstance(instance, TrainValidationSplit):
             from pyspark.ml.tuning import TrainValidationSplitWriter
@@ -155,21 +162,21 @@ class RemoteMLWriter(MLWriter):
             RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             tvsm_writer = TrainValidationSplitModelWriter(instance)
             tvsm_writer.optionMap = optionMap
-            tvsm_writer.session(session)  # type: ignore[arg-type]
+            tvsm_writer.session(session)
             tvsm_writer.save(path)
         elif isinstance(instance, OneVsRest):
             from pyspark.ml.classification import OneVsRestWriter
 
             RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             ovr_writer = OneVsRestWriter(instance)
-            ovr_writer.session(session)  # type: ignore[arg-type]
+            ovr_writer.session(session)
             ovr_writer.save(path)
         elif isinstance(instance, OneVsRestModel):
             from pyspark.ml.classification import OneVsRestModelWriter
 
             RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             ovrm_writer = OneVsRestModelWriter(instance)
-            ovrm_writer.session(session)  # type: ignore[arg-type]
+            ovrm_writer.session(session)
             ovrm_writer.save(path)
 
         elif isinstance(instance, PowerIterationClustering):
@@ -179,7 +186,7 @@ class RemoteMLWriter(MLWriter):
             transformer._resetUid(instance.uid)
             transformer._paramMap = instance._paramMap
             RemoteMLWriter.saveInstance(
-                transformer,  # type: ignore[arg-type]
+                transformer,
                 path,
                 session,
                 shouldOverwrite,
@@ -217,17 +224,17 @@ class RemoteMLReader(MLReader[RL]):
         path: str,
         session: "SparkSession",
     ) -> RL:
-        from pyspark.ml.wrapper import JavaModel, JavaEstimator, JavaTransformer
-        from pyspark.ml.evaluation import JavaEvaluator
-        from pyspark.ml.pipeline import Pipeline, PipelineModel
         from pyspark.ml.classification import OneVsRest, OneVsRestModel
         from pyspark.ml.clustering import PowerIterationClustering
+        from pyspark.ml.evaluation import JavaEvaluator
+        from pyspark.ml.pipeline import Pipeline, PipelineModel
         from pyspark.ml.tuning import (
             CrossValidator,
             CrossValidatorModel,
             TrainValidationSplit,
             TrainValidationSplitModel,
         )
+        from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer
 
         if (
             issubclass(clazz, JavaModel)

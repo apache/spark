@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -131,6 +132,27 @@ trait XMLArchiveReadBase extends ArchiveReadSuiteBase {
       Seq(entryName(0) -> xmlBytes("<row><id>1</id><name>Alice</name>")),
       extraOptions = Map("multiLine" -> "true"),
       schema = corruptSchema)
+  }
+
+  if (supportsMidAdvanceFailure) {
+    test("XML: multiLine inference keeps records read before a mid-advance failure " +
+        "(ignoreCorruptFiles)") {
+      // Entry 0 is read, then advancing to a later entry throws (not at open). A whole-archive drop
+      // would lose entry 0's `extra`; aborting the traversal would lose the sibling file's `later`.
+      val opts = Map("multiLine" -> "true")
+      withArchiveFile() { archive =>
+        writeArchiveFailingAfterFirstEntry(archive, entryName(0) ->
+          xmlBytes("<rows><row><id>1</id><name>Alice</name><extra>9</extra></row></rows>"))
+        Files.write(new File(archive.getParentFile, s"later.$fileExtension").toPath,
+          xmlBytes("<rows><row><id>2</id><name>Bob</name><later>7</later></row></rows>"))
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+          val schema = inferredSchema(Seq(archive.getParentFile.getCanonicalPath), opts)
+          assert(schema.fieldNames.toSet == Set("id", "name", "extra", "later"),
+            "expected `extra` (pre-failure entry) and `later` (sibling file) in the inferred " +
+              s"schema after the mid-advance skip, got $schema")
+        }
+      }
+    }
   }
 }
 

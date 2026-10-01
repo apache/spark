@@ -19,7 +19,15 @@
 Wrappers around spark that correspond to common pandas functions.
 """
 
+import json
+import pickle
+import warnings
+from collections.abc import Iterable
+from datetime import tzinfo
+from functools import reduce
+from io import BytesIO
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -30,81 +38,74 @@ from typing import (
     Sized,
     Tuple,
     Type,
-    TYPE_CHECKING,
     Union,
     cast,
     no_type_check,
 )
-from collections.abc import Iterable
-from datetime import tzinfo
-from functools import reduce
-from io import BytesIO
-import pickle
-import json
-import warnings
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from pandas.api.types import (
     is_datetime64_dtype,
     is_list_like,
 )
 from pandas.tseries.offsets import DateOffset
-import pyarrow as pa
-import pyarrow.parquet as pq
 
+from pyspark import pandas as ps
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.loose_version import LooseVersion
-from pyspark.sql import functions as F, Column as PySparkColumn
-from pyspark.sql.functions import pandas_udf
-from pyspark.sql.types import (
-    ByteType,
-    ShortType,
-    IntegerType,
-    LongType,
-    FloatType,
-    DoubleType,
-    BooleanType,
-    NumericType,
-    TimestampType,
-    TimestampNTZType,
-    DecimalType,
-    StringType,
-    DateType,
-    StructType,
-    StructField,
-    DataType,
-)
-from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
-from pyspark import pandas as ps
 from pyspark.pandas._typing import Axis, Dtype, Label, Name
 from pyspark.pandas.base import IndexOpsMixin
+from pyspark.pandas.config import get_option
+from pyspark.pandas.frame import DataFrame, _reduce_spark_multi
+from pyspark.pandas.indexes import DatetimeIndex, Index, TimedeltaIndex
+from pyspark.pandas.indexes.multi import MultiIndex
+from pyspark.pandas.internal import (
+    DEFAULT_SERIES_NAME,
+    HIDDEN_COLUMNS,
+    NATURAL_ORDER_COLUMN_NAME,
+    SPARK_INDEX_NAME_FORMAT,
+    InternalField,
+    InternalFrame,
+)
+from pyspark.pandas.series import Series, first_series
+from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.utils import (
     align_diff_frames,
     default_session,
     is_ansi_mode_enabled,
     is_name_like_tuple,
     is_name_like_value,
+    log_advice,
     name_like_string,
     same_anchor,
     scol_for,
     validate_axis,
-    log_advice,
 )
-from pyspark.pandas.config import get_option
-from pyspark.pandas.frame import DataFrame, _reduce_spark_multi
-from pyspark.pandas.internal import (
-    InternalFrame,
-    InternalField,
-    DEFAULT_SERIES_NAME,
-    HIDDEN_COLUMNS,
-    SPARK_INDEX_NAME_FORMAT,
-    NATURAL_ORDER_COLUMN_NAME,
+from pyspark.sql import Column as PySparkColumn
+from pyspark.sql import functions as F
+from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
+from pyspark.sql.functions import pandas_udf
+from pyspark.sql.types import (
+    BooleanType,
+    ByteType,
+    DataType,
+    DateType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    NumericType,
+    ShortType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampNTZType,
+    TimestampType,
 )
-from pyspark.pandas.series import Series, first_series
-from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
-from pyspark.pandas.indexes import Index, DatetimeIndex, TimedeltaIndex
-from pyspark.pandas.indexes.multi import MultiIndex
 
 if TYPE_CHECKING:
     from pandas._typing import HTMLFlavors
@@ -4046,15 +4047,17 @@ _get_dummies_acceptable_types = _get_dummies_default_accept_types + (
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import shutil
     import sys
     import tempfile
     import uuid
-    from pyspark.sql import SparkSession
-    import pyspark.pandas.namespace
+
     from pandas.util.version import Version
+
+    import pyspark.pandas.namespace
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

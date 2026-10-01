@@ -709,7 +709,24 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT randstr(-1, 0) AS result
 -- !query analysis
-[Analyzer test output redacted due to nondeterminism]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "-1",
+    "exprName" : "`length`",
+    "sqlExpr" : "\"randstr(-1, 0)\"",
+    "valueRange" : "[0, 2147483647]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "randstr(-1, 0)"
+  } ]
+}
 
 
 -- !query

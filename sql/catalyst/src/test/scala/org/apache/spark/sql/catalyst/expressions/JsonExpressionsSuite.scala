@@ -803,6 +803,15 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "STRUCT<col: BIGINT>")
   }
 
+  test("schema_of_json and from_json trim CHAR padding") {
+    val document = """{"col":1}   """
+    val input = Literal.create(document, CharType(document.length, "UTF8_LCASE"))
+    val schema = new StructType().add("col", LongType)
+
+    checkEvaluation(SchemaOfJson(input, Map.empty), "STRUCT<col: BIGINT>")
+    checkEvaluation(JsonToStructs(schema, Map.empty, input, UTC_OPT), InternalRow(1L))
+  }
+
   test("parse date with locale") {
     Seq("en-US", "ru-RU").foreach { langTag =>
       val locale = Locale.forLanguageTag(langTag)
@@ -906,6 +915,33 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     ).foreach {
       case (input, expected) =>
         checkEvaluation(JsonObjectKeys(Literal(input)), expected)
+    }
+  }
+
+  test("json_typeof") {
+    Seq(
+      // Invalid or empty inputs return null.
+      ("", null),
+      ("bad", null),
+      ("""{"key": 45, "random_string"}""", null),
+      // Trailing content after a valid value is not a single well-formed JSON document.
+      ("123 true", null),
+      // Valid JSON values return the type of the outermost value.
+      ("{}", "object"),
+      ("""{"key": 1, "arr": [1, 2]}""", "object"),
+      ("[]", "array"),
+      ("[1, 2, 3]", "array"),
+      ("\"hello\"", "string"),
+      ("123", "number"),
+      ("1.5", "number"),
+      ("-123", "number"),
+      ("-1.5", "number"),
+      ("true", "boolean"),
+      ("false", "boolean"),
+      ("null", "null")
+    ).foreach {
+      case (input, expected) =>
+        checkEvaluation(JsonTypeof(Literal(input)), expected)
     }
   }
 
@@ -1039,6 +1075,33 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       JsonToStructs(inputSchema, Map.empty, Literal(expectedJson), UTC_OPT),
       input)
+  }
+
+  test("JsonToStructs, GetJsonObject, JsonTuple, MultiGetJsonObject, JsonValue are stateful " +
+      "and produce fresh copies") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val jsonToStructs = JsonToStructs(schema, Map.empty, Literal("{}"), UTC_OPT)
+    assert(jsonToStructs.stateful)
+    assert(jsonToStructs.freshCopyIfContainsStatefulExpression() ne jsonToStructs)
+
+    val getJsonObject = GetJsonObject(Literal("{}"), Literal("$.a"))
+    assert(getJsonObject.stateful)
+    assert(getJsonObject.freshCopyIfContainsStatefulExpression() ne getJsonObject)
+
+    val jsonTuple = JsonTuple(Literal("{}") :: Literal("a") :: Nil)
+    assert(jsonTuple.stateful)
+    assert(jsonTuple.freshCopyIfContainsStatefulExpression() ne jsonTuple)
+
+    val multiGetJsonObject = MultiGetJsonObject(Literal("{}"), Seq("$.a", "$.b"))
+    assert(multiGetJsonObject.stateful)
+    assert(multiGetJsonObject.freshCopyIfContainsStatefulExpression() ne multiGetJsonObject)
+
+    // JsonValue reuses a mutable row to cast the extracted scalar, so it must be stateful.
+    val jsonValue = JsonValue(
+      Literal("{}"), "$.a", StringType,
+      JsonValueBehavior.Null, JsonValueBehavior.Null, None, None)
+    assert(jsonValue.stateful)
+    assert(jsonValue.freshCopyIfContainsStatefulExpression() ne jsonValue)
   }
 
 }

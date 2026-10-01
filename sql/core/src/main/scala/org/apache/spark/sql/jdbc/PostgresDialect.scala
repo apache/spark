@@ -260,7 +260,9 @@ private case class PostgresDialect()
 
   // See https://www.postgresql.org/docs/current/errcodes-appendix.html
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    Option(exception.getSQLState).exists(_.startsWith("42"))
+    // SQLSTATE 42000 covers both syntax errors and access-rule violations, so preserve the
+    // original exception for that ambiguous state.
+    exception.getSQLState == "42601"
   }
 
   // SHOW INDEX syntax
@@ -388,7 +390,8 @@ private case class PostgresDialect()
     if (!oldTable.namespace().sameElements(newTable.namespace())) {
       throw QueryCompilationErrors.cannotRenameTableAcrossSchemaError()
     }
-    s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} RENAME TO ${newTable.name()}"
+    s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} RENAME TO " +
+      s"${quoteIdentifier(newTable.name())}"
   }
 
   /**
@@ -436,7 +439,8 @@ private case class PostgresDialect()
              |FROM pg_attribute
              |  JOIN pg_class ON pg_attribute.attrelid = pg_class.oid
              |  JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
-             |WHERE pg_class.relname = '$tableName' and pg_attribute.attname = '$columnName'
+             |WHERE pg_class.relname = '${escapeSql(tableName)}'
+             |  and pg_attribute.attname = '${escapeSql(columnName)}'
              |""".stripMargin
         try {
           Using.resource(conn.createStatement()) { stmt =>

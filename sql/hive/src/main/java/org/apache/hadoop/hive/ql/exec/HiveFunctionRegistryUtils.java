@@ -18,6 +18,10 @@
 package org.apache.hadoop.hive.ql.exec;
 
 import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.ql.udf.SettableUDF;
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDF;
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDFBridge;
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorUtils.PrimitiveGrouping;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
@@ -28,6 +32,8 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+
+import org.apache.hadoop.util.ReflectionUtils;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
@@ -338,5 +344,54 @@ public class HiveFunctionRegistryUtils {
         udfMethods.add(bestMatch);
       }
     }
+  }
+
+  /**
+   * Create a copy of an existing GenericUDF.
+   */
+  public static GenericUDF cloneGenericUDF(GenericUDF genericUDF) {
+    if (null == genericUDF) {
+      return null;
+    }
+
+    GenericUDF clonedUDF;
+    if (genericUDF instanceof GenericUDFBridge) {
+      GenericUDFBridge bridge = (GenericUDFBridge) genericUDF;
+      clonedUDF = new GenericUDFBridge(bridge.getUdfName(), bridge.isOperator(),
+          bridge.getUdfClassName());
+    } else if (genericUDF instanceof GenericUDFMacro) {
+      GenericUDFMacro bridge = (GenericUDFMacro) genericUDF;
+      clonedUDF = new GenericUDFMacro(bridge.getMacroName(), bridge.getBody().clone(),
+          bridge.getColNames(), bridge.getColTypes());
+    } else {
+      clonedUDF = ReflectionUtils.newInstance(genericUDF.getClass(), null);
+    }
+
+    if (clonedUDF != null) {
+      // Copy info that may be required in the new copy.
+      // The SettableUDF calls below could be replaced using this mechanism as well.
+      try {
+        genericUDF.copyToNewInstance(clonedUDF);
+      } catch (UDFArgumentException err) {
+        throw new IllegalArgumentException(err);
+      }
+
+      // The original may have settable info that needs to be added to the new copy.
+      if (genericUDF instanceof SettableUDF) {
+        try {
+          TypeInfo typeInfo = ((SettableUDF)genericUDF).getTypeInfo();
+          if (typeInfo != null) {
+            ((SettableUDF)clonedUDF).setTypeInfo(typeInfo);
+          }
+        } catch (UDFArgumentException err) {
+          // In theory this should not happen - if the original copy of the UDF had this
+          // data, we should be able to set the UDF copy with this same settableData.
+          LOG.error("Unable to add settable data to UDF " + genericUDF.getClass());
+          throw new IllegalArgumentException(err);
+        }
+      }
+    }
+
+    return clonedUDF;
   }
 }

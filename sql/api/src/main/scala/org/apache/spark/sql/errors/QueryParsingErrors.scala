@@ -138,6 +138,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def duplicateJsonTableColumnError(columnName: String, ctx: JsonTableContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.DUPLICATE_JSON_TABLE_COLUMN",
+      messageParameters = Map("columnName" -> toSQLId(columnName)),
+      ctx)
+  }
+
   def clausesWithPipeOperatorsUnsupportedError(
       ctx: QueryOrganizationContext,
       clauses: String): Throwable = {

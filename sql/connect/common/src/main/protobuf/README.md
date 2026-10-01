@@ -14,9 +14,16 @@ reproducible environment.
 
 ### Build the image
 
+From the root of the Spark repository:
+
 ```bash
-docker build -t connect-cg dev/spark-test-image/connect-gen-protos/
+docker build -t connect-cg \
+  --build-context root=. \
+  dev/spark-test-image/connect-gen-protos/
 ```
+
+The `root` build context points at the Spark repository root so the Dockerfile
+can `COPY` `pyproject.toml` for dependency installation.
 
 ### Run the image
 

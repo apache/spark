@@ -83,7 +83,7 @@ class AsyncOffsetSeqLog(
    *         to indicate some write error.
    */
   def addAsync(batchId: Long, metadata: OffsetSeqBase): CompletableFuture[(Long, Boolean)] = {
-    require(metadata != null, "'null' metadata cannot written to a metadata log")
+    require(metadata != null, "'null' metadata cannot be written to a metadata log")
 
     def issueAsyncWrite(batchId: Long): CompletableFuture[Long] = {
       lastCommitIssuedTimestampMs.set(clock.getTimeMillis())

@@ -80,7 +80,8 @@ private case class DerbyDialect() extends JdbcDialect with NoLegacyJDBCError {
     }
     // New table name restriction:
     // https://db.apache.org/derby/docs/10.2/ref/rrefnewtablename.html#rrefnewtablename
-    s"RENAME TABLE ${getFullyQualifiedQuotedTableName(oldTable)} TO ${newTable.name()}"
+    s"RENAME TABLE ${getFullyQualifiedQuotedTableName(oldTable)} TO " +
+      s"${quoteIdentifier(newTable.name())}"
   }
 
   // Derby currently doesn't support comment on table. Here is the ticket to add the support

@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianMicros
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.nanosVal
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{Decimal, TimeType}
@@ -1199,6 +1200,49 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-57825: timestamp nanos add year-month interval preserves nanosWithinMicro") {
+    def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
+      TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+
+    // The epoch-micros part follows the micro `timestampAddMonths` (including the Jan-31 -> Feb-29
+    // day clamp in a leap year) while the sub-microsecond remainder is carried through unchanged.
+    assert(timestampNanosAddMonths(
+      nanos(date(2020, 1, 31, 12, 0, 0, 123000, LA), 789), 1, LA) ===
+      nanos(date(2020, 2, 29, 12, 0, 0, 123000, LA), 789))
+
+    outstandingZoneIds.foreach { zid =>
+      // The sub-microsecond remainder is preserved for the boundary values 0, 1 and 999.
+      Seq(0, 1, 999).foreach { rem =>
+        // Zero interval is a no-op on both the epoch-micros and the remainder.
+        assert(timestampNanosAddMonths(
+          nanos(date(2021, 3, 18, 19, 44, 1, 123456, zid), rem), 0, zid) ===
+          nanos(date(2021, 3, 18, 19, 44, 1, 123456, zid), rem))
+        // Adding whole years/months shifts only the month field, never the fraction.
+        assert(timestampNanosAddMonths(
+          nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), rem), 14, zid) ===
+          nanos(date(2021, 3, 2, 3, 4, 5, 123456, zid), rem))
+        // Subtracting months is symmetric.
+        assert(timestampNanosAddMonths(
+          nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), rem), -1, zid) ===
+          nanos(date(2019, 12, 2, 3, 4, 5, 123456, zid), rem))
+        // Pre-epoch (negative epochMicros) value.
+        assert(timestampNanosAddMonths(
+          nanos(date(1960, 1, 2, 3, 4, 5, 123456, zid), rem), 1, zid) ===
+          nanos(date(1960, 2, 2, 3, 4, 5, 123456, zid), rem))
+      }
+    }
+
+    // Consistency with the micro helper: epochMicros matches `timestampAddMonths` exactly and the
+    // remainder is independent of the interval amount.
+    outstandingZoneIds.foreach { zid =>
+      val start = nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), 789)
+      val months = 15
+      val result = timestampNanosAddMonths(start, months, zid)
+      assert(result.epochMicros === timestampAddMonths(start.epochMicros, months, zid))
+      assert(result.nanosWithinMicro === start.nanosWithinMicro)
+    }
+  }
+
   test("SPARK-57159: timestampNanosToEpochNanos packs into int64 epoch-nanoseconds") {
     def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
       TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
@@ -2191,6 +2235,77 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     intercept[ArithmeticException] {
       timeBucketYMInterval(1, Long.MinValue, 0L, utc)
     }
+  }
+
+  test("timeBucketDTIntervalNanos") {
+    val utc = ZoneOffset.UTC
+    // Micro-parity: zero remainder on both ts and origin matches the microsecond function.
+    assert(
+      timeBucketDTIntervalNanos(
+        15 * MICROS_PER_MINUTE,
+        nanosVal(date(2024, 1, 1, 11, 27, 0), 0),
+        nanosVal(0L, 0),
+        utc)
+        === nanosVal(
+          timeBucketDTInterval(15 * MICROS_PER_MINUTE, date(2024, 1, 1, 11, 27, 0), 0L, utc), 0))
+    // Boundary case: ts lands on the same microsecond as a bucket grid point, but with a
+    // smaller sub-micro remainder than the origin's -- ts's true instant is just before the
+    // grid point, so it belongs to the previous bucket.
+    assert(
+      timeBucketDTIntervalNanos(
+        MICROS_PER_SECOND,
+        nanosVal(3000000L, 200),
+        nanosVal(0L, 500),
+        utc)
+        === nanosVal(2000000L, 500))
+    // Same microsecond, but ts's remainder is >= origin's -- ts's true instant is at or after
+    // the grid point, so it starts the bucket there.
+    assert(
+      timeBucketDTIntervalNanos(
+        MICROS_PER_SECOND,
+        nanosVal(3000000L, 700),
+        nanosVal(0L, 500),
+        utc)
+        === nanosVal(3000000L, 500))
+    // Non-boundary case: ts's microsecond doesn't match any grid point's microsecond, so the
+    // sub-micro remainder never comes into play; result carries origin's remainder.
+    assert(
+      timeBucketDTIntervalNanos(
+        MICROS_PER_SECOND,
+        nanosVal(3500000L, 999),
+        nanosVal(0L, 500),
+        utc)
+        === nanosVal(3000000L, 500))
+    // Calendar-aware (multi-day) path also preserves origin's sub-micro remainder.
+    assert(
+      timeBucketDTIntervalNanos(
+        MICROS_PER_DAY,
+        nanosVal(date(2024, 1, 4, 0, 0, 0, 500), 999),
+        nanosVal(500, 250),
+        utc)
+        === nanosVal(date(2024, 1, 4, 0, 0, 0, 500), 250))
+  }
+
+  test("timeBucketYMIntervalNanos") {
+    val utc = ZoneOffset.UTC
+    // Micro-parity: zero remainder on both ts and origin matches the microsecond function.
+    assert(
+      timeBucketYMIntervalNanos(
+        1,
+        nanosVal(date(2024, 3, 15, 11, 27, 0), 0),
+        nanosVal(0L, 0),
+        utc)
+        === nanosVal(timeBucketYMInterval(1, date(2024, 3, 15, 11, 27, 0), 0L, utc), 0))
+    // Boundary case: ts lands exactly on the microsecond of a monthly grid point, but with a
+    // smaller sub-micro remainder than the origin's -- steps back to the previous bucket.
+    val marchFirst = date(2024, 3, 1, 0, 0, 0)
+    assert(
+      timeBucketYMIntervalNanos(1, nanosVal(marchFirst, 100), nanosVal(0L, 500), utc)
+        === nanosVal(date(2024, 2, 1, 0, 0, 0), 500))
+    // Same microsecond, but ts's remainder is >= origin's -- stays in the bucket starting there.
+    assert(
+      timeBucketYMIntervalNanos(1, nanosVal(marchFirst, 700), nanosVal(0L, 500), utc)
+        === nanosVal(marchFirst, 500))
   }
 
   test("SPARK-57033: java.time.LocalDateTime <-> TimestampNanosVal roundtrip") {

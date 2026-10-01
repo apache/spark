@@ -24,11 +24,15 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
-import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType, VariantType}
+import org.apache.spark.sql.types.{CharType, DataType, MapType, StringType, StructType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils extends EvalHelper with QueryErrorsBase {
@@ -58,13 +62,22 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
     dataType.asInstanceOf[StructType]
   }
 
-  def convertToMapData(exp: Expression): Map[String, String] = exp match {
+  def convertToMapData(exp: Expression, functionName: String): Map[String, String] = exp match {
     case m: CreateMap
       if AbstractMapType(
         StringTypeWithCollation(supportsTrimCollation = true),
         StringTypeWithCollation(supportsTrimCollation = true))
         .acceptsType(m.dataType) =>
-      val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
+      val preparedMap = ReplaceExpressions.replace(m)
+      val unsafeToEvaluate = preparedMap.references.nonEmpty ||
+        !preparedMap.deterministic || preparedMap.exists(_.isInstanceOf[Unevaluable])
+      val allowNonFoldable =
+        SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_NON_FOLDABLE_OPTIONS)
+      if (unsafeToEvaluate || (!preparedMap.foldable && !allowNonFoldable)) {
+        throw QueryCompilationErrors.nonFoldableArgumentError(
+          functionName, "options", m.dataType)
+      }
+      val arrayMap = preparedMap.eval().asInstanceOf[ArrayBasedMapData]
       ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
         if (key == null) {
           throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
@@ -219,5 +232,64 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
 
     a.groupingExpressions.foreach(checkValidGroupingExprs)
     a.aggregateExpressions.foreach(checkValidAggregateExpression)
+  }
+
+  /**
+   * Returns true if `e` is safe to evaluate unconditionally, i.e. on rows where the
+   * original plan would not have evaluated it: evaluating it must not raise an error and
+   * must not change the query result. This is the check to use when relocating an
+   * expression out of a short-circuited position, e.g. moving the base out of the taken
+   * branch of an If/CaseWhen, or hoisting a streamed-side join conjunct above the probe
+   * so it also runs for streamed rows that have no match.
+   *
+   * Only a whitelist of total, deterministic expressions qualifies:
+   *   - leaves: attribute references and literals;
+   *   - total accessors: GetStructField, GetArrayStructFields and GetMapValue never throw.
+   *     Note that GetArrayItem/ElementAt are NOT included: they throw on invalid ordinals
+   *     when ANSI mode is on;
+   *   - logic/predicates: And, Or, Not, comparisons, IsNull, IsNotNull, IsNaN, NullIf,
+   *     Coalesce, In and InSet are total boolean functions.
+   * Anything else (arithmetic, casts, string functions, UDFs, nested IF/CASE WHEN, ...)
+   * conservatively returns false. On top of the whitelist, the expression must be
+   * deterministic and must not contain subqueries.
+   *
+   * Note: this deliberately does not rely on [[Expression.throwable]], which is opt-in
+   * metadata that most expressions do not override. A throwing ScalaUDF with
+   * non-throwing children, for example, reports non-throwable.
+   */
+  def canEvaluateUnconditionally(e: Expression): Boolean =
+    e.deterministic && !e.containsPattern(PLAN_EXPRESSION) &&
+      canEvaluateUnconditionallyInternal(e)
+
+  private def canEvaluateUnconditionallyInternal(e: Expression): Boolean = e match {
+    case _: AttributeReference | _: Literal => true
+    case _: GetStructField | _: GetArrayStructFields | _: GetMapValue =>
+      e.children.forall(canEvaluateUnconditionallyInternal)
+    case _: And | _: Or | _: Not | _: BinaryComparison | _: IsNull | _: IsNotNull |
+         _: IsNaN | _: NullIf | _: Coalesce | _: In | _: InSet =>
+      e.children.forall(canEvaluateUnconditionallyInternal)
+    case _ => false
+  }
+}
+
+private[sql] trait SupportTrimmedCharInput extends UnaryExpression {
+
+  // Keep this type-based so the effective input does not change if SQLConf changes after analysis.
+  // A first-class CharType child already establishes that CHAR semantics apply.
+  @transient
+  protected final lazy val stringInput: Expression = child.dataType match {
+    case _: CharType =>
+      Invoke(
+        child,
+        "trimRight",
+        child.dataType,
+        returnNullable = false,
+        isDeterministic = child.deterministic)
+    case _ => child
+  }
+
+  protected final def trimStringInput(value: UTF8String): UTF8String = child.dataType match {
+    case _: CharType => value.trimRight()
+    case _ => value
   }
 }

@@ -22,8 +22,7 @@ import java.nio.channels.{ClosedByInterruptException, FileChannel}
 import java.nio.file.Files
 import java.util.zip.Checksum
 
-import org.apache.spark.SparkException
-import org.apache.spark.errors.SparkCoreErrors
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.MutableCheckedOutputStream
@@ -338,7 +337,11 @@ private[spark] class DiskBlockObjectWriter(
     recordWritten()
   }
 
-  override def write(b: Int): Unit = throw SparkCoreErrors.unsupportedOperationError()
+  override def write(b: Int): Unit = throw new SparkUnsupportedOperationException(
+    errorClass = "UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
+    messageParameters = Map(
+      "className" -> classOf[DiskBlockObjectWriter].getName,
+      "methodName" -> "write"))
 
   override def write(kvBytes: Array[Byte], offs: Int, len: Int): Unit = {
     if (!streamOpen) {

@@ -322,6 +322,16 @@ class PipelineModel private[ml] (
     @Since("1.4.0") val stages: Array[Transformer])
   extends Model[PipelineModel] with MLWritable with Logging {
 
+  private[spark] override def estimatedSize: Long = {
+    estimateMatadataSize + stages.iterator.map {
+      case model: Model[_] => model.estimatedSize
+      // Non-model transformers are skipped because:
+      // - ML Connect cache accounting counts only models.
+      // - They can retain incidental references, such as SparkSession.
+      case _ => 0L
+    }.sum
+  }
+
   /** A Java/Python-friendly auxiliary constructor. */
   private[ml] def this(uid: String, stages: ju.List[Transformer]) = {
     this(uid, stages.asScala.toArray)

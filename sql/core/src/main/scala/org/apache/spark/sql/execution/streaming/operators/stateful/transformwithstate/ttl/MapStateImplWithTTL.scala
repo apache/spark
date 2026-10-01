@@ -35,7 +35,7 @@ import org.apache.spark.util.NextIterator
  * @param userKeyEnc  - Spark SQL encoder for the map key
  * @param valEncoder - SQL encoder for state variable
  * @param ttlConfig  - the ttl configuration (time to live duration etc.)
- * @param batchTimestampMs - current batch processing timestamp.
+ * @param currentTimestampMs - function to get the current processing time timestamp.
  * @param prevBatchTimestampMs - batch timestamp from the previous micro-batch (exclusive).
  *                               Entries with expiration at or below this timestamp are assumed
  *                               to have been already cleaned up and will be skipped during
@@ -52,12 +52,12 @@ class MapStateImplWithTTL[K, V](
     userKeyEnc: ExpressionEncoder[Any],
     valEncoder: ExpressionEncoder[Any],
     ttlConfig: TTLConfig,
-    batchTimestampMs: Long,
+    currentTimestampMs: () => Long,
     prevBatchTimestampMs: Option[Long] = None,
     metrics: Map[String, SQLMetric])
   extends OneToOneTTLState(
     stateName, store, getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema), ttlConfig,
-    batchTimestampMs, prevBatchTimestampMs, metrics) with MapState[K, V] with Logging {
+    currentTimestampMs, prevBatchTimestampMs, metrics) with MapState[K, V] with Logging {
 
   private val stateTypesEncoder = new CompositeKeyStateEncoder(
     keyExprEnc, userKeyEnc, valEncoder, stateName, hasTtl = true)
@@ -84,7 +84,7 @@ class MapStateImplWithTTL[K, V](
     val retRow = store.get(encodedCompositeKey, stateName)
 
     if (retRow != null) {
-      if (!stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
+      if (!stateTypesEncoder.isExpired(retRow, currentTimestampMs())) {
         stateTypesEncoder.decodeValue(retRow).asInstanceOf[V]
       } else {
         null.asInstanceOf[V]
@@ -107,7 +107,7 @@ class MapStateImplWithTTL[K, V](
 
     val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
     val ttlExpirationMs = StateTTL
-      .calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
+      .calculateExpirationTimeForDuration(ttlConfig.ttlDuration, currentTimestampMs())
     val encodedValue = stateTypesEncoder.encodeValue(value, ttlExpirationMs)
 
     updatePrimaryAndSecondaryIndices(encodedCompositeKey, encodedValue, ttlExpirationMs)
@@ -120,7 +120,7 @@ class MapStateImplWithTTL[K, V](
     new NextIterator[(K, V)] {
       override protected def getNext(): (K, V) = {
         val iter = unsafeRowPairIterator.dropWhile { rowPair =>
-          stateTypesEncoder.isExpired(rowPair.value, batchTimestampMs)
+          stateTypesEncoder.isExpired(rowPair.value, currentTimestampMs())
         }
         if (iter.hasNext) {
           val currentRowPair = iter.next()

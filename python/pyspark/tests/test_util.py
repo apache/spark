@@ -23,10 +23,10 @@ from unittest.mock import patch
 from py4j.protocol import Py4JJavaError
 
 from pyspark import keyword_only
-from pyspark.util import _parse_memory, disable_gc
+from pyspark.find_spark_home import _find_spark_home
 from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import PySparkTestCase, eventually, timeout
-from pyspark.find_spark_home import _find_spark_home
+from pyspark.util import _parse_memory, disable_gc
 
 
 class KeywordOnlyTests(unittest.TestCase):
@@ -173,6 +173,7 @@ class HandleWorkerExceptionTests(unittest.TestCase):
 
     def run_handle_worker_exception(self, hide_traceback=None):
         import io
+
         from pyspark.util import handle_worker_exception
 
         try:

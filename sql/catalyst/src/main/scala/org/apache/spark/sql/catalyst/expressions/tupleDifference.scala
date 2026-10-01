@@ -31,6 +31,12 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
     _FUNC_(tupleSketch1, tupleSketch2) - Subtracts two binary representations of Datasketches
     TupleSketch objects with double summary data type using a TupleSketch AnotB object.
     Returns elements in the first sketch that are not in the second sketch. """,
+  arguments = """
+    Arguments:
+      * tupleSketch1 - A binary representation of a TupleSketch with double summary.
+      * tupleSketch2 - A binary representation of a TupleSketch with double summary
+          to subtract from the first sketch.
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), tuple_sketch_agg_double(col2, val2))) FROM VALUES (5, 5.0D, 4, 4.0D), (1, 1.0D, 4, 4.0D), (2, 2.0D, 5, 5.0D), (3, 3.0D, 1, 1.0D) tab(col1, val1, col2, val2);
@@ -67,6 +73,12 @@ case class TupleDifferenceDouble(left: Expression, right: Expression)
     _FUNC_(tupleSketch1, tupleSketch2) - Subtracts two binary representations of Datasketches
     TupleSketch objects with integer summary data type using a TupleSketch AnotB object.
     Returns elements in the first sketch that are not in the second sketch. """,
+  arguments = """
+    Arguments:
+      * tupleSketch1 - A binary representation of a TupleSketch with integer summary.
+      * tupleSketch2 - A binary representation of a TupleSketch with integer summary
+          to subtract from the first sketch.
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_integer(_FUNC_(tuple_sketch_agg_integer(col1, val1), tuple_sketch_agg_integer(col2, val2))) FROM VALUES (5, 5, 4, 4), (1, 1, 4, 4), (2, 2, 5, 5), (3, 3, 1, 1) tab(col1, val1, col2, val2);
@@ -103,6 +115,11 @@ case class TupleDifferenceInteger(left: Expression, right: Expression)
     _FUNC_(tupleSketch, thetaSketch) - Subtracts the binary representation of a
     Datasketches ThetaSketch from a TupleSketch with double summary data type using a TupleSketch
     AnotB object. Returns elements in the TupleSketch that are not in the ThetaSketch. """,
+  arguments = """
+    Arguments:
+      * tupleSketch - A binary representation of a TupleSketch with double summary.
+      * thetaSketch - A binary representation of a ThetaSketch to subtract from the TupleSketch.
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), theta_sketch_agg(col2))) FROM VALUES (5, 5.0D, 4), (1, 1.0D, 4), (2, 2.0D, 5), (3, 3.0D, 1) tab(col1, val1, col2);
@@ -139,6 +156,11 @@ case class TupleDifferenceThetaDouble(left: Expression, right: Expression)
     _FUNC_(tupleSketch, thetaSketch) - Subtracts the binary representation of a
     Datasketches ThetaSketch from a TupleSketch with integer summary data type using a TupleSketch
     AnotB object. Returns elements in the TupleSketch that are not in the ThetaSketch. """,
+  arguments = """
+    Arguments:
+      * tupleSketch - A binary representation of a TupleSketch with integer summary.
+      * thetaSketch - A binary representation of a ThetaSketch to subtract from the TupleSketch.
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_integer(_FUNC_(tuple_sketch_agg_integer(col1, val1), theta_sketch_agg(col2))) FROM VALUES (5, 5, 4), (1, 1, 4), (2, 2, 5), (3, 3, 1) tab(col1, val1, col2);

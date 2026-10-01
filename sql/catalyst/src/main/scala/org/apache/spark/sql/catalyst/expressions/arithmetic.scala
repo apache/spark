@@ -502,6 +502,13 @@ object Add {
 
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`-`expr2`.",
+  arguments = """
+    Arguments:
+      * expr1 - The minuend.
+          An expression that evaluates to a numeric, interval, date, timestamp, or time.
+      * expr2 - The subtrahend.
+          An expression that evaluates to a numeric, interval, date, timestamp, or time.
+  """,
   examples = """
     Examples:
       > SELECT 2 _FUNC_ 1;
@@ -1313,6 +1320,12 @@ object Pmod {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, ...) - Returns the least value of all parameters, skipping null values.",
+  arguments = """
+    Arguments:
+      * expr - An expression of any orderable type. At least two expressions must be given,
+          and all arguments must share a common type. Null values are skipped; the result is
+          null only when all arguments are null.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(10, 9, 2, 4, 3);
@@ -1402,6 +1415,12 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, ...) - Returns the greatest value of all parameters, skipping null values.",
+  arguments = """
+    Arguments:
+      * expr - An expression of any orderable type. At least two expressions must be given,
+          and all arguments must share a common type. Null values are skipped; the result is
+          null only when all arguments are null.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(10, 9, 2, 4, 3);

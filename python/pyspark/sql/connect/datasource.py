@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Type, TYPE_CHECKING
+from typing import TYPE_CHECKING, Type
 
 from pyspark.sql.datasource import DataSourceRegistration as PySparkDataSourceRegistration
 
 if TYPE_CHECKING:
-    from pyspark.sql.datasource import DataSource
     from pyspark.sql.connect.session import SparkSession
+    from pyspark.sql.datasource import DataSource
 
 
 class DataSourceRegistration:

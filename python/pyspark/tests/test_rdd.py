@@ -14,30 +14,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from datetime import datetime, timedelta
 import hashlib
 import os
 import random
 import tempfile
 import time
 import unittest
+from datetime import datetime, timedelta
 from glob import glob
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import shuffle, RDD
+from pyspark import RDD, shuffle
 from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder, TaskResourceRequests
 from pyspark.serializers import (
-    CloudPickleSerializer,
     BatchedSerializer,
+    CloudPickleSerializer,
     CPickleSerializer,
     MarshalSerializer,
-    UTF8Deserializer,
     NoOpSerializer,
+    UTF8Deserializer,
 )
 from pyspark.sql import SparkSession
-from pyspark.testing.utils import ReusedPySparkTestCase, QuietTest, have_numpy, have_pandas
 from pyspark.testing.sqlutils import SPARK_HOME
+from pyspark.testing.utils import QuietTest, ReusedPySparkTestCase, have_numpy, have_pandas
 
 global_func = lambda: "Hi"  # noqa: E731
 

@@ -330,13 +330,10 @@ private[evaluation] object SquaredEuclideanSilhouette extends Silhouette {
         }
       )
 
-    clustersStatsRDD
-      .collectAsMap()
-      .toMap
-      .transform {
-        case (_, (featureSum: DenseVector, squaredNormSum: Double, weightSum: Double)) =>
-          SquaredEuclideanSilhouette.ClusterStats(featureSum, squaredNormSum, weightSum)
-      }
+    clustersStatsRDD.mapValues {
+      case (featureSum: DenseVector, squaredNormSum: Double, weightSum: Double) =>
+        SquaredEuclideanSilhouette.ClusterStats(featureSum, squaredNormSum, weightSum)
+    }.collectAsMap().toMap
   }
 
   /**

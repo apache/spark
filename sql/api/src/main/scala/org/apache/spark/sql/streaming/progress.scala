@@ -42,6 +42,32 @@ import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
 
 /**
  * Information about updates made to stateful operators in a [[StreamingQuery]] during a trigger.
+ *
+ * @param operatorName
+ *   Name of the stateful operator this progress describes.
+ * @param numRowsTotal
+ *   Number of state rows held by the operator after this trigger.
+ * @param numRowsUpdated
+ *   Number of state rows updated during this trigger.
+ * @param allUpdatesTimeMs
+ *   Time taken, in milliseconds, to apply all state updates in this trigger.
+ * @param numRowsRemoved
+ *   Number of state rows removed during this trigger.
+ * @param allRemovalsTimeMs
+ *   Time taken, in milliseconds, to remove all evicted state rows in this trigger.
+ * @param commitTimeMs
+ *   Time taken, in milliseconds, to commit the state changes of this trigger.
+ * @param memoryUsedBytes
+ *   Memory used, in bytes, by the operator's state store.
+ * @param numRowsDroppedByWatermark
+ *   Number of input rows dropped because their event time was older than the watermark.
+ * @param numShufflePartitions
+ *   Number of shuffle partitions the operator ran with.
+ * @param numStateStoreInstances
+ *   Number of state store instances backing the operator.
+ * @param customMetrics
+ *   Custom metrics specific to the stateful operator or state store implementation, keyed by
+ *   metric name.
  */
 @Evolving
 class StateOperatorProgress private[spark] (
@@ -172,6 +198,8 @@ class StateOperatorProgress private[spark] (
  *   Information about operators in the query that store state.
  * @param sources
  *   detailed statistics on data being read from each of the streaming sources.
+ * @param sink
+ *   detailed statistics on data being written to the sink.
  * @since 2.1.0
  */
 @Evolving
@@ -354,6 +382,8 @@ class SourceProgress protected[spark] (
  * @param numOutputRows
  *   Number of rows written to the sink or -1 for Continuous Mode (temporarily) or Sink V1 (until
  *   decommissioned).
+ * @param metrics
+ *   Sink-specific metrics reported for this trigger, keyed by metric name.
  * @since 2.1.0
  */
 @Evolving

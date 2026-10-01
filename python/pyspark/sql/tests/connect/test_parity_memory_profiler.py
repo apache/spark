@@ -17,8 +17,8 @@
 import inspect
 import os
 
-from pyspark.tests.test_memory_profiler import MemoryProfiler2TestsMixin, _do_computation
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.tests.test_memory_profiler import MemoryProfiler2TestsMixin, _do_computation
 
 
 class MemoryProfilerParityTests(MemoryProfiler2TestsMixin, ReusedConnectTestCase):

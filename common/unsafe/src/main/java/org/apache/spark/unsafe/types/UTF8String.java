@@ -1065,11 +1065,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int trimIdx = 0;
 
     while (searchIdx < numBytes) {
-      UTF8String searchChar = copyUTF8String(
-          searchIdx, searchIdx + numBytesForFirstByte(this.getByte(searchIdx)) - 1);
-      int searchCharBytes = searchChar.numBytes;
-      // try to find the matching for the searchChar in the trimString set
-      if (trimString.find(searchChar, 0) >= 0) {
+      byte leadByte = this.getByte(searchIdx);
+      // Clamp to the remaining bytes so a truncated trailing leader is handled as copyUTF8String
+      // would have been.
+      int searchCharBytes = Math.min(numBytesForFirstByte(leadByte), numBytes - searchIdx);
+      // try to find the matching for the search char in the trimString set
+      if (trimString.find(this.base, this.offset + searchIdx, searchCharBytes, 0) >= 0) {
         trimIdx += searchCharBytes;
       } else {
         // no matching, exit the search
@@ -1147,13 +1148,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // the source string.
     int trimEnd = numBytes - 1;
     while (numChars > 0) {
-      UTF8String searchChar = copyUTF8String(
-          stringCharPos[numChars - 1],
-          stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);
-      if (trimString.find(searchChar, 0) >= 0) {
-        // Advance by the bytes the character actually occupies. A truncated trailing leader is
-        // shorter than the width its leader byte declares, so use the (clamped) search char.
-        trimEnd -= searchChar.numBytes;
+      int pos = stringCharPos[numChars - 1];
+      // Advance by the bytes the character actually occupies. A truncated trailing leader is
+      // shorter than the width its leader byte declares, so clamp to the remaining bytes.
+      int searchCharBytes = Math.min(stringCharLen[numChars - 1], numBytes - pos);
+      if (trimString.find(this.base, this.offset + pos, searchCharBytes, 0) >= 0) {
+        trimEnd -= searchCharBytes;
       } else {
         break;
       }
@@ -1196,24 +1196,38 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return this;
     }
 
-    if (numBytes == 1) {
-      byte[] newBytes = new byte[times];
-      byte b = getByte(0);
-      Arrays.fill(newBytes, b);
-      return fromBytes(newBytes);
-    }
-
     byte[] newBytes = new byte[Math.multiplyExact(numBytes, times)];
-    copyMemory(this.base, this.offset, newBytes, BYTE_ARRAY_OFFSET, numBytes);
+    fillRepeated(newBytes, 0, this.base, this.offset, numBytes, times);
+    return UTF8String.fromBytes(newBytes);
+  }
 
+  /**
+   * Writes `count` back-to-back copies of the `patternNumBytes` bytes at
+   * `(patternBase, patternOffset)` into `data` starting at byte index `destPos`, using exponential
+   * doubling so the fill takes O(log count) copies rather than O(count). Returns the byte index
+   * just past the written region.
+   */
+  private static int fillRepeated(
+      byte[] data, int destPos, Object patternBase, long patternOffset, int patternNumBytes,
+      int count) {
+    if (count <= 0 || patternNumBytes == 0) {
+      return destPos;
+    }
+    if (patternNumBytes == 1) {
+      // Single-byte pattern (e.g. padding with a space or '0'): one Arrays.fill beats the loop.
+      int end = destPos + count;
+      Arrays.fill(data, destPos, end, Platform.getByte(patternBase, patternOffset));
+      return end;
+    }
+    copyMemory(patternBase, patternOffset, data, BYTE_ARRAY_OFFSET + destPos, patternNumBytes);
     int copied = 1;
-    while (copied < times) {
-      int toCopy = Math.min(copied, times - copied);
-      System.arraycopy(newBytes, 0, newBytes, copied * numBytes, numBytes * toCopy);
+    while (copied < count) {
+      int toCopy = Math.min(copied, count - copied);
+      System.arraycopy(data, destPos, data, destPos + copied * patternNumBytes,
+        patternNumBytes * toCopy);
       copied += toCopy;
     }
-
-    return UTF8String.fromBytes(newBytes);
+    return destPos + count * patternNumBytes;
   }
 
   /**
@@ -1289,7 +1303,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     int charCount = 0;
-    int charsToSkip, byteIdx;
+    int byteIdx;
+    // `charsToSkip` is a long because negating `start` overflows for Integer.MIN_VALUE.
+    long charsToSkip;
     if (start > 0) {
       byteIdx = 0; // position in byte
       charsToSkip = start - 1; // skip character count
@@ -1300,7 +1316,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     } else {
       // For negative start, skip |start| characters from the end to position
       // byteIdx at the starting byte of the first character to compare.
-      charsToSkip = -start;
+      charsToSkip = -(long) start;
       byteIdx = numBytes;
       while (byteIdx > 0 && charCount < charsToSkip) {
         byteIdx = prevCharStart(byteIdx);
@@ -1398,9 +1414,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Find the `str` from left to right.
    */
   public int find(UTF8String str, int start) {
-    assert (str.numBytes > 0);
-    while (start <= numBytes - str.numBytes) {
-      if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {
+    return find(str.base, str.offset, str.numBytes, start);
+  }
+
+  private int find(Object strBase, long strOffset, int strNumBytes, int start) {
+    assert (strNumBytes > 0);
+    while (start <= numBytes - strNumBytes) {
+      if (ByteArrayMethods.arrayEquals(base, offset + start, strBase, strOffset, strNumBytes)) {
         return start;
       }
       start += 1;
@@ -1452,11 +1472,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     } else {
       int idx = numBytes - delim.numBytes + 1;
-      count = -count;
-      while (count > 0) {
+      // `remaining` is a long because negating `count` overflows for Integer.MIN_VALUE.
+      long remaining = -(long) count;
+      while (remaining > 0) {
         idx = rfind(delim, idx - 1);
         if (idx >= 0) {
-          count --;
+          remaining --;
         } else {
           // can not find enough delim
           return this;
@@ -1479,6 +1500,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    *   ('hi', 1, '??') =&gt; 'h'
    */
   public UTF8String rpad(int len, UTF8String pad) {
+    // If the requested length is not positive, the result is empty. This is also what the
+    // `spaces <= 0` branch below computes, but it has to be checked up front: for
+    // `len == Integer.MIN_VALUE` the subtraction wraps to a positive value and the padding
+    // branch is taken instead.
+    if (len <= 0) return EMPTY_UTF8;
     int spaces = len - this.numChars(); // number of char need to pad
     if (spaces <= 0 || pad.numBytes() == 0) {
       // no padding at all, return the substring of the current string
@@ -1493,13 +1519,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         Math.toIntExact((long) numBytes + (long) pad.numBytes * count + remain.numBytes);
       byte[] data = new byte[resultSize];
       copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET, this.numBytes);
-      int offset = this.numBytes;
-      int idx = 0;
-      while (idx < count) {
-        copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
-        ++ idx;
-        offset += pad.numBytes;
-      }
+      int offset = fillRepeated(data, this.numBytes, pad.base, pad.offset, pad.numBytes, count);
       copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
 
       return UTF8String.fromBytes(data);
@@ -1513,6 +1533,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    *   ('hi', 1, '??') =&gt; 'h'
    */
   public UTF8String lpad(int len, UTF8String pad) {
+    // If the requested length is not positive, the result is empty. This is also what the
+    // `spaces <= 0` branch below computes, but it has to be checked up front: for
+    // `len == Integer.MIN_VALUE` the subtraction wraps to a positive value and the padding
+    // branch is taken instead.
+    if (len <= 0) return EMPTY_UTF8;
     int spaces = len - this.numChars(); // number of char need to pad
     if (spaces <= 0 || pad.numBytes() == 0) {
       // no padding at all, return the substring of the current string
@@ -1527,13 +1552,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         Math.toIntExact((long) numBytes + (long) pad.numBytes * count + remain.numBytes);
       byte[] data = new byte[resultSize];
 
-      int offset = 0;
-      int idx = 0;
-      while (idx < count) {
-        copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
-        ++ idx;
-        offset += pad.numBytes;
-      }
+      int offset = fillRepeated(data, 0, pad.base, pad.offset, pad.numBytes, count);
       copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
       offset += remain.numBytes;
       copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET + offset, numBytes());
@@ -2149,18 +2168,21 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     for (j = 0, j_bytes = 0; j < m; j_bytes += num_bytes_j, j++) {
-      num_bytes_j = numBytesForFirstByte(t.getByte(j_bytes));
+      byte t_byte = t.getByte(j_bytes);
+      num_bytes_j = numBytesForFirstByte(t_byte);
       d[0] = j + 1;
 
-      for (i = 0, i_bytes = 0; i < n; i_bytes += numBytesForFirstByte(s.getByte(i_bytes)), i++) {
-        if (s.getByte(i_bytes) != t.getByte(j_bytes) ||
-              num_bytes_j != numBytesForFirstByte(s.getByte(i_bytes))) {
+      for (i = 0, i_bytes = 0; i < n; i++) {
+        byte s_byte = s.getByte(i_bytes);
+        int num_bytes_i = numBytesForFirstByte(s_byte);
+        if (s_byte != t_byte || num_bytes_j != num_bytes_i) {
           cost = 1;
         } else {
           cost = (ByteArrayMethods.arrayEquals(t.base, t.offset + j_bytes, s.base,
               s.offset + i_bytes, num_bytes_j)) ? 0 : 1;
         }
         d[i + 1] = Math.min(Math.min(d[i] + 1, p[i + 1] + 1), p[i] + cost);
+        i_bytes += num_bytes_i;
       }
 
       swap = p;

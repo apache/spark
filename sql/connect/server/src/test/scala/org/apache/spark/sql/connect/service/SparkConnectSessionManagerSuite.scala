@@ -76,6 +76,7 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
         Some(sessionHolder.session.sessionUUID + "invalid"))
     }
     assert(exGet.getCondition == "INVALID_HANDLE.SESSION_CHANGED")
+    assert(exGet.getSqlState == "08003")
   }
 
   test(
@@ -89,11 +90,13 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
       SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
     }
     assert(exGetOrCreate.getCondition == "INVALID_HANDLE.SESSION_CLOSED")
+    assert(exGetOrCreate.getSqlState == "08003")
 
     val exGet = intercept[SparkSQLException] {
       SparkConnectService.sessionManager.getIsolatedSession(key, None)
     }
     assert(exGet.getCondition == "INVALID_HANDLE.SESSION_CLOSED")
+    assert(exGet.getSqlState == "08003")
 
     val sessionGetIfPresent = SparkConnectService.sessionManager.getIsolatedSessionIfPresent(key)
     assert(sessionGetIfPresent.isEmpty)
@@ -106,6 +109,7 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
       SparkConnectService.sessionManager.getIsolatedSession(key, None)
     }
     assert(exGet.getCondition == "INVALID_HANDLE.SESSION_NOT_FOUND")
+    assert(exGet.getSqlState == "08003")
 
     val sessionGetIfPresent = SparkConnectService.sessionManager.getIsolatedSessionIfPresent(key)
     assert(sessionGetIfPresent.isEmpty)

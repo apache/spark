@@ -280,6 +280,7 @@ Additional libraries that enhance functionality but are not included in the inst
 - **mlflow**: Required for ``pyspark.pandas.mlflow``.
 - **plotly**: Provide plotting for visualization. It is recommended using **plotly** over **matplotlib**.
 - **matplotlib**: Provide plotting for visualization. The default is **plotly**.
+- **jinja2**: Required for ``pyspark.pandas.to_latex``.
 
 
 MLlib DataFrame-based API

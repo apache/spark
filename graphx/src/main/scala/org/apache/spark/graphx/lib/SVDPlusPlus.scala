@@ -38,6 +38,17 @@ object SVDPlusPlus {
       var gamma7: Double)
     extends Serializable
 
+  /** Sums two Phase 2 training messages component-wise: both vectors and the scalar. */
+  private[graphx] def combineTrainMessages(
+      g1: (Array[Double], Array[Double], Double),
+      g2: (Array[Double], Array[Double], Double)): (Array[Double], Array[Double], Double) = {
+    val out1 = g1._1.clone()
+    BLAS.nativeBLAS.daxpy(out1.length, 1.0, g2._1, 1, out1, 1)
+    val out2 = g1._2.clone()
+    BLAS.nativeBLAS.daxpy(out2.length, 1.0, g2._2, 1, out2, 1)
+    (out1, out2, g1._3 + g2._3)
+  }
+
   // scalastyle:off line.size.limit
   /**
    * Implement SVD++ based on "Factorization Meets the Neighborhood: a Multifaceted
@@ -152,14 +163,7 @@ object SVDPlusPlus {
       g.cache()
       val t2 = g.aggregateMessages(
         sendMsgTrainF(conf, u),
-        (g1: (Array[Double], Array[Double], Double), g2: (Array[Double], Array[Double], Double)) =>
-        {
-          val out1 = g1._1.clone()
-          BLAS.nativeBLAS.daxpy(out1.length, 1.0, g2._1, 1, out1, 1)
-          val out2 = g1._2.clone()
-          BLAS.nativeBLAS.daxpy(out2.length, 1.0, g2._2, 1, out2, 1)
-          (out1, out2, g1._3 + g2._3)
-        })
+        combineTrainMessages)
       val gJoinT2 = g.outerJoinVertices(t2) {
         (vid: VertexId,
          vd: (Array[Double], Array[Double], Double, Double),

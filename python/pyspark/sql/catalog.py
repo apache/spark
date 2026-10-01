@@ -17,17 +17,16 @@
 
 import sys
 import warnings
-from typing import Any, Callable, Dict, NamedTuple, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional
 
 from pyspark.errors import PySparkTypeError
-from pyspark.storagelevel import StorageLevel
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
 from pyspark.sql.types import StructType
+from pyspark.storagelevel import StorageLevel
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import UserDefinedFunctionLike
-    from pyspark.sql._typing import DataTypeOrString
+    from pyspark.sql._typing import DataTypeOrString, UserDefinedFunctionLike
 
 
 class CatalogMetadata(NamedTuple):
@@ -252,7 +251,8 @@ class Catalog:
         """
         sc = self._sc
         assert sc is not None
-        ju = sc._gateway.jvm.java.util  # type: ignore[union-attr]
+        assert sc._gateway is not None
+        ju = sc._gateway.jvm.java.util
         m = ju.HashMap()
         if properties:
             for k, v in properties.items():
@@ -1569,10 +1569,11 @@ class Catalog:
 
 
 def _test() -> None:
-    import os
     import doctest
-    from pyspark.sql import SparkSession
+    import os
+
     import pyspark.sql.catalog
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

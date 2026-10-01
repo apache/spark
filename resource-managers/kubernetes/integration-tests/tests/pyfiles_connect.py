@@ -19,7 +19,6 @@ import sys
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StringType
 
-
 if __name__ == "__main__":
     """
         Usage: pyfiles

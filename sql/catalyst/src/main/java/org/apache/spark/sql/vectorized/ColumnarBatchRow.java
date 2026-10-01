@@ -86,6 +86,11 @@ public final class ColumnarBatchRow extends InternalRow {
           row.update(i, getMap(i).copy());
         } else if (pdt instanceof PhysicalVariantType) {
           row.update(i, getVariant(i));
+        } else if (pdt instanceof PhysicalTimestampNTZNanosType) {
+          // TimestampNanosVal is immutable, so it can be shared without copying.
+          row.update(i, getTimestampNTZNanos(i));
+        } else if (pdt instanceof PhysicalTimestampLTZNanosType) {
+          row.update(i, getTimestampLTZNanos(i));
         } else {
           throw new RuntimeException("Not implemented. " + dt);
         }
@@ -208,6 +213,10 @@ public final class ColumnarBatchRow extends InternalRow {
       return getLong(ordinal);
     } else if (dataType instanceof TimestampNTZType) {
       return getLong(ordinal);
+    } else if (dataType instanceof TimestampNTZNanosType) {
+      return getTimestampNTZNanos(ordinal);
+    } else if (dataType instanceof TimestampLTZNanosType) {
+      return getTimestampLTZNanos(ordinal);
     } else if (dataType instanceof ArrayType) {
       return getArray(ordinal);
     } else if (dataType instanceof StructType structType) {

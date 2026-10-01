@@ -34,7 +34,6 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import sun.misc.{Signal, SignalHandler}
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -47,7 +46,7 @@ import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver.closeHiveSessionStateIfStarted
 import org.apache.spark.sql.internal.{SharedState, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI
-import org.apache.spark.util.{SparkStringUtils, Utils}
+import org.apache.spark.util.{SignalUtils, SparkStringUtils, Utils}
 import org.apache.spark.util.ShutdownHookManager
 import org.apache.spark.util.SparkExitCode._
 
@@ -72,7 +71,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
   def installSignalHandler(): Unit = {
     HiveInterruptUtils.add(() => {
       if (SparkSQLEnv.sparkContext != null) {
-        SparkSQLEnv.sparkContext.cancelAllJobs()
+        SparkSQLEnv.sparkContext.cancelAllJobs(
+          "because the user interrupted the Spark SQL CLI with Ctrl+C")
       }
     })
   }
@@ -584,37 +584,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
   // Adapted processLine from Hive 2.3's CliDriver.processLine.
   override def processLine(line: String, allowInterrupting: Boolean): Int = {
-    var oldSignal: SignalHandler = null
-    var interruptSignal: Signal = null
-
-    if (allowInterrupting) {
-      // Remember all threads that were running at the time we started line processing.
-      // Hook up the custom Ctrl+C handler while processing this line
-      interruptSignal = new Signal("INT")
-      oldSignal = Signal.handle(interruptSignal, new SignalHandler() {
-        private var interruptRequested: Boolean = false
-
-        override def handle(signal: Signal): Unit = {
-          val initialRequest = !interruptRequested
-          interruptRequested = true
-
-          // Kill the VM on second ctrl+c
-          if (!initialRequest) {
-            console.printInfo("Exiting the JVM")
-            SparkSQLCLIDriver.exit(ERROR_COMMAND_NOT_FOUND)
-          }
-
-          // Interrupt the CLI thread to stop the current statement and return
-          // to prompt
-          console.printInfo("Interrupting... Be patient, this might take some time.")
-          console.printInfo("Press Ctrl+C again to kill JVM")
-
-          HiveInterruptUtils.interrupt()
-        }
-      })
-    }
-
-    try {
+    def processStatements(): Int = {
       var lastRet: Int = 0
 
       // we can not use "split" function directly as ";" may be quoted
@@ -640,11 +610,33 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       }
       CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf])
       lastRet
-    } finally {
-      // Once we are done processing the line, restore the old handler
-      if (oldSignal != null && interruptSignal != null) {
-        Signal.handle(interruptSignal, oldSignal)
+    }
+
+    if (allowInterrupting) {
+      // Hook up the custom Ctrl+C handler while processing this line. Once we are done
+      // processing the line, the old handler is restored.
+      var interruptRequested: Boolean = false
+      SignalUtils.withSignalHandler("INT") {
+        val initialRequest = !interruptRequested
+        interruptRequested = true
+
+        // Kill the VM on second ctrl+c
+        if (!initialRequest) {
+          console.printInfo("Exiting the JVM")
+          SparkSQLCLIDriver.exit(ERROR_COMMAND_NOT_FOUND)
+        }
+
+        // Interrupt the CLI thread to stop the current statement and return
+        // to prompt
+        console.printInfo("Interrupting... Be patient, this might take some time.")
+        console.printInfo("Press Ctrl+C again to kill JVM")
+
+        HiveInterruptUtils.interrupt()
+      } {
+        processStatements()
       }
+    } else {
+      processStatements()
     }
   }
 

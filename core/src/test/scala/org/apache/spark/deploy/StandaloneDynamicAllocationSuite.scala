@@ -492,8 +492,53 @@ class StandaloneDynamicAllocationSuite
 
     eventually(timeout(10.seconds), interval(100.millis)) {
       val afterList = getApplications().head.executors.keys.toSet
-      assert(beforeList.intersect(afterList).size == 0)
+      assert(beforeList.intersect(afterList).isEmpty)
     }
+  }
+
+  test("SPARK-59055: SparkContext reports the hold status of the application to the Master") {
+    sc = new SparkContext(appConf
+      .set(config.SHUFFLE_SERVICE_ENABLED, true)
+      .set(config.DECOMMISSION_ENABLED, true))
+    // The report from the end of the SparkContext constructor.
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      assert(getApplications().length === 1)
+      assert(getApplications().head.holdSupported)
+    }
+    assert(!getApplications().head.held)
+
+    assert(sc.holdExecutors())
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      assert(getApplications().head.held)
+    }
+    // The faked executors never exit, so all of them are still counted as draining.
+    assert(getApplications().head.numDrainingExecutors === 2)
+
+    assert(sc.resumeExecutors())
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      assert(!getApplications().head.held)
+    }
+  }
+
+  test("SPARK-59055: spark.ui.holdEnabled=false does not suppress the hold status") {
+    sc = new SparkContext(appConf
+      .set(config.SHUFFLE_SERVICE_ENABLED, true)
+      .set(config.DECOMMISSION_ENABLED, true)
+      .set(config.UI.UI_HOLD_ENABLED, false))
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      assert(getApplications().length === 1)
+    }
+
+    // spark.ui.holdEnabled gates the controls on the driver UI, not the capability itself:
+    // holdExecutors() is a developer API that the config does not touch, so a hold made with
+    // the config off must still be visible on the Master.
+    assert(sc.holdExecutors())
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      assert(getApplications().head.held)
+    }
+    assert(getApplications().head.holdSupported)
+    assert(getApplications().head.isHeld)
+    assert(getApplications().head.numDrainingExecutors === 2)
   }
 
   test("executor registration on a excluded host must fail") {

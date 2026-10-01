@@ -23,6 +23,7 @@ Run with:
 # $example on$
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.stat import Correlation
+
 # $example off$
 from pyspark.sql import SparkSession
 

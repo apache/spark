@@ -70,6 +70,9 @@ class LateralColumnAliasResolver(expressionResolver: ExpressionResolver, operato
       case _ @Project(projectList: Seq[_], aggregate: Aggregate) =>
         operatorResolutionContextStack.current.baseOperator = Some(aggregate)
 
+        // Note: LCA + grouping analytics (CUBE/ROLLUP/GROUPING SETS) is intercepted in
+        // AggregateResolver which throws ExplicitlyUnsupportedResolverFeature before reaching
+        // here. This validation is retained as defense-in-depth in case the call path changes.
         AggregationValidator(aggregate)
 
         val remappedAliases = new HashMap[ExprId, Alias](projectList.size)

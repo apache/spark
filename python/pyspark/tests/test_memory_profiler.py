@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 
+import inspect
 import os
 import sys
-import inspect
 import tempfile
 import unittest
 import warnings

@@ -19,19 +19,18 @@
 MLflow-related functions to load models and apply them to pandas-on-Spark dataframes.
 """
 
-from typing import List, Union
-from typing import Any
+from typing import Any, List, Union
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
-from pyspark.sql.types import DataType
-from pyspark.sql.functions import struct
-from pyspark.pandas._typing import Label, Dtype
-from pyspark.pandas.utils import lazy_property, default_session
+from pyspark.pandas._typing import Dtype, Label
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series, first_series
 from pyspark.pandas.typedef import as_spark_type
+from pyspark.pandas.utils import default_session, lazy_property
+from pyspark.sql.functions import struct
+from pyspark.sql.types import DataType
 
 __all__ = ["PythonModelWrapper", "load_model"]
 
@@ -204,11 +203,12 @@ def load_model(
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.mlflow
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

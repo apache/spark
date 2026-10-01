@@ -22,12 +22,14 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
+import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
+import org.apache.spark.sql.execution.{InSubqueryExec, LocalTableScanExec, SubqueryExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, VariantType}
+import org.apache.spark.sql.types.{BooleanType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2StrategySuite extends SharedSparkSession {
@@ -1026,11 +1028,30 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     val expr = Abs(Literal(-5), failOnError = true)
     checkV2Conversion(expr, LiteralValue(5, IntegerType))
 
-    withSQLConf(SQLConf.DATA_SOURCE_V2_EXPR_FOLDING.key -> "false") {
+    withSQLConf("spark.sql.optimizer.datasourceV2ExprFolding" -> "false") {
       // when spark.sql.optimizer.datasourceV2ExprFolding = false
       // expression will be converted to V2 expressions, but not folded
       checkV2Conversion(expr,
         new GeneralScalarExpression("ABS", Array(LiteralValue(-5, IntegerType))))
+    }
+  }
+
+  test("SPARK-58428: translating an expression that failed to evaluate does not loop forever") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // `coalesce(c, 1 div 0) = 1`. Constant folding defers the divide by zero error because the
+      // failing expression sits in a conditional branch, so it is tagged FAILED_TO_EVALUATE and
+      // left as is. `div` returns BIGINT, so `c` is LONG to keep the `coalesce` inputs equal.
+      val c = AttributeReference("c", LongType)()
+      val predicate =
+        EqualTo(Coalesce(Seq(c, IntegralDivide(Literal(1), Literal(0)))), Literal(1L))
+      val folded = ConstantFolding.constantFolding(predicate)
+      assert(
+        folded.exists(_.containsTag(ConstantFolding.FAILED_TO_EVALUATE)),
+        "expected the divide by zero branch to be tagged FAILED_TO_EVALUATE")
+
+      // Translating such an expression used to recurse forever. Note that a regression hangs
+      // this test instead of failing it, as the recursion is in tail position.
+      assert(new V2ExpressionBuilder(folded, isPredicate = true).build().isEmpty)
     }
   }
 
@@ -1042,6 +1063,61 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     assertResult(result) {
       DataSourceV2Strategy.translateFilterV2(catalystFilter)
     }
+  }
+
+  test("SPARK-59301: translate runtime IN filter") {
+    attrInts.foreach { case (attr, name) =>
+      checkRuntimeFilter(runtimeFilter(attr, Array[Any](1, 2)), name,
+        Set(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType)))
+    }
+    // the values are pushed as given
+    val predicate = DataSourceV2Strategy.translateRuntimeFilterV2(
+      runtimeFilter($"cint".int, Array[Any](2, 1, 2))).get
+    assert(predicate.children().toSeq == Seq(FieldReference("cint"),
+      LiteralValue(2, IntegerType), LiteralValue(1, IntegerType), LiteralValue(2, IntegerType)))
+    // no subquery result, so no row can match
+    assert(DataSourceV2Strategy.translateRuntimeFilterV2(
+      runtimeFilter($"cint".int, Array.empty[Any])).contains(new AlwaysFalse()))
+  }
+
+  test("SPARK-59301: translate runtime IN filter on a cast column") {
+    // the values are converted to the column type, values out of its range are dropped and
+    // nulls are kept, the same as `UnwrapCastInBinaryComparison` does for `InSet`
+    attrInts.foreach { case (attr, name) =>
+      val in = runtimeFilter(Cast(attr, LongType), Array[Any](1L, 2L, Int.MaxValue + 1L, null))
+      checkRuntimeFilter(in, name, Set(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType),
+        LiteralValue(null, IntegerType)))
+    }
+    // values rounded by the conversion are dropped
+    checkRuntimeFilter(runtimeFilter(Cast($"cfloat".float, DoubleType), Array[Any](0.5d, 3.14d)),
+      "cfloat", Set(LiteralValue(0.5f, FloatType)))
+    // no value is representable in the column type, so no row can match
+    assert(DataSourceV2Strategy.translateRuntimeFilterV2(
+      runtimeFilter(Cast($"cint".int, LongType), Array[Any](Int.MaxValue + 1L)))
+      .contains(new AlwaysFalse()))
+    // the cast is not unwrapped when it is lossy
+    assert(DataSourceV2Strategy.translateRuntimeFilterV2(
+      runtimeFilter(Cast($"clong".long, DoubleType), Array[Any](1.0d))).isEmpty)
+    assert(DataSourceV2Strategy.translateRuntimeFilterV2(
+      runtimeFilter(Cast($"cint".int, StringType), Array[Any](UTF8String.fromString("1")))).isEmpty)
+  }
+
+  private def runtimeFilter(child: Expression, values: Array[Any]): InSubqueryExec = {
+    val plan = SubqueryExec("dpp", LocalTableScanExec(Nil, Nil, None))
+    InSubqueryExec(child, plan, ExprId(0), isDynamicPruning = true, resultBroadcast = null,
+      result = values)
+  }
+
+  private def checkRuntimeFilter(
+      in: InSubqueryExec,
+      column: String,
+      values: Set[LiteralValue[_]]): Unit = {
+    val predicate = DataSourceV2Strategy.translateRuntimeFilterV2(in).getOrElse {
+      fail(s"can't translate runtime filter: $in")
+    }
+    assert(predicate.name() == "IN")
+    assert(predicate.children().head == FieldReference(column))
+    assert(predicate.children().tail.toSet == values)
   }
 
   private def checkV2Conversion(

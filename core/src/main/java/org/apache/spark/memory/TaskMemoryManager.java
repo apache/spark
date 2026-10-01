@@ -449,36 +449,162 @@ public class TaskMemoryManager {
   }
 
   /**
-   * Dump the memory usage of all consumers.
+   * A point-in-time snapshot of this task's execution-memory usage: each consumer that is holding
+   * memory (largest first) paired with its used bytes, plus the bytes not attributable to any
+   * specific consumer. Rendering the executor-log dump and the error-message breakdown from a
+   * single snapshot is what lets the two describe the same instant; see
+   * {@link #logMemoryUsageAndGetBreakdown()}.
    */
-  public void showMemoryUsage() {
-    logger.info("Memory used in task {}",
-      MDC.of(LogKeys.TASK_ATTEMPT_ID, taskAttemptId));
+  private static final class MemoryUsageSnapshot {
+    private final List<Map.Entry<MemoryConsumer, Long>> consumerUsages;
+    private final long memoryNotAccountedFor;
+
+    MemoryUsageSnapshot(
+        List<Map.Entry<MemoryConsumer, Long>> consumerUsages, long memoryNotAccountedFor) {
+      this.consumerUsages = consumerUsages;
+      this.memoryNotAccountedFor = memoryNotAccountedFor;
+    }
+  }
+
+  /**
+   * Snapshot the per-consumer memory usage once, holding the monitor for the whole read.
+   * <p>
+   * {@link MemoryConsumer#getUsed()} reads an {@code AtomicLong} that is not guarded by this
+   * monitor, so callers must not re-read it while sorting or rendering: doing so could observe
+   * changing values and trip {@code TimSort}'s "Comparison method violates its general contract!"
+   * check, masking the OOM we are about to report with an unrelated failure. Consumers are returned
+   * largest first, since the biggest consumers are the most likely culprits of an OOM.
+   */
+  private MemoryUsageSnapshot snapshotMemoryUsage() {
+    List<Map.Entry<MemoryConsumer, Long>> consumerUsages = new ArrayList<>();
+    long memoryAccountedForByConsumers = 0;
+    long memoryNotAccountedFor;
     synchronized (this) {
-      long memoryAccountedForByConsumers = 0;
-      for (MemoryConsumer c: consumers) {
+      for (MemoryConsumer c : consumers) {
         long totalMemUsage = c.getUsed();
-        memoryAccountedForByConsumers += totalMemUsage;
         if (totalMemUsage > 0) {
-          logger.info("Acquired by {}: {}",
-            MDC.of(LogKeys.MEMORY_CONSUMER, c),
-            MDC.of(LogKeys.MEMORY_SIZE, Utils.bytesToString(totalMemUsage)));
+          memoryAccountedForByConsumers += totalMemUsage;
+          consumerUsages.add(new AbstractMap.SimpleEntry<>(c, totalMemUsage));
         }
       }
-      long memoryNotAccountedFor =
+      memoryNotAccountedFor =
         memoryManager.getExecutionMemoryUsageForTask(taskAttemptId) - memoryAccountedForByConsumers;
-      logger.info(
-        "{} bytes of memory were used by task {} but are not associated with specific consumers",
-        MDC.of(LogKeys.MEMORY_SIZE, memoryNotAccountedFor),
-        MDC.of(LogKeys.TASK_ATTEMPT_ID, taskAttemptId));
-      logger.info(
-        "{} bytes of memory are used for execution " +
-                "and {} bytes of memory are used for storage " +
-                "and {} bytes of unmanaged memory are used",
-        MDC.of(LogKeys.EXECUTION_MEMORY_SIZE, memoryManager.executionMemoryUsed()),
-        MDC.of(LogKeys.STORAGE_MEMORY_SIZE,  memoryManager.storageMemoryUsed()),
-        MDC.of(LogKeys.MEMORY_SIZE, UnifiedMemoryManager$.MODULE$.getUnmanagedMemoryUsed()));
     }
+    consumerUsages.sort(Map.Entry.<MemoryConsumer, Long>comparingByValue().reversed());
+    return new MemoryUsageSnapshot(consumerUsages, memoryNotAccountedFor);
+  }
+
+  /**
+   * Dump the given memory-usage snapshot to the executor logs, one line per consumer (uncapped).
+   */
+  private void logMemoryUsage(MemoryUsageSnapshot snapshot) {
+    logger.info("Memory used in task {}",
+      MDC.of(LogKeys.TASK_ATTEMPT_ID, taskAttemptId));
+    for (Map.Entry<MemoryConsumer, Long> usage : snapshot.consumerUsages) {
+      logger.info("Acquired by {}: {}",
+        MDC.of(LogKeys.MEMORY_CONSUMER, usage.getKey()),
+        MDC.of(LogKeys.MEMORY_SIZE, Utils.bytesToString(usage.getValue())));
+    }
+    logger.info(
+      "{} bytes of memory were used by task {} but are not associated with specific consumers",
+      MDC.of(LogKeys.MEMORY_SIZE, snapshot.memoryNotAccountedFor),
+      MDC.of(LogKeys.TASK_ATTEMPT_ID, taskAttemptId));
+    logger.info(
+      "{} bytes of memory are used for execution " +
+              "and {} bytes of memory are used for storage " +
+              "and {} bytes of unmanaged memory are used",
+      MDC.of(LogKeys.EXECUTION_MEMORY_SIZE, memoryManager.executionMemoryUsed()),
+      MDC.of(LogKeys.STORAGE_MEMORY_SIZE,  memoryManager.storageMemoryUsed()),
+      MDC.of(LogKeys.MEMORY_SIZE, UnifiedMemoryManager$.MODULE$.getUnmanagedMemoryUsed()));
+  }
+
+  /**
+   * Render the given snapshot as the compact, bounded breakdown embedded in the
+   * {@code UNABLE_TO_ACQUIRE_MEMORY} error. Returns an empty string when there is nothing to
+   * show -- that is, when the snapshot has neither attributed nor unattributed memory to report
+   * (or when the breakdown is disabled by a limit of 0) -- so callers can append it
+   * unconditionally.
+   */
+  private String renderConsumerBreakdown(MemoryUsageSnapshot snapshot) {
+    // Bound the message that travels to the driver and the UI. The largest consumers -- the most
+    // likely culprits -- are listed individually up to this limit; the rest are collapsed into a
+    // single summary line so total byte accounting is preserved without unbounded noise. The full,
+    // uncapped breakdown is still available in the executor logs via logMemoryUsage(). A limit of
+    // 0 omits the breakdown from the error message entirely.
+    int limit = memoryManager.oomErrorConsumerBreakdownLimit();
+    if (limit == 0) {
+      return "";
+    }
+    List<Map.Entry<MemoryConsumer, Long>> usages = snapshot.consumerUsages;
+    StringBuilder sb = new StringBuilder();
+    int shown = Math.min(limit, usages.size());
+    for (int i = 0; i < shown; i++) {
+      Map.Entry<MemoryConsumer, Long> usage = usages.get(i);
+      sb.append("\n  ").append(usage.getKey()).append(": ")
+        .append(Utils.bytesToString(usage.getValue()));
+    }
+    if (usages.size() > shown) {
+      long remainingBytes = 0;
+      for (int i = shown; i < usages.size(); i++) {
+        remainingBytes = Math.addExact(remainingBytes, usages.get(i).getValue());
+      }
+      sb.append("\n  (").append(usages.size() - shown).append(" more consumers): ")
+        .append(Utils.bytesToString(remainingBytes));
+    }
+    if (snapshot.memoryNotAccountedFor > 0) {
+      sb.append("\n  (not attributed to a specific consumer): ")
+        .append(Utils.bytesToString(snapshot.memoryNotAccountedFor));
+    }
+    if (sb.length() == 0) {
+      return "";
+    }
+    return "\nMemory used by task " + taskAttemptId + " grouped by consumer:" + sb;
+  }
+
+  /**
+   * Dump the memory usage of all consumers to the executor logs.
+   */
+  public void showMemoryUsage() {
+    logMemoryUsage(snapshotMemoryUsage());
+  }
+
+  /**
+   * Build a compact, human-readable breakdown of this task's execution-memory usage grouped by
+   * {@link MemoryConsumer}, with the biggest consumers first, followed by the bytes that are not
+   * attributable to any specific consumer.
+   * <p>
+   * The returned string is meant to be embedded in the {@code UNABLE_TO_ACQUIRE_MEMORY} error so
+   * that the consumers competing for memory at the moment of failure travel with the task failure
+   * reason all the way to the driver and the Spark UI. Returns an empty string when there is
+   * nothing to report -- no consumer is holding memory <i>and</i> there is no unattributed
+   * memory, or the breakdown is disabled by a limit of 0 -- so the caller can append it
+   * unconditionally. Otherwise, a task holding only unattributed memory still gets a breakdown,
+   * consisting of the unattributed line alone.
+   */
+  public String getMemoryConsumptionBreakdown() {
+    // Skip the snapshot entirely when the breakdown is disabled: renderConsumerBreakdown would
+    // discard it anyway. The combined logging path (logMemoryUsageAndGetBreakdown) still needs the
+    // snapshot to write the executor-log dump, so it keeps snapshotting and relies on the
+    // renderer's own limit-0 check.
+    if (memoryManager.oomErrorConsumerBreakdownLimit() == 0) {
+      return "";
+    }
+    return renderConsumerBreakdown(snapshotMemoryUsage());
+  }
+
+  /**
+   * Snapshot this task's memory usage once, write the full (uncapped) breakdown to the executor
+   * logs, and return the bounded breakdown to embed in the {@code UNABLE_TO_ACQUIRE_MEMORY} error.
+   * <p>
+   * Taking a single snapshot for both outputs is what guarantees the log dump and the error message
+   * describe the same instant and cannot disagree; this is the method the OOM path should call
+   * rather than invoking {@link #showMemoryUsage()} and {@link #getMemoryConsumptionBreakdown()}
+   * separately.
+   */
+  public String logMemoryUsageAndGetBreakdown() {
+    MemoryUsageSnapshot snapshot = snapshotMemoryUsage();
+    logMemoryUsage(snapshot);
+    return renderConsumerBreakdown(snapshot);
   }
 
   /**

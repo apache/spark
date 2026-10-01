@@ -1,144 +1,144 @@
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup (size=10000, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted - Linear Lookup                      149            168          23          0.1       14940.7       1.0X
-GetMapValue interpreted - Hash Lookup                         29             37           6          0.3        2914.9       5.1X
-GetMapValue codegen - Linear Lookup                          103            113           9          0.1       10302.7       1.5X
-GetMapValue codegen - Hash Lookup                             29             34           5          0.3        2913.6       5.1X
+GetMapValue interpreted - Linear Lookup                      166            183          14          0.1       16582.6       1.0X
+GetMapValue interpreted - Hash Lookup                         35             45           8          0.3        3462.7       4.8X
+GetMapValue codegen - Linear Lookup                          117            123           5          0.1       11748.8       1.4X
+GetMapValue codegen - Hash Lookup                             33             39           7          0.3        3338.7       5.0X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup (size=10000, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted - Linear Lookup                      173            186          10          0.1       17296.4       1.0X
-GetMapValue interpreted - Hash Lookup                         25             29           5          0.4        2480.4       7.0X
-GetMapValue codegen - Linear Lookup                          145            159          19          0.1       14515.1       1.2X
-GetMapValue codegen - Hash Lookup                             27             31           5          0.4        2652.8       6.5X
+GetMapValue interpreted - Linear Lookup                      197            200           2          0.1       19704.2       1.0X
+GetMapValue interpreted - Hash Lookup                         29             32           5          0.4        2852.1       6.9X
+GetMapValue codegen - Linear Lookup                          173            177           4          0.1       17268.1       1.1X
+GetMapValue codegen - Hash Lookup                             31             34           5          0.3        3066.2       6.4X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup (size=10000, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted - Linear Lookup                      236            248          10          0.0       23628.2       1.0X
-GetMapValue interpreted - Hash Lookup                         23             26           4          0.4        2267.5      10.4X
-GetMapValue codegen - Linear Lookup                          188            193           5          0.1       18753.4       1.3X
-GetMapValue codegen - Hash Lookup                             25             29           4          0.4        2549.4       9.3X
+GetMapValue interpreted - Linear Lookup                      268            277           9          0.0       26783.8       1.0X
+GetMapValue interpreted - Hash Lookup                         27             30           4          0.4        2676.5      10.0X
+GetMapValue codegen - Linear Lookup                          222            226           4          0.0       22238.9       1.2X
+GetMapValue codegen - Hash Lookup                             29             33           5          0.4        2854.4       9.4X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup (size=1000, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted - Linear Lookup                      23             26           4          0.4        2303.6       1.0X
-GetMapValue interpreted - Hash Lookup                        15             19           3          0.6        1549.1       1.5X
-GetMapValue codegen - Linear Lookup                          19             22           3          0.5        1905.2       1.2X
-GetMapValue codegen - Hash Lookup                            14             17           4          0.7        1445.3       1.6X
+GetMapValue interpreted - Linear Lookup                      25             29           4          0.4        2454.4       1.0X
+GetMapValue interpreted - Hash Lookup                        18             23           5          0.5        1833.9       1.3X
+GetMapValue codegen - Linear Lookup                          23             26           4          0.4        2263.1       1.1X
+GetMapValue codegen - Hash Lookup                            17             20           3          0.6        1696.0       1.4X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup (size=1000, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted - Linear Lookup                      24             27           5          0.4        2387.8       1.0X
-GetMapValue interpreted - Hash Lookup                        15             18           3          0.7        1494.6       1.6X
-GetMapValue codegen - Linear Lookup                          19             23           4          0.5        1914.0       1.2X
-GetMapValue codegen - Hash Lookup                            14             15           2          0.7        1366.4       1.7X
+GetMapValue interpreted - Linear Lookup                      26             30           4          0.4        2599.2       1.0X
+GetMapValue interpreted - Hash Lookup                        18             19           2          0.6        1752.7       1.5X
+GetMapValue codegen - Linear Lookup                          24             27           4          0.4        2374.9       1.1X
+GetMapValue codegen - Hash Lookup                            16             19           3          0.6        1645.8       1.6X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup (size=1000, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted - Linear Lookup                      27             30           4          0.4        2722.4       1.0X
-GetMapValue interpreted - Hash Lookup                        13             16           3          0.8        1319.8       2.1X
-GetMapValue codegen - Linear Lookup                          21             24           3          0.5        2108.9       1.3X
-GetMapValue codegen - Hash Lookup                            13             14           2          0.8        1301.9       2.1X
+GetMapValue interpreted - Linear Lookup                      28             31           3          0.4        2823.3       1.0X
+GetMapValue interpreted - Hash Lookup                        16             19           3          0.6        1620.7       1.7X
+GetMapValue codegen - Linear Lookup                          25             28           5          0.4        2548.9       1.1X
+GetMapValue codegen - Hash Lookup                            15             18           3          0.7        1512.6       1.9X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup (size=10, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted - Linear Lookup                    12             14           2          0.8        1225.7       1.0X
-GetMapValue interpreted - Hash Lookup                      12             13           2          0.9        1169.9       1.0X
-GetMapValue codegen - Linear Lookup                        11             13           2          0.9        1147.2       1.1X
-GetMapValue codegen - Hash Lookup                          11             13           3          0.9        1140.8       1.1X
+GetMapValue interpreted - Linear Lookup                    14             16           3          0.7        1434.3       1.0X
+GetMapValue interpreted - Hash Lookup                      14             16           3          0.7        1402.2       1.0X
+GetMapValue codegen - Linear Lookup                        14             16           3          0.7        1358.3       1.1X
+GetMapValue codegen - Hash Lookup                          14             16           2          0.7        1386.4       1.0X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup (size=10, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted - Linear Lookup                    11             13           2          0.9        1142.2       1.0X
-GetMapValue interpreted - Hash Lookup                      11             12           2          0.9        1100.3       1.0X
-GetMapValue codegen - Linear Lookup                        11             13           3          0.9        1077.0       1.1X
-GetMapValue codegen - Hash Lookup                          11             13           3          1.0        1050.2       1.1X
+GetMapValue interpreted - Linear Lookup                    14             16           2          0.7        1382.2       1.0X
+GetMapValue interpreted - Hash Lookup                      13             16           3          0.8        1319.5       1.0X
+GetMapValue codegen - Linear Lookup                        13             15           2          0.7        1335.1       1.0X
+GetMapValue codegen - Hash Lookup                          13             16           3          0.7        1342.0       1.0X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup (size=10, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted - Linear Lookup                    11             13           2          0.9        1096.2       1.0X
-GetMapValue interpreted - Hash Lookup                      10             13           3          1.0        1048.4       1.0X
-GetMapValue codegen - Linear Lookup                        10             13           3          1.0        1044.4       1.0X
-GetMapValue codegen - Hash Lookup                          10             12           2          1.0        1004.8       1.1X
+GetMapValue interpreted - Linear Lookup                    14             16           2          0.7        1416.1       1.0X
+GetMapValue interpreted - Hash Lookup                      13             16           3          0.8        1322.9       1.1X
+GetMapValue codegen - Linear Lookup                        13             16           3          0.8        1317.2       1.1X
+GetMapValue codegen - Hash Lookup                          12             14           2          0.8        1218.4       1.2X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup: non-foldable map column (size=1000, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted                                                              878            883           5          0.0       87770.1       1.0X
-GetMapValue codegen                                                                  124            144          18          0.1       12398.5       7.1X
+GetMapValue interpreted                                                              211            238          21          0.0       21120.5       1.0X
+GetMapValue codegen                                                                  146            175          19          0.1       14581.1       1.4X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup: non-foldable map column (size=1000, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted                                                             1205           1235          32          0.0      120486.2       1.0X
-GetMapValue codegen                                                                  118            141          26          0.1       11753.2      10.3X
+GetMapValue interpreted                                                              241            266          19          0.0       24142.0       1.0X
+GetMapValue codegen                                                                  150            163          14          0.1       14952.5       1.6X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup: non-foldable map column (size=1000, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted                                                             1566           1589          38          0.0      156570.9       1.0X
-GetMapValue codegen                                                                  120            144          16          0.1       12035.5      13.0X
+GetMapValue interpreted                                                              278            313          25          0.0       27778.0       1.0X
+GetMapValue codegen                                                                  171            193          20          0.1       17086.6       1.6X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup: non-foldable map column (size=100, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted                                                              99            109          10          0.1        9923.0       1.0X
-GetMapValue codegen                                                                  24             30           6          0.4        2406.0       4.1X
+GetMapValue interpreted                                                              36             41           7          0.3        3604.3       1.0X
+GetMapValue codegen                                                                  30             37           7          0.3        3036.0       1.2X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup: non-foldable map column (size=100, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted                                                             130            143          11          0.1       12953.9       1.0X
-GetMapValue codegen                                                                  24             29           4          0.4        2416.5       5.4X
+GetMapValue interpreted                                                              38             50          10          0.3        3795.3       1.0X
+GetMapValue codegen                                                                  30             36           7          0.3        3019.5       1.3X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup: non-foldable map column (size=100, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted                                                             154            160           4          0.1       15359.9       1.0X
-GetMapValue codegen                                                                  23             27           4          0.4        2298.5       6.7X
+GetMapValue interpreted                                                              41             48           8          0.2        4140.7       1.0X
+GetMapValue codegen                                                                  32             39           7          0.3        3166.8       1.3X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup: non-foldable map column (size=10, hit=1.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted                                                             22             25           3          0.4        2230.2       1.0X
-GetMapValue codegen                                                                 12             15           3          0.8        1237.7       1.8X
+GetMapValue interpreted                                                             18             21           5          0.6        1764.7       1.0X
+GetMapValue codegen                                                                 16             18           4          0.6        1566.3       1.1X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup: non-foldable map column (size=10, hit=0.5, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted                                                             24             26           1          0.4        2432.1       1.0X
-GetMapValue codegen                                                                 12             14           3          0.8        1199.6       2.0X
+GetMapValue interpreted                                                             17             19           3          0.6        1723.4       1.0X
+GetMapValue codegen                                                                 16             18           3          0.6        1602.6       1.1X
 
-OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 MapLookup: non-foldable map column (size=10, hit=0.0, type=IntegerType):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------------------
-GetMapValue interpreted                                                             27             28           2          0.4        2657.8       1.0X
-GetMapValue codegen                                                                 12             15           3          0.8        1235.3       2.2X
+GetMapValue interpreted                                                             18             20           3          0.6        1759.1       1.0X
+GetMapValue codegen                                                                 16             18           3          0.6        1570.2       1.1X
 

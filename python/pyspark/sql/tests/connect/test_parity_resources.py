@@ -16,8 +16,8 @@
 #
 import os
 
-from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.sql.tests.test_resources import ResourceProfileTestsMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ResourceProfileParityTests(ResourceProfileTestsMixin, ReusedConnectTestCase):

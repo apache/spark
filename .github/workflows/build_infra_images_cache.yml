@@ -33,7 +33,6 @@ on:
     - 'master'
     - 'branch-*'
     paths:
-    - 'dev/infra/Dockerfile'
     - 'dev/spark-test-image/docs/Dockerfile'
     - 'dev/spark-test-image/lint/Dockerfile'
     - 'dev/spark-test-image/sparkr/Dockerfile'
@@ -58,36 +57,26 @@ jobs:
       packages: write
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
       - name: Login to DockerHub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push
-        id: docker_build
-        continue-on-error: true
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
-        with:
-          context: ./dev/infra/
-          push: true
-          tags: ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ github.ref_name }}-static
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ github.ref_name }}
-          cache-to: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ github.ref_name }},mode=max
-      - name: Image digest
-        run: echo ${{ steps.docker_build.outputs.digest }}
       - name: Build and push (Documentation)
         if: hashFiles('dev/spark-test-image/docs/Dockerfile') != ''
         id: docker_build_docs
         continue-on-error: true
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: ./dev/spark-test-image/docs/
+          build-contexts: |
+            root=./
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ github.ref_name }}
@@ -99,9 +88,11 @@ jobs:
         if: hashFiles('dev/spark-test-image/lint/Dockerfile') != ''
         id: docker_build_lint
         continue-on-error: true
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: ./dev/spark-test-image/lint/
+          build-contexts: |
+            root=./
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ github.ref_name }}
@@ -113,7 +104,7 @@ jobs:
         if: hashFiles('dev/spark-test-image/sparkr/Dockerfile') != ''
         id: docker_build_sparkr
         continue-on-error: true
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: ./dev/spark-test-image/sparkr/
           push: true
@@ -127,9 +118,11 @@ jobs:
         if: hashFiles('dev/spark-test-image/python-minimum/Dockerfile') != ''
         id: docker_build_pyspark_python_minimum
         continue-on-error: true
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: ./dev/spark-test-image/python-minimum/
+          build-contexts: |
+            root=./
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-minimum-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-minimum-cache:${{ github.ref_name }}
@@ -141,7 +134,7 @@ jobs:
         if: hashFiles('dev/spark-test-image/python-311/Dockerfile') != ''
         id: docker_build_pyspark_python_311
         continue-on-error: true
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: ./dev/spark-test-image/python-311/
           build-contexts: |
@@ -157,9 +150,11 @@ jobs:
         if: hashFiles('dev/spark-test-image/python-312-classic-only/Dockerfile') != ''
         id: docker_build_pyspark_python_312_classic_only
         continue-on-error: true
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: ./dev/spark-test-image/python-312-classic-only/
+          build-contexts: |
+            root=./
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-312-classic-only-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-312-classic-only-cache:${{ github.ref_name }}
@@ -171,7 +166,7 @@ jobs:
         if: hashFiles('dev/spark-test-image/python-312/Dockerfile') != ''
         id: docker_build_pyspark_python_312
         continue-on-error: true
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: ./dev/spark-test-image/python-312/
           build-contexts: |
@@ -187,9 +182,11 @@ jobs:
         if: hashFiles('dev/spark-test-image/python-312-pandas-3/Dockerfile') != ''
         id: docker_build_pyspark_python_312_pandas_3
         continue-on-error: true
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: ./dev/spark-test-image/python-312-pandas-3/
+          build-contexts: |
+            root=./
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-312-pandas-3-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-312-pandas-3-cache:${{ github.ref_name }}
@@ -201,7 +198,7 @@ jobs:
         if: hashFiles('dev/spark-test-image/python-313/Dockerfile') != ''
         id: docker_build_pyspark_python_313
         continue-on-error: true
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: ./dev/spark-test-image/python-313/
           build-contexts: |
@@ -217,7 +214,7 @@ jobs:
         if: hashFiles('dev/spark-test-image/python-314/Dockerfile') != ''
         id: docker_build_pyspark_python_314
         continue-on-error: true
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: ./dev/spark-test-image/python-314/
           build-contexts: |
@@ -233,9 +230,11 @@ jobs:
         if: hashFiles('dev/spark-test-image/python-314-nogil/Dockerfile') != ''
         id: docker_build_pyspark_python_314_nogil
         continue-on-error: true
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: ./dev/spark-test-image/python-314-nogil/
+          build-contexts: |
+            root=./
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-314-nogil-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-314-nogil-cache:${{ github.ref_name }}
@@ -255,7 +254,6 @@ jobs:
               status=1
             fi
           }
-          check "base"                            "${{ steps.docker_build.outcome }}"
           check "docs"                            "${{ steps.docker_build_docs.outcome }}"
           check "lint"                            "${{ steps.docker_build_lint.outcome }}"
           check "sparkr"                          "${{ steps.docker_build_sparkr.outcome }}"

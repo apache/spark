@@ -51,6 +51,16 @@ class BlockIdSuite extends SparkFunSuite {
     assertSame(id, BlockId(id.toString))
   }
 
+  test("SPARK-41246: rdd with a negative id") {
+    // Safety net: fail-fast prevents minting negative ids, but BlockId must still
+    // parse names from pre-upgrade caches or tests.
+    val id = RDDBlockId(-1330910599, 36)
+    assert(id.name === "rdd_-1330910599_36")
+    assertSame(id, BlockId(id.name))
+    assertDifferent(id, RDDBlockId(1330910599, 36))
+    assertSame(RDDBlockId(Int.MinValue, 0), BlockId("rdd_-2147483648_0"))
+  }
+
   test("shuffle") {
     val id = ShuffleBlockId(1, 2, 3)
     assertSame(id, ShuffleBlockId(1, 2, 3))

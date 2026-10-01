@@ -26,7 +26,7 @@ import org.apache.spark.annotation.DeveloperApi;
  * This is a checked exception to ensure callers handle credential resolution failures
  * explicitly (e.g., retry, fail the job, or fall back to another mechanism).
  *
- * @since 4.3.0
+ * @since 4.4.0
  */
 @DeveloperApi
 public class CredentialResolutionException extends Exception {

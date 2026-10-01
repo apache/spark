@@ -380,7 +380,12 @@ sealed abstract class LikeAllBase extends MultiLikeBase {
     val javaDataType = CodeGenerator.javaType(child.dataType)
     val pattern = ctx.freshName("pattern")
     val valueArg = ctx.freshName("valueArg")
-    val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
+    // Cast to a parameterized List so the generated for-each binds elements to Pattern
+    // (javac rejects iterating a raw collection into a typed loop var; Janino allows it),
+    // and so the cast targets the public List interface rather than the non-public
+    // Scala collection wrapper's runtime class.
+    val patternCache = ctx.addReferenceObj(
+      "patternCache", cache.asJava, "java.util.List<java.util.regex.Pattern>")
 
     val checkNotMatchCode = if (isNotSpecified) {
       s"$pattern.matcher($valueArg.toString()).matches()"
@@ -440,7 +445,12 @@ sealed abstract class LikeAnyBase extends MultiLikeBase {
     val javaDataType = CodeGenerator.javaType(child.dataType)
     val pattern = ctx.freshName("pattern")
     val valueArg = ctx.freshName("valueArg")
-    val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
+    // Cast to a parameterized List so the generated for-each binds elements to Pattern
+    // (javac rejects iterating a raw collection into a typed loop var; Janino allows it),
+    // and so the cast targets the public List interface rather than the non-public
+    // Scala collection wrapper's runtime class.
+    val patternCache = ctx.addReferenceObj(
+      "patternCache", cache.asJava, "java.util.List<java.util.regex.Pattern>")
 
     val checkMatchCode = if (isNotSpecified) {
       s"!$pattern.matcher($valueArg.toString()).matches()"
@@ -607,7 +617,8 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
-  override def dataType: DataType = ArrayType(str.dataType, containsNull = false)
+  override def dataType: DataType =
+    ArrayType(str.dataType, containsNull = false)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeBinaryLcase, StringTypeWithCollation, IntegerType)
   override def first: Expression = str
@@ -738,6 +749,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   // last replacement string, we don't want to convert a UTF8String => java.langString every time.
   @transient private var lastReplacement: String = _
   @transient private var lastReplacementInUTF8: UTF8String = _
+  override def stateful: Boolean = true
   final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_REPLACE)
 
   override def nullSafeEval(s: Any, p: Any, r: Any, i: Any): Any = {
@@ -754,7 +766,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     RegExpUtils.replace(pattern, s.toString, lastReplacement, i.asInstanceOf[Int])
   }
 
-  override def dataType: DataType = subject.dataType
+  override def dataType: DataType =
+    subject.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeBinaryLcase,
       StringTypeWithCollation, StringTypeBinaryLcase, IntegerType)
@@ -816,9 +829,8 @@ object RegExpExtractBase {
   // generated Java is a single call rather than an inline match/group block.
   def extract(matcher: Matcher, idx: Int, prettyName: String): UTF8String = {
     if (matcher.find()) {
-      val mr = matcher.toMatchResult
-      checkGroupIndex(prettyName, mr.groupCount, idx)
-      val group = mr.group(idx)
+      checkGroupIndex(prettyName, matcher.groupCount, idx)
+      val group = matcher.group(idx)
       // Pattern matched, but it's an optional group
       if (group == null) UTF8String.EMPTY_UTF8 else UTF8String.fromString(group)
     } else {
@@ -830,9 +842,8 @@ object RegExpExtractBase {
   def extractAll(matcher: Matcher, idx: Int, prettyName: String): GenericArrayData = {
     val matchResults = new ArrayBuffer[UTF8String]()
     while (matcher.find()) {
-      val mr = matcher.toMatchResult
-      checkGroupIndex(prettyName, mr.groupCount, idx)
-      val group = mr.group(idx)
+      checkGroupIndex(prettyName, matcher.groupCount, idx)
+      val group = matcher.group(idx)
       // Pattern matched, but it's an optional group
       if (group == null) {
         matchResults += UTF8String.EMPTY_UTF8
@@ -855,6 +866,7 @@ abstract class RegExpExtractBase
   @transient private var lastRegex: UTF8String = _
   // last regex pattern, we cache it for performance concern
   @transient private var pattern: Pattern = _
+  override def stateful: Boolean = true
 
   final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_EXTRACT_FAMILY)
 
@@ -928,7 +940,8 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     RegExpExtractBase.extract(getLastMatcher(s, p), r.asInstanceOf[Int], prettyName)
   }
 
-  override def dataType: DataType = subject.dataType
+  override def dataType: DataType =
+    subject.dataType
   override def prettyName: String = "regexp_extract"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1004,7 +1017,8 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
     RegExpExtractBase.extractAll(getLastMatcher(s, p), r.asInstanceOf[Int], prettyName)
   }
 
-  override def dataType: DataType = ArrayType(subject.dataType)
+  override def dataType: DataType =
+    ArrayType(subject.dataType)
   override def prettyName: String = "regexp_extract_all"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1157,7 +1171,7 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
       val source = s.toString
       val m = getLastMatcher(source, r)
       if (m.find) {
-        source.codePointCount(0, m.toMatchResult.start()) + 1
+        source.codePointCount(0, m.start()) + 1
       } else {
         0
       }
@@ -1186,7 +1200,7 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
         collationId)}
          |  if ($matcher.find()) {
          |    String $source = $subject.toString();
-         |    ${ev.value} = $source.codePointCount(0, $matcher.toMatchResult().start()) + 1;
+         |    ${ev.value} = $source.codePointCount(0, $matcher.start()) + 1;
          |  } else {
          |    ${ev.value} = 0;
          |  }

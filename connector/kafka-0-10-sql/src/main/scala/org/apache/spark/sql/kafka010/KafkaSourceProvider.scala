@@ -37,6 +37,7 @@ import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsTruncate, Write, WriteBuilder}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsStreamingUpdateAsAppend}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
@@ -375,10 +376,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       case LatestOffsetRangeLimit =>
         throw new IllegalArgumentException("starting offset can't be latest " +
           "for batch queries on Kafka")
-      case SpecificOffsetRangeLimit(partitionOffsets) =>
-        partitionOffsets.foreach {
-          case (tp, off) if off == KafkaOffsetRangeLimit.LATEST =>
-            throw new IllegalArgumentException(s"startingOffsets for $tp can't " +
+      case SpecificOffsetRangeLimit(partitionOffsets, topicOffsets) =>
+        (partitionOffsets.map { case (tp, off) => tp.toString -> off } ++ topicOffsets).foreach {
+          case (name, off) if off == KafkaOffsetRangeLimit.LATEST =>
+            throw new IllegalArgumentException(s"startingOffsets for $name can't " +
               "be latest for batch queries on Kafka")
           case _ => // ignore
         }
@@ -393,10 +394,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         throw new IllegalArgumentException("ending offset can't be earliest " +
           "for batch queries on Kafka")
       case LatestOffsetRangeLimit => // good to go
-      case SpecificOffsetRangeLimit(partitionOffsets) =>
-        partitionOffsets.foreach {
-          case (tp, off) if off == KafkaOffsetRangeLimit.EARLIEST =>
-            throw new IllegalArgumentException(s"ending offset for $tp can't be " +
+      case SpecificOffsetRangeLimit(partitionOffsets, topicOffsets) =>
+        (partitionOffsets.map { case (tp, off) => tp.toString -> off } ++ topicOffsets).foreach {
+          case (name, off) if off == KafkaOffsetRangeLimit.EARLIEST =>
+            throw new IllegalArgumentException(s"ending offset for $name can't be " +
               "earliest for batch queries on Kafka")
           case _ => // ignore
         }
@@ -640,19 +641,25 @@ private[kafka010] object KafkaSourceProvider extends Logging {
     startOffset match {
       case start: SpecificOffsetRangeLimit if endOffset.isInstanceOf[SpecificOffsetRangeLimit] =>
         val end = endOffset.asInstanceOf[SpecificOffsetRangeLimit]
-        if (start.partitionOffsets.keySet != end.partitionOffsets.keySet) {
+        // Topic-level offsets are only expanded once the partitions are discovered, so with them
+        // the two sides can legitimately enumerate different topic-partitions here. Matching them
+        // up is then left to the offset readers, which see the assigned partitions.
+        val enumeratesAllPartitions = start.topicOffsets.isEmpty && end.topicOffsets.isEmpty
+        if (enumeratesAllPartitions &&
+            start.partitionOffsets.keySet != end.partitionOffsets.keySet) {
           throw KafkaExceptions.unmatchedTopicPartitionsBetweenOffsets(
             start.partitionOffsets.keySet, end.partitionOffsets.keySet
           )
         }
         start.partitionOffsets.foreach {
-          case (tp, startOffset) =>
+          case (tp, startOffset) if end.partitionOffsets.contains(tp) =>
             checkStartOffsetNotGreaterThanEndOffset(
               startOffset,
               end.partitionOffsets(tp),
               tp,
               KafkaExceptions.unresolvedStartOffsetGreaterThanEndOffset
             )
+          case _ => // the offsets of this partition are not comparable before resolution
         }
 
       case start: SpecificTimestampRangeLimit
@@ -711,7 +718,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
           LatestOffsetRangeLimit
         case Some(offset) if offset.toLowerCase(Locale.ROOT) == "earliest" =>
           EarliestOffsetRangeLimit
-        case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
+        case Some(json) => JsonUtils.specificOffsets(json)
         case None => defaultOffsets
       }
     }
@@ -801,10 +808,19 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   }
 
   private def convertToSpecifiedParams(parameters: Map[String, String]): Map[String, String] = {
-    parameters
+    // Optional operator-configured denylist of Kafka client option names (without the "kafka."
+    // prefix). Empty by default, which allows every option and preserves the previous behavior.
+    val disallowed = SQLConf.get.getConf(StaticSQLConf.KAFKA_DISALLOWED_OPTIONS)
+      .map(_.toLowerCase(Locale.ROOT)).toSet
+    val stripped = parameters
       .keySet
       .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
       .map { k => k.drop(6) -> parameters(k) }
-      .toMap
+    stripped.foreach { case (key, _) =>
+      if (disallowed.contains(key.toLowerCase(Locale.ROOT))) {
+        throw KafkaExceptions.disallowedOption(key, StaticSQLConf.KAFKA_DISALLOWED_OPTIONS.key)
+      }
+    }
+    stripped.toMap
   }
 }

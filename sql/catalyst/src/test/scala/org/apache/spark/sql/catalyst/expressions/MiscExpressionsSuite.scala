@@ -55,6 +55,10 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
+  test("SPARK-58627: RaiseError is throwable") {
+    assert(RaiseError(Literal("error!")).throwable)
+  }
+
   test("SPARK-55109: RaiseError.sql uses single-argument form only for known error classes") {
     assert(RaiseError(Literal("error!")).sql === "raise_error('error!')")
 

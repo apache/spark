@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -62,6 +63,19 @@ class EncoderResolutionSuite extends PlanTest {
     // int type can be up cast to string type
     val attrs2 = Seq($"a".int, $"b".long)
     testFromRow(encoder, attrs2, InternalRow(1, 2L))
+  }
+
+  test("SPARK-59112: legacy loose upcast accepts CHAR/VARCHAR inputs") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.LEGACY_LOOSE_UPCAST.key -> "true") {
+      Seq(CharType(1), VarcharType(1)).foreach { stringType =>
+        val encoder = ExpressionEncoder[Int]()
+        val attributes = Seq(AttributeReference("value", stringType)())
+        val deserializer = encoder.resolveAndBind(attributes).createDeserializer()
+        assert(deserializer(InternalRow(UTF8String.fromString("1"))) === 1)
+      }
+    }
   }
 
   test("real type doesn't match encoder schema but they are compatible: nested product") {

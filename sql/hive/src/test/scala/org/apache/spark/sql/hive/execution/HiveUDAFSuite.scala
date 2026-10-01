@@ -19,28 +19,43 @@ package org.apache.spark.sql.hive.execution
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.hadoop.hive.common.`type`.HiveChar
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDAFEvaluator, GenericUDAFMax}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.{AggregationBuffer, Mode}
 import org.apache.hadoop.hive.ql.util.JavaDataModel
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
+import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory, PrimitiveObjectInspector}
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.{PrimitiveObjectInspectorFactory, PrimitiveObjectInspectorUtils}
+import org.apache.hadoop.hive.serde2.typeinfo.{CharTypeInfo, TypeInfo}
 import test.org.apache.spark.sql.MyDoubleAvg
 
-import org.apache.spark.SPARK_DOC_ROOT
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
+import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
+import org.apache.spark.sql.hive.HiveUDAFFunction
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{CharType, LongType, StringType, VarcharType}
 import org.apache.spark.tags.SlowHiveTest
+import org.apache.spark.unsafe.types.UTF8String
 
 @SlowHiveTest
 class HiveUDAFSuite extends QueryTest
   with TestHiveSingleton with AdaptiveSparkPlanHelper {
   import testImplicits._
+
+  // Sums the `numTasksFallBacked` metric across every `ObjectHashAggregateExec` in the executed
+  // plan. The DataFrame must be executed (e.g. via `checkAnswer`) before this is read.
+  private def numFallbackTasks(df: DataFrame): Long = {
+    collect(df.queryExecution.executedPlan) {
+      case agg: ObjectHashAggregateExec => agg.metrics("numTasksFallBacked").value
+    }.sum
+  }
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -102,28 +117,79 @@ class HiveUDAFSuite extends QueryTest
   test("SPARK-24935: customized Hive UDAF with two aggregation buffers") {
     withTempView("v") {
       spark.range(100).createTempView("v")
-      val df = sql("SELECT id % 2, mock2(id) FROM v GROUP BY id % 2")
+      // Disable `CombineAdjacentAggregation` so the partial/final staging is preserved; otherwise
+      // the single-partition `range(100)` collapses into a single `Complete`-mode aggregate (the
+      // Complete-mode path is covered separately by the SPARK-58294 test below).
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        val df = sql("SELECT id % 2, mock2(id) FROM v GROUP BY id % 2")
 
-      val aggs = collect(df.queryExecution.executedPlan) {
-        case agg: ObjectHashAggregateExec => agg
+        val aggs = collect(df.queryExecution.executedPlan) {
+          case agg: ObjectHashAggregateExec => agg
+        }
+
+        // There should be two aggregate operators, one for partial aggregation, and the other for
+        // global aggregation.
+        assert(aggs.length == 2)
+
+        withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
+          checkAnswer(df, Seq(
+            Row(0, Row(50, 0)),
+            Row(1, Row(50, 0))
+          ))
+        }
+
+        withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "100") {
+          checkAnswer(df, Seq(
+            Row(0, Row(50, 0)),
+            Row(1, Row(50, 0))
+          ))
+        }
       }
+    }
+  }
 
-      // There should be two aggregate operators, one for partial aggregation, and the other for
-      // global aggregation.
-      assert(aggs.length == 2)
+  test("SPARK-58294: Hive UDAF with two aggregation buffers in Complete mode") {
+    withTempView("v") {
+      spark.range(100).createTempView("v")
+      // With `CombineAdjacentAggregation` enabled and a single input partition, the adjacent
+      // partial/final pair is merged into a single `Complete`-mode `ObjectHashAggregateExec`.
+      // `MockUDAF2` deliberately uses distinct aggregation-buffer classes per mode (one for
+      // consuming original input via PARTIAL1, another for merging partial buffers via FINAL).
+      // The Hive UDAF wrapper must convert the PARTIAL1 buffer to a FINAL buffer on `eval` so the
+      // Complete-mode path (which calls `update` but not `merge`) terminates correctly instead of
+      // handing a PARTIAL1 buffer to the FINAL evaluator.
+      val query = "SELECT id % 2, mock2(id) FROM v GROUP BY id % 2"
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        val aggs = collect(sql(query).queryExecution.executedPlan) {
+          case agg: ObjectHashAggregateExec => agg
+        }
+        // Combined into a single `Complete`-mode aggregate.
+        assert(aggs.length == 1)
+        assert(aggs.head.aggregateExpressions.forall(_.mode == Complete))
 
-      withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
-        checkAnswer(df, Seq(
-          Row(0, Row(50, 0)),
-          Row(1, Row(50, 0))
-        ))
-      }
+        // Rebuild the query inside each `withSQLConf` block: `SparkPlan.executeRDD` memoizes the
+        // RDD, so reusing one DataFrame across thresholds would replay the first execution instead
+        // of re-planning under the new threshold, exercising only one of the two paths.
+        // Threshold 1 forces every task with more than one group to fall back to sort-based
+        // aggregation (there are two groups: `id % 2` in {0, 1}).
+        withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
+          val df = sql(query)
+          checkAnswer(df, Seq(
+            Row(0, Row(50, 0)),
+            Row(1, Row(50, 0))
+          ))
+          assert(numFallbackTasks(df) > 0, "threshold 1 must trigger the sort-based fallback path")
+        }
 
-      withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "100") {
-        checkAnswer(df, Seq(
-          Row(0, Row(50, 0)),
-          Row(1, Row(50, 0))
-        ))
+        // Threshold 100 is above the two groups, so no task falls back.
+        withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "100") {
+          val df = sql(query)
+          checkAnswer(df, Seq(
+            Row(0, Row(50, 0)),
+            Row(1, Row(50, 0))
+          ))
+          assert(numFallbackTasks(df) == 0, "threshold 100 must not trigger the fallback path")
+        }
       }
     }
   }
@@ -137,6 +203,90 @@ class HiveUDAFSuite extends QueryTest
           spark.sql("SELECT default.myDoubleAvg(value) as my_avg from temp"),
           Row(105.0))
       }
+    }
+  }
+
+  test("SPARK-59277: Hive UDAF supports first-class CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq(
+        ("CHAR(5) COLLATE UTF8_LCASE", CharType(5), Row("def  ")),
+        ("VARCHAR(7) COLLATE UNICODE_CI", VarcharType(7), Row("def"))
+      ).foreach { case (dataType, expectedType, expectedRow) =>
+        val aggregate = sql(
+          s"""SELECT hive_max(value)
+             |FROM VALUES
+             |  (CAST('abc' AS $dataType)),
+             |  (CAST('def' AS $dataType))
+             |AS input(value)
+             |""".stripMargin)
+        assert(aggregate.schema.head.dataType === expectedType)
+        checkAnswer(aggregate, expectedRow)
+      }
+    }
+  }
+
+  test("SPARK-59277: HiveUDAFFunction keeps analysis type after child constantness changes") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val attr = AttributeReference("value", VarcharType(7))()
+      val original = HiveUDAFFunction(
+        "hive_max",
+        HiveFunctionWrapper(classOf[GenericUDAFMax].getName),
+        Seq(Literal.create(UTF8String.fromString("abc"), VarcharType(7))))
+      assert(original.dataType === VarcharType(7))
+      val copied = original.withNewChildren(Seq(attr)).asInstanceOf[HiveUDAFFunction]
+      assert(copied.dataType === original.dataType)
+      copied.serialize(null)
+    }
+  }
+
+  test("SPARK-59277: Hive UDAF partial buffer type can differ from the final result") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withUserDefinedFunction("char_max" -> true) {
+        sql(
+          s"CREATE TEMPORARY FUNCTION char_max AS " +
+            s"'${classOf[MockPartialStringFinalCharUDAF].getName}'")
+        withTempView("cv_udaf") {
+          Seq("abc", "def").toDF("value").repartition(2).createOrReplaceTempView("cv_udaf")
+          val aggregate = sql("SELECT char_max(CAST(value AS VARCHAR(7))) FROM cv_udaf")
+          assert(aggregate.schema.head.dataType === CharType(5))
+          checkAnswer(aggregate, Row("def  "))
+        }
+      }
+    }
+  }
+
+  test("SPARK-59277: incompatible UDAF partial inspector triggers mismatch error") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // MockPartialStringFinalCharUDAF exposes STRING partial / CHAR(5) final.
+      // Feed LongType as the expected partial type to trigger the mismatch.
+      val udaf = HiveUDAFFunction(
+        "char_max",
+        HiveFunctionWrapper(classOf[MockPartialStringFinalCharUDAF].getName),
+        Seq(Literal("x")),
+        isUDAFBridgeRequired = false,
+        mutableAggBufferOffset = 0,
+        inputAggBufferOffset = 0,
+        partialResultDataType = LongType,
+        dataType = CharType(5))
+      intercept[SparkException] { udaf.serialize(null) }
+    }
+  }
+
+  test("SPARK-59277: incompatible UDAF final inspector triggers mismatch error") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // MockPartialStringFinalCharUDAF exposes CHAR(5) final.
+      // Feed VarcharType(5) as the expected final type: CHAR(5) vs VARCHAR(5)
+      // is incompatible (different bounded-string kind).
+      val udaf = HiveUDAFFunction(
+        "char_max",
+        HiveFunctionWrapper(classOf[MockPartialStringFinalCharUDAF].getName),
+        Seq(Literal("x")),
+        isUDAFBridgeRequired = false,
+        mutableAggBufferOffset = 0,
+        inputAggBufferOffset = 0,
+        partialResultDataType = StringType,
+        dataType = VarcharType(5))
+      intercept[SparkException] { udaf.serialize(null) }
     }
   }
 
@@ -343,5 +493,69 @@ class MockUDAFEvaluator2 extends GenericUDAFEvaluator {
   override def terminate(agg: AggregationBuffer): AnyRef = {
     val buffer = agg.asInstanceOf[MockUDAFBuffer2]
     Array[Object](buffer.nonNullCount: java.lang.Long, buffer.nullCount: java.lang.Long)
+  }
+}
+
+/**
+ * PARTIAL1/PARTIAL2 expose a STRING inspector; FINAL/COMPLETE expose CHAR(5). This keeps the
+ * (partial, final) Catalyst type pair distinct so shuffle serde cannot silently use the result
+ * type for the aggregation buffer.
+ */
+class MockPartialStringFinalCharUDAF extends AbstractGenericUDAFResolver {
+  override def getEvaluator(info: Array[TypeInfo]): GenericUDAFEvaluator =
+    new MockPartialStringFinalCharEvaluator
+}
+
+class MockPartialStringFinalCharBuffer(var max: String)
+    extends GenericUDAFEvaluator.AbstractAggregationBuffer {
+  override def estimate(): Int = 16
+}
+
+class MockPartialStringFinalCharEvaluator extends GenericUDAFEvaluator {
+  private var inputOI: PrimitiveObjectInspector = _
+  private val partialOI = PrimitiveObjectInspectorFactory.javaStringObjectInspector
+  private val finalOI =
+    PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector(new CharTypeInfo(5))
+
+  override def init(mode: Mode, parameters: Array[ObjectInspector]): ObjectInspector = {
+    if (mode == Mode.PARTIAL1 || mode == Mode.COMPLETE) {
+      inputOI = parameters.head.asInstanceOf[PrimitiveObjectInspector]
+    }
+    if (mode == Mode.PARTIAL1 || mode == Mode.PARTIAL2) partialOI else finalOI
+  }
+
+  override def getNewAggregationBuffer: AggregationBuffer =
+    new MockPartialStringFinalCharBuffer(null)
+
+  override def reset(agg: AggregationBuffer): Unit = {
+    agg.asInstanceOf[MockPartialStringFinalCharBuffer].max = null
+  }
+
+  override def iterate(agg: AggregationBuffer, parameters: Array[AnyRef]): Unit = {
+    if (parameters.head != null) {
+      val value = PrimitiveObjectInspectorUtils.getString(parameters.head, inputOI)
+      val buffer = agg.asInstanceOf[MockPartialStringFinalCharBuffer]
+      if (buffer.max == null || value > buffer.max) {
+        buffer.max = value
+      }
+    }
+  }
+
+  override def merge(agg: AggregationBuffer, partial: Object): Unit = {
+    if (partial != null) {
+      val value = partial.asInstanceOf[String]
+      val buffer = agg.asInstanceOf[MockPartialStringFinalCharBuffer]
+      if (buffer.max == null || value > buffer.max) {
+        buffer.max = value
+      }
+    }
+  }
+
+  override def terminatePartial(agg: AggregationBuffer): AnyRef =
+    agg.asInstanceOf[MockPartialStringFinalCharBuffer].max
+
+  override def terminate(agg: AggregationBuffer): AnyRef = {
+    val max = agg.asInstanceOf[MockPartialStringFinalCharBuffer].max
+    if (max == null) null else new HiveChar(max, 5)
   }
 }

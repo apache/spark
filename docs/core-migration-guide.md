@@ -22,7 +22,17 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 4.3 to 4.4
+
+- Since Spark 4.4, an executor pod template that names a service account in `serviceAccountName` keeps it: Spark applies `spark.kubernetes.authenticate.executor.serviceAccountName`, or `spark.kubernetes.authenticate.driver.serviceAccountName` as a fallback, only when the template names no account in either `serviceAccount` or `serviceAccountName`. Earlier versions decided by reading the deprecated `serviceAccount` field alone, so with either configuration set, a template that named the account in `serviceAccountName` had it overwritten; with neither set, the template's account was kept already. Spark logs a warning when `spark.kubernetes.authenticate.executor.serviceAccountName` named an account the template displaced.
+
+- Since Spark 4.4, an empty service account name in an executor pod template counts as naming no account, which is how Kubernetes itself defaults the two fields. A template whose deprecated `serviceAccount` field is present but empty, with `serviceAccountName` empty or absent, used to count as naming an account: the configured account was dropped and the executor pods ran as the namespace's default account. They now run as `spark.kubernetes.authenticate.executor.serviceAccountName` or, failing that, `spark.kubernetes.authenticate.driver.serviceAccountName`, which can widen what they are allowed to do, since the [RBAC](running-on-kubernetes.html#rbac) setup binds the driver's account to the `edit` role. To keep the executor pods on the namespace's default account, name it explicitly, either in the template's `serviceAccountName` or in `spark.kubernetes.authenticate.executor.serviceAccountName`; Kubernetes creates it as `default` in every namespace.
+
 ## Upgrading from Core 4.2 to 4.3
+
+- Since Spark 4.3, when submitting to a standalone cluster in cluster mode through the RPC submission gateway, which is what `spark-submit` uses unless `spark.master.rest.enabled` is set to `true`, Spark forwards to the driver only the environment variables whose name starts with `SPARK_`, excluding `SPARK_ENV_LOADED`, `SPARK_HOME`, `SPARK_CONF_DIR`, `SPARK_LOCAL_IP`, and `SPARK_LOCAL_HOSTNAME`, matching the REST submission gateway. Previously the full environment of the submitting process was forwarded, so variables such as `JAVA_HOME`, `HADOOP_CONF_DIR`, `YARN_CONF_DIR`, and `LD_LIBRARY_PATH` no longer reach the driver. To restore the legacy behavior, you can set `spark.standalone.submit.filterEnvironment` to `false`; `SPARK_LOCAL_IP` and `SPARK_LOCAL_HOSTNAME` are never forwarded regardless, since they describe the submitting host rather than the worker the driver runs on.
+
+- Spark 4.3 adds pre-fetch filtering and CSRF tokens to side-effect causing Spark UI actions, _except for_ `/workers/kill` which is used by decomissioning, and requires POST requests for non-YARN deployments. You can re-enable GET request handling by setting `spark.ui.actionsViaGetEnabled=true`, however CSRF token validation remains even with GET requests enabled. If you have scripted actions outside of Spark to kill running jobs you will need to fetch the previous page and grab the CSRF token first.
 
 - Since Spark 4.3, Spark compresses serialized RDD partitions by default. To restore the legacy behavior, you can set `spark.rdd.compress` to `false`.
 
@@ -37,6 +47,10 @@ license: |
 - Since Spark 4.3, `spark.ui.allowFramingFrom` now uses CSP `frame-ancestors` instead of the deprecated `X-Frame-Options: ALLOW-FROM` (which was ignored by all modern browsers). This setting only takes effect when `spark.ui.contentSecurityPolicy.enabled=true` (the default). When CSP is disabled, `X-Frame-Options: SAMEORIGIN` is always used regardless of the `allowFramingFrom` value.
 
 - Since Spark 4.3, the Spark Master REST API rejects a submission whose request body exceeds `spark.master.rest.maxRequestBodySize` (default `100m`) with HTTP 413. To allow larger request bodies, increase `spark.master.rest.maxRequestBodySize`.
+
+- Since Spark 4.3, `spark.task.cpus` accepts fractional values, and the executor-wide `spark.executor.pyspark.memory` allocation is split across the executor's concurrent task capacity instead of its raw core count. Each Python worker's memory limit can therefore change for existing configurations: with `spark.task.cpus` greater than 1 each worker receives a proportionally larger share, and with dynamic allocation enabled, when a custom resource (e.g. GPUs) limits concurrency the fewer concurrently running workers share the whole allocation. With dynamic allocation disabled, shares stay proportional to each task's cpus so that mixed workloads sharing one executor stay within the budget. In addition, a stage whose resource profile does not request `pysparkMemory` explicitly now inherits the default profile's allocation, matching how its executors are sized; Python workers that previously ran without any memory limit under such profiles are now capped. The aggregate limit across concurrently running workers stays within the configured allocation.
+
+- Since Spark 4.3, a positive `spark.executor.pyspark.memory` allocation that is too small to give each concurrent task slot at least 1 MiB fails the Python task with an error instead of silently running the workers without any memory limit. Setting `spark.executor.pyspark.memory=0` still disables the limit. To restore a working memory limit, increase `spark.executor.pyspark.memory` or reduce the executor's concurrent task capacity.
 
 ## Upgrading from Core 4.1 to 4.2
 

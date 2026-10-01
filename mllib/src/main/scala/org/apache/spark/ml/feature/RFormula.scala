@@ -27,13 +27,14 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, VectorUDT}
 import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasHandleInvalid, HasLabelCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Base trait for [[RFormula]] and [[RFormulaModel]].
@@ -313,9 +314,9 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     require(!hasLabelCol(schema) || !$(forceIndexLabel),
       "If label column already exists, forceIndexLabel can not be set with true.")
     if (hasLabelCol(schema)) {
-      StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true))
+      StructType(schema.fields :+ StructField($(featuresCol), SQLDataTypes.VectorType, true))
     } else {
-      StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true) :+
+      StructType(schema.fields :+ StructField($(featuresCol), SQLDataTypes.VectorType, true) :+
         StructField($(labelCol), DoubleType, true))
     }
   }
@@ -353,6 +354,15 @@ class RFormulaModel private[feature](
 
   // For ml connect only
   private[ml] def this() = this("", null, null)
+
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    // ResolvedRFormula(label: String, terms: Seq[Seq[String]], hasIntercept: Boolean)
+    size += SizeEstimator.estimate(resolvedFormula)
+    // pipelineModel: PipelineModel
+    size += pipelineModel.estimatedSize
+    size
+  }
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {

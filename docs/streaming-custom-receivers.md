@@ -75,7 +75,7 @@ class CustomReceiver(host: String, port: Int)
 
   def onStop() {
     // There is nothing much to do as the thread calling receive()
-    // is designed to stop by itself if isStopped() returns false
+    // is designed to stop by itself when isStopped() returns true
   }
 
   /** Create a socket connection and receive data until receiver is stopped */
@@ -137,7 +137,7 @@ public class JavaCustomReceiver extends Receiver<String> {
   @Override
   public void onStop() {
     // There is nothing much to do as the thread calling receive()
-    // is designed to stop by itself if isStopped() returns false
+    // is designed to stop by itself when isStopped() returns true
   }
 
   /** Create a socket connection and receive data until receiver is stopped */

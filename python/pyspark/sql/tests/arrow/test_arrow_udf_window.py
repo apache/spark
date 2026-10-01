@@ -15,22 +15,23 @@
 # limitations under the License.
 #
 
-import unittest
 import logging
+import unittest
 
-from pyspark.sql.functions import arrow_udf, ArrowUDFType
-from pyspark.util import PythonEvalType, is_remote_only
-from pyspark.sql import Row, functions as sf
+from pyspark.errors import AnalysisException, PySparkTypeError, PythonException
+from pyspark.sql import Row
+from pyspark.sql import functions as sf
+from pyspark.sql.functions import ArrowUDFType, arrow_udf
 from pyspark.sql.window import Window
-from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
-from pyspark.testing.utils import (
-    have_numpy,
-    numpy_requirement_message,
-    have_pyarrow,
-    pyarrow_requirement_message,
-    assertDataFrameEqual,
-)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
+    have_numpy,
+    have_pyarrow,
+    numpy_requirement_message,
+    pyarrow_requirement_message,
+)
+from pyspark.util import PythonEvalType, is_remote_only
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)

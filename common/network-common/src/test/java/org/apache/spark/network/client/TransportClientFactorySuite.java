@@ -219,9 +219,14 @@ public class TransportClientFactorySuite {
   @Test
   public void closeFactoryBeforeCreateClient() {
     TransportClientFactory factory = context.createClientFactory();
+    io.netty.channel.EventLoopGroup groupBeforeClose = factory.getWorkerGroup();
     factory.close();
     Assertions.assertThrows(IOException.class,
       () -> factory.createClient(TestUtils.getLocalHost(), server1.getPort()));
+    // SPARK-58292: createClient on a closed factory fails with the terminated-executor cause, but
+    // the closed factory must NOT recreate a fresh worker group (which would leak threads). The
+    // group is left as-is, i.e. the shut-down one from before close().
+    assertSame(groupBeforeClose, factory.getWorkerGroup());
   }
 
   @Test
@@ -263,6 +268,51 @@ public class TransportClientFactorySuite {
       IOException exception = Assertions.assertThrows(IOException.class,
           () -> factory.createClient(TestUtils.getLocalHost(), unreachablePort, true));
       assertNotEquals(exception.getCause(), null);
+    }
+  }
+
+  @Test
+  public void recreatesWorkerGroupWhenEventLoopIsDead() throws Exception {
+    // SPARK-58292: a dead netty worker event loop is never replaced within a fixed-size group and
+    // permanently poisons connections. Simulate it by shutting down the factory's worker group:
+    // the next createClient's channel registration is rejected with "event executor terminated", so
+    // createClient must swap in a fresh worker group (and rethrow so the caller can retry).
+    try (TransportClientFactory factory = context.createClientFactory()) {
+      io.netty.channel.EventLoopGroup deadGroup = factory.getWorkerGroup();
+      deadGroup.shutdownGracefully().sync();
+      assertTrue(deadGroup.isShuttingDown());
+
+      // The connect fails because the (dead) group rejects the channel registration.
+      assertThrows(IOException.class,
+        () -> factory.createClient(TestUtils.getLocalHost(), server1.getPort()));
+
+      // The worker group was replaced with a fresh, live one.
+      io.netty.channel.EventLoopGroup freshGroup = factory.getWorkerGroup();
+      assertNotSame(deadGroup, freshGroup);
+      assertFalse(freshGroup.isShuttingDown());
+
+      // And a subsequent connection now succeeds on the fresh group.
+      TransportClient client = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+      assertTrue(client.isActive());
+    }
+  }
+
+  @Test
+  public void doesNotRecreateWorkerGroupWhenDisabled() throws Exception {
+    // With the recreation disabled, a dead worker group is NOT recreated: createClient still
+    // fails, but the worker group is left unchanged.
+    Map<String, String> configMap = new HashMap<>();
+    configMap.put("spark.network.recreateWorkerGroupOnDeadEventLoop", "false");
+    TransportConf disabledConf = new TransportConf("shuffle", new MapConfigProvider(configMap));
+    try (TransportContext ctx = new TransportContext(disabledConf, new NoOpRpcHandler());
+         TransportClientFactory factory = ctx.createClientFactory()) {
+      io.netty.channel.EventLoopGroup deadGroup = factory.getWorkerGroup();
+      deadGroup.shutdownGracefully().sync();
+
+      assertThrows(IOException.class,
+        () -> factory.createClient(TestUtils.getLocalHost(), server1.getPort()));
+
+      assertSame(deadGroup, factory.getWorkerGroup());
     }
   }
 }

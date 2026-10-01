@@ -284,10 +284,21 @@ abstract class TaskContext extends Serializable {
   def getLocalProperty(key: String): String
 
   /**
-   * CPUs allocated to the task.
+   * CPUs allocated to the task, rounded up to a whole number.
+   *
+   * @note when `spark.task.cpus` is fractional (e.g. `0.2`) this rounds up to the next integer and
+   *       so cannot represent the fractional amount; use [[cpuAmount]] for the exact value.
    */
+  @deprecated("use cpuAmount() instead, which supports a fractional spark.task.cpus", "4.3.0")
   @Since("3.3.0")
-  def cpus(): Int
+  def cpus(): Int = cpuAmount().setScale(0, BigDecimal.RoundingMode.CEILING).intValue
+
+  /**
+   * CPUs allocated to the task as an exact, possibly fractional amount, carried as a
+   * [[scala.math.BigDecimal]] (e.g. `BigDecimal("0.2")` when `spark.task.cpus` is `0.2`).
+   */
+  @Since("4.3.0")
+  def cpuAmount(): BigDecimal
 
   /**
    * Resources allocated to the task. The key is the resource name and the value is information

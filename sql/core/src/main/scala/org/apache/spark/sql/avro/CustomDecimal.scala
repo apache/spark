@@ -33,7 +33,7 @@ private[spark] class CustomDecimal(schema: Schema) extends LogicalType(CustomDec
     val obj = schema.getObjectProp("scale")
     obj match {
       case null =>
-        throw new IllegalArgumentException(s"Invalid ${CustomDecimal.TYPE_NAME}: missing scale");
+        throw new IllegalArgumentException(s"Invalid ${CustomDecimal.TYPE_NAME}: missing scale")
       case i : Integer =>
         i
       case other =>

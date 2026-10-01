@@ -18,7 +18,13 @@
 package org.apache.spark.sql.execution.python.streaming
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException, InterruptedIOException}
-import java.nio.channels.{Channels, ClosedByInterruptException, ServerSocketChannel}
+import java.nio.channels.{
+  Channels,
+  ClosedByInterruptException,
+  ClosedChannelException,
+  ServerSocketChannel,
+  SocketChannel
+}
 import java.time.Duration
 
 import scala.collection.mutable
@@ -29,6 +35,7 @@ import com.google.protobuf.ByteString
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
+import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -40,6 +47,7 @@ import org.apache.spark.sql.execution.streaming.state.StateMessage.KeyAndValuePa
 import org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithListGet
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * This class is used to handle the state requests from the Python side. It runs on a separate
@@ -66,7 +74,8 @@ class TransformWithStateInPySparkStateServer(
     mapStatesMapForTest : mutable.HashMap[String, MapStateInfo] = null,
     keyValueIteratorMapForTest: mutable.HashMap[String, Iterator[(Row, Row)]] = null,
     expiryTimerIterForTest: mutable.HashMap[String, Iterator[(Row, Long)]] = null,
-    listTimerMapForTest: mutable.HashMap[String, Iterator[Long]] = null)
+    listTimerMapForTest: mutable.HashMap[String, Iterator[Long]] = null,
+    authHelper: SocketAuthHelper = null)
   extends Runnable with Logging {
 
   import PythonResponseWriterUtils._
@@ -138,8 +147,27 @@ class TransformWithStateInPySparkStateServer(
   } else new mutable.HashMap[String, Iterator[Long]]()
 
   def run(): Unit = {
-    val listeningSocket = stateServerSocket.accept()
+    val listeningSocket = try {
+      stateServerSocket.accept()
+    } catch {
+      case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
+        logInfo(log"State server listener interrupted before the Python worker connected")
+        Thread.currentThread().interrupt()
+        statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
+        return
+      case _: ClosedChannelException =>
+        logInfo(log"State server socket closed before the Python worker connected")
+        statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
+        return
+    }
 
+    // The task completion listener closes only the listening server socket, and the
+    // request loop has several early returns, so the accepted connection is closed
+    // through tryWithResource.
+    Utils.tryWithResource(listeningSocket)(serveRequests)
+  }
+
+  private def serveRequests(listeningSocket: SocketChannel): Unit = {
     // SPARK-51667: We have a pattern of sending messages continuously from one side
     // (Python -> JVM, and vice versa) before getting response from other side. Since most
     // messages we are sending are small, this triggers the bad combination of Nagle's algorithm
@@ -150,6 +178,13 @@ class TransformWithStateInPySparkStateServer(
     // lot less reference to disabling delayed ACKs, while there are lots of resources to
     // disable Nagle's algorithm.
     if (!isUnixDomainSock) listeningSocket.socket().setTcpNoDelay(true)
+
+    // Verify the connecting client before serving any state request, reusing the same
+    // secret-exchange protocol as the other Python <-> JVM channels (SocketAuthHelper).
+    // It is a no-op for Unix domain sockets, which rely on filesystem permissions instead.
+    if (authHelper != null) {
+      authHelper.authClient(listeningSocket)
+    }
 
     inputStream = new DataInputStream(
       new BufferedInputStream(Channels.newInputStream(listeningSocket)))

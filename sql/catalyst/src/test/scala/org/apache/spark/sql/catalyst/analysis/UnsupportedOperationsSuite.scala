@@ -30,8 +30,8 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeMode, TimerValues}
+import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructType}
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends LeafCommand
@@ -106,7 +106,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       excludeColumns = None,
       storedAsScdType = 1,
       trackHistoryColumns = None,
-      trackHistoryExceptColumns = None))
+      trackHistoryExceptColumns = None,
+      ignoreNullUpdates = false,
+      ignoreNullUpdatesColumns = None,
+      ignoreNullUpdatesExceptColumns = None))
 
   /*
     =======================================================================================
@@ -395,6 +398,34 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     Deduplicate(Seq(att), batchRelation),
     outputMode = Append
   )
+
+  def asOfJoin(left: LogicalPlan, right: LogicalPlan): AsOfJoin = {
+    AsOfJoin(
+      left,
+      right,
+      left.output.head >= right.output.head,
+      condition = None,
+      joinType = Inner,
+      orderExpression = left.output.head - right.output.head,
+      toleranceAssertion = None)
+  }
+
+  assertSupportedInStreamingPlan(
+    "ASOF join with stream-static relations",
+    asOfJoin(streamRelation, batchRelation),
+    outputMode = Append)
+
+  assertNotSupportedInStreamingPlan(
+    "ASOF join with static-stream relations",
+    asOfJoin(batchRelation, streamRelation),
+    outputMode = Append,
+    expectedMsgs = Seq("ASOF join", "streaming DataFrame/Dataset on the right"))
+
+  assertNotSupportedInStreamingPlan(
+    "ASOF join with stream-stream relations",
+    asOfJoin(streamRelation, streamRelation),
+    outputMode = Append,
+    expectedMsgs = Seq("ASOF join", "streaming DataFrame/Dataset on the right"))
 
   // Inner joins: Multiple stream-stream joins supported only in append mode
   testBinaryOperationInStreamingPlan(
@@ -774,12 +805,32 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     streamBatchSupported = false,
     batchStreamSupported = false)
 
-  // Except: *-stream not supported
+  // Except: by default, streaming input on either side is not supported
   testBinaryOperationInStreamingPlan(
     "except",
     _.except(_, isAll = false),
     streamStreamSupported = false,
+    streamBatchSupported = false,
     batchStreamSupported = false)
+
+  testBinaryOperationInStreamingPlan(
+    "except all",
+    _.except(_, isAll = true),
+    streamStreamSupported = false,
+    streamBatchSupported = false,
+    batchStreamSupported = false)
+
+  assertSupportedInStreamingPlan(
+    "except with stream-batch relations and legacy compatibility enabled",
+    streamRelation.except(batchRelation, isAll = false),
+    Append,
+    SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "true")
+
+  assertSupportedInStreamingPlan(
+    "except all with stream-batch relations and legacy compatibility enabled",
+    streamRelation.except(batchRelation, isAll = true),
+    Append,
+    SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "true")
 
   // Intersect: not supported
   testBinaryOperationInStreamingPlan(
@@ -965,6 +1016,80 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       streamRelation.join(batchRelation, joinType = Inner),
       Update
     )
+  }
+
+  assertSupportedForRealTime(
+    "real-time with Scala transformWithState - update mode",
+    scalaTransformWithState(streamRelation),
+    Update
+  )
+
+  assertSupportedForRealTime(
+    "real-time with deduplicate within watermark - update mode",
+    DeduplicateWithinWatermark(Seq(attribute), streamRelation),
+    Update
+  )
+
+  assertSupportedForRealTime(
+    "real-time with deduplicate within watermark after union - update mode",
+    DeduplicateWithinWatermark(
+      Seq(attribute),
+      streamRelation.union(new TestStreamingRelation(attribute.newInstance()))),
+    Update
+  )
+
+  assertNotSupportedForRealTime(
+    "real-time with Scala transformWithState on both sides of union - update mode",
+    scalaTransformWithState(streamRelation)
+      .union(scalaTransformWithState(new TestStreamingRelation(attribute.newInstance()))),
+    Update,
+    "STREAMING_REAL_TIME_MODE.STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED"
+  )
+
+  assertNotSupportedForRealTime(
+    "real-time with deduplicate within watermark before union - update mode",
+    DeduplicateWithinWatermark(Seq(attribute), streamRelation)
+      .union(new TestStreamingRelation(attribute.newInstance())),
+    Update,
+    "STREAMING_REAL_TIME_MODE.STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED"
+  )
+
+  assertSupportedForRealTime(
+    "real-time with batch aggregate before union - update mode",
+    streamRelation
+      .join(Aggregate(Nil, aggExprs("c"), batchRelation), joinType = Inner)
+      .select(attribute)
+      .union(new TestStreamingRelation(attribute.newInstance())),
+    Update
+  )
+
+  private def scalaTransformWithState(child: LogicalPlan): TransformWithState = {
+    val statefulProcessor = new StatefulProcessor[Any, Any, Any] {
+      override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
+
+      override def handleInputRows(
+          key: Any,
+          inputRows: Iterator[Any],
+          timerValues: TimerValues): Iterator[Any] = Iterator.empty
+    }
+    val keyEncoder = ExpressionEncoder(new StructType().add("a", IntegerType))
+      .asInstanceOf[ExpressionEncoder[Any]]
+    new TransformWithState(
+      keyDeserializer = attribute,
+      valueDeserializer = attribute,
+      groupingAttributes = Seq(attribute),
+      dataAttributes = Seq(attribute),
+      statefulProcessor = statefulProcessor,
+      timeMode = NoTime,
+      outputMode = Update,
+      keyEncoder = keyEncoder,
+      outputObjAttr = attribute,
+      child = child,
+      hasInitialState = false,
+      initialStateGroupingAttrs = Seq(attribute),
+      initialStateDataAttrs = Seq(attribute),
+      initialStateDeserializer = attribute,
+      initialState = LocalRelation(Seq.empty[Attribute]))
   }
 
   /*

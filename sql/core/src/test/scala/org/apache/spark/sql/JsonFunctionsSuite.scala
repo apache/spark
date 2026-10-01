@@ -1022,6 +1022,33 @@ class JsonFunctionsSuite extends SharedSparkSession {
         stop = 22
       )
     )
+
+  }
+
+  test("SPARK-59801: JSON functions with non-foldable options") {
+    val df = Seq((Tuple1(1), """{"a":1}""", "true")).toDF("a", "json", "option")
+    val nonFoldableQueries = Seq(
+      "from_json" ->
+        "from_json(json, 'a INT', map('primitivesAsString', option))",
+      "to_json" -> "to_json(a, map('pretty', option))",
+      "schema_of_json" ->
+        """schema_of_json('{"a":1}', map('primitivesAsString', option))""")
+
+    nonFoldableQueries.foreach { case (functionName, query) =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.selectExpr(query)
+        },
+        condition = "NON_FOLDABLE_ARGUMENT",
+        parameters = Map(
+          "funcName" -> s"`$functionName`",
+          "paramName" -> "`options`",
+          "paramType" -> "\"MAP<STRING, STRING>\""),
+        context = ExpectedContext(
+          fragment = query,
+          start = 0,
+          stop = query.length - 1))
+    }
   }
 
   test("SPARK-19967 Support from_json in SQL") {
@@ -1798,6 +1825,37 @@ class JsonFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58707: json pruning keeps the corrupt record column populated") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        // `b` is a type mismatch rather than a structural malformation, so it only fails when the
+        // parser is asked for it. Pruning the schema down to the corrupt record column alone left
+        // the parser nothing to convert, so the record was reported as clean.
+        val df = Seq("""{"a": 1, "b": "bad"}""").toDS()
+          .selectExpr("from_json(value, 'a int, b int, _corrupt_record string') as p")
+          .selectExpr("p._corrupt_record")
+
+        checkAnswer(df, Row("""{"a": 1, "b": "bad"}"""))
+      }
+    }
+  }
+
+  test("SPARK-58707: named_struct keeps the corrupt record column populated") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        // The two from_json calls are written inline so that CollapseProject does not keep them
+        // behind an alias, which would stop the rule from firing at all.
+        val fromJson = "from_json(value, 'a int, b int, _corrupt_record string')"
+        val df = Seq("""{"a": 1, "b": "bad"}""").toDS()
+          .selectExpr(
+            s"named_struct('a', $fromJson.a, '_corrupt_record', $fromJson._corrupt_record) as s")
+          .selectExpr("s.a", "s._corrupt_record")
+
+        checkAnswer(df, Row(1, """{"a": 1, "b": "bad"}"""))
+      }
+    }
+  }
+
   test("SPARK-33907: json pruning optimization with corrupt record field") {
     Seq("true", "false").foreach { enabled =>
       withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
@@ -1806,11 +1864,39 @@ class JsonFunctionsSuite extends SharedSparkSession {
           .add("b", IntegerType)
         val badRec = """{"a" 1, "b": 11}"""
 
+        // Since SPARK-58707 the rule no longer prunes to the corrupt record column, so both
+        // iterations run the same plan. The record here is structurally malformed, which fails at
+        // tokenization whatever schema is requested, so the answer never depended on the pruning.
         val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
           .selectExpr("from_json(value, 'a int, b int, _corrupt_record string') as parsed")
           .selectExpr("parsed._corrupt_record")
 
         checkAnswer(df, Seq(Row("""{"a" 1, "b": 11}"""), Row(null)))
+      }
+    }
+  }
+
+  test("SPARK-58373: bad json input with json pruning optimization: named_struct") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        // `c` is a type mismatch rather than a structural malformation, so it only fails
+        // when the parser is actually asked for it. A structurally broken record would
+        // fail at tokenization regardless of the requested schema and hide the pruning.
+        // The two from_json calls are written inline: an aliased subquery reference would
+        // not be inlined by CollapseProject, so the named_struct would not see them.
+        val fromJson = "from_json(value, 'a int, b int, c int', map('mode', 'FAILFAST'))"
+        val df = Seq("""{"a": 1, "b": 2, "c": "bad"}""").toDS()
+          .selectExpr(s"named_struct('a', $fromJson.a, 'b', $fromJson.b)")
+
+        checkError(
+          exception = intercept[SparkException] {
+            df.collect()
+          },
+          condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map(
+            "badRecord" -> "[1,2,null]",
+            "failFastMode" -> "FAILFAST")
+        )
       }
     }
   }
@@ -1949,6 +2035,15 @@ class JsonFunctionsSuite extends SharedSparkSession {
 
     checkAnswer(df.selectExpr("json_object_keys(a)"), expected)
     checkAnswer(df.select(json_object_keys($"a")), expected)
+  }
+
+  test("json_typeof function") {
+    val df = Seq(null, "{}", "[1, 2, 3]", "\"str\"", "123", "true", "null", "", "bad")
+      .toDF("a")
+    val expected = Seq(Row(null), Row("object"), Row("array"), Row("string"),
+      Row("number"), Row("boolean"), Row("null"), Row(null), Row(null))
+    checkAnswer(df.selectExpr("json_typeof(a)"), expected)
+    checkAnswer(df.select(json_typeof($"a")), expected)
   }
 
   test("function get_json_object - Codegen Support") {

@@ -564,7 +564,7 @@ abstract class KllSketchGetQuantileBase
 
   override def dataType: DataType = {
     right.dataType match {
-      case ArrayType(_, _) => ArrayType(outputDataType, false)
+      case ArrayType(_, _) => ArrayType(outputDataType, containsNull = false)
       case _ => outputDataType
     }
   }
@@ -750,7 +750,7 @@ abstract class KllSketchGetRankBase
   }
   override def dataType: DataType = {
     right.dataType match {
-      case ArrayType(_, _) => ArrayType(DoubleType, false)
+      case ArrayType(_, _) => ArrayType(DoubleType, containsNull = false)
       case _ => DoubleType
     }
   }

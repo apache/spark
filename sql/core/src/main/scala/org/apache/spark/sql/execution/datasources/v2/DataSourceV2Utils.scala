@@ -141,7 +141,7 @@ private[sql] object DataSourceV2Utils extends Logging {
         }
         val timeTravel = TimeTravelSpec.create(
           timeTravelTimestamp, timeTravelVersion, conf.sessionLocalTimeZone)
-        val tbl = CatalogV2Util.getTable(catalog, ident, timeTravel)
+        val tbl = CatalogV2Util.getTable(catalog, ident, timeTravel, options = dsOptions)
         (tbl, Some(catalog), Some(ident), timeTravel)
       case _ =>
         // TODO: Non-catalog paths for DSV2 are currently not well defined.

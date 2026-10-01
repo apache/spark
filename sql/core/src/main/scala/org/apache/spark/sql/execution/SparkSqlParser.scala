@@ -25,11 +25,10 @@ import scala.jdk.CollectionConverters._
 import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.TerminalNode
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace,
   GlobalTempView, LocalTempView, PersistedView,
-  PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
+  SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
   UnresolvedIdentifier, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedProcedure,
   UnresolvedTableOrViewSearchPathMode}
 import org.apache.spark.sql.catalyst.catalog._
@@ -123,6 +122,13 @@ class SparkSqlParser extends AbstractSqlParser {
    */
   override def splitStatements(sqlText: String): SqlStatementSplitResult =
     SqlStatementSplitter.split(sqlText, SparkSqlParser.substituteVariablesForValidation)
+
+  /** Split statements while retaining their positions in the original SQL text. */
+  private[sql] def splitStatementsWithPositions(
+      sqlText: String): PositionedSqlStatementSplitResult =
+    SqlStatementSplitter.splitWithPositions(
+      sqlText,
+      SparkSqlParser.substituteVariablesForValidation)
 
   /**
    * Internal parse method that handles both parameter substitution and regular parsing.
@@ -311,25 +317,6 @@ class SparkSqlAstBuilder extends AstBuilder {
       case _ =>
         throw QueryParsingErrors.invalidTempObjQualifierError(
           "VIEW", viewIdentifier.last, viewIdentifier.init.mkString("."), ctx)
-    }
-  }
-
-  private def withCatalogIdentClause(
-      ctx: CatalogIdentifierReferenceContext,
-      builder: Seq[String] => LogicalPlan): LogicalPlan = {
-    val exprCtx = ctx.expression
-    if (exprCtx != null) {
-      // resolve later in analyzer
-      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, Nil,
-        (ident, _) => builder(ident))
-    } else if (ctx.errorCapturingIdentifier() != null) {
-      // resolve immediately
-      builder.apply(Seq(getIdentifierText(ctx.errorCapturingIdentifier())))
-    } else if (ctx.stringLit() != null) {
-      // resolve immediately
-      builder.apply(Seq(string(visitStringLit(ctx.stringLit()))))
-    } else {
-      throw SparkException.internalError("Invalid catalog name")
     }
   }
 
@@ -706,7 +693,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   override def visitFailSetRole(ctx: FailSetRoleContext): LogicalPlan = withOrigin(ctx) {
-    invalidStatement("SET ROLE", ctx);
+    invalidStatement("SET ROLE", ctx)
   }
 
   /**
@@ -1750,7 +1737,10 @@ class SparkSqlAstBuilder extends AstBuilder {
           excludeColumns = params.excludeColumns,
           storedAsScdType = params.storedAsScdType,
           trackHistoryColumns = params.trackHistoryColumns,
-          trackHistoryExceptColumns = params.trackHistoryExceptColumns
+          trackHistoryExceptColumns = params.trackHistoryExceptColumns,
+          ignoreNullUpdates = params.ignoreNullUpdates,
+          ignoreNullUpdatesColumns = params.ignoreNullUpdatesColumns,
+          ignoreNullUpdatesExceptColumns = params.ignoreNullUpdatesExceptColumns
         )
       } else {
         Option(ctx.query) match {

@@ -22,11 +22,10 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession, TPCDSSchema, TPCDSTableStats}
+import org.apache.spark.sql.{BenchmarkQueryTest, SparkSession, TPCDSSchema, TPCDSTableStats}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
+import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFormatter, CodeGenerator}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -35,6 +34,12 @@ import org.apache.spark.sql.internal.SQLConf
  * plans each query over empty TPC-DS tables, collects the whole-stage-codegen subtrees, and reports
  * how large the generated (and compiled) code is. It is the standard instrument for changes that
  * aim to reduce generated Java size (see the umbrella SPARK-56908).
+ *
+ * The tables are empty, and a broadcast join generates its code from the value of its broadcast:
+ * over an empty one it generates a stub instead of the join and the rest of its subtree. So each
+ * subtree's code is generated from a copy in which every broadcast reads one row of default
+ * values (`BenchmarkQueryTest.withRowBroadcasts`). A single row makes the join keys unique, so a
+ * hash join is measured in its unique-key form; the loop over repeated keys is not measured.
  *
  * The reported grand totals (lower is better, except the query/stage counts) are:
  *   - source code size: characters of generated Java summed over all stages;
@@ -127,29 +132,39 @@ object WholeStageCodegenSizeBenchmark extends SqlBasedBenchmark with Logging {
   private def measureQuery(queryLocation: String, name: String, totals: Totals): Unit = {
     val queryString = resourceToString(s"$queryLocation/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
-    try {
-      val plan = spark.sql(queryString).queryExecution.executedPlan
-      // codegenStringSeq walks all WholeStageCodegenExec subtrees (recursing subqueries), calls
-      // doCodeGen() for the source and CodeGenerator.compile() for the compiled ByteCodeStats.
-      val stages = codegenStringSeq(plan)
-      totals.queries += 1
-      stages.foreach { case (_, source, stats) =>
-        totals.stages += 1
-        totals.sourceChars += source.length
-        if (stats == ByteCodeStats.UNAVAILABLE) {
-          totals.fallbacks += 1
-        } else {
-          totals.maxMethodBytecodeSum += stats.maxMethodCodeSize
-          totals.maxMethodBytecodeMax =
-            math.max(totals.maxMethodBytecodeMax, stats.maxMethodCodeSize)
-          totals.innerClasses += stats.numInnerClasses
-          totals.constPoolSum += stats.maxConstPoolSize
-          totals.constPoolMax = math.max(totals.constPoolMax, stats.maxConstPoolSize)
-        }
-      }
+    val plan = try {
+      spark.sql(queryString).queryExecution.executedPlan
     } catch {
       case NonFatal(e) =>
         logWarning(s"Skipping query $name: failed to plan (${e.getMessage})")
+        return
+    }
+    // Every WholeStageCodegenExec subtree (recursing subqueries), with the code it generates for
+    // data: the tables are empty, and over an empty broadcast a join generates a stub instead of
+    // its code and the rest of its subtree's. Compiled for the ByteCodeStats; a subtree that fails
+    // to compile is counted as a fallback.
+    val stages = BenchmarkQueryTest.generatedCode(plan).map { case (_, code) =>
+      val stats = try CodeGenerator.compile(code)._2 catch {
+        case NonFatal(_) => ByteCodeStats.UNAVAILABLE
+      }
+      (CodeFormatter.format(code), stats)
+    }
+    require(stages.nonEmpty, s"query $name has no whole-stage-codegen subtree to measure; " +
+      "the plan must be fully materialized at planning time, with adaptive execution disabled")
+    totals.queries += 1
+    stages.foreach { case (source, stats) =>
+      totals.stages += 1
+      totals.sourceChars += source.length
+      if (stats == ByteCodeStats.UNAVAILABLE) {
+        totals.fallbacks += 1
+      } else {
+        totals.maxMethodBytecodeSum += stats.maxMethodCodeSize
+        totals.maxMethodBytecodeMax =
+          math.max(totals.maxMethodBytecodeMax, stats.maxMethodCodeSize)
+        totals.innerClasses += stats.numInnerClasses
+        totals.constPoolSum += stats.maxConstPoolSize
+        totals.constPoolMax = math.max(totals.constPoolMax, stats.maxConstPoolSize)
+      }
     }
   }
 

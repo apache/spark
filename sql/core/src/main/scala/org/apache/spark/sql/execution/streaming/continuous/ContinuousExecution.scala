@@ -26,7 +26,7 @@ import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestampLike, LocalTimestamp}
+import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestampLike, LocalTimestamp, LocalTimestampNanos}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
@@ -234,7 +234,8 @@ class ContinuousExecution(
     }
 
     withNewSources.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
-      case (_: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp) =>
+      case (_: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp |
+          _: LocalTimestampNanos) =>
         throw new IllegalStateException("CurrentTimestamp, Now, CurrentDate and LocalTimestamp" +
           " not yet supported for continuous processing")
     }

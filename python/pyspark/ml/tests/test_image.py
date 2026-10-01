@@ -16,8 +16,8 @@
 #
 
 from pyspark.ml.image import ImageSchema
-from pyspark.testing.mlutils import SparkSessionTestCase
 from pyspark.sql import Row
+from pyspark.testing.mlutils import SparkSessionTestCase
 from pyspark.testing.utils import QuietTest, eventually
 
 

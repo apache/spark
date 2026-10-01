@@ -448,6 +448,350 @@ struct<bround(-9223372036854775808, -1):bigint>
 
 
 -- !query
+SELECT truncate(25y, 1)
+-- !query schema
+struct<truncate(25, 1):tinyint>
+-- !query output
+25
+
+
+-- !query
+SELECT truncate(25y, 0)
+-- !query schema
+struct<truncate(25, 0):tinyint>
+-- !query output
+25
+
+
+-- !query
+SELECT truncate(25y, -1)
+-- !query schema
+struct<truncate(25, -1):tinyint>
+-- !query output
+20
+
+
+-- !query
+SELECT truncate(25y, -2)
+-- !query schema
+struct<truncate(25, -2):tinyint>
+-- !query output
+0
+
+
+-- !query
+SELECT truncate(25y, -3)
+-- !query schema
+struct<truncate(25, -3):tinyint>
+-- !query output
+0
+
+
+-- !query
+SELECT truncate(-25y, 1)
+-- !query schema
+struct<truncate(-25, 1):tinyint>
+-- !query output
+-25
+
+
+-- !query
+SELECT truncate(-25y, 0)
+-- !query schema
+struct<truncate(-25, 0):tinyint>
+-- !query output
+-25
+
+
+-- !query
+SELECT truncate(-25y, -1)
+-- !query schema
+struct<truncate(-25, -1):tinyint>
+-- !query output
+-20
+
+
+-- !query
+SELECT truncate(-25y, -2)
+-- !query schema
+struct<truncate(-25, -2):tinyint>
+-- !query output
+0
+
+
+-- !query
+SELECT truncate(-25y, -3)
+-- !query schema
+struct<truncate(-25, -3):tinyint>
+-- !query output
+0
+
+
+-- !query
+SELECT truncate(127y, -1)
+-- !query schema
+struct<truncate(127, -1):tinyint>
+-- !query output
+120
+
+
+-- !query
+SELECT truncate(-128y, -1)
+-- !query schema
+struct<truncate(-128, -1):tinyint>
+-- !query output
+-120
+
+
+-- !query
+SELECT truncate(525s, 1)
+-- !query schema
+struct<truncate(525, 1):smallint>
+-- !query output
+525
+
+
+-- !query
+SELECT truncate(525s, 0)
+-- !query schema
+struct<truncate(525, 0):smallint>
+-- !query output
+525
+
+
+-- !query
+SELECT truncate(525s, -1)
+-- !query schema
+struct<truncate(525, -1):smallint>
+-- !query output
+520
+
+
+-- !query
+SELECT truncate(525s, -2)
+-- !query schema
+struct<truncate(525, -2):smallint>
+-- !query output
+500
+
+
+-- !query
+SELECT truncate(525s, -3)
+-- !query schema
+struct<truncate(525, -3):smallint>
+-- !query output
+0
+
+
+-- !query
+SELECT truncate(-525s, 1)
+-- !query schema
+struct<truncate(-525, 1):smallint>
+-- !query output
+-525
+
+
+-- !query
+SELECT truncate(-525s, 0)
+-- !query schema
+struct<truncate(-525, 0):smallint>
+-- !query output
+-525
+
+
+-- !query
+SELECT truncate(-525s, -1)
+-- !query schema
+struct<truncate(-525, -1):smallint>
+-- !query output
+-520
+
+
+-- !query
+SELECT truncate(-525s, -2)
+-- !query schema
+struct<truncate(-525, -2):smallint>
+-- !query output
+-500
+
+
+-- !query
+SELECT truncate(-525s, -3)
+-- !query schema
+struct<truncate(-525, -3):smallint>
+-- !query output
+0
+
+
+-- !query
+SELECT truncate(525, 1)
+-- !query schema
+struct<truncate(525, 1):int>
+-- !query output
+525
+
+
+-- !query
+SELECT truncate(525, 0)
+-- !query schema
+struct<truncate(525, 0):int>
+-- !query output
+525
+
+
+-- !query
+SELECT truncate(525, -1)
+-- !query schema
+struct<truncate(525, -1):int>
+-- !query output
+520
+
+
+-- !query
+SELECT truncate(525, -2)
+-- !query schema
+struct<truncate(525, -2):int>
+-- !query output
+500
+
+
+-- !query
+SELECT truncate(525, -3)
+-- !query schema
+struct<truncate(525, -3):int>
+-- !query output
+0
+
+
+-- !query
+SELECT truncate(-525, 1)
+-- !query schema
+struct<truncate(-525, 1):int>
+-- !query output
+-525
+
+
+-- !query
+SELECT truncate(-525, 0)
+-- !query schema
+struct<truncate(-525, 0):int>
+-- !query output
+-525
+
+
+-- !query
+SELECT truncate(-525, -1)
+-- !query schema
+struct<truncate(-525, -1):int>
+-- !query output
+-520
+
+
+-- !query
+SELECT truncate(-525, -2)
+-- !query schema
+struct<truncate(-525, -2):int>
+-- !query output
+-500
+
+
+-- !query
+SELECT truncate(-525, -3)
+-- !query schema
+struct<truncate(-525, -3):int>
+-- !query output
+0
+
+
+-- !query
+SELECT truncate(525L, 1)
+-- !query schema
+struct<truncate(525, 1):bigint>
+-- !query output
+525
+
+
+-- !query
+SELECT truncate(525L, 0)
+-- !query schema
+struct<truncate(525, 0):bigint>
+-- !query output
+525
+
+
+-- !query
+SELECT truncate(525L, -1)
+-- !query schema
+struct<truncate(525, -1):bigint>
+-- !query output
+520
+
+
+-- !query
+SELECT truncate(525L, -2)
+-- !query schema
+struct<truncate(525, -2):bigint>
+-- !query output
+500
+
+
+-- !query
+SELECT truncate(525L, -3)
+-- !query schema
+struct<truncate(525, -3):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT truncate(-525L, 1)
+-- !query schema
+struct<truncate(-525, 1):bigint>
+-- !query output
+-525
+
+
+-- !query
+SELECT truncate(-525L, 0)
+-- !query schema
+struct<truncate(-525, 0):bigint>
+-- !query output
+-525
+
+
+-- !query
+SELECT truncate(-525L, -1)
+-- !query schema
+struct<truncate(-525, -1):bigint>
+-- !query output
+-520
+
+
+-- !query
+SELECT truncate(-525L, -2)
+-- !query schema
+struct<truncate(-525, -2):bigint>
+-- !query output
+-500
+
+
+-- !query
+SELECT truncate(-525L, -3)
+-- !query schema
+struct<truncate(-525, -3):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT truncate(1234.5678)
+-- !query schema
+struct<truncate(1234.5678, 0):decimal(5,0)>
+-- !query output
+1234
+
+
+-- !query
 SELECT conv('100', 2, 10)
 -- !query schema
 struct<conv(100, 2, 10):string>

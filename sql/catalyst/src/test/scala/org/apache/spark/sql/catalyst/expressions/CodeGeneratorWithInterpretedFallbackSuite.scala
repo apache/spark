@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.concurrent.ExecutionException
 
+import org.codehaus.commons.compiler.CompileException
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
@@ -83,13 +85,21 @@ class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanT
   }
 
   test("codegen failures in the CODEGEN_ONLY mode") {
-    val errMsg = intercept[ExecutionException] {
+    val e = intercept[ExecutionException] {
       val input = Seq(BoundReference(0, IntegerType, nullable = true))
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenOnly) {
         FailedCodegenProjection.createObject(input)
       }
-    }.getMessage
-    assert(errMsg.contains("Failed to compile: org.codehaus.commons.compiler.CompileException:"))
+    }
+    // SPARK-23711/SPARK-25140 made this path catch the exception the compile cache raises rather
+    // than the compiler's own: a source-level failure goes through `compilerError`, whose checked
+    // CompileException the cache wraps in an ExecutionException. (The other branch,
+    // `internalCompilerError`, builds an unchecked InternalCompilerException, which
+    // `CodeGenerator.compile` unwraps and rethrows bare.)
+    assert(e.getCause.isInstanceOf[CompileException])
+    // "Failed to compile: " comes from `QueryExecutionErrors.failedToCompileMsg`; the compiler's
+    // own diagnostic follows it, and its wording is not Spark's to assert on.
+    assert(e.getMessage.contains("Failed to compile:"))
   }
 
   test("SPARK-25358 Correctly handles NoOp in MutableProjection") {

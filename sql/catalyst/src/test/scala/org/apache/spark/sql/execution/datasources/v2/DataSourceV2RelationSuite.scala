@@ -18,18 +18,26 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import java.util
+import java.util.{HashMap, Map => JMap, OptionalLong}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Histogram, HistogramBin}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.INTERNAL_METADATA_KEYS
 import org.apache.spark.sql.connector.catalog.{Column, Table, TableCapability}
-import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
+import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class DataSourceV2RelationSuite extends SparkFunSuite {
+class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
 
   test("DataSourceV2Relation.v1StatsToV2Stats") {
     val schema = StructType(Seq(
@@ -114,6 +122,414 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
     assert(!idV2NoHist.histogram().isPresent)
   }
 
+  private def scanRel(
+      output: Seq[AttributeReference],
+      scan: Scan,
+      table: Table = new FakeTableWithSchema()): DataSourceV2ScanRelation = {
+    DataSourceV2ScanRelation(
+      DataSourceV2Relation(table, output, None, None, CaseInsensitiveStringMap.empty()),
+      scan,
+      output)
+  }
+
+  private def optLong(value: Option[Long]): OptionalLong =
+    value.map(OptionalLong.of).getOrElse(OptionalLong.empty())
+
+  private def v2ColumnStat(
+      distinct: Option[Long] = None,
+      avg: Option[Long] = None): ColumnStatistics = new ColumnStatistics {
+    override def distinctCount(): OptionalLong = optLong(distinct)
+    override def avgLen(): OptionalLong = optLong(avg)
+  }
+
+  private def v2ColumnStatsMap(
+      entries: (String, ColumnStatistics)*): JMap[NamedReference, ColumnStatistics] = {
+    val map = new HashMap[NamedReference, ColumnStatistics]()
+    entries.foreach { case (name, stat) => map.put(FieldReference.column(name), stat) }
+    map
+  }
+
+  private def v2Statistics(
+      size: OptionalLong = OptionalLong.empty(),
+      rows: OptionalLong = OptionalLong.empty(),
+      colStats: JMap[NamedReference, ColumnStatistics] =
+        new HashMap[NamedReference, ColumnStatistics]()): V2Statistics =
+    new V2Statistics {
+      override def sizeInBytes(): OptionalLong = size
+      override def numRows(): OptionalLong = rows
+      override def columnStats(): JMap[NamedReference, ColumnStatistics] = colStats
+    }
+
+  /** Evaluates stats for each estimateStatistics() call. */
+  private def newStatsScan(
+      stats: => V2Statistics,
+      schema: StructType = StructType(Seq(StructField("id", IntegerType))),
+      sizeEstimate: OptionalLong = OptionalLong.empty()): Scan =
+    new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = schema
+      override def estimateStatistics(): V2Statistics = stats
+      override def estimateSizeInBytes(): OptionalLong = sizeEstimate
+    }
+
+  test("DataSourceV2ScanRelation.computeStats uses non-empty scan stats with CBO") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = newStatsScan(v2Statistics(
+      rows = OptionalLong.of(42L),
+      colStats = v2ColumnStatsMap("id" -> v2ColumnStat(distinct = Some(40L), avg = Some(4L)))))
+
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.rowCount.contains(BigInt(42)))
+      assert(stats.attributeStats.size === 1)
+      assert(stats.attributeStats(idAttr).distinctCount.contains(BigInt(40)))
+      assert(stats.attributeStats(idAttr).avgLen.contains(4L))
+      assert(stats.sizeInBytes ===
+        EstimationUtils.getOutputSize(output, BigInt(42), stats.attributeStats))
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats matches column stats for names needing quoting") {
+    val colAttr = AttributeReference("col-1", IntegerType)()
+    val output = Seq(colAttr)
+    val scan = newStatsScan(
+      v2Statistics(
+        rows = OptionalLong.of(42L),
+        colStats = v2ColumnStatsMap("col-1" -> v2ColumnStat(distinct = Some(40L)))),
+      schema = StructType(Seq(StructField("col-1", IntegerType))))
+
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val stats = scanRel(output, scan).computeStats()
+      assert(stats.rowCount.contains(BigInt(42)))
+      assert(stats.attributeStats.size === 1,
+        "column stat keyed by a name needing quoting must be attached to its attribute")
+      assert(stats.attributeStats(colAttr).distinctCount.contains(BigInt(40)))
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats matches column stats respecting case sensitivity") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = newStatsScan(v2Statistics(
+      rows = OptionalLong.of(42L),
+      colStats = v2ColumnStatsMap("ID" -> v2ColumnStat(distinct = Some(40L)))))
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "false") {
+      val stats = scanRel(output, scan).computeStats()
+      assert(stats.attributeStats.size === 1,
+        "case-insensitive resolution should match 'ID' to attribute 'id'")
+      assert(stats.attributeStats(idAttr).distinctCount.contains(BigInt(40)))
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "true") {
+      val stats = scanRel(output, scan).computeStats()
+      assert(stats.attributeStats.isEmpty,
+        "case-sensitive resolution should not match 'ID' to attribute 'id'")
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats resolves case-conflicting outputs uniquely") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val upperIdAttr = AttributeReference("ID", IntegerType)()
+    val output = Seq(idAttr, upperIdAttr)
+
+    def scanKeyed(name: String): Scan = newStatsScan(
+      v2Statistics(
+        rows = OptionalLong.of(42L),
+        colStats = v2ColumnStatsMap(name -> v2ColumnStat(distinct = Some(40L)))),
+      schema = StructType(Seq(StructField("id", IntegerType), StructField("ID", IntegerType))))
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "false") {
+      val idStats = scanRel(output, scanKeyed("id")).computeStats()
+      assert(idStats.attributeStats.size === 1)
+      assert(idStats.attributeStats(idAttr).distinctCount.contains(BigInt(40)))
+
+      val ambiguousStats = scanRel(output, scanKeyed("Id")).computeStats()
+      assert(ambiguousStats.attributeStats.isEmpty,
+        "an ambiguous case-insensitive match must not be attached to any attribute")
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats prefers the exact-name key when several keys " +
+    "map to one output") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = newStatsScan(v2Statistics(
+      rows = OptionalLong.of(42L),
+      colStats = v2ColumnStatsMap(
+        "ID" -> v2ColumnStat(distinct = Some(10L)),
+        "id" -> v2ColumnStat(distinct = Some(40L)))))
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "false") {
+      val stats = scanRel(output, scan).computeStats()
+      assert(stats.attributeStats.size === 1)
+      assert(stats.attributeStats(idAttr).distinctCount.contains(BigInt(40)),
+        "the exact-name key must win deterministically over a case-folded key")
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats matches column stats consistently with the " +
+    "analyzer for case-folding-equal names") {
+    // scalastyle:off nonascii
+    val longS = "\u017f"
+    // scalastyle:on nonascii
+    val colAttr = AttributeReference(longS, IntegerType)()
+    val output = Seq(colAttr)
+    val scan = newStatsScan(
+      v2Statistics(
+        rows = OptionalLong.of(42L),
+        colStats = v2ColumnStatsMap("s" -> v2ColumnStat(distinct = Some(40L)))),
+      schema = StructType(Seq(StructField(longS, IntegerType))))
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "false") {
+      val stats = scanRel(output, scan).computeStats()
+      assert(stats.attributeStats.isEmpty,
+        "a stat keyed by an ASCII name must not attach to a case-folding-equal non-ASCII column")
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats derives size 1 for a zero-row scan with CBO") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = newStatsScan(v2Statistics(rows = OptionalLong.of(0L)))
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.rowCount.contains(BigInt(0)))
+      assert(stats.sizeInBytes === BigInt(1))
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats uses full stats with plan stats enabled") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = newStatsScan(
+      v2Statistics(size = OptionalLong.of(1000L), rows = OptionalLong.of(7L)),
+      sizeEstimate = OptionalLong.of(50L))
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "true") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(1000))
+      assert(stats.rowCount.contains(BigInt(7)))
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats treats column-only scan stats as non-empty") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = newStatsScan(v2Statistics(
+      colStats = v2ColumnStatsMap("id" -> v2ColumnStat(distinct = Some(7L)))))
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(12345))
+      assert(stats.rowCount.isEmpty)
+      assert(stats.attributeStats.size === 1)
+      assert(stats.attributeStats(idAttr).distinctCount.contains(BigInt(7)))
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats uses size-only estimates without CBO") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = newStatsScan(
+      v2Statistics(size = OptionalLong.of(1000L), rows = OptionalLong.of(5L)),
+      sizeEstimate = OptionalLong.of(50L))
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "false") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(50))
+      assert(stats.rowCount.isEmpty)
+      assert(stats.attributeStats.isEmpty)
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats uses default estimateSizeInBytes without CBO") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = newStatsScan(v2Statistics(size = OptionalLong.of(64L), rows = OptionalLong.of(5L)))
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "false") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(64))
+      assert(stats.rowCount.isEmpty)
+      assert(stats.attributeStats.isEmpty)
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats infers size-only estimates from row count") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = newStatsScan(v2Statistics(rows = OptionalLong.of(5L)))
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "false") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === EstimationUtils.getSizePerRow(output) * BigInt(5))
+      assert(stats.rowCount.isEmpty)
+      assert(stats.attributeStats.isEmpty)
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats invokes estimateStatistics once without CBO") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    // Scan with only a row count and the default estimateSizeInBytes(): the size-only path must
+    // consult the full statistics exactly once, not once for the (empty) size and again for the row
+    // count.
+    var estimateStatisticsCalls = 0
+    val scan = newStatsScan({
+      estimateStatisticsCalls += 1
+      v2Statistics(rows = OptionalLong.of(5L))
+    })
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "false") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === EstimationUtils.getSizePerRow(output) * BigInt(5))
+      assert(estimateStatisticsCalls === 1,
+        s"estimateStatistics should be called at most once, was $estimateStatisticsCalls")
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats uses default size without CBO for empty stats") {
+    val output = Seq(AttributeReference("id", IntegerType)())
+    val scan = newStatsScan(v2Statistics())
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "false",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(12345))
+      assert(stats.rowCount.isEmpty)
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats uses default size without reported stats") {
+    val output = Seq(AttributeReference("id", IntegerType)())
+    val scan = new Scan {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "false",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(12345))
+      assert(stats.rowCount.isEmpty)
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(12345))
+      assert(stats.rowCount.isEmpty)
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats uses default size for empty scan stats") {
+    val output = Seq(AttributeReference("id", IntegerType)())
+    val scan = newStatsScan(v2Statistics())
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(12345))
+      assert(stats.rowCount.isEmpty)
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats uses default size for null scan stats") {
+    val output = Seq(AttributeReference("id", IntegerType)())
+    val nullStatsScan = newStatsScan(stats = null)
+    val nullColumnStatsScan = newStatsScan(v2Statistics(colStats = null))
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      Seq(nullStatsScan, nullColumnStatsScan).foreach { scan =>
+        val stats = scanRel(output, scan).computeStats()
+
+        assert(stats.sizeInBytes === BigInt(12345))
+        assert(stats.rowCount.isEmpty)
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "false",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      Seq(nullStatsScan, nullColumnStatsScan).foreach { scan =>
+        val stats = scanRel(output, scan).computeStats()
+
+        assert(stats.sizeInBytes === BigInt(12345))
+        assert(stats.rowCount.isEmpty)
+      }
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats tolerates null column stats with row count") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    // numRows present, columnStats null: isNotEmpty is true (via numRows), so the conversion runs
+    // and must not NPE on the null column-stats map.
+    val rowCountScan = newStatsScan(v2Statistics(rows = OptionalLong.of(42L), colStats = null))
+    // sizeInBytes present, columnStats null: same null-tolerance requirement, reached via
+    // sizeInBytes instead of numRows.
+    val sizeScan = newStatsScan(v2Statistics(size = OptionalLong.of(1000L), colStats = null))
+
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val rowCountStats = scanRel(output, rowCountScan).computeStats()
+      assert(rowCountStats.rowCount.contains(BigInt(42)))
+      assert(rowCountStats.attributeStats.isEmpty)
+      assert(rowCountStats.sizeInBytes ===
+        EstimationUtils.getOutputSize(output, BigInt(42), rowCountStats.attributeStats))
+
+      val sizeStats = scanRel(output, sizeScan).computeStats()
+      assert(sizeStats.sizeInBytes === BigInt(1000))
+      assert(sizeStats.rowCount.isEmpty)
+      assert(sizeStats.attributeStats.isEmpty)
+    }
+  }
+
   test("create strips leaked internal metadata but preserves column IDs") {
     // A column carrying both a column ID (surfaced on purpose) and every internal metadata key
     // (listed in INTERNAL_METADATA_KEYS), simulating a v2 source that leaks internal metadata.
@@ -146,4 +562,37 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
     assert(field.id.contains("1"))
     assert(field.metadata.contains(FIELD_ID_METADATA_KEY))
   }
+
+  test("nodePatterns declare the DSv2 relation identity tree patterns") {
+    val table = new Table {
+      override def name(): String = "t"
+      override def columns(): Array[Column] =
+        Array(Column.create("id", IntegerType))
+      override def capabilities(): util.Set[TableCapability] =
+        util.Set.of[TableCapability]()
+    }
+
+    val relation =
+      DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty())
+    assert(relation.containsPattern(TreePattern.DATA_SOURCE_V2_RELATION))
+
+    val scan = new Scan {
+      override def readSchema(): StructType = relation.schema
+    }
+    val scanRelation = DataSourceV2ScanRelation(relation, scan, relation.output)
+    assert(scanRelation.containsPattern(TreePattern.DATA_SOURCE_V2_SCAN_RELATION))
+    // The scan leaf must not inherit the pre-pushdown relation's identity pattern from its
+    // `relation` field (which is a case-class arg, not a child), so pruning on the two bits
+    // stays distinct.
+    assert(!scanRelation.containsPattern(TreePattern.DATA_SOURCE_V2_RELATION))
+  }
+}
+
+private class FakeTableWithSchema(
+    tableSchema: StructType = StructType(Seq(StructField("id", IntegerType))))
+    extends Table {
+
+  override def name(): String = "fake"
+  override def schema(): StructType = tableSchema
+  override def capabilities(): java.util.Set[TableCapability] = java.util.Set.of()
 }

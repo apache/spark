@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -73,6 +73,27 @@ class TableLocationSuite extends SharedSparkSession {
         val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
         val qualified = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
         fs.delete(qualified, true)
+      }
+    }
+  }
+
+  test("SPARK-56558: CTAS IF NOT EXISTS should be with non-existent or empty location") {
+    withSQLConf(SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key -> "false") {
+      withTempDir { dir =>
+        val tempLocation = dir.getCanonicalPath
+        withTable("ctas1", "ctas2") {
+          sql(s"CREATE TABLE ctas1 USING parquet LOCATION '$tempLocation/ctas1' " +
+            "AS SELECT 1 AS ID")
+          // Table ctas2 does not exist in the catalog, so IF NOT EXISTS must not skip the
+          // non-empty location check and overwrite the data of table ctas1.
+          val m = intercept[AnalysisException] {
+            sql(s"CREATE TABLE IF NOT EXISTS ctas2 USING parquet LOCATION '$tempLocation/ctas1' " +
+              "AS SELECT 2 AS ID")
+          }.getMessage
+          assert(m.contains("CREATE-TABLE-AS-SELECT cannot create table with location to a " +
+            "non-empty directory"))
+          checkAnswer(spark.table("ctas1"), Row(1))
+        }
       }
     }
   }

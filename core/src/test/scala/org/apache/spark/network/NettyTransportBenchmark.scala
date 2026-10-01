@@ -599,7 +599,7 @@ object NettyTransportBenchmark extends BenchmarkBase {
           output = output)
 
         Seq("NIO", "AUTO").foreach { mode =>
-          benchmark.addTimerCase(s"$mode, sequential fetch", numIters = 3) { timer =>
+          benchmark.addTimerCase(s"$mode, pipelined fetch (1 client)", numIters = 3) { timer =>
             val conf = createConf(mode)
             val streamManager = createFileStreamManager(conf, files)
             val rpcHandler = createStreamRpcHandler(streamManager)

@@ -38,7 +38,7 @@ import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimeType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -545,6 +545,19 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     }
   }
 
+  test("SPARK-59276: restore an ordinary requested UDT in a local relation") {
+    val ordinaryUdt = new PythonUserDefinedType(
+      ArrayType(DoubleType, containsNull = false),
+      "pyspark.testing.objects.PythonOnlyUDT",
+      "serialized")
+    val requestedSchema = StructType(StructField("value", ordinaryUdt) :: Nil)
+    val relation = proto.Relation
+      .newBuilder()
+      .setLocalRelation(proto.LocalRelation.newBuilder().setSchema(requestedSchema.json))
+      .build()
+    assert(Dataset.ofRows(spark, transform(relation)).schema("value").dataType === ordinaryUdt)
+  }
+
   test("Empty ArrowBatch") {
     val schema = StructType(Seq(StructField("int", IntegerType)))
     val data = ArrowConverters.createEmptyArrowBatch(schema, null, true, false)
@@ -654,6 +667,18 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(array(0).toString == InternalRow(1, "spark", 1, "spark").toString)
     assert(array(1).toString == InternalRow(2, "hadoop", 2, "hadoop").toString)
     assert(array(2).toString == InternalRow(3, "kafka", 3, "kafka").toString)
+  }
+
+  test("SPARK-58341: transform SQL with 5 or more positional arguments binds in order") {
+    val sql = proto.SQL
+      .newBuilder()
+      .setQuery("SELECT ?, ?, ?, ?, ?, ?")
+    (1 to 6).foreach { v =>
+      sql.addPosArguments(proto.Expression.newBuilder().setLiteral(toLiteralProto(v)))
+    }
+
+    val df = Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setSql(sql).build()))
+    assert(df.collect() === Array(Row(1, 2, 3, 4, 5, 6)))
   }
 
   test("transform UnresolvedStar with target field") {

@@ -203,6 +203,35 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(resourceProfileAdded, resourceProfileJsonString)
   }
 
+  test("SPARK-58192: resource profiles with historical zero cpus amounts deserialize") {
+    // Event logs written before cpus amounts were validated can carry a cpus amount of 0;
+    // deserialization must accept them so the history server can replay such applications.
+    val legacyJson =
+      """
+        |{
+        |  "Event":"SparkListenerResourceProfileAdded",
+        |  "Resource Profile Id":7,
+        |  "Executor Resource Requests":{
+        |    "cores":{
+        |      "Resource Name":"cores",
+        |      "Amount":2,
+        |      "Discovery Script":"",
+        |      "Vendor":""
+        |    }
+        |  },
+        |  "Task Resource Requests":{
+        |    "cpus":{
+        |      "Resource Name":"cpus",
+        |      "Amount":0.0
+        |    }
+        |  }
+        |}
+      """.stripMargin
+    val event = JsonProtocol.sparkEventFromJson(legacyJson)
+      .asInstanceOf[SparkListenerResourceProfileAdded]
+    assert(event.resourceProfile.taskResources("cpus").amount === 0.0)
+  }
+
   test("Dependent Classes") {
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout")
     val attributes = Map("ContainerId" -> "ct1", "User" -> "spark")
@@ -805,6 +834,19 @@ class JsonProtocolSuite extends SparkFunSuite {
         |  "foo" : "foo"
         |}""".stripMargin
     assert(JsonProtocol.sparkEventFromJson(unknownFieldsJson) === expected)
+  }
+
+  test("unknown event types are rejected without static initialization") {
+    val eventJson =
+      """{
+        |  "Event" : "org.apache.spark.util.JsonProtocolStaticInitProbe$"
+        |}""".stripMargin
+    val e = intercept[SparkException] {
+      JsonProtocol.sparkEventFromJson(eventJson)
+    }
+    assert(e.getMessage.contains("Unknown event type"))
+    assert(!JsonProtocolStaticInitProbeFlag.triggered,
+      "static initializer of a non-SparkListenerEvent class must not run")
   }
 
   test("SPARK-42204: spark.eventLog.includeTaskMetricsAccumulators config") {
@@ -3212,3 +3254,17 @@ private[spark] object JsonProtocolSuite extends Assertions {
 }
 
 case class TestListenerEvent(foo: String, bar: Int) extends SparkListenerEvent
+
+/** Records whether [[JsonProtocolStaticInitProbe]] has been statically initialized. */
+private[util] object JsonProtocolStaticInitProbeFlag {
+  @volatile var triggered = false
+}
+
+/**
+ * Probe used to verify that JsonProtocol does not run static initializers of classes named by
+ * the Event field. Only ever referenced by (string) name, so that initialization is observable
+ * exclusively through [[JsonProtocolStaticInitProbeFlag]].
+ */
+private[util] object JsonProtocolStaticInitProbe {
+  JsonProtocolStaticInitProbeFlag.triggered = true
+}

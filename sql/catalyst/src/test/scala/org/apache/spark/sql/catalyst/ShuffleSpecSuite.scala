@@ -19,15 +19,101 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.DirectShufflePartitionID
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, DirectShufflePartitionID, Expression, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
 
 class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
+
   private val passThrough_a_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"a"), 10)
   private val passThrough_b_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"b"), 10)
   private val passThrough_c_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"c"), 10)
+
+  /** A bound function with a stable canonical name, enough to build a `TransformExpression`. */
+  private object TestBucketFunction extends ScalarFunction[Int] {
+    override def inputTypes(): Array[DataType] = Array(IntegerType)
+    override def resultType(): DataType = IntegerType
+    override def name(): String = "bucket"
+    override def canonicalName(): String = "test.bucket"
+  }
+
+  /**
+   * A bucket-like reducible function: like the built-in `bucket`, a pair of the same function with
+   * coarser/finer bucket counts is compatible (a reducer exists) but not the same function. Local
+   * to the suite because catalyst has no BucketFunction.
+   */
+  private class FakeBucket extends ScalarFunction[java.lang.Long]
+      with ReducibleFunction[java.lang.Long, java.lang.Long] {
+    override def inputTypes(): Array[DataType] = Array(LongType)
+    override def resultType(): DataType = LongType
+    override def name(): String = "test.fakeBucket"
+    override def canonicalName(): String = name()
+    override def produceResult(input: InternalRow): java.lang.Long = input.getLong(0)
+    override def reducer(
+        thisNumBuckets: Int,
+        other: ReducibleFunction[_, _],
+        otherNumBuckets: Int): Reducer[java.lang.Long, java.lang.Long] =
+      if (other.isInstanceOf[FakeBucket] && thisNumBuckets != otherNumBuckets &&
+          thisNumBuckets % otherNumBuckets == 0) {
+        new Reducer[java.lang.Long, java.lang.Long] {
+          override def reduce(v: java.lang.Long): java.lang.Long = v % otherNumBuckets
+          override def resultType(): DataType = LongType
+        }
+      } else {
+        null
+      }
+  }
+
+  test("SPARK-59289: createShuffleSpec keeps a member that only satisfies after a projection") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val clustered = ClusteredDistribution(Seq(a))
+    // Grouped, but `a = 1` sits on two partitions, so projecting the keys onto [a] merges them and
+    // the member satisfies only once a `GroupPartitionsExec` has. Filtering the members on the
+    // strict `satisfies` would drop it and leave an empty collection, which its own `require`
+    // rejects.
+    val merging = KeyedPartitioning(
+      Seq(a, b), Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1)))
+    assert(merging.isGrouped, "test setup: the member is grouped on its own keys")
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      assert(!merging.satisfies(clustered), "test setup: it does not serve as it stands")
+      val collection = PartitioningCollection(Seq(merging, merging))
+      val spec = collection.createShuffleSpec(clustered)
+      assert(spec.asInstanceOf[ShuffleSpecCollection].specs.size == 2)
+      // Each member's spec describes the projected layout the node would emit, one partition per
+      // distinct `a`.
+      assert(spec.flatten.map(_.numPartitions) == Seq(2, 2))
+    }
+  }
+
+  test("SPARK-59289: createShuffleSpec drops a keyed member that is not grouped") {
+    val a = AttributeReference("a", IntegerType)()
+    val clustered = ClusteredDistribution(Seq(a))
+    // A node would group this one too, but the admission set here is what a finished plan is
+    // checked against by `ValidateRequirements`, so it stays what the strict question admitted
+    // before a projection was allowed to answer it.
+    val ungrouped = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
+    val grouped = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
+    assert(!ungrouped.isGrouped && grouped.isGrouped, "test setup")
+
+    assert(!PartitioningCollection.maySatisfyAfterProjection(ungrouped, clustered))
+    assert(PartitioningCollection.maySatisfyAfterProjection(grouped, clustered))
+
+    // And through the filter itself, which is the predicate's one caller. The keyed member goes and
+    // the hash member stays, so the collection keeps a spec and its `require` is not tripped. The
+    // pairing is asked of a mixed collection rather than of two keyed members, because
+    // `checkKeyedPartitioningInvariant` forces one `KeyLayout` on all keyed members and `isGrouped`
+    // is therefore uniform across them: a collection cannot hold one of each.
+    val mixed = PartitioningCollection(Seq(ungrouped, HashPartitioning(Seq(a), 3)))
+    val specs = mixed.createShuffleSpec(clustered).asInstanceOf[ShuffleSpecCollection].specs
+    assert(specs.size == 1, s"only the hash member survives the filter, got $specs")
+    assert(specs.head.isInstanceOf[HashShuffleSpec], s"and it is the hash one, got $specs")
+  }
+
   protected def checkCompatible(
       left: ShuffleSpec,
       right: ShuffleSpec,
@@ -48,7 +134,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
   }
 
   protected def checkCreatePartitioning(
-      spec: ShuffleSpec,
+      spec: LeafShuffleSpec,
       dist: ClusteredDistribution,
       expected: Partitioning): Unit = {
     val actual = spec.createPartitioning(dist.clustering)
@@ -424,6 +510,332 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     assert(!RangeShuffleSpec(10, distribution).canCreatePartitioning)
   }
 
+  test("SPARK-59022: canCreatePartitioning: KeyedShuffleSpec requires grouped partition keys") {
+    val a = $"a".int
+    val distribution = ClusteredDistribution(Seq(a))
+    def keyedSpec(keys: Seq[Int]): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(a), keys.map(k => InternalRow(k))), distribution)
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val grouped = keyedSpec(Seq(2, 1))
+      assert(grouped.partitioning.isGrouped)
+      assert(grouped.canCreatePartitioning,
+        "unsorted keys are fine, the shuffle follows the declared order")
+
+      // Duplicate keys mean one key spans several partitions, which a KeyGroupedPartitioner cannot
+      // reproduce, so this spec must not be the target for shuffling the other child.
+      val ungrouped = keyedSpec(Seq(1, 1, 2))
+      assert(!ungrouped.partitioning.isGrouped)
+      assert(!ungrouped.canCreatePartitioning)
+    }
+  }
+
+  test("SPARK-59121: canCreatePartitioning: KeyedShuffleSpec refuses reduced keys") {
+    // A `bucket(12, a)` partitioning whose keys a join reduced together with a `bucket(8, a)` one.
+    // The keys are `a % 4`, which is not what evaluating `bucket(12, a)` on a row produces, so the
+    // other child cannot be shuffled onto them. This replaces SPARK-59120's data-type proxy,
+    // which both bucket transforms pass, since the reduced keys keep their `IntegerType`.
+    val a = $"a".int
+    val bucket12 = TransformExpression(TestBucketFunction, Seq(a), Some(12))
+    val bucket8 = TransformExpression(TestBucketFunction, Seq(a), Some(8))
+    // `builtWith` types the key row, `declared` is what the partitioning reports, so the two can be
+    // made to disagree the way `createPartitioning` does.
+    def divergingSpec(
+        builtWith: Expression,
+        declared: Expression,
+        key: InternalRow): KeyedShuffleSpec =
+      KeyedShuffleSpec(
+        KeyedPartitioning(Seq(builtWith), Seq(key)).copy(expressions = Seq(declared)),
+        ClusteredDistribution(declared.references.toSeq))
+    def spec(expression: Expression): KeyedShuffleSpec =
+      divergingSpec(expression, expression, InternalRow(1))
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      assert(spec(bucket12).canCreatePartitioning,
+        "keys the expression describes can be evaluated per row")
+      assert(!spec(bucket12.reducedTogetherWith(bucket8)).canCreatePartitioning,
+        "reduced keys cannot")
+
+      // The gate no longer looks at data types, which SPARK-59120's proxy did. That proxy had to
+      // compare struct keys by shape, because `createPartitioning` puts the other child's
+      // expressions over these keys and the two sides can name a field differently. This builds
+      // that divergence, with the key row at `struct<f>` and the partitioning declaring
+      // `struct<g>`.
+      def struct(field: String): Attribute =
+        $"a".struct(new StructType().add(field, IntegerType))
+      assert(divergingSpec(struct("f"), struct("g"), InternalRow(InternalRow(1)))
+        .canCreatePartitioning,
+        "a key row reads the same either way, so the field names must not matter")
+    }
+  }
+
+  test("SPARK-59120: createShuffleSpec sorts the projected keys at their built-with types") {
+    val a = $"a".timestamp
+    val b = $"b".int
+    // A reducer left `(year, bucket)` values, both `IntegerType`, under expressions that still
+    // declare `(TimestampType, IntegerType)`. Projecting to the `a` position sorts them. An
+    // ordering built from the declared types reads the year as a Long and throws.
+    val reduced =
+      KeyedPartitioning(Seq($"a".int, b), Seq(InternalRow(2021, 1), InternalRow(2020, 0)))
+        .copy(expressions = Seq(a, b))
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val spec = reduced.createShuffleSpec(ClusteredDistribution(Seq(a)))
+      assert(spec.joinKeyPositions === Some(Seq(0)))
+      assert(spec.partitioning.partitionKeys.map(_.row.getInt(0)) === Seq(2020, 2021))
+    }
+  }
+
+  test("SPARK-59256: createShuffleSpec reports no projection when it changes nothing") {
+    val a = $"a".int
+    val b = $"b".int
+    val distribution = ClusteredDistribution(Seq(a, b))
+    val sortedKeys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1))
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      // Every position is a cluster key and the keys are already grouped and sorted, so the
+      // projection and the regrouping both rebuild this partitioning. Reporting positions here
+      // would make a consumer insert a `GroupPartitionsExec` that projects nothing.
+      val unchanged = KeyedPartitioning(Seq(a, b), sortedKeys).createShuffleSpec(distribution)
+      assert(unchanged.joinKeyPositions === None)
+      assert(unchanged.partitioning == KeyedPartitioning(Seq(a, b), sortedKeys))
+
+      // The same positions, but the keys arrive unsorted, so `toGrouped` reorders them. That is a
+      // different partitioning, and the positions say so. This is why the question is not simply
+      // whether every position was kept.
+      val resorted = KeyedPartitioning(Seq(a, b), sortedKeys.reverse)
+        .createShuffleSpec(distribution)
+      assert(resorted.joinKeyPositions === Some(Seq(0, 1)))
+      assert(resorted.partitioning.partitionKeys.map(_.row.getInt(1)) === Seq(1, 2, 1))
+
+      // And a position that is no cluster key is dropped, which has always been reported.
+      val narrowed = KeyedPartitioning(Seq(a, $"z".int), sortedKeys)
+        .createShuffleSpec(ClusteredDistribution(Seq(a)))
+      assert(narrowed.joinKeyPositions === Some(Seq(0)))
+    }
+  }
+
+  test("areKeysCompatible: unknown partition keys only allow a subset of the declared keys") {
+    val a = $"a".int
+    val distribution = ClusteredDistribution(Seq(a))
+    def keyedSpec(
+        keys: Seq[Int],
+        hasUnknown: Boolean = false): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(a), keys.map(k => InternalRow(k)))
+        .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)), distribution)
+
+    // A partitioning with unknown partition keys (e.g. a side re-shuffled onto a keyed layout by
+    // `KeyedShuffleSpec.createPartitioning`) only guarantees co-location for its declared keys, so
+    // it can only be co-partitioned with a side whose keys are a subset of the declared keys.
+    val unknown12 = keyedSpec(Seq(1, 2), hasUnknown = true)
+    // hasUnknown=true is still compatible with a subset (or equal) partner: every such key is
+    // co-located on both sides.
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1)), allowReduce = true),
+      "subset keys must be compatible")
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(2)), allowReduce = true),
+      "another subset key must be compatible")
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1, 2)), allowReduce = true),
+      "equal keys must be compatible")
+    assert(keyedSpec(Seq(1)).areKeysCompatible(unknown12, allowReduce = true),
+      "compatibility must be symmetric for a subset partner")
+
+    // A larger partner's keys are not all covered by the declared keys.
+    assert(!unknown12.areKeysCompatible(keyedSpec(Seq(1, 2, 3)), allowReduce = true),
+      "a larger key set must not be compatible with an unknown-keyed partitioning")
+    assert(!keyedSpec(Seq(1, 2, 3)).areKeysCompatible(unknown12, allowReduce = true),
+      "an unknown-keyed partitioning cannot cover a larger partner's keys")
+
+    // Both sides unknown with the same declared keys: `KeyGroupedPartitioner`'s out-of-set-key
+    // fallback is a deterministic hash of the key, so both sides route those keys to the same
+    // partition and stay compatible, but only when the declared key order also agrees, since a
+    // GroupPartitionsExec regrouping re-labels partitions by each side's declared order. Different
+    // declared keys or a different order are rejected.
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1, 2), hasUnknown = true), allowReduce = true),
+      "two unknown-keyed partitionings with the same declared keys must be compatible")
+    assert(!unknown12.areKeysCompatible(
+        keyedSpec(Seq(2, 1), hasUnknown = true), allowReduce = true),
+      "two unknown-keyed partitionings must agree on the declared key order")
+    assert(!unknown12.areKeysCompatible(
+        keyedSpec(Seq(1, 2, 3), hasUnknown = true), allowReduce = true),
+      "two unknown-keyed partitionings with different declared keys must not be compatible")
+
+    // Without the marker, key sets are not compared, only the partition expressions are.
+    assert(keyedSpec(Seq(1, 2)).areKeysCompatible(keyedSpec(Seq(1, 2, 3)), allowReduce = true),
+      "without unknown keys, different key sets remain expression-compatible")
+  }
+
+  test("areKeysCompatible: unknown partition keys require the same partition functions") {
+    // A stand-in for a connector partition function such as `bucket`: only the canonical name
+    // matters here, since `TransformExpression.isSameFunction` compares names and bucket counts.
+    val bucketFn = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(LongType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "test.bucket"
+      override def canonicalName(): String = "test.bucket"
+    }
+    def bucket(numBuckets: Int, expr: Expression): TransformExpression =
+      TransformExpression(bucketFn, Seq(expr), Some(numBuckets))
+
+    val a = $"a".long
+    val distribution = ClusteredDistribution(Seq(a))
+    def bucketSpec(
+        keys: Seq[Long],
+        hasUnknown: Boolean = false): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(bucket(4, a)), keys.map(k => InternalRow(k)))
+        .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)), distribution)
+    def keyedSpec(
+        keys: Seq[Long],
+        hasUnknown: Boolean = false): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(a), keys.map(k => InternalRow(k)))
+        .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)), distribution)
+
+    // `isExpressionCompatible` admits an identity-vs-transform pair when compatible transforms
+    // are allowed, but then the two sides' partition keys live in different domains: raw values
+    // on the identity side and bucket ids on the transform side. The unknown-keyed subset test
+    // would compare unrelated numbers, so the marker path must require the same partition
+    // function per position instead.
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      assert(!keyedSpec(Seq(1), hasUnknown = true).areKeysCompatible(
+          bucketSpec(Seq(0, 1)), allowReduce = true),
+        "an unknown-keyed identity partitioning must not pair with a transform partitioning")
+      assert(!bucketSpec(Seq(0, 1)).areKeysCompatible(
+          keyedSpec(Seq(1), hasUnknown = true), allowReduce = true),
+        "the incompatibility must be symmetric")
+      assert(!keyedSpec(Seq(1), hasUnknown = true).areKeysCompatible(
+          bucketSpec(Seq(0, 1), hasUnknown = true), allowReduce = true),
+        "the identity-vs-transform pair must not pair even when both sides are unknown-keyed")
+      // Two unmarked sides keep the pre-existing behavior: the pair stays admissible, and
+      // `EnsureRequirements` computes reducers to reconcile the two key domains.
+      assert(keyedSpec(Seq(1)).areKeysCompatible(bucketSpec(Seq(0, 1)), allowReduce = true),
+        "unmarked identity-vs-transform pairs remain admissible")
+    }
+  }
+
+  test("isCompatibleWith: a pair whose keys a join would reduce is not compatible as it stands") {
+    // `flip_low_bit` permutes its key space and keeps its argument's type, so the two sides can
+    // report the same key list while a key stands for different rows on each, the identity side
+    // holding raw values and this one its outputs. The same fixture the end-to-end test uses.
+    val a = $"a".long
+    val distribution = ClusteredDistribution(Seq(a))
+    def spec(expression: Expression): KeyedShuffleSpec =
+      KeyedShuffleSpec(
+        KeyedPartitioning(Seq(expression), Seq(InternalRow(0L), InternalRow(1L))), distribution)
+    val identity = spec(a)
+    val flip = spec(TransformExpression(FlipLowBitFunction, Seq(a)))
+    assert(identity.partitioning.layout.describesSameKeys(flip.partitioning.layout),
+      "test setup: both sides report the same key rows at the same type, so a refusal below can " +
+        "only come from the key spaces differing")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      assert(identity.areKeysCompatible(flip, allowReduce = true),
+        "the pair stays admissible, since `EnsureRequirements` reduces the identity side onto it")
+      assert(!identity.isCompatibleWith(flip),
+        "equal key rows in two key spaces are not compatible before that reduce runs")
+      assert(!flip.isCompatibleWith(identity), "the refusal must be symmetric")
+
+      // The same for two reducible transforms that differ in their bucket count: a reducer exists,
+      // so the pair is admitted for the reduce path, and the two key lists can still coincide.
+      val bucketFn = new FakeBucket
+      val bucket8 = TransformExpression(bucketFn, Seq(a), Some(8))
+      val bucket4 = TransformExpression(bucketFn, Seq(a), Some(4))
+      assert(spec(bucket8).areKeysCompatible(spec(bucket4), allowReduce = true),
+        "a reducer reconciles the two bucket counts, so the pair stays admissible")
+      assert(!spec(bucket8).isCompatibleWith(spec(bucket4)),
+        "two bucket counts are not lined up until that reducer has run")
+      // Positive control: the same function is lined up as it stands, so the refusals above are the
+      // key spaces' doing rather than this path always answering false.
+      assert(spec(bucket8).isCompatibleWith(spec(bucket8)),
+        "one function over one key list is compatible with itself")
+
+      // A pair an earlier join reduced together is in one key space already, so it stays
+      // compatible. This is what keeps a chained storage-partitioned join from shuffling.
+      assert(spec(bucket8.reducedTogetherWith(bucket4))
+        .isCompatibleWith(spec(bucket4.reducedTogetherWith(bucket8))),
+        "two sides reduced together share one key space")
+    }
+  }
+
+  test("createShuffleSpec: a marked narrowing projection yields an unusable spec") {
+    val a = $"a".int
+    val b = $"b".int
+    val marked = KeyedPartitioning(Seq(a, b), Seq(InternalRow(1, 2), InternalRow(3, 4)))
+      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val spec = marked.createShuffleSpec(ClusteredDistribution(Seq(a)))
+        .asInstanceOf[KeyedShuffleSpec]
+      // The refusal returns the unprojected spec whose `b` expression maps to no clustering
+      // key; that position must make the spec unusable as a shuffle template, or
+      // `createPartitioning` would index an empty position set.
+      assert(spec.joinKeyPositions.isEmpty)
+      assert(!spec.canCreatePartitioning)
+    }
+  }
+
+  test("createShuffleSpec: a marked covering projection yields a usable unprojected spec") {
+    val a = $"a".int
+    // Grouped but not sorted, which is what a one-side shuffle onto a union's key order leaves
+    // behind. Every partition expression covers a clustering key here, so the projection that is
+    // refused would only have re-sorted the keys.
+    val marked = KeyedPartitioning(Seq(a),
+      Seq(InternalRow(3), InternalRow(4), InternalRow(1), InternalRow(2)))
+      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    assert(marked.isGrouped, "test setup: the keys are distinct, so the layout is grouped")
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val spec = marked.createShuffleSpec(ClusteredDistribution(Seq(a)))
+        .asInstanceOf[KeyedShuffleSpec]
+      // The refusal leaves the child's own layout, and unlike the narrowing case above that spec
+      // is usable: a consumer is laid out on the keys in the order this side reports them. Sorting
+      // them would send the consumer's undeclared rows where this side does not hold them.
+      assert(spec.joinKeyPositions.isEmpty)
+      assert(spec.canCreatePartitioning)
+      assert(spec.partitioning.partitionKeys == marked.partitionKeys)
+    }
+  }
+
+  test("areKeysCompatible: unknown keys require the same function, not just a compatible one") {
+    val fn = new FakeBucket
+    val a = $"a".long
+    def bucketSpec(numBuckets: Int, hasUnknown: Boolean): KeyedShuffleSpec =
+      KeyedShuffleSpec(
+        KeyedPartitioning(
+          Seq(TransformExpression(fn, Seq(a), Some(numBuckets))),
+          Seq(InternalRow(0L), InternalRow(1L)))
+          .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)),
+        ClusteredDistribution(Seq(a)))
+
+    // `allowCompatibleTransforms` lets a differing-bucket-count pair through
+    // `isExpressionCompatible`, and both specs declare the key set {0, 1}, so any
+    // refusal below can only come from the same-function gate on the marker path, not the keys.
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      assert(!bucketSpec(4, true).areKeysCompatible(bucketSpec(8, true), allowReduce = true),
+        "two marked sides must agree on the exact function, not just a compatible one")
+      assert(!bucketSpec(4, true).areKeysCompatible(bucketSpec(8, false), allowReduce = true),
+        "a marked side must not pair across bucket counts")
+      assert(!bucketSpec(8, false).areKeysCompatible(bucketSpec(4, true), allowReduce = true),
+        "the refusal must be symmetric")
+      // Unmarked, the compatible-transform relaxation still pairs them (pre-existing behavior).
+      assert(bucketSpec(4, false).areKeysCompatible(bucketSpec(8, false), allowReduce = true),
+        "unmarked compatible transforms remain admissible")
+      // Positive control: the same marked function with the same keys must stay compatible, so
+      // the refusals above are the function difference's doing, not the marker path always false.
+      assert(bucketSpec(4, true).areKeysCompatible(bucketSpec(4, true), allowReduce = true),
+        "identical marked functions remain compatible")
+    }
+  }
+
   test("createPartitioning: HashShuffleSpec") {
     checkCreatePartitioning(
       HashShuffleSpec(HashPartitioning(Seq($"a"), 10), ClusteredDistribution(Seq($"a", $"b"))),
@@ -525,13 +937,6 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       SinglePartition
     )
 
-    checkCreatePartitioning(ShuffleSpecCollection(Seq(
-      HashShuffleSpec(HashPartitioning(Seq($"a"), 10), distribution),
-        RangeShuffleSpec(10, distribution))),
-      ClusteredDistribution(Seq($"c", $"d")),
-      HashPartitioning(Seq($"c"), 10)
-    )
-
     // unsupported cases
 
     checkError(
@@ -541,7 +946,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       condition = "UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
       parameters = Map(
         "methodName" -> "createPartitioning$",
-        "className" -> "org.apache.spark.sql.catalyst.plans.physical.ShuffleSpec"))
+        "className" -> "org.apache.spark.sql.catalyst.plans.physical.LeafShuffleSpec"))
   }
 
   test("compatibility: ShufflePartitionIdPassThroughSpec on both sides") {
@@ -601,5 +1006,92 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       HashShuffleSpec(HashPartitioning(Seq($"c"), 10), cd),
       expected = false
     )
+  }
+
+  test("SPARK-59080: a collection whose members cover different key subsets disagrees") {
+    val id = AttributeReference("id", IntegerType)()
+    val t1 = AttributeReference("t1", IntegerType)()
+    val t2 = AttributeReference("t2", IntegerType)()
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1))
+
+    // The shape an alias cross-product produces: same arity, same keys, different expressions. The
+    // operation clusters on (id, t1), so the first member projects onto both positions and keeps
+    // three partitions, while the second matches only `id` and keeps two.
+    val collection = PartitioningCollection.fromPartitionings(Seq(
+      KeyedPartitioning(Seq(id, t1), keys),
+      KeyedPartitioning(Seq(id, t2), keys)))
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val spec = collection.createShuffleSpec(ClusteredDistribution(Seq(id, t1)))
+
+      // The disagreement is kept rather than resolved here. Every member has to stay for
+      // `isCompatibleWith`, which answers for any of them, and the collection cannot know which one
+      // the other side matched. `EnsureRequirements` resolves that and asks the member, so the
+      // collection has no partition count of its own to read.
+      val memberPartitions = spec.flatten.map(_.numPartitions)
+      assert(memberPartitions.toSet === Set(3, 2))
+      assert(spec.isCompatibleWith(spec), "every member stays available for matching")
+    }
+  }
+
+  test("SPARK-59187: reduceKeys reports the types its keys are compared at") {
+    // A reducer's result type comes from the connector, so it can name a struct field. See
+    // `KeyedPartitioning.reduceKeys`.
+    val named = new StructType().add("reduced", IntegerType)
+    val reducer = new Reducer[Int, InternalRow] {
+      override def resultType(): DataType = named
+      override def reduce(value: Int): InternalRow = InternalRow(value)
+    }
+    val transform = TransformExpression(TestBucketFunction, Seq($"a".int), Some(4))
+    val partitioning = KeyedPartitioning(Seq($"a".int), Seq(InternalRow(1), InternalRow(2)))
+
+    val (reducedDataTypes, reducedKeys) =
+      partitioning.reduceKeys(Seq(Some(KeyReducer(reducer, transform))))
+    assert(reducedDataTypes !== Seq(named), "test setup: the reducer names a field to erase")
+    assert(reducedKeys.map(_.dataTypes).distinct === Seq(reducedDataTypes),
+      "the reported types are the ones the keys hold")
+  }
+
+  test("SPARK-59256: a single-partition side needs every member of a collection to be one") {
+    val id = AttributeReference("id", IntegerType)()
+    val t1 = AttributeReference("t1", IntegerType)()
+    val t2 = AttributeReference("t2", IntegerType)()
+    // Clustering on (id, t1) again. The first member matches `id` only and collapses to one
+    // partition, the second projects onto both positions and keeps three. The members disagree, so
+    // no single answer holds for whichever one the plan settles on.
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(1, 3))
+    val collection = PartitioningCollection.fromPartitionings(Seq(
+      KeyedPartitioning(Seq(id, t2), keys),
+      KeyedPartitioning(Seq(id, t1), keys)))
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val spec = collection.createShuffleSpec(ClusteredDistribution(Seq(id, t1)))
+      val memberPartitions = spec.flatten.map(_.numPartitions)
+      // Ordered, not just as a set: the whole point is that the head is the wrong one to read.
+      assert(memberPartitions === Seq(1, 3))
+
+      // Reading the head's count answers one partition and claims a co-partitioning that does not
+      // hold. Only this direction is asserted: `KeyedShuffleSpec` has no
+      // `SinglePartitionShuffleSpec` case at all, so the reverse is false whatever the member
+      // counts are. That asymmetry is pre-existing and is not what this change is about.
+      assert(!SinglePartitionShuffleSpec.isCompatibleWith(spec))
+    }
+  }
+
+  test("SPARK-59256: an empty collection is rejected at construction, not at the first read") {
+    // `numPartitions` carried this `require` and threw the same way, but only once something asked.
+    // `flatten` would answer `Nil` instead, and the ranking's `max` over it throws a worse message.
+    val e = intercept[IllegalArgumentException](ShuffleSpecCollection(Nil))
+    assert(e.getMessage.contains("expected specs to be non-empty"))
+  }
+
+  test("SPARK-59256: flattening reaches the members of a nested collection") {
+    val distribution = ClusteredDistribution(Seq($"a", $"b"))
+    val buried = HashShuffleSpec(HashPartitioning(Seq($"a"), 10), distribution)
+    val direct = HashShuffleSpec(HashPartitioning(Seq($"b"), 10), distribution)
+    // A `PartitioningCollection` can hold another one, so a spec collection can nest too.
+    val collection = ShuffleSpecCollection(Seq(ShuffleSpecCollection(Seq(buried)), direct))
+
+    assert(collection.flatten === Seq(buried, direct))
   }
 }

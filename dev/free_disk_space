@@ -44,15 +44,26 @@ sudo rm -rf /opt/hostedtoolcache/go
 sudo rm -rf /opt/hostedtoolcache/node
 du -sh /opt/*
 
-sudo apt-get update --fix-missing
-sudo apt-get remove --purge -y '^aspnet.*'
-sudo apt-get remove --purge -y '^dotnet-.*'
-sudo apt-get remove --purge -y '^llvm-.*'
-sudo apt-get remove --purge -y '^temurin-.*'
-sudo apt-get remove --purge -y 'php.*'
-sudo apt-get remove --purge -y '^mongodb-.*'
-sudo apt-get remove --purge -y snapd google-chrome-stable microsoft-edge-stable firefox
-sudo apt-get remove --purge -y azure-cli google-cloud-sdk mono-devel powershell libgl1-mesa-dri
+package_patterns=(
+  '^aspnet.*'
+  '^dotnet-.*'
+  '^llvm-.*'
+  '^mongodb-.*'
+  '^temurin-.*'
+  'php.*'
+  azure-cli
+  firefox
+  google-chrome-stable
+  google-cloud-sdk
+  libgl1-mesa-dri
+  microsoft-edge-stable
+  mono-devel
+  powershell
+  snapd
+)
+for package_pattern in "${package_patterns[@]}"; do
+  sudo apt-get remove --purge -y "$package_pattern" || true
+done
 sudo apt-get autoremove --purge -y
 sudo apt-get clean
 

@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 
-from collections import namedtuple
 import os
 import traceback
+from collections import namedtuple
 
 CallSite = namedtuple("CallSite", "function file linenum")
 

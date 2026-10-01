@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.loose_version import LooseVersion
 from pyspark.errors import PySparkImportError, PySparkRuntimeError
+from pyspark.loose_version import LooseVersion
 
 
 def require_minimum_pandas_version() -> None:

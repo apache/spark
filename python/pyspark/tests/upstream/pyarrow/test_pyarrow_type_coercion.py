@@ -30,9 +30,9 @@ Test categories (each tests multiple types: numeric, temporal, string, etc.):
 """
 
 import datetime
-from decimal import Decimal
 import math
 import unittest
+from decimal import Decimal
 from typing import Any, List, Tuple
 
 from pyspark.loose_version import LooseVersion
@@ -159,8 +159,9 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
 
     def test_python_instances_coercion(self):
         """Test type coercion from Python list, tuple, generator with all data types."""
-        import pyarrow as pa
         from zoneinfo import ZoneInfo
+
+        import pyarrow as pa
 
         # ==== 2.1 Numeric Types ====
 
@@ -447,10 +448,11 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
     )
     def test_pandas_instances_coercion(self):
         """Test type coercion from pandas Series with various backend types."""
+        from zoneinfo import ZoneInfo
+
         import numpy as np
         import pandas as pd
         import pyarrow as pa
-        from zoneinfo import ZoneInfo
 
         # Constants
         int8_min, int8_max = np.iinfo(np.int8).min, np.iinfo(np.int8).max

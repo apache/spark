@@ -21,7 +21,8 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NullType, StringType}
 
@@ -166,6 +167,73 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
       extraOptions = Map("multiLine" -> "true"))
   }
 
+  test("JSON: streaming multi-line top-level arrays match a directory read") {
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
+      assertArchiveMatchesDir(
+        Seq(
+          "a.json" -> jsonBytes("""[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]"""),
+          "b.json" -> jsonBytes("""[{"id":3,"name":"Carol"}]""")),
+        extraOptions = Map("multiLine" -> "true"))
+      // Jackson auto-detects UTF-16/32, so only a non-UTF charset shows `encoding` is applied.
+      // scalastyle:off nonascii
+      assertArchiveMatchesDir(
+        Seq("a.json" -> "[{\"id\":1,\"name\":\"Jos\u00e9\"},{\"id\":2,\"name\":\"Bob\"}]"
+          .getBytes(StandardCharsets.ISO_8859_1)),
+        extraOptions = Map("multiLine" -> "true", "encoding" -> "ISO-8859-1"))
+      // scalastyle:on nonascii
+    }
+  }
+
+  gridTest("JSON: streaming archive arrays resume after a partial element")(
+      Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST")) { mode =>
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
+      val document = """[{"id":"bad","name":"Alice"},{"id":2,"name":"Bob"}]"""
+      withArchiveFile() { archive =>
+        writeArchive(archive, Seq(entryName(0) -> jsonBytes(document)))
+        val df = read(
+          archive.getCanonicalPath,
+          Map("multiLine" -> "true", "mode" -> mode),
+          s"$readSchema, _corrupt_record STRING")
+
+        mode match {
+          case "PERMISSIVE" =>
+            checkAnswer(df, Seq(Row(null, "Alice", document), Row(2, "Bob", null)))
+          case "DROPMALFORMED" =>
+            checkAnswer(df, Row(2, "Bob", null))
+          case "FAILFAST" =>
+            val error = intercept[SparkException](df.collect())
+            assert(error.getCause.asInstanceOf[SparkException].getCondition ===
+              "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+        }
+      }
+    }
+  }
+
+  gridTest("JSON: streaming archive arrays handle terminal malformed input")(
+      Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST")) { mode =>
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
+      val document = """[{"id":1,"name":"Alice"} {"id":2,"name":"Bob"}]"""
+      withArchiveFile() { archive =>
+        writeArchive(archive, Seq(entryName(0) -> jsonBytes(document)))
+        val df = read(
+          archive.getCanonicalPath,
+          Map("multiLine" -> "true", "mode" -> mode),
+          s"$readSchema, _corrupt_record STRING")
+
+        mode match {
+          case "PERMISSIVE" =>
+            checkAnswer(df, Seq(Row(1, "Alice", null), Row(null, null, document)))
+          case "DROPMALFORMED" =>
+            checkAnswer(df, Row(1, "Alice", null))
+          case "FAILFAST" =>
+            val error = intercept[SparkException](df.collect())
+            assert(error.getCause.asInstanceOf[SparkException].getCondition ===
+              "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+        }
+      }
+    }
+  }
+
   test("JSON: a malformed record in an archive entry matches a directory read (both modes)") {
     // Permissive mode (the default): a malformed record parses to nulls with its raw text echoed
     // into `_corrupt_record`. The archive path wires its own FailureSafeParser in `readStream` --
@@ -184,11 +252,30 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
       schema = corruptSchema)
   }
 
+  if (supportsMidAdvanceFailure) {
+    test("JSON: multiLine inference keeps entries read before a mid-advance failure " +
+        "(ignoreCorruptFiles)") {
+      // Entry 0 is read, then advancing to a later entry throws (not at open). A whole-archive drop
+      // would lose entry 0's `extra`; aborting the traversal would lose the sibling file's `later`.
+      val opts = Map("multiLine" -> "true")
+      withArchiveFile() { archive =>
+        writeArchiveFailingAfterFirstEntry(archive,
+          entryName(0) -> jsonBytes("{\n  \"id\": 1,\n  \"name\": \"Alice\",\n  \"extra\": 9\n}"))
+        Files.write(new File(archive.getParentFile, s"later.$fileExtension").toPath,
+          jsonBytes("{\n  \"id\": 2,\n  \"name\": \"Bob\",\n  \"later\": 7\n}"))
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+          val schema = inferredSchema(Seq(archive.getParentFile.getCanonicalPath), opts)
+          assert(schema.fieldNames.toSet == Set("id", "name", "extra", "later"),
+            "expected `extra` (pre-failure entry) and `later` (sibling file) in the inferred " +
+              s"schema after the mid-advance skip, got $schema")
+        }
+      }
+    }
+  }
+
   test("JSON: the DSv2 path refuses to infer a schema for an archive (UNABLE_TO_INFER_SCHEMA)") {
-    // Archive scanning is wired into the v1 file source only, so the DSv2 reader cannot read
-    // archives. On the v2 path inference must keep returning None for an archive input -- raising
-    // UNABLE_TO_INFER_SCHEMA -- rather than inferring a schema the v2 scan would then mis-read as
-    // raw archive bytes. Forcing json off the v1 source list routes the read through JsonTable.
+    // Forcing json off the v1 source list routes the archive read through the DSv2 JsonTable, which
+    // cannot read archives and must fail with UNABLE_TO_INFER_SCHEMA, not parse raw bytes.
     withArchiveFile() { archive =>
       writeArchive(archive, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {

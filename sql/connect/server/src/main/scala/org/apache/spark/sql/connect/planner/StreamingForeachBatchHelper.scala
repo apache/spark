@@ -31,10 +31,11 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, PYTHON_EXEC, QUERY_ID, R
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders}
 import org.apache.spark.sql.connect.IllegalStateErrors
-import org.apache.spark.sql.connect.common.ForeachWriterPacket
+import org.apache.spark.sql.connect.common.{ForeachWriterPacket, UdfSerialization}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connect.service.SparkConnectService
+import org.apache.spark.sql.execution.python.PythonWorkerEnvironment
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.Utils
@@ -100,7 +101,8 @@ object StreamingForeachBatchHelper extends Logging {
       payloadBytes: Array[Byte],
       sessionHolder: SessionHolder): ForeachBatchFnType = {
     val foreachBatchPkt =
-      Utils.deserialize[ForeachWriterPacket](payloadBytes, Utils.getContextOrSparkClassLoader)
+      UdfSerialization
+        .deserialize[ForeachWriterPacket](payloadBytes, Utils.getContextOrSparkClassLoader)
     val fn = foreachBatchPkt.foreachWriter.asInstanceOf[(Dataset[Any], Long) => Unit]
     val encoder = foreachBatchPkt.datasetEncoder.asInstanceOf[AgnosticEncoder[Any]]
     // TODO(SPARK-44462): Set up Spark Connect session.
@@ -145,7 +147,9 @@ object StreamingForeachBatchHelper extends Logging {
       pythonFn,
       connectUrl,
       sessionHolder.sessionId,
-      "pyspark.sql.connect.streaming.worker.foreach_batch_worker")
+      "pyspark.sql.connect.streaming.worker.foreach_batch_worker",
+      // The worker lives as long as the query, so it keeps the values held at query start.
+      PythonWorkerEnvironment.readValidated(sessionHolder.session.sessionState.conf))
 
     logInfo(
       log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +

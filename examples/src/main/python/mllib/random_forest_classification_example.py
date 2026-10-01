@@ -19,9 +19,11 @@
 Random Forest Classification Example.
 """
 from pyspark import SparkContext
+
 # $example on$
 from pyspark.mllib.tree import RandomForest, RandomForestModel
 from pyspark.mllib.util import MLUtils
+
 # $example off$
 
 if __name__ == "__main__":

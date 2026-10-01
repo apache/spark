@@ -92,6 +92,34 @@ private[spark] object UI {
     .booleanConf
     .createWithDefault(true)
 
+  val UI_HOLD_ENABLED = ConfigBuilder("spark.ui.holdEnabled")
+    .doc("Allows the whole application to be held and resumed from the web UI. Holding " +
+      "gracefully decommissions all executors and stops requesting new ones. Cached blocks " +
+      "are not preserved and are recomputed after resuming. This takes effect only when " +
+      "spark.decommission.enabled is true, the shuffle data is kept outside the executors " +
+      "(through either spark.shuffle.service.enabled or a ShuffleDataIO with reliable " +
+      "storage), and the cluster manager can hold executors: Standalone, YARN, and " +
+      "Kubernetes with spark.kubernetes.allocation.pods.allocator=direct.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(true)
+
+  val UI_ACTIONS_VIA_GET_ENABLED = ConfigBuilder("spark.ui.actionsViaGetEnabled")
+    .doc("Whether the state-changing endpoints of the web UI (job/stage kill, application " +
+      "hold and resume) accept HTTP GET requests in addition to POST. Unset, this " +
+      "defaults to true when spark.master is yarn, because the YARN ResourceManager/AM " +
+      "proxy does not forward POST requests (SPARK-6846), and to false everywhere else. " +
+      "Either way the state-changing endpoints require the random per-UI CSRF token " +
+      "embedded in the forms the UI renders, and reject prefetch requests " +
+      "(Purpose/Sec-Purpose/X-Moz headers) and HEAD requests, so forged cross-site " +
+      "requests and incidental fetches cannot trigger them; prefetch rejection " +
+      "relies on the prefetcher identifying itself via those headers.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createOptional
+
   val UI_THREAD_DUMPS_ENABLED = ConfigBuilder("spark.ui.threadDumpsEnabled")
     .doc("Whether to show a link for executor thread dumps in Stages and Executor pages.")
     .version("1.2.0")

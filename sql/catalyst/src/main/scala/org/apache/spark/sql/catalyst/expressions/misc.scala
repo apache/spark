@@ -84,6 +84,7 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
+  override lazy val throwable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
@@ -364,6 +365,10 @@ case class SparkVersion()
 
 @ExpressionDescription(
   usage = """_FUNC_(expr) - Return DDL-formatted type string for the data type of the input.""",
+  arguments = """
+    Arguments:
+      * expr - An expression of any type whose data type is returned as a DDL-formatted string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
