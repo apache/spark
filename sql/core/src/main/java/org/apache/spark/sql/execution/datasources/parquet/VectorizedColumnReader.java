@@ -389,7 +389,8 @@ public class VectorizedColumnReader {
           default -> throw new SparkUnsupportedOperationException(
             "_LEGACY_ERROR_TEMP_3190", Map.of("typeName", typeName.toString()));
         };
-        yield new VectorizedByteStreamSplitValuesReader(typeWidth);
+        yield new VectorizedByteStreamSplitValuesReader(
+          typeWidth, this.descriptor.getMaxDefinitionLevel() == 0);
       }
       case RLE -> {
         PrimitiveType.PrimitiveTypeName typeName =

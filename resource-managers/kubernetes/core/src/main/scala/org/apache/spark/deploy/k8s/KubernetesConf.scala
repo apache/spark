@@ -32,9 +32,14 @@ import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
+ * :: DeveloperApi ::
+ *
  * Structure containing metadata for Kubernetes logic to build Spark pods.
  */
-private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
+@Unstable
+@DeveloperApi
+@Since("4.4.0")
+abstract class KubernetesConf(val sparkConf: SparkConf) {
 
   val resourceNamePrefix: String
   def labels: Map[String, String]
@@ -197,7 +202,15 @@ class KubernetesDriverConf(
   }
 }
 
-private[spark] class KubernetesExecutorConf(
+/**
+ * :: DeveloperApi ::
+ *
+ * Used for K8s operations internally and Spark K8s operator.
+ */
+@Unstable
+@DeveloperApi
+@Since("4.4.0")
+class KubernetesExecutorConf(
     sparkConf: SparkConf,
     val appId: String,
     val executorId: String,
@@ -205,6 +218,21 @@ private[spark] class KubernetesExecutorConf(
     val resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID,
     customAuthSecret: Option[String] = None)
   extends KubernetesConf(sparkConf) with Logging {
+
+  /**
+   * Java-friendly constructor that accepts a nullable Pod for driverPod and
+   * a nullable String for customAuthSecret instead of Option.
+   */
+  @Since("4.4.0")
+  def this(
+      sparkConf: SparkConf,
+      appId: String,
+      executorId: String,
+      driverPod: Pod,
+      resourceProfileId: Int,
+      customAuthSecret: String) =
+    this(sparkConf, appId, executorId, Option(driverPod), resourceProfileId,
+      Option(customAuthSecret))
 
   def authSecret: Option[String] = {
     customAuthSecret

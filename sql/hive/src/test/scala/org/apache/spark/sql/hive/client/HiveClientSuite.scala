@@ -49,6 +49,27 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
 
   private val ver = IsolatedClientLoader.hiveVersion(version)
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    System.gc() // Hack to avoid SEGV on some JVM versions.
+    val hadoopConf = new Configuration()
+    hadoopConf.set("test", "success")
+    client = buildClient(hadoopConf)
+    versionSpark = TestHiveVersion(client)
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      if (versionSpark != null) {
+        versionSpark.reset()
+        versionSpark = null
+      }
+      client = null
+    } finally {
+      super.afterAll()
+    }
+  }
+
   /**
    * Drops table `tableName` after calling `f`.
    */
@@ -61,13 +82,8 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
   }
 
   test("create client") {
-    client = null
-    System.gc() // Hack to avoid SEGV on some JVM versions.
-    val hadoopConf = new Configuration()
-    hadoopConf.set("test", "success")
-    client = buildClient(hadoopConf)
-    if (versionSpark != null) versionSpark.reset()
-    versionSpark = TestHiveVersion(client)
+    assert(client != null, "client should be initialized in beforeAll")
+    assert(versionSpark != null, "versionSpark should be initialized in beforeAll")
     assert(versionSpark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
       .client.version.fullVersion.startsWith(version))
   }

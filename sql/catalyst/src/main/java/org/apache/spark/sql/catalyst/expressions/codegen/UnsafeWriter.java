@@ -145,6 +145,8 @@ public abstract class UnsafeWriter {
 
     if (input == null) {
       BitSetMethods.set(getBuffer(), startingOffset, ordinal);
+      Platform.putLong(getBuffer(), cursor(), 0L);
+      Platform.putLong(getBuffer(), cursor() + 8, 0L);
     } else {
       // Write the months, days and microseconds fields of interval to the variable length portion.
       long longVal =

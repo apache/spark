@@ -60,6 +60,19 @@ class SortMergeAsOfJoinSuite extends QueryTest
     (df1, df2)
   }
 
+  // Like checkAnswer, but also asserts the right-side buffer spilled (spillSize > 0).
+  private def checkAnswerAndSpill(df: classic.DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    checkAnswer(df, expectedAnswer)
+    val op = collectFirst(df.queryExecution.executedPlan) {
+      case s: SortMergeAsOfJoinExec => s
+    }
+    assert(op.isDefined,
+      s"Expected SortMergeAsOfJoinExec in plan:\n${df.queryExecution.executedPlan}")
+    assert(op.get.metrics("spillSize").value > 0,
+      s"Expected the right-side buffer to spill (spillSize > 0), " +
+        s"got ${op.get.metrics("spillSize").value}")
+  }
+
   test("uses SortMergeAsOfJoinExec physical operator") {
     val (df1, df2) = prepareForAsOfJoin()
     val result = df1.joinAsOf(
@@ -602,6 +615,40 @@ class SortMergeAsOfJoinSuite extends QueryTest
     )
   }
 
+  test("null-safe equi-key (<=>) in ON matches null keys, unlike EqualTo") {
+    // <=> is a residual (empty equi-keys), so null keys match, unlike EqualTo.
+    val schema1 = StructType(
+      StructField("grp", IntegerType, nullable = true) ::
+        StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val schema2 = StructType(
+      StructField("grp", IntegerType, nullable = true) ::
+        StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val df1 = spark.createDataFrame(
+      List(Row(null, 5, "a"), Row(1, 5, "b"), Row(null, 10, "c")).asJava, schema1)
+    val df2 = spark.createDataFrame(
+      List(Row(null, 3, "x"), Row(1, 4, "y"), Row(null, 8, "z")).asJava, schema2)
+    val joined = df1.joinAsOf(
+      df2, df1.col("ts"), df2.col("ts"),
+      joinExprs = df1.col("grp") <=> df2.col("grp"),
+      joinType = "inner", tolerance = null,
+      allowExactMatches = true, direction = "backward")
+    checkAnswer(
+      joined,
+      Seq(
+        Row(null, 5, "a", null, 3, "x"),
+        Row(1, 5, "b", 1, 4, "y"),
+        Row(null, 10, "c", null, 8, "z")
+      )
+    )
+    val plan = joined.queryExecution.executedPlan
+    val asOfExecs = collectWithSubqueries(plan) { case j: SortMergeAsOfJoinExec => j }
+    assert(asOfExecs.length == 1, s"expected one SortMergeAsOfJoinExec in:\n$plan")
+    assert(asOfExecs.head.leftKeys.isEmpty && asOfExecs.head.rightKeys.isEmpty,
+      s"<=> must be a residual, so equi-keys must be empty, got ${asOfExecs.head}")
+  }
+
   test("residual condition via joinExprs") {
     // Test that pair-correlated residual predicates are routed into the
     // scanner's residualCondition (not a post-join FilterExec).
@@ -638,6 +685,49 @@ class SortMergeAsOfJoinSuite extends QueryTest
     )
   }
 
+  test("forward join - residual rejects every row within the tolerance") {
+    // For left (5, 10), ts 6 is within the tolerance but fails amount > threshold. ts 9 passes
+    // the residual but is past the tolerance, so it gets no match. Left (4, 30) matches ts 6.
+    val schema1 = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("amount", IntegerType) :: Nil)
+    val schema2 = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("threshold", IntegerType) :: Nil)
+    val df1 = spark.createDataFrame(List(Row(4, 30), Row(5, 10)).asJava, schema1)
+    val df2 = spark.createDataFrame(List(Row(6, 20), Row(9, 1)).asJava, schema2)
+    checkAnswer(
+      df1.joinAsOf(
+        df2, df1.col("ts"), df2.col("ts"),
+        joinExprs = df1.col("amount") > df2.col("threshold"),
+        joinType = "leftouter", tolerance = functions.lit(2),
+        allowExactMatches = true, direction = "forward"),
+      Seq(Row(4, 30, 6, 20), Row(5, 10, null, null)))
+  }
+
+  test("forward join - picks the closest row when right - left overflows") {
+    // Int.MaxValue - (-100) overflows INT, so a distance-based scan throws or picks far.
+    val schema1 = StructType(StructField("ts", IntegerType) :: Nil)
+    val schema2 = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("tag", StringType) :: Nil)
+    val df1 = spark.createDataFrame(List(Row(-100)).asJava, schema1)
+    val df2 = spark.createDataFrame(
+      List(Row(-50, "near"), Row(Int.MaxValue, "far")).asJava, schema2)
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        Seq(true, false).foreach { allowExactMatches =>
+          checkAnswer(
+            df1.joinAsOf(
+              df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
+              joinType = "inner", tolerance = null,
+              allowExactMatches = allowExactMatches, direction = "forward"),
+            Seq(Row(-100, -50, "near")))
+        }
+      }
+    }
+  }
+
   test("backward join - spill to disk") {
     // Force spill by setting in-memory threshold to 1 row.
     // Verifies that ExternalAppendOnlyUnsafeRowArray's spill path
@@ -647,7 +737,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
       val (df1, df2) = prepareForAsOfJoin()
       // No equi-key (bufferAllRight path)
-      checkAnswer(
+      checkAnswerAndSpill(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
           joinType = "inner", tolerance = null,
@@ -658,7 +748,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           Row(10, "z", "c", 7, "z", 7)
         )
       )
-      // With equi-key (bufferRightGroup path)
+      // Equi-key (bufferRightGroup): at most one right row per group, so it does not spill.
       checkAnswer(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq("b"),
@@ -677,7 +767,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
       val (df1, df2) = prepareForAsOfJoin()
       // No equi-key (bufferAllRight path)
-      checkAnswer(
+      checkAnswerAndSpill(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
           joinType = "inner", tolerance = null,
@@ -700,7 +790,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         List(Row("A", 5), Row("A", 10)).asJava, schema1)
       val right = spark.createDataFrame(
         List(Row("A", 6, "a"), Row("A", 8, "b"), Row("A", 12, "c")).asJava, schema2)
-      checkAnswer(
+      checkAnswerAndSpill(
         left.joinAsOf(
           right, left.col("ts"), right.col("ts"), usingColumns = Seq("grp"),
           joinType = "inner", tolerance = null,
@@ -719,7 +809,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
       val (df1, df2) = prepareForAsOfJoin()
       // No equi-key (bufferAllRight path)
-      checkAnswer(
+      checkAnswerAndSpill(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
           joinType = "inner", tolerance = null,
@@ -742,7 +832,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         List(Row("A", 5), Row("A", 10)).asJava, schema1)
       val right = spark.createDataFrame(
         List(Row("A", 3, "a"), Row("A", 7, "b"), Row("A", 12, "c")).asJava, schema2)
-      checkAnswer(
+      checkAnswerAndSpill(
         left.joinAsOf(
           right, left.col("ts"), right.col("ts"), usingColumns = Seq("grp"),
           joinType = "inner", tolerance = null,
@@ -760,7 +850,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
       val (df1, df2) = prepareForAsOfJoin()
-      checkAnswer(
+      checkAnswerAndSpill(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
           joinType = "leftouter", tolerance = null,
@@ -769,6 +859,43 @@ class SortMergeAsOfJoinSuite extends QueryTest
           Row(1, "x", "a", 1, "v", 1),
           Row(5, "y", "b", 3, "x", 3),
           Row(10, "z", "c", 7, "z", 7)
+        )
+      )
+    }
+  }
+
+  test("backward join - in-memory group followed by a spill-backed one") {
+    // `clear()` drops the spillable backing store between equi-key groups, so one scanner can
+    // see an in-memory group (whose buffer iterator yields the distinct stored rows) and then a
+    // spill-backed one (whose iterator re-points a single UnsafeRow on every next(), so that a
+    // retained match has to be copied out). Group "A" has one right row and stays in memory,
+    // group "B" has three and spills; in "B" the match is followed by a non-matching row, so a
+    // match that was not copied out would be clobbered before it is emitted.
+    withSQLConf(
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      val leftSchema = StructType(
+        StructField("grp", StringType) ::
+          StructField("ts", IntegerType) :: Nil)
+      val rightSchema = StructType(
+        StructField("grp", StringType) ::
+          StructField("ts", IntegerType) ::
+          StructField("right_val", StringType) :: Nil)
+      // Values of differing lengths so a clobbered match stands out in the answer.
+      val bestVal = "b" * 40
+      val left = spark.createDataFrame(
+        List(Row("A", 8), Row("B", 8)).asJava, leftSchema)
+      val right = spark.createDataFrame(
+        List(Row("A", 3, "aa"), Row("B", 1, "x"), Row("B", 5, bestVal), Row("B", 12, "y")).asJava,
+        rightSchema)
+      checkAnswerAndSpill(
+        left.joinAsOf(
+          right, left.col("ts"), right.col("ts"), usingColumns = Seq("grp"),
+          joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = "backward"),
+        Seq(
+          Row("A", 8, "A", 3, "aa"),
+          Row("B", 8, "B", 5, bestVal)
         )
       )
     }

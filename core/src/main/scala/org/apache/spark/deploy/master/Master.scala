@@ -34,6 +34,7 @@ import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.MessageWithContext
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.internal.config.Deploy.WorkerSelectionPolicy._
@@ -129,6 +130,8 @@ private[deploy] class Master(
   val historyServerUrl = conf.get(MASTER_UI_HISTORY_SERVER_URL)
   val useAppNameAsAppId = conf.get(MASTER_USE_APP_NAME_AS_APP_ID)
   val useDriverIdAsAppName = conf.get(MASTER_USE_DRIVER_ID_AS_APP_NAME)
+  // Whether applications can be held through this Master, from its web UI or REST server
+  private val holdEnabled = conf.get(UI_HOLD_ENABLED)
 
   // Alternative application submission gateway that is stable across Spark versions
   private val restServerEnabled = conf.get(MASTER_REST_SERVER_ENABLED)
@@ -533,6 +536,15 @@ private[deploy] class Master(
     case KillExecutors(appId, executorIds) =>
       val formattedExecutorIds = formatExecutorIds(executorIds)
       context.reply(handleKillExecutors(appId, formattedExecutorIds))
+
+    case RequestApplicationHold(appId, hold) =>
+      if (state != RecoveryState.ALIVE) {
+        val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
+          "Can only hold or resume applications in ALIVE state."
+        context.reply(ApplicationHoldResponse(success = false, msg))
+      } else {
+        context.reply(handleApplicationHold(appId, hold))
+      }
 
     case DecommissionWorkersOnHosts(hostnames) =>
       if (state != RecoveryState.STANDBY) {
@@ -1235,25 +1247,41 @@ private[deploy] class Master(
   }
 
   /**
-   * Handle a hold or resume request made from the Master UI by forwarding it to the driver,
-   * which owns the hold: see `SparkContext.holdExecutors()`.
+   * Handle a hold or resume request made from the Master UI or the REST server by forwarding it
+   * to the driver, which owns the hold: see `SparkContext.holdExecutors()`. The request is
+   * rejected unless both this Master and the application enable `spark.ui.holdEnabled`, and the
+   * application reported that it can be held.
    *
-   * The driver drains its executors before answering, so the ask is not waited on here -- that
-   * would block the dispatcher. The resulting state arrives separately as
-   * [[ApplicationHoldUpdated]] and the UI renders that; like the kill links, the request itself
-   * gets no UI feedback, so the outcome is only logged.
+   * The driver asks this Master to lower its executor requirement before answering, so the ask
+   * is not waited on here -- that would block the dispatcher. The resulting state arrives
+   * separately as [[ApplicationHoldUpdated]] and the UI renders that; like the kill links, the
+   * request itself gets no UI feedback, so the outcome is only logged. The returned response,
+   * which the REST server relays, tells only whether the request was forwarded.
    */
-  private def handleApplicationHold(appId: String, hold: Boolean): Unit = {
+  private def handleApplicationHold(appId: String, hold: Boolean): ApplicationHoldResponse = {
     val action = if (hold) "hold" else "resume"
+    def reject(msg: MessageWithContext): ApplicationHoldResponse = {
+      logWarning(msg)
+      ApplicationHoldResponse(success = false, msg.message)
+    }
     idToApp.get(appId) match {
+      case _ if !holdEnabled =>
+        // The Master UI offers no control then, but the REST server still takes requests.
+        reject(log"Ignoring the ${MDC(LogKeys.OPERATION, action)} request for application " +
+          log"${MDC(LogKeys.APP_ID, appId)}: ${MDC(LogKeys.CONFIG, UI_HOLD_ENABLED.key)} is " +
+          log"disabled on the Master.")
       case Some(app) if !app.desc.holdEnabled =>
-        // The UI offers no control for such an application, so this is a stale or hand-crafted
-        // request. The driver would reject it too; answer here without the round trip.
-        logWarning(log"Ignoring the ${MDC(LogKeys.OPERATION, action)} request for application " +
+        // The driver would reject it too; answer here without the round trip.
+        reject(log"Ignoring the ${MDC(LogKeys.OPERATION, action)} request for application " +
           log"${MDC(LogKeys.APP_ID, appId)}, which disabled holding.")
+      case Some(app) if !app.isFinished && !app.holdSupported =>
+        // Act only once the driver reports that it can be held, as the UI controls do.
+        reject(log"Ignoring the ${MDC(LogKeys.OPERATION, action)} request for application " +
+          log"${MDC(LogKeys.APP_ID, appId)}, which has not reported that it can be held.")
       case Some(app) if !app.isFinished =>
-        logInfo(log"Requesting application ${MDC(LogKeys.APP_ID, appId)} to " +
-          log"${MDC(LogKeys.OPERATION, action)}.")
+        val msg = log"Requesting application ${MDC(LogKeys.APP_ID, appId)} to " +
+          log"${MDC(LogKeys.OPERATION, action)}."
+        logInfo(msg)
         app.driver.ask[Boolean](SetApplicationHold(hold)).onComplete {
           case Success(acknowledged) =>
             if (!acknowledged) {
@@ -1264,8 +1292,9 @@ private[deploy] class Master(
             logWarning(log"Failed to ${MDC(LogKeys.OPERATION, action)} application " +
               log"${MDC(LogKeys.APP_ID, appId)}", t)
         }(ThreadUtils.sameThread)
+        ApplicationHoldResponse(success = true, msg.message)
       case _ =>
-        logWarning(log"Ignoring the ${MDC(LogKeys.OPERATION, action)} request for unknown or " +
+        reject(log"Ignoring the ${MDC(LogKeys.OPERATION, action)} request for unknown or " +
           log"finished application ${MDC(LogKeys.APP_ID, appId)}.")
     }
   }

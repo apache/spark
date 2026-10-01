@@ -47,7 +47,7 @@ jobs:
     if: github.repository == 'apache/spark'
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: apache/spark
           ref: 'master'

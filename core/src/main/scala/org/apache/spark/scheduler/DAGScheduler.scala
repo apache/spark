@@ -1164,8 +1164,8 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Shape of the shuffle boundaries in the RDD graph rooted at a job's final RDD, computed by
-   * [[classifyJobShuffleShape]] before any stage is created (so an unsupported job is rejected
+   * Shape of the shuffle boundaries in the RDD graph rooted at a job's final RDD, computed
+   * before any stage is created (so an unsupported job is rejected
    * fail-fast with no partial scheduler state).
    *
    * The supported shapes are:
@@ -1315,13 +1315,9 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Reject a job that uses a pipelined shuffle in combination with a cluster feature that a
-   * pipelined group cannot support. Checked up front, before any stage is created, so a rejection
-   * leaves no partial scheduler state. Used by the result-job path (handleJobSubmitted); the
-   * map-stage-job path rejects a pipelined dependency outright (see handleMapStageSubmitted), which
-   * subsumes these. Returns true (and fails the job via `listener`) if rejected; false otherwise.
-   * The RDD-graph walk runs only when a relevant feature is enabled and is inert for jobs without a
-   * pipelined dependency.
+   * Classify a job's shuffle shape, or fail it via `listener` if it uses a pipelined shuffle with
+   * an incompatible cluster feature. Checked before any stage is created, so a rejection leaves
+   * no partial scheduler state. The map-stage-job path rejects pipelined dependencies outright.
    *
    * Rejected combinations:
    *  - Speculation: a speculative copy of a producer would race a consumer already reading the
@@ -1332,12 +1328,13 @@ private[spark] class DAGScheduler(
    *    with CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT against a transient 0-slot snapshot even though
    *    the cluster would soon have capacity. Barrier scheduling forbids the same combination
    *    (checkBarrierStageWithDynamicAllocation); pipelined groups do likewise.
+   *
+   * @return the shuffle shape, or None if the job was rejected for an incompatible feature
    */
-  private def rejectUnsupportedPipelinedJob(
+  private def classifyJobShuffleShapeAndCheckFeatures(
       jobId: Int,
       finalRDD: RDD[_],
-      listener: JobListener): Boolean = {
-    // Only walk the RDD graph if a relevant feature is on, then only once.
+      listener: JobListener): Option[JobShuffleShape] = {
     val speculationOn = sc.conf.get(config.SPECULATION_ENABLED)
     val dynAllocOn = Utils.isDynamicAllocationEnabled(sc.conf)
     if ((speculationOn || dynAllocOn) && rddGraphHasPipelinedDependency(finalRDD)) {
@@ -1347,7 +1344,7 @@ private[spark] class DAGScheduler(
         listener.jobFailed(new SparkException(
           "Speculative execution is not supported for a job that uses a pipelined shuffle " +
             s"dependency. Disable ${config.SPECULATION_ENABLED.key} for such jobs."))
-        return true
+        return None
       }
       // dynAllocOn
       logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: dynamic allocation is incompatible " +
@@ -1356,9 +1353,18 @@ private[spark] class DAGScheduler(
         "Dynamic allocation is not supported for a job that uses a pipelined shuffle dependency: " +
           "a pipelined stage group must be co-scheduled against a known cluster size. Disable " +
           s"${config.DYN_ALLOCATION_ENABLED.key} for such jobs."))
-      return true
+      return None
     }
-    false
+    if (speculationOn || dynAllocOn) {
+      // The negative feature check already proved there is no pipelined dependency anywhere.
+      // Reuse that result instead of walking the graph again to classify its shuffle shape.
+      Some(JobShuffleShape(
+        hasPipelined = false,
+        hasUnmaterializedRegularBoundary = false,
+        hasPipelinedBelowRegular = false))
+    } else {
+      Some(classifyJobShuffleShape(finalRDD))
+    }
   }
 
   /**
@@ -1936,8 +1942,11 @@ private[spark] class DAGScheduler(
    * stage.
    */
   private def submitWaitingPipelinedChildStages(runningParent: Stage): Unit = {
+    if (!isPipelinedProducer(runningParent)) {
+      return
+    }
     val pipelinedChildren = waitingStages.filter { child =>
-      child.parents.contains(runningParent) && isPipelinedProducer(runningParent)
+      child.parents.contains(runningParent)
     }.toArray
     // Remove them from waitingStages before resubmitting, or submitStage's `!waitingStages(stage)`
     // guard would treat them as already-scheduled and no-op (mirrors submitWaitingChildStages).
@@ -2127,15 +2136,17 @@ private[spark] class DAGScheduler(
     var demand = finalNumPartitions
     val countedShuffleIds = new HashSet[Int]
     traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
-      rdd.dependencies.foreach {
-        case pd: PipelinedShuffleDependency[_, _, _] =>
-          if (countedShuffleIds.add(pd.shuffleId)) {
-            demand += pd.rdd.partitions.length
-          }
-        case _ => // narrow deps are not boundaries; a regular dep is a materialized prefix
-                  // boundary (JobShuffleShape), whose stages never run and are not members
+      rdd.dependencies.foreach { dep =>
+        dep match {
+          case pd: PipelinedShuffleDependency[_, _, _] =>
+            if (countedShuffleIds.add(pd.shuffleId)) {
+              demand += pd.rdd.partitions.length
+            }
+          case _ => // narrow deps are not boundaries; a regular dep is a materialized prefix
+                    // boundary (JobShuffleShape), whose stages never run and are not members
+        }
+        enqueue(dep.rdd)
       }
-      rdd.dependencies.foreach(dep => enqueue(dep.rdd))
     }
     demand
   }
@@ -2431,8 +2442,9 @@ private[spark] class DAGScheduler(
     // against a not-yet-warmed cluster). Reject such a job up front -- before any stages are
     // created, so no partial scheduler state is left behind. (Inert for jobs without any pipelined
     // dependency.)
-    if (rejectUnsupportedPipelinedJob(jobId, finalRDD, listener)) {
-      return
+    val shape = classifyJobShuffleShapeAndCheckFeatures(jobId, finalRDD, listener) match {
+      case Some(shape) => shape
+      case None => return
     }
 
     // A job's shuffle graph must be all-regular, all-pipelined, or the materialized-prefix mixed
@@ -2440,7 +2452,6 @@ private[spark] class DAGScheduler(
     // JobShuffleShape). Anything else is rejected up front (before any stage is created): an
     // unmaterialized regular stage would have to run while gang-admitted producers hold slots
     // blocked on transport backpressure, which admission does not account for and can deadlock.
-    val shape = classifyJobShuffleShape(finalRDD)
     val hasPipelined = shape.hasPipelined
     if (shape.isUnsupportedMix) {
       logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: a job mixing a pipelined shuffle with " +
@@ -2594,8 +2605,8 @@ private[spark] class DAGScheduler(
     // dependency submitted as a map-stage job outright, up front, before any stage is created so no
     // partial scheduler state is left behind. Inert for a regular ShuffleDependency. (The
     // result-job path, handleJobSubmitted, rejects the speculation and dynamic-allocation cases via
-    // rejectUnsupportedPipelinedJob, but a pipelined dependency is otherwise a legitimate internal
-    // edge there.)
+    // classifyJobShuffleShapeAndCheckFeatures, but a pipelined dependency is otherwise a legitimate
+    // internal edge there.)
     if (dependency.isInstanceOf[PipelinedShuffleDependency[_, _, _]]) {
       logWarning(log"Rejecting map-stage job ${MDC(JOB_ID, jobId)}: a pipelined shuffle dependency " +
         log"cannot be materialized as a map-stage job")

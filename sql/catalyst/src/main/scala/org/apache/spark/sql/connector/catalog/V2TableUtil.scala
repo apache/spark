@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import java.util.Locale
-
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.MetadataAttributeWithLogicalName
@@ -198,7 +196,7 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   }
 
   private def normalize(name: String): String = {
-    if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+    SchemaUtils.foldName(name, conf.caseSensitiveAnalysis)
   }
 
   private def resolver: Resolver = conf.resolver

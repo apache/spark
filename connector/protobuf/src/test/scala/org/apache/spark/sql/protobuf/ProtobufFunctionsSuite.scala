@@ -725,6 +725,75 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
     }
   }
 
+  test("convert.timestamp.duration.to.native=false keeps Timestamp/Duration as struct") {
+    // Build a proto payload the normal way (native Timestamp/Duration on the write side),
+    // then read it back with the conversion disabled and assert both fields deserialize as
+    // struct<seconds: bigint, nanos: int> -- the raw proto shape -- instead of TimestampType /
+    // DayTimeIntervalType.
+    val tsSchema = StructType(
+      StructField("timeStampMsg",
+        StructType(
+          StructField("key", StringType, nullable = true) ::
+            StructField("stmp", TimestampType, nullable = true) :: Nil
+        ), nullable = true) :: Nil)
+    val ts = Timestamp.valueOf("2016-05-09 10:12:43.999")
+    val tsInput = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(Row("key1", ts)))),
+      tsSchema)
+
+    val expectedStruct = StructType(
+      StructField("seconds", LongType, nullable = true) ::
+        StructField("nanos", IntegerType, nullable = true) :: Nil)
+
+    checkWithFileAndClassName("timeStampMsg") {
+      case (name, descFilePathOpt) =>
+        val toProtoDf = tsInput
+          .select(to_protobuf_wrapper($"timeStampMsg", name, descFilePathOpt) as Symbol("to_proto"))
+        val fromProtoDf = toProtoDf
+          .select(from_protobuf_wrapper($"to_proto", name, descFilePathOpt,
+            Map("convert.timestamp.duration.to.native" -> "false")) as Symbol("timeStampMsg"))
+
+        val stmpField = fromProtoDf.schema("timeStampMsg").dataType
+          .asInstanceOf[StructType]("stmp")
+        assert(stmpField.dataType === expectedStruct)
+        // Derive the expected epoch from the input Timestamp so the assertion is independent
+        // of the JVM default time zone (Timestamp.valueOf parses in the local zone).
+        val row = fromProtoDf.select("timeStampMsg.stmp.seconds", "timeStampMsg.stmp.nanos").first()
+        assert(row.getLong(0) === ts.getTime / 1000)
+        assert(row.getInt(1) === 999000000)
+    }
+
+    val durSchema = StructType(
+      StructField("durationMsg",
+        StructType(
+          StructField("key", StringType, nullable = true) ::
+            StructField("duration", DayTimeIntervalType.defaultConcreteType, nullable = true) ::
+            Nil
+        ), nullable = true) :: Nil)
+    val durInput = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(Row("key1", Duration.ofSeconds(4).plusNanos(500000000))))),
+      durSchema)
+
+    checkWithFileAndClassName("durationMsg") {
+      case (name, descFilePathOpt) =>
+        val toProtoDf = durInput
+          .select(to_protobuf_wrapper($"durationMsg", name, descFilePathOpt) as Symbol("to_proto"))
+        val fromProtoDf = toProtoDf
+          .select(from_protobuf_wrapper($"to_proto", name, descFilePathOpt,
+            Map("convert.timestamp.duration.to.native" -> "false")) as Symbol("durationMsg"))
+
+        val durField = fromProtoDf.schema("durationMsg").dataType
+          .asInstanceOf[StructType]("duration")
+        assert(durField.dataType === expectedStruct)
+        val row = fromProtoDf.select("durationMsg.duration.seconds", "durationMsg.duration.nanos")
+          .first()
+        assert(row.getLong(0) === 4L)
+        assert(row.getInt(1) === 500000000)
+    }
+  }
+
   test("SPARK-57573: Handle TimeType between to_protobuf and from_protobuf") {
     val schema = StructType(
       StructField("timeMsg",
@@ -2071,11 +2140,10 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
             )
           }
         } else {
-          if (defaults == "false") {
-            checkAnswer(parsedExplicitZero, expectedEmpty)
-          } else {
-            checkAnswer(parsedExplicitZero, Seq((0)).toDF("int32_val"))
-          }
+          // When unwrapping, a present wrapper carries a value even if it is the inner scalar's
+          // default, so an explicit zero unwraps to 0 regardless of emit.default.values (which
+          // only governs bare proto3 scalars, not a wrapper message's presence).
+          checkAnswer(parsedExplicitZero, Seq((0)).toDF("int32_val"))
         }
 
         // For nonzero, we should get back the number or wrapped version regardless
@@ -2101,6 +2169,35 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
           )
         }
       }
+    }
+  }
+
+  test("well known wrappers with empty container elements unwrap to defaults") {
+    // A repeated/map field of unwrapped wrappers uses a non-null container
+    // (containsNull = false / valueContainsNull = false). A present-but-empty wrapper element
+    // must unwrap to the inner scalar's default, not null -- a null in a non-null container
+    // crashes downstream. Other container-wrapper tests only use non-empty elements, so this
+    // covers the empty-element case for both a repeated and a map field.
+    val message = spark.range(1).select(
+      lit(
+        WellKnownWrapperTypes.newBuilder()
+          .addInt32List(Int32Value.getDefaultInstance) // empty element -> 0
+          .addInt32List(Int32Value.of(7))
+          .putWktMap(1, StringValue.getDefaultInstance) // empty value -> ""
+          .build().toByteArray
+      ).as("raw_proto"))
+
+    val opt = Map("unwrap.primitive.wrapper.types" -> "true")
+    checkWithFileAndClassName("WellKnownWrapperTypes") { case (name, descFilePathOpt) =>
+      val parsed = message.select(
+        from_protobuf_wrapper($"raw_proto", name, descFilePathOpt, opt).as("proto"))
+
+      checkAnswer(
+        parsed.select("proto.int32_list"),
+        spark.range(1).select(typedLit(List(0, 7)).as("int32_list")))
+      checkAnswer(
+        parsed.select("proto.wkt_map"),
+        spark.range(1).select(typedLit(Map(1 -> "")).as("wkt_map")))
     }
   }
 
