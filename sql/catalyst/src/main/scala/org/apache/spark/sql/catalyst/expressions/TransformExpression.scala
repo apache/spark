@@ -193,11 +193,10 @@ case class TransformExpression(
    * it out of `functionId`, adds a second entry to `references` (tripping
    * `KeyedShuffleSpec.keyPositions`' single-reference assert), and makes
    * `KeyedPartitioning.supportsExpressions` reject the partitioning outright -- so SPJ is silently
-   * lost. Every such path should go through here rather than reimplement the skip.
+   * lost. Use it for any retargeting of a partition transform.
    *
    * Callers: `KeyedShuffleSpec.createPartitioning`, which retargets a transform at the other side's
-   * clustering key, and `PartitioningPreservingUnaryExecNode`, which retargets it at an aliased
-   * output attribute.
+   * clustering key.
    */
   def rewriteColumnSlots(rewriteColumn: Expression => Expression): TransformExpression =
     copy(children = children.map {

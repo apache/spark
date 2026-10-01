@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeReference, Literal, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, YearsFunction}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -1011,6 +1011,44 @@ class ProjectedOrderingAndPartitioningSuite
       case other => fail(s"Expected KeyedPartitioning, got $other")
     }
   }
+
+  test("SPARK-50593: alias projection keeps a transform ordering in step with its partitioning") {
+    // A scan orders by its partition expressions (partitionKeyOrdering is on by default), so the
+    // ordering holds the same transform as the partitioning, literal parameter included. Projected
+    // through `32 AS w`, both must keep the literal, or the two stop matching.
+    val id = AttributeReference("id", IntegerType)()
+    val bucketExpr = TransformExpression(BucketFunction, Seq(Literal(32), id))
+    val child = DummyLeafExecWithOrdering(
+      output = Seq(id),
+      partitioning = KeyedPartitioning(Seq(bucketExpr), Seq(InternalRow(0), InternalRow(1))),
+      ordering = Seq(SortOrder(bucketExpr, Ascending)))
+    val project = ProjectExec(Seq(Alias(id, "pk")(), Alias(Literal(32), "w")()), child)
+
+    val orderExpr = project.outputOrdering match {
+      case Seq(so) => so.child
+      case other => fail(s"Expected one sort order, got $other")
+    }
+    assert(orderExpr.references.size === 1, s"the literal became an attribute: $orderExpr")
+    project.outputPartitioning match {
+      case kp: KeyedPartitioning =>
+        assert(orderExpr.semanticEquals(kp.expressions.head),
+          s"ordering $orderExpr no longer matches partitioning ${kp.expressions.head}")
+      case other => fail(s"Expected KeyedPartitioning, got $other")
+    }
+  }
+
+  test("SPARK-50593: alias projection keeps literals of nested transforms") {
+    val id = AttributeReference("id", IntegerType)()
+    val nested = TransformExpression(BucketFunction,
+      Seq(Literal(4), TransformExpression(BucketFunction, Seq(Literal(32), id))))
+    val child = DummyLeafExecWithOrdering(Seq(id), UnknownPartitioning(2),
+      Seq(SortOrder(nested, Ascending)))
+    val project = ProjectExec(Seq(Alias(id, "pk")(), Alias(Literal(32), "w")()), child)
+    val orderExpr = project.outputOrdering.head.child
+    assert(orderExpr.references.map(_.name).toSet === Set("pk"),
+      s"a literal became an attribute: $orderExpr")
+  }
+
 }
 
 private case class DummyLeafExecWithPartitioning(
@@ -1026,4 +1064,13 @@ private case class DummyLeafPlanExec(output: Seq[Attribute]) extends LeafExecNod
   override def outputPartitioning: Partitioning = {
     PartitioningCollection(output.map(attr => HashPartitioning(Seq(attr), 4)))
   }
+}
+
+private case class DummyLeafExecWithOrdering(
+    output: Seq[Attribute],
+    partitioning: Partitioning,
+    ordering: Seq[SortOrder]) extends LeafExecNode {
+  override protected def doExecute(): RDD[InternalRow] = null
+  override def outputPartitioning: Partitioning = partitioning
+  override def outputOrdering: Seq[SortOrder] = ordering
 }
