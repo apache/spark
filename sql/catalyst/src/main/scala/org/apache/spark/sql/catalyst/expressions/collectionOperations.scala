@@ -4909,8 +4909,6 @@ trait ArrayBinaryLike
 case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_UNION)
-
   override def nullSafeEval(input1: Any, input2: Any): Any = {
     val array1 = input1.asInstanceOf[ArrayData]
     val array2 = input2.asInstanceOf[ArrayData]
