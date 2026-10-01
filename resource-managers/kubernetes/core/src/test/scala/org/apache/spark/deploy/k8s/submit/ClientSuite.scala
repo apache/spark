@@ -27,7 +27,7 @@ import io.fabric8.kubernetes.api.model.apiextensions.v1.{CustomResourceDefinitio
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mock, MockitoAnnotations}
-import org.mockito.Mockito.{doThrow, never, verify, when}
+import org.mockito.Mockito.{doThrow, inOrder, never, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatestplus.mockito.MockitoSugar._
 
@@ -241,6 +241,15 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     // than only checking that some function was passed to edit() -- a no-op (or wrong-field)
     // edit function would satisfy the verify() above without ever removing the gate.
     assert(editFnCaptor.getValue.apply(podWithOwnerReference()) === fullExpectedPodGateRemoved())
+    // SPARK-38079 review (dongjoon-hyun, #4129910551): checking each call happened is not
+    // enough to show the pod is created *before* its pre-resources, or that the gate is
+    // removed only *after* that -- these are independent verify() calls, so e.g. swapping the
+    // order of the create() and resourceList() calls inside run() would still satisfy them
+    // all. Pin down the actual order with InOrder instead.
+    val order = inOrder(namedPods, kubernetesClient)
+    order.verify(namedPods).create()
+    order.verify(kubernetesClient).resourceList(ArgumentMatchers.any[Array[HasMetadata]](): _*)
+    order.verify(namedPods).edit(ArgumentMatchers.any[java.util.function.UnaryOperator[Pod]]())
   }
 
   test("The client should create Kubernetes resources") {
