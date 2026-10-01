@@ -543,11 +543,14 @@ private[spark] object UserCredentialManager extends Logging {
       // pollute the structured `reason` field, which is used elsewhere for operation-failure
       // reasons. We say credentials "may be" (not "will be") transmitted in cleartext because the
       // channel could still be protected outside Spark (e.g. a service mesh or a private network),
-      // which Spark cannot detect.
+      // which Spark cannot detect. We also point at the SPIP's stricter mode so operators who want
+      // Spark to enforce encryption (rather than warn) know a fail-fast mode is the intended path.
       logWarning(log"OIDC credential propagation is enabled " +
         log"(${MDC(LogKeys.CONFIG, SECURITY_OIDC_ENABLED.key)}=true) but RPC channel encryption " +
         log"is not configured. Credentials may be transmitted to executors over an unencrypted " +
-        log"channel. " + log"${MDC(LogKeys.MESSAGE, SecurityManager.rpcEncryptionRemediation)}")
+        log"channel. " + log"${MDC(LogKeys.MESSAGE, SecurityManager.rpcEncryptionRemediation)}" +
+        log" This is a warning by default; per the SPIP, a stricter fail-fast mode that " +
+        log"refuses to start without RPC encryption may be introduced later.")
     }
   }
 
