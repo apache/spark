@@ -485,19 +485,21 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("nested STRUCT column MATCH_CONDITION keeps a NULL inner struct apart from NULL fields") {
-    // {e: NULL} sorts before {e: {a: NULL}}, as in a plain comparison. Only `>` here: a forward
-    // join also reads the distance, which is NULL for these values.
+    // {e: NULL} sorts before {e: {a: NULL}}, as in a plain comparison.
     val eNull = "named_struct('e', CAST(NULL AS STRUCT<a: INT>))"
     val aNull = "named_struct('e', named_struct('a', CAST(NULL AS INT)))"
-    Seq(true, false).foreach { ansiEnabled =>
+    for {
+      (left, op, right) <- Seq((aNull, ">", eNull), (eNull, "<", aNull))
+      ansiEnabled <- Seq(true, false)
+    } {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
         checkSortMergeAsOf(
           sql(
             s"""
                |SELECT r.tag
-               |FROM VALUES ($aNull, 'l') AS t(k, tag)
-               |ASOF JOIN VALUES ($eNull, 'r') AS r(k, tag)
-               |  MATCH_CONDITION (t.k > r.k)
+               |FROM VALUES ($left, 'l') AS t(k, tag)
+               |ASOF JOIN VALUES ($right, 'r') AS r(k, tag)
+               |  MATCH_CONDITION (t.k $op r.k)
                |""".stripMargin),
           Row("r") :: Nil)
       }
