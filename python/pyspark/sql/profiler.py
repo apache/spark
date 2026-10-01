@@ -44,7 +44,7 @@ from pyspark.accumulators import (
     SpecialAccumulatorIds,
     _accumulatorRegistry,
 )
-from pyspark.errors import PySparkValueError
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.profiler import (
     CodeMapDict,
     MemoryProfiler,
@@ -170,7 +170,7 @@ class WorkerSamplingProfiler:
 
     def _start_sampling_thread(self) -> None:
         if self._sampling_thread is not None:
-            raise RuntimeError("Sampling thread already started")
+            raise PySparkRuntimeError("Sampling thread already started")
         self._sampling_thread = threading.Thread(target=self._sample_loop)
         self._sampling_thread.start()
 

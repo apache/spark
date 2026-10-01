@@ -304,7 +304,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             if profiler:
                 profiler.profile(run_process)
             elif sampling_profiler_enabled:
-                from pyspark.sql.profiler import WorkerSamplingProfiler, ProfileResultsParamV2
+                from pyspark.sql.profiler import ProfileResultsParamV2, WorkerSamplingProfiler
 
                 accumulator = _deserialize_accumulator(
                     SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
