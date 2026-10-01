@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import scala.jdk.CollectionConverters._
-
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{InMemoryRelationCatalog, TableCatalog, TableSummary}
+import org.apache.spark.sql.connector.catalog.{InMemoryRelationCatalog, TableSummary}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.util.Utils
 
@@ -72,42 +70,35 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
   }
 
   gridTest("show table extended preserves reserved metadata with display properties")(
-      Seq(false, true)) { external =>
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id bigint) $defaultUsing " +
-        "COMMENT 'table comment' LOCATION 'file:/tmp/display-properties' " +
-        "TBLPROPERTIES ('persisted' = 'stored')")
-      val table = loadTable(catalog, "ns", "tbl")
-      if (external) {
-        table.properties.put(TableCatalog.PROP_EXTERNAL, "true")
-      }
-      table.setDisplayProperties(Map(
-        "catalog-label" -> "catalog-value",
-        "persisted" -> "display-value",
-        TableCatalog.PROP_EXTERNAL -> (!external).toString,
-        TableCatalog.PROP_COMMENT -> "display comment",
-        TableCatalog.PROP_LOCATION -> "file:/display-location",
-        TableCatalog.PROP_PROVIDER -> "display-provider",
-        TableCatalog.PROP_OWNER -> "display-owner").asJava)
+      Seq((false, false), (false, true), (true, false), (true, true))) {
+    case (external, withLocation) =>
+      withNamespaceAndTable("ns", "tbl") { t =>
+        val location = if (withLocation) "LOCATION 'file:/tmp/display-properties' " else ""
+        sql(s"CREATE TABLE $t (id bigint) $defaultUsing " +
+          s"COMMENT 'table comment' $location" +
+          "TBLPROPERTIES ('persisted' = 'stored')")
+        setDisplayProperties(loadTable(catalog, "ns", "tbl"), external)
 
-      val information = sql(s"SHOW TABLE EXTENDED IN $catalog.ns LIKE 'tbl'")
-        .head().getString(3)
-      val tableType = if (external) "EXTERNAL" else "MANAGED"
-      assert(information ===
-        s"""Catalog: $catalog
-           |Namespace: ns
-           |Table: tbl
-           |Type: $tableType
-           |Comment: table comment
-           |Location: file:/tmp/display-properties
-           |Provider: _
-           |Owner: ${Utils.getCurrentUserName()}
-           |Table Properties: [catalog-label=catalog-value, persisted=stored]
-           |Schema: root
-           | |-- id: long (nullable = true)
-           |
-           |""".stripMargin)
-    }
+        val information = sql(s"SHOW TABLE EXTENDED IN $catalog.ns LIKE 'tbl'")
+          .head().getString(3)
+        val tableType = if (external) "EXTERNAL" else "MANAGED"
+        val locationRow = if (withLocation) "Location: file:/tmp/display-properties\n" else ""
+        val properties =
+          "[catalog-label=catalog-value, password=*********(redacted), persisted=stored]"
+        assert(information ===
+          s"""Catalog: $catalog
+             |Namespace: ns
+             |Table: tbl
+             |Type: $tableType
+             |Comment: table comment
+             |${locationRow}Provider: _
+             |Owner: ${Utils.getCurrentUserName()}
+             |Table Properties: $properties
+             |Schema: root
+             | |-- id: long (nullable = true)
+             |
+             |""".stripMargin)
+      }
   }
 
   test("show table extended omits empty table properties") {

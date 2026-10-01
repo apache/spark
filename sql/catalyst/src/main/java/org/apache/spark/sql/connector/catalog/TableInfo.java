@@ -65,6 +65,11 @@ public class TableInfo {
   /**
    * Returns the additional display-only properties described by {@link Table#displayProperties()}.
    *
+   * <p>These properties describe metadata returned by a catalog. Spark leaves them empty when
+   * calling {@code TableCatalog.createTable},
+   * {@code TableCatalog.createTableLike}, {@code StagingTableCatalog.stageCreate},
+   * {@code StagingTableCatalog.stageReplace}, and {@code StagingTableCatalog.stageCreateOrReplace}.
+   *
    * @since 4.4.0
    */
   public Map<String, String> displayProperties() {
@@ -86,7 +91,12 @@ public class TableInfo {
     protected Builder self() { return this; }
 
     /**
-     * Sets additional display-only properties, taking a defensive copy of the map.
+     * Sets additional display-only properties.
+     *
+     * <p>Spark leaves these properties empty when calling
+     * {@code TableCatalog.createTable}, {@code TableCatalog.createTableLike},
+     * {@code StagingTableCatalog.stageCreate}, {@code StagingTableCatalog.stageReplace}, and
+     * {@code StagingTableCatalog.stageCreateOrReplace}.
      *
      * @see Table#displayProperties()
      * @since 4.4.0

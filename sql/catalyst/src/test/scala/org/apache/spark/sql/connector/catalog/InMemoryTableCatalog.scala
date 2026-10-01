@@ -168,11 +168,9 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   }
 
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
-    val table = createTable(
+    createTable(
       ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
       Distributions.unspecified(), Array.empty, None, None, tableInfo.constraints())
-    table.asInstanceOf[InMemoryBaseTable].setDisplayProperties(tableInfo.displayProperties())
-    table
   }
 
   // scalastyle:off argcount
@@ -263,7 +261,6 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     }
 
     table.increaseVersion()
-    val currentVersion = table.version()
     val columnsWithIds = InMemoryBaseTable.assignMissingIds(
       CatalogV2Util.structTypeToV2Columns(schema))
     val reconstructedId = Option(table.id()).getOrElse(util.UUID.randomUUID().toString)
@@ -278,8 +275,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
         throw new UnsupportedOperationException(
           s"Unsupported InMemoryBaseTable subclass: ${other.getClass.getName}")
     }
-    newTable.setVersion(currentVersion)
-    newTable.setDisplayProperties(table.displayProperties())
+    newTable.copyTableStateFrom(table)
     changes.foreach {
       case a: TableChange.AddConstraint =>
         newTable.setValidatedVersion(a.validatedTableVersion())

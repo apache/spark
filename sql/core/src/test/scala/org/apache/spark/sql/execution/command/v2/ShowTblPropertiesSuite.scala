@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command
 
 /**
@@ -31,21 +28,37 @@ class ShowTblPropertiesSuite extends command.ShowTblPropertiesSuiteBase with Com
     withNamespaceAndTable("ns", "table") { tbl =>
       sql(s"CREATE TABLE $tbl (id bigint) $defaultUsing " +
         "TBLPROPERTIES ('persisted' = 'stored')")
-      loadTable(catalog, "ns", "table").setDisplayProperties(Map(
-        "catalog-label" -> "catalog-value",
-        "persisted" -> "display-value",
-        TableCatalog.PROP_EXTERNAL -> "true",
-        TableCatalog.PROP_LOCATION -> "file:/display-location").asJava)
+      setDisplayProperties(loadTable(catalog, "ns", "table"))
 
       checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl"),
-        Seq(Row("catalog-label", "catalog-value"), Row("persisted", "stored")))
+        Seq(Row("catalog-label", "catalog-value"), Row("password", "*********(redacted)"),
+          Row("persisted", "stored")))
       checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl ('persisted')"), Row("persisted", "stored"))
       checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl ('catalog-label')"),
         Row("catalog-label", "catalog-value"))
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl ('password')"),
+        Row("password", "*********(redacted)"))
 
       sql(s"ALTER TABLE $tbl SET TBLPROPERTIES ('persisted' = 'updated')")
       checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl"),
-        Seq(Row("catalog-label", "catalog-value"), Row("persisted", "updated")))
+        Seq(Row("catalog-label", "catalog-value"), Row("password", "*********(redacted)"),
+          Row("persisted", "updated")))
+
+      sql(s"ALTER TABLE $tbl UNSET TBLPROPERTIES ('persisted', 'catalog-label')")
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl"),
+        Seq(Row("catalog-label", "catalog-value"), Row("password", "*********(redacted)"),
+          Row("persisted", "display-value")))
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl ('persisted')"),
+        Row("persisted", "display-value"))
+      assert(spark.catalog.getTableProperties(tbl).get("persisted") === "display-value")
+      assert(!spark.catalog.getCreateTableString(tbl).contains("persisted"))
+
+      sql(s"ALTER TABLE $tbl SET TBLPROPERTIES ('catalog-label' = 'updated')")
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl ('catalog-label')"),
+        Row("catalog-label", "updated"))
+      sql(s"ALTER TABLE $tbl UNSET TBLPROPERTIES ('catalog-label')")
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl ('catalog-label')"),
+        Row("catalog-label", "catalog-value"))
     }
   }
 }

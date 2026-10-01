@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector
 
+import java.util
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
@@ -38,6 +40,34 @@ class DataSourceV2MetadataTableSuite extends SharedSparkSession {
     .set(
       "spark.sql.catalog.table_catalog",
       classOf[TestingDataSourceTableCatalog].getName)
+
+  test("metadata commands include display properties from DelegatingTable") {
+    val tableName = "table_catalog.display_properties.test_display_properties"
+    checkAnswer(sql(s"SHOW TBLPROPERTIES $tableName"),
+      Seq(Row("catalog-label", "catalog-value"), Row("persisted", "stored")))
+    checkAnswer(
+      sql(s"DESCRIBE TABLE EXTENDED $tableName").where("col_name = 'Table Properties'"),
+      Row("Table Properties", "[catalog-label=catalog-value,persisted=stored]", ""))
+    checkAnswer(
+      sql("SHOW TABLE EXTENDED IN table_catalog.display_properties " +
+        "LIKE 'test_display_properties'"),
+      Row("display_properties", "test_display_properties", false,
+        """Catalog: table_catalog
+          |Namespace: display_properties
+          |Table: test_display_properties
+          |Type: MANAGED
+          |Provider: parquet
+          |Table Properties: [catalog-label=catalog-value, persisted=stored]
+          |Schema: root
+          | |-- id: long (nullable = true)
+          |
+          |""".stripMargin))
+    assert(spark.catalog.getTableProperties(tableName) ===
+      util.Map.of("catalog-label", "catalog-value", "persisted", "stored"))
+    val ddl = spark.catalog.getCreateTableString(tableName)
+    assert(ddl.contains("'persisted' = 'stored'"))
+    assert(!ddl.contains("catalog-label"))
+  }
 
   test("file source table") {
     withTempPath { path =>
@@ -117,6 +147,15 @@ class DataSourceV2MetadataTableSuite extends SharedSparkSession {
  */
 class TestingDataSourceTableCatalog extends TableCatalog {
   override def loadTable(ident: Identifier): Table = ident.name() match {
+    case "test_display_properties" =>
+      val info = new TableInfo.Builder()
+        .withSchema(new StructType().add("id", "long"))
+        .withProperties(util.Map.of("persisted", "stored"))
+        .withProvider("parquet")
+        .withDisplayProperties(util.Map.of(
+          "catalog-label", "catalog-value", "persisted", "display-value"))
+        .build()
+      new DelegatingTable(info, ident.toString)
     case "test_json" =>
       val info = new TableInfo.Builder()
         .withSchema(new StructType().add("col", "string"))
@@ -152,8 +191,10 @@ class TestingDataSourceTableCatalog extends TableCatalog {
     throw new RuntimeException("shouldn't be called")
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit =
     throw new RuntimeException("shouldn't be called")
-  override def listTables(namespace: Array[String]): Array[Identifier] =
-    throw new RuntimeException("shouldn't be called")
+  override def listTables(namespace: Array[String]): Array[Identifier] = {
+    assert(namespace.toSeq == Seq("display_properties"))
+    Array(Identifier.of(namespace, "test_display_properties"))
+  }
 
   private var catalogName = ""
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
