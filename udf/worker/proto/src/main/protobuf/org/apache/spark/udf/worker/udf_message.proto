@@ -503,6 +503,13 @@ message CancelResponse {
 // are not transfer times and MUST NOT be used as rate denominators. Spark
 // reads each field as a signed 64-bit value and ignores values above
 // 2^63 - 1.
+//
+// [[init_wall_nanos]], [[processing_wall_nanos]], and [[finish_wall_nanos]]
+// are consecutive windows of the stream. [[receive_wall_nanos]],
+// [[send_wall_nanos]], [[work_wall_nanos]], and [[work_cpu_nanos]] are
+// totals, summed across the worker's threads. They can overlap and do not
+// add up to any window; [[work_wall_nanos]] can exceed
+// [[processing_wall_nanos]].
 message ExecutionMetrics {
     // Bytes of [[DataRequest.data]] payload received.
     optional uint64 bytes_in = 1;
