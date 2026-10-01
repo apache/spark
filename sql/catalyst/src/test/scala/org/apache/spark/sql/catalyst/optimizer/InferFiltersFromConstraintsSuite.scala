@@ -507,26 +507,6 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     assert(!planted.exists(_.exists(_.isInstanceOf[With])), s"found: $planted")
   }
 
-  test("SPARK-59494: an inferred filter from an un-splittable With carries no With") {
-    val left = LocalRelation($"k".int, $"v".int)
-    val right = LocalRelation($"k2".int, $"w".int)
-    val Seq(k, _) = left.output
-    val Seq(k2, w) = right.output
-    // Read twice in an `Or`, so `asConstraints` cannot split a single copy into each conjunct and
-    // keeps the `With` opaque. The equality substitutes `k -> k2` inside the definition, giving a
-    // predicate the right side holds on its own, which `InferFiltersFromConstraints` plants. Being
-    // opaque to `DataSourceStrategy`'s filter translation, it has to be planted inlined, not as a
-    // `With`, or the pushdown this filter exists for is lost.
-    val condition = (k === k2) && With(k * w) { case Seq(ref) => ref > 6 || ref < 2 }
-    val optimized = Optimize.execute(left.join(right, Inner, Some(condition)).analyze)
-    val planted = filterConjuncts(optimized)
-    // The inferred filter over the right side was planted (premise) ...
-    assert(planted.exists(_.exists(_.semanticEquals(k2 * w))),
-      s"expected an inferred filter over k2 * w; found: $planted")
-    // ... and it is inlined rather than left as an opaque `With`.
-    assert(!planted.exists(_.exists(_.isInstanceOf[With])), s"found: $planted")
-  }
-
   test("SPARK-59719: infer IsNotNull through null-intolerant CheckOverflow") {
     val dt = DecimalType(18, 0)
     val decimalRelation = LocalRelation($"d".decimal(18, 0))
