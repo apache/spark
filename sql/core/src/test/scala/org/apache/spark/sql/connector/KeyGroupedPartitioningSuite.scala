@@ -431,6 +431,51 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
+  test("SPARK-59905: ORDER BY a join-key expression a join reports as a partition expression") {
+    createTable("ident", Array(Column.create("id", LongType)), Array(identity("id")))
+    sql("INSERT INTO testcat.ns.ident VALUES " + (94 to 100).map(i => s"($i)").mkString(", "))
+    createTable("neg", Array(Column.create("id", LongType)), Array(identity("id")))
+    sql("INSERT INTO testcat.ns.neg VALUES " + (0 to 6).map(i => s"(${-i})").mkString(", "))
+    createTable("plain", Array(Column.create("b", LongType), Column.create("c", LongType)),
+      Array.empty)
+    sql("INSERT INTO testcat.ns.plain VALUES " + (0 to 6).map(b => s"($b, 94)").mkString(", "))
+    createTable("ident2", Array(Column.create("x", LongType), Column.create("y", LongType)),
+      Array(identity("x"), identity("y")))
+    sql("INSERT INTO testcat.ns.ident2 VALUES (94, 1), (94, 2), (95, 1)")
+    createTable("plain2", Array(Column.create("b", LongType), Column.create("c", LongType)),
+      Array.empty)
+    sql("INSERT INTO testcat.ns.plain2 VALUES (6, 1), (6, 2), (5, 1)")
+
+    // An inner broadcast join reports `i`'s layout over `p`'s join key too, e.g. `100 - b`. With
+    // only the join's `p` side in the output, that is the partitioning the ORDER BY sees, and it is
+    // served by sorting the partition values, with no shuffle.
+    case class Query(left: String, right: String, on: String, order: String, select: String,
+        expected: Seq[Row])
+    val queries = Seq(
+      Query("neg", "plain", "i.id = -p.b", "-p.b", "p.b", (6 to 0 by -1).map(b => Row(b.toLong))),
+      Query("neg", "plain", "i.id = -p.b", "-p.b DESC", "p.b", (0 to 6).map(b => Row(b.toLong))),
+      Query("ident", "plain", "i.id = 100 - p.b", "100 - p.b", "p.b",
+        (6 to 0 by -1).map(b => Row(b.toLong))),
+      Query("ident", "plain", "i.id = 100 - p.b", "100 - p.b DESC", "p.b",
+        (0 to 6).map(b => Row(b.toLong))),
+      Query("ident2", "plain2", "i.x = 100 - p.b AND i.y = p.c", "100 - p.b, p.c DESC", "p.b, p.c",
+        Seq(Row(6L, 2L), Row(6L, 1L), Row(5L, 1L))))
+
+    for (query <- queries; aqe <- Seq(true, false)) {
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+          SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
+        val df = sql(
+          s"""SELECT /*+ BROADCAST(p) */ ${query.select} FROM testcat.ns.${query.left} i
+             |JOIN testcat.ns.${query.right} p ON ${query.on} ORDER BY ${query.order}
+             |""".stripMargin)
+        checkAnswer(df, query.expected)
+        assert(collectAllShuffles(df.queryExecution.executedPlan).isEmpty,
+          s"${query.order}, aqe = $aqe")
+      }
+    }
+  }
+
   test("SPARK-49179: Fix v2 multi bucketed inner joins throw AssertionError") {
     val cols = Array(
       Column.create("id", LongType),
