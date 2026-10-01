@@ -284,8 +284,8 @@ object StreamingForeachBatchHelper extends Logging {
 
     val (dataOut, dataIn) = runner.init()
 
-    val useClonedSession = sessionHolder.session.sessionState.conf.getConf(
-      SQLConf.CONNECT_STREAMING_FOREACH_BATCH_USE_CLONED_SESSION)
+    val useClonedSession = sessionHolder.session.sessionState.conf
+      .getConf(SQLConf.CONNECT_STREAMING_FOREACH_BATCH_USE_CLONED_SESSION)
     val sessionManager = new ForeachBatchSessionManager(sessionHolder, useClonedSession)
     val queryIdRef = new AtomicReference[String]()
 
