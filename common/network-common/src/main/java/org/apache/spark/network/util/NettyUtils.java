@@ -17,6 +17,14 @@
 
 package org.apache.spark.network.util;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ThreadFactory;
 
 import io.netty.buffer.PooledByteBufAllocator;
@@ -74,9 +82,14 @@ public class NettyUtils {
    * available). Any other mode is returned unchanged. Keeping this in one place stops the
    * event-loop and channel factories below from drifting apart.
    */
+  private static volatile boolean epollNativePrepared;
+
   private static IOMode resolveMode(IOMode mode) {
     if (mode != IOMode.AUTO) {
       return mode;
+    }
+    if (JavaUtils.isLinux) {
+      prepareEpollNativeLibrary();
     }
     if (JavaUtils.isLinux && Epoll.isAvailable()) {
       return IOMode.EPOLL;
@@ -213,5 +226,84 @@ public class NettyUtils {
       allowDirectBufs = conf.preferDirectBufs();
     }
     return allowDirectBufs && PlatformDependent.directBufferPreferred();
+  }
+
+  /**
+   * Load Spark's epoll JNI library when another jar embeds a different copy.
+   *
+   * <p>Netty aborts if more than one
+   * {@code META-INF/native/libnetty_transport_native_epoll_<arch>.so} is visible
+   * and the bytes differ, then caches that failure for the JVM.
+   * {@code ExceptionInInitializerError.getMessage()} is null, so callers only see
+   * "epoll: null". sql tests hit this because snowflake-jdbc embeds a Netty 4.1
+   * copy beside Spark's 4.2 classifier jar. Loading Spark's copy first registers
+   * the JNI symbols, and {@link Epoll}'s initializer then skips Netty's duplicate
+   * check. A single copy is left for Netty to load itself.
+   */
+  private static void prepareEpollNativeLibrary() {
+    if (epollNativePrepared) {
+      return;
+    }
+    synchronized (NettyUtils.class) {
+      if (epollNativePrepared) {
+        return;
+      }
+      epollNativePrepared = true;
+      try {
+        String arch = epollNativeArch(System.getProperty("os.arch", ""));
+        String resource = "META-INF/native/libnetty_transport_native_epoll_" + arch + ".so";
+        ClassLoader loader = NettyUtils.class.getClassLoader();
+        Enumeration<URL> found = loader == null
+            ? ClassLoader.getSystemResources(resource)
+            : loader.getResources(resource);
+        List<URL> urls = new ArrayList<>();
+        while (found.hasMoreElements()) {
+          urls.add(found.nextElement());
+        }
+        URL sparkCopy = sparkEpollNativeUrl(urls);
+        if (sparkCopy == null) {
+          return;
+        }
+        File tmp = File.createTempFile("libnetty_transport_native_epoll_", ".so");
+        tmp.deleteOnExit();
+        try (InputStream in = sparkCopy.openStream();
+             FileOutputStream out = new FileOutputStream(tmp)) {
+          in.transferTo(out);
+        }
+        tmp.setReadable(true, true);
+        tmp.setExecutable(true, true);
+        System.load(tmp.getAbsolutePath());
+      } catch (Exception | LinkageError expected) {
+        // Epoll.isAvailable reports the failure if the library did not load.
+      }
+    }
+  }
+
+  /** Netty's normalized arch suffix for the epoll classifier resource name. */
+  static String epollNativeArch(String osArch) {
+    String arch = osArch.toLowerCase(Locale.ROOT);
+    if (arch.equals("amd64") || arch.equals("x86_64")) {
+      return "x86_64";
+    }
+    if (arch.equals("aarch64") || arch.equals("arm64")) {
+      return "aarch_64";
+    }
+    return arch;
+  }
+
+  /**
+   * The classifier-jar URL to preload, or null when Netty should load on its own.
+   * Null covers a single resource and a classpath with no Spark classifier jar.
+   */
+  static URL sparkEpollNativeUrl(List<URL> urls) {
+    if (urls.size() < 2) {
+      return null;
+    }
+    for (URL url : urls) {
+      if (url.toString().contains("netty-transport-native-epoll")) {
+        return url;
+      }
+    }
+    return null;
   }
 }
