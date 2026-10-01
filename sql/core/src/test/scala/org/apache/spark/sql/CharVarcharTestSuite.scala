@@ -1044,6 +1044,20 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       parameters = Map("limit" -> expectedLimit))
   }
 
+  private def assertMalformedJsonRecord(query: String): Unit = {
+    val error = intercept[SparkException] { sql(query).collect() }
+    val malformed = Iterator.iterate[Throwable](error)(_.getCause)
+      .takeWhile(_ != null)
+      .collectFirst {
+        case e: SparkException
+            if e.getCondition == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION" => e
+      }
+      .getOrElse(fail(
+        "expected MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION, got: " + error,
+        error))
+    assert(malformed.getCondition === "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+  }
+
   private def assertDuplicateMapKey(query: String, expectedKey: String = "a "): Unit = {
     assertDuplicateMapKeyError(sql(query).collect(), expectedKey)
   }
@@ -3047,7 +3061,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assertDuplicateMapKey(jsonQuery)
       assertDuplicateMapKey(jsonFailfastQuery)
       assertDuplicateMapKey(varcharJsonQuery, expectedKey = "ab")
-      checkAnswer(sql(varcharOverflowQuery), Row(null))
+      checkAnswer(sql(varcharOverflowQuery), Row(Map.empty[String, Int]))
       assertParseExceedLimit(varcharOverflowFailfastQuery, expectedLimit = "2")
       assertDuplicateMapKey(overflowAfterCollisionQuery)
       assertDuplicateMapKey(nestedJsonQuery)
@@ -3063,7 +3077,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         assertDuplicateMapKey(jsonQuery)
         assertDuplicateMapKey(overflowAfterCollisionQuery)
         assertDuplicateMapKey(badJsonKeyBeforeDuplicateQuery)
-        checkAnswer(sql(varcharOverflowQuery), Row(null))
+        checkAnswer(sql(varcharOverflowQuery), Row(Map.empty[String, Int]))
         assertParseExceedLimit(varcharOverflowFailfastQuery, expectedLimit = "2")
       }
 
@@ -3086,20 +3100,20 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(jsonFailfastQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(varcharJsonQuery), Row(Map("ab" -> 2)))
-        checkAnswer(sql(varcharOverflowQuery), Row(null))
+        checkAnswer(sql(varcharOverflowQuery), Row(Map.empty[String, Int]))
         assertParseExceedLimit(varcharOverflowFailfastQuery, expectedLimit = "2")
-        checkAnswer(sql(overflowAfterCollisionQuery), Row(null))
+        checkAnswer(sql(overflowAfterCollisionQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(exactCharJsonQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(exactVarcharJsonQuery), Row(Map("ab" -> 2)))
         checkAnswer(sql(nestedJsonQuery), Row(Map("outer" -> Map("a " -> 2))))
-        checkAnswer(sql(badValueBeforeDuplicateQuery), Row(null))
-        checkAnswer(sql(malformedValueBeforeDuplicateQuery), Row(null))
+        checkAnswer(sql(badValueBeforeDuplicateQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(malformedValueBeforeDuplicateQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(interleavedCharJsonQuery), Row(Seq(Row("a ", 3), Row("b ", 2))))
-        checkAnswer(sql(badJsonKeyBeforeDuplicateQuery), Row(null))
+        checkAnswer(sql(badJsonKeyBeforeDuplicateQuery), Row(Map("a " -> 2)))
         withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
           checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
-          checkAnswer(sql(overflowAfterCollisionQuery), Row(null))
-          checkAnswer(sql(badJsonKeyBeforeDuplicateQuery), Row(null))
+          checkAnswer(sql(overflowAfterCollisionQuery), Row(Map("a " -> 2)))
+          checkAnswer(sql(badJsonKeyBeforeDuplicateQuery), Row(Map("a " -> 2)))
         }
       }
     }
@@ -3139,8 +3153,43 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
       withSQLConf(
           SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
-        (overflowQueries :+ nestedFailureQuery).foreach { query =>
-          checkAnswer(sql(query), Row(Row(null, 9)))
+        overflowQueries.foreach { query =>
+          val valueType = if (query.contains("VARCHAR(5)")) "VARCHAR" else "CHAR"
+          val expectedValue = if (valueType == "VARCHAR") "y" else "y    "
+          withClue(s"$valueType: ") {
+            checkAnswer(sql(query), Row(Row(Map("a " -> expectedValue), 9)))
+          }
+        }
+        checkAnswer(
+          sql(nestedFailureQuery),
+          Row(Row(Map("b " -> Map.empty[String, Int], "a " -> Map("x " -> 2)), 9)))
+      }
+    }
+  }
+
+  test("SPARK-59722: JSON CHAR map value failures preserve parser position and error class") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val valueFailFast =
+        """SELECT from_json(
+          |  '{"a":"not-an-int","b":2}',
+          |  'MAP<CHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin
+      val nestedArrayLeakQuery =
+        """SELECT map_keys(from_json(
+          |  '{"a":[1,"bad",99],"b":[3]}',
+          |  'MAP<CHAR(2), ARRAY<INT>>'))""".stripMargin
+      val nestedArrayMapQuery =
+        """SELECT from_json(
+          |  '{"a":[1,"bad",99],"b":[3]}',
+          |  'MAP<CHAR(2), ARRAY<INT>>')""".stripMargin
+
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          withClue(s"partial=$partial") {
+            assertMalformedJsonRecord(valueFailFast)
+            checkAnswer(sql(nestedArrayLeakQuery), Row(Seq("b ")))
+            checkAnswer(sql(nestedArrayMapQuery), Row(Map("b " -> Seq(3))))
+          }
         }
       }
     }
