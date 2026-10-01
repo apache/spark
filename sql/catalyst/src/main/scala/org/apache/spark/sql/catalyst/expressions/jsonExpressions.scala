@@ -2497,10 +2497,7 @@ case class JsonObjectExpr(
     StructsToJsonEvaluator(Map.empty, ArrayType(StringType), Some(resolvedZoneId))
 
   @transient private lazy val valueEvaluators: Array[StructsToJsonEvaluator] =
-    memberArray.map { case (_, v) =>
-      StructsToJsonEvaluator(Map.empty, ArrayType(v.dataType),
-        Some(resolvedZoneId))
-    }
+    new Array[StructsToJsonEvaluator](memberArray.length)
 
   @transient private lazy val singleElem: Array[Any] = new Array[Any](1)
 
@@ -2526,7 +2523,13 @@ case class JsonObjectExpr(
   // substring), mirroring `JsonArray.appendRenderedElement`.
   private def appendRenderedValue(sb: java.lang.StringBuilder, idx: Int, value: Any): Unit = {
     singleElem(0) = value
-    val arrJson = valueEvaluators(idx).evaluateString(singleElemData)
+    var evaluator = valueEvaluators(idx)
+    if (evaluator == null) {
+      evaluator = StructsToJsonEvaluator(
+        Map.empty, ArrayType(memberArray(idx)._2.dataType), Some(resolvedZoneId))
+      valueEvaluators(idx) = evaluator
+    }
+    val arrJson = evaluator.evaluateString(singleElemData)
     sb.append(arrJson, 1, arrJson.length - 1)
   }
 
