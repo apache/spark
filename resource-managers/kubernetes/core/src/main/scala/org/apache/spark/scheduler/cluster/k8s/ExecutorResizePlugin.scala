@@ -56,8 +56,8 @@ class ExecutorResizeDriverPlugin extends DriverPlugin with Logging {
 
   override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
     val allocator = sc.conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR)
-    if (allocator != "direct") {
-      logWarning(log"ExecutorResizePlugin requires the 'direct' pods allocator; " +
+    if (allocator != "direct" && allocator != "deployment") {
+      logWarning(log"ExecutorResizePlugin requires the 'direct' or 'deployment' pods allocator; " +
         log"${MDC(CONFIG, KUBERNETES_ALLOCATION_PODS_ALLOCATOR.key)} is " +
         log"${MDC(CONFIG2, allocator)}. Plugin will not start.")
       return Map.empty[String, String].asJava
