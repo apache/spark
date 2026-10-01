@@ -135,7 +135,8 @@ class StreamingShuffleSuite
       sc: SparkContext,
       mappers: Int,
       reducers: Int,
-      serializer: Option[Serializer] = None) {
+      serializer: Option[Serializer] = None,
+      shuffleId: Int = 0) {
     assert(SparkEnv.get.pipelinedShuffleManager.isInstanceOf[StreamingShuffleManager])
     assert(SparkEnv.get.streamingShuffleOutputTracker.isDefined)
     SparkEnv.get.streamingShuffleOutputTracker.get
@@ -248,7 +249,7 @@ class StreamingShuffleSuite
    * A serializer whose serialization stream captures the [[ByteBuf]] it is asked to write into,
    * and then fails at a configurable point so the writer hits an error while holding a buffer that
    * is not yet parked in a shard or handed to `send()`. Tests use the captured buffer to assert the
-   * writer releases it on the error path instead of leaking it (see SPARK-XXXXX):
+   * writer releases it on the error path instead of leaking it (see SPARK-59907):
    *  - `failOnValueNumber = Some(n)` throws on the n-th value written (a mid-serialization failure
    *    in the writer's per-record path), and
    *  - `failOnClose = true` throws when the stream is closed (a failure in `ShardState.send` just
@@ -258,16 +259,19 @@ class StreamingShuffleSuite
   private class BufferCapturingThrowingSerializer(
       capturedBuffer: AtomicReference[ByteBuf],
       failOnValueNumber: Option[Int] = None,
-      failOnClose: Boolean = false)
+      failOnClose: Boolean = false,
+      oomOnValueNumber: Option[Int] = None)
     extends Serializer with Serializable {
     override def newInstance(): SerializerInstance =
-      new BufferCapturingThrowingSerializerInstance(capturedBuffer, failOnValueNumber, failOnClose)
+      new BufferCapturingThrowingSerializerInstance(
+        capturedBuffer, failOnValueNumber, failOnClose, oomOnValueNumber)
   }
 
   private class BufferCapturingThrowingSerializerInstance(
       capturedBuffer: AtomicReference[ByteBuf],
       failOnValueNumber: Option[Int],
-      failOnClose: Boolean)
+      failOnClose: Boolean,
+      oomOnValueNumber: Option[Int])
     extends SerializerInstance {
     private var valuesWritten = 0
 
@@ -280,6 +284,10 @@ class StreamingShuffleSuite
           valuesWritten += 1
           if (failOnValueNumber.contains(valuesWritten)) {
             throw new RuntimeException("injected serialization failure")
+          }
+          if (oomOnValueNumber.contains(valuesWritten)) {
+            // Stands in for an OutOfDirectMemory error (which is an OutOfMemoryError subclass).
+            throw new OutOfMemoryError("injected direct memory exhaustion")
           }
           this
         }
@@ -1274,14 +1282,12 @@ class StreamingShuffleSuite
     }
   }
 
-  // NOTE: SPARK-XXXXX used in the test names and the serializer doc comment above is a
-  // placeholder; replace it with the real Jira id before merge (a SPARK ticket will be created).
   // Unlike the tests above, which fail the task from the outside (markTaskFailed / interrupt),
   // this exercises an in-line failure: serialization throws in the middle of the per-record write
   // path while the writer holds a buffer that is not yet parked in a shard or handed to send().
   // The task-completion cleanup only drains the pool and shard-parked buffers, so this in-flight
   // buffer is invisible to it and must be released by the writer's own error path.
-  test("SPARK-XXXXX: writer releases the in-flight buffer when serialization fails mid-write") {
+  test("SPARK-59907: writer releases the in-flight buffer when serialization fails mid-write") {
     withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
       val capturedBuffer = new AtomicReference[ByteBuf](null)
       val g = new ShuffleGroup[Int](
@@ -1289,6 +1295,9 @@ class StreamingShuffleSuite
         serializer = Some(
           new BufferCapturingThrowingSerializer(capturedBuffer, failOnValueNumber = Some(1))))
       val writer = g.writers(0)
+
+      // Each allocated buffer holds BUFFER_SIZE permits, which the failed write must return.
+      val permitsBefore = writer.allocatedBufferBytesSemaphore.availablePermits()
 
       val e = intercept[RuntimeException] {
         writer.write(Iterator((1, 1), (2, 2)))
@@ -1303,6 +1312,7 @@ class StreamingShuffleSuite
       eventually(Timeout(30.seconds)) {
         capturedBuffer.get().refCnt() should be(0)
       }
+      writer.allocatedBufferBytesSemaphore.availablePermits() should be(permitsBefore)
     }
   }
 
@@ -1311,7 +1321,7 @@ class StreamingShuffleSuite
   // asynchronous send() that owns the release/pool logic. A throw in that window also leaves the
   // buffer referenced only locally, invisible to the task-completion cleanup, so send() must
   // release it on the error path.
-  test("SPARK-XXXXX: writer releases the in-flight buffer when the stream close fails on send") {
+  test("SPARK-59907: writer releases the in-flight buffer when the stream close fails on send") {
     withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
       val capturedBuffer = new AtomicReference[ByteBuf](null)
       val g = new ShuffleGroup[Int](
@@ -1358,6 +1368,32 @@ class StreamingShuffleSuite
       doneCalls.get() should be(1)
       // Only the caller's reference remains, for the completion callback to release.
       data.refCnt() should be(1)
+    }
+  }
+
+  // An OutOfDirectMemoryError (an OutOfMemoryError subclass) thrown mid-write should not leave the
+  // executor unusable: the failed task must release its buffer, and a later shuffle on the same
+  // process must still complete end to end.
+  test("SPARK-59907: executor stays healthy after a task fails with an OutOfMemoryError") {
+    withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
+      val capturedBuffer = new AtomicReference[ByteBuf](null)
+      val failing = new ShuffleGroup[Int](
+        sc, 1, 1,
+        serializer = Some(
+          new BufferCapturingThrowingSerializer(capturedBuffer, oomOnValueNumber = Some(1))))
+
+      intercept[OutOfMemoryError] {
+        failing.writers(0).write(Iterator((1, 1)))
+      }
+      // Leaked direct buffers are not reclaimed by GC, so the failed task must release its own.
+      eventually(Timeout(30.seconds)) {
+        capturedBuffer.get().refCnt() should be(0)
+      }
+
+      // A new shuffle on the same process still completes.
+      val healthy = new ShuffleGroup[Int](sc, 1, 1, shuffleId = 1)
+      healthy.writers(0).write(Iterator((1, 1), (2, 2)))
+      await(healthy.read(0)._2) should be(Set((1, 1), (2, 2)))
     }
   }
 

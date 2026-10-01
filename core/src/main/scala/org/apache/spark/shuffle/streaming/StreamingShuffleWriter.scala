@@ -124,7 +124,9 @@ class StreamingShuffleWriter[K, V](
   // Holds per-shard state. Public for testing.
   private[streaming] val shards: Array[ShardState] = Array.tabulate(numPartitions)(ShardState(_))
 
-  private val allocatedBufferBytesSemaphore: Semaphore = new Semaphore(MAX_BUFFER_BYTES.toInt)
+  // Bounds the bytes held by allocated buffers. Public for testing.
+  private[streaming] val allocatedBufferBytesSemaphore: Semaphore =
+    new Semaphore(MAX_BUFFER_BYTES.toInt)
 
   // Data payloads use a dedicated direct-buffer free-list (bufferPool) of fixed BUFFER_SIZE
   // buffers so full-size send buffers can be recycled across the task; the small, variable-size
@@ -270,12 +272,6 @@ class StreamingShuffleWriter[K, V](
     // Sends buffer as a DataMessage to the shuffle reader. Takes ownership of the buffer.
     def send(timestampedBuffer: TimestampedBuffer): Unit = synchronized {
       val rawBuffer = timestampedBuffer.buffer
-      // Everything up to the send() hand-off below runs synchronously and can throw: closing the
-      // serialization stream flushes buffered bytes into rawBuffer, and the checksum reads it.
-      // Until send() is called nothing else references rawBuffer and the release/pool logic lives
-      // in send()'s completion callback, so a throw here would leak the buffer and its permit
-      // (cleanupResources() cannot see a buffer that is neither pooled nor shard-parked). Release
-      // both before propagating; send() takes ownership only once we reach it.
       val dataMessage = try {
         timestampedBuffer.serializationStream.close()
         val dataSize = rawBuffer.writerIndex()
@@ -460,13 +456,6 @@ class StreamingShuffleWriter[K, V](
         if (timestampedBuffer == null) {
           timestampedBuffer = newBuffer()
         }
-        // The buffer is held only by this local reference here: it has been taken out of the
-        // shard (takeBuffer) and not yet parked back (putBuffer) or handed to send(). If
-        // serialization throws in this window, the task-completion cleanup cannot reclaim it
-        // (cleanupResources() only drains the pool and shard-parked buffers), so release the
-        // buffer and return its memory permit before propagating. The hand-off below is kept
-        // outside this guard: once send() is called it owns the buffer and does its own cleanup,
-        // and releasing here as well would corrupt refcounts.
         try {
           val dataStartPos = timestampedBuffer.buffer.writerIndex()
           val partitionSerializationStream = timestampedBuffer.serializationStream
