@@ -17,11 +17,11 @@
 
 import unittest
 
-from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession as PySparkSession
 from pyspark.testing.connectutils import ReusedMixedTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.utils import eventually
+from pyspark.util import is_remote_only
 
 
 @unittest.skipIf(is_remote_only(), "Requires JVM access")

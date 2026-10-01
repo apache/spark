@@ -379,8 +379,8 @@ private[kafka010] class KafkaMicroBatchStream(
           KafkaSourceOffset(kafkaOffsetReader.fetchEarliestOffsets())
         case LatestOffsetRangeLimit =>
           KafkaSourceOffset(kafkaOffsetReader.fetchLatestOffsets(None))
-        case SpecificOffsetRangeLimit(p) =>
-          kafkaOffsetReader.fetchSpecificOffsets(p, reportDataLoss)
+        case o: SpecificOffsetRangeLimit =>
+          kafkaOffsetReader.fetchSpecificOffsets(o, reportDataLoss)
         case SpecificTimestampRangeLimit(p, strategy) =>
           kafkaOffsetReader.fetchSpecificTimestampBasedOffsets(p,
             isStartingOffsets = true, strategy)
@@ -514,7 +514,7 @@ object KafkaMicroBatchStream extends Logging {
       latestAvailablePartitionOffsets: Option[PartitionOffsetMap]): ju.Map[String, String] = {
     val offset = Option(latestConsumedOffset.orElse(null))
 
-    if (offset.nonEmpty && latestAvailablePartitionOffsets.isDefined) {
+    if (offset.nonEmpty && latestAvailablePartitionOffsets.exists(_ != null)) {
       val consumedPartitionOffsets = offset.map(KafkaSourceOffset(_)).get.partitionToOffsets
       val offsetsBehindLatest = latestAvailablePartitionOffsets.get
         .map(partitionOffset => partitionOffset._2 -

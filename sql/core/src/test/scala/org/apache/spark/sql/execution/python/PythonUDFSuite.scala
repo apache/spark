@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.execution.python
 
+import scala.concurrent.duration._
+
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, Row}
-import org.apache.spark.sql.functions.{array, avg, col, count, transform}
+import org.apache.spark.sql.functions.{aggregate, array, avg, col, count, lit, transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
@@ -117,16 +119,28 @@ class PythonUDFSuite extends SharedSparkSession {
     assert(df.agg(pandasTestUDF(df("id"))).schema.fieldNames.exists(_.startsWith(udfName)))
   }
 
-  test("SPARK-48706: Negative test case for Python UDF in higher order functions") {
+  test("SPARK-27052: Python UDF in a higher order function lambda") {
     assume(shouldTestPythonUDFs)
+    // SPARK-48706 originally rejected this. `ExtractPythonUDFFromLambda` now rewrites it so the
+    // UDF is applied to the whole array outside the lambda, so it runs and returns a result.
+    checkAnswer(
+      spark.range(1).select(transform(array("id"), x => pythonTestUDF(x))),
+      Row(Seq(0)))
+  }
+
+  test("SPARK-27052: Negative test case for Python UDF in higher order functions") {
+    assume(shouldTestPythonUDFs)
+    // A UDF reading `aggregate`'s accumulator is sequential, so there is no array to precompute
+    // over and the rewrite does not apply. This must still fail rather than give a wrong answer.
     checkError(
       exception = intercept[AnalysisException] {
-        spark.range(1).select(transform(array("id"), x => pythonTestUDF(x))).collect()
+        spark.range(1).select(
+          aggregate(array("id"), lit(0L), (acc, x) => pythonTestUDF(acc) + x)).collect()
       },
       condition = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
       parameters = Map("funcName" -> "\"pyUDF(namedlambdavariable())\""),
       context = ExpectedContext(
-        "transform", s".*${this.getClass.getSimpleName}.*"))
+        "aggregate", s".*${this.getClass.getSimpleName}.*"))
   }
 
   test("SPARK-48666: Python UDF execution against partitioned column") {
@@ -206,6 +220,34 @@ class PythonUDFSuite extends SharedSparkSession {
     // Python total time should also be non-zero and >= processing time
     assert(pythonTotalTime > 0 && pythonTotalTime >= processingTime,
       s"pythonTotalTime should be > 0, but was $pythonTotalTime")
+  }
+
+  test("reused Python worker initialization excludes pre-task idle time") {
+    assume(shouldTestPythonUDFs)
+
+    def executePythonUDF(): BatchEvalPythonExec = {
+      val result = spark.range(1).coalesce(1).select(pythonTestUDF(col("id")))
+      result.collect()
+      result.queryExecution.executedPlan.collectFirst {
+        case exec: BatchEvalPythonExec => exec
+      }.getOrElse {
+        fail("Expected BatchEvalPythonExec in executed plan")
+      }
+    }
+
+    executePythonUDF()
+
+    eventually(timeout(10.seconds), interval(100.milliseconds)) {
+      Thread.sleep(1000L)
+      val pythonExec = executePythonUDF()
+      val bootTime = pythonExec.metrics("pythonBootTime").value
+      val initTime = pythonExec.metrics("pythonInitTime").value
+      val totalTime = pythonExec.metrics("pythonTotalTime").value
+
+      assert(bootTime === 0L, s"expected a reused Python worker, but boot time was $bootTime ms")
+      assert(initTime <= totalTime,
+        s"initialization time $initTime ms exceeded total worker time $totalTime ms")
+    }
   }
 
   test("SPARK-55046:pythonProcessingTime metric for ArrowEvalPythonExec") {

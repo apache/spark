@@ -22,9 +22,9 @@ import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedInsertTarget}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{AutoCdcInto, CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateStreamingTableAutoCdc, CreateView, InsertIntoStatement, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AutoCdcInto, CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateStreamingTableAutoCdc, CreateView, LogicalPlan, UnresolvedInsert}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.command.{CreateViewCommand, SetCatalogCommand, SetCommand, SetNamespaceCommand}
@@ -275,16 +275,27 @@ class SqlGraphRegistrationContext(
    * into the [[ChangeArgs]] consumed by an [[AutoCdcFlow]]. Shared by the two SQL AUTO CDC entry
    * points: `CREATE STREAMING TABLE ... FLOW AUTO CDC ...` and `CREATE FLOW ... AS AUTO CDC INTO`.
    *
-   * SQL AUTO CDC syntax only supports SCD Type 1, so [[ChangeArgs.storedAsScdType]] is always
-   * [[ScdType.Type1]]. [[includeColumns]] and [[excludeColumns]] are mutually exclusive at the
-   * grammar level; the guard here is defensive.
+   * `STORED AS SCD TYPE <n>` selects [[ScdType]] (defaulting to [[ScdType.Type1]] when absent).
+   * `TRACK HISTORY ON ...` populates the SCD2-only [[ChangeArgs.trackHistorySelection]] and is
+   * rejected under SCD1. `IGNORE NULL UPDATES [ON ...]` populates
+   * [[ChangeArgs.ignoreNullSelection]], where the bare clause is "all columns"
+   * ([[ColumnSelection.ExcludeColumns]] of an empty list) and an absent clause is [[None]].
+   * [[includeColumns]]/[[excludeColumns]], the two track-history lists, and the two ignore-null
+   * lists are each mutually exclusive at the grammar level; the guards here are defensive.
    */
+  // scalastyle:off argcount
   private def buildChangeArgs(
       keys: Seq[UnresolvedAttribute],
       sequenceByExpr: Expression,
       deleteCondition: Option[Expression],
       includeColumns: Option[Seq[UnresolvedAttribute]],
       excludeColumns: Option[Seq[UnresolvedAttribute]],
+      storedAsScdType: Int,
+      trackHistoryColumns: Option[Seq[UnresolvedAttribute]],
+      trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]],
+      ignoreNullUpdates: Boolean,
+      ignoreNullUpdatesColumns: Option[Seq[UnresolvedAttribute]],
+      ignoreNullUpdatesExceptColumns: Option[Seq[UnresolvedAttribute]],
       queryOrigin: QueryOrigin): ChangeArgs = {
     val columnSelection: Option[ColumnSelection] = (includeColumns, excludeColumns) match {
       case (Some(_), Some(_)) =>
@@ -300,14 +311,77 @@ class SqlGraphRegistrationContext(
         None
     }
 
+    val scdType: ScdType = storedAsScdType match {
+      case 1 => ScdType.Type1
+      case 2 => ScdType.Type2
+      case other =>
+        throw SqlGraphElementRegistrationException(
+          msg = s"Unsupported AUTO CDC SCD type: $other. Only SCD TYPE 1 and SCD TYPE 2 are " +
+            "supported.",
+          queryOrigin = queryOrigin
+        )
+    }
+
+    // TRACK HISTORY is only meaningful under SCD2; reject it for SCD1 before interpreting the
+    // clause. The grammar allows the clause regardless of the STORED AS type, so this is where
+    // the SCD2 requirement is enforced.
+    if (scdType != ScdType.Type2 &&
+      (trackHistoryColumns.isDefined || trackHistoryExceptColumns.isDefined)) {
+      throw SqlGraphElementRegistrationException(
+        msg = "AUTO CDC TRACK HISTORY requires STORED AS SCD TYPE 2.",
+        queryOrigin = queryOrigin
+      )
+    }
+
+    val trackHistorySelection: Option[ColumnSelection] =
+      (trackHistoryColumns, trackHistoryExceptColumns) match {
+        case (Some(_), Some(_)) =>
+          throw SqlGraphElementRegistrationException(
+            msg = "AUTO CDC cannot specify both TRACK HISTORY ON and TRACK HISTORY ON * EXCEPT.",
+            queryOrigin = queryOrigin
+          )
+        case (Some(tracked), None) =>
+          Option(ColumnSelection.IncludeColumns(tracked.map(toUnqualifiedColumnName)))
+        case (None, Some(nonTracked)) =>
+          Option(ColumnSelection.ExcludeColumns(nonTracked.map(toUnqualifiedColumnName)))
+        case (None, None) =>
+          None
+      }
+
+    // IGNORE NULL UPDATES. Unlike the selections above, "all columns" is distinct from "absent":
+    // the bare clause (no subset) ignores nulls on every column, encoded as an empty ExcludeColumns
+    // selection, while an absent clause leaves ignore-null updates off (None).
+    val ignoreNullSelection: Option[ColumnSelection] =
+      if (!ignoreNullUpdates) {
+        None
+      } else {
+        (ignoreNullUpdatesColumns, ignoreNullUpdatesExceptColumns) match {
+          case (Some(_), Some(_)) =>
+            throw SqlGraphElementRegistrationException(
+              msg = "AUTO CDC cannot specify both IGNORE NULL UPDATES ON and " +
+                "IGNORE NULL UPDATES ON * EXCEPT.",
+              queryOrigin = queryOrigin
+            )
+          case (Some(included), None) =>
+            Option(ColumnSelection.IncludeColumns(included.map(toUnqualifiedColumnName)))
+          case (None, Some(excluded)) =>
+            Option(ColumnSelection.ExcludeColumns(excluded.map(toUnqualifiedColumnName)))
+          case (None, None) =>
+            Option(ColumnSelection.ExcludeColumns(Seq.empty))
+        }
+      }
+
     ChangeArgs(
       keys = keys.map(toUnqualifiedColumnName),
       sequencing = Column(sequenceByExpr),
-      storedAsScdType = ScdType.Type1,
+      storedAsScdType = scdType,
       deleteCondition = deleteCondition.map(Column(_)),
-      columnSelection = columnSelection
+      columnSelection = columnSelection,
+      trackHistorySelection = trackHistorySelection,
+      ignoreNullSelection = ignoreNullSelection
     )
   }
+  // scalastyle:on argcount
 
   private def toUnqualifiedColumnName(attr: UnresolvedAttribute): UnqualifiedColumnName =
     UnqualifiedColumnName(attr.nameParts)
@@ -374,6 +448,12 @@ class SqlGraphRegistrationContext(
             deleteCondition = cst.deleteCondition,
             includeColumns = cst.includeColumns,
             excludeColumns = cst.excludeColumns,
+            storedAsScdType = cst.storedAsScdType,
+            trackHistoryColumns = cst.trackHistoryColumns,
+            trackHistoryExceptColumns = cst.trackHistoryExceptColumns,
+            ignoreNullUpdates = cst.ignoreNullUpdates,
+            ignoreNullUpdatesColumns = cst.ignoreNullUpdatesColumns,
+            ignoreNullUpdatesExceptColumns = cst.ignoreNullUpdatesExceptColumns,
             queryOrigin = queryOrigin
           )
         )
@@ -544,31 +624,8 @@ class SqlGraphRegistrationContext(
         .identifier
 
       cf.flowOperation match {
-        case i: InsertIntoStatement =>
-          validateInsertIntoFlow(i, queryOrigin)
-          val flowTargetDatasetName = i.table match {
-            case u: UnresolvedRelation =>
-              IdentifierHelper.toTableIdentifier(u.multipartIdentifier)
-            case _ =>
-              throw SqlGraphElementRegistrationException(
-                msg = "Unable to resolve target dataset name for INSERT INTO flow",
-                queryOrigin = queryOrigin
-              )
-          }
-          graphRegistrationContext.registerFlow(
-            UntypedFlow(
-              identifier = flowIdentifier,
-              destinationIdentifier = qualifyDestinationIdentifier(flowTargetDatasetName),
-              func = FlowAnalysis.createFlowFunctionFromLogicalPlan(i.query),
-              sqlConf = context.getSqlConf,
-              once = false,
-              queryContext = QueryContext(
-                currentCatalog = context.getCurrentCatalogOpt,
-                currentDatabase = context.getCurrentDatabaseOpt
-              ),
-              origin = queryOrigin
-            )
-          )
+        case i: UnresolvedInsert =>
+          handleInsert(i, flowIdentifier, queryOrigin)
         case a: AutoCdcInto =>
           val flowTargetDatasetName = IdentifierHelper.toTableIdentifier(a.targetTable)
           graphRegistrationContext.registerFlow(
@@ -588,6 +645,12 @@ class SqlGraphRegistrationContext(
                 deleteCondition = a.deleteCondition,
                 includeColumns = a.includeColumns,
                 excludeColumns = a.excludeColumns,
+                storedAsScdType = a.storedAsScdType,
+                trackHistoryColumns = a.trackHistoryColumns,
+                trackHistoryExceptColumns = a.trackHistoryExceptColumns,
+                ignoreNullUpdates = a.ignoreNullUpdates,
+                ignoreNullUpdatesColumns = a.ignoreNullUpdatesColumns,
+                ignoreNullUpdatesExceptColumns = a.ignoreNullUpdatesExceptColumns,
                 queryOrigin = queryOrigin
               )
             )
@@ -598,6 +661,36 @@ class SqlGraphRegistrationContext(
             queryOrigin = queryOrigin
           )
       }
+    }
+
+    private def handleInsert(
+        insert: UnresolvedInsert,
+        flowIdentifier: TableIdentifier,
+        queryOrigin: QueryOrigin): Unit = {
+      validateInsertIntoFlow(insert, queryOrigin)
+      val flowTargetDatasetName = insert.table match {
+        case u: UnresolvedInsertTarget =>
+          IdentifierHelper.toTableIdentifier(u.multipartIdentifier)
+        case _ =>
+          throw SqlGraphElementRegistrationException(
+            msg = "Unable to resolve target dataset name for INSERT INTO flow",
+            queryOrigin = queryOrigin
+          )
+      }
+      graphRegistrationContext.registerFlow(
+        UntypedFlow(
+          identifier = flowIdentifier,
+          destinationIdentifier = qualifyDestinationIdentifier(flowTargetDatasetName),
+          func = FlowAnalysis.createFlowFunctionFromLogicalPlan(insert.query),
+          sqlConf = context.getSqlConf,
+          once = false,
+          queryContext = QueryContext(
+            currentCatalog = context.getCurrentCatalogOpt,
+            currentDatabase = context.getCurrentDatabaseOpt
+          ),
+          origin = queryOrigin
+        )
+      )
     }
 
     /** Qualifies a raw flow target dataset identifier against the current catalog/database. */
@@ -612,34 +705,34 @@ class SqlGraphRegistrationContext(
         .identifier
 
     private def validateInsertIntoFlow(
-        insertIntoStatement: InsertIntoStatement,
+        insert: UnresolvedInsert,
         queryOrigin: QueryOrigin
     ): Unit = {
-      if (insertIntoStatement.partitionSpec.nonEmpty) {
+      if (insert.partitionSpec.nonEmpty) {
         throw SqlGraphElementRegistrationException(
           msg = "Partition spec may not be specified for flow target.",
           queryOrigin = queryOrigin
         )
       }
-      if (insertIntoStatement.userSpecifiedCols.nonEmpty) {
+      if (insert.userSpecifiedCols.nonEmpty) {
         throw SqlGraphElementRegistrationException(
           msg = "Column schema may not be specified for flow target.",
           queryOrigin = queryOrigin
         )
       }
-      if (insertIntoStatement.overwrite) {
+      if (insert.overwrite) {
         throw SqlGraphElementRegistrationException(
           msg = "INSERT OVERWRITE flows not supported.",
           queryOrigin = queryOrigin
         )
       }
-      if (insertIntoStatement.ifPartitionNotExists) {
+      if (insert.ifPartitionNotExists) {
         throw SqlGraphElementRegistrationException(
           msg = "IF NOT EXISTS not supported for flows.",
           queryOrigin = queryOrigin
         )
       }
-      if (!insertIntoStatement.byName) {
+      if (!insert.byName) {
         throw SqlGraphElementRegistrationException(
           msg = "Only INSERT INTO by name flows supported.",
           queryOrigin = queryOrigin

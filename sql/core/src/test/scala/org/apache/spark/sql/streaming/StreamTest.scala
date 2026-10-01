@@ -295,10 +295,12 @@ trait StreamTest extends SharedSparkSession with TimeLimits {
    */
   case class ExpectFailure[T <: Throwable : ClassTag](
       assertFailure: Throwable => Unit = _ => {},
-      isFatalError: Boolean = false) extends StreamAction {
+      isFatalError: Boolean = false,
+      typeIsSuperClass: Boolean = false) extends StreamAction {
     val causeClass: Class[T] = implicitly[ClassTag[T]].runtimeClass.asInstanceOf[Class[T]]
     override def toString(): String =
-      s"ExpectFailure[${causeClass.getName}, isFatalError: $isFatalError]"
+      s"ExpectFailure[${causeClass.getName}, isFatalError: $isFatalError, " +
+        s"typeIsSuperClass: $typeIsSuperClass]"
   }
 
   /**
@@ -712,14 +714,25 @@ trait StreamTest extends SharedSparkSession with TimeLimits {
               s"incorrect exception returned by query.exception()")
 
             val exception = currentStream.exception.get
-            verify(exception.cause.getClass === ef.causeClass,
-              "incorrect cause in exception returned by query.exception()\n" +
-                s"\tExpected: ${ef.causeClass}\n\tReturned: ${exception.cause.getClass}")
+            if (ef.typeIsSuperClass) {
+              verify(ef.causeClass.isInstance(exception.cause),
+                "incorrect cause in exception returned by query.exception()\n" +
+                  s"\tExpected: ${ef.causeClass}\n\tReturned: ${exception.cause.getClass}")
+            } else {
+              verify(exception.cause.getClass === ef.causeClass,
+                "incorrect cause in exception returned by query.exception()\n" +
+                  s"\tExpected: ${ef.causeClass}\n\tReturned: ${exception.cause.getClass}")
+            }
             if (ef.isFatalError) {
               // This is a fatal error, `streamThreadDeathCause` should be set to this error in
               // UncaughtExceptionHandler.
-              verify(streamThreadDeathCause != null &&
-                streamThreadDeathCause.getClass === ef.causeClass,
+              val fatalErrorMatches = streamThreadDeathCause != null && (
+                if (ef.typeIsSuperClass) {
+                  ef.causeClass.isInstance(streamThreadDeathCause)
+                } else {
+                  streamThreadDeathCause.getClass === ef.causeClass
+                })
+              verify(fatalErrorMatches,
                 "UncaughtExceptionHandler didn't receive the correct error\n" +
                   s"\tExpected: ${ef.causeClass}\n\tReturned: $streamThreadDeathCause")
               streamThreadDeathCause = null

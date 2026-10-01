@@ -67,7 +67,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Set(
       "PartitionPruning",
       "RewriteSubquery",
-      "Extract Python UDFs",
+      "Extract UDFs",
       "Infer Filters")
 
   protected def fixedPoint =
@@ -111,6 +111,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeJoinCondition,
         LimitPushDown,
         LimitPushDownThroughWindow,
+        RewriteSizeOfArrayStruct,
         ColumnPruning,
         GenerateOptimization,
         // Operator combine
@@ -125,6 +126,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeRepartition,
         EliminateWindowPartitions,
         TransposeWindow,
+        PullUpProjectAliasThroughWindow,
         NullPropagation,
         // NullPropagation may introduce Exists subqueries, so RewriteNonCorrelatedExists must run
         // after.
@@ -174,6 +176,13 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushDownPredicates))
 
     val batches: Seq[Batch] = flattenBatches(Seq(
+    // UDF substitution rules should be executed before any other optimization rules
+    // so that the substituted Catalyst alternatives go through the same finalization
+    // (FinishAnalysis, RewriteWithExpression, etc.) and downstream optimization as
+    // any other expression. Anything ConvertToCatalyst leaves behind -- including
+    // RuntimeReplaceable nodes inside transpiled options -- is still rewritten by
+    // the FinishAnalysis batch that runs immediately after.
+    Batch("Convert python UDFs to Catalyst", Once, ConvertToCatalyst),
     Batch("Finish Analysis", FixedPoint(1), FinishAnalysis),
     // We must run this batch after `ReplaceExpressions`, as `RuntimeReplaceable` expression
     // may produce `With` expressions that need to be rewritten.
@@ -255,6 +264,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Eliminate Sorts", Once,
       EliminateSorts,
       RemoveRedundantSorts),
+    // Run after operator optimization normally folds accuracy expressions and before
+    // RewriteDistinctAggregates so fused distinct percentiles are rewritten correctly.
+    Batch("Combine Approximate Percentiles", Once,
+      CombineApproximatePercentiles),
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates),
     // This batch must run after "Decimal Optimizations", as that one may change the
@@ -304,7 +317,14 @@ abstract class Optimizer(catalogManager: CatalogManager)
    */
   def nonExcludableRules: Seq[String] =
     Seq(
+      // ConvertToCatalyst is the only rule that strips the Unevaluable
+      // TranspiledPythonUDF node; excluding it would leak that node into
+      // execution, so it must never be excludable.
+      ConvertToCatalyst.ruleName,
       FinishAnalysis.ruleName,
+      // ReplaceExpressions (in FinishAnalysis) turns Between/NullIf into the Unevaluable
+      // With expression; excluding this rule leaks it into codegen and fails with INTERNAL_ERROR.
+      RewriteWithExpression.ruleName,
       RewriteDistinctAggregates.ruleName,
       ReplaceDeduplicateWithAggregate.ruleName,
       ReplaceIntersectWithSemiJoin.ruleName,
@@ -336,13 +356,12 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView,
       EliminateSQLFunctionNode,
       ReplaceExpressions,
-      NormalizeFloatingNumbers,
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
-      // Put `InsertMapSortInGroupingExpressions` after `PullOutGroupingExpressions`,
-      // so the grouping keys can only be attribute and literal which makes
-      // `InsertMapSortInGroupingExpressions` easy to insert `MapSort`.
-      InsertMapSortInGroupingExpressions,
+      // Put `InsertMapSortInAggregate` after `PullOutGroupingExpressions`,
+      // so grouping keys are attributes or literals. The rule also projects complex distinct
+      // aggregate arguments before inserting `MapSort`.
+      InsertMapSortInAggregate,
       InsertMapSortInRepartitionExpressions,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),
@@ -1003,6 +1022,391 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))
     case LocalLimit(le, p @ Project(_, udf: ArrowEvalPython)) =>
       LocalLimit(le, p.copy(child = udf.copy(child = maybePushLocalLimit(le, udf.child))))
+    case LocalLimit(le, udf: ExecuteExternalUDF) =>
+      LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))
+    case LocalLimit(le, p @ Project(_, udf: ExecuteExternalUDF)) =>
+      LocalLimit(le, p.copy(child = udf.copy(child = maybePushLocalLimit(le, udf.child))))
+  }
+}
+
+/**
+ * Attempt to convert UDFS to Catalyst expressions.
+ */
+object ConvertToCatalyst extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    // Short circuit if there are no Transpiled Python UDFs in the plan.
+    if (!plan.containsPattern(TRANSPILED_PYTHON_UDF)) {
+      return plan
+    }
+    // Traverse subquery plans too: this batch runs Once, and later rules (e.g.
+    // PullupCorrelatedPredicates) can move expressions from a subquery into the
+    // outer plan, so an Unevaluable TranspiledPythonUDF left inside a subquery
+    // here could otherwise escape and reach execution un-stripped.
+    plan.transformDownWithSubqueriesAndPruning(
+      _.containsPattern(TRANSPILED_PYTHON_UDF), ruleId) {
+      // A fast path, not a correctness guard -- `convertOperator` hands back an operator it finds
+      // nothing to do in. The pruning above only skips subtrees, so every Filter and Sort between
+      // the root and a call lands here. The bit is the cheap reject, cached per node; the walk then
+      // also rejects an operator whose only call sits in a subquery, since a SubqueryExpression
+      // reports its inner plan's bits while `Expression.exists` does not descend into the plan.
+      case p if !p.expressions.exists { e =>
+        e.containsPattern(TRANSPILED_PYTHON_UDF) && e.exists(_.isInstanceOf[TranspiledPythonUDF])
+      } => p
+
+      case p => convertOperator(p)
+    }
+  }
+
+  /**
+   * Whether the call still has its arguments. An analyzer rule may replace the Python UDF with an
+   * attribute -- `PullOutNondeterministic` does, for a nondeterministic call in an operator that
+   * cannot hold one -- and then [[TranspiledPythonUDF.arguments]] is empty while the option still
+   * refers to them by position. There is nothing to substitute, so the attribute stands.
+   */
+  private def callIsIntact(s: TranspiledPythonUDF): Boolean = s.pythonUDFExpr match {
+    case _: PythonFuncExpression => true
+    case agg: AggregateExpression => agg.aggregateFunction.isInstanceOf[PythonFuncExpression]
+    case _ => false
+  }
+
+  /**
+   * Converts the calls in one operator, putting an argument the body reads more than once in a
+   * column on the operator's child so we compute it once a row instead of once a read
+   * (SPARK-58626). Three operators can't hold that Project, and a call under one of them that owes
+   * an evaluation keeps the interpreted Python UDF instead:
+   *
+   *  - More than one child: we'd have to pick a side.
+   *  - A Command: the Project hides the relation DataSourceV2Strategy looks for, and
+   *    `DELETE FROM t WHERE udf(a + 1) > 0` becomes an internal error.
+   *  - An Aggregate: a result expression no aggregate function wraps has to be built from the
+   *    grouping expressions, and a column is not one, so `groupBy(a + 1).agg(udf(a + 1))` would
+   *    fail MISSING_AGGREGATION. Splitting the Aggregate to make room was tried and reverted: it
+   *    reshapes correlated subqueries, which broke `splitSubquery` on a HAVING and flipped
+   *    COUNT-bug handling, for a column in one uncommon shape.
+   *  - Anything whose child is an Aggregate, for the second half of that same trap:
+   *    `splitSubquery` finds a subquery's Aggregate by matching `Filter(_, Aggregate)`, so a
+   *    Project in between hides it and the COUNT bug goes unhandled. Measured on
+   *    `HAVING udf(count(*) + 1) > 0`: the outer rows that match nothing came back dropped where
+   *    the same plan without the column returns them. It runs before the pushdown that would
+   *    collapse the Project away, so being invisible later is no help.
+   *
+   * MergeRows is on neither list, on purpose. Its instructions are first-match-wins, so a column
+   * runs `WHEN ... AND udf(a / b) > 0` for every row of the join -- but so does the interpreted
+   * UDF, which computes its inputs below MergeRows and raises on an unmatched row under ANSI today.
+   * Turning it down there is what would diverge.
+   */
+  private def convertOperator(p: LogicalPlan): LogicalPlan =
+    // A column widens the operator's child, and we only learn whether this operator's output is a
+    // widening of its child's after building it. When it isn't, convert again without columns
+    // rather than fail the query: `preEvaluate` says yes to every single-child operator that is not
+    // a Command or an Aggregate, a longer list than anyone has thought about -- Window, Generate,
+    // Expand, CollectMetrics, ScriptTransformation, whatever an extension adds.
+    convertOperator(p, withColumns = true).getOrElse(convertOperator(p, withColumns = false).get)
+
+  private def convertOperator(p: LogicalPlan, withColumns: Boolean): Option[LogicalPlan] = {
+    val extraColumns = mutable.ArrayBuffer.empty[Alias]
+    val columnByKey = mutable.HashMap.empty[ShareKey, Alias]
+    // Per call *node*, by identity: an operator can hold one node in two expression slots -- Window
+    // copies its spec into every WindowSpecDefinition, MergeRows has five -- and each slot is
+    // visited on its own. Minting an id per visit gave one call two columns, so two draws. A plain
+    // counter, not an ExprId: nothing outside the sharing key ever reads it, and `newExprId` would
+    // bump the global counter for every call we merely looked at.
+    var nextCallId = 0L
+    val callIds = new java.util.IdentityHashMap[TranspiledPythonUDF, java.lang.Long]()
+    val preEvaluate: Option[PreEvaluate] =
+      if (withColumns && p.children.length == 1 && !p.isInstanceOf[Command] &&
+          !p.isInstanceOf[Aggregate] && !p.children.head.isInstanceOf[Aggregate]) {
+        val child = p.children.head
+        // Once per operator, not once per call: an operator can hold several, and this walks the
+        // whole child plan. See `canPlaceColumn`, which is the only reader.
+        lazy val joinBelow = child.exists(_.isInstanceOf[Join])
+        Some((call, args, option) => {
+          val callId = callIds.computeIfAbsent(call, _ => { nextCallId += 1; nextCallId })
+          def keyOf(index: Int): ShareKey = shareKey(args(index), callId, index)
+          val reads = TranspiledUDFParameter.referencedIndexes(option)
+          val readsPerKey = reads.groupBy(keyOf).map { case (k, is) => k -> is.length }
+          val owed = mustPreEvaluate(args, option)
+          // Read more than once under one key and not cheap to repeat. That covers everything we
+          // owe (`owed` counts reads of one index; a key only ever merges indexes together, so its
+          // count is at least as high) plus what is merely worth sharing: two parameters holding
+          // equal arguments, each read once. Not every repeat earns a column -- a pointless Project
+          // sticks around under anything CollapseProject can't merge through, and stops
+          // SpecialLimits matching `Project(_, Sort(...))` for TakeOrderedAndProjectExec.
+          val shared = reads.distinct.filter { index =>
+            readsPerKey(keyOf(index)) > 1 && !cheapToRepeat(args(index)) &&
+              canPlaceColumn(args(index), child, joinBelow)
+          }
+          if (!owed.forall(shared.contains)) {
+            // Something we owe one evaluation has nowhere to go, so hand the call back to Python,
+            // which evaluates each of its inputs once wherever it sits.
+            None
+          } else if (shared.isEmpty) {
+            Some(TranspiledUDFParameter.substitute(option, args))
+          } else {
+            val byIndex = shared.map { index =>
+              // The ExprId goes in the name: numbering per operator would give two operators
+              // each a `_udf_param_0`, which makes a plan string ambiguous. Same reason
+              // RewriteWithExpression has USE_COMMON_EXPR_ID_FOR_ALIAS.
+              index -> columnByKey.getOrElseUpdate(keyOf(index), {
+                val exprId = NamedExpression.newExprId
+                val alias = Alias(args(index), s"_udf_param_${exprId.id}")(exprId)
+                extraColumns += alias
+                alias
+              })
+            }.toMap
+            Some(TranspiledUDFParameter.substitute(
+              option, i => byIndex.get(i).map(_.toAttribute).getOrElse(args(i))))
+          }
+        })
+      } else {
+        None
+      }
+    // Enter each expression at its root rather than at the first TranspiledPythonUDF in it, so
+    // that `applyExpr` sees every node on the way down and can thread `parentIsUdf`. Starting
+    // at the node itself would report no enclosing UDF even when a PythonUDF wraps it, and the
+    // batch pipeline the flag exists to protect would be split anyway.
+    val converted = p.mapExpressions {
+      case e if e.containsPattern(TRANSPILED_PYTHON_UDF) =>
+        applyExpr(e, parentIsUdf = false, preEvaluate, inLambda = false)
+      case e => e
+    }
+    // A call turned down can orphan a column registered for an argument of its own. Drop those:
+    // an unread column still computes, and under ANSI can raise on a row nothing looked at.
+    val read = AttributeSet(converted.expressions.flatMap(_.references))
+    val columns = extraColumns.filter(a => read.contains(a.toAttribute)).toSeq
+    if (columns.isEmpty) {
+      Some(converted)
+    } else {
+      val child = p.children.head
+      val widened = converted.withNewChildren(Seq(Project(child.output ++ columns, child)))
+      // A Filter passes its child's output straight up, so it carries our columns now. Project them
+      // back off to keep the schema. The checks are the two RewriteWithExpression asserts, as a
+      // condition: we only ever append, so an operator whose output shrinks or loses an attribute
+      // is one we should not have offered a column to.
+      if (p.output.length > widened.output.length || !p.outputSet.subsetOf(widened.outputSet)) {
+        None
+      } else if (p.output.length < widened.output.length) {
+        Some(Project(p.output, widened))
+      } else {
+        Some(widened)
+      }
+    }
+  }
+
+  /**
+   * What decides whether two parameters share a column: an equal argument of equal nullability, or
+   * nothing -- a nondeterministic argument keys on the call it belongs to and its position in it.
+   */
+  private sealed trait ShareKey
+  // Nullability rides along because `canonicalized` drops it: an AttributeReference canonicalizes
+  // to `AttributeReference("none", dataType)(exprId)`, so `a#5` nullable and `a#5` not would
+  // otherwise share one column, and a body coerced against the nullable one would read a column
+  // declared without nulls -- enough for NullPropagation to fold an `IsNull` to false.
+  private case class DeterministicKey(canonical: Expression, nullable: Boolean) extends ShareKey
+  // A call id, not just the parameter index: `f(rand())` and `g(rand())` in one operator would
+  // otherwise collide on one column. `f(rand(), rand())` owes two draws, and so do two calls that
+  // each pass their own `rand()`.
+  private case class NondeterministicKey(callId: Long, index: Int) extends ShareKey
+
+  // One key per distinct deterministic argument in the operator: `f(a + 1, a + 1)` computes
+  // `a + 1` once, and two calls that each read it more than once share the column. The read
+  // count is still per call -- a call reading it once keeps its own copy, one evaluation.
+  private def shareKey(arg: Expression, callId: Long, index: Int): ShareKey =
+    if (arg.deterministic) DeterministicKey(arg.canonicalized, arg.nullable)
+    else NondeterministicKey(callId, index)
+
+  /**
+   * Whether `arg` can sit in a Project on `child`. Four ways it can't:
+   *
+   *  - It reads something the child doesn't output. `f(g(x))` is the one you hit: `f`'s
+   *    argument is `g`'s column, which this Project is still defining.
+   *  - It's an aggregate, window function or generator. Only PlanHelper can say, and
+   *    only about a Project, so this one is asked with a throwaway alias.
+   *  - It has an OuterReference and decorrelation is off, where the fallback rewrites
+   *    Filters only and would strand it. Both confs, since EXISTS and IN switch on
+   *    their own even while the global one is on.
+   *  - It still holds an enclosing call's reference, which only that call can
+   *    substitute, and only while the reference is in the option body.
+   *
+   * A nondeterministic column anywhere above a Join takes the join's condition down with
+   * it: PushPredicateThroughNonJoin pushes nothing through a Project holding a
+   * nondeterministic field, so a Filter above it never reaches the Join and
+   * `where t1.a = t2.a and udf(rand()) < 2` plans as a cartesian product. Below anywhere,
+   * not just at the child -- one `select` in between is enough, and the Filter can sit
+   * above whatever we are rewriting.
+   *
+   * `joinBelow` is by name so a deterministic argument never pays for the walk behind it.
+   */
+  private def canPlaceColumn(arg: Expression, child: LogicalPlan, joinBelow: => Boolean): Boolean =
+    (arg.deterministic || !joinBelow) &&
+      arg.references.subsetOf(child.outputSet) &&
+      PlanHelper.specialExpressionsInUnsupportedOperator(
+        // A fixed id, not `newExprId`: this alias is thrown away with the Project and
+        // PlanHelper never reads it, so minting one would bump the global counter and
+        // shift the ExprIds in every later plan string by however many arguments we
+        // merely considered.
+        Project(Seq(Alias(arg, "_udf_param")(ExprId(0))), child)).isEmpty &&
+      ((conf.decorrelateInnerQueryEnabled &&
+          conf.decorrelateInnerQueryEnabledForExistsIn) ||
+        !arg.containsPattern(OUTER_REFERENCE)) &&
+      // Bit first, then a walk, as in `apply`: a SubqueryExpression reports its inner plan's bits
+      // but `exists` does not descend into it, so an argument holding a subquery that merely
+      // *contains* a call would fail the bit test over a reference that is not ours to substitute.
+      !(arg.containsPattern(TRANSPILED_UDF_PARAMETER) &&
+        arg.exists(_.isInstanceOf[TranspiledUDFParameter]))
+
+  /**
+   * Notes the columns to add to the operator's child, and points the option's refs at them. None
+   * means we can't compute an evaluation the body is owed here, and the caller keeps the Python
+   * UDF. The call comes along so that two visits to one node share its columns.
+   */
+  private type PreEvaluate =
+    (TranspiledPythonUDF, Seq[Expression], Expression) => Option[Expression]
+
+  /**
+   * The parameters this call owes one evaluation: read more than once, with an argument that isn't
+   * cheap to repeat. Where no column can hold one we don't transpile at all. Per parameter:
+   * `f(rand(), rand())` owes two draws, `f(rand())` owes one however often it is read.
+   */
+  private def mustPreEvaluate(args: Seq[Expression], option: Expression): Set[Int] =
+    TranspiledUDFParameter.referencedIndexes(option).groupBy(identity).collect {
+      case (index, reads) if reads.length > 1 && !cheapToRepeat(args(index)) => index
+    }.toSet
+
+  /**
+   * Whether reading an argument twice is as good as reading a column that holds it once.
+   *
+   * A nondeterministic one never is, whatever `isCheap` says of it: two copies of `rand()` are two
+   * draws, so the body sees two values for one parameter. A deterministic one is only work, but
+   * work counts, so anything `isCheap` won't vouch for -- a regex, `a + 1` -- is owed one too.
+   */
+  private def cheapToRepeat(arg: Expression): Boolean = arg match {
+    // An enclosing call's reference computes nothing of its own. What it stands for may well be
+    // expensive, but that is the enclosing call's argument, and these copies are reads of it.
+    case _: TranspiledUDFParameter => true
+    case _ => arg.deterministic && CollapseProject.isCheap(arg)
+  }
+
+  /**
+   * Converts the transpiled calls in one expression, leaving every argument at its use sites -- and
+   * so keeping the Python UDF for a call that owes one of them a single evaluation.
+   *
+   * This is what a custom transpiler's own ConvertToX gets, and it comes with no column placement
+   * at all: whether a Project fits below the operator is the operator's business, and only `apply`
+   * above, walking the plan, can know. A custom rule that wants an argument computed once has to
+   * place the column itself.
+   */
+  def applyExpr(expression: Expression, parentIsUdf: Boolean = false): Expression =
+    applyExpr(expression, parentIsUdf, None, inLambda = false)
+
+  private def applyExpr(
+      expression: Expression,
+      parentIsUdf: Boolean,
+      preEvaluate: Option[PreEvaluate],
+      inLambda: Boolean): Expression = {
+    def recurse(e: Expression, parentIsUdf: Boolean): Expression =
+      applyExpr(e, parentIsUdf, preEvaluate, inLambda)
+    expression match {
+      // Nothing to convert below here, so skip the subtree rather than walking it node by node.
+      case other if !other.containsPattern(TRANSPILED_PYTHON_UDF) => other
+
+      case s: TranspiledPythonUDF =>
+        // Every branch that turns the call down leaves the Python UDF in place and keeps walking
+        // its arguments, which may hold transpilable calls of their own.
+        def keepPython: Expression = s.pythonUDFExpr.mapChildren(recurse(_, parentIsUdf = true))
+        // We _shouldn't_ have these nodes if ANSI is not enabled or transpilation is disabled
+        // but if someone changed it while running we'll want to strip the nodes out.
+        if (!conf.getConf(SQLConf.ANSI_ENABLED)) {
+          logWarning(log"Skipping Python UDF transpilation: " +
+            log"${MDC(LogKeys.CONFIG, SQLConf.ANSI_ENABLED.key)} is disabled. The transpiler " +
+            log"targets ANSI semantics and refuses to rewrite plans under non-ANSI mode. " +
+            log"Enable ANSI or disable transpilation to silence this warning.")
+          keepPython
+        } else if (!conf.getConf(SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS)) {
+          logWarning(log"Skipping Python UDF transpilation: " +
+            log"${MDC(LogKeys.CONFIG, SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key)} " +
+            log"is disabled but we still got TranspiledPythonUDFs in our plan.")
+          keepPython
+        } else if (!callIsIntact(s)) {
+          // PullOutNondeterministic moves a nondeterministic call into a projection below and
+          // leaves an attribute here, so `arguments` is empty while the option still refers to
+          // them. Keep the attribute: the call is computed once below us, which is the promise,
+          // just not in Catalyst. `orderBy(u(rand()))` and `repartition(2, u(rand()))` land here.
+          keepPython
+        } else if (inLambda ||
+            s.transpiledOptions.headOption.exists(_.containsPattern(LAMBDA_FUNCTION))) {
+          // Lambdas are out of scope for lowering: a higher-order function's lambda already has a
+          // story for a Python UDF in ExtractPythonUDFFromLambda, which applies it over the whole
+          // array. Both shapes are left to it -- a call inside a lambda, and an option body that
+          // builds one.
+          keepPython
+        } else if (!parentIsUdf || !s.hasOnlyPythonUDFInputs) {
+          // Walk the full list of transpiled options and pick the first one,
+          // falling back to the original Python UDF if none are available.
+          // Options whose declared input-type categories don't match the bound
+          // column types are already pruned during analysis by
+          // ResolveTranspiledPythonUDFOptions, so any option that reaches here is
+          // safe to use. If you're plugging in your own transpilation, please add
+          // a separate ConvertToX so you can choose your desired transpiled nodes.
+          // NOTE: the substituted option is used as-is, with no cast back to the
+          // UDF's declared return type. The built-in transpiler guarantees each
+          // option's dataType already matches; a custom transpiler MUST do the
+          // same (or insert its own Cast), or it will silently change the output
+          // schema.
+          s.transpiledOptions.headOption match {
+            case None =>
+              keepPython
+            case Some(catalystExpr) =>
+              // Arguments live on the Python UDF, not in the option, so convert them there -- one
+              // could be a transpilable call itself. Recurse on the option's root too, not just its
+              // children, or a nested call sitting at the root survives and throws at execution.
+              //
+              // Only the arguments the body actually reads. Converting an unread one would register
+              // a column for its nested call that nothing ever reads, and under ANSI that column
+              // computes -- and can raise on -- an argument `transpile.py` promises is never
+              // computed at all.
+              val reads = TranspiledUDFParameter.referencedIndexes(catalystExpr)
+              val read = reads.toSet
+              // Over `reads`, not `read`: a Set names whichever bad index it yields first, so the
+              // error moved around between JVMs.
+              reads.find(index => index < 0 || index >= s.arguments.length).foreach { index =>
+                // Only a hand-built option can be out of range: the builder bounds-checks what it
+                // emits, and a pre-typed reference slips past the analyzer's check too.
+                throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(
+                  index, s.arguments.length)
+              }
+              val args = s.arguments.zipWithIndex.map {
+                case (arg, i) if read.contains(i) => recurse(arg, parentIsUdf = false)
+                case (arg, _) => arg
+              }
+              val option = recurse(catalystExpr, parentIsUdf = false)
+              val substituted = preEvaluate match {
+                case Some(f) => f(s, args, option)
+                // No column can go here at all, so an evaluation the body is owed can only be kept
+                // by the Python UDF, which computes its inputs once in a projection of its own.
+                case None =>
+                  Option.when(mustPreEvaluate(args, option).isEmpty)(
+                    TranspiledUDFParameter.substitute(option, args))
+              }
+              // None from either arm means we can't keep that promise here, so don't transpile.
+              substituted.getOrElse(keepPython)
+          }
+        } else {
+          // We should avoid converting a UDF node where that could break pipelining.
+          // For example: (UDF -> UDF -> UDF) is often cheaper than UDF -> Catalyst -> UDF.
+          keepPython
+        }
+      case _ =>
+        // Not a TranspiledPythonUDF: recurse down, telling the children whether
+        // this node is itself a scalar Python UDF so a transpiled child can
+        // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
+        // transpiled wrapping one that could).
+        //
+        // A conditional branch is not treated like a lambda, on purpose: the column stands, which
+        // makes the argument eager, and the interpreted UDF is eager there too. See `transpile.py`.
+        expression.mapChildren(applyExpr(_, parentIsUdf = isScalarPythonUDF(expression),
+          preEvaluate, inLambda || expression.isInstanceOf[LambdaFunction]))
+    }
   }
 }
 
@@ -1579,6 +1983,10 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       }
     // Alias and ExtractValue are very cheap.
     case _: Alias | _: ExtractValue => e.children.forall(isCheap)
+    // `Collate` only re-tags the collation in the type; at runtime it is a pass-through
+    // (eval/genCode delegate to the child) and never evaluates its collation argument, so it is
+    // as cheap to duplicate as its value child.
+    case c: Collate => isCheap(c.child)
     case _ => false
   }
 
@@ -1664,6 +2072,10 @@ object OptimizeWindowFunctions extends Rule[LogicalPlan] {
  * Collapse Adjacent Window Expression.
  * - If the partition specs and order specs are the same and the window expression are
  *   independent and are of the same window function type, collapse into the parent.
+ * - If the partition specs are the same and one of the order specs is empty, collapse into the
+ *   parent when the window expressions of the empty-order window can be evaluated under any row
+ *   order. The merged window keeps the non-empty order spec. Merging an empty-order child is
+ *   gated by `spark.sql.optimizer.collapseWindowWithEmptyOrderSpecInChild`.
  */
 object CollapseWindow extends Rule[LogicalPlan] {
   private def specCompatible(s1: Seq[Expression], s2: Seq[Expression]): Boolean = {
@@ -1671,9 +2083,46 @@ object CollapseWindow extends Rule[LogicalPlan] {
       s1.zip(s2).forall(e => e._1.semanticEquals(e._2))
   }
 
+  /**
+   * Returns true if the given window expression can still be evaluated correctly when the rows
+   * of the partition are reordered, so that it can be merged into another window with a different
+   * (non-empty) order spec.
+   *
+   * The frame determines whether reordering is safe. When the frame is the whole partition
+   * (`UNBOUNDED PRECEDING` to `UNBOUNDED FOLLOWING`), it always covers all the rows of the
+   * partition regardless of the ordering, so reordering changes only the order in which the rows
+   * are seen, never which rows are in the frame. Since the order spec of the window is empty,
+   * the query does not fix the row order, so evaluating its expressions under any ordering
+   * yields a valid result, even though the value may differ for order-dependent expressions
+   * such as `first`, `collect_list`, or floating-point `sum`/`avg`. On the other hand, a bounded
+   * frame (e.g. `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`) is order-sensitive: which
+   * rows are in the frame depends on the ordering, so even `count` or `sum` would change value,
+   * and such a window must not be merged.
+   */
+  private def canEvaluateUnderAnyOrder(windowExpression: NamedExpression): Boolean =
+    windowExpression match {
+      case Alias(WindowExpression(_, WindowSpecDefinition(_, _,
+          SpecifiedWindowFrame(_, UnboundedPreceding, UnboundedFollowing))), _) => true
+      case _ => false
+    }
+
   private def windowsCompatible(w1: Window, w2: Window): Boolean = {
     specCompatible(w1.partitionSpec, w2.partitionSpec) &&
-      specCompatible(w1.orderSpec, w2.orderSpec) &&
+      // The order specs can differ when one of them is empty, as long as the window expressions
+      // of the window with the empty order spec are safe to evaluate under any row order. In that
+      // case, they can be evaluated under the non-empty order spec of the other window. The
+      // operator then keeps the non-empty order spec while the merged-in expressions keep their
+      // own empty order spec; this divergence is safe because after analysis only
+      // OptimizeWindowFunctions reads an expression's own order spec, and it is a no-op without
+      // one. Merging an empty-order child into an ordered parent can disable
+      // InferWindowGroupLimit and LimitPushDownThroughWindow, so that direction is gated by
+      // conf.collapseWindowWithEmptyOrderSpecInChild.
+      (specCompatible(w1.orderSpec, w2.orderSpec) ||
+        (w1.orderSpec.isEmpty && w2.orderSpec.nonEmpty &&
+          w1.windowExpressions.forall(canEvaluateUnderAnyOrder)) ||
+        (conf.collapseWindowWithEmptyOrderSpecInChild && w2.orderSpec.isEmpty &&
+          w1.orderSpec.nonEmpty &&
+          w2.windowExpressions.forall(canEvaluateUnderAnyOrder))) &&
       w1.references.intersect(w2.windowOutputSet).isEmpty &&
       w1.windowExpressions.nonEmpty && w2.windowExpressions.nonEmpty &&
       // This assumes Window contains the same type of window expressions. This is ensured
@@ -1686,13 +2135,19 @@ object CollapseWindow extends Rule[LogicalPlan] {
     _.containsPattern(WINDOW), ruleId) {
     case w1 @ Window(we1, _, _, w2 @ Window(we2, _, _, grandChild, _), _)
         if windowsCompatible(w1, w2) =>
-      w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
+      w1.copy(
+        orderSpec = if (w1.orderSpec.nonEmpty) w1.orderSpec else w2.orderSpec,
+        windowExpressions = we2 ++ we1,
+        child = grandChild)
 
     case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild, _)), _)
         if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
       Project(
         pl ++ w1.windowOutputSet,
-        w1.copy(windowExpressions = we2 ++ we1, child = grandChild))
+        w1.copy(
+          orderSpec = if (w1.orderSpec.nonEmpty) w1.orderSpec else w2.orderSpec,
+          windowExpressions = we2 ++ we1,
+          child = grandChild))
   }
 }
 
@@ -2104,6 +2559,10 @@ object PushDownPredicates extends Rule[LogicalPlan] {
  * 2) the predicate is deterministic and the operator will not change any of rows.
  * 3) We don't add double evaluation OR double evaluation would be cheap OR we're configured to.
  *
+ * Note: if a new push-through case is added here, or the translation applied to pushed
+ * conditions changes (e.g. how aliases are substituted), also update
+ * `removePushedDownFilter` in [[PushdownPredicatesAndPruneColumnsForCTEDef]], which mirrors
+ * this rule's cases to locate and remove filters previously pushed into CTE definitions.
  */
 object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
@@ -2122,8 +2581,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     //    resulting in double evaluation, but only of inexpensive items -- worth it to filter
     //    records sooner.
     // (Case 1 & 2 are treated as "cheap" predicates)
-    // 3) When an a filter references expensive to compute references we do not push it.
-    // Note that a given filter may contain parts (sepereated by logical ands) from all cases.
+    // 3) When a filter references expensive-to-compute references we do not push it. Instead we
+    //    split the projection around it (see `splitProjectForExpensiveConditions`); whatever is
+    //    left over stays above the projection, which is where all of case 3 lands when nothing
+    //    is worth splitting.
+    // Note that a given filter may contain parts (separated by logical ands) from all cases.
     // We handle each part separately according to the logic above.
     // Additional restriction:
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
@@ -2165,26 +2627,44 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
               false
             }
           }
-        // Short circuit if we do not have any cheap filters return the original filter as is.
-        if (cheapWithUsed.isEmpty) {
+        // Cheap filters (cases 1 & 2) pushed below the projection.
+        val baseChild: LogicalPlan = if (cheapWithUsed.nonEmpty) {
+          val combinedCheapFilter = cheapWithUsed.map(_._3).reduce(And)
+          Filter(combinedCheapFilter, child = grandChild)
+        } else {
+          grandChild
+        }
+        // Case 3: split the projection around the expensive conditions. Non-deterministic
+        // conditions stay in the top filter, as they do everywhere else in this rule -- the
+        // split orders conditions by cost, and cost is no way to decide how many rows a
+        // non-deterministic expression sees.
+        val (splitChild, splitAliases, stayUp) =
+          if (expensiveWithUsed.nonEmpty && SQLConf.get.splitProjectionForExpensiveFilters) {
+            val (deterministic, nonDeterministic) =
+              expensiveWithUsed.partition { case (cond, _, _) => cond.deterministic }
+            val (child, aliases, unplaced) = splitProjectForExpensiveConditions(
+              project, aliasMap, baseChild,
+              deterministic.map { case (cond, used, _) => (cond, used) })
+            (child, aliases, unplaced ++ nonDeterministic.map(_._1))
+          } else {
+            (baseChild, AttributeSet.empty, expensiveWithUsed.map(_._1))
+          }
+        if (cheapWithUsed.isEmpty && splitAliases.isEmpty) {
           f
         } else {
-          val cheap: Seq[Expression] = cheapWithUsed.map(_._3)
-          // Make a base instance which has all of the cheap filters pushed down.
-          // For all filter which do not reference any expensive aliases then
-          // just push the filter while resolving the non-expensive aliases.
-          val combinedCheapFilter = cheap.reduce(And)
-          val baseChild = Filter(combinedCheapFilter, child = grandChild)
-          // Take our projection and place it on top of the pushed filters.
-          val topProjection = project.copy(child = baseChild)
+          // Reference the aliases the split already computed; only the aliases change so the
+          // column ordering (and schema) is preserved.
+          val topProjectList = if (splitAliases.isEmpty) {
+            fields
+          } else {
+            fields.map(field => if (splitAliases.contains(field)) field.toAttribute else field)
+          }
+          val topProjection = project.copy(projectList = topProjectList, child = splitChild)
 
-          // If we pushed all the filters we can return the projection
-          if (expensiveWithUsed.isEmpty) {
+          if (stayUp.isEmpty) {
             topProjection
           } else {
-            // Finally add any filters which could not be pushed
-            val remainingConditions = expensiveWithUsed.map(_._1)
-            Filter(remainingConditions.reduce(And), topProjection)
+            Filter(stayUp.reduce(And), topProjection)
           }
         }
       }
@@ -2308,6 +2788,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: RebalancePartitions => true
     case _: ScriptTransformation => true
     case _: Sort => true
+    case _: ExecuteExternalUDF => true
     case _: BatchEvalPython => true
     case _: ArrowEvalPython => true
     case _: Expand => true
@@ -2341,6 +2822,128 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     } else {
       filter
     }
+  }
+
+  /**
+   * Splits `project` into a stack of [[Project]]s with the expensive conditions in
+   * `expensiveConds` between them, so an expensive expression only runs on the rows the filters
+   * below it kept (SPARK-55014). For example, with both regexes considered expensive and a child
+   * producing `a` and `e`:
+   *
+   * {{{
+   *   Filter f AND g
+   *     Project a, rlike(e, 'magic') AS f, rlike(e, 'other') AS g
+   *       child
+   * }}}
+   * becomes
+   * {{{
+   *   Filter g
+   *     Project a, f, rlike(e, 'other') AS g
+   *       Filter f
+   *         Project a, e, rlike(e, 'magic') AS f
+   *           child
+   * }}}
+   * so `rlike(e, 'other')` only runs on the rows where `rlike(e, 'magic')` was true.
+   *
+   * Conditions are grouped by the aliases they reference, then the group needing the fewest
+   * not-yet-computed aliases is split off first -- least demanding first keeps the expensive
+   * expressions as high in the stack, and so over as few rows, as we can manage. On a tie, the
+   * group making the most conditions evaluable wins, falling back to the condition written first
+   * (the only selectivity signal we have). Whole-stage codegen already defers a projected
+   * expression past a filter that does not need it (`CodegenSupport.evaluateRequiredVariables`),
+   * so this rule only buys the same saving on the paths codegen does not cover -- interpreted
+   * projections, operators it bails out of, Python UDFs.
+   *
+   * Two restrictions keep the split from costing more than it saves:
+   *  - Only split a [[Project]] off while it leaves an expensive alias for a later layer; an extra
+   *    operator has to buy a real deferral.
+   *  - Aliases sharing an expensive sub-expression move together. Subexpression elimination
+   *    works within one projection and cannot reach across a [[Filter]], so splitting them apart
+   *    would re-evaluate the shared part on every row below the filter and again on every
+   *    survivor (a struct-returning UDF read field by field is the common shape).
+   *
+   * The most demanding group is left un-placed for the caller to put above the projection --
+   * where expensive conditions go when there is nothing worth splitting.
+   *
+   * Callers must pass deterministic conditions only -- the grouping below orders conditions by
+   * cost, and cost is no way to decide how many rows a non-deterministic expression sees.
+   *
+   * Returns the new plan, the alias attributes it has already computed, and the un-placed
+   * conditions (in their original, alias-referencing form).
+   */
+  private def splitProjectForExpensiveConditions(
+      project: Project,
+      aliasMap: AttributeMap[Alias],
+      baseChild: LogicalPlan,
+      expensiveConds: Seq[(Expression, AttributeMap[Alias])])
+    : (LogicalPlan, AttributeSet, Seq[Expression]) = {
+    val expensiveAliases = AttributeSet(
+      aliasMap.collect { case (attr, alias) if alias.child.expensive => attr })
+    // Expensive sub-expressions behind each expensive alias, to spot when two aliases are the
+    // same piece of work. Cheap aliases have none, so we skip the (possibly wide) cheap rest.
+    val expensivePartsOf = AttributeMap(expensiveAliases.toSeq.map { attr =>
+      attr -> aliasMap(attr).child.collect { case e if e.expensive => e.canonicalized }.toSet
+    })
+    def expensiveParts(attr: Attribute): Set[Expression] =
+      expensivePartsOf.getOrElse(attr, Set.empty)
+    val aliasesSharing = expensivePartsOf.toSeq
+      .flatMap { case (attr, parts) => parts.map(part => part -> attr) }
+      .groupBy(_._1)
+      .map { case (part, pairs) => part -> AttributeSet(pairs.map(_._2)) }
+    // Grow a set of aliases into the whole unit of shared expensive work it belongs to,
+    // transitively (see the docstring restriction on shared sub-expressions).
+    def unitOf(aliases: AttributeSet): AttributeSet = {
+      var unit = aliases
+      var grew = true
+      while (grew) {
+        val next = unit.flatMap(expensiveParts).foldLeft(unit) {
+          case (acc, part) => acc ++ aliasesSharing(part)
+        }
+        grew = next.size > unit.size
+        unit = next
+      }
+      unit
+    }
+    val indexed = expensiveConds.zipWithIndex.map {
+      case ((cond, used), idx) => (unitOf(AttributeSet(used.keys)), idx, cond)
+    }
+    // Group conditions over the same aliases; group on sorted exprIds (not AttributeSet) for
+    // stable hashing, and order groups by first condition to keep plans stable.
+    var pending: Seq[(AttributeSet, Seq[(Int, Expression)])] = indexed
+      .groupBy { case (used, _, _) => used.toSeq.map(_.exprId.id).sorted }
+      .toSeq
+      .map { case (_, group) => (group.head._1, group.map { case (_, idx, cond) => (idx, cond) }) }
+      .sortBy { case (_, conds) => conds.head._1 }
+    def conditionsOf(groups: Seq[(AttributeSet, Seq[(Int, Expression)])]): Seq[Expression] =
+      groups.flatMap(_._2).sortBy(_._1).map(_._2)
+
+    // Projection order is stable, unlike the alias map's iteration order.
+    val orderedAliases = project.projectList.collect { case a: Alias => a }
+
+    var plan = baseChild
+    var computed = AttributeSet.empty
+    var searching = true
+    while (searching) {
+      // Only split while it leaves an expensive alias for a later layer.
+      val stillToCompute = expensiveAliases -- computed
+      val candidates = pending.filter { case (used, _) => !stillToCompute.subsetOf(used) }
+      if (candidates.isEmpty) {
+        searching = false
+      } else {
+        val (bestUsed, _) = candidates.minBy {
+          case (used, conds) => ((used -- computed).size, -conds.size)
+        }
+        val newAliases = orderedAliases.filter(a => bestUsed.contains(a) && !computed.contains(a))
+        computed ++= AttributeSet(newAliases.map(_.toAttribute))
+        // Keep the plan's existing outputs available for later projections; column pruning drops
+        // the extras.
+        val newProject = project.copy(projectList = plan.output ++ newAliases, child = plan)
+        val (evaluable, rest) = pending.partition { case (used, _) => used.subsetOf(computed) }
+        plan = Filter(conditionsOf(evaluable).reduce(And), newProject)
+        pending = rest
+      }
+    }
+    (plan, computed, conditionsOf(pending))
   }
 
   /**
@@ -2695,9 +3298,11 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
     _.containsPattern(LOCAL_RELATION), ruleId) {
     case Project(projectList, LocalRelation(output, data, isStreaming, stream))
         if !projectList.exists(hasUnevaluableExpr) =>
-      val projection = new InterpretedMutableProjection(projectList, output)
+      val freshProjectList = projectList.map(
+        _.freshCopyIfContainsStatefulExpression().asInstanceOf[NamedExpression])
+      val projection = new InterpretedMutableProjection(freshProjectList, output)
       projection.initialize(0)
-      LocalRelation(projectList.map(_.toAttribute), data.map(projection(_).copy()),
+      LocalRelation(freshProjectList.map(_.toAttribute), data.map(projection(_).copy()),
         isStreaming, stream)
 
     case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming, stream)) =>
@@ -2708,7 +3313,8 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
 
     case Filter(condition, LocalRelation(output, data, isStreaming, stream))
         if !hasUnevaluableExpr(condition) =>
-      val predicate = Predicate.create(condition, output)
+      val freshCondition = condition.freshCopyIfContainsStatefulExpression()
+      val predicate = Predicate.create(freshCondition, output)
       predicate.initialize(0)
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming, stream)
   }
@@ -2738,7 +3344,7 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
     case d @ Deduplicate(keys, child, _) if !child.isStreaming =>
       val keyExprIds = keys.map(_.exprId)
-      val generatedAliasesMap = new mutable.HashMap[Attribute, Alias]();
+      val generatedAliasesMap = new mutable.HashMap[Attribute, Alias]()
       val aggCols = child.output.map { attr =>
         if (keyExprIds.contains(attr.exprId)) {
           attr

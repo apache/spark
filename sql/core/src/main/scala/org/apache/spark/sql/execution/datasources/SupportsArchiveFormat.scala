@@ -17,29 +17,36 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{Closeable, InputStream}
+import java.io.{Closeable, File, FileOutputStream, InputStream}
+import java.nio.ByteBuffer
+import java.nio.channels.{NonWritableChannelException, SeekableByteChannel}
 import java.util.Locale
 import java.util.regex.Pattern
 import java.util.zip.GZIPInputStream
 
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import org.apache.commons.compress.archivers.{ArchiveEntry, ArchiveInputStream}
+import org.apache.commons.compress.archivers.ArchiveEntry
+import org.apache.commons.compress.archivers.sevenz.SevenZFile
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
-import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
+import org.apache.commons.compress.archivers.zip.ZipFile
 import org.apache.commons.io.ByteOrderMark
 import org.apache.commons.io.input.{BOMInputStream, CloseShieldInputStream}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FSDataInputStream, GlobPattern, Path}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.util.LineReader
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.HadoopFSUtils
+import org.apache.spark.paths.SparkPath
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.util.{HadoopFSUtils, Utils}
 
 /**
- * Mixed into a file-based data source to let it read tar/zip archives of its files, treating an
+ * Mixed into a file-based data source to let it read tar/zip/7z archives of its files, treating an
  * archive like a directory of the entries it contains. Schema inference is left to each format.
  */
 trait SupportsArchiveFormat extends Logging {
@@ -88,9 +95,109 @@ trait SupportsArchiveFormat extends Logging {
     }
   }
 
+  /** Which archive entries are data files of this format; others are skipped. */
+  protected def archiveEntryFilter(name: String): Boolean =
+    throw new UnsupportedOperationException(
+      s"${getClass.getName} does not support random-access archive reads")
+
+  /**
+   * Reads an archive by unpacking each entry to a temp file and applying `readEntry`, for a
+   * format that needs a complete file on disk (random access).
+   *
+   * @param file              the archive as a [[PartitionedFile]]
+   * @param conf              Hadoop configuration used to open the archive
+   * @param tempPrefix        prefix for the per-task temp dir the entries are unpacked into
+   * @param archivePathFilter optional glob matched against the entry's full path
+   * @param readEntry         reads one unpacked entry file into rows
+   * @return iterator of rows across all entries
+   */
+  protected def readLocalizedEntries(
+      file: PartitionedFile,
+      conf: Configuration,
+      tempPrefix: String,
+      archivePathFilter: Option[GlobPattern])(
+      readEntry: PartitionedFile => Iterator[InternalRow]): Iterator[InternalRow] = {
+    val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), tempPrefix)
+    // Register cleanup before constructing `entries`, which can throw before returning an iterator
+    // that FileScanRDD could close.
+    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] { _ =>
+      Utils.deleteRecursively(tempDir)
+    })
+    val entries =
+      try SupportsArchiveFormat.localizeEntries(
+        file.toPath, conf, tempDir, archiveEntryFilter, archivePathFilter)
+      catch {
+        case NonFatal(e) =>
+          Utils.deleteRecursively(tempDir)
+          throw e
+      }
+
+    // Element type is `Object`, not `InternalRow`: a batch scan yields `ColumnarBatch`.
+    val rows = new Iterator[Object] with Closeable {
+      private var current: Iterator[Object] = Iterator.empty
+      private var currentFile: File = _
+      private var done = false
+
+      private def releaseCurrent(): Unit = {
+        current match {
+          case c: Closeable => try c.close() catch { case NonFatal(_) => }
+          case _ =>
+        }
+        current = Iterator.empty
+        if (currentFile != null) {
+          currentFile.delete()
+          currentFile = null
+        }
+      }
+
+      // Advance on `hasNext`, not `next`, so a reader reusing a mutable batch is not probed early.
+      private def advance(): Unit = {
+        while (!done && !current.hasNext) {
+          releaseCurrent()
+          if (entries.hasNext) {
+            val (_, entryFile) = entries.next()
+            currentFile = entryFile
+            current = readEntry(file.copy(
+              filePath = SparkPath.fromUri(entryFile.toURI),
+              start = 0L,
+              length = entryFile.length(),
+              fileSize = entryFile.length(),
+              modificationTime = file.modificationTime)).asInstanceOf[Iterator[Object]]
+          } else {
+            done = true
+          }
+        }
+      }
+
+      override def hasNext: Boolean = {
+        advance()
+        !done
+      }
+
+      override def next(): Object = {
+        if (!hasNext) throw new NoSuchElementException
+        current.next()
+      }
+
+      override def close(): Unit = {
+        done = true
+        releaseCurrent()
+        entries match {
+          case c: Closeable => try c.close() catch { case NonFatal(_) => }
+          case _ =>
+        }
+      }
+    }
+
+    rows.asInstanceOf[Iterator[InternalRow]]
+  }
+
 }
 
 object SupportsArchiveFormat {
+
+  // Basename chars unsafe in a temp file name; precompiled since it runs per entry.
+  private val unsafeEntryNameChars = Pattern.compile("[^A-Za-z0-9._-]")
 
   /**
    * Whether the file path is a supported archive format.
@@ -98,34 +205,137 @@ object SupportsArchiveFormat {
   def isArchivePath(path: Path): Boolean = {
     val name = path.getName.toLowerCase(Locale.ROOT)
     name.endsWith(".tar") || name.endsWith(".tar.gz") || name.endsWith(".tgz") ||
-      name.endsWith(".zip")
+      name.endsWith(".zip") || name.endsWith(".7z")
   }
 
+  /** An archive's entries as lazy `(entry, stream)` pairs; closing releases the container. */
+  private type ArchiveEntries = Iterator[(ArchiveEntry, InputStream)] with Closeable
+
   /**
-   * Opens the archive at `path` as a commons-compress stream, selecting the container by extension.
+   * Opens the archive at `path`, selecting the container by extension and exposing its entries as
+   * `(entry, stream)` pairs.
    */
-  private def openArchiveStream(
-      path: Path,
-      conf: Configuration): ArchiveInputStream[_ <: ArchiveEntry] = {
+  private def openArchiveStream(path: Path, conf: Configuration): ArchiveEntries = {
     val name = path.getName.toLowerCase(Locale.ROOT)
     name match {
       case n if n.endsWith(".tar") || n.endsWith(".tar.gz") || n.endsWith(".tgz") =>
-        val base = CodecStreams.createInputStreamWithCloseResource(conf, path)
-        try {
-          // GZIPInputStream reads the gzip header in its constructor, so a corrupt archive can
-          // throw here -- after `base` is already open -- and `base` must not leak.
-          val tarBytes = if (n.endsWith(".tgz")) new GZIPInputStream(base) else base
-          new TarArchiveInputStream(tarBytes)
-        } catch {
-          case NonFatal(e) =>
-            try base.close() catch { case NonFatal(_) => }
-            throw e
-        }
+        openTarStream(path, conf)
       case n if n.endsWith(".zip") =>
-        new ZipArchiveInputStream(CodecStreams.createInputStreamWithCloseResource(conf, path))
+        openZipStream(path, conf)
+      case n if n.endsWith(".7z") =>
+        openSevenZStream(path, conf)
       case _ =>
         throw new IllegalArgumentException(
-          s"$path is not a supported archive (expected .tar, .tar.gz, .tgz, or .zip)")
+          s"$path is not a supported archive (expected .tar, .tar.gz, .tgz, .zip, or .7z)")
+    }
+  }
+
+  /** Opens a `.tar`/`.tar.gz`/`.tgz` archive, streaming its entries through one forward cursor. */
+  private def openTarStream(path: Path, conf: Configuration): ArchiveEntries = {
+    val gzipped = path.getName.toLowerCase(Locale.ROOT).endsWith(".tgz")
+    val base = CodecStreams.createInputStreamWithCloseResource(conf, path)
+    try {
+      // GZIPInputStream reads the gzip header in its constructor, so a corrupt archive can throw
+      // here -- after `base` is already open -- and `base` must not leak.
+      val tar = new TarArchiveInputStream(if (gzipped) new GZIPInputStream(base) else base)
+      val entries = Iterator.continually(tar.getNextEntry).takeWhile(_ != null)
+        .map((_, tar: InputStream))
+      closeable(entries, () => tar.close())
+    } catch {
+      case NonFatal(e) =>
+        try base.close() catch { case NonFatal(_) => }
+        throw e
+    }
+  }
+
+  /** Pairs an entry iterator with the resource it reads from, closed when the caller is done. */
+  private def closeable(
+      entries: Iterator[(ArchiveEntry, InputStream)],
+      closeFn: () => Unit): ArchiveEntries =
+    new Iterator[(ArchiveEntry, InputStream)] with Closeable {
+      override def hasNext: Boolean = entries.hasNext
+      override def next(): (ArchiveEntry, InputStream) = entries.next()
+      override def close(): Unit = closeFn()
+    }
+
+  /** Opens a `.7z` archive by seeking. */
+  private def openSevenZStream(path: Path, conf: Configuration): ArchiveEntries = {
+    val fs = path.getFileSystem(conf)
+    val length = fs.getFileStatus(path).getLen
+    var channel: SeekableByteChannel = null
+    var sevenZ: SevenZFile = null
+    try {
+      channel = new HadoopSeekableByteChannel(fs.open(path), length)
+      sevenZ = SevenZFile.builder().setSeekableByteChannel(channel).get()
+      // SevenZFile is a forward cursor: one stream serves whichever entry getNextEntry selects.
+      val entryStream = new SevenZEntryInputStream(sevenZ)
+      val entries = Iterator.continually(sevenZ.getNextEntry).takeWhile(_ != null)
+        .map((_, entryStream))
+      closeable(entries, () => {
+        try {
+          sevenZ.close()
+        } finally {
+          channel.close()
+        }
+      })
+    } catch {
+      case NonFatal(e) =>
+        Utils.closeQuietly(sevenZ)
+        Utils.closeQuietly(channel)
+        throw e
+    }
+  }
+
+  /** Opens a `.zip` archive by seeking, reading the central directory first. */
+  private def openZipStream(path: Path, conf: Configuration): ArchiveEntries = {
+    val fs = path.getFileSystem(conf)
+    val length = fs.getFileStatus(path).getLen
+    var channel: SeekableByteChannel = null
+    var zipFile: ZipFile = null
+    try {
+      channel = new HadoopSeekableByteChannel(fs.open(path), length)
+      zipFile = ZipFile.builder().setSeekableByteChannel(channel).get()
+      var current: InputStream = null
+      def closeCurrentStream(): Unit = if (current != null) {
+        try current.close() catch { case NonFatal(_) => }
+        current = null
+      }
+      // Open each entry's stream lazily, on first read. An entry the engine skips (directory or
+      // dotfile) is never read, so it is never opened and its readability never checked -- else a
+      // skipped-but-encrypted entry would throw CANNOT_READ_ZIP_ENTRY, unlike the streaming reader
+      // ZipFile replaced. Opening an entry releases the previous one's inflater.
+      val entries = zipFile.getEntries.asScala.map { entry =>
+        val stream = new InputStream {
+          private var delegate: InputStream = _
+          private def open(): InputStream = {
+            if (delegate == null) {
+              closeCurrentStream()
+              if (!zipFile.canReadEntryData(entry)) {
+                throw QueryExecutionErrors.cannotReadZipEntry(entry.getName, path.toString)
+              }
+              delegate = zipFile.getInputStream(entry)
+              current = delegate
+            }
+            delegate
+          }
+          override def read(): Int = open().read()
+          override def read(b: Array[Byte], off: Int, len: Int): Int = open().read(b, off, len)
+        }
+        (entry: ArchiveEntry, stream)
+      }
+      closeable(entries, () => {
+        try {
+          closeCurrentStream()
+          zipFile.close()
+        } finally {
+          channel.close()
+        }
+      })
+    } catch {
+      case NonFatal(e) =>
+        Utils.closeQuietly(zipFile)
+        Utils.closeQuietly(channel)
+        throw e
     }
   }
 
@@ -135,31 +345,39 @@ object SupportsArchiveFormat {
    *
    * @param entry                   the archive entry to test
    * @param ignoredPathSegmentRegex per-segment filter matched against each `/`-separated component
-   * @return true if the entry is a directory or any path component is filtered out
+   * @param archivePathFilter       optional glob matched against the entry's full path
+   * @return true if the entry is a directory, any path component is filtered out, or the entry's
+   *         path does not match `archivePathFilter`
    */
-  private def shouldSkipEntry(entry: ArchiveEntry, ignoredPathSegmentRegex: Pattern): Boolean = {
+  private def shouldSkipEntry(
+      entry: ArchiveEntry,
+      ignoredPathSegmentRegex: Pattern,
+      archivePathFilter: Option[GlobPattern]): Boolean = {
     if (entry.isDirectory) return true
+    if (archivePathFilter.exists(!_.matches(entry.getName))) return true
     entry.getName.split("/").exists(c =>
       c.nonEmpty && HadoopFSUtils.shouldFilterOutPathName(c, ignoredPathSegmentRegex))
   }
 
   /**
    * Streams the archive at `path` entry by entry, applying `parseEntry` to each non-skipped
-   * `(name, stream)` and concatenating the results.
+   * `(entry, stream)` and concatenating the results.
    *
    * @param path                    the archive path
    * @param conf                    Hadoop configuration used to open the archive
    * @param ignoredPathSegmentRegex per-segment filter for entries to skip (defaults to the
    *                                `InMemoryFileIndex` filter); pass a custom one to match a
    *                                loose-file scan
-   * @param parseEntry              turns one entry's `(name, stream)` into an iterator of results
+   * @param archivePathFilter       optional glob matched against the entry's full path
+   * @param parseEntry              turns one entry's `(entry, stream)` into an iterator of results
    * @return the concatenated results across kept entries, lazily one entry at a time
    */
   def readArchiveEntries[T](
       path: Path,
       conf: Configuration,
-      ignoredPathSegmentRegex: Pattern = HadoopFSUtils.defaultIgnoredPathSegmentRegexPattern)(
-      parseEntry: (String, InputStream) => Iterator[T]): Iterator[T] = {
+      ignoredPathSegmentRegex: Pattern = HadoopFSUtils.defaultIgnoredPathSegmentRegexPattern,
+      archivePathFilter: Option[GlobPattern])(
+      parseEntry: (ArchiveEntry, InputStream) => Iterator[T]): Iterator[T] = {
     val archive = openArchiveStream(path, conf)
     var closed = false
 
@@ -185,17 +403,19 @@ object SupportsArchiveFormat {
             case c: Closeable => try c.close() catch { case NonFatal(_) => }
             case _ =>
           }
-          var entry = archive.getNextEntry
-          while (entry != null && shouldSkipEntry(entry, ignoredPathSegmentRegex)) {
-            entry = archive.getNextEntry
+          var next: (ArchiveEntry, InputStream) = null
+          while (next == null && archive.hasNext) {
+            val entry = archive.next()
+            if (!shouldSkipEntry(entry._1, ignoredPathSegmentRegex, archivePathFilter)) {
+              next = entry
+            }
           }
-          if (entry == null) {
+          if (next == null) {
             done = true
             cleanup()
           } else {
-            // CloseShieldInputStream ignores close(), so a parser closing its input does not close
-            // the archive; any unread remainder is skipped by getNextEntry() when advancing.
-            currentIter = parseEntry(entry.getName, CloseShieldInputStream.wrap(archive))
+            // Parse the entry stream; any unread remainder is skipped when the archive advances.
+            currentIter = parseEntry(next._1, CloseShieldInputStream.wrap(next._2))
           }
         }
       }
@@ -230,4 +450,95 @@ object SupportsArchiveFormat {
     entries
   }
 
+  /**
+   * Copies one archive entry's bytes to a fresh temp file under localDir.
+   *
+   * @param in        the entry's byte stream, positioned at the entry start
+   * @param localDir  directory the temp file is created under
+   * @param entryName the entry's archive path; its sanitized basename names the temp file
+   * @return the temp [[File]] holding the entry's bytes
+   */
+  def copyEntryToLocalFile(in: InputStream, localDir: File, entryName: String): File = {
+    val rawBasename = entryName.substring(entryName.lastIndexOf('/') + 1)
+    val basename = unsafeEntryNameChars.matcher(rawBasename).replaceAll("_")
+    val local = File.createTempFile("archive-entry-", "-" + basename, localDir)
+    val out = new FileOutputStream(local)
+    try Utils.copyStream(in, out) finally out.close()
+    local
+  }
+
+  /**
+   * Materializes each entry passing `entryFilter` to a fresh temp file under `localDir`, lazily one
+   * at a time. Yields `(entryName, localFile)`; the caller owns deleting each file. On the
+   * companion so executor-side callers (a format's distributed archive inference) can use it
+   * without a trait instance.
+   *
+   * @param path              the archive path
+   * @param conf              Hadoop configuration used to open the archive
+   * @param localDir          directory the per-entry temp files are created under
+   * @param entryFilter       which entry names to keep
+   * @param archivePathFilter optional glob matched against the entry's full path
+   */
+  def localizeEntries(
+      path: Path,
+      conf: Configuration,
+      localDir: File,
+      entryFilter: String => Boolean,
+      archivePathFilter: Option[GlobPattern]): Iterator[(String, File)] =
+    readArchiveEntries(path, conf, archivePathFilter = archivePathFilter) { (entry, in) =>
+      val name = entry.getName
+      if (entryFilter(name)) {
+        Iterator.single((name, copyEntryToLocalFile(in, localDir, name)))
+      } else {
+        Iterator.empty
+      }
+    }
+
+}
+
+/**
+ * Adapter for [[FSDataInputStream]] to [[SeekableByteChannel]].
+ *
+ * @param in     the underlying seekable Hadoop stream
+ * @param length the file's size in bytes
+ */
+private class HadoopSeekableByteChannel(in: FSDataInputStream, length: Long)
+  extends SeekableByteChannel {
+
+  private var open = true
+
+  override def read(dst: ByteBuffer): Int = {
+    val len = dst.remaining()
+    if (len == 0) return 0
+    // Read straight into dst's backing array when it exposes one, avoiding a per-call copy.
+    if (dst.hasArray) {
+      val n = in.read(dst.array(), dst.arrayOffset() + dst.position(), len)
+      if (n > 0) dst.position(dst.position() + n)
+      n
+    } else {
+      val buf = new Array[Byte](len)
+      val n = in.read(buf, 0, len)
+      if (n > 0) dst.put(buf, 0, n)
+      n
+    }
+  }
+
+  override def position(): Long = in.getPos
+  override def position(newPosition: Long): SeekableByteChannel = { in.seek(newPosition); this }
+  override def size(): Long = length
+  override def isOpen: Boolean = open
+  override def close(): Unit = { open = false; in.close() }
+
+  override def write(src: ByteBuffer): Int = throw new NonWritableChannelException
+  override def truncate(size: Long): SeekableByteChannel = throw new NonWritableChannelException
+}
+
+/**
+ * Exposes the current [[SevenZFile]] entry's bytes as a plain forward [[InputStream]].
+ *
+ * @param sevenZ the 7z file, positioned at the current entry
+ */
+private class SevenZEntryInputStream(sevenZ: SevenZFile) extends InputStream {
+  override def read(): Int = sevenZ.read()
+  override def read(b: Array[Byte], off: Int, len: Int): Int = sevenZ.read(b, off, len)
 }

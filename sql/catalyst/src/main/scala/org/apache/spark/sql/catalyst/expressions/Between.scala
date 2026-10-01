@@ -30,8 +30,14 @@ import org.apache.spark.sql.internal.SQLConf
   arguments = """
     Arguments:
       * input - An expression that is being compared with lower and upper bound.
+        An expression that evaluates to a boolean, numeric, string, binary, date, timestamp, time,
+        interval, array, or struct.
       * lower - Lower bound of the between check.
+        An expression that evaluates to a boolean, numeric, string, binary, date, timestamp, time,
+        interval, array, or struct.
       * upper - Upper bound of the between check.
+        An expression that evaluates to a boolean, numeric, string, binary, date, timestamp, time,
+        interval, array, or struct.
   """,
   since = "1.0.0",
   group = "conditional_funcs")

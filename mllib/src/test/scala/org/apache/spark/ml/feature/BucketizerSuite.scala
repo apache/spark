@@ -37,6 +37,14 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(new Bucketizer)
   }
 
+  test("Bucketizer estimated size") {
+    val model = new Bucketizer().setSplits(Array(-1.0, 0.0, 1.0))
+    val maxSize = 1024 * 4
+    assert(
+      model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("Bucket continuous features, without -inf,inf") {
     // Check a set of valid feature values.
     val splits = Array(-0.5, 0.0, 0.5)

@@ -24,7 +24,7 @@ from pyspark.serializers import read_int
 
 class DaemonTests(unittest.TestCase):
     def connect(self, port):
-        from socket import socket, AF_INET, AF_INET6, SOCK_STREAM
+        from socket import AF_INET, AF_INET6, SOCK_STREAM, socket
 
         family, host = AF_INET, "127.0.0.1"
         if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
@@ -37,8 +37,8 @@ class DaemonTests(unittest.TestCase):
         return True
 
     def do_termination_test(self, terminator):
-        from subprocess import Popen, PIPE
         from errno import ECONNREFUSED
+        from subprocess import PIPE, Popen
 
         # start daemon
         daemon_path = os.path.join(os.path.dirname(__file__), "..", "daemon.py")

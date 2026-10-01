@@ -19,8 +19,10 @@
 Linear Regression With SGD Example.
 """
 from pyspark import SparkContext
+
 # $example on$
-from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD, LinearRegressionModel
+from pyspark.mllib.regression import LabeledPoint, LinearRegressionModel, LinearRegressionWithSGD
+
 # $example off$
 
 if __name__ == "__main__":

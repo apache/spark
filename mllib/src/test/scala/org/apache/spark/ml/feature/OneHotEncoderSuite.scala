@@ -35,6 +35,17 @@ class OneHotEncoderSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(new OneHotEncoder)
   }
 
+  test("OneHotEncoderModel estimated size") {
+    val model = new OneHotEncoder()
+      .setInputCol("input")
+      .setOutputCol("output")
+      .fit(Seq(0.0, 1.0).toDF("input"))
+
+    val maxSize = 4 * 1024
+    assert(model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("OneHotEncoder dropLast = false") {
     val data = Seq(
       Row(0.0, Vectors.sparse(3, Seq((0, 1.0)))),

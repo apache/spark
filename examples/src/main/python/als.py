@@ -24,8 +24,8 @@ This example requires numpy (http://www.numpy.org/)
 import sys
 
 import numpy as np
-from numpy.random import rand
 from numpy import matrix
+from numpy.random import rand
 from pyspark.sql import SparkSession
 
 LAMBDA = 0.01   # regularization

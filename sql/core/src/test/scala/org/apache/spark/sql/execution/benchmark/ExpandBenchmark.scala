@@ -33,6 +33,11 @@ import org.apache.spark.sql.internal.SQLConf
  * OptimizeExpand rule that pre-aggregates data before the Expand. Controlled by
  * spark.sql.optimizer.optimizeExpandRatio (default -1 = disabled).
  *
+ * It also measures subexpression elimination in Expand: conditional-aggregate
+ * queries whose conditions all share the same expensive subexpression, which
+ * ends up in every branch of the Expand. Controlled by
+ * spark.sql.subexpressionElimination.enabled (default true).
+ *
  * To run this benchmark:
  * {{{
  *   1. build/sbt "sql/Test/runMain <this class>"
@@ -113,6 +118,62 @@ object ExpandBenchmark extends SqlBasedBenchmark {
         numIters = 5) { _ =>
       withSQLConf(OPTIMIZE_EXPAND_RATIO -> "2") {
         spark.sql(sqlPure).noop()
+      }
+    }
+
+    benchmark.run()
+  }
+
+  /**
+   * Prepares a traffic-like fact table: one row per page view, with a user id,
+   * a date-string partition column `pt` (format `yyyyMMdd`), and a metric value.
+   */
+  private def prepareTrafficTable(name: String, N: Long, userMod: Int): Unit = {
+    spark.range(N)
+      .selectExpr(
+        s"cast(id % $userMod as bigint) as user_id",
+        "date_format(date_add(date '2023-06-01', cast(id % 730 as int)), 'yyyyMMdd') as pt",
+        "cast(id % 3600 as bigint) as value")
+      .createOrReplaceTempView(name)
+  }
+
+  /**
+   * Builds a traffic/BI "N-day active users" rollup query: for each of the
+   * given day windows, one conditional COUNT(DISTINCT) and one conditional SUM
+   * whose conditions all share the same expensive datetime subexpression
+   * (parse `pt`, format it back, then `datediff` against a fixed date).
+   * `RewriteDistinctAggregates` places those conditions in the branches of an
+   * Expand, so the shared subexpression is codegen'd once per branch without
+   * subexpression elimination.
+   */
+  private def conditionalAggsQuery(table: String, windows: Seq[Int]): String = {
+    val daysSince = "datediff(" +
+      "from_unixtime(unix_timestamp('20250601', 'yyyyMMdd')), " +
+      "from_unixtime(unix_timestamp(pt, 'yyyyMMdd')))"
+    val metrics = windows.flatMap { n =>
+      Seq(
+        s"count(distinct if($daysSince <= $n, pt, null)) as count_${n}d",
+        s"sum(if($daysSince <= $n, value, null)) as sum_${n}d")
+    }
+    s"""SELECT user_id,
+       |  ${metrics.mkString(",\n  ")}
+       |FROM $table
+       |GROUP BY user_id""".stripMargin
+  }
+
+  private def subExprEliminationBenchmark(
+      title: String, N: Long, table: String): Unit = {
+    val benchmark = new Benchmark(title, N, output = output)
+    val sql = conditionalAggsQuery(table, Seq(1, 7, 14, 30, 60, 90, 180, 365, 730))
+
+    benchmark.addCase("CSE disabled (re-evaluate per branch)", numIters = 3) { _ =>
+      withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false") {
+        spark.sql(sql).noop()
+      }
+    }
+    benchmark.addCase("CSE enabled (evaluate once per row)", numIters = 3) { _ =>
+      withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true") {
+        spark.sql(sql).noop()
       }
     }
 
@@ -211,6 +272,14 @@ object ExpandBenchmark extends SqlBasedBenchmark {
       }
 
       benchDataChar.run()
+    }
+
+    runBenchmark("Expand: subexpression elimination across branches") {
+      val numRows = 5L << 20 // ~5M rows
+      prepareTrafficTable("expand_traffic", numRows, userMod = 1000000)
+      subExprEliminationBenchmark(
+        "9 conditional COUNT(DISTINCT) + 9 conditional SUM sharing one subexpression",
+        numRows, "expand_traffic")
     }
   }
 }

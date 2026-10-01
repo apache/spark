@@ -28,7 +28,6 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
-import scala.jdk.OptionConverters._
 
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
@@ -117,13 +116,19 @@ private[spark] class PythonWorkerFactory(
   private val authHelper = new SocketAuthHelper(conf)
   private val isUnixDomainSock = authHelper.isUnixDomainSock
 
+  // The factory carries everything faulthandler-related through envVars (which is how it reaches
+  // the worker process): PYTHON_FAULTHANDLER_DIR is set by the runner iff faulthandler should be
+  // surfaced for this worker, so a worker handle created here binds that directory (None = off).
+  private val faultHandlerLogDir: Option[File] =
+    envVars.get("PYTHON_FAULTHANDLER_DIR").map(new File(_))
+
   @GuardedBy("self")
   private var daemon: Process = null
   val daemonHost = InetAddress.getLoopbackAddress()
   @GuardedBy("self")
   private var daemonPort: Int = 0
   @GuardedBy("self")
-  private val daemonWorkers = new mutable.WeakHashMap[PythonWorker, ProcessHandle]()
+  private val daemonWorkers = new mutable.WeakHashMap[PythonWorker, PythonWorkerHandle]()
   @GuardedBy("self")
   private var daemonSockPath: String = _
   @GuardedBy("self")
@@ -144,7 +149,7 @@ private[spark] class PythonWorkerFactory(
     envVars.getOrElse("PYTHONPATH", ""),
     sys.env.getOrElse("PYTHONPATH", ""))
 
-  def create(): (PythonWorker, Option[ProcessHandle]) = {
+  def create(): (PythonWorker, Option[PythonWorkerHandle]) = {
     if (useDaemon) {
       self.synchronized {
         // Pull from idle workers until we get one that is alive, otherwise create a new one.
@@ -180,9 +185,9 @@ private[spark] class PythonWorkerFactory(
    * processes itself to avoid the high cost of forking from Java. This currently only works
    * on UNIX-based systems.
    */
-  private def createThroughDaemon(): (PythonWorker, Option[ProcessHandle]) = {
+  private def createThroughDaemon(): (PythonWorker, Option[PythonWorkerHandle]) = {
 
-    def createWorker(): (PythonWorker, Option[ProcessHandle]) = {
+    def createWorker(): (PythonWorker, Option[PythonWorkerHandle]) = {
       val socketChannel = if (isUnixDomainSock) {
         SocketChannel.open(UnixDomainSocketAddress.of(daemonSockPath))
       } else {
@@ -209,8 +214,8 @@ private[spark] class PythonWorkerFactory(
       if (pid < 0) {
         throw new IllegalStateException("Python daemon failed to launch worker with code " + pid)
       }
-      val processHandle = ProcessHandle.of(pid).orElseThrow(
-        () => new IllegalStateException("Python daemon failed to launch worker.")
+      val processHandle = PythonWorkerHandle.of(pid, faultHandlerLogDir).getOrElse(
+        throw new IllegalStateException("Python daemon failed to launch worker.")
       )
       authHelper.authToServer(socketChannel)
       socketChannel.configureBlocking(false)
@@ -247,7 +252,7 @@ private[spark] class PythonWorkerFactory(
    * Launch a worker by executing worker.py (by default) directly and telling it to connect to us.
    */
   private[spark] def createSimpleWorker(
-      blockingMode: Boolean): (PythonWorker, Option[ProcessHandle]) = {
+      blockingMode: Boolean): (PythonWorker, Option[PythonWorkerHandle]) = {
     var serverSocketChannel: ServerSocketChannel = null
     lazy val sockPath = new File(
       authHelper.sockDir,
@@ -317,7 +322,7 @@ private[spark] class PythonWorkerFactory(
         self.synchronized {
           simpleWorkers.put(worker, workerProcess)
         }
-        (worker.refresh(), ProcessHandle.of(pid).toScala)
+        (worker.refresh(), PythonWorkerHandle.of(pid, faultHandlerLogDir))
       } catch {
         case e: Exception =>
           throw new SparkException("Python worker failed to connect back.", e)
@@ -514,10 +519,11 @@ private[spark] class PythonWorkerFactory(
     self.synchronized {
       if (useDaemon) {
         if (daemon != null) {
-          daemonWorkers.get(worker).foreach { processHandle =>
+          daemonWorkers.get(worker).collect { case l: LocalPythonWorkerHandle => l.pid }
+            .foreach { pid =>
             // tell daemon to kill worker by pid
             val output = new DataOutputStream(daemon.getOutputStream)
-            output.writeInt(processHandle.pid().toInt)
+            output.writeInt(pid.toInt)
             output.flush()
             daemon.getOutputStream.flush()
           }

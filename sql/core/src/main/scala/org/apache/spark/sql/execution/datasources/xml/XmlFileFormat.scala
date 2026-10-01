@@ -131,7 +131,8 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
           broadcastedHadoopConf.value.value,
           file,
           () => parser(),
-          requiredSchema)
+          requiredSchema,
+          xmlOptions.archivePathFilterPattern)
       } else {
         XmlDataSource(xmlOptions).readFile(
           broadcastedHadoopConf.value.value,

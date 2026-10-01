@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.{IObjectPickler, Opcodes, Pickler}
 
-import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData, STUtils}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, TimestampNanosVal, UTF8String, VariantVal}
 
 object EvaluatePython {
 
@@ -45,6 +45,21 @@ object EvaluatePython {
   def needConversionInPython(dt: DataType): Boolean =
     TypeApiOps(dt).flatMap(_.needConversionInPython)
       .getOrElse(needConversionInPythonDefault(dt))
+
+  /**
+   * True if `dt` is, or structurally contains, a nanosecond-capable timestamp type. Used to gate
+   * the map-key collision check in [[toJava]] to maps whose key type can actually truncate when
+   * handed to Python (directly, or as a nanos field nested in a struct/array/map key).
+   */
+  private def typeCarriesTimestampNanos(dt: DataType): Boolean = dt match {
+    case _: AnyTimestampNanoType => true
+    case ArrayType(elementType, _) => typeCarriesTimestampNanos(elementType)
+    case MapType(keyType, valueType, _) =>
+      typeCarriesTimestampNanos(keyType) || typeCarriesTimestampNanos(valueType)
+    case StructType(fields) => fields.exists(f => typeCarriesTimestampNanos(f.dataType))
+    case udt: UserDefinedType[_] => typeCarriesTimestampNanos(udt.sqlType)
+    case _ => false
+  }
 
   private def needConversionInPythonDefault(dt: DataType): Boolean = dt match {
     case DateType | TimestampType | TimestampNTZType | VariantType | _: DayTimeIntervalType
@@ -100,6 +115,21 @@ object EvaluatePython {
         })
         values
 
+      case (map: MapData, mt: MapType) if typeCarriesTimestampNanos(mt.keyType) =>
+        // A nanosecond timestamp key is handed to Python as epoch micros (datetime.datetime is
+        // microsecond-resolution), so two keys that differ only below a microsecond collapse to
+        // the same Python key and one entry is silently dropped. A post-hoc size check is not
+        // reliable: composite keys (e.g. a struct with a nanos field and a binary field) stay
+        // distinct in the JVM map -- BytesWrapper uses identity equality -- yet still collapse
+        // once pickled to Python. Scalar precision loss is tolerable, but silently changing a
+        // map's cardinality is not, so reject nanosecond-keyed maps on this path outright. This
+        // covers the Python UDF input path, where the task failure propagates; the collect path
+        // is guarded earlier, in Python, since a failure in the background serve thread would not
+        // surface (see DataFrame.collect).
+        throw new SparkRuntimeException(
+          errorClass = "TIMESTAMP_NANOS_PYTHON_MAP_KEY",
+          messageParameters = Map("type" -> mt.keyType.sql))
+
       case (map: MapData, mt: MapType) =>
         sizeAcc.foreach(_.add(PickledSizeAccumulator.PER_VALUE_OVERHEAD))
         val jmap = new java.util.HashMap[Any, Any](map.numElements())
@@ -135,6 +165,16 @@ object EvaluatePython {
         } else {
           bytes
         }
+
+      case (v: TimestampNanosVal, _: AnyTimestampNanoType) =>
+        // `datetime.datetime` is microsecond-resolution, so the sub-microsecond remainder cannot
+        // be represented on the Python side: hand over epoch micros and let the Python type's
+        // fromInternal build the datetime. Without this case the value would fall through as a
+        // raw TimestampNanosVal, which has no registered pickler. See the Python Interop section
+        // of TimestampNanosTypeApiOps for the reverse direction and SPARK-57808 for the
+        // documented microsecond-only Python/UDF boundary.
+        sizeAcc.foreach(_.addLeaf(v.epochMicros))
+        v.epochMicros
 
       case (other, _) =>
         sizeAcc.foreach(_.addLeaf(other))

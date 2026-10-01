@@ -67,7 +67,7 @@ object ResolveWriteToStream extends Rule[LogicalPlan] {
 
       // Streaming writes with generated columns are not yet supported.
       s.catalogAndIdent.foreach { case (catalog, ident) =>
-        if (GeneratedColumn.supportsGeneratedColumnsOnWrite(Some(catalog), s.sink.columns())) {
+        if (GeneratedColumn.supportsGeneratedColumnsOnWrite(s.sink, s.sink.columns())) {
           throw QueryCompilationErrors.unsupportedTableOperationError(
             catalog, ident, "streaming write with generated columns")
         }

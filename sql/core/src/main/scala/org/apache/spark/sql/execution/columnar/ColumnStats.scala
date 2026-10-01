@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, UnsafeArrayData, UnsafeMapData, UnsafeRow}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
+import org.apache.spark.unsafe.types.{BinaryView, TimestampNanosVal, UTF8String}
 
 class ColumnStatisticsSchema(a: Attribute) extends Serializable {
   val upperBound = AttributeReference(a.name + ".upperBound", a.dataType, nullable = true)()
@@ -297,6 +297,28 @@ private[columnar] final class BinaryColumnStats extends ColumnStats {
     Array[Any](null, null, nullCount, count, sizeInBytes)
 }
 
+/**
+ * Size collector for Geometry/Geography columns. Their Catalyst physical value is a
+ * [[BinaryView]] (this is what ArrowWriter consumes via getBinaryView), so BinaryColumnStats,
+ * which reads row.getBinary, would throw a ClassCastException on a row that actually stores a
+ * BinaryView (e.g. a GenericInternalRow from a row-based reader or direct serializer use). Read
+ * the value through getBinaryView and use its byte length for the size; no min/max bounds.
+ */
+private[columnar] final class GeoColumnStats extends ColumnStats {
+  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
+    if (!row.isNullAt(ordinal)) {
+      val view: BinaryView = row.getBinaryView(ordinal)
+      sizeInBytes += view.numBytes() + 4
+      count += 1
+    } else {
+      gatherNullStats()
+    }
+  }
+
+  override def collectedStatistics: Array[Any] =
+    Array[Any](null, null, nullCount, count, sizeInBytes)
+}
+
 private[columnar] final class VariantColumnStats extends ColumnStats {
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
@@ -382,8 +404,30 @@ private[columnar] final class ObjectColumnStats(dataType: DataType) extends Colu
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
-      val size = columnType.actualSize(row, ordinal)
+      // Read the value once: columnar complex values (ColumnarArray/ColumnarMap/ColumnarRow)
+      // are views into ColumnVectors and do not expose getSizeInBytes, so fall back to the
+      // type's default size estimate instead of recording zero bytes for them (which would
+      // underestimate the relation's sizeInBytes and could make it wrongly eligible for
+      // broadcast). The Unsafe* match also guards other non-Unsafe values such as
+      // GenericArrayData, which columnType.actualSize would reject with a ClassCastException.
+      val size = columnType match {
+        case _: ARRAY => row.getArray(ordinal) match {
+          case unsafe: UnsafeArrayData => 4 + unsafe.getSizeInBytes
+          case _ => columnType.defaultSize
+        }
+        case _: MAP => row.getMap(ordinal) match {
+          case unsafe: UnsafeMapData => 4 + unsafe.getSizeInBytes
+          case _ => columnType.defaultSize
+        }
+        case struct: STRUCT =>
+          row.getStruct(ordinal, struct.dataType.fields.length) match {
+            case unsafe: UnsafeRow => 4 + unsafe.getSizeInBytes
+            case _ => columnType.defaultSize
+          }
+        case _ => columnType.actualSize(row, ordinal)
+      }
       sizeInBytes += size
+
       count += 1
     } else {
       gatherNullStats()

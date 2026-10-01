@@ -54,6 +54,14 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, ByteType, DataT
       The optional k parameter controls the size and accuracy of the sketch (default 200, range 8-65535).
       Larger k values provide more accurate quantile estimates but result in larger, slower sketches.
   """,
+  arguments = """
+    Arguments:
+      * expr - The expression to aggregate into the KLL sketch.
+          An expression that evaluates to an integral.
+      * k - Optional. The parameter controlling the size and accuracy of the sketch.
+          An expression that evaluates to an integer between 8 and 65535. Must be a
+          constant. Defaults to 200.
+  """,
   examples = """
     Examples:
       > SELECT LENGTH(kll_sketch_to_string_bigint(_FUNC_(col))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
@@ -201,6 +209,14 @@ case class KllSketchAggBigint(
       The optional k parameter controls the size and accuracy of the sketch (default 200, range 8-65535).
       Larger k values provide more accurate quantile estimates but result in larger, slower sketches.
   """,
+  arguments = """
+    Arguments:
+      * expr - The expression to aggregate into the KLL sketch.
+          An expression that evaluates to a float.
+      * k - Optional. The parameter controlling the size and accuracy of the sketch.
+          An expression that evaluates to an integer between 8 and 65535. Must be a
+          constant. Defaults to 200.
+  """,
   examples = """
     Examples:
       > SELECT LENGTH(kll_sketch_to_string_float(_FUNC_(col))) > 0 FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
@@ -336,6 +352,14 @@ case class KllSketchAggFloat(
     _FUNC_(expr[, k]) - Returns the KllDoublesSketch compact binary representation.
       The optional k parameter controls the size and accuracy of the sketch (default 200, range 8-65535).
       Larger k values provide more accurate quantile estimates but result in larger, slower sketches.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to aggregate into the KLL sketch.
+          An expression that evaluates to a float or double.
+      * k - Optional. The parameter controlling the size and accuracy of the sketch.
+          An expression that evaluates to an integer between 8 and 65535. Must be a
+          constant. Defaults to 200.
   """,
   examples = """
     Examples:
@@ -479,6 +503,14 @@ case class KllSketchAggDouble(
       The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
       If k is not specified, the merged sketch adopts the k value from the first input sketch.
   """,
+  arguments = """
+    Arguments:
+      * expr - The expression to merge into the KLL sketch.
+          An expression that evaluates to a binary KLL sketch representation.
+      * k - Optional. The parameter controlling the size and accuracy of the merged
+          sketch. An expression that evaluates to an integer between 8 and 65535. Must be
+          a constant. Defaults to the k value of the first input sketch.
+  """,
   examples = """
     Examples:
       > SELECT kll_sketch_get_n_bigint(_FUNC_(sketch)) FROM (SELECT kll_sketch_agg_bigint(col) as sketch FROM VALUES (1), (2), (3) tab(col) UNION ALL SELECT kll_sketch_agg_bigint(col) as sketch FROM VALUES (4), (5), (6) tab(col)) t;
@@ -552,6 +584,14 @@ case class KllMergeAggBigint(
       The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
       If k is not specified, the merged sketch adopts the k value from the first input sketch.
   """,
+  arguments = """
+    Arguments:
+      * expr - The expression to merge into the KLL sketch.
+          An expression that evaluates to a binary KLL sketch representation.
+      * k - Optional. The parameter controlling the size and accuracy of the merged
+          sketch. An expression that evaluates to an integer between 8 and 65535. Must be
+          a constant. Defaults to the k value of the first input sketch.
+  """,
   examples = """
     Examples:
       > SELECT kll_sketch_get_n_float(_FUNC_(sketch)) FROM (SELECT kll_sketch_agg_float(col) as sketch FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)) tab(col) UNION ALL SELECT kll_sketch_agg_float(col) as sketch FROM VALUES (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)), (CAST(6.0 AS FLOAT)) tab(col)) t;
@@ -624,6 +664,14 @@ case class KllMergeAggFloat(
       The input expression should contain binary sketch representations (e.g., from kll_sketch_agg_double).
       The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
       If k is not specified, the merged sketch adopts the k value from the first input sketch.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to merge into the KLL sketch.
+          An expression that evaluates to a binary KLL sketch representation.
+      * k - Optional. The parameter controlling the size and accuracy of the merged
+          sketch. An expression that evaluates to an integer between 8 and 65535. Must be
+          a constant. Defaults to the k value of the first input sketch.
   """,
   examples = """
     Examples:

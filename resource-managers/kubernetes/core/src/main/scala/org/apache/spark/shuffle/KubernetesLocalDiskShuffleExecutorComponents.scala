@@ -72,6 +72,42 @@ class KubernetesLocalDiskShuffleExecutorComponents(sparkConf: SparkConf)
 
 object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
   /**
+   * `File.listFiles` returns null when the directory cannot be read (an IO error, a permission
+   * denial, or the directory being removed during the walk). Skip such a directory with a warning
+   * instead of failing the whole recovery, so one unreadable entry cannot cost us every other
+   * recoverable file. This is the single-level counterpart of `SparkFileUtils.recursiveList`, and
+   * unlike `JavaUtils.listFilesSafely` it does not throw on an unlistable directory.
+   */
+  private def listEntriesOrEmpty(dir: File): Array[File] = {
+    val entries = dir.listFiles()
+    if (entries != null) {
+      entries
+    } else {
+      logWarning(log"Failed to list ${MDC(LogKeys.FILE_ABSOLUTE_PATH, dir.getAbsolutePath)}; " +
+        log"skipping it during shuffle data recovery.")
+      Array.empty[File]
+    }
+  }
+
+  /**
+   * Walks two levels up from a local directory to reach the volume root shared by all executor
+   * generations. Returns None for a path with fewer than three components, where `getParent`
+   * yields null.
+   */
+  private def volumeRootOf(localDir: String): Option[File] = {
+    val root = Option(new File(localDir).getParentFile).flatMap(p => Option(p.getParentFile))
+    if (root.isEmpty) {
+      logWarning(log"Cannot locate the volume root of local directory " +
+        log"${MDC(LogKeys.PATH, localDir)}; skipping it during shuffle data recovery. Recovery " +
+        log"requires a local directory nested at least two levels below the volume root, such as " +
+        log"/data/spark-x/executor-y. Set the mount path of the spark-local-dir-* volume, or " +
+        log"${MDC(LogKeys.CONFIG, "spark.local.dir")} when no such volume is mounted, " +
+        log"accordingly.")
+    }
+    root
+  }
+
+  /**
    * This tries to recover shuffle data of dead executors' local dirs if exists.
    * Since the executors are already dead, we cannot use `getHostLocalDirs`.
    * This is enabled only when spark.kubernetes.driver.reusePersistentVolumeClaim is true.
@@ -79,18 +115,18 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
   def recoverDiskStore(conf: SparkConf, bm: BlockManager): Unit = {
     // Find All files
     val (checksumFiles, files) = Utils.getConfiguredLocalDirs(conf)
-      .filter(_ != null)
-      .map(s => new File(new File(new File(s).getParent).getParent))
+      .filter(s => s != null && s.nonEmpty)
+      .flatMap(volumeRootOf)
       .flatMap { dir =>
-        val oldDirs = dir.listFiles().filter { f =>
+        val oldDirs = listEntriesOrEmpty(dir).filter { f =>
           f.isDirectory && f.getName.startsWith("spark-")
         }
-        val files = oldDirs
-          .flatMap(_.listFiles).filter(_.isDirectory) // executor-xxx
-          .flatMap(_.listFiles).filter(_.isDirectory) // blockmgr-xxx
-          .flatMap(_.listFiles).filter(_.isDirectory) // 00
-          .flatMap(_.listFiles)
-        if (files != null) files.toImmutableArraySeq else Seq.empty
+        oldDirs
+          .flatMap(listEntriesOrEmpty).filter(_.isDirectory) // executor-xxx
+          .flatMap(listEntriesOrEmpty).filter(_.isDirectory) // blockmgr-xxx
+          .flatMap(listEntriesOrEmpty).filter(_.isDirectory) // 00
+          .flatMap(listEntriesOrEmpty)
+          .toImmutableArraySeq
       }
       .partition(_.getName.contains(".checksum"))
     val (indexFiles, dataFiles) = files.partition(_.getName.endsWith(".index"))

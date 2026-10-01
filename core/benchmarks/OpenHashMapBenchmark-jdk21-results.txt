@@ -1,0 +1,26 @@
+================================================================================================
+OpenHashMap vs java.util.HashMap
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+Insert 1000000 distinct String keys:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+OpenHashMap                                         262            280          15          3.8         262.0       1.0X
+java.util.HashMap                                    48             84          57         21.0          47.7       5.5X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+Aggregate 5000000 ops on 1000000 String keys:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------
+OpenHashMap changeValue                                 858            885          28          5.8         171.7       1.0X
+java.util.HashMap merge                                 772            811          60          6.5         154.5       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+Look up 1000000 String keys in random order:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+OpenHashMap                                            101            106           3          9.9         100.9       1.0X
+java.util.HashMap                                       48             53           3         20.7          48.3       2.1X
+
+

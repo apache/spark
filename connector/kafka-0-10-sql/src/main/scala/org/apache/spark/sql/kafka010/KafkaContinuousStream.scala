@@ -70,7 +70,7 @@ class KafkaContinuousStream(
     val offsets = initialOffsets match {
       case EarliestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchEarliestOffsets())
       case LatestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchLatestOffsets(None))
-      case SpecificOffsetRangeLimit(p) => offsetReader.fetchSpecificOffsets(p, reportDataLoss)
+      case o: SpecificOffsetRangeLimit => offsetReader.fetchSpecificOffsets(o, reportDataLoss)
       case SpecificTimestampRangeLimit(p, strategy) =>
         offsetReader.fetchSpecificTimestampBasedOffsets(p, isStartingOffsets = true, strategy)
       case GlobalTimestampRangeLimit(ts, strategy) =>

@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeSet, BindReferences, BoundReference, Cast, Expression, GenericInternalRow, JoinedRow, Literal, Multiply, NamedExpression, UnsafeProjection}
+import org.apache.spark.sql.catalyst.plans.logical.BinBy
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -33,9 +34,9 @@ import org.apache.spark.sql.types.DoubleType
  * bin overlapping `[rangeStart, rangeEnd)`, scaling the DISTRIBUTE UNIFORM columns by the overlap
  * fraction and appending `bin_start`, `bin_end`, `bin_distribute_ratio`.
  *
- * Bin boundaries reuse [[DateTimeUtils.timeBucketDTInterval]] /
- * [[DateTimeUtils.timestampAddDayTime]], matching `time_bucket`: sub-day widths use UTC microsecond
- * arithmetic, multi-day widths use civil-time arithmetic in the session zone (UTC for
+ * Bin boundaries lie on the grid `bin_start(k) =
+ * [[DateTimeUtils.timeBucketFromIndexDTInterval]](width, k, origin, zone)`. Sub-day widths use UTC
+ * microsecond arithmetic, multi-day widths use civil-time arithmetic in the session zone (UTC for
  * TIMESTAMP_NTZ). DISTRIBUTE UNIFORM columns are FLOAT or DOUBLE only and scale by multiplication.
  */
 case class BinByExec(
@@ -65,6 +66,18 @@ case class BinByExec(
 
   override def producedAttributes: AttributeSet =
     AttributeSet(scaledDistributeColumns ++ appendedAttributes)
+
+  override protected def stringArgs: Iterator[Any] = {
+    BinBy.explainStringArgs(
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      binWidthMicros = binWidthMicros,
+      originMicros = originMicros,
+      distributeColumns = distributeColumns,
+      scaledDistributeColumns = scaledDistributeColumns,
+      appendedAttributes = appendedAttributes,
+      timeZoneId = timeZoneId)
+  }
 
   // The trait keeps a child partitioning only when its keys are in the output: a partitioning keyed
   // on a pass-through column survives; one keyed on a scaled DISTRIBUTE column (fresh ExprId) does
@@ -107,8 +120,9 @@ case class BinByExec(
             if (rs > re) {
               throw QueryExecutionErrors.binByInvalidRangeError(fmt.format(rs), fmt.format(re))
             } else if (rs == re) {
-              val binStart = DateTimeUtils.timeBucketDTInterval(width, rs, origin, zone)
-              val binEnd = DateTimeUtils.timestampAddDayTime(binStart, width, zone)
+              val (k, binStart) = DateTimeUtils.timeBucketFromTimestampDTInterval(width, rs, origin,
+                zone)
+              val binEnd = DateTimeUtils.timeBucketFromIndexDTInterval(width, k + 1, origin, zone)
               appended.update(0, binStart)
               appended.update(1, binEnd)
               appended.update(2, 1.0d)
@@ -116,17 +130,21 @@ case class BinByExec(
             } else {
               val total = Math.subtractExact(re, rs)
               new Iterator[InternalRow] {
-                private var curStart =
-                  DateTimeUtils.timeBucketDTInterval(width, rs, origin, zone)
+                // Advance the bucket index and read each boundary off the grid, rather than
+                // walking one bin end to the next start.
+                private var (k, curStart) =
+                  DateTimeUtils.timeBucketFromTimestampDTInterval(width, rs, origin, zone)
 
                 override def hasNext: Boolean = curStart < re
 
                 override def next(): InternalRow = {
-                  val curEnd = DateTimeUtils.timestampAddDayTime(curStart, width, zone)
+                  val curEnd =
+                    DateTimeUtils.timeBucketFromIndexDTInterval(width, k + 1, origin, zone)
                   val overlap = math.min(re, curEnd) - math.max(rs, curStart)
                   appended.update(0, curStart)
                   appended.update(1, curEnd)
                   appended.update(2, overlap.toDouble / total.toDouble)
+                  k += 1
                   curStart = curEnd
                   proj(joined.withRight(appended))
                 }

@@ -89,6 +89,28 @@ class NoOpGetStatusPlugin extends GetStatusPlugin {
 }
 
 /**
+ * A plugin that returns a list containing a null element, to test null filtering.
+ */
+class NullElementGetStatusPlugin extends GetStatusPlugin {
+  override def processRequestExtensions(
+      sessionHolder: SessionHolder,
+      requestExtensions: util.List[protobuf.Any]): Optional[util.List[protobuf.Any]] =
+    listWithNull()
+
+  override def processOperationExtensions(
+      operationId: String,
+      sessionHolder: SessionHolder,
+      operationExtensions: util.List[protobuf.Any]): Optional[util.List[protobuf.Any]] =
+    listWithNull()
+
+  private def listWithNull(): Optional[util.List[protobuf.Any]] = {
+    val result = new util.ArrayList[protobuf.Any]()
+    result.add(null)
+    Optional.of(result)
+  }
+}
+
+/**
  * A plugin that always throws a RuntimeException.
  */
 class FailingGetStatusPlugin extends GetStatusPlugin {
@@ -343,6 +365,32 @@ class GetStatusHandlerSuite extends SharedSparkSession {
     assert(opExtValues.size == 2)
     assert(opExtValues.contains(s"op-echo:${executeHolder.operationId}:safe"))
     assert(opExtValues.contains(s"second-op:${executeHolder.operationId}:safe"))
+  }
+
+  test("GetStatus filters null extension elements returned by a plugin") {
+    SparkConnectPluginRegistry.setGetStatusPluginsForTesting(
+      Seq(new NullElementGetStatusPlugin(), new EchoGetStatusPlugin()))
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val command = proto.Command.newBuilder().build()
+    val executeHolder = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+
+    val reqExt = protobuf.Any.pack(StringValue.of("data"))
+    val opExt = protobuf.Any.pack(StringValue.of("data"))
+    val response = sendGetOperationStatusRequest(
+      sessionHolder.sessionId,
+      operationIds = Seq(executeHolder.operationId),
+      userId = sessionHolder.userId,
+      requestExtensions = Seq(reqExt),
+      operationExtensions = Seq(opExt))
+
+    // The null element is dropped; only the healthy plugin's extension survives, at both levels.
+    val responseExtValues = response.getExtensionsList.asScala
+      .map(_.unpack(classOf[StringValue]).getValue)
+    assert(responseExtValues == Seq("request-echo:data"))
+
+    val opExtValues = response.getOperationStatusesList.asScala.head.getExtensionsList.asScala
+      .map(_.unpack(classOf[StringValue]).getValue)
+    assert(opExtValues == Seq(s"op-echo:${executeHolder.operationId}:data"))
   }
 }
 

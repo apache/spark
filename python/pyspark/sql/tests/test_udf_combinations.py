@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
-from typing import Iterator
 import itertools
 import unittest
+from typing import Iterator
 
-from pyspark.sql.functions import udf, arrow_udf, pandas_udf
+from pyspark.sql.functions import arrow_udf, pandas_udf, udf
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     have_pandas,

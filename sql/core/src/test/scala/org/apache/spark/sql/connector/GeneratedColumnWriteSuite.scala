@@ -18,11 +18,12 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
-import org.apache.spark.sql.connector.catalog.{InMemoryCatalog, InMemoryRowLevelOperationTableCatalog,
-  TableCatalogCapability}
+import org.apache.spark.sql.catalyst.util.GeneratedColumn
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryRowLevelOperationTableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 
@@ -40,16 +41,10 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  // A catalog that supports creating generated columns but does NOT declare
-  // SUPPORT_GENERATED_COLUMN_ON_WRITE, so Spark must not auto-fill or enforce them.
-  private val noWriteCapCat = "nowritecapcat"
-
-  private def withNoWriteCapCatalog(f: => Unit): Unit = {
-    withSQLConf(s"spark.sql.catalog.$noWriteCapCat" ->
-      classOf[InMemoryNoGenColWriteCatalog].getName) {
-      f
-    }
-  }
+  // A table property that makes the in-memory test table omit the
+  // GENERATE_COLUMN_VALUES_ON_WRITE capability, so Spark must not auto-fill or enforce
+  // generated columns for it.
+  private val noWriteCapProp = "generate-column-values-on-write"
 
   private def hasCheckInvariant(sqlText: String): Boolean = {
     val parsed = spark.sessionState.sqlParser.parsePlan(sqlText)
@@ -102,6 +97,17 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
         updateFunc(table)
       }
     }
+  }
+
+  private def generationExpressionOf(table: String, column: String): Option[String] = {
+    val loaded = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), table))
+    Option(loaded.columns().find(_.name == column).get.generationExpression())
+  }
+
+  private def assertNoGenerationMetadata(df: DataFrame, column: String): Unit = {
+    val metadata = df.schema(column).metadata
+    assert(!metadata.contains(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY),
+      s"generation expression leaked into the schema of $column: ${metadata.json}")
   }
 
   testGeneratedColumnWrite("append_data_v2") { table =>
@@ -369,6 +375,26 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
         sql(s"INSERT INTO testcat.$tblName VALUES (DATE'2024-06-15')")
       }
       assert(ex.getMessage.contains("not enough data columns"))
+    }
+  }
+
+  test("INSERT WITH SCHEMA EVOLUTION by position does not auto-fill trailing generated column") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  id INT,
+             |  doubled INT GENERATED ALWAYS AS (id * 2)
+             |) USING foo""".stripMargin)
+
+      withSQLConf(SQLConf.INSERT_INTO_NESTED_TYPE_COERCION_ENABLED.key -> "true") {
+        val ex = intercept[AnalysisException] {
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE testcat.$tblName SELECT 5")
+        }
+        assert(ex.getCondition == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS")
+      }
+
+      sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE testcat.$tblName(id) SELECT 5")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(5, 10))
     }
   }
 
@@ -966,6 +992,68 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("generation expression is not exposed in the read schema") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  id INT,
+             |  doubled INT GENERATED ALWAYS AS (id * 2)
+             |) USING foo""".stripMargin)
+      // The table still declares the generated column; only the internal metadata is hidden.
+      assert(generationExpressionOf(tblName, "doubled").contains("id * 2"))
+      assertNoGenerationMetadata(spark.table(s"testcat.$tblName"), "doubled")
+      assertNoGenerationMetadata(spark.read.table(s"testcat.$tblName"), "doubled")
+      assertNoGenerationMetadata(sql(s"SELECT * FROM testcat.$tblName"), "doubled")
+      assertNoGenerationMetadata(spark.readStream.table(s"testcat.$tblName"), "doubled")
+    }
+  }
+
+  test("CTAS from a table with generated columns does not create generated columns") {
+    val srcName = "src_tab"
+    val dstName = "dst_tab"
+    withTable(s"testcat.$srcName", s"testcat.$dstName") {
+      sql(s"""CREATE TABLE testcat.$srcName(
+             |  id INT,
+             |  doubled INT GENERATED ALWAYS AS (id * 2)
+             |) USING foo""".stripMargin)
+      sql(s"INSERT INTO testcat.$srcName (id) VALUES (1)")
+      sql(s"CREATE TABLE testcat.$dstName USING foo AS SELECT * FROM testcat.$srcName")
+      // The query output is plain data, so the new table must not inherit the generated column.
+      assert(generationExpressionOf(dstName, "doubled").isEmpty)
+      // Confirms it behaves as an ordinary column: a value the expression would not produce is
+      // written through instead of failing a generated column constraint.
+      sql(s"INSERT INTO testcat.$dstName VALUES (5, 999)")
+      checkAnswer(spark.table(s"testcat.$dstName"), Row(1, 2) :: Row(5, 999) :: Nil)
+    }
+  }
+
+  test("streaming write to a new table does not create generated columns") {
+    val srcName = "src_tab"
+    val dstName = "dst_tab"
+    withTable(s"testcat.$srcName", s"testcat.$dstName") {
+      withTempDir { checkpointDir =>
+        sql(s"""CREATE TABLE testcat.$srcName(
+               |  id INT,
+               |  doubled INT GENERATED ALWAYS AS (id * 2)
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$srcName (id) VALUES (1)")
+        // toTable creates the target from the streaming DataFrame's schema, which must not carry
+        // the source's generation expression over: a new table with a generated column would make
+        // this very write unsupported.
+        val query = spark.readStream.table(s"testcat.$srcName").writeStream
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .toTable(s"testcat.$dstName")
+        try {
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+        assert(generationExpressionOf(dstName, "doubled").isEmpty)
+        checkAnswer(spark.table(s"testcat.$dstName"), Row(1, 2))
+      }
+    }
+  }
+
   test("streaming write with generated columns is blocked") {
     import testImplicits._
     val tblName = "my_tab"
@@ -1134,44 +1222,29 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  test("catalog without write capability does not auto-fill or enforce generated columns") {
-    withNoWriteCapCatalog {
-      val tblName = "my_tab"
-      withTable(s"$noWriteCapCat.$tblName") {
-        sql(s"""CREATE TABLE $noWriteCapCat.$tblName(
-               |  a INT,
-               |  b INT GENERATED ALWAYS AS (a + 1)
-               |) USING foo""".stripMargin)
+  test("table without write capability does not auto-fill or enforce generated columns") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  b INT GENERATED ALWAYS AS (a + 1)
+             |) USING foo TBLPROPERTIES ('$noWriteCapProp' = 'false')""".stripMargin)
 
-        // A user-provided value that does NOT match the generation expression is written
-        // as-is: no constraint is enforced because the catalog does not opt in.
-        sql(s"INSERT INTO $noWriteCapCat.$tblName(a, b) VALUES (5, 999)")
-        checkAnswer(spark.table(s"$noWriteCapCat.$tblName"), Row(5, 999))
+      // A user-provided value that does NOT match the generation expression is written
+      // as-is: no constraint is enforced because the table does not opt in.
+      sql(s"INSERT INTO testcat.$tblName(a, b) VALUES (5, 999)")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(5, 999))
 
-        // Omitting the generated column does not auto-fill; it is treated as a regular
-        // nullable column and filled with null.
-        sql(s"INSERT INTO $noWriteCapCat.$tblName(a) VALUES (7)")
-        checkAnswer(
-          spark.table(s"$noWriteCapCat.$tblName"),
-          Row(5, 999) :: Row(7, null) :: Nil)
+      // Omitting the generated column does not auto-fill; it is treated as a regular
+      // nullable column and filled with null.
+      sql(s"INSERT INTO testcat.$tblName(a) VALUES (7)")
+      checkAnswer(
+        spark.table(s"testcat.$tblName"),
+        Row(5, 999) :: Row(7, null) :: Nil)
 
-        // No CheckInvariant is added to the plan for the generated column.
-        assert(!hasCheckInvariant(s"INSERT INTO $noWriteCapCat.$tblName(a, b) VALUES (5, 6)"),
-          "No CheckInvariant should be added when the catalog lacks the write capability")
-      }
+      // No CheckInvariant is added to the plan for the generated column.
+      assert(!hasCheckInvariant(s"INSERT INTO testcat.$tblName(a, b) VALUES (5, 6)"),
+        "No CheckInvariant should be added when the table lacks the write capability")
     }
-  }
-}
-
-/**
- * A catalog that supports creating tables with generated columns but does NOT declare
- * [[TableCatalogCapability.SUPPORT_GENERATED_COLUMN_ON_WRITE]], so Spark leaves generated
- * column handling to the connector (no auto-fill, no constraint enforcement on write).
- */
-class InMemoryNoGenColWriteCatalog extends InMemoryCatalog {
-  override def capabilities: java.util.Set[TableCatalogCapability] = {
-    val caps = new java.util.HashSet[TableCatalogCapability](super.capabilities)
-    caps.remove(TableCatalogCapability.SUPPORT_GENERATED_COLUMN_ON_WRITE)
-    caps
   }
 }

@@ -29,6 +29,13 @@ import org.apache.spark.sql.types._
  */
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise AND of `expr1` and `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1 - The first operand of the bitwise AND.
+        An expression that evaluates to an integral.
+      * expr2 - The second operand of the bitwise AND.
+        An expression that evaluates to an integral.
+  """,
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 5;
@@ -78,6 +85,13 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
  */
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise OR of `expr1` and `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1 - The first operand of the bitwise OR.
+        An expression that evaluates to an integral.
+      * expr2 - The second operand of the bitwise OR.
+        An expression that evaluates to an integral.
+  """,
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 5;
@@ -127,6 +141,13 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
  */
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise exclusive OR of `expr1` and `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1 - The first operand of the bitwise exclusive OR.
+        An expression that evaluates to an integral.
+      * expr2 - The second operand of the bitwise exclusive OR.
+        An expression that evaluates to an integral.
+  """,
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 5;
@@ -174,6 +195,11 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
  */
 @ExpressionDescription(
   usage = "_FUNC_ expr - Returns the result of bitwise NOT of `expr`.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the bitwise NOT of.
+        An expression that evaluates to an integral.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_ 0;
@@ -216,6 +242,11 @@ case class BitwiseNot(child: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the number of bits that are set in the argument expr as an" +
     " unsigned 64-bit integer, or NULL if the argument is NULL.",
+  arguments = """
+    Arguments:
+      * expr - The argument whose set bits are counted.
+        An expression that evaluates to an integral or boolean.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -265,6 +296,13 @@ object BitwiseGetUtil {
     _FUNC_(expr, pos) - Returns the value of the bit (0 or 1) at the specified position.
       The positions are numbered from right to left, starting at zero.
       The position argument cannot be negative.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to read the bit from.
+        An expression that evaluates to an integral.
+      * pos - The position of the bit to return, numbered from right to left starting at zero.
+        An expression that evaluates to an integer.
   """,
   examples = """
     Examples:

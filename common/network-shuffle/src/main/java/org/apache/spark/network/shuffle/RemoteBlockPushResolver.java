@@ -893,6 +893,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             String.format("Failed to get the merge directory information from the " +
               "shuffleManagerMeta %s in executor registration message", shuffleManagerMeta));
         }
+        validateMergeDirectoryName(mergeDir, shuffleManagerMeta);
         if (attemptId == UNDEFINED_ATTEMPT_ID) {
           // When attemptId is -1, there is no attemptId stored in the ExecutorShuffleInfo.
           // Only the first ExecutorRegister message can register the merge dirs.
@@ -946,6 +947,25 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       }
     } else {
       logger.warn("ExecutorShuffleInfo does not have the expected merge directory information");
+    }
+  }
+
+  /**
+   * Validates the peer-supplied merge directory name. Spark only ever generates a
+   * single directory name here ("merge_manager" or "merge_manager_&lt;attemptId&gt;"), so a
+   * value containing a path separator, a "." or ".." segment, can be rejected.
+   */
+  private static void validateMergeDirectoryName(String mergeDir, String shuffleManagerMeta) {
+    boolean valid = !mergeDir.isEmpty()
+      && !mergeDir.equals(".")
+      && !mergeDir.equals("..")
+      && mergeDir.indexOf('/') < 0
+      && mergeDir.indexOf('\\') < 0
+      && !mergeDir.contains(File.separator);
+    if (!valid) {
+      throw new IllegalArgumentException(
+        String.format("Invalid merge directory name %s from the shuffleManagerMeta %s in " +
+          "executor registration message", mergeDir, shuffleManagerMeta));
     }
   }
 
@@ -2031,13 +2051,28 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         String mergeDirectory,
         int subDirsPerLocalDir) {
       activeLocalDirs = Arrays.stream(localDirs)
-        .map(localDir ->
+        .map(localDir -> {
           // Merge directory is created at the same level as block-manager directory. The list of
           // local directories that we get from ExecutorShuffleInfo are paths of each
           // block-manager directory. The mergeDirectory is the merge directory name that we get
           // from ExecutorShuffleInfo. To find out the merge directory location, we first find the
           // parent dir of the block-manager directory and then append merge directory name to it.
-          Paths.get(localDir).getParent().resolve(mergeDirectory).toFile().getPath())
+          Path parent = Paths.get(localDir).getParent();
+          if (parent == null) {
+            throw new IllegalArgumentException(
+              "Invalid local directory without a parent dir: " + localDir);
+          }
+          // The resolved merge directory must remain directly under the
+          // parent of the local dir.
+          Path normalizedParent = parent.normalize();
+          Path resolved = normalizedParent.resolve(mergeDirectory).normalize();
+          if (resolved.equals(normalizedParent) || !resolved.startsWith(normalizedParent)) {
+            throw new IllegalArgumentException(
+              String.format("Merge directory %s escapes the local dir parent %s for " +
+                "application %s", mergeDirectory, normalizedParent, appId));
+          }
+          return resolved.toFile().getPath();
+        })
         .toArray(String[]::new);
       this.subDirsPerLocalDir = subDirsPerLocalDir;
       if (logger.isInfoEnabled()) {

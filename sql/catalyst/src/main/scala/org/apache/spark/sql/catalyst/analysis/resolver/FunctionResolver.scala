@@ -22,6 +22,7 @@ import scala.util.Random
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionResolution,
+  SQLFunctionExpression,
   UnresolvedFunction,
   UnresolvedSeed
 }
@@ -59,13 +60,14 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  * expression is [[TimeZoneAwareExpression]], apply timezone.
  */
 class FunctionResolver(
-    expressionResolver: ExpressionResolver,
+    protected val expressionResolver: ExpressionResolver,
     protected val functionResolution: FunctionResolution,
     aggregateExpressionResolver: AggregateExpressionResolver,
     binaryArithmeticResolver: BinaryArithmeticResolver)
     extends TreeNodeResolver[UnresolvedFunction, Expression]
     with ProducesUnresolvedSubtree
-    with CoercesExpressionTypes {
+    with CoercesExpressionTypes
+    with FunctionResolverUtils {
 
   private val random = new Random()
   private val traversals = expressionResolver.getExpressionTreeTraversals
@@ -131,9 +133,11 @@ class FunctionResolver(
       expressionResolutionContext.windowFunctionNestednessLevel += 1
     }
 
+    val unresolvedFunctionWithExpandedStarArgs = handleStarInArguments(unresolvedFunction)
+
     val functionWithResolvedChildren =
       withResolvedChildren(
-        unresolvedExpression = unresolvedFunction,
+        unresolvedExpression = unresolvedFunctionWithExpandedStarArgs,
         resolveChild = expressionResolver.resolve _
       ).asInstanceOf[UnresolvedFunction]
 
@@ -148,6 +152,8 @@ class FunctionResolver(
   private def handlePartiallyResolvedFunction(partiallyResolvedFunction: Expression): Expression = {
     val expressionResolutionContext = expressionResolutionContextStack.peek()
     val resolvedFunction = partiallyResolvedFunction match {
+      case _: SQLFunctionExpression =>
+        throw new ExplicitlyUnsupportedResolverFeature("SQL function expression")
       case collate @ Collate(_, collation: UnresolvedCollation) =>
         val withResolvedCollation = collate.copy(
           collation = ResolvedCollation(

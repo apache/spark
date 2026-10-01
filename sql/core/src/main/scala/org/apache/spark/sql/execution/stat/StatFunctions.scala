@@ -81,7 +81,8 @@ object StatFunctions extends Logging {
     val accuracy = if (relativeError == 0.0) {
       Int.MaxValue
     } else {
-      math.min(Int.MaxValue, (1.0 / relativeError).ceil.toLong).toInt
+      val raw = (1.0 / relativeError).ceil.toLong
+      math.max(1, math.min(Int.MaxValue, raw)).toInt
     }
 
     val results = Array.fill(cols.size)(Seq.empty[Double])

@@ -16,6 +16,9 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import datetime
+import decimal
+import pstats
 from typing import (
     Any,
     Callable,
@@ -27,15 +30,12 @@ from typing import (
     TypeVar,
     Union,
 )
+
 from typing_extensions import Literal, Protocol
 
-import datetime
-import decimal
-import pstats
-
+import pyspark.sql.types
 from pyspark._typing import PrimitiveType
 from pyspark.profiler import CodeMapDict
-import pyspark.sql.types
 from pyspark.sql.column import Column
 from pyspark.sql.tvf_argument import TableValuedFunctionArgument
 
@@ -64,6 +64,11 @@ RowLike = TypeVar("RowLike", List[Any], Tuple[Any, ...], pyspark.sql.types.Row)
 
 SQLBatchedUDFType = Literal[100]
 SQLArrowBatchedUDFType = Literal[101]
+SQLArrowElementwiseUDFType = Literal[102]
+SQLScalarPandasElementwiseUDFType = Literal[103]
+SQLScalarPandasIterElementwiseUDFType = Literal[104]
+SQLScalarArrowElementwiseUDFType = Literal[105]
+SQLScalarArrowIterElementwiseUDFType = Literal[106]
 SQLTableUDFType = Literal[300]
 SQLArrowTableUDFType = Literal[301]
 SQLArrowUDTFType = Literal[302]

@@ -17,17 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.Locale
-
-import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionResolution,
   ResolvedStar,
+  RoutedSqlJsonStarOwner,
   Star,
   UnresolvedFunction,
   UnresolvedStar
 }
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
@@ -59,21 +57,40 @@ trait FunctionResolverUtils {
    */
   protected def handleStarInArguments(
       unresolvedFunction: UnresolvedFunction): UnresolvedFunction = {
-    val functionContainsStarInArguments = unresolvedFunction.arguments.exists {
+    val functionContainsDirectStarInArguments = unresolvedFunction.arguments.exists {
       case _: Star => true
       case _ => false
     }
 
-    if (!functionContainsStarInArguments) {
+    // Distinct-agnostic probe for the builtin `count`. Lazy so only the count(*)/count(tbl.*) paths
+    // pay for the (possibly external) lookup; reused by the rewrite and the single-table guard.
+    lazy val resolvesToCountBuiltin =
+      functionResolution.functionNameResolvesToBuiltin(unresolvedFunction.nameParts, "count")
+
+    if (!functionContainsDirectStarInArguments) {
       unresolvedFunction
-    } else if (isNonDistinctCount(unresolvedFunction) &&
-      hasSingleSimpleStarArgument(unresolvedFunction)) {
-      normalizeCountExpression(unresolvedFunction)
     } else {
-      assertSingleTableStarNotInCountFunction(unresolvedFunction)
-      unresolvedFunction.copy(
-        arguments = expressionResolver.expandStarExpressions(unresolvedFunction.arguments)
-      )
+      // Resolve the routed SQL/JSON owner once and mirror the fixed-point analyzer.
+      functionResolution.selectRoutedSqlJsonDirectStarOwner(unresolvedFunction.nameParts) match {
+        case RoutedSqlJsonStarOwner.RejectStockBuiltin =>
+          throw QueryCompilationErrors.invalidStarUsageError(
+            s"expression `${unresolvedFunction.prettyName}`",
+            extractStar(unresolvedFunction.arguments))
+        case RoutedSqlJsonStarOwner.BindShadowOwner(candidate) =>
+          unresolvedFunction.copy(
+            arguments = expressionResolver.expandStarExpressions(unresolvedFunction.arguments),
+            boundOwner = Some(candidate))
+        case RoutedSqlJsonStarOwner.NoBinding =>
+          if (!unresolvedFunction.isDistinct && resolvesToCountBuiltin &&
+              hasSingleSimpleStarArgument(unresolvedFunction)) {
+            normalizeCountExpression(unresolvedFunction)
+          } else {
+            assertSingleTableStarNotInCountFunction(unresolvedFunction, resolvesToCountBuiltin)
+            unresolvedFunction.copy(
+              arguments = expressionResolver.expandStarExpressions(unresolvedFunction.arguments)
+            )
+          }
+      }
     }
   }
 
@@ -94,43 +111,8 @@ trait FunctionResolverUtils {
       case _ => false
     }
 
-  /**
-   * Method used to determine whether the given function is non-distinct `count` function,
-   * with optional normalization.
-   */
-  private def isNonDistinctCount(
-      unresolvedFunction: UnresolvedFunction,
-      normalizeFunctionName: Boolean = true
-  ): Boolean = {
-    !unresolvedFunction.isDistinct &&
-      isCount(unresolvedFunction, normalizeFunctionName) &&
-      !isUnqualifiedCountShadowedByTemp(unresolvedFunction)
-  }
-
-  /**
-   * Keep single-pass behavior aligned with fixed-point: when PATH puts system.session before
-   * system.builtin and a temp `count` exists, unqualified `count(*)` must not be rewritten to
-   * `count(1)`.
-   */
-  private def isUnqualifiedCountShadowedByTemp(unresolvedFunction: UnresolvedFunction): Boolean = {
-    unresolvedFunction.nameParts.length == 1 &&
-      functionResolution.isSessionBeforeBuiltinInPath &&
-      functionResolution.catalogManager.v1SessionCatalog
-        .isTemporaryFunction(FunctionIdentifier(unresolvedFunction.nameParts.head))
-  }
-
-  private def isCount(
-      unresolvedFunction: UnresolvedFunction,
-      normalizeFunctionName: Boolean = true
-  ): Boolean = {
-    val isCountName = if (normalizeFunctionName) {
-      unresolvedFunction.nameParts.head.toLowerCase(Locale.ROOT) == "count"
-    } else {
-      unresolvedFunction.nameParts.head == "count"
-    }
-
-    unresolvedFunction.nameParts.length == 1 && isCountName
-  }
+  private def extractStar(expressions: Seq[Expression]): Seq[Star] =
+    expressions.collect { case s: Star => s }
 
   /**
    * Method used to replace the `count(*)` function with `count(1)` function. Resolution of the
@@ -141,7 +123,6 @@ trait FunctionResolverUtils {
   private def normalizeCountExpression(
       unresolvedFunction: UnresolvedFunction): UnresolvedFunction = {
     unresolvedFunction.copy(
-      nameParts = Seq("count"),
       arguments = Seq(Literal(1)),
       filter = unresolvedFunction.filter
     )
@@ -150,19 +131,14 @@ trait FunctionResolverUtils {
   /**
    * Throws an exception according to [[SQLConf.ALLOW_STAR_WITH_SINGLE_TABLE_IDENTIFIER_IN_COUNT]].
    *
-   * Note that check for function name is case-sensitive. Even when flag is false we allow
-   * `COUNT(tableName.*)` but block `count(tableName.*)`. This is the same behavior as in
-   * fixed-point analyzer, and clearly it is a bug. If this is ever fixed it should be done in both
-   * analyzers simultaneously.
-   *
    * See [[handleStarInArguments]]
    */
   private def assertSingleTableStarNotInCountFunction(
-      unresolvedFunction: UnresolvedFunction): Unit = {
-    if (!conf.allowStarWithSingleTableIdentifierInCount && isCount(
-        unresolvedFunction = unresolvedFunction,
-        normalizeFunctionName = false
-      ) && unresolvedFunction.arguments.length == 1) {
+      unresolvedFunction: UnresolvedFunction,
+      resolvesToCountBuiltin: Boolean): Unit = {
+    if (!conf.allowStarWithSingleTableIdentifierInCount &&
+      resolvesToCountBuiltin &&
+      unresolvedFunction.arguments.length == 1) {
       unresolvedFunction.arguments.head match {
         case star: UnresolvedStar if scopes.current.isStarQualifiedByTable(star) =>
           throw QueryCompilationErrors

@@ -18,16 +18,17 @@
 import importlib
 import math
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from pandas.core.base import PandasObject  # type: ignore[attr-defined]
 from pandas.core.dtypes.inference import is_integer
 
-from pyspark.sql import functions as F, Column
-from pyspark.sql.internal import InternalFunction as SF
-from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
+from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.utils import name_like_string
+from pyspark.sql import Column
+from pyspark.sql import functions as F
+from pyspark.sql.internal import InternalFunction as SF
 
 
 class TopNPlotBase:
@@ -527,6 +528,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             try:
                 # test if matplotlib can be imported
                 import matplotlib  # noqa: F401
+
                 from pyspark.pandas.plot import matplotlib as module
             except ImportError:
                 raise ImportError(
@@ -539,6 +541,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             try:
                 # test if plotly can be imported
                 import plotly  # noqa: F401
+
                 from pyspark.pandas.plot import plotly as module
             except ImportError:
                 raise ImportError(

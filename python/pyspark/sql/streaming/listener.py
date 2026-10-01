@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import uuid
 import json
-from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
+import uuid
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
-from pyspark.sql import Row
 from pyspark import cloudpickle
+from pyspark.sql.types import Row
 
 __all__ = ["StreamingQueryListener"]
 
@@ -1112,20 +1112,24 @@ class SinkProgress(dict):
 
 
 def _test() -> None:
-    import sys
     import doctest
     import os
-    from pyspark.sql import SparkSession
-    import pyspark.sql.streaming.listener
+    import sys
+
     from py4j.protocol import Py4JError
+
+    import pyspark.sql.streaming.listener
+    from pyspark.core.context import SparkContext
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.streaming.listener.__dict__.copy()
+    sc = SparkContext("local[4]", "PythonTest")
     try:
         spark = SparkSession._getActiveSessionOrCreate()
     except Py4JError:
-        spark = SparkSession(sc)  # type: ignore[name-defined] # noqa: F821
+        spark = SparkSession(sc)
 
     globs["spark"] = spark
 

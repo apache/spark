@@ -284,6 +284,18 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Adds a year-month interval expressed in months to a nanosecond-precision timestamp value while
+   * preserving the `nanosWithinMicro` remainder.
+   */
+  def timestampNanosAddMonths(
+      start: TimestampNanosVal,
+      months: Int,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val epochMicros = timestampAddMonths(start.epochMicros, months, zoneId)
+    TimestampNanosVal.fromParts(epochMicros, start.nanosWithinMicro)
+  }
+
+  /**
    * Adds a day-time interval expressed in microseconds to a timestamp at the given time zone.
    * It converts the input timestamp to a local timestamp, and adds the interval by:
    *   - Splitting the interval to days and microsecond adjustment in a day, and
@@ -646,6 +658,21 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Truncates a nanosecond-precision timestamp to the unit given by `level`. `epochMicros` is
+   * truncated with the same [[truncTimestamp]] used by microsecond timestamps, and the
+   * sub-microsecond `nanosWithinMicro` is always dropped: `date_trunc`'s finest supported unit
+   * is MICROSECOND (see `MIN_LEVEL_OF_TIMESTAMP_TRUNC`), which already discards everything below
+   * a microsecond. NTZ vs. LTZ zone handling is the caller's responsibility via `zoneId`.
+   */
+  def truncTimestampNanos(
+      value: TimestampNanosVal,
+      level: Int,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val truncatedMicros = truncTimestamp(value.epochMicros, level, zoneId)
+    TimestampNanosVal.fromParts(truncatedMicros, 0.toShort)
+  }
+
+  /**
    * Returns time truncated to the unit specified by the level.
    */
   private def parseTimeTruncLevel(level: UTF8String): ChronoUnit = {
@@ -964,6 +991,61 @@ object DateTimeUtils extends SparkDateTimeUtils {
     }
   }
 
+  /**
+   * Adds the specified number of units to a nanosecond-precision timestamp of precision `p` (in
+   * [7, 9]), returning a value floored to that precision.
+   *
+   * For units of MICROSECOND or coarser the addition runs on the microsecond grid (reusing
+   * [[timestampAdd]] for all the calendar, DST and overflow handling) and the input's already
+   * `p`-aligned fraction is carried through unchanged. For the NANOSECOND unit the fraction absorbs
+   * `quantity` nanoseconds and any whole microseconds carry into `epochMicros`; the resulting
+   * fraction is then floored to `p` (via [[truncateTimestampNanosToPrecision]]) so a NANOSECOND
+   * quantity finer than the type's step never produces an off-grid value that would compare, hash
+   * or sort unequal to its displayed (aligned) form. NANOSECOND is only valid here: adding
+   * nanoseconds to a microsecond timestamp is unrepresentable, so that combination is rejected as
+   * an invalid unit through the microsecond [[timestampAdd]] path.
+   *
+   * @param unit A keyword that specifies the interval units to add to the input timestamp.
+   * @param quantity The amount of `unit`s to add. It can be positive or negative.
+   * @param ts The input nanosecond-precision timestamp.
+   * @param precision The declared fractional-second precision `p` in [7, 9] of the input/output.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return A nanosecond-precision timestamp value floored to `precision`.
+   */
+  def timestampAddNanos(
+      unit: String,
+      quantity: Long,
+      ts: TimestampNanosVal,
+      precision: Int,
+      zoneId: ZoneId): TimestampNanosVal = {
+    if (unit.toUpperCase(Locale.ROOT) == "NANOSECOND") {
+      try {
+        // Split the added nanoseconds into whole microseconds and a [0, 999] remainder first, so
+        // the fraction sum stays within [0, 1998] and only the true microsecond total can overflow
+        // a Long (adding the remainder to `nanosWithinMicro` before the split would spuriously
+        // reject a large-but-representable quantity).
+        val quotientMicros = Math.floorDiv(quantity, NANOS_PER_MICROS)
+        val remainderNanos = Math.floorMod(quantity, NANOS_PER_MICROS)
+        val fractionSum = ts.nanosWithinMicro.toLong + remainderNanos
+        val carryMicros =
+          Math.addExact(quotientMicros, Math.floorDiv(fractionSum, NANOS_PER_MICROS))
+        val newFraction = Math.floorMod(fractionSum, NANOS_PER_MICROS).toShort
+        val newMicros = Math.addExact(ts.epochMicros, carryMicros)
+        truncateTimestampNanosToPrecision(
+          TimestampNanosVal.fromParts(newMicros, newFraction), precision)
+      } catch {
+        case _: ArithmeticException | _: DateTimeException =>
+          throw QueryExecutionErrors.timestampAddOverflowError(ts.epochMicros, quantity, unit)
+      }
+    } else {
+      // Units of MICROSECOND or coarser do not touch the sub-microsecond fraction; add on the
+      // microsecond grid and re-attach the input's fraction, which is already `p`-aligned. An
+      // unknown unit is rejected by timestampAdd, and NANOSECOND is handled above.
+      TimestampNanosVal.fromParts(
+        timestampAdd(unit, quantity, ts.epochMicros, zoneId), ts.nanosWithinMicro)
+    }
+  }
+
   private val timestampDiffMap = Map[String, (Temporal, Temporal) => Long](
     "MICROSECOND" -> ChronoUnit.MICROS.between,
     "MILLISECOND" -> ChronoUnit.MILLIS.between,
@@ -1251,11 +1333,33 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * DayTimeInterval bucketing: bucket k starts at
-   * `timestampAddDayTime(originMicros, k * bucketMicros, zoneId)`, matching the instant that
-   * `originMicros + INTERVAL '<k * bucketSize>'` would produce. For sub-day buckets the
-   * calendar-day component is zero, so the result is pure UTC-microsecond floor division
-   * and `zoneId` has no effect.
+   * Start boundary of DayTimeInterval bucket index `k`, on the fixed grid anchored at
+   * `originMicros`. Sub-day buckets use pure UTC arithmetic; multi-day buckets add the calendar-day
+   * part in `zoneId`.
+   *
+   * `bucketMicros` must be positive; `TimeBucket.checkInputDataTypes` enforces this at
+   * analysis time.
+   *
+   * @param bucketMicros bucket size in microseconds.
+   * @param k            bucket index (may be negative).
+   * @param originMicros grid alignment anchor, in microseconds since the epoch (UTC).
+   * @param zoneId       zone in which calendar-day arithmetic is performed.
+   */
+  def timeBucketFromIndexDTInterval(
+      bucketMicros: Long, k: Long, originMicros: Long, zoneId: ZoneId): Long = {
+    val bucketOffset = MathUtils.multiplyExact(k, bucketMicros)
+
+    if (bucketMicros / MICROS_PER_DAY != 0) {
+      timestampAddDayTime(originMicros, bucketOffset, zoneId)
+    } else {
+      // Sub-day bucket stays zone-independent even when k*bucketMicros spans days.
+      MathUtils.addExact(originMicros, bucketOffset)
+    }
+  }
+
+  /**
+   * The DayTimeInterval bucket containing `tsMicros`, as `(index, startBoundary)`. The index is
+   * returned so callers walking to the next bucket need not search again.
    *
    * `bucketMicros` must be positive; `TimeBucket.checkInputDataTypes` enforces this at
    * analysis time.
@@ -1265,33 +1369,46 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @param originMicros grid alignment anchor, in microseconds since the epoch (UTC).
    * @param zoneId       zone in which calendar-day arithmetic is performed.
    */
+  def timeBucketFromTimestampDTInterval(
+      bucketMicros: Long, tsMicros: Long, originMicros: Long, zoneId: ZoneId): (Long, Long) = {
+    val diff = MathUtils.subtractExact(tsMicros, originMicros)
+    val k = MathUtils.floorDiv(diff, bucketMicros)
+
+    def boundary(kk: Long): Long =
+      timeBucketFromIndexDTInterval(bucketMicros, kk, originMicros, zoneId)
+
+    if (bucketMicros / MICROS_PER_DAY != 0) {
+      // Multi-day: calendar-day arithmetic makes boundaries drift off the linear grid as offset
+      // shifts accumulate between origin and ts. A DST shift (e.g. Pacific/Los_Angeles) is 1h, so
+      // the estimate is off by at most one; a date-line shift (e.g. Pacific/Apia 2011) can reach a
+      // full bucket, so it can be off by more than one. Step the index until the bucket contains
+      // ts: the first loop walks down while the start is past ts, the second walks up while the
+      // next start is not, landing on boundary(k) <= ts < boundary(k + 1).
+      var adjusted = k
+      while (boundary(adjusted) > tsMicros) {
+        adjusted = MathUtils.subtractExact(adjusted, 1L)
+      }
+      while (boundary(MathUtils.addExact(adjusted, 1L)) <= tsMicros) {
+        adjusted = MathUtils.addExact(adjusted, 1L)
+      }
+      return (adjusted, boundary(adjusted))
+    }
+    // Sub-day: pure UTC arithmetic, the linear estimate is exact.
+    (k, boundary(k))
+  }
+
+  /**
+   * DayTimeInterval bucketing: the start boundary of the bucket containing `tsMicros`.
+   *
+   * @param bucketMicros bucket size in microseconds.
+   * @param tsMicros     timestamp to bucket, in microseconds since the epoch (UTC).
+   * @param originMicros grid alignment anchor, in microseconds since the epoch (UTC).
+   * @param zoneId       zone in which calendar-day arithmetic is performed.
+   */
   def timeBucketDTInterval(
       bucketMicros: Long, tsMicros: Long, originMicros: Long, zoneId: ZoneId): Long = {
-    val bucketDays = bucketMicros / MICROS_PER_DAY
-
-    val diff = MathUtils.subtractExact(tsMicros, originMicros)
-    var k = MathUtils.floorDiv(diff, bucketMicros)
-
-    if (bucketDays == 0) {
-      val bucketOffset = MathUtils.multiplyExact(k, bucketMicros)
-      MathUtils.addExact(originMicros, bucketOffset)
-    } else {
-      // bucketMicros >= MICROS_PER_DAY, so DST offset shifts (a few hours at most) can
-      // move candidate(k) within one bucket of `origin + k*bucketMicros` but no further.
-      // One +/-1 step recovers the correct k.
-      def candidate(kk: Long): Long =
-        timestampAddDayTime(originMicros, MathUtils.multiplyExact(kk, bucketMicros), zoneId)
-
-      var c = candidate(k)
-      if (c > tsMicros) {
-        k -= 1
-        c = candidate(k)
-      } else {
-        val cNext = candidate(MathUtils.addExact(k, 1L))
-        if (cNext <= tsMicros) c = cNext
-      }
-      c
-    }
+    val (_, start) = timeBucketFromTimestampDTInterval(bucketMicros, tsMicros, originMicros, zoneId)
+    start
   }
 
   /**
@@ -1329,5 +1446,47 @@ object DateTimeUtils extends SparkDateTimeUtils {
       c = candidate(k)
     }
     c
+  }
+
+  /**
+   * Nanosecond-precision DayTimeInterval bucketing. `bucketMicros` is an integer number of
+   * microseconds, so every bucket boundary `origin + k * bucketSize` carries the same
+   * `nanosWithinMicro` remainder as `origin` -- only the choice of `k` needs nanosecond
+   * resolution, and only when the micro-level boundary lands on the same microsecond as `ts`:
+   * if `origin`'s remainder is larger than `ts`'s there, the true boundary is one bucket earlier.
+   */
+  def timeBucketDTIntervalNanos(
+      bucketMicros: Long,
+      ts: TimestampNanosVal,
+      origin: TimestampNanosVal,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val startMicros = timeBucketDTInterval(bucketMicros, ts.epochMicros, origin.epochMicros, zoneId)
+    val adjustedStartMicros =
+      if (startMicros == ts.epochMicros && origin.nanosWithinMicro > ts.nanosWithinMicro) {
+        timeBucketDTInterval(bucketMicros, startMicros - 1, origin.epochMicros, zoneId)
+      } else {
+        startMicros
+      }
+    TimestampNanosVal.fromParts(adjustedStartMicros, origin.nanosWithinMicro)
+  }
+
+  /**
+   * Nanosecond-precision YearMonthInterval bucketing. See
+   * [[timeBucketDTIntervalNanos]] for why the result's `nanosWithinMicro` always equals
+   * `origin`'s, and why only the choice of `k` needs sub-microsecond resolution.
+   */
+  def timeBucketYMIntervalNanos(
+      bucketMonths: Int,
+      ts: TimestampNanosVal,
+      origin: TimestampNanosVal,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val startMicros = timeBucketYMInterval(bucketMonths, ts.epochMicros, origin.epochMicros, zoneId)
+    val adjustedStartMicros =
+      if (startMicros == ts.epochMicros && origin.nanosWithinMicro > ts.nanosWithinMicro) {
+        timeBucketYMInterval(bucketMonths, startMicros - 1, origin.epochMicros, zoneId)
+      } else {
+        startMicros
+      }
+    TimestampNanosVal.fromParts(adjustedStartMicros, origin.nanosWithinMicro)
   }
 }

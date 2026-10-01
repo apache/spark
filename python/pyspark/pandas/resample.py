@@ -33,21 +33,13 @@ import numpy as np
 import pandas as pd
 from pandas.tseries.frequencies import to_offset
 
-from pyspark.sql import Column, functions as F
-from pyspark.sql.internal import InternalFunction as SF
-from pyspark.sql.types import (
-    NumericType,
-    StructField,
-    TimestampNTZType,
-    DataType,
-)
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import FrameLike
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.internal import (
+    SPARK_DEFAULT_INDEX_NAME,
     InternalField,
     InternalFrame,
-    SPARK_DEFAULT_INDEX_NAME,
 )
 from pyspark.pandas.missing.resample import (
     MissingPandasLikeDataFrameResampler,
@@ -57,6 +49,15 @@ from pyspark.pandas.series import Series, first_series
 from pyspark.pandas.utils import (
     scol_for,
     verify_temp_column_name,
+)
+from pyspark.sql import Column
+from pyspark.sql import functions as F
+from pyspark.sql.internal import InternalFunction as SF
+from pyspark.sql.types import (
+    DataType,
+    NumericType,
+    StructField,
+    TimestampNTZType,
 )
 
 
@@ -766,11 +767,12 @@ class SeriesResampler(Resampler[Series]):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.resample
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

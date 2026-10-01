@@ -225,7 +225,7 @@ object ValidateSubqueryExpression
 
       case inSubqueryOrExistsSubquery =>
         plan match {
-          case _: Filter | _: SupportsSubquery | _: Join |
+          case _: Filter | _: SupportsSubquery | _: Join | _: AsOfJoin |
             _: Project | _: Aggregate | _: Window => // Ok
           case _ =>
             expr.failAnalysis(

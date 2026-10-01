@@ -127,6 +127,13 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
            negative number with wrapping angled brackets.
            ('<1>').
   """,
+  arguments = """
+    Arguments:
+      * expr - The string to convert to a number.
+        An expression that evaluates to a string.
+      * fmt - The format that specifies how to parse the string as a number.
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('454', '999');
@@ -161,6 +168,13 @@ case class ToNumber(left: Expression, right: Expression)
      _FUNC_(expr, fmt) - Convert string 'expr' to a number based on the string format `fmt`.
        Returns NULL if the string 'expr' does not match the expected format. The format follows the
        same semantics as the to_number function.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The string to convert to a number.
+        An expression that evaluates to a string.
+      * fmt - The format that specifies how to parse the string as a number.
+        An expression that evaluates to a string. Must be a constant.
   """,
   examples = """
     Examples:
@@ -222,6 +236,14 @@ case class TryToNumber(left: Expression, right: Expression)
         'base64': a base 64 string.
         'hex': a string in the hexadecimal format.
         'utf-8': the input binary is decoded to UTF-8 string.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to convert to a string.
+        An expression that evaluates to a numeric, date, timestamp, time, or binary.
+      * format - The format that specifies how to render the value as a string.
+        An expression that evaluates to a string. Must be a constant when `expr` is numeric or
+        binary.
   """,
   examples = """
     Examples:

@@ -148,7 +148,7 @@ case class JDBCScanBuilder(
       JDBCOptions.JDBC_QUERY_STRING
 
     filteredJDBCOptions == otherSideFilteredJDBCOptions
-  };
+  }
 
   /**
    * Helper method to calculate StructType based on the SupportsPushDownJoin.ColumnWithAlias and
@@ -183,6 +183,12 @@ case class JDBCScanBuilder(
       rightSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
       condition: Predicate ): Boolean = {
     if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) {
+      return false
+    }
+
+    // Join pushdown uses the query option, which cannot be combined with partitionColumn.
+    if (jdbcOptions.partitionColumn.isDefined) {
+      logDebug("Skipping JDBC join pushdown because partitionColumn is defined.")
       return false
     }
 

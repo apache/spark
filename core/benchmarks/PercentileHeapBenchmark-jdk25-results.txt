@@ -2,40 +2,40 @@
 PercentileHeap Operations
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 PercentileHeap Operations - Input Size: 10000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------
-Percentile: 0.5                                            1              1           0         10.5          95.4       1.0X
-Percentile: 0.9                                            1              1           0         18.4          54.4       1.8X
-Percentile: 0.95                                           0              0           0         24.0          41.7       2.3X
-Percentile: 0.99                                           0              0           0         31.7          31.5       3.0X
+Percentile: 0.5                                            1              1           0          9.9         101.0       1.0X
+Percentile: 0.9                                            1              1           0         18.1          55.3       1.8X
+Percentile: 0.95                                           0              0           0         22.9          43.7       2.3X
+Percentile: 0.99                                           0              0           0         29.8          33.5       3.0X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 PercentileHeap Operations - Input Size: 50000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------
-Percentile: 0.5                                            5              5           0         10.2          98.4       1.0X
-Percentile: 0.9                                            3              3           0         17.6          56.9       1.7X
-Percentile: 0.95                                           2              2           0         22.7          44.0       2.2X
-Percentile: 0.99                                           2              2           0         30.7          32.6       3.0X
+Percentile: 0.5                                            5              6           0          9.4         106.3       1.0X
+Percentile: 0.9                                            3              3           0         15.5          64.7       1.6X
+Percentile: 0.95                                           2              3           0         22.4          44.6       2.4X
+Percentile: 0.99                                           2              2           0         29.6          33.7       3.1X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 PercentileHeap Operations - Input Size: 100000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------
-Percentile: 0.5                                            11             13           2          8.9         112.8       1.0X
-Percentile: 0.9                                             6              6           0         16.9          59.2       1.9X
-Percentile: 0.95                                            5              5           0         21.7          46.0       2.5X
-Percentile: 0.99                                            3              4           0         30.2          33.2       3.4X
+Percentile: 0.5                                            13             13           0          7.6         130.9       1.0X
+Percentile: 0.9                                             6              7           1         16.6          60.3       2.2X
+Percentile: 0.95                                            5              5           0         20.8          48.0       2.7X
+Percentile: 0.99                                            3              4           0         29.2          34.2       3.8X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 PercentileHeap Operations - Input Size: 200000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------
-Percentile: 0.5                                            24             25           1          8.4         119.5       1.0X
-Percentile: 0.9                                            13             13           0         15.1          66.3       1.8X
-Percentile: 0.95                                           10             11           2         20.3          49.2       2.4X
-Percentile: 0.99                                            7              7           0         27.0          37.1       3.2X
+Percentile: 0.5                                            27             29           3          7.4         134.5       1.0X
+Percentile: 0.9                                            14             15           0         14.1          71.0       1.9X
+Percentile: 0.95                                           12             12           0         17.4          57.6       2.3X
+Percentile: 0.99                                            7              7           0         27.1          36.8       3.7X
 
 

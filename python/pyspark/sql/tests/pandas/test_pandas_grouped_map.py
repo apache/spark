@@ -16,36 +16,36 @@
 #
 
 import datetime
-import unittest
 import logging
 import os
-
+import unittest
 from collections import OrderedDict
 from decimal import Decimal
-from typing import Iterator, Tuple, Any
+from typing import Any, Iterator, Tuple
 
+from pyspark.errors import PySparkTypeError, PySparkValueError, PythonException
 from pyspark.loose_version import LooseVersion
-from pyspark.sql import Row, functions as sf
-from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
+from pyspark.sql import Row
+from pyspark.sql import functions as sf
+from pyspark.sql.functions import PandasUDFType, pandas_udf, udf
 from pyspark.sql.types import (
-    IntegerType,
-    DoubleType,
     ArrayType,
     BinaryType,
-    ByteType,
-    LongType,
-    DecimalType,
-    ShortType,
-    FloatType,
-    StringType,
     BooleanType,
-    StructType,
-    StructField,
-    NullType,
+    ByteType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
     MapType,
+    NullType,
+    ShortType,
+    StringType,
+    StructField,
+    StructType,
     YearMonthIntervalType,
 )
-from pyspark.errors import PythonException, PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     assertDataFrameEqual,
@@ -202,6 +202,21 @@ class ApplyInPandasTestsMixin:
         assert_frame_equal(expected2, result2)
         assert_frame_equal(expected3, result3)
 
+    def test_output_batch_split_preserves_result(self):
+        # A small worker output-batch cap splits a group's output Arrow batch into several
+        # pieces before it is sent to the JVM. The result must be unchanged by the split.
+        df = self.spark.range(1000).selectExpr("id", "1 as k")
+
+        def add_one(pdf):
+            return pdf.assign(id=pdf.id + 1)
+
+        conf = {"spark.sql.execution.pythonUDF.arrow.workerOutputBatchMaxBytes": 128}
+        with self.sql_conf(conf):
+            result = df.groupby("k").applyInPandas(add_one, "id long, k int").sort("id").toPandas()
+
+        expected = df.toPandas().assign(id=lambda p: p.id + 1)
+        assert_frame_equal(expected.reset_index(drop=True), result.reset_index(drop=True))
+
     def test_array_type_correct(self):
         df = self.data.withColumn("arr", sf.array(sf.col("id"))).repartition(1, "id")
 
@@ -243,7 +258,8 @@ class ApplyInPandasTestsMixin:
                     "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_ARROW_UDF, "
                     "SQL_SCALAR_PANDAS_ITER_UDF, SQL_SCALAR_ARROW_ITER_UDF, "
                     "SQL_GROUPED_AGG_PANDAS_UDF, SQL_GROUPED_AGG_ARROW_UDF, "
-                    "SQL_GROUPED_AGG_PANDAS_ITER_UDF or SQL_GROUPED_AGG_ARROW_ITER_UDF"
+                    "SQL_GROUPED_AGG_PANDAS_ITER_UDF, SQL_GROUPED_AGG_ARROW_ITER_UDF "
+                    "or SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF"
                 },
             )
 

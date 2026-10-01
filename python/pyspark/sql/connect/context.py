@@ -17,34 +17,35 @@
 
 import warnings
 from typing import (
-    Optional,
-    Union,
-    Callable,
+    TYPE_CHECKING,
     Any,
+    Callable,
+    ClassVar,
     Iterable,
     List,
+    Optional,
     Tuple,
-    ClassVar,
-    TYPE_CHECKING,
+    Union,
 )
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.errors import PySparkNotImplementedError
-from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.connect.streaming.readwriter import DataStreamReader
 from pyspark.sql.connect.streaming.query import StreamingQueryManager
+from pyspark.sql.connect.streaming.readwriter import DataStreamReader
+from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import AtomicType, BooleanType, DataType, StringType, StructField, StructType
 
 if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import pyarrow as pa
+
+    from pyspark.sql._typing import UserDefinedFunctionLike
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.connect.udf import UDFRegistration
     from pyspark.sql.connect.udtf import UDTFRegistration
-    from pyspark.sql._typing import UserDefinedFunctionLike
 
 # Internal module - not part of the public PySpark API surface.
 # The public SQLContext/HiveContext are in pyspark.sql.context; this module

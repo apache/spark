@@ -60,9 +60,14 @@ class BlockManagerStorageEndpoint(
         if (mapOutputTracker != null) {
           mapOutputTracker.unregisterShuffle(shuffleId)
         }
-        val shuffleManager = SparkEnv.get.shuffleManager
-        if (shuffleManager != null) {
-          shuffleManager.unregisterShuffle(shuffleId)
+        val env = SparkEnv.get
+        // The shuffle manager init is deferred (gated by a latch) so user jars can load first; a
+        // RemoveShuffle can arrive before it runs. As before this routing, skip in that case.
+        if (env != null && env.isShuffleManagerInitialized) {
+          // Only a shuffleId is available here and it does not identify the owning manager, so
+          // notify every configured manager (default and, if present, incremental). This reaches
+          // the owning manager on any node, including one that never performed this shuffle's I/O.
+          env.unregisterShuffleFromAllManagers(shuffleId)
         } else {
           logDebug(log"Ignore remove shuffle ${MDC(SHUFFLE_ID, shuffleId)}")
           true

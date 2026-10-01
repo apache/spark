@@ -34,6 +34,13 @@ import org.apache.spark.unsafe.types.UTF8String
     _FUNC_(child, mode) - Aggregates the summary values from a double summary type
     Datasketches TupleSketch. The mode can be 'sum', 'min', 'max', or 'alwaysone'
     (defaults to 'sum'). """,
+  arguments = """
+    Arguments:
+      * child - A binary expression holding a serialized double summary type Datasketches
+          TupleSketch to aggregate.
+      * mode - An optional string aggregation mode: 'sum', 'min', 'max', or 'alwaysone'.
+          Defaults to 'sum'.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(tuple_sketch_agg_double(key, summary)) FROM VALUES (1, 1.0D), (1, 2.0D), (2, 3.0D) tab(key, summary);
@@ -98,6 +105,13 @@ case class TupleSketchSummaryDouble(left: Expression, right: Expression)
     _FUNC_(child, mode) - Aggregates the summary values from a integer summary type
     Datasketches TupleSketch. The mode can be 'sum', 'min', 'max', or 'alwaysone'
     (defaults to 'sum'). """,
+  arguments = """
+    Arguments:
+      * child - A binary expression holding a serialized integer summary type Datasketches
+          TupleSketch to aggregate.
+      * mode - An optional string aggregation mode: 'sum', 'min', 'max', or 'alwaysone'.
+          Defaults to 'sum'.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(tuple_sketch_agg_integer(key, summary)) FROM VALUES (1, 1), (1, 2), (2, 3) tab(key, summary);

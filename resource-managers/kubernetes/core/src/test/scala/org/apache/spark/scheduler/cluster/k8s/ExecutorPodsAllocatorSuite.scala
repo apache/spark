@@ -139,7 +139,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(labeledPods.withField(anyString(), anyString())).thenReturn(labeledPods)
     when(driverPodOperations.get).thenReturn(driverPod)
     when(driverPodOperations.waitUntilReady(any(), any())).thenReturn(driverPod)
-    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
       meq(kubernetesClient), any(classOf[ResourceProfile]))).thenAnswer(executorPodAnswer())
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
     waitForExecutorPodsClock = new ManualClock(0L)
@@ -154,6 +154,33 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(pvcWithNamespace.resource(any())).thenReturn(pvcResource)
     when(labeledPersistentVolumeClaims.list()).thenReturn(persistentVolumeClaimList)
     when(persistentVolumeClaimList.getItems).thenReturn(Seq.empty[PersistentVolumeClaim].asJava)
+  }
+
+  test("SPARK-58192: warn when recovery mode cannot isolate a single task") {
+    val confWithFractionalCpus = conf.clone.set(CPUS_PER_TASK, BigDecimal(0.5))
+    val allocator = new ExecutorPodsAllocator(confWithFractionalCpus, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    val logAppender = new LogAppender("recovery mode fractional cpus")
+    withLogAppender(logAppender) {
+      allocator.setRecoveryMode()
+      // the warning is logged at most once
+      allocator.setRecoveryMode()
+    }
+    val warnings = logAppender.loggingEvents
+      .map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("instead of only one"))
+    assert(warnings.size === 1)
+    assert(warnings.head.contains("2 concurrent tasks"))
+
+    // no warning when a recovery-mode executor's single announced core fits exactly one task
+    val allocator2 = new ExecutorPodsAllocator(conf.clone, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    val logAppender2 = new LogAppender("recovery mode whole cpus")
+    withLogAppender(logAppender2) {
+      allocator2.setRecoveryMode()
+    }
+    assert(!logAppender2.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains("instead of only one")))
   }
 
   test("SPARK-49447: Prevent small values less than 100 for batch delay") {
@@ -833,7 +860,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     pvc.getMetadata
       .setCreationTimestamp(Instant.now().minus(podCreationTimeout + 1, MILLIS).toString)
     when(persistentVolumeClaimList.getItems).thenReturn(Seq(pvc).asJava)
-    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
         meq(kubernetesClient), any(classOf[ResourceProfile])))
       .thenAnswer((invocation: InvocationOnMock) => {
       val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
@@ -950,7 +977,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .set(s"$prefix.option.sizeLimit", "200Gi")
       .set(s"$prefix.option.storageClass", "gp3")
 
-    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
       meq(kubernetesClient), any(classOf[ResourceProfile])))
       .thenAnswer((invocation: InvocationOnMock) => {
         val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
@@ -1020,7 +1047,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .set(s"$prefix.option.sizeLimit", "200Gi")
       .set(s"$prefix.option.storageClass", "gp3")
 
-    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
       meq(kubernetesClient), any(classOf[ResourceProfile])))
       .thenAnswer((invocation: InvocationOnMock) => {
         val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
@@ -1105,5 +1132,24 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
     podsAllocator.setRecoveryMode()
     assert(!newConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).get)
+  }
+
+  test("SPARK-59331: unsetRecoveryMode leaves the recovery mode that setRecoveryMode turned on") {
+    val newConf = conf.clone
+    val podsAllocator = new ExecutorPodsAllocator(newConf, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocator.setRecoveryMode()
+    assert(newConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).contains(true))
+    podsAllocator.unsetRecoveryMode()
+    assert(newConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).isEmpty)
+  }
+
+  test("SPARK-59331: unsetRecoveryMode keeps a configured recovery mode") {
+    val newConf = conf.clone.set(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, true)
+    val podsAllocator = new ExecutorPodsAllocator(newConf, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocator.setRecoveryMode()
+    podsAllocator.unsetRecoveryMode()
+    assert(newConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).contains(true))
   }
 }

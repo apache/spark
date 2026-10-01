@@ -38,7 +38,8 @@ import org.apache.spark.unsafe.types.UTF8String
   """,
   arguments = """
     Arguments:
-      str - a string expression to be translated
+      * str - a string expression to be translated
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -80,6 +81,7 @@ case class UrlEncode(child: Expression)
   arguments = """
     Arguments:
       * str - a string expression to decode
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -123,6 +125,7 @@ case class UrlDecode(child: Expression, failOnError: Boolean = true)
   arguments = """
     Arguments:
       * str - a string expression to decode
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -165,6 +168,15 @@ object UrlCodec {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(url, partToExtract[, key]) - This is a special version of `parse_url` that performs the same operation, but returns a NULL value instead of raising an error if the parsing cannot be performed.",
+  arguments = """
+    Arguments:
+      * url - The URL to extract a part from.
+        An expression that evaluates to a string.
+      * partToExtract - The part of the URL to extract.
+        An expression that evaluates to a string.
+      * key - The key to extract when returning a query parameter value.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST');
@@ -197,6 +209,15 @@ case class TryParseUrl(params: Seq[Expression], replacement: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(url, partToExtract[, key]) - Extracts a part from a URL.",
+  arguments = """
+    Arguments:
+      * url - The URL to extract a part from.
+        An expression that evaluates to a string.
+      * partToExtract - The part of the URL to extract.
+        An expression that evaluates to a string.
+      * key - The key to extract when returning a query parameter value.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST');

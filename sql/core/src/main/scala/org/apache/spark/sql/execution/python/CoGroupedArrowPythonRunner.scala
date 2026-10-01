@@ -58,7 +58,10 @@ class CoGroupedArrowPythonRunner(
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
   override val envVars: util.Map[String, String] = {
-    val envVars = new util.HashMap(funcs.head._1.funcs.head.envVars)
+    // Installed at worker launch, so a cached plan cannot pin an older environment.
+    val envVars =
+      PythonWorkerEnvironment.mergeValidated(funcs.head._1.funcs.head.envVars, SQLConf.get)
+    // Applied after the session's environment, so a session cannot override a Spark-owned name.
     sessionUUID.foreach { uuid =>
       envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
     }

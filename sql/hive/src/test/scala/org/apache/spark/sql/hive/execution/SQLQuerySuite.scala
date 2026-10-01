@@ -594,6 +594,29 @@ abstract class SQLQuerySuiteBase extends QueryTest with TestHiveSingleton {
     }
   }
 
+  test("SPARK-56558: CTAS IF NOT EXISTS Hive Table should be with non-existent " +
+    "or empty location") {
+    withSQLConf(SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key -> "false") {
+      withTempDir { dir =>
+        val tempLocation = dir.toURI.toString
+        withTable("ctas1", "ctas_with_existing_location") {
+          sql(s"CREATE TABLE ctas1(id string) stored as rcfile LOCATION '$tempLocation/ctas1'")
+          sql("INSERT INTO TABLE ctas1 SELECT 'A' ")
+          // The target table does not exist in the catalog, so IF NOT EXISTS must not skip the
+          // non-empty location check and overwrite the data of table ctas1.
+          val m = intercept[AnalysisException] {
+            sql(s"""CREATE TABLE IF NOT EXISTS ctas_with_existing_location stored as rcfile
+                 |LOCATION '$tempLocation'
+                 |AS SELECT key k, value FROM src ORDER BY k, value""".stripMargin)
+          }.getMessage
+          assert(m.contains("CREATE-TABLE-AS-SELECT cannot create " +
+            "table with location to a non-empty directory"))
+          checkAnswer(spark.table("ctas1"), Row("A"))
+        }
+      }
+    }
+  }
+
   test("CTAS with serde") {
     withTable("ctas1", "ctas2", "ctas3", "ctas4", "ctas5") {
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.sql.catalyst.expressions.{Attribute,
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet,
   ExternalUserDefinedFunction}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.types.StructType
@@ -40,10 +40,45 @@ trait ExternalUDF extends UnaryNode {
 
 /**
  * :: Experimental ::
+ * Logical plan node for evaluating one scalar UDF expression in an external
+ * worker session.
+ *
+ * @param udf UDF expression evaluated by the worker session.
+ * @param resultAttr Output attribute for the UDF expression.
+ * @param child Input relation for the UDF.
+ */
+@Experimental
+case class ExecuteExternalUDF(
+    udf: ExternalUserDefinedFunction,
+    resultAttr: Attribute,
+    child: LogicalPlan)
+  extends ExternalUDF {
+
+  override def workerSpec: UDFWorkerSpecification = udf.workerSpec
+
+  assert(udf.dataType == resultAttr.dataType && udf.nullable == resultAttr.nullable,
+    "The UDF and result attribute must have matching types and nullability")
+  // TODO(SPARK-59049): Support UDF chaining before allowing nested UDFs in one node.
+  assert(!udf.children.exists(_.exists(_.isInstanceOf[ExternalUserDefinedFunction])),
+    "Nested external UDFs must use separate evaluation nodes")
+
+  override def output: Seq[Attribute] = child.output :+ resultAttr
+
+  override def producedAttributes: AttributeSet = AttributeSet(Seq(resultAttr))
+
+  override def maxRows: Option[Long] = child.maxRows
+
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): ExecuteExternalUDF =
+    copy(child = newChild)
+}
+
+/**
+ * :: Experimental ::
  * Logical plan node for mapPartitions-style UDF execution in an
  * external worker process.
  *
- * @param workerSpec       Specification describing the UDF worker.
  * @param function         The UDF to invoke. Output attributes are
  *                         derived from `function.dataType`.
  * @param isBarrier        Whether to use barrier execution.
@@ -52,12 +87,13 @@ trait ExternalUDF extends UnaryNode {
  */
 @Experimental
 case class MapPartitionsExternalUDF(
-    workerSpec: UDFWorkerSpecification,
     function: ExternalUserDefinedFunction,
     isBarrier: Boolean,
     profile: Option[ResourceProfile],
     child: LogicalPlan)
   extends ExternalUDF {
+
+  override def workerSpec: UDFWorkerSpecification = function.workerSpec
 
   val nodeOutputAttributes = toAttributes(
     function.dataType.asInstanceOf[StructType]

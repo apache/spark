@@ -409,6 +409,24 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     checkRule(mapRel, mapExpected)
   }
 
+  test("SPARK-58431: don't simplify ANSI out-of-bounds array access to null") {
+    val ansiQuery = relation
+      .select(
+        GetArrayItem(
+          CreateArray(Seq($"nullable_id", $"nullable_id" + 1L)),
+          5,
+          failOnError = true) as "a1")
+    val nonAnsiQuery = relation
+      .select(
+        GetArrayItem(
+          CreateArray(Seq($"nullable_id", $"nullable_id" + 1L)),
+          5,
+          failOnError = false) as "a1")
+
+    checkRule(ansiQuery, ansiQuery)
+    checkRule(nonAnsiQuery, relation.select(Literal.create(null, LongType) as "a1"))
+  }
+
   test("SPARK-23500: Ensure that aggregation expressions are not simplified") {
     // Make sure that aggregation exprs are correctly ignored. Maps can't be used in
     // grouping exprs so aren't tested here.

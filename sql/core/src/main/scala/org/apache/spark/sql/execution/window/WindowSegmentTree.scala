@@ -434,7 +434,7 @@ private[window] class WindowSegmentTree(
       if (!evictEldest() || !acquireBlockMemory()) {
         // scalastyle:off throwerror
         throw QueryExecutionErrors.cannotAcquireMemoryForWindowAggregateError(
-          blockBytes, 0L)
+          blockBytes, 0L, taskMemoryManager.getMemoryConsumptionBreakdown())
         // scalastyle:on throwerror
       }
     }

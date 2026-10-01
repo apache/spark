@@ -64,12 +64,18 @@ private[client] class GrpcExceptionConverter(
       .map(d => grpcStub.withDeadline(Deadline.after(d.toMillis, TimeUnit.MILLISECONDS)))
       .getOrElse(grpcStub)
 
-  def convert[T](sessionId: String, userContext: UserContext, clientType: String)(f: => T): T = {
+  def convert[T](
+      sessionId: String,
+      userContext: UserContext,
+      clientType: String,
+      operationId: Option[String] = None)(f: => T): T = {
     try {
       f
     } catch {
       case e: StatusRuntimeException =>
-        throw toThrowable(e, sessionId, userContext, clientType)
+        val converted = toThrowable(e, sessionId, userContext, clientType)
+        operationId.foreach(SparkConnectClient.attachOperationId(converted, _))
+        throw converted
     }
   }
 
@@ -77,25 +83,26 @@ private[client] class GrpcExceptionConverter(
       sessionId: String,
       userContext: UserContext,
       clientType: String,
-      iter: CloseableIterator[T]): CloseableIterator[T] = {
+      iter: CloseableIterator[T],
+      operationId: Option[String] = None): CloseableIterator[T] = {
     new WrappedCloseableIterator[T] {
 
       override def innerIterator: Iterator[T] = iter
 
       override def hasNext: Boolean = {
-        convert(sessionId, userContext, clientType) {
+        convert(sessionId, userContext, clientType, operationId) {
           iter.hasNext
         }
       }
 
       override def next(): T = {
-        convert(sessionId, userContext, clientType) {
+        convert(sessionId, userContext, clientType, operationId) {
           iter.next()
         }
       }
 
       override def close(): Unit = {
-        convert(sessionId, userContext, clientType) {
+        convert(sessionId, userContext, clientType, operationId) {
           iter.close()
         }
       }
@@ -170,23 +177,22 @@ private[client] class GrpcExceptionConverter(
     }
 
     // If no ErrorInfo is found, create a SparkException based on the StatusRuntimeException.
-    val (message, cause) = if (ex.getStatus.getCode == Status.Code.DEADLINE_EXCEEDED) {
-      val msg = s"${ex.toString}: RPC deadline exceeded. Deadlines can be configured via " +
+    val message = if (ex.getStatus.getCode == Status.Code.DEADLINE_EXCEEDED) {
+      s"${ex.toString}: RPC deadline exceeded. Deadlines can be configured via " +
         "SparkConnectClient.Builder.rpcDeadlines(). To disable all deadlines: " +
         "SparkConnectClient.builder().rpcDeadlines(RpcDeadlines.disabled).build()"
-      // For DEADLINE_EXCEEDED, we pass `ex` itself as the cause rather than `ex.getCause`.
-      // StatusRuntimeException.getCause() returns status.getCause(), which is always null for
-      // client-side deadline fires (gRPC constructs the status without a wrapped cause). Using
-      // ex.getCause would produce a SparkException with cause = null, losing the gRPC status
-      // code and description from the exception chain. Passing ex preserves full context and
-      // allows callers to programmatically inspect the status code via getCause().getStatus().
-      (msg, ex)
     } else {
-      (ex.toString, ex.getCause)
+      ex.toString
     }
+    // Pass `ex` itself as the cause rather than `ex.getCause`. StatusRuntimeException.getCause()
+    // returns status.getCause(), which is often null (e.g. always for client-side deadline
+    // fires, since gRPC constructs the status without a wrapped cause). Using ex.getCause
+    // would produce a SparkException with cause = null, losing the gRPC status code and
+    // description from the exception chain. Passing ex preserves full context and allows
+    // callers to programmatically inspect the status code via getCause().getStatus().
     new SparkException(
       message = message,
-      cause = cause,
+      cause = ex,
       errorClass = Some("CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE"),
       messageParameters = Map("message" -> message),
       context = Array.empty)

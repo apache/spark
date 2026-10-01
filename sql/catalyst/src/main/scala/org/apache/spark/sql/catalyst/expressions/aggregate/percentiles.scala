@@ -223,8 +223,12 @@ abstract class PercentileBase
       // We end up here only if spark.sql.legacy.percentileDiscCalculation=true
       toDoubleValue(lowerKey)
     } else {
-      // Linear interpolation to get the exact percentile
-      (higher - position) * toDoubleValue(lowerKey) + (position - lower) * toDoubleValue(higherKey)
+      // Linear interpolation to get the exact percentile. Computed as lower + fraction *
+      // (higher - lower) to stay monotonic; the delta can overflow to Infinity only for adjacent
+      // values straddling zero near Double.MaxValue, an extreme case where the old form was also
+      // inaccurate.
+      toDoubleValue(lowerKey) +
+        (position - lower) * (toDoubleValue(higherKey) - toDoubleValue(lowerKey))
     }
   }
 
@@ -267,6 +271,15 @@ abstract class PercentileBase
       positive integral
 
       """,
+  arguments = """
+    Arguments:
+      * col - The column to compute the percentile of.
+          An expression that evaluates to a numeric, ANSI interval, or time.
+      * percentage - The percentile(s) to compute, each between 0.0 and 1.0. Either a
+          single numeric value or an array of numeric values. Must be foldable.
+      * frequency - Optional. The number of times each value should be counted.
+          An expression that evaluates to a positive integral value. Defaults to 1.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col, 0.3) FROM VALUES (0), (10) AS tab(col);
@@ -331,6 +344,11 @@ case class Percentile(
 
 @ExpressionDescription(
   usage = "_FUNC_(col) - Returns the median of numeric, ANSI interval or TIME column `col`.",
+  arguments = """
+    Arguments:
+      * col - The column to compute the median of.
+        An expression that evaluates to a numeric, interval, or time.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (0), (10) AS tab(col);
@@ -484,6 +502,12 @@ case class PercentileDisc(
   usage = "_FUNC_(percentage) WITHIN GROUP (ORDER BY col) - Return a percentile value based on " +
     "a continuous distribution of numeric, ANSI interval or TIME column `col` at the given " +
     "`percentage` (specified in ORDER BY clause).",
+  arguments = """
+    Arguments:
+      * percentage - The percentile to compute, between 0.0 and 1.0. Must be foldable.
+      * col - The column to compute the percentile of, specified in the ORDER BY clause.
+          An expression that evaluates to a numeric, ANSI interval, or time.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0.25) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (10) AS tab(col);
@@ -510,6 +534,12 @@ object PercentileContBuilder extends ExpressionBuilder {
   usage = "_FUNC_(percentage) WITHIN GROUP (ORDER BY col) - Return a percentile value based on " +
     "a discrete distribution of numeric, ANSI interval or TIME column `col` at the given " +
     "`percentage` (specified in ORDER BY clause).",
+  arguments = """
+    Arguments:
+      * percentage - The percentile to compute, between 0.0 and 1.0. Must be foldable.
+      * col - The column to compute the percentile of, specified in the ORDER BY clause.
+          An expression that evaluates to a numeric, ANSI interval, or time.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0.25) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (10) AS tab(col);

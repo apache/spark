@@ -40,6 +40,14 @@ import org.apache.spark.unsafe.types.UTF8String
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(csvStr, schema[, options]) - Returns a struct value with the given `csvStr` and `schema`.",
+  arguments = """
+    Arguments:
+      * csvStr - A string expression of a single CSV record.
+      * schema - A string literal or invocation of `schema_of_csv` describing the schema.
+      * options - An optional map literal of string key-value pairs specifying CSV parsing
+          options controlling how `csvStr` is parsed. Accepts the same options as the CSV data
+          source.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('1, 0.8', 'a INT, b DOUBLE');
@@ -58,10 +66,10 @@ case class CsvToStructs(
     requiredSchema: Option[StructType] = None)
   extends UnaryExpression
   with TimeZoneAwareExpression
-  with ExpectsInputTypes {
+  with ExpectsInputTypes
+  with SupportTrimmedCharInput {
 
   override def nullable: Boolean = child.nullable
-
   override def nullIntolerant: Boolean = true
 
   // Used in `FunctionRegistry`
@@ -77,7 +85,7 @@ case class CsvToStructs(
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
       schema = ExprUtils.evalSchemaExpr(schema),
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "from_csv"),
       child = child,
       timeZoneId = None)
 
@@ -102,14 +110,15 @@ case class CsvToStructs(
   @transient
   private lazy val evaluator: CsvToStructsEvaluator = CsvToStructsEvaluator(
     options, nullableSchema, nameOfCorruptRecord, timeZoneId, requiredSchema)
+  override def stateful: Boolean = true
 
   override def nullSafeEval(input: Any): Any = {
-    evaluator.evaluate(input.asInstanceOf[UTF8String])
+    evaluator.evaluate(trimStringInput(input.asInstanceOf[UTF8String]))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
-    val eval = child.genCode(ctx)
+    val eval = stringInput.genCode(ctx)
     val resultType = CodeGenerator.boxedType(dataType)
     val resultTerm = ctx.freshName("result")
     ev.copy(code =
@@ -133,6 +142,12 @@ case class CsvToStructs(
  */
 @ExpressionDescription(
   usage = "_FUNC_(csv[, options]) - Returns schema in the DDL format of CSV string.",
+  arguments = """
+    Arguments:
+      * csv - A foldable string expression of a single CSV record.
+      * options - An optional map literal of string key-value pairs specifying CSV parsing
+          options that control schema inference. Accepts the same options as the CSV data source.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('1,abc');
@@ -146,13 +161,14 @@ case class SchemaOfCsv(
   extends UnaryExpression
   with RuntimeReplaceable
   with DefaultStringProducingExpression
-  with QueryErrorsBase {
+  with QueryErrorsBase
+  with SupportTrimmedCharInput {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
   def this(child: Expression, options: Expression) = this(
     child = child,
-    options = ExprUtils.convertToMapData(options))
+    options = ExprUtils.convertToMapData(options, "schema_of_csv"))
 
   override def nullable: Boolean = false
 
@@ -168,7 +184,7 @@ case class SchemaOfCsv(
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "csv"))
-    } else if (child.dataType != StringType) {
+    } else if (!child.dataType.isInstanceOf[StringType]) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
@@ -194,8 +210,8 @@ case class SchemaOfCsv(
     Literal.create(evaluator, ObjectType(classOf[SchemaOfCsvEvaluator])),
     "evaluate",
     dataType,
-    Seq(child),
-    Seq(child.dataType),
+    Seq(stringInput),
+    Seq(stringInput.dataType),
     returnNullable = false)
 }
 
@@ -205,6 +221,13 @@ case class SchemaOfCsv(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr[, options]) - Returns a CSV string with a given struct value",
+  arguments = """
+    Arguments:
+      * expr - A struct expression to convert into a CSV string.
+      * options - An optional map literal of string key-value pairs specifying CSV generation
+          options controlling how the struct is rendered. Accepts the same options as the CSV data
+          source.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
@@ -233,7 +256,7 @@ case class StructsToCsv(
 
   def this(child: Expression, options: Expression) =
     this(
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "to_csv"),
       child = child,
       timeZoneId = None)
 
@@ -275,6 +298,7 @@ case class StructsToCsv(
   lazy val converter: Any => UTF8String = {
     (row: Any) => UTF8String.fromString(gen.writeToString(row.asInstanceOf[InternalRow]))
   }
+  override def stateful: Boolean = true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))

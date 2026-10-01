@@ -1,0 +1,172 @@
+-- FVT Category 3: ASOF JOIN error conditions (FVT-ASOF-3-*)
+
+--SET spark.sql.join.asofJoin.enabled=true
+
+CREATE OR REPLACE TEMP VIEW trades(trade_time, symbol, quantity) AS
+  VALUES (TIMESTAMP '2026-06-29 10:00:05', 'AAPL', 100),
+         (TIMESTAMP '2026-06-29 10:00:11', 'AAPL', 200),
+         (TIMESTAMP '2026-06-29 10:00:12', 'MSFT',  50),
+         (TIMESTAMP '2026-06-29 09:59:59', 'GOOG',  30);
+
+CREATE OR REPLACE TEMP VIEW quotes(quote_time, symbol, bid_price) AS
+  VALUES (TIMESTAMP '2026-06-29 10:00:00', 'AAPL', 180.10),
+         (TIMESTAMP '2026-06-29 10:00:07', 'AAPL', 180.15),
+         (TIMESTAMP '2026-06-29 10:00:10', 'AAPL', 180.20),
+         (TIMESTAMP '2026-06-29 10:00:08', 'MSFT', 420.50);
+
+-- FVT-ASOF-3-001: scalar subquery in MATCH_CONDITION operand
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= (SELECT max(trade_time) FROM trades))
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-002: aggregate in MATCH_CONDITION operand
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= max(q.quote_time))
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-003: window function in MATCH_CONDITION operand
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= lead(q.quote_time) OVER (
+    PARTITION BY q.symbol ORDER BY q.quote_time))
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-004: generator in MATCH_CONDITION operand
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= EXPLODE(ARRAY(q.quote_time)))
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-005: non-deterministic function in MATCH_CONDITION operand
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (rand() >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-006: = rejected in MATCH_CONDITION (parse time)
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time = q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-007: <> rejected in MATCH_CONDITION (parse time)
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time <> q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-008: != rejected in MATCH_CONDITION (parse time)
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time != q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-009: IS DISTINCT FROM rejected in MATCH_CONDITION (parse time)
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time IS DISTINCT FROM q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-009a: IS NOT DISTINCT FROM rejected in MATCH_CONDITION (parse time)
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time IS NOT DISTINCT FROM q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-010: MAP operand rejected
+SELECT * FROM VALUES (MAP('a', 1)) AS t(m) ASOF JOIN VALUES (MAP('a', 1)) AS r(m)
+  MATCH_CONDITION (t.m >= r.m);
+
+-- FVT-ASOF-3-011: ARRAY of non-orderable elements rejected
+SELECT * FROM VALUES (ARRAY(MAP('a', 1))) AS t(a) ASOF JOIN VALUES (ARRAY(MAP('a', 1))) AS r(a)
+  MATCH_CONDITION (t.a >= r.a);
+
+-- FVT-ASOF-3-011a: ARRAY elements with no common type rejected (INT vs STRING only string-promotes)
+SELECT * FROM VALUES (ARRAY(1)) AS t(a) ASOF JOIN VALUES (ARRAY('x')) AS r(a)
+  MATCH_CONDITION (t.a >= r.a);
+
+-- FVT-ASOF-3-012: incompatible types in MATCH_CONDITION (TIMESTAMP vs DECIMAL has no common type)
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.bid_price)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-012a: STRING vs INTERVAL has no comparison common type, rejected like `>=`
+SELECT * FROM VALUES ('2026-06-29') AS t(s) ASOF JOIN
+     VALUES (INTERVAL '1-2' YEAR TO MONTH) AS r(iv)
+  MATCH_CONDITION (t.s >= r.iv);
+
+-- FVT-ASOF-3-013: STRUCT with non-orderable field rejected
+SELECT * FROM VALUES (named_struct('a', 1, 'm', MAP('a', 1))) AS t(s) ASOF JOIN
+     VALUES (named_struct('a', 1, 'm', MAP('a', 1))) AS r(s)
+  MATCH_CONDITION (t.s >= r.s);
+
+-- FVT-ASOF-3-013a: STRUCT operands with different field names and coercible types rejected
+-- (different names have no common type for the coercion the comparison needs)
+SELECT * FROM VALUES (named_struct('a', 1)) AS t(s) ASOF JOIN
+     VALUES (named_struct('c', CAST(1 AS BIGINT))) AS r(s)
+  MATCH_CONDITION (t.s >= r.s);
+
+-- FVT-ASOF-3-013b: STRUCT operands with same field name but only string-promotable types rejected
+-- (INT vs STRING has no tightest common type, so the comparison cannot widen the field)
+SELECT * FROM VALUES (named_struct('a', 1)) AS t(s) ASOF JOIN
+     VALUES (named_struct('a', CAST('x' AS STRING))) AS r(s)
+  MATCH_CONDITION (t.s >= r.s);
+
+-- FVT-ASOF-3-014: operand references both sides
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time + (q.quote_time - t.trade_time) >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-015: both operands reference same table
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= t.trade_time - INTERVAL 1 HOUR)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-017: aggregate in ON
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol AND q.bid_price > avg(q.bid_price);
+
+-- FVT-ASOF-3-018: window function in ON
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol
+    AND row_number() OVER (PARTITION BY q.symbol ORDER BY q.quote_time) = 1;
+
+-- FVT-ASOF-3-019: generator in ON
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON EXPLODE(ARRAY(t.symbol, q.symbol)) IS NOT NULL;
+
+-- FVT-ASOF-3-020: non-deterministic function in ON
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol AND RAND() > 0.5;
+
+-- FVT-ASOF-3-021: non-boolean ON
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol;
+
+-- FVT-ASOF-3-022: both ON and USING
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol
+  USING (symbol);
+
+-- FVT-ASOF-3-023: right operand references only right table
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (q.quote_time >= q.quote_time - INTERVAL 1 HOUR)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-024: literal constant operand (right) references no join input
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= TIMESTAMP '2026-06-29 10:00:00')
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-025: literal constant operand (left) references no join input
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (TIMESTAMP '2026-06-29 10:00:00' >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-026: query-foldable constant operand (current_timestamp) references no join input
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (current_timestamp() >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-027: both operands are constants that reference no join input
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (TIMESTAMP '2026-06-29 10:00:01' >= TIMESTAMP '2026-06-29 10:00:00')
+  ON t.symbol = q.symbol;

@@ -371,6 +371,15 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "STRUCT<col: BIGINT>")
   }
 
+  test("schema_of_xml and from_xml trim CHAR padding") {
+    val document = "<ROW><col>1</col></ROW>   "
+    val input = Literal.create(document, CharType(document.length, "UTF8_LCASE"))
+    val schema = new StructType().add("col", LongType)
+
+    checkEvaluation(SchemaOfXml(input, Map.empty), "STRUCT<col: BIGINT>")
+    checkEvaluation(XmlToStructs(schema, Map.empty, input, UTC_OPT), InternalRow(1L))
+  }
+
   test("parse date with locale") {
     Seq("en-US", "ru-RU").foreach { langTag =>
       val locale = Locale.forLanguageTag(langTag)
@@ -520,6 +529,19 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       XmlToStructs(schema, Map("rowTag" -> "record"), xmlResult, UTC_OPT),
       InternalRow(times)
     )
+  }
+
+  test("XmlToStructs and StructsToXml are stateful and produce fresh copies") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+
+    val xmlToStructs = XmlToStructs(schema, Map.empty, Literal("<a>1</a>"), UTC_OPT)
+    assert(xmlToStructs.stateful)
+    assert(xmlToStructs.freshCopyIfContainsStatefulExpression() ne xmlToStructs)
+
+    val struct = Literal.create(InternalRow(1), schema)
+    val structsToXml = StructsToXml(Map.empty, struct, UTC_OPT)
+    assert(structsToXml.stateful)
+    assert(structsToXml.freshCopyIfContainsStatefulExpression() ne structsToXml)
   }
 
 }

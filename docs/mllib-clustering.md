@@ -384,7 +384,7 @@ Refer to the [`LDA` Java docs](api/java/org/apache/spark/mllib/clustering/LDA.ht
 Bisecting K-means can often be much faster than regular K-means, but it will generally produce a different clustering.
 
 Bisecting k-means is a kind of [hierarchical clustering](https://en.wikipedia.org/wiki/Hierarchical_clustering).
-Hierarchical clustering is one of the most commonly used  method of cluster analysis which seeks to build a hierarchy of clusters.
+Hierarchical clustering is one of the most commonly used methods of cluster analysis which seeks to build a hierarchy of clusters.
 Strategies for hierarchical clustering generally fall into two types:
 
 - Agglomerative: This is a "bottom up" approach: each observation starts in its own cluster, and pairs of clusters are merged as one moves up the hierarchy.

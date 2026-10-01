@@ -293,7 +293,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
     attr.dataType match {
       case _: NumericType | DateType | TimestampType | BooleanType =>
         evaluateBinaryForNumeric(op, attr, literal, update)
-      case StringType | BinaryType =>
+      case _: StringType | BinaryType =>
         // TODO: It is difficult to support other binary comparisons for String/Binary
         // type without min/max and advanced statistics like histogram.
         logDebug("[CBO] No range comparison statistics for String/Binary type " + attr)
@@ -329,7 +329,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
     // We currently don't store min/max for binary/string type. For other types, if min/max are
     // missing, treat the range as unknown (instead of "all nulls") and fall back to NDV/histogram.
     val valueInRange = attr.dataType match {
-      case StringType | BinaryType =>
+      case _: StringType | BinaryType =>
         true
       case _ if !colStat.hasMinMaxStats =>
         true
@@ -353,7 +353,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
       // We update ColumnStat structure after apply this equality predicate:
       // Set distinctCount to 1, nullCount to 0, and min/max values (if exist) to the literal value.
       val newStats = attr.dataType match {
-        case StringType | BinaryType =>
+        case _: StringType | BinaryType =>
           colStat.copy(distinctCount = Some(1), nullCount = Some(0))
         case _ =>
           colStat.copy(distinctCount = Some(1), min = Some(literal.value),
@@ -443,7 +443,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
         }
 
       // We assume the whole set since there is no min/max information for String/Binary type
-      case StringType | BinaryType =>
+      case _: StringType | BinaryType =>
         if (ndv.toDouble == 0)  {
           return Some(0.0)
         }
@@ -686,7 +686,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
     }
 
     attrLeft.dataType match {
-      case StringType | BinaryType =>
+      case _: StringType | BinaryType =>
         // TODO: It is difficult to support other binary comparisons for String/Binary
         // type without min/max and advanced statistics like histogram.
         logDebug("[CBO] No range comparison statistics for String/Binary type " + attrLeft)

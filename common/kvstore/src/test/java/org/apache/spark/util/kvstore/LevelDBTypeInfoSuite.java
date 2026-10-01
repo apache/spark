@@ -145,6 +145,15 @@ public class LevelDBTypeInfoSuite {
     assertBefore(idx.toKey(new int[] { 1, 2 }), idx.toKey(new int[] { 1, 3 }));
   }
 
+  @Test
+  public void testStringValuesRejectKeySeparator() throws Exception {
+    LevelDBTypeInfo.Index idx = newTypeInfo(CustomType1.class).indices().iterator().next();
+
+    assertThrows(IllegalArgumentException.class, () -> idx.toKey("key\u0000suffix"));
+    assertThrows(IllegalArgumentException.class,
+      () -> idx.toKey(new String[] { "ok", "bad\u0000" }));
+  }
+
   private LevelDBTypeInfo newTypeInfo(Class<?> type) throws Exception {
     return new LevelDBTypeInfo(null, type, type.getName().getBytes(UTF_8));
   }

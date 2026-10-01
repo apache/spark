@@ -55,6 +55,11 @@ abstract class BitAggregate extends DeclarativeAggregate with ExpectsInputTypes
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the bitwise AND of all non-null input values, or null if none.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the bitwise AND of.
+        An expression that evaluates to an integral.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (3), (5) AS tab(col);
@@ -76,6 +81,11 @@ case class BitAndAgg(child: Expression) extends BitAggregate {
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the bitwise OR of all non-null input values, or null if none.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the bitwise OR of.
+        An expression that evaluates to an integral.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (3), (5) AS tab(col);
@@ -97,6 +107,11 @@ case class BitOrAgg(child: Expression) extends BitAggregate {
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the bitwise XOR of all non-null input values, or null if none.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the bitwise XOR of.
+        An expression that evaluates to an integral.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (3), (5) AS tab(col);

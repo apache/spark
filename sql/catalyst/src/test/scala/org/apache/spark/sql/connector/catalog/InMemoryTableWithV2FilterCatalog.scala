@@ -19,31 +19,28 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
+import org.apache.spark.sql.connector.distributions.Distribution
+import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 
 class InMemoryTableWithV2FilterCatalog extends InMemoryTableCatalog {
-  import CatalogV2Implicits._
-
-  override def createTable(
-      ident: Identifier,
+  // scalastyle:off argcount
+  override protected def newInMemoryTable(
+      name: String,
       columns: Array[Column],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
-    if (tables.containsKey(ident)) {
-      throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
-    }
-
-    InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
-
-    val tableName = s"$name.${ident.quoted}"
-    val table = new InMemoryTableWithV2Filter(tableName, columns, partitions, properties)
-    tables.put(ident, table)
-    namespaces.putIfAbsent(ident.namespace.toList, Map())
-    table
-  }
-
-  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
-    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties)
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint],
+      distribution: Distribution,
+      ordering: Array[SortOrder],
+      requiredNumPartitions: Option[Int],
+      advisoryPartitionSize: Option[Long],
+      distributionStrictlyRequired: Boolean,
+      numRowsPerSplit: Int,
+      id: String): InMemoryBaseTable = {
+    // scalastyle:on argcount
+    new InMemoryTableWithV2Filter(
+      name, columns, partitioning, properties, constraints, distribution, ordering,
+      requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired, numRowsPerSplit)
   }
 }

@@ -104,11 +104,11 @@ public interface KVStore extends Closeable {
 
   /**
    * Removes an object and all data related to it, like index entries, from the store.
+   * Deleting a missing key is a no-op.
    *
    * @param type The object's type.
    * @param naturalKey The object's "natural key", which uniquely identifies it. Null keys
    *                   are not allowed.
-   * @throws java.util.NoSuchElementException If an element with the given key does not exist.
    */
   void delete(Class<?> type, Object naturalKey) throws Exception;
 

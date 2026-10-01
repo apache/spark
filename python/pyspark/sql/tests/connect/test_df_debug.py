@@ -18,7 +18,7 @@
 import unittest
 
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.utils import have_graphviz, graphviz_requirement_message
+from pyspark.testing.utils import graphviz_requirement_message, have_graphviz
 
 
 class SparkConnectDataFrameDebug(ReusedConnectTestCase):

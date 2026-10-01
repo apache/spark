@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-from typing import Any, Union, List, Dict
+from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
 
-from pyspark.sql import DataFrame
 from pyspark.ml.connect.util import aggregate_dataframe
+from pyspark.sql import DataFrame
 
 
 class SummarizerAggState:

@@ -418,21 +418,9 @@ class TriggeredGraphExecution(
       return RunCompletion()
     }
 
-    val executionFailureOpt = failureTracker.iterator
-      .map {
-        case (flowIdentifier, failureInfo) =>
-          (
-            graphForExecution.flow(flowIdentifier),
-            failureInfo.lastException,
-            failureInfo.lastExceptionAction
-          )
-      }
-      .collectFirst {
-        case (_, _, GraphExecution.StopFlowExecution(reason)) =>
-          reason.runTerminationReason
-      }
-
-    executionFailureOpt.getOrElse(UnexpectedRunFailure())
+    TriggeredGraphExecution
+      .chooseRunTerminationReason(failureTracker.iterator)
+      .getOrElse(UnexpectedRunFailure())
   }
 }
 
@@ -449,6 +437,23 @@ case class TriggeredFailureInfo(
 }
 
 object TriggeredGraphExecution {
+
+  /**
+   * Picks the run-termination reason from the flows whose execution was stopped because they
+   * exhausted their retries. Several flows can stop a run and `failures` comes from an unordered
+   * map, so the earliest failure is chosen - ties broken by flow name - to keep the reported
+   * reason stable across otherwise-identical runs.
+   */
+  private[graph] def chooseRunTerminationReason(
+      failures: Iterator[(TableIdentifier, TriggeredFailureInfo)]): Option[RunTerminationReason] = {
+    failures
+      .collect {
+        case (id, TriggeredFailureInfo(ts, _, _, GraphExecution.StopFlowExecution(r))) =>
+          (ts, id.unquotedString, r.runTerminationReason)
+      }
+      .minByOption { case (ts, flowName, _) => (ts, flowName) }
+      .map { case (_, _, reason) => reason }
+  }
 
   // All possible states of a data stream for a flow
   sealed trait StreamState

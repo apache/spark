@@ -17,7 +17,7 @@
 
 /* global $, uiRoot, appBasePath, createSqlApiBase, getSqlTableColumns,
    withResolvedAppId, statusBadge, jobIdLinks, formatDurationSql,
-   descriptionHtml */
+   formatTotalTaskTime, descriptionHtml */
 
 $(document).ready(function () {
   // Read the cluster-level grouping toggle rendered into the page by Scala
@@ -132,7 +132,8 @@ $(document).ready(function () {
         var html = '<table id="' + childId +
           '" class="table table-sm table-bordered mb-0 sub-exec-table">';
         html += '<thead><tr><th>ID</th><th>Status</th><th>Description</th>' +
-          '<th>Duration</th><th>Succeeded Jobs</th></tr></thead><tbody>';
+          '<th>Duration</th><th>Total Task Time</th>' +
+          '<th>Succeeded Jobs</th></tr></thead><tbody>';
         subs.forEach(function (child) {
           html += '<tr><td><a href="' + basePath + '/SQL/execution/?id=' +
             child.id + '">' + child.id + '</a></td>';
@@ -141,6 +142,7 @@ $(document).ready(function () {
             id: child.id, description: child.description || ""
           }) + '</td>';
           html += '<td>' + formatDurationSql(child.duration) + '</td>';
+          html += '<td>' + formatTotalTaskTime(child.totalTaskTime) + '</td>';
           html += '<td>' + jobIdLinks(child.jobIds || []) + '</td></tr>';
         });
         html += '</tbody></table>';

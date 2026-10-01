@@ -24,9 +24,10 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.ipc.{ArrowFileReader, ArrowFileWriter}
-import org.apache.arrow.vector.types.pojo.Schema
+import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
 
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
+import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.util.ArrowUtils
 
 private[sql] class SparkArrowFileWriter(schema: Schema, path: Path) extends AutoCloseable {
@@ -97,6 +98,33 @@ private[spark] object ArrowFileReadWrite {
   def load(spark: SparkSession, path: Path): DataFrame = {
     val reader = new SparkArrowFileReader(path)
     val schema = ArrowUtils.fromArrowSchema(reader.schema)
+    // `toDataFrame` rebuilds vectors from `schema` via `toArrowSchema` and loads the file's raw
+    // record batches into them, so the file's physical layout must match Spark's canonical Arrow
+    // encoding of that schema. An Arrow type that converts to a Spark type but is encoded
+    // differently (e.g. Utf8View or LargeUtf8 vs Utf8) would have its buffers reinterpreted as
+    // the wrong layout and read back as corrupt values, so reject it up front.
+    val canonicalSchema = ArrowUtils.toArrowSchema(
+      schema, "UTC", errorOnDuplicatedFieldNames = true, largeVarTypes = false)
+    reader.schema.getFields.asScala.zip(canonicalSchema.getFields.asScala).foreach {
+      case (actual, canonical) => checkLayoutMatch(actual, canonical)
+    }
     ArrowConverters.toDataFrame(reader.read(), schema, spark, "UTC", true, false)
+  }
+
+  private def checkLayoutMatch(actual: Field, canonical: Field): Unit = {
+    val compatible = (actual.getType, canonical.getType) match {
+      // The timezone label does not affect the physical encoding (values are epoch-based), and
+      // `fromArrowSchema` already rejects the units Spark cannot read.
+      case (a: ArrowType.Timestamp, c: ArrowType.Timestamp) => a.getUnit == c.getUnit
+      // Map equality includes the keysSorted flag, which has no layout impact.
+      case (_: ArrowType.Map, _: ArrowType.Map) => true
+      case (a, c) => a == c
+    }
+    if (!compatible) {
+      throw ExecutionErrors.unsupportedArrowTypeError(actual.getType)
+    }
+    actual.getChildren.asScala.zip(canonical.getChildren.asScala).foreach {
+      case (a, c) => checkLayoutMatch(a, c)
+    }
   }
 }

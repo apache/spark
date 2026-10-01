@@ -17,14 +17,14 @@
 
 import unittest
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import extension_dtypes_available
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 @unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")

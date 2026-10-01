@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
@@ -102,6 +103,45 @@ public interface TableCatalog extends CatalogPlugin {
    * @return the set of capabilities for this TableCatalog
    */
   default Set<TableCatalogCapability> capabilities() { return Set.of(); }
+
+  /**
+   * Returns the connector-specific option keys that select the table state (such as a branch, tag,
+   * snapshot, or version) and therefore must be known when the table is loaded. Keys that Spark
+   * parses and handles itself, such as time travel, must not be listed here.
+   * <p>
+   * Spark may need to resolve the same table more than once while analyzing or refreshing a query.
+   * Spark reuses one table instance only for references whose table-state options match and passes
+   * only the declared options to {@code loadTable}. The complete user option map remains on each
+   * resolved relation for subsequent scan and write planning.
+   * <p>
+   * The default implementation returns an empty set, treating all options as unable to select a
+   * different table state. Option key matching is case-insensitive, while option values remain
+   * case-sensitive.
+   *
+   * @return a non-null set of case-insensitive option keys
+   *
+   * @since 4.3.0
+   */
+  default Set<String> tableStateOptionKeys() { return Set.of(); }
+
+  /**
+   * Returns the connector-specific option keys needed to load a changelog or determine its
+   * metadata, such as branch, tag, or schema selection. Parameters that Spark parses into
+   * {@link ChangelogContext}, such as the range and post-processing options, must not be listed.
+   * <p>
+   * Spark passes only the declared options to {@link #loadChangelog} and uses them, together with
+   * the changelog context, to identify reusable changelog state. The complete user option map
+   * remains on each resolved relation for subsequent scan planning.
+   * <p>
+   * The default implementation returns {@link #tableStateOptionKeys()}. An override declares the
+   * complete set of changelog state option keys; Spark does not add the table state option keys.
+   * Option key matching is case-insensitive, while option values remain case-sensitive.
+   *
+   * @return a non-null set of case-insensitive option keys
+   *
+   * @since 4.3.0
+   */
+  default Set<String> changelogStateOptionKeys() { return tableStateOptionKeys(); }
 
   /**
    * List the tables in a namespace from the catalog.
@@ -195,16 +235,67 @@ public interface TableCatalog extends CatalogPlugin {
   }
 
   /**
+   * Load table metadata by {@link Identifier identifier} from the catalog, forwarding the
+   * user-specified options that may affect table state.
+   * <p>
+   * The default implementation ignores {@code stateOptions} and delegates to the existing
+   * {@code loadTable} overloads based on {@code context}. Catalogs that want to receive the user
+   * options while loading a table for a read or write must override
+   * {@link #tableStateOptionKeys()} and this method.
+   * Spark passes only the options declared by {@link #tableStateOptionKeys()}. Spark retains the
+   * complete user option map on the resolved relation for subsequent scan and write planning.
+   * <p>
+   * An override replaces that dispatch and must honor {@code context} itself: apply the time
+   * travel in {@link TableContext#timeTravel()}, and authorize the requested
+   * {@link TableContext#writePrivileges()} as it would in {@link #loadTable(Identifier, Set)}.
+   * Spark does not re-check either afterwards.
+   *
+   * @param ident a table identifier
+   * @param context the parsed load parameters (time travel, write privileges)
+   * @param stateOptions options declared to affect table state; Spark-parsed state such as time
+   *                     travel is provided through {@code context} instead
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist
+   *
+   * @since 4.3.0
+   */
+  default Table loadTable(
+      Identifier ident,
+      TableContext context,
+      CaseInsensitiveStringMap stateOptions) throws NoSuchTableException {
+    if (context.timeTravel().isPresent()) {
+      TimeTravel timeTravel = context.timeTravel().get();
+      if (timeTravel instanceof TimeTravel.AsOfVersion v) {
+        return loadTable(ident, v.version());
+      } else if (timeTravel instanceof TimeTravel.AsOfTimestamp ts) {
+        return loadTable(ident, ts.micros());
+      } else {
+        throw new SparkIllegalArgumentException(
+            "INTERNAL_ERROR",
+            Map.of("message", "Unsupported time travel spec: " + timeTravel));
+      }
+    } else if (!context.writePrivileges().isEmpty()) {
+      return loadTable(ident, context.writePrivileges());
+    } else {
+      return loadTable(ident);
+    }
+  }
+
+  /**
    * Load a {@link Changelog} for the given table, representing the row-level changes within the
    * range specified by {@code context}.
    * <p>
-   * The default implementation throws an analysis exception indicating that the catalog does
-   * not support CDC. Catalogs that support CDC must override this method.
+   * Spark passes only the options declared by {@link #changelogStateOptionKeys()}. The range and
+   * post-processing parameters are supplied through {@code context}. The complete user option
+   * map is retained for {@link Changelog#newScanBuilder(CaseInsensitiveStringMap)}.
+   * <p>
+   * The default implementation throws {@link UnsupportedOperationException} to indicate that
+   * the catalog does not support CDC. Catalogs that support CDC must override this method.
    *
    * @param ident a table identifier
    * @param context the CDC query context (range, deduplication mode, etc.)
-   * @param options all options passed to the changelog query, including the CDC-recognized
-   *                keys (range, deduplication mode, etc.) that are also parsed into {@code context}
+   * @param stateOptions options declared to affect changelog state; Spark-parsed parameters are
+   *                     provided through {@code context} instead
    * @return a Changelog instance for the requested table and range
    * @throws NoSuchTableException If the table doesn't exist
    *
@@ -213,7 +304,7 @@ public interface TableCatalog extends CatalogPlugin {
   default Changelog loadChangelog(
       Identifier ident,
       ChangelogContext context,
-      CaseInsensitiveStringMap options) throws NoSuchTableException {
+      CaseInsensitiveStringMap stateOptions) throws NoSuchTableException {
     throw new UnsupportedOperationException(name() + " does not support Change Data Capture (CDC)");
   }
 
@@ -278,7 +369,10 @@ public interface TableCatalog extends CatalogPlugin {
    * @param ident a table identifier
    * @param tableInfo information about the table
    * @return metadata for the new table. This can be null if getting the metadata for the new table
-   *         is expensive. Spark will call {@link #loadTable(Identifier)} if needed (e.g. CTAS).
+   *         is expensive. Spark will call
+   *         {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} if needed
+   *         (e.g. CTAS), forwarding the catalog-declared table-state options and required
+   *         privileges.
    *
    * @throws TableAlreadyExistsException If a table already exists for the identifier
    * @throws UnsupportedOperationException If a requested partition transform is not supported

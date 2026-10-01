@@ -332,8 +332,8 @@ abstract class Catalog {
   def createTable(tableName: String, path: String, source: String): DataFrame
 
   /**
-   * Creates a table from the given path based on a data source and a set of options. Then,
-   * returns the corresponding DataFrame.
+   * Creates a table based on the dataset in a data source and a set of options. Then, returns the
+   * corresponding DataFrame.
    *
    * @param tableName
    *   is either a qualified or unqualified name that designates a table. If no database
@@ -365,8 +365,8 @@ abstract class Catalog {
   }
 
   /**
-   * (Scala-specific) Creates a table from the given path based on a data source and a set of
-   * options. Then, returns the corresponding DataFrame.
+   * (Scala-specific) Creates a table based on the dataset in a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
    *
    * @param tableName
    *   is either a qualified or unqualified name that designates a table. If no database
@@ -393,8 +393,8 @@ abstract class Catalog {
   def createTable(tableName: String, source: String, options: Map[String, String]): DataFrame
 
   /**
-   * Create a table from the given path based on a data source, a schema and a set of options.
-   * Then, returns the corresponding DataFrame.
+   * Create a table based on the dataset in a data source, a schema and a set of options. Then,
+   * returns the corresponding DataFrame.
    *
    * @param tableName
    *   is either a qualified or unqualified name that designates a table. If no database
@@ -464,8 +464,8 @@ abstract class Catalog {
   }
 
   /**
-   * (Scala-specific) Create a table from the given path based on a data source, a schema and a
-   * set of options. Then, returns the corresponding DataFrame.
+   * (Scala-specific) Create a table based on the dataset in a data source, a schema and a set of
+   * options. Then, returns the corresponding DataFrame.
    *
    * @param tableName
    *   is either a qualified or unqualified name that designates a table. If no database

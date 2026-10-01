@@ -34,6 +34,13 @@ import org.apache.spark.sql.types._
   usage = """
     _FUNC_(expr[, isIgnoreNull]) - Returns some value of `expr` for a group of rows.
       If `isIgnoreNull` is true, returns only non-null values.""",
+  arguments = """
+    Arguments:
+      * expr - The expression to return some value of.
+        An expression of any type.
+      * isIgnoreNull - Whether to return only non-null values.
+        An expression that evaluates to a boolean. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (10), (5), (20) AS tab(col);

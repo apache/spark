@@ -497,7 +497,7 @@ private class LiveStage(var info: StageInfo) extends LiveEntity {
 
       submissionTime = info.submissionTime.map(new Date(_)),
       firstTaskLaunchedTime =
-        if (firstLaunchTime < Long.MaxValue) Some(new Date(firstLaunchTime)) else None,
+        Option.when(firstLaunchTime < Long.MaxValue)(new Date(firstLaunchTime)),
       completionTime = info.completionTime.map(new Date(_)),
       failureReason = info.failureReason,
 
@@ -627,10 +627,10 @@ private class LiveRDDDistribution(exec: LiveExecutor) {
         memoryUsed,
         exec.maxMemory - exec.memoryUsed,
         diskUsed,
-        if (exec.hasMemoryInfo) Some(onHeapUsed) else None,
-        if (exec.hasMemoryInfo) Some(offHeapUsed) else None,
-        if (exec.hasMemoryInfo) Some(exec.totalOnHeap - exec.usedOnHeap) else None,
-        if (exec.hasMemoryInfo) Some(exec.totalOffHeap - exec.usedOffHeap) else None)
+        Option.when(exec.hasMemoryInfo)(onHeapUsed),
+        Option.when(exec.hasMemoryInfo)(offHeapUsed),
+        Option.when(exec.hasMemoryInfo)(exec.totalOnHeap - exec.usedOnHeap),
+        Option.when(exec.hasMemoryInfo)(exec.totalOffHeap - exec.usedOffHeap))
     }
     lastUpdate
   }

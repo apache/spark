@@ -357,6 +357,15 @@ abstract class TupleUnionAggBase[S <: Summary]
       `child` should be a binary TupleSketch representation created with a double type summary.
       `lgNomEntries` is the log-base-2 of nominal entries for the union operation. Default is 12.
       `mode` is the aggregation mode for numeric summaries during union (sum, min, max, alwaysone). Default is sum. """,
+  arguments = """
+    Arguments:
+      * child - The binary TupleSketch representation, created with a double type summary, to union.
+        An expression that evaluates to a binary.
+      * lgNomEntries - The log-base-2 of nominal entries for the union operation.
+        An expression that evaluates to an integer. Must be a constant.
+      * mode - The aggregation mode for numeric summaries during union (sum, min, max, alwaysone).
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_double(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg_double(key, summary) as sketch FROM VALUES (1, 5.0D), (2, 10.0D) tab(key, summary) UNION ALL SELECT tuple_sketch_agg_double(key, summary) as sketch FROM VALUES (2, 3.0D), (3, 7.0D) tab(key, summary));
@@ -386,6 +395,16 @@ object TupleUnionAggDoubleExpressionBuilder extends ExpressionBuilder {
       `child` should be a binary TupleSketch representation created with an integer type summary.
       `lgNomEntries` is the log-base-2 of nominal entries for the union operation. Default is 12.
       `mode` is the aggregation mode for numeric summaries during union (sum, min, max, alwaysone). Default is sum. """,
+  arguments = """
+    Arguments:
+      * child - The binary TupleSketch representation, created with an integer type summary, to
+        union.
+        An expression that evaluates to a binary.
+      * lgNomEntries - The log-base-2 of nominal entries for the union operation.
+        An expression that evaluates to an integer. Must be a constant.
+      * mode - The aggregation mode for numeric summaries during union (sum, min, max, alwaysone).
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_integer(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg_integer(key, summary) as sketch FROM VALUES (1, 5), (2, 10) tab(key, summary) UNION ALL SELECT tuple_sketch_agg_integer(key, summary) as sketch FROM VALUES (2, 3), (3, 7) tab(key, summary));

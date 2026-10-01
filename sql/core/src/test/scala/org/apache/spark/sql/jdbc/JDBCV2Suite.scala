@@ -236,6 +236,12 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES ('a a a')")
       batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES (null)")
 
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"null_literal\" (s TEXT(32))")
+      batchStmt.addBatch("INSERT INTO \"test\".\"null_literal\" VALUES ('keep')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"null_literal\" VALUES ('')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"null_literal\" VALUES (null)")
+
       batchStmt.executeBatch()
 
       conn
@@ -1243,14 +1249,16 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkPushedInfo(df10, "PushedFilters: [ID IS NOT NULL, ID > 1]")
     checkAnswer(df10, Row("mary", 2))
 
+    // RAND(1) is non-deterministic, so (SPARK-58207) it is not pushed down and stays as a
+    // post-scan filter. RAND(1) < bonus is trivially true for the matching row (bonus = 1300 >= 1).
     val df11 = sql(
       """
         |SELECT * FROM h2.test.employee
         |WHERE GREATEST(bonus, 1100) > 1200 AND RAND(1) < bonus
         |""".stripMargin)
-    checkFiltersRemoved(df11)
+    checkFiltersRemoved(df11, removed = false)
     checkPushedInfo(df11, "PushedFilters: " +
-      "[BONUS IS NOT NULL, (GREATEST(BONUS, 1100.0)) > 1200.0, RAND(1) < BONUS]")
+      "[BONUS IS NOT NULL, (GREATEST(BONUS, 1100.0)) > 1200.0]")
     checkAnswer(df11, Row(2, "david", 10000, 1300, true))
 
     val df12 = sql(
@@ -1817,7 +1825,8 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       Seq(Row("test", "address", false), Row("test", "people", false),
         Row("test", "empty_table", false), Row("test", "employee", false),
         Row("test", "item", false), Row("test", "dept", false),
-        Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
+        Row("test", "null_literal", false), Row("test", "person", false),
+        Row("test", "view1", false), Row("test", "view2", false),
         Row("test", "datetime", false), Row("test", "binary_tab", false),
         Row("test", "employee_bonus", false),
         Row("test", "strings_with_nulls", false)))
@@ -2513,7 +2522,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAggregateRemoved(df3)
     checkPushedInfo(df3,
       """
-        |PushedAggregates: [AVG(CASE WHEN BONUS IS NOT NULL THEN BONUS ELSE null END)],
+        |PushedAggregates: [AVG(CASE WHEN BONUS IS NOT NULL THEN BONUS ELSE NULL END)],
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |PushedGroupByExpressions: [DEPT],
         |""".stripMargin.replaceAll("\n", " "))
@@ -2529,7 +2538,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAggregateRemoved(df4)
     checkPushedInfo(df4,
       """
-        |PushedAggregates: [AVG(DISTINCT CASE WHEN BONUS IS NOT NULL THEN BONUS ELSE null END)],
+        |PushedAggregates: [AVG(DISTINCT CASE WHEN BONUS IS NOT NULL THEN BONUS ELSE NULL END)],
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |PushedGroupByExpressions: [DEPT],
         |""".stripMargin.replaceAll("\n", " "))
@@ -3172,4 +3181,17 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
 
     assertResult(expectedMetadata) { jdbcRdd.getDatabaseMetadata }
   }
+
+  test("SPARK-58782: null literal in aggregate should render as NULL not 'null'") {
+    val df = sql("SELECT NULLIF(s, '') AS g, COUNT(*) FROM h2.test.null_literal GROUP BY g")
+
+    checkAggregateRemoved(df)
+    checkPushedInfo(df,
+      "PushedAggregates: [COUNT(*)]",
+      "PushedGroupByExpressions: [CASE WHEN S = '' THEN NULL ELSE S END]")
+
+    // The '' row should collapse into the NULL group, not create a separate 'null' string group
+    checkAnswer(df, Seq(Row("keep", 1), Row(null, 2)))
+  }
+
 }

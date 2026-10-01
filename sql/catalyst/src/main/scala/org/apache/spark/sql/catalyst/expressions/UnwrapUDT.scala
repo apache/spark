@@ -25,6 +25,8 @@ import org.apache.spark.sql.types.{DataType, UserDefinedType}
 
 /**
  * Unwrap UDT data type column into its underlying type.
+ *
+ * @see [[WrapUDT]] for converting an underlying SQL type column to a UDT.
  */
 case class UnwrapUDT(child: Expression) extends UnaryExpression with NonSQLExpression {
 

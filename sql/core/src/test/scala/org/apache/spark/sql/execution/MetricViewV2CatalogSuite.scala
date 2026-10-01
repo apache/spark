@@ -184,7 +184,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
 
       // SQL configs and current catalog/namespace are first-class typed fields on View, no
       // longer encoded into properties for V2 catalogs.
-      assert(info.sqlConfigs().size > 0,
+      assert(!info.sqlConfigs().isEmpty,
         s"Expected at least one captured SQL config; got ${info.sqlConfigs()}")
       assert(info.currentCatalog() ===
         spark.sessionState.catalogManager.currentCatalog.name())
@@ -927,6 +927,28 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
       } finally {
         sql(s"DROP VIEW IF EXISTS $renamedFull")
       }
+    }
+  }
+
+  test("ALTER VIEW <metric_view> SET TBLPROPERTIES preserves the dependency list") {
+    withTestCatalogTables {
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, mv)
+
+      sql(s"ALTER VIEW $fullMetricViewName SET TBLPROPERTIES ('k' = 'v')")
+
+      val info = capturedViewInfo()
+      assert(info.properties().get("k") === "v")
+      val deps = info.viewDependencies()
+      assert(deps != null)
+      assert(deps.dependencies().length === 1)
+      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
+      assert(tableDep.nameParts().toSeq ===
+        Seq(testCatalogName, testNamespace, sourceTableName))
     }
   }
 

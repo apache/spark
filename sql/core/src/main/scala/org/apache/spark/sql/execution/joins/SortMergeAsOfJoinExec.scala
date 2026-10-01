@@ -45,8 +45,8 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 case class SortMergeAsOfJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
-    leftAsOfExpr: Expression,
-    rightAsOfExpr: Expression,
+    leftSortExprs: Seq[Expression],
+    rightSortExprs: Seq[Expression],
     asOfCondition: Expression,
     orderExpression: Expression,
     joinType: JoinType,
@@ -54,6 +54,10 @@ case class SortMergeAsOfJoinExec(
     left: SparkPlan,
     right: SparkPlan,
     isSkewJoin: Boolean = false) extends ShuffledJoin {
+
+  require(leftSortExprs.nonEmpty && rightSortExprs.nonEmpty &&
+    leftSortExprs.length == rightSortExprs.length,
+    s"$nodeName requires matching non-empty sort expressions on both sides")
 
   require(Seq(Inner, LeftOuter).exists(joinType == _),
     s"$nodeName does not support join type: $joinType")
@@ -79,27 +83,37 @@ case class SortMergeAsOfJoinExec(
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
-    val leftOrdering = leftKeys.map(SortOrder(_, Ascending)) :+
-      SortOrder(leftAsOfExpr, Ascending)
-    val rightOrdering = rightKeys.map(SortOrder(_, Ascending)) :+
-      SortOrder(rightAsOfExpr, Ascending)
+    val leftOrdering = leftKeys.map(SortOrder(_, Ascending)) ++
+      leftSortExprs.map(SortOrder(_, Ascending))
+    val rightOrdering = rightKeys.map(SortOrder(_, Ascending)) ++
+      rightSortExprs.map(SortOrder(_, Ascending))
     leftOrdering :: rightOrdering :: Nil
   }
 
   override def outputOrdering: Seq[SortOrder] = left.outputOrdering
 
-  // Determine scan direction based on the order expression (distance metric).
-  // This is a performance heuristic only -- if it misclassifies, the scan
-  // still produces the correct result; only the early-termination shortcut
-  // is lost.
-  //
-  // orderExpression is direction-unique by construction:
-  //   Backward: Subtract(leftAsOf, rightAsOf) -> backward mode
-  //   Forward:  Subtract(rightAsOf, leftAsOf) -> forward mode
-  //   Nearest:  If(...) -> forward mode
-  private val isBackwardJoin: Boolean = orderExpression match {
-    case Subtract(l, _, _) if l.semanticEquals(leftAsOfExpr) => true
-    case _ => false
+  // Backward joins scan the right-side buffer forward and keep the last match.
+  // Detect from asOfCondition so composite MATCH_CONDITION sort keys still work.
+  private val isBackwardJoin: Boolean =
+    isBackwardAsOfCondition(asOfCondition, left.output, right.output)
+
+  private def isBackwardAsOfCondition(
+      condition: Expression,
+      leftOutput: Seq[Attribute],
+      rightOutput: Seq[Attribute]): Boolean = {
+    val leftAttrs = AttributeSet(leftOutput)
+    val rightAttrs = AttributeSet(rightOutput)
+    def isBackwardPredicate(expr: Expression): Boolean = expr match {
+      case GreaterThanOrEqual(l, r)
+          if l.references.subsetOf(leftAttrs) && r.references.subsetOf(rightAttrs) =>
+        true
+      case GreaterThan(l, r)
+          if l.references.subsetOf(leftAttrs) && r.references.subsetOf(rightAttrs) =>
+        true
+      case And(c, _) => isBackwardPredicate(c)
+      case _ => false
+    }
+    isBackwardPredicate(condition)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -165,8 +179,14 @@ private[joins] class SortMergeAsOfJoinScanner(
 
   private val joinedOutput = leftOutput ++ rightOutput
   private val joinedRow = new JoinedRow()
-  private val resultProjection =
-    UnsafeProjection.create(joinedOutput, joinedOutput)
+  // Use nullable bound references so outer-join null padding is safe even when
+  // right attributes are NOT NULL in the catalog schema.
+  private val resultProjection = {
+    val nullableRefs = joinedOutput.zipWithIndex.map { case (attr, i) =>
+      BoundReference(i, attr.dataType, nullable = true)
+    }
+    UnsafeProjection.create(nullableRefs, joinedOutput)
+  }
 
   private val boundAsOfCond = bindReference(asOfCondition, joinedOutput)
   private val boundOrderExpr = bindReference(orderExpression, joinedOutput)
@@ -190,7 +210,15 @@ private[joins] class SortMergeAsOfJoinScanner(
   private val distanceOrdering =
     TypeUtils.getInterpretedOrdering(orderExpression.dataType)
 
-  private val nullRightRow = new GenericInternalRow(rightOutput.length)
+  // Materialize an all-null right row as UnsafeRow. GenericInternalRow cannot be
+  // passed through identity UnsafeProjection when right columns are NOT NULL.
+  private val nullRightRow: InternalRow = {
+    val nullableRefs = rightOutput.zipWithIndex.map { case (attr, i) =>
+      BoundReference(i, attr.dataType, nullable = true)
+    }
+    val proj = UnsafeProjection.create(nullableRefs, rightOutput)
+    proj(new GenericInternalRow(rightOutput.length))
+  }
 
   // Spill-backed right-side buffer
   private val rightGroupBuffer = new ExternalAppendOnlyUnsafeRowArray(
@@ -349,6 +377,18 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   /**
+   * Retains `rightRow` as the best match found so far.
+   *
+   * While the right-side buffer is held in memory, its iterator yields the distinct rows stored
+   * in the buffer and a match can be retained as is. Once the buffer is spill-backed the
+   * iterator re-points a single [[UnsafeRow]] on every `next()`, so the match has to be copied
+   * out before the scan advances. `needsCopy` is read once per scan by the callers.
+   */
+  private def retainMatch(rightRow: UnsafeRow, needsCopy: Boolean): UnsafeRow = {
+    if (needsCopy) rightRow.copy() else rightRow
+  }
+
+  /**
    * Forward scan for Backward joins: last-match-wins.
    * Buffer is sorted ascending by as-of key. For left.t >= right.t,
    * as-of condition is monotone: true for right.t <= left.t, then false.
@@ -357,10 +397,12 @@ private[joins] class SortMergeAsOfJoinScanner(
   private def findBestBackwardForward(leftRow: InternalRow): InternalRow = {
     var bestMatch: InternalRow = null
     val iter = rightGroupBuffer.generateIterator()
+    val needsCopy = rightGroupBuffer.isSpillBacked
 
+    joinedRow.withLeft(leftRow)
     while (iter.hasNext) {
       val rightRow = iter.next()
-      joinedRow.withLeft(leftRow).withRight(rightRow)
+      joinedRow.withRight(rightRow)
 
       val asOfSatisfied = boundAsOfCond.eval(joinedRow)
       if (asOfSatisfied != null && asOfSatisfied.asInstanceOf[Boolean]) {
@@ -370,7 +412,7 @@ private[joins] class SortMergeAsOfJoinScanner(
         }
         if (residualSatisfied) {
           // Last match wins (closest right.t to left.t)
-          bestMatch = rightRow.copy()
+          bestMatch = retainMatch(rightRow, needsCopy)
         }
       } else if (bestMatch != null) {
         // as-of condition transitioned true -> false (monotone for Backward).
@@ -389,10 +431,12 @@ private[joins] class SortMergeAsOfJoinScanner(
     var bestMatch: InternalRow = null
     var bestDistance: Any = null
     val iter = rightGroupBuffer.generateIterator()
+    val needsCopy = rightGroupBuffer.isSpillBacked
 
+    joinedRow.withLeft(leftRow)
     while (iter.hasNext) {
       val rightRow = iter.next()
-      joinedRow.withLeft(leftRow).withRight(rightRow)
+      joinedRow.withRight(rightRow)
 
       val asOfSatisfied = boundAsOfCond.eval(joinedRow)
       if (asOfSatisfied != null && asOfSatisfied.asInstanceOf[Boolean]) {
@@ -404,7 +448,7 @@ private[joins] class SortMergeAsOfJoinScanner(
           val distance = boundOrderExpr.eval(joinedRow)
           if (distance != null) {
             if (bestMatch == null || distanceOrdering.lt(distance, bestDistance)) {
-              bestMatch = rightRow.copy()
+              bestMatch = retainMatch(rightRow, needsCopy)
               bestDistance = distance
             } else {
               // Distance is increasing past the minimum. For Forward,

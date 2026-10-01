@@ -14,9 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import json
-from contextlib import contextmanager
 import collections
+import json
 import logging
 import os
 import random
@@ -27,27 +26,28 @@ import sys
 import tempfile
 import textwrap
 import time
+from contextlib import contextmanager
 from typing import (
-    Union,
-    Callable,
-    List,
-    Dict,
-    Optional,
     Any,
-    Tuple,
+    Callable,
+    Dict,
     Generator,
     Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
 )
 
 from pyspark import cloudpickle
-from pyspark.resource.information import ResourceInformation
-from pyspark.sql import DataFrame, SparkSession
-from pyspark.taskcontext import BarrierTaskContext
+from pyspark.ml.dl_util import FunctionPickler
 from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingClient,
     LogStreamingServer,
 )
-from pyspark.ml.dl_util import FunctionPickler
+from pyspark.resource.information import ResourceInformation
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.taskcontext import BarrierTaskContext
 
 
 def _get_resources(session: SparkSession) -> Dict[str, ResourceInformation]:
@@ -431,12 +431,20 @@ class TorchDistributor(Distributor):
         else:
             processes_per_node = 1
         node_rank = os.environ["RANK"]
+        # Set by set_torch_config; no constant fallback, since concurrent runs sharing a
+        # rendezvous endpoint would collide on a fixed id.
+        rdzv_id = os.environ.get("PYSPARK_TORCH_DISTRIBUTOR_RDZV_ID")
+        if not rdzv_id:
+            raise RuntimeError(
+                "Missing PYSPARK_TORCH_DISTRIBUTOR_RDZV_ID environment variable: a unique "
+                "per-run rendezvous id is required for distributed training."
+            )
 
         torchrun_args = [
             f"--nnodes={num_processes // processes_per_node}",
             f"--node_rank={node_rank}",
             f"--rdzv_endpoint={master_addr}:{master_port}",
-            "--rdzv_id=0",  # TODO: setup random ID that is gleaned from env variables
+            f"--rdzv_id={rdzv_id}",
         ]
         return torchrun_args, processes_per_node
 
@@ -485,14 +493,21 @@ class TorchDistributor(Distributor):
                 decoded = line.decode("utf-8")
                 tail.append(decoded)
                 if redirect_to_stdout:
-                    if (
-                        log_streaming_client
-                        and not log_streaming_client.failed
-                        and (
-                            log_streaming_client.sock.getsockname()[0]
-                            == log_streaming_client.sock.getpeername()[0]
-                        )
-                    ):
+                    same_node = False
+                    if log_streaming_client and not log_streaming_client.failed:
+                        try:
+                            same_node = (
+                                log_streaming_client.sock.getsockname()[0]
+                                == log_streaming_client.sock.getpeername()[0]
+                            )
+                        except OSError:
+                            # The log-streaming socket is best effort and can be
+                            # dropped (e.g. a cloud-provider idle-timeout) while
+                            # torch/NCCL initializes. getpeername() then raises
+                            # OSError; a barrier task must not die over log
+                            # redirection, so fall back to writing to stdout.
+                            same_node = False
+                    if same_node:
                         # If log_streaming_client and log_stream_server are in the same
                         # node (typical case is spark local mode),
                         # server side will redirect the log to STDOUT,
@@ -647,6 +662,7 @@ class TorchDistributor(Distributor):
         input_params = self.input_params
         driver_address = self.driver_address
         log_streaming_server_port = self.log_streaming_server_port
+        log_streaming_auth_secret = self.log_streaming_auth_secret
         is_spark_local_master = self.is_spark_local_master
         driver_owned_gpus: List[str] = []
         if is_spark_local_master and use_gpu:
@@ -660,8 +676,11 @@ class TorchDistributor(Distributor):
         # Spark task program
         def wrapped_train_fn(iterator):  # type: ignore[no-untyped-def]
             import os
+            import secrets
+
             import pandas as pd
             import pyarrow
+
             from pyspark import BarrierTaskContext
 
             CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
@@ -687,6 +706,15 @@ class TorchDistributor(Distributor):
 
                 os.environ["MASTER_ADDR"] = str(addrs[0])
                 os.environ["MASTER_PORT"] = str(get_free_port(addrs[0], context))
+                # Unique per run so that concurrent runs sharing a rendezvous endpoint
+                # do not collide.
+                rdzv_id = secrets.token_hex(16) if context.partitionId() == 0 else ""
+                rdzv_id = context.allGather(str(rdzv_id))[0]
+                if not rdzv_id:
+                    raise RuntimeError(
+                        "Failed to generate a shared rendezvous id for distributed training."
+                    )
+                os.environ["PYSPARK_TORCH_DISTRIBUTOR_RDZV_ID"] = rdzv_id
                 os.environ["WORLD_SIZE"] = str(num_processes)
                 os.environ["NODE_RANK"] = str(context.partitionId())
                 os.environ["RANK"] = str(context.partitionId())
@@ -723,7 +751,9 @@ class TorchDistributor(Distributor):
                 os.environ[CUDA_VISIBLE_DEVICES] = ""
             set_torch_config(context)
 
-            log_streaming_client = LogStreamingClient(driver_address, log_streaming_server_port)
+            log_streaming_client = LogStreamingClient(
+                driver_address, log_streaming_server_port, auth_secret=log_streaming_auth_secret
+            )
             input_params["log_streaming_client"] = log_streaming_client
             try:
                 with TorchDistributor._setup_spark_partition_data(iterator, schema_json):
@@ -776,10 +806,12 @@ class TorchDistributor(Distributor):
             log_streaming_server.start(spark_host_address=self.driver_address)
             time.sleep(1)  # wait for the server to start
             self.log_streaming_server_port = log_streaming_server.port
+            self.log_streaming_auth_secret = log_streaming_server.auth_secret
         except Exception as e:
             # If starting log streaming server failed, we don't need to break
             # the distributor training but emit a warning instead.
             self.log_streaming_server_port = -1
+            self.log_streaming_auth_secret = None
             self.logger.warning(
                 "Start torch distributor log streaming server failed, "
                 "You cannot receive logs sent from distributor workers, ",
@@ -855,9 +887,10 @@ class TorchDistributor(Distributor):
     def _setup_spark_partition_data(
         partition_data_iterator: Iterator[Any], input_schema_json: Dict[str, Any]
     ) -> Iterator[Any]:
-        from pyspark.sql.pandas.serializers import ArrowStreamSerializer
-        from pyspark.core.files import SparkFiles
         import json
+
+        from pyspark.core.files import SparkFiles
+        from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 
         if input_schema_json is None:
             yield
@@ -1081,9 +1114,10 @@ def _get_spark_partition_data_loader(
     prefetch_factor:
         Number of batches loaded in advance by each worker
     """
-    from pyspark.sql.types import StructType
-    from pyspark.ml.torch.data import _SparkPartitionTorchDataset
     from torch.utils.data import DataLoader
+
+    from pyspark.ml.torch.data import _SparkPartitionTorchDataset
+    from pyspark.sql.types import StructType
 
     arrow_file = os.environ[SPARK_PARTITION_ARROW_DATA_FILE]
     schema_file = os.environ[SPARK_DATAFRAME_SCHEMA_FILE]

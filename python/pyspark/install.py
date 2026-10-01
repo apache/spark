@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import hashlib
 import os
 import re
 import tarfile
@@ -22,7 +23,6 @@ import traceback
 import urllib.request
 from shutil import rmtree
 from typing import TYPE_CHECKING
-
 
 if TYPE_CHECKING:
     from http.client import HTTPResponse
@@ -36,6 +36,14 @@ DEFAULT_HIVE = "hive2.3"
 SUPPORTED_HADOOP_VERSIONS = ["hadoop3", "without-hadoop"]
 SUPPORTED_HIVE_VERSIONS = ["hive2.3"]
 UNSUPPORTED_COMBINATIONS = []  # type: ignore
+
+# Official ASF-controlled hosts serving release checksums. Integrity metadata
+# must come from these origins, never from a (community) mirror, so that a
+# tampered tarball served by a mirror fails verification.
+CHECKSUM_ORIGINS = [
+    "https://downloads.apache.org/spark",
+    "https://archive.apache.org/dist/spark",
+]
 
 
 def checked_package_name(spark_version: str, hadoop_version: str, hive_version: str) -> str:
@@ -137,10 +145,12 @@ def install_spark(dest: str, spark_version: str, hadoop_version: str, hive_versi
 
     package_name = checked_package_name(spark_version, hadoop_version, hive_version)
     package_local_path = os.path.join(dest, "%s.tgz" % package_name)
-    if "PYSPARK_RELEASE_MIRROR" in os.environ:
+    explicit_mirror = "PYSPARK_RELEASE_MIRROR" in os.environ
+    if explicit_mirror:
         sites = [os.environ["PYSPARK_RELEASE_MIRROR"]]
     else:
-        sites = get_preferred_mirrors()
+        # Plain-http mirrors are trivially tampered with in transit.
+        sites = [site for site in get_preferred_mirrors() if site.startswith("https://")]
     print("Trying to download Spark %s from [%s]" % (spark_version, ", ".join(sites)))
 
     pretty_pkg_name = "%s for Hadoop %s" % (
@@ -148,6 +158,27 @@ def install_spark(dest: str, spark_version: str, hadoop_version: str, hive_versi
         "Free build" if hadoop_version == "without" else hadoop_version,
     )
 
+    # Verify every downloaded tarball against the SHA-512 digest published on
+    # the official Apache hosts. Setting PYSPARK_UNVERIFIED_DOWNLOAD=1 opts out
+    # (for example for air-gapped setups with no route to downloads.apache.org).
+    expected_digest = None
+    if os.environ.get("PYSPARK_UNVERIFIED_DOWNLOAD", "") != "1":
+        try:
+            expected_digest = _fetch_official_checksum(spark_version, package_name)
+        except Exception:
+            if explicit_mirror:
+                # An explicitly configured mirror (e.g. an internal mirror or a
+                # release-candidate staging area) may host packages that have no
+                # published official checksum; defer to the user's explicit
+                # trust in that mirror.
+                print(
+                    "Warning: no official checksum is available for %s; skipping "
+                    "verification for the explicitly configured mirror." % package_name
+                )
+            else:
+                raise
+
+    last_error = None
     for site in sites:
         os.makedirs(dest, exist_ok=True)
         url = "%s/spark/%s/%s.tgz" % (site, spark_version, package_name)
@@ -157,11 +188,16 @@ def install_spark(dest: str, spark_version: str, hadoop_version: str, hive_versi
             print("Downloading %s from:\n- %s" % (pretty_pkg_name, url))
             _download_with_retries(url, package_local_path)
 
+            if expected_digest is not None:
+                print("Verifying the SHA-512 checksum of %s" % package_local_path)
+                _verify_checksum(package_local_path, expected_digest)
+
             print("Installing to %s" % dest)
             tar = tarfile.open(package_local_path, "r:gz")
             _extract_tar(tar, package_name, dest)
             return
-        except Exception:
+        except Exception as e:
+            last_error = e
             print("Failed to download %s from %s:" % (pretty_pkg_name, url))
             traceback.print_exc()
             rmtree(dest, ignore_errors=True)
@@ -170,7 +206,7 @@ def install_spark(dest: str, spark_version: str, hadoop_version: str, hive_versi
                 tar.close()
             if os.path.exists(package_local_path):
                 os.remove(package_local_path)
-    raise OSError("Unable to download %s." % pretty_pkg_name)
+    raise OSError("Unable to download %s." % pretty_pkg_name) from last_error
 
 
 def _extract_tar(tar: tarfile.TarFile, package_name: str, dest: str) -> None:
@@ -201,6 +237,67 @@ def _extract_tar(tar: tarfile.TarFile, package_name: str, dest: str) -> None:
                 "directory; refusing to extract." % member.name
             )
         tar.extract(member, dest)
+
+
+def _parse_sha512_checksum(content: str, package_file_name: str) -> str:
+    """
+    Parse the contents of an Apache release ``.sha512`` file into a lowercase
+    hex digest. Both formats published for Spark releases are accepted:
+    ``sha512sum`` style (``<hex digest>  <file name>``) and GPG
+    ``--print-md`` style (``<file name>: ABCD 1234 ...``).
+    """
+    digest = (
+        content.replace(package_file_name, "")
+        .replace(":", "")
+        .replace("\n", "")
+        .replace("\t", "")
+        .replace(" ", "")
+        .strip()
+        .lower()
+    )
+    if not re.match("^[0-9a-f]{128}$", digest):
+        raise ValueError(
+            "Could not parse a SHA-512 digest for %s from the checksum file." % package_file_name
+        )
+    return digest
+
+
+def _fetch_official_checksum(spark_version: str, package_name: str) -> str:
+    """
+    Fetch the SHA-512 checksum for the given package from the official Apache
+    distribution hosts (never from a mirror), so that a tarball served by an
+    untrusted mirror can be verified against it.
+    """
+    file_name = "%s.tgz" % package_name
+    last_error = None
+    for origin in CHECKSUM_ORIGINS:
+        url = "%s/%s/%s.sha512" % (origin, spark_version, file_name)
+        try:
+            response = urllib.request.urlopen(url, timeout=60)
+            return _parse_sha512_checksum(response.read().decode("utf-8"), file_name)
+        except Exception as e:
+            last_error = e
+    raise OSError(
+        "Unable to fetch the checksum for %s: %s. Set PYSPARK_UNVERIFIED_DOWNLOAD=1 "
+        "to skip verification." % (file_name, last_error)
+    )
+
+
+def _verify_checksum(path: str, expected_digest: str) -> None:
+    """
+    Verify that the SHA-512 digest of the file at ``path`` matches
+    ``expected_digest``, raising ``ValueError`` otherwise.
+    """
+    sha512 = hashlib.sha512()
+    with open(path, mode="rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            sha512.update(chunk)
+    actual_digest = sha512.hexdigest()
+    if actual_digest != expected_digest:
+        raise ValueError(
+            "SHA-512 mismatch for %s: expected %s but got %s. The downloaded file is "
+            "corrupt or has been tampered with." % (path, expected_digest, actual_digest)
+        )
 
 
 def get_preferred_mirrors() -> list[str]:

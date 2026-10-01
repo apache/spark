@@ -134,7 +134,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
         }
         addColumns.copy(columnsToAdd = newCols)
 
-      case alterColumns @ AlterColumns(_, specs) if alterColumns.resolved &&
+      case alterColumns @ AlterColumns(_, specs, _) if alterColumns.resolved &&
         specs.exists(_.newDefaultExpression.isDefined) =>
         val newSpecs = specs.map { c =>
           val dataType = c.column.asInstanceOf[ResolvedFieldName].field.dataType

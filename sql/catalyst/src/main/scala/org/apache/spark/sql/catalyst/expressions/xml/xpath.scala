@@ -78,6 +78,13 @@ abstract class XPathExtract
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(xml, xpath) - Returns true if the XPath expression evaluates to true, or if a matching node is found.",
+  arguments = """
+    Arguments:
+      * xml - The XML string to evaluate.
+        An expression that evaluates to a string.
+      * xpath - The XPath expression to evaluate against the XML.
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>1</b></a>','a/b');
@@ -99,6 +106,13 @@ case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(xml, xpath) - Returns a short integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
+  arguments = """
+    Arguments:
+      * xml - The XML string to evaluate.
+        An expression that evaluates to a string.
+      * xpath - The XPath expression to evaluate against the XML.
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
@@ -121,6 +135,13 @@ case class XPathShort(xml: Expression, path: Expression) extends XPathExtract {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(xml, xpath) - Returns an integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
+  arguments = """
+    Arguments:
+      * xml - The XML string to evaluate.
+        An expression that evaluates to a string.
+      * xpath - The XPath expression to evaluate against the XML.
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
@@ -143,6 +164,13 @@ case class XPathInt(xml: Expression, path: Expression) extends XPathExtract {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(xml, xpath) - Returns a long integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
+  arguments = """
+    Arguments:
+      * xml - The XML string to evaluate.
+        An expression that evaluates to a string.
+      * xpath - The XPath expression to evaluate against the XML.
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
@@ -165,6 +193,13 @@ case class XPathLong(xml: Expression, path: Expression) extends XPathExtract {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(xml, xpath) - Returns a float value, the value zero if no match is found, or NaN if a match is found but the value is non-numeric.",
+  arguments = """
+    Arguments:
+      * xml - The XML string to evaluate.
+        An expression that evaluates to a string.
+      * xpath - The XPath expression to evaluate against the XML.
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
@@ -187,6 +222,13 @@ case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(xml, xpath) - Returns a double value, the value zero if no match is found, or NaN if a match is found but the value is non-numeric.",
+  arguments = """
+    Arguments:
+      * xml - The XML string to evaluate.
+        An expression that evaluates to a string.
+      * xpath - The XPath expression to evaluate against the XML.
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
@@ -210,6 +252,13 @@ case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(xml, xpath) - Returns the text contents of the first xml node that matches the XPath expression.",
+  arguments = """
+    Arguments:
+      * xml - The XML string to evaluate.
+        An expression that evaluates to a string.
+      * xpath - The XPath expression matching the node whose text is returned.
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>b</b><c>cc</c></a>','a/c');
@@ -233,6 +282,13 @@ case class XPathString(xml: Expression, path: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(xml, xpath) - Returns a string array of values within the nodes of xml that match the XPath expression.",
+  arguments = """
+    Arguments:
+      * xml - The XML string to evaluate.
+        An expression that evaluates to a string.
+      * xpath - The XPath expression matching the nodes whose values are returned.
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b/text()');

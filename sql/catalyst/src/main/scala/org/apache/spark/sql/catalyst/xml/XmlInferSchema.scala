@@ -178,7 +178,7 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     try {
       val xsd = xsdSchema.orElse(Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema))
       xsd.foreach { schema =>
-        schema.newValidator().validate(new StreamSource(new StringReader(xml)))
+        ValidatorUtil.newValidator(schema).validate(new StreamSource(new StringReader(xml)))
       }
       parser = StaxXmlParserUtils.filteredReader(xml)
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
@@ -205,6 +205,9 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
         Some(StructType(Nil))
       case e: FileNotFoundException if !options.ignoreMissingFiles => throw e
       case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
+      // ValidatorUtil.newValidator throws this when the JAXP implementation cannot
+      // disable external access; that is an environment error, not a bad record.
+      case e: UnsupportedOperationException => throw e
       case e @ (_: IOException | _: RuntimeException) if options.ignoreCorruptFiles =>
         logWarning("Skipped the rest of the content in the corrupted file", e)
         Some(StructType(Nil))
@@ -371,7 +374,17 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     // such values as null (see `StaxXmlParser`), so inference must skip them too; otherwise a
     // column that is entirely `nullValue`s (or mixes them with a typed value) would infer the
     // string content of the token instead of ignoring it.
-    if (value == null || value.isEmpty || value == options.nullValue) {
+    //
+    // Unlike `CSVInferSchema.inferField`, an empty value is intentionally NOT skipped here. The
+    // CSV datasource defaults `nullValue` to `""`, so an empty field is already read as null by
+    // the parser (`UnivocityParser.nullSafeDatum`) and its inference can safely skip it. XML's
+    // `nullValue` defaults to `null`, so an empty value is NOT read as null: `StaxXmlParser`
+    // would call `convertTo("", <numericType>)`, which throws `NumberFormatException`, and in
+    // PERMISSIVE mode the error recovery can silently drop sibling records. To keep inference
+    // consistent with the parser, an empty value falls through the cascade to `StringType`, so a
+    // field mixing empty and numeric values widens to `StringType` rather than to the numeric
+    // type. See SPARK-58133.
+    if (value == null || value == options.nullValue) {
       return typeSoFar
     }
 

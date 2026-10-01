@@ -92,7 +92,14 @@ public class TransportClient implements Closeable {
   }
 
   public boolean isActive() {
-    return !timedOut && (channel.isOpen() || channel.isActive());
+    // A channel is pinned to one netty event-loop thread for its lifetime. If that event loop has
+    // terminated (e.g. an uncaught error killed the thread; netty does not replace it in a
+    // fixed-size EventLoopGroup), the channel can no longer send or complete anything: writes and
+    // listener notifications route to the dead loop and are silently dropped. Such a client must
+    // not be treated as active/reused, otherwise a fetch on it can orphan and hang. See
+    // SPARK-58292.
+    return !timedOut && !channel.eventLoop().isShuttingDown()
+        && (channel.isOpen() || channel.isActive());
   }
 
   public SocketAddress getSocketAddress() {

@@ -18,39 +18,39 @@
 import sys
 import warnings
 from typing import (
-    Optional,
-    Union,
-    Callable,
+    TYPE_CHECKING,
     Any,
+    Callable,
+    ClassVar,
     Iterable,
     List,
+    Optional,
     Tuple,
-    overload,
     Type,
-    ClassVar,
-    TYPE_CHECKING,
+    Union,
     cast,
+    overload,
 )
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.errors import PySparkNotImplementedError, PySparkValueError
-from pyspark.sql.session import _monkey_patch_RDD, SparkSession
+from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
-from pyspark.sql.streaming import DataStreamReader
+from pyspark.sql.session import SparkSession, _monkey_patch_RDD
+from pyspark.sql.streaming import DataStreamReader, StreamingQueryManager
+from pyspark.sql.streaming.query import StreamingCheckpointManager
+from pyspark.sql.types import AtomicType, DataType, StructType
 from pyspark.sql.udf import UDFRegistration
 from pyspark.sql.udtf import UDTFRegistration
-from pyspark.errors.exceptions.captured import install_exception_handler
-from pyspark.sql.types import AtomicType, DataType, StructType
-from pyspark.sql.streaming import StreamingQueryManager
-from pyspark.sql.streaming.query import StreamingCheckpointManager
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaObject
     import pyarrow as pa
-    from pyspark.core.rdd import RDD
+    from py4j.java_gateway import JavaObject
+
     from pyspark.core.context import SparkContext
+    from pyspark.core.rdd import RDD
     from pyspark.sql._typing import (
         AtomicValue,
         RowLike,
@@ -816,12 +816,13 @@ class HiveContext(SQLContext):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import tempfile
+
+    import pyspark.sql.context
     from pyspark.core.context import SparkContext
     from pyspark.sql import Row, SQLContext
-    import pyspark.sql.context
 
     os.chdir(os.environ["SPARK_HOME"])
 

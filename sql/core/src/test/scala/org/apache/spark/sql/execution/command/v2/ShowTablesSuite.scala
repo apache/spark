@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.connector.catalog.{InMemoryRelationCatalog, TableSummary}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.util.Utils
 
@@ -26,6 +30,9 @@ import org.apache.spark.util.Utils
  */
 class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase {
   override def defaultNamespace: Seq[String] = Nil
+  // Extended JSON now uses TableSummary.tableType(), and TableCatalog.listTableSummaries
+  // defaults a missing V2 table type property to TableSummary.FOREIGN_TABLE_TYPE.
+  override def expectedTableTypeInJson: String = TableSummary.FOREIGN_TABLE_TYPE
   override def expectsSessionTempViews: Boolean = false
 
   // The test fails for V1 catalog with the error:
@@ -70,6 +77,34 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
         .collect()(0)(3).toString
 
       assert(!information.split("\n").exists(_.startsWith("Table Properties")))
+    }
+  }
+
+  test("show table extended as json returns relation catalog table and view types") {
+    val relationCatalog = "show_table_extended_json_relation_catalog"
+    withSQLConf(s"spark.sql.catalog.$relationCatalog" ->
+        classOf[InMemoryRelationCatalog].getName) {
+      withNamespaceAndTable("ns", "tbl", relationCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+        withView(s"$relationCatalog.ns.vw") {
+          sql(s"CREATE VIEW $relationCatalog.ns.vw AS SELECT 1 AS id")
+
+          val jsonStr = sql(
+            s"SHOW TABLE EXTENDED IN $relationCatalog.ns LIKE '*' AS JSON")
+            .collect()(0).getString(0)
+          val tables = (parse(jsonStr) \ "tables").asInstanceOf[JArray].arr
+          def entry(name: String): JValue = {
+            tables.find(e => (e \ "name").extract[String] == name)
+              .getOrElse(fail(s"Missing $name in SHOW TABLE EXTENDED AS JSON: $tables"))
+          }
+
+          assert((entry("tbl") \ "type").extract[String] ===
+            TableSummary.FOREIGN_TABLE_TYPE)
+          assert((entry("vw") \ "type").extract[String] ===
+            TableSummary.VIEW_TABLE_TYPE)
+          assert(tables.map(e => (e \ "name").extract[String]).toSet === Set("tbl", "vw"))
+        }
+      }
     }
   }
 

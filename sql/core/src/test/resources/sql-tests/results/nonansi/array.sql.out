@@ -1010,3 +1010,103 @@ select array_distinct(array(0.0, -0.0, -0.0, DOUBLE("NaN"), DOUBLE("NaN")))
 struct<array_distinct(array(0.0, 0.0, 0.0, NaN, NaN)):array<double>>
 -- !query output
 [0.0,NaN]
+
+
+-- !query
+select trim_array(array(1, 2, 3, 4, 5), 0)
+-- !query schema
+struct<trim_array(array(1, 2, 3, 4, 5), 0):array<int>>
+-- !query output
+[1,2,3,4,5]
+
+
+-- !query
+select trim_array(array(1, 2, 3, 4, 5), 2)
+-- !query schema
+struct<trim_array(array(1, 2, 3, 4, 5), 2):array<int>>
+-- !query output
+[1,2,3]
+
+
+-- !query
+select trim_array(array(1, 2, 3, 4, 5), 5)
+-- !query schema
+struct<trim_array(array(1, 2, 3, 4, 5), 5):array<int>>
+-- !query output
+[]
+
+
+-- !query
+select trim_array(array('a', 'b', 'c'), 1)
+-- !query schema
+struct<trim_array(array(a, b, c), 1):array<string>>
+-- !query output
+["a","b"]
+
+
+-- !query
+select trim_array(array(1, 2, null, 4), 1)
+-- !query schema
+struct<trim_array(array(1, 2, NULL, 4), 1):array<int>>
+-- !query output
+[1,2,null]
+
+
+-- !query
+select trim_array(array(), 0)
+-- !query schema
+struct<trim_array(array(), 0):array<void>>
+-- !query output
+[]
+
+
+-- !query
+select trim_array(array(1, 2, 3), -1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.TRIM_ARRAY_LENGTH",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`trim_array`",
+    "length" : "-1",
+    "numElements" : "3",
+    "parameter" : "`n`"
+  }
+}
+
+
+-- !query
+select trim_array(array(1, 2, 3), 4)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.TRIM_ARRAY_LENGTH",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`trim_array`",
+    "length" : "4",
+    "numElements" : "3",
+    "parameter" : "`n`"
+  }
+}
+
+
+-- !query
+select trim_array(CAST(null AS ARRAY<INT>), 1)
+-- !query schema
+struct<trim_array(NULL, 1):array<int>>
+-- !query output
+NULL
+
+
+-- !query
+select trim_array(array(1, 2, 3), CAST(null AS INT))
+-- !query schema
+struct<trim_array(array(1, 2, 3), CAST(NULL AS INT)):array<int>>
+-- !query output
+NULL
