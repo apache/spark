@@ -1041,8 +1041,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         mergeableScan = !hasBlockingPushdown(sHolder))
 
       val inferredAdjustmentFilters =
-        if (!scanRelation.shouldEstimateInferredFilters &&
-            shouldAddSparkPostPushdownAdjustmentFilters(wrappedScan)) {
+        if (shouldAddPostPushdownAdjustmentFilters(scanRelation)) {
           remappedInferredFilters
         } else {
           Nil
@@ -1055,11 +1054,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // Opted-in scans compare original and inferred predicates directly from scan metadata,
       // including any residual filters. Other scans still use the existing best-effort adjustment
       // for fully pushed predicates that survive pruning.
-      val withPostPushdownAdjustmentFilters = if (scanRelation.shouldEstimateInferredFilters) {
-        withFilter
-      } else {
+      val withPostPushdownAdjustmentFilters =
         withSparkPostPushdownAdjustmentFilters(withFilter, scanRelation.outputBoundPushedFilters)
-      }
 
       if (withPostPushdownAdjustmentFilters.output != project) {
         val newProjects = normalizedProjects
@@ -1268,12 +1264,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       case Some(pushedCondition) =>
         def addToScan(plan: LogicalPlan): LogicalPlan = plan match {
           case Filter(condition, scanRelation: DataSourceV2ScanRelation)
-              if shouldAddSparkPostPushdownAdjustmentFilters(scanRelation.scan) =>
+              if shouldAddPostPushdownAdjustmentFilters(scanRelation) =>
             Filter(And(condition, pushedCondition), scanRelation)
           case Filter(condition, child) =>
             Filter(condition, addToScan(child))
           case scanRelation: DataSourceV2ScanRelation
-              if shouldAddSparkPostPushdownAdjustmentFilters(scanRelation.scan) =>
+              if shouldAddPostPushdownAdjustmentFilters(scanRelation) =>
             Filter(pushedCondition, scanRelation)
           case other => other
         }
@@ -1282,9 +1278,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  private def shouldAddSparkPostPushdownAdjustmentFilters(scan: Scan): Boolean = scan match {
-    case s: SupportsReportStatistics => !s.reflectsFullyPushedDownFilters()
-    case _ => false
+  private def shouldAddPostPushdownAdjustmentFilters(
+      scanRelation: DataSourceV2ScanRelation): Boolean = {
+    !scanRelation.shouldEstimateInferredFilters && (scanRelation.scan match {
+      case s: SupportsReportStatistics => !s.reflectsFullyPushedDownFilters()
+      case _ => false
+    })
   }
 
   private def getInferredFilters(sHolder: ScanBuilderHolder): Seq[Expression] = {
