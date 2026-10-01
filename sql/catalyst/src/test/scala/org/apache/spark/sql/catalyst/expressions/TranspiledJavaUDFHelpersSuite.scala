@@ -169,6 +169,11 @@ class TranspiledJavaUDFHelpersSuite extends SparkFunSuite {
     // not on its own safe.
     assert(intercept[SparkArithmeticException](
       H.repeat(utf8("abcd"), 600000000L)).getCondition === "ARITHMETIC_OVERFLOW")
+    // A count that overflows the long PRODUCT (2 bytes x 1<<62 == 1<<63 wraps to
+    // Long.MIN_VALUE) must throw the error class, not fall through to `repeat(0)`
+    // returning the empty string where CPython raises OverflowError.
+    assert(intercept[SparkArithmeticException](
+      H.repeat(utf8("ab"), 1L << 62)).getCondition === "ARITHMETIC_OVERFLOW")
   }
 
   test("null in an ordering comparison raises rather than propagating") {
