@@ -21,13 +21,13 @@ import java.io.{InputStream, OutputStream}
 import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent.{CountDownLatch, LinkedBlockingQueue, Semaphore, TimeoutException, TimeUnit}
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.reflectiveCalls
 import scala.reflect.ClassTag
 
-import io.netty.buffer.{ByteBuf, ByteBufOutputStream, PooledByteBufAllocator}
+import io.netty.buffer.{ByteBuf, ByteBufOutputStream, PooledByteBufAllocator, UnpooledByteBufAllocator, UnpooledHeapByteBuf}
 import io.netty.util.ResourceLeakDetector
 import io.netty.util.concurrent.{Future => NettyFuture}
 import org.scalatest.Assertions.intercept
@@ -1332,6 +1332,32 @@ class StreamingShuffleSuite
       eventually(Timeout(30.seconds)) {
         capturedBuffer.get().refCnt() should be(0)
       }
+    }
+  }
+
+  // Encoding a message into the outgoing frame (e.g. allocating the frame, which can fail with an
+  // OutOfDirectMemoryError) happens before the message is handed to the client. If it throws,
+  // send() must still run the completion callback, since that is what releases a data buffer and
+  // returns its memory permit.
+  test("SPARK-59907: shard send runs the completion callback when encoding fails") {
+    withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
+      val g = new ShuffleGroup[Int](sc, 1, 1)
+      val data = new UnpooledHeapByteBuf(UnpooledByteBufAllocator.DEFAULT, 8, 8) {
+        override def retainedSlice(index: Int, length: Int): ByteBuf =
+          throw new RuntimeException("injected encode failure")
+      }
+      data.writeInt(1)
+      val message = new DataMessage(0, 0, data.readableBytes(), data, 0L)
+      val doneCalls = new AtomicInteger(0)
+
+      val e = intercept[RuntimeException] {
+        g.writers(0).shards(0).send(message, () => doneCalls.incrementAndGet())
+      }
+      e.getMessage should include("injected encode failure")
+
+      doneCalls.get() should be(1)
+      // Only the caller's reference remains, for the completion callback to release.
+      data.refCnt() should be(1)
     }
   }
 

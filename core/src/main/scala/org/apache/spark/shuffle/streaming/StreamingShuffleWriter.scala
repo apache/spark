@@ -226,10 +226,12 @@ class StreamingShuffleWriter[K, V](
       } catch {
         case e: Throwable =>
           if (buf != null) buf.release()
+          // Release the message first: done() expects only the caller's reference to remain.
+          message.release()
+          done()
           throw e
-      } finally {
-        message.release()
       }
+      message.release()
 
       def sendToClient(client: TransportClient): Unit = {
         try {
