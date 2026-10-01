@@ -116,6 +116,20 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
     assert(getNumBytesSpilled > 0)
   }
 
+  test("length is tracked as a Long") {
+    val (inMemoryThreshold, spillThreshold) = (10, 20)
+    withExternalArray(inMemoryThreshold, spillThreshold) { array =>
+      // `length` must be a `Long` so a single partition can hold more than Int.MaxValue rows
+      // without the counter overflowing (see the FrameLessOffsetWindowFunctionFrame overflow bug).
+      val emptyLen: Long = array.length
+      assert(emptyLen === 0L)
+
+      populateRows(array, 15)
+      val len: Long = array.length
+      assert(len === 15L)
+    }
+  }
+
   test("insert rows less than the inMemoryThreshold") {
     val (inMemoryThreshold, spillThreshold) = (100, 50)
     withExternalArray(inMemoryThreshold, spillThreshold) { array =>

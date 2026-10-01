@@ -237,12 +237,15 @@ private[window] class WindowSegmentTree(
    * Exception-safe: if aggregation throws, previously built state is preserved.
    */
   def build(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    // rows.length is Int by design; check guards against future widening.
-    val n = rows.length
-    if (n < 0) {
+    // The segment tree indexes rows with 32-bit `Int`s. The window driver already rejects
+    // partitions larger than `Int.MaxValue` rows for this frame
+    // (see `WindowFunctionFrame.supportsLargePartition`); this check is a defensive backstop.
+    val numRowsLong = rows.length
+    if (numRowsLong > Int.MaxValue) {
       throw SparkException.internalError(
-        s"WindowSegmentTree cannot hold more than Int.MaxValue rows, got $n")
+        s"WindowSegmentTree cannot hold more than Int.MaxValue rows, got $numRowsLong")
     }
+    val n = numRowsLong.toInt
     val nBlocks = if (n == 0) 0 else (n + blockSize - 1) / blockSize
     val newBlockAggs = computeBlockAggregates(rows, n, nBlocks)
 
