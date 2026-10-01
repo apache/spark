@@ -536,7 +536,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         parameters = Map(
           "value" -> s"${str}BD",
           "sourceType" -> "\"DECIMAL(38,8)\"",
-          "targetType" -> s"\"$targetType\"",
+          "targetType" -> s"\"${targetType}\"",
           "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
     }
   }

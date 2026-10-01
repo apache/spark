@@ -189,7 +189,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
           "CAST_OVERFLOW",
           Map(
             "value" -> s"${value}BD",
-            "sourceType" -> s"\"DECIMAL(20,$scale)\"",
+            "sourceType" -> s"\"${DecimalType(20, scale).sql}\"",
             "targetType" -> s"\"${dt.sql}\"",
             "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
       }
