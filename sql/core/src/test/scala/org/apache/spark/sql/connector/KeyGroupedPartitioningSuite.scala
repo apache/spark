@@ -6296,6 +6296,40 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-50593: identical truncate widths trigger SPJ under the default config") {
+    val table1 = "trunc_same_a"
+    val table2 = "trunc_same_b"
+    val partitions = Array(
+      Expressions.apply("truncate", Expressions.column("data"), Expressions.literal(3)))
+
+    createTable(table1, columns, partitions)
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+      "(0, 'apple', CAST('2022-01-01' AS timestamp)), " +
+      "(1, 'grape', CAST('2021-01-01' AS timestamp)), " +
+      "(2, 'orange', CAST('2020-01-01' AS timestamp))")
+
+    createTable(table2, columns, partitions)
+    sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+      "(10, 'apple', CAST('2022-01-01' AS timestamp)), " +
+      "(20, 'grape', CAST('2021-01-01' AS timestamp)), " +
+      "(30, 'orange', CAST('2020-01-01' AS timestamp))")
+
+    // No withSQLConf: identical widths are the same transform, so this has to work on the
+    // default config, where allowCompatibleTransforms is off.
+    val df = sql(
+      s"""
+         |${selectWithMergeJoinHint(table1, table2)}
+         |$table1.id AS left_id, $table2.id AS right_id
+         |FROM testcat.ns.$table1 JOIN testcat.ns.$table2
+         |ON $table1.data = $table2.data
+         |ORDER BY $table1.id
+         |""".stripMargin)
+
+    assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+      "identical truncate widths are the same function, so no shuffle is needed")
+    checkAnswer(df, Seq(Row(0, 10), Row(1, 20), Row(2, 30)))
+  }
+
   test("SPARK-50593: existing bucket SPJ still works with Literal[] API") {
     // Exercises the new Literal[]-based reducer path end-to-end: bucket(4) and
     // bucket(2) differ, so SPJ can only avoid the shuffle if BucketFunction's reducer
@@ -6529,6 +6563,18 @@ class KeyGroupedPartitioningSuite
       "a different function must not be offered the deprecated overload")
     assert(!careless4.isCompatible(other2))
     assert(careless4.reducers(careless2).isDefined, "the same function still reduces")
+
+    // Same function means the same canonicalName; name() is only a display name.
+    val lookalike2 = TransformExpression(CarelessLookalikeFunction, Seq(Literal(2), attr("id")))
+    assert(careless4.reducers(lookalike2).isEmpty,
+      "a different function sharing only name() must not be offered the deprecated overload")
+  }
+
+  test("SPARK-50593: truncate over a string and over an int are different transforms") {
+    // The two partition data differently, so they must not share a canonical name.
+    val strTrunc = TransformExpression(TruncateFunction, Seq(attr("data"), Literal(3)))
+    val intTrunc = TransformExpression(IntegerTruncateFunction, Seq(attr("id"), Literal(3)))
+    assert(!strTrunc.isSameFunction(intTrunc) && !intTrunc.isSameFunction(strTrunc))
   }
 
   test("SPARK-50593: a non-IntegerType param (DateType) does not reach the deprecated " +
@@ -6685,16 +6731,24 @@ class KeyGroupedPartitioningSuite
   }
 
   test("SPARK-50593: a typed-null integer param is not routed to the deprecated int reducer") {
-    // LegacyIntReducerFunction implements ONLY the deprecated int reducer (accepts any int), so the
-    // generalized probe is Unimplemented and dispatch falls back to the deprecated overload. A
-    // typed-null IntegerType param must be excluded by isSingleInt from that fallback -- otherwise
-    // null.asInstanceOf[Int] fabricates a 0 the legacy reducer accepts, falsely co-partitioning
-    // null vs 0. So the pair must NOT be reducible.
+    // LegacyIntReducerFunction implements only the deprecated int reducer and accepts any int. A
+    // typed-null parameter would reach it as null.asInstanceOf[Int], a fabricated 0, so Spark
+    // refuses null parameters before asking any overload.
     val col = AttributeReference("id", IntegerType)()
     val l = TransformExpression(LegacyIntReducerFunction, Seq(Literal(null, IntegerType), col))
     val r = TransformExpression(LegacyIntReducerFunction, Seq(Literal(null, IntegerType), col))
     assert(l.reducers(r).isEmpty,
       "a typed-null int param must not reach the deprecated int fallback")
+  }
+
+  test("SPARK-50593: a typed-null literal param does not reach the generalized reducer either") {
+    // BucketFunction implements the generalized overload and reads its parameter with
+    // `value().asInstanceOf[Int]`, which turns null into 0; gcd(0, 4) would then give a reducer.
+    val col = AttributeReference("id", IntegerType)()
+    val nullBucket = TransformExpression(BucketFunction, Seq(Literal(null, IntegerType), col))
+    val bucket4 = TransformExpression(BucketFunction, Seq(Literal(4), col))
+    assert(nullBucket.reducers(bucket4).isEmpty && bucket4.reducers(nullBucket).isEmpty)
+    assert(!nullBucket.isCompatible(bucket4))
   }
 
   test("SPARK-50593: a column whose type differs from the declared input type is not reducible " +

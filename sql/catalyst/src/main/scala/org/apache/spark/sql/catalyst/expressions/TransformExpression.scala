@@ -300,7 +300,8 @@ case class TransformExpression(
     }
     if (!sameArgumentLayout(other) ||
         !literalParamsMatchInputTypes || !other.literalParamsMatchInputTypes ||
-        !noComplexLiteralParams || !other.noComplexLiteralParams) {
+        !noComplexLiteralParams || !other.noComplexLiteralParams ||
+        literalChildren.exists(_.value == null) || other.literalChildren.exists(_.value == null)) {
       return None
     }
 
@@ -308,10 +309,10 @@ case class TransformExpression(
     val otherParams = other.extractParameters
     val thisName = function.canonicalName()
 
-    // Only a single non-null IntegerType parameter per side may use the deprecated int overload; a
-    // typed null would otherwise be read as 0.
+    // A single IntegerType parameter on each side is the shape the deprecated
+    // reducer(int, ..., int) overload accepts. Null parameters were refused above.
     def isSingleInt(p: Array[V2Literal[_]]): Boolean = {
-      p.length == 1 && p(0).dataType == IntegerType && p(0).value() != null
+      p.length == 1 && p(0).dataType == IntegerType
     }
 
     // Probe one reducer overload into an Outcome. Pure -- logging is decided once, below.
@@ -332,7 +333,7 @@ case class TransformExpression(
           // The deprecated overload is documented for bucket against bucket, so only offer it a
           // pair of the same function.
           case Unimplemented if isSingleInt(thisParams) && isSingleInt(otherParams) &&
-              function.name() == other.function.name() =>
+              function.canonicalName() == other.function.canonicalName() =>
             probe(thisFunction.reducer(
               thisParams(0).value().asInstanceOf[Int], otherFunction,
               otherParams(0).value().asInstanceOf[Int]))

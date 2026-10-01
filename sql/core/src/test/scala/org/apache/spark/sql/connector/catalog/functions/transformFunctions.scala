@@ -295,6 +295,19 @@ object CarelessLegacyBucketFunction extends ScalarFunction[Int] with ReducibleFu
 }
 
 /**
+ * A different function that shares `CarelessLegacyBucketFunction`'s `name()` but not its
+ * `canonicalName()`, and partitions data differently.
+ */
+object CarelessLookalikeFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "careless_bucket"
+  override def canonicalName(): String = "careless_bucket_lookalike"
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = input.getLong(1).toInt
+}
+
+/**
  * A non-bucket function with a single int parameter in the first position, the same argument
  * layout as `bucket(n, col)`.
  */
@@ -441,7 +454,7 @@ object TruncateFunction
   override def inputTypes(): Array[DataType] = Array(StringType, IntegerType)
   override def resultType(): DataType = StringType
   override def name(): String = "truncate"
-  override def canonicalName(): String = name()
+  override def canonicalName(): String = "truncate(string)"
   override def toString: String = name()
   override def produceResult(input: InternalRow): UTF8String = {
     val str = input.getUTF8String(0)
@@ -491,7 +504,7 @@ object IntegerTruncateFunction
   override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
   override def resultType(): DataType = IntegerType
   override def name(): String = "truncate"
-  override def canonicalName(): String = name()
+  override def canonicalName(): String = "truncate(int)"
   override def toString: String = name()
   override def produceResult(input: InternalRow): Int = {
     val value = input.getInt(0)
