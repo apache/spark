@@ -26,8 +26,9 @@ import org.apache.arrow.c.{ArrowArray, ArrowSchema}
 import org.apache.arrow.util.AutoCloseables
 import org.apache.arrow.vector.VectorSchemaRoot
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
+import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, PythonUDF}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
@@ -57,6 +58,9 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     metrics: Map[String, SQLMetric])
   extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
 
+  private[python] def runtimeSession: InProcessPythonRuntime.InterpreterSession =
+    InProcessPythonRuntime.currentSession
+
   override protected def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
       argMetas: Array[Array[ArgumentMetadata]],
@@ -82,12 +86,13 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     val initTime = new InProcessArrowEvalPythonEvaluatorFactory.NanosecondTimer(
       metrics("pythonInitTime"))
     val arrowSchema = ArrowUtils.toArrowSchema(inputSchema, timeZoneId, largeVarTypes)
-    var runtime: InProcessPythonRuntime.InterpreterSession = null
+    // Capture before consuming input: an old task must never join a later context's session.
+    val runtime = runtimeSession
+    val copyResult = Option(SparkEnv.get).exists(_.conf.get(PYTHON_UDF_PIPELINED_EXECUTION))
     val handles = functions.map(_ => UUID.randomUUID().toString)
     var registered = false
     var writer: ArrowWriter = null
     val results = ArrayBuffer.empty[ArrowColumnVector]
-    var closed = false
     var startedAt = 0L
 
     def closeBatch(): Unit = {
@@ -101,40 +106,41 @@ class InProcessArrowEvalPythonEvaluatorFactory(
       AutoCloseables.close(resources.asJava)
     }
 
-    def close(): Unit = {
-      if (!closed) {
-        closed = true
-        if (startedAt != 0L) {
-          metrics("pythonTotalTime") += (System.nanoTime() - startedAt) / 1000000
-        }
-        Utils.tryWithSafeFinally {
-          closeBatch()
-        } {
-          if (registered) runtime.release(handles)
-        }
+    val resources = new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(() => {
+      if (startedAt != 0L) {
+        metrics("pythonTotalTime") += (System.nanoTime() - startedAt) / 1000000
       }
-    }
+      Utils.tryWithSafeFinally {
+        closeBatch()
+      } {
+        if (registered) runtime.release(handles)
+      }
+    })
 
-    context.addTaskCompletionListener[Unit](_ => close())
+    context.addTaskCompletionListener[Unit](_ => resources.close())
 
     new Iterator[InternalRow] {
       private var batchIter: Iterator[InternalRow] = Iterator.empty
 
-      override def hasNext: Boolean = {
-        if (!closed && startedAt == 0L) startedAt = System.nanoTime()
+      private def hasNextInput: Boolean = {
+        if (startedAt == 0L) startedAt = System.nanoTime()
         checkCancellation()
-        val available = !closed && (batchIter.hasNext || rows.hasNext)
-        if (!available) close()
+        val available = !resources.isClosed && (batchIter.hasNext || rows.hasNext)
+        if (!available) resources.close()
         available
       }
 
-      override def next(): InternalRow = {
-        if (!hasNext) throw new NoSuchElementException("End of in-process UDF input")
+      override def hasNext: Boolean = resources.use(false) { hasNextInput }
+
+      private def endOfInput: Nothing =
+        throw new NoSuchElementException("End of in-process UDF input")
+
+      override def next(): InternalRow = resources.use[InternalRow](endOfInput) {
+        if (!hasNextInput) endOfInput
         try {
           if (!batchIter.hasNext) {
             closeBatch()
             if (!registered) {
-              runtime = InProcessPythonRuntime.currentSession
               // Mark before registering so failure after any registration still cleans up.
               registered = true
               functions.indices.foreach { i =>
@@ -214,9 +220,11 @@ class InProcessArrowEvalPythonEvaluatorFactory(
             val columns = results.toArray[ColumnVector]
             batchIter = new ColumnarBatch(columns, count).rowIterator().asScala
           }
-          batchIter.next()
+          val row = batchIter.next()
+          // A pipelined consumer may still read this row after task completion closes vectors.
+          if (copyResult) row.copy() else row
         } catch {
-          case t: Throwable => Utils.tryWithSafeFinally { throw t } { close() }
+          case t: Throwable => Utils.tryWithSafeFinally { throw t } { resources.close() }
         }
       }
     }
@@ -224,6 +232,50 @@ class InProcessArrowEvalPythonEvaluatorFactory(
 }
 
 private[python] object InProcessArrowEvalPythonEvaluatorFactory {
+  /**
+   * A pipelined worker can consume input after task completion has requested cleanup.
+   * Defer cleanup until that iterator call returns, without blocking the completion listener
+   * on native Python work. Both normal and exceptional returns release deferred resources.
+   */
+  class IteratorResources(cleanup: () => Unit) extends AutoCloseable {
+    @volatile private var closed = false
+    private var inUse = false
+
+    def isClosed: Boolean = closed
+
+    def use[T](ifClosed: => T)(body: => T): T = {
+      synchronized {
+        if (closed) return ifClosed
+        require(!inUse, "Concurrent consumption of an in-process UDF iterator")
+        inUse = true
+      }
+      var completed = false
+      try {
+        val result = body
+        synchronized {
+          inUse = false
+          completed = true
+          // Do not return a row backed by vectors that deferred cleanup will free.
+          if (closed) Utils.tryWithSafeFinally { ifClosed } { cleanup() } else result
+        }
+      } finally {
+        if (!completed) {
+          synchronized {
+            inUse = false
+            if (closed) cleanup()
+          }
+        }
+      }
+    }
+
+    override def close(): Unit = synchronized {
+      if (!closed) {
+        closed = true
+        if (!inUse) cleanup()
+      }
+    }
+  }
+
   /** Carry sub-millisecond time between batches instead of dropping it on every invocation. */
   class NanosecondTimer(metric: SQLMetric) {
     private var remainder = 0L

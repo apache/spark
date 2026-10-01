@@ -74,6 +74,8 @@ def _inprocess_register(
         # JEP exposes direct ByteBuffers through the buffer protocol. Unpickle a separate
         # function per task without iterating over a PyJArray one JNI call per byte.
         func = cloudpickle.loads(memoryview(serialized_udf))
+        if not callable(func):
+            raise TypeError("In-process UDF command must contain a callable; use inprocess_udf")
         # The JVM is the single source of truth for Arrow layout and logical metadata.
         expected_type = pa.Field._import_from_c(schema_ptr).type
         checker = _null_checker(expected_type) or (lambda array: None)
@@ -117,7 +119,7 @@ def _nullable_type(data_type: pa.DataType) -> pa.DataType:
         return pa.map_(
             _nullable_type(data_type.key_type),
             nullable_field(data_type.item_field),
-            keys_sorted=data_type.keys_sorted,
+            keys_sorted=False,
         )
     # These physical representations depend on session settings unavailable to the UDF.
     if pa.types.is_timestamp(data_type) and data_type.tz is not None:
@@ -273,7 +275,8 @@ def _validate_result(
         raise ValueError(f"In-process UDF returned {len(result)} rows; expected {expected_rows}")
     if _nullable_type(result.type) != _nullable_type(expected_type):
         raise TypeError(f"In-process UDF returned {result.type}; expected {expected_type}")
-    result.validate()
+    # Validate every offset before null checks, normalization or JVM buffer access.
+    result.validate(full=True)
     checker = null_checker if null_checker is not None else _null_checker(expected_type)
     if checker is not None:
         checker(result)

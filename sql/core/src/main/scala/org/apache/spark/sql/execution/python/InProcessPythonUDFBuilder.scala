@@ -76,7 +76,7 @@ object InProcessPythonUDFBuilder {
       PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF, deterministic))
   }
 
-  private[python] def checkConfiguration(conf: SQLConf): Unit = {
+  private[sql] def checkConfiguration(conf: SQLConf): Unit = {
     val unsupported = Seq(
       Option.when(PythonWorkerEnvironment.read(conf).nonEmpty)("spark.pythonWorkerEnv.*"),
       conf.pythonUDFProfiler.map(_ => SQLConf.PYTHON_UDF_PROFILER.key),

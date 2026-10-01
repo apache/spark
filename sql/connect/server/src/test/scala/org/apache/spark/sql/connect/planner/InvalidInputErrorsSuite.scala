@@ -38,12 +38,19 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
       expectedErrorCondition = "CONNECT_INVALID_PLAN.FUNCTION_EVAL_TYPE_NOT_SUPPORTED",
       expectedParameters = Map("evalType" -> "258"),
       invalidInput = {
-        val udf = proto.CommonInlineUserDefinedFunction.newBuilder().setPythonUdf(
-          proto.PythonUDF.newBuilder()
-            .setEvalType(PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF))
-        val expression = proto.Expression.newBuilder().setCommonInlineUserDefinedFunction(udf)
-        proto.Relation.newBuilder().setProject(
-          proto.Project.newBuilder().setInput(testLocalRelation).addExpressions(expression)).build()
+        val udf = proto.CommonInlineUserDefinedFunction
+          .newBuilder()
+          .setPythonUdf(
+            proto.PythonUDF
+              .newBuilder()
+              .setEvalType(PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF))
+        val expression =
+          proto.Expression.newBuilder().setCommonInlineUserDefinedFunction(udf)
+        proto.Relation
+          .newBuilder()
+          .setProject(
+            proto.Project.newBuilder().setInput(testLocalRelation).addExpressions(expression))
+          .build()
       }),
     TestCase(
       name = "Invalid schema data type non struct for Parse",
@@ -137,8 +144,10 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
       }))
 
   test("Connect rejects SQL registration of in-process Python functions") {
-    val udf = proto.CommonInlineUserDefinedFunction.newBuilder().setPythonUdf(
-      proto.PythonUDF.newBuilder().setEvalType(PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF))
+    val udf = proto.CommonInlineUserDefinedFunction
+      .newBuilder()
+      .setPythonUdf(
+        proto.PythonUDF.newBuilder().setEvalType(PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF))
     val error = intercept[InvalidPlanInput] {
       transform(proto.Command.newBuilder().setRegisterFunction(udf).build())
     }

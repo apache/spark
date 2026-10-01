@@ -1029,6 +1029,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object PythonEvals extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ArrowEvalPython(udfs, output, child, PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) =>
+        InProcessPythonUDFBuilder.checkConfiguration(conf)
         InProcessArrowEvalPythonExec(udfs, output, planLater(child)) :: Nil
       case ArrowEvalPython(udfs, output, child, evalType) =>
         ArrowEvalPythonExec(udfs, output, planLater(child), evalType) :: Nil

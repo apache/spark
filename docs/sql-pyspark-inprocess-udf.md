@@ -55,9 +55,12 @@ Timezone-naive and timezone-aware timestamps are not interchangeable. String and
 offset widths, including nested values, are converted as needed to match
 `spark.sql.execution.arrow.useLargeVarTypes`. These conversions can allocate new buffers.
 Other value types must match exactly: use an explicit PyArrow cast for numeric conversions.
+Map `keys_sorted` metadata is normalized to Spark's declared map type.
 Nested field nullability may differ if the actual values satisfy the declared nullability. Sliced results, including nested
 child slices, are copied to remove offsets that Arrow Java's CDI importer cannot
 read. Compatible results retain zero-copy transfer.
+Before exporting a result, the runtime performs full Arrow validation, including interior
+offsets and UTF-8 data. This adds validation work proportional to the result size.
 
 The API produces a regular `PythonUDF` expression with an in-process evaluation
 type. Spark's existing `ArrowEvalPython` planning rules handle aggregation,
@@ -80,7 +83,10 @@ vectors are released on task completion, early termination and failure. The runt
 each exported result until the next invocation for that task or task cleanup, after the JVM
 has released its references. The runtime drops its Python references on the interpreter
 thread, so releasing JVM results does not trigger Python finalizers on Spark task threads.
-Cleanup can remain queued behind another task's invocation.
+Cleanup can remain queued behind another task's invocation. If task completion overlaps
+an active iterator call, cleanup waits for that call to finish. With pipelined Python worker
+execution enabled, result rows are copied before returning them to downstream consumers,
+so those rows remain valid after the task releases its Arrow vectors.
 
 UDF deserialization uses PySpark's bundled cloudpickle. Each task registers its
 own function instance once and passes a small handle for subsequent batches.
@@ -388,7 +394,7 @@ spark-submit \
   --conf spark.executor.cores=1 \
   --conf spark.task.cpus=1 \
   --conf spark.pyspark.python=./myvenv/bin/python3 \
-  --conf spark.executor.extraJavaOptions="-Djava.library.path=./myvenv/lib/python3.11/site-packages/jep" \
+  --conf spark.executor.extraLibraryPath=./myvenv/lib/python3.11/site-packages/jep \
   --conf spark.inprocess.python.sitePackages=./myvenv/lib/python3.11/site-packages \
   my_app.py
 ```
@@ -439,6 +445,8 @@ spark-submit \
 
 `spark.executor.extraJavaOptions=-Djava.library.path=...` locates JEP even on Kubernetes
 images whose entrypoint does not propagate `spark.executor.extraLibraryPath`.
+It replaces the entire JVM native library search path; append any other required native
+library directories, separated by `:` on Linux.
 
 #### Option B: `--archives` with remote file upload
 
@@ -480,7 +488,8 @@ spark-submit \
 
 Registers the in-process Python plugin. This initializes the `SharedInterpreter` on each
 executor at startup. Without this plugin, the driver rejects in-process UDF execution
-before submitting tasks. Missing native dependencies are reported during plugin initialization.
+during physical planning, including `explain()`, before submitting tasks. Missing native
+dependencies are reported during plugin initialization.
 Task calls and cleanup never create or restart an interpreter.
 
 ---
@@ -513,8 +522,14 @@ The relative path `./myvenv/` resolves to the directory where Spark extracted yo
 the executor node. Initial archives are localized or unpacked before executor plugin
 initialization, so their site-packages directories are available when JEP starts.
 
-Paths cannot contain a single quote, backslash, newline, comma, or the platform path
-separator (`:` on Linux/macOS). Commas separate configuration entries.
+Paths cannot contain a single quote, newline, NUL, surrogate character (including
+supplementary Unicode characters), comma, or the platform path separator (`:` on Linux/macOS).
+Backslashes are supported. Commas separate configuration entries.
+
+The configured directories are fixed for the JVM lifetime once JEP has been configured,
+including when a subsequent Python bootstrap fails. Stopping a SparkContext does not clear
+Python's cached modules or previous `.pth` entries. Restart the executor process (or the
+local driver process) before changing this configuration or replacing its installed packages.
 
 **Multiple paths** (comma-separated):
 
@@ -527,17 +542,24 @@ spark.inprocess.python.sitePackages = ./venv/lib/python3.11/site-packages,/opt/c
 
 ---
 
-### `spark.executor.extraJavaOptions` — `java.library.path`
+### Native library paths
 
 jep requires its native library (`libjep.so` on Linux, `libjep.dylib` on macOS) to be on the
 JVM's native library path. **This must be set before the JVM starts** — `System.setProperty()`
 has no effect after JVM startup, so runtime configuration is not possible.
 
-The reliable approach is to set `-Djava.library.path` via `spark.executor.extraJavaOptions`:
+For YARN and Standalone, use `spark.executor.extraLibraryPath` to prepend JEP's directory
+to the native library search path while preserving existing directories:
 
 ```
-spark.executor.extraJavaOptions = -Djava.library.path=./myvenv/lib/python3.11/site-packages/jep
+spark.executor.extraLibraryPath = ./myvenv/lib/python3.11/site-packages/jep
 ```
+
+For Kubernetes images whose entrypoint does not propagate this setting, set
+`-Djava.library.path` via `spark.executor.extraJavaOptions`. This **replaces** the JVM's
+entire default native library search path. Include every other required native library
+directory as well, such as Hadoop native libraries or compression codecs; otherwise those
+libraries may become unavailable. Separate directories with the platform path separator.
 
 When using `--archives`, Spark extracts the archive to a predictable relative path (`./myvenv/`),
 so the path above is stable across executor nodes without any per-node configuration.

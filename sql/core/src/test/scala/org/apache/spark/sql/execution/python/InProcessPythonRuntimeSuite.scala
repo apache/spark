@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.execution.python
 
+import java.util.Collections
 import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskKilledException}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, SimplePythonFunction}
 import org.apache.spark.internal.config.Python.IN_PROCESS_SITE_PACKAGES
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.ArrowUtils
@@ -43,7 +47,11 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     assert(conf.get(IN_PROCESS_SITE_PACKAGES).isEmpty)
     conf.set(IN_PROCESS_SITE_PACKAGES.key, " /opt/venv/lib, /opt/extra ")
     assert(conf.get(IN_PROCESS_SITE_PACKAGES) == Seq("/opt/venv/lib", "/opt/extra"))
-    Seq("bad'path", "bad\npath", "bad\\path", s"bad${java.io.File.pathSeparator}path")
+    conf.set(IN_PROCESS_SITE_PACKAGES.key, "back\\slash")
+    assert(conf.get(IN_PROCESS_SITE_PACKAGES) == Seq("back\\slash"))
+    Seq("bad'path", "bad\npath", "bad\rpath", "bad\u0000path",
+      "bad" + new String(Character.toChars(0x1f600)), "bad" + 0xd800.toChar,
+      s"bad${java.io.File.pathSeparator}path")
       .foreach { path =>
         conf.set(IN_PROCESS_SITE_PACKAGES.key, path)
         intercept[IllegalArgumentException] { conf.get(IN_PROCESS_SITE_PACKAGES) }
@@ -95,6 +103,9 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     val context = TaskContext.empty()
     class TestEvaluator extends InProcessArrowEvalPythonEvaluatorFactory(
         Seq.empty, Seq.empty, Seq.empty, 10, 0L, "UTC", false, false, false, false, metrics) {
+      override private[python] def runtimeSession: InProcessPythonRuntime.InterpreterSession =
+        runtime
+
       def createUnusedIterator(): Unit = {
         evaluate(Seq.empty, Array.empty, Iterator.empty, new StructType, context)
       }
@@ -103,6 +114,98 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     Thread.sleep(20)
     context.markTaskCompleted(None)
     assert(metrics("pythonTotalTime").value == 0L)
+  }
+
+  test("evaluators retain the generation captured before consuming any input") {
+    val metrics = Seq("pythonInitTime", "pythonProcessingTime", "pythonTotalTime")
+      .map(_ -> new SQLMetric("timing", 0L)).toMap
+    val context = TaskContext.empty()
+    val function = SimplePythonFunction(
+      Seq.empty, Collections.emptyMap[String, String](), Collections.emptyList[String](),
+      "", "3.12", Collections.emptyList(), null)
+    val udf = PythonUDF("identity", function, LongType, Seq.empty,
+      PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF, true)
+    var lookups = 0
+    class TestEvaluator extends InProcessArrowEvalPythonEvaluatorFactory(
+        Seq.empty, Seq(udf), Seq.empty, 10, 0L, "UTC", false, false, false, false, metrics) {
+      override private[python] def runtimeSession: InProcessPythonRuntime.InterpreterSession = {
+        lookups += 1
+        runtime
+      }
+
+      def iterator(): Iterator[InternalRow] = evaluate(
+        Seq((ChainedPythonFunctions(Seq(function)), 0L)), Array(Array.empty),
+        Iterator.single(InternalRow.empty), new StructType, context)
+    }
+    val iterator = new TestEvaluator().iterator()
+    assert(lookups == 1)
+    runtime.shutdown()
+    runtime = new InProcessPythonRuntime.InterpreterSession()
+    try {
+      val error = intercept[IllegalStateException] { iterator.next() }
+      assert(error.getMessage.contains("not running"))
+      assert(lookups == 1)
+    } finally {
+      context.markTaskCompleted(None)
+    }
+  }
+
+  gridTest("task completion defers cleanup until a pipelined iterator call returns")(
+      Seq(true, false)) { failCall =>
+    val entered = new CountDownLatch(1)
+    val finish = new CountDownLatch(1)
+    val cleanups = new AtomicInteger()
+    val lateResources = new AtomicInteger()
+    val returned = new AtomicBoolean()
+    val resources = new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(() => {
+      assert(lateResources.getAndSet(0) == 2)
+      cleanups.incrementAndGet()
+    })
+    val caller = new Thread(() => {
+      try {
+        resources.use[Unit](throw new TaskKilledException("completed")) {
+          entered.countDown()
+          assert(finish.await(10, TimeUnit.SECONDS))
+          // Two fused UDFs can acquire results after the task requests cleanup.
+          lateResources.addAndGet(2)
+          if (failCall) throw new IllegalArgumentException("late failure")
+        }
+        returned.set(true)
+      } catch {
+        case _: IllegalArgumentException if failCall =>
+        case _: TaskKilledException if !failCall =>
+      }
+    })
+    caller.start()
+    try {
+      assert(entered.await(10, TimeUnit.SECONDS))
+      resources.close()
+      resources.close()
+      assert(resources.isClosed)
+      assert(cleanups.get() == 0)
+      assert(!resources.use(false) { fail("closed iterators cannot acquire resources") })
+    } finally {
+      finish.countDown()
+      caller.join(10000)
+    }
+    assert(!caller.isAlive)
+    assert(!returned.get())
+    resources.close()
+    assert(cleanups.get() == 1)
+    assert(lateResources.get() == 0)
+  }
+
+  test("exhausted iterators close normally and return no more rows") {
+    val cleanups = new AtomicInteger()
+    val resources = new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(
+      () => { cleanups.incrementAndGet(); () })
+    assert(!resources.use(false) {
+      resources.close()
+      false
+    })
+    assert(!resources.use(false) { fail("must not consume exhausted input") })
+    resources.close()
+    assert(cleanups.get() == 1)
   }
 
   test("calls from different threads use the same interpreter owner thread") {

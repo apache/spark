@@ -214,17 +214,23 @@ def inprocess_udf(return_type: Union[DataType, str], deterministic: bool = True)
     Install dependencies on executors before starting Spark. The driver's Python
     major.minor version must match the embedded interpreter.
 
-    Args:
-        return_type:   Spark SQL DataType or DDL string for the UDF return value
-        deterministic: Whether this UDF produces the same output for the same input.
-                       Set to ``False`` for UDFs that use randomness, external state,
-                       or other sources of non-determinism so the optimizer does not
-                       deduplicate or reorder calls to this UDF.  Default: ``True``.
+    Parameters
+    ----------
+    return_type : :class:`pyspark.sql.types.DataType` or str
+        The return type of the UDF, as a DataType or a DDL-formatted type string.
+    deterministic : bool, optional
+        Whether this UDF produces the same output for the same input. Set to ``False``
+        for UDFs that use randomness or external state, so the optimizer does not
+        deduplicate or reorder calls to this UDF. Default: ``True``.
 
-    Returns:
-        Decorator that wraps the function as an ``InProcessUDFWrapper``
+    Returns
+    -------
+    function
+        A decorator that wraps the function as an ``InProcessUDFWrapper``.
 
-    Example::
+    Examples
+    --------
+    .. code-block:: python
 
         @inprocess_udf(return_type=LongType())
         def double(x):

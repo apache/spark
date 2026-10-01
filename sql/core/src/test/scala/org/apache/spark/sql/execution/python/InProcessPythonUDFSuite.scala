@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution.python
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.internal.config.PLUGINS
 import org.apache.spark.sql.{AnalysisException, Column, QueryTest}
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
@@ -35,6 +36,19 @@ import org.apache.spark.sql.types.LongType
 class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
+
+  private val plugin = "org.apache.spark.sql.execution.python.InProcessPythonPlugin"
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    // These tests plan queries without loading a native interpreter. Advertise the plugin
+    // after context creation; actual plugin initialization is covered by integration tests.
+    SparkEnv.get.conf.set(PLUGINS, Seq(plugin))
+  }
+
+  override def afterEach(): Unit = {
+    try { SparkEnv.get.conf.remove(PLUGINS) } finally { super.afterEach() }
+  }
 
   private def makeUDF(
       name: String,
@@ -72,10 +86,8 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
       withSQLConf(
           SQLConf.USE_PARTITION_EVALUATOR.key -> partitionEvaluator,
           SQLConf.PYTHON_UDF_PROFILER.key -> "perf") {
-        val plan = spark.range(1).select(column).queryExecution.executedPlan
         val error = intercept[SparkException] {
-          // execute() builds the RDD without submitting a job or entering a task closure.
-          plan.execute()
+          spark.range(1).select(column).queryExecution.executedPlan
         }
         checkError(
           exception = error,
@@ -86,6 +98,7 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("missing executor plugin is rejected before task submission") {
+    SparkEnv.get.conf.remove(PLUGINS)
     val column = makeUDF("identity", col("id"))
     val error = intercept[SparkException] {
       spark.range(1).select(column).queryExecution.executedPlan.execute()
@@ -95,6 +108,22 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
       condition = "INVALID_SPARK_CONFIG.MISSING_IN_PROCESS_PYTHON_PLUGIN",
       parameters = Map("plugin" ->
         "org.apache.spark.sql.execution.python.InProcessPythonPlugin"))
+  }
+
+  test("AQE validates configuration while planning above a shuffle") {
+    val df = spark.range(0, 10, 1, 2).selectExpr("id % 2 AS k", "id AS v")
+    val query = df.groupBy("k").agg(sum("v").as("s"))
+      .select(makeUDF("identity", col("s")))
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.PYTHON_UDF_PROFILER.key -> "perf") {
+      // Planning cannot submit a shuffle stage. Both collect() and explain() plan here.
+      val error = intercept[SparkException] { query.queryExecution.executedPlan }
+      checkError(
+        exception = error,
+        condition = "INVALID_SPARK_CONFIG.UNSUPPORTED_IN_PROCESS_PYTHON_UDF",
+        parameters = Map("config" -> SQLConf.PYTHON_UDF_PROFILER.key))
+    }
   }
 
   test("positional arguments after named arguments are rejected by the builder") {

@@ -23,7 +23,7 @@ import threading
 import unittest
 import weakref
 from importlib.util import find_spec
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from pyspark import cloudpickle
 from pyspark.sql.types import (
@@ -112,6 +112,44 @@ class InProcessRuntimeTests(unittest.TestCase):
             for value in arrays + schemas + [output, output_schema]:
                 if value.release != ffi.NULL:
                     value.release(value)
+
+    def test_worker_style_command_is_rejected_at_registration(self):
+        with self.assertRaisesRegex(RuntimeError, "must contain a callable; use inprocess_udf"):
+            self.register("worker", cloudpickle.dumps((lambda x: x, LongType())))
+        self.assertNotIn("worker", _udfs)
+
+    def test_full_validation_precedes_normalization_and_export(self):
+        # Model Arrow rejecting an invalid result without handing malformed native buffers
+        # to either runtime. A validation failure must prevent all subsequent buffer access.
+        result = MagicMock(spec=pa.Array)
+        result.type = pa.string()
+        result.__len__.return_value = 2
+        result.validate.side_effect = pa.ArrowInvalid("invalid result offsets")
+        with patch("pyspark.inprocess.runtime._with_schema") as normalize:
+            with self.assertRaisesRegex(pa.ArrowInvalid, "invalid result offsets"):
+                _validate_result(result, 2, pa.string())
+            result.validate.assert_called_once_with(full=True)
+            normalize.assert_not_called()
+            result.buffers.assert_not_called()
+
+    def test_sorted_map_metadata_is_normalized_including_nested_maps(self):
+        sorted_type = pa.map_(pa.string(), pa.int64(), keys_sorted=True)
+        declared = pa.map_(pa.string(), pa.int64())
+        values = [[("a", 1), ("b", 2)], None, []]
+        for actual_type, expected_type, data in [
+            (sorted_type, declared, values),
+            (pa.list_(sorted_type), pa.list_(declared), [values]),
+            (pa.struct([("m", sorted_type)]), pa.struct([("m", declared)]), [{"m": values[0]}]),
+        ]:
+            with self.subTest(actual_type=actual_type):
+                value = pa.array(data, type=actual_type)
+                result = _validate_result(value, len(value), expected_type)
+                self.assertEqual(result.type, expected_type)
+                self.assertEqual(result.to_pylist(), value.to_pylist())
+                self.assertEqual(
+                    [b.address if b is not None else None for b in result.buffers()],
+                    [b.address if b is not None else None for b in value.buffers()],
+                )
 
     def test_identity_retains_buffers_and_nulls(self):
         value = pa.array([1, None, 3], type=pa.int64())

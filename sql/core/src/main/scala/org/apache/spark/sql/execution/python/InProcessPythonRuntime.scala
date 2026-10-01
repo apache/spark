@@ -40,6 +40,7 @@ private[python] object InProcessPythonRuntime extends Logging {
   private var active: InterpreterSession = _
   private var mainConfigured = false
   @volatile private var sharedConfigured = false
+  @volatile private var bootstrappedSitePackages: Option[Seq[String]] = None
 
   private[python] class LifecycleException(message: String) extends IllegalStateException(message)
 
@@ -63,7 +64,7 @@ private[python] object InProcessPythonRuntime extends Logging {
     def interpreterConfig(sitePackages: Seq[String]): JepConfig = {
       require(sitePackages.forall(Python.isValidInProcessPath),
         s"Invalid ${Python.IN_PROCESS_SITE_PACKAGES.key}: paths cannot contain quotes, " +
-          "backslashes, newlines or the platform path separator")
+          "newlines, NUL, surrogate characters or the platform path separator")
       val config = new JepConfig().setClassEnquirer(new NamingConventionClassEnquirer(false))
       // Calling addIncludePaths with no arguments adds the working directory in JEP.
       if (sitePackages.nonEmpty) config.addIncludePaths(sitePackages: _*)
@@ -88,10 +89,16 @@ private[python] object InProcessPythonRuntime extends Logging {
     "try:\n" + script.linesIterator.map("    " + _).mkString("\n") +
       "\nexcept BaseException as _bootstrap_error:\n" +
       "    raise RuntimeError('In-process Python bootstrap failed: ' + " +
-      "ascii(_bootstrap_error)) from None\n"
+      "ascii(type(_bootstrap_error).__name__ + ': ' + str(_bootstrap_error))) from None\n"
   }
 
   def initialize(sitePackages: Seq[String] = Seq.empty): Unit = synchronized {
+    bootstrappedSitePackages.foreach { paths =>
+      if (paths != sitePackages) {
+        throw new LifecycleException("In-process Python has already configured different " +
+          "sitePackages. Restart the executor process before changing interpreter configuration.")
+      }
+    }
     if (active != null && !active.isTerminated) {
       active.requireCompatible(sitePackages)
     } else {
@@ -155,7 +162,7 @@ private[python] object InProcessPythonRuntime extends Logging {
       }
       if (sitePackages != paths) {
         throw new LifecycleException("In-process Python is already running with different " +
-          "sitePackages. Stop the existing context before changing interpreter configuration.")
+          "sitePackages. Restart the executor process before changing interpreter configuration.")
       }
     }
 
@@ -214,6 +221,9 @@ private[python] object InProcessPythonRuntime extends Logging {
 
     def initialize(): Unit = onInterpreterThread {
       val candidate = new ManagedSharedInterpreter()
+      // SharedInterpreter keeps sys.modules and sys.path for the JVM lifetime, even when
+      // the following bootstrap fails. A new context cannot switch Python environments.
+      bootstrappedSitePackages = Some(sitePackages)
       try {
         candidate.set("_site_packages", sitePackages.asJava)
         val sparkPaths = PythonUtils.mergePythonPaths(

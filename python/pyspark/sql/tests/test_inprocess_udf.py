@@ -28,6 +28,7 @@ import os
 import shutil
 import tempfile
 import unittest
+import zipfile
 from importlib.util import find_spec
 from pathlib import Path
 from unittest.mock import patch
@@ -107,8 +108,21 @@ class InProcessUDFTests(ReusedSQLTestCase):
         with open(os.path.join(shadow, "__init__.py"), "w") as f:
             f.write("raise RuntimeError('site-packages must not shadow Spark PySpark')\n")
         try:
-            # No JEP or PySpark on PYTHONPATH: bootstrap must supply both before use.
-            with patch.dict(os.environ, {"PYTHONPATH": system_dir}):
+            # CI extracts compiled targets without building pyspark.zip. Keep the source
+            # tree available, while still requiring the configured paths to provide JEP.
+            cls.python_source = Path(__file__).resolve().parents[3]
+            archive = cls.python_source / "lib" / "pyspark.zip"
+            if archive.is_file():
+                with zipfile.ZipFile(archive) as packaged:
+                    for module in (cls.python_source / "pyspark" / "inprocess").glob("*.py"):
+                        name = module.relative_to(cls.python_source).as_posix()
+                        if (
+                            name not in packaged.namelist()
+                            or packaged.read(name) != module.read_bytes()
+                        ):
+                            raise RuntimeError("Rebuild or remove stale python/lib/pyspark.zip")
+            python_path = os.pathsep.join([str(cls.python_source), system_dir])
+            with patch.dict(os.environ, {"PYTHONPATH": python_path}):
                 super().setUpClass()
         except Exception:
             shutil.rmtree(cls.site_packages)
@@ -399,6 +413,8 @@ class MissingJepProbe {
         spark_home = jvm.java.lang.System.getenv("SPARK_HOME")
         self.assertIsNotNone(spark_home)
         python_lib = Path(spark_home) / "python" / "lib"
+        if not (python_lib / "pyspark.zip").is_file():
+            self.skipTest("Packaged bootstrap coverage requires python/lib/pyspark.zip")
         env = os.environ.copy()
         env.pop("SPARK_HOME", None)
         env.pop("VIRTUAL_ENV", None)
@@ -499,6 +515,72 @@ class BootstrapProbe {
             self.assertIn("SHUTDOWN_FLUSH", result.stdout)
             self.assertIn("set LC_ALL=C.UTF-8", result.stderr)
 
+    def test_failed_bootstrap_preserves_message_and_freezes_site_packages(self):
+        import subprocess
+
+        jvm = self.spark.sparkContext._jvm
+        java_home = jvm.java.lang.System.getProperty("java.home")
+        classpath = jvm.java.lang.System.getProperty("java.class.path")
+        source = """
+import java.util.Arrays;
+import org.apache.spark.sql.execution.python.InProcessPythonRuntime;
+
+class BootstrapFailureProbe {
+  public static void main(String[] args) {
+    var paths = scala.jdk.javaapi.CollectionConverters
+        .asScala(Arrays.asList(args[0], args[1])).toSeq();
+    try {
+      InProcessPythonRuntime.initialize(paths);
+      throw new AssertionError("Expected an unsupported PyArrow version");
+    } catch (jep.JepException expected) {
+      String message = expected.getMessage();
+      if (!message.contains("PySparkImportError") ||
+          !message.contains("UNSUPPORTED_PACKAGE_VERSION") ||
+          !message.contains("PyArrow") || !message.contains("0.0.0")) throw expected;
+    }
+    var changed = scala.jdk.javaapi.CollectionConverters
+        .asScala(Arrays.asList(args[1])).toSeq();
+    try {
+      InProcessPythonRuntime.initialize(changed);
+      throw new AssertionError("Accepted a different environment after bootstrap failure");
+    } catch (IllegalStateException expected) {
+      if (!expected.getMessage().contains("Restart the executor process")) throw expected;
+    }
+    System.out.println("BOOTSTRAP_FAILURE_CHECKED");
+  }
+}
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            # Use a backslash in a supported POSIX path to exercise JEP's escaping too.
+            packages = Path(directory) / "back\\slash"
+            packages.mkdir()
+            (packages / "old_arrow.pth").write_text(
+                "import pyarrow; pyarrow.__version__ = '0.0.0'\n"
+            )
+            source_file = Path(directory) / "BootstrapFailureProbe.java"
+            source_file.write_text(source)
+            env = os.environ.copy()
+            # This direct JVM probe needs no Spark installation and always imports source.
+            env["SPARK_HOME"] = directory
+            env["PYTHONPATH"] = str(self.python_source)
+            result = subprocess.run(
+                [
+                    str(Path(java_home) / "bin" / "java"),
+                    f"-Djava.library.path={self.jep_dir}",
+                    "--class-path",
+                    classpath,
+                    str(source_file),
+                    str(packages),
+                    str(self.jep_dir.parent),
+                ],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("BOOTSTRAP_FAILURE_CHECKED", result.stdout)
+
     def test_exception_unicode_and_nul_survive_jep(self):
         from pyspark.inprocess import inprocess_udf
 
@@ -532,7 +614,9 @@ class BootstrapProbe {
             return pa.array([pyspark.__file__] * len(x))
 
         path = self.spark.range(1).select(inprocess_udf("string")(location)("id")).first()[0]
-        self.assertIn("pyspark.zip/pyspark/__init__.py", path)
+        expected = str(self.python_source / "pyspark" / "__init__.py")
+        packaged = str(self.python_source / "lib" / "pyspark.zip" / "pyspark" / "__init__.py")
+        self.assertIn(path, [expected, packaged])
 
     def test_declared_struct_metadata(self):
         from pyspark.inprocess import inprocess_udf
@@ -1238,16 +1322,17 @@ class BootstrapProbe {
         df = self.spark.range(1)
         self.assertEqual(df.select(read_magic(df.id)).first()[0], 99)
 
-    def test_bootstrap_converts_base_exceptions_and_can_retry(self):
+    def test_bootstrap_converts_base_exceptions_and_retries_the_same_configuration(self):
         jvm = self.spark.sparkContext._jvm
         runtime = jvm.org.apache.spark.sql.execution.python.InProcessPythonRuntime
         runtime_module = getattr(
             getattr(jvm.org.apache.spark.sql.execution.python, "InProcessPythonRuntime$"), "MODULE$"
         )
 
-        def initialize(path):
+        def initialize():
             paths = jvm.java.util.ArrayList()
-            paths.add(path)
+            paths.add(self.site_packages)
+            paths.add(str(self.jep_dir.parent))
             runtime.initialize(jvm.PythonUtils.toSeq(paths))
 
         # Check the shared guard independently of CPython/JEP exception handling.
@@ -1258,14 +1343,14 @@ class BootstrapProbe {
             with self.assertRaisesRegex(RuntimeError, "bootstrap failed"):
                 exec(runtime_module.bootstrapScript(script), {})
         runtime.shutdown()
+        probe = Path(self.site_packages) / "probe.pth"
         try:
-            with tempfile.TemporaryDirectory() as path:
-                with open(os.path.join(path, "probe.pth"), "w") as f:
-                    f.write("import sys; raise KeyboardInterrupt('bootstrap probe')\n")
-                with self.assertRaisesRegex(Exception, "bootstrap failed.*bootstrap probe"):
-                    initialize(path)
+            probe.write_text("import sys; raise KeyboardInterrupt('bootstrap probe')\n")
+            with self.assertRaisesRegex(Exception, "bootstrap failed.*bootstrap probe"):
+                initialize()
         finally:
-            initialize(self.site_packages)
+            probe.unlink()
+            initialize()
         from pyspark.inprocess import inprocess_udf
 
         identity = inprocess_udf("long")(lambda x: x)
@@ -1283,9 +1368,16 @@ class BootstrapProbe {
         try:
             with self.assertRaisesRegex(Exception, "not running"):
                 df.select(identity(df.id)).collect()
+            changed = self.spark.sparkContext._jvm.java.util.ArrayList()
+            changed.add(self.site_packages)
+            with self.assertRaisesRegex(Exception, "Restart the executor process"):
+                runtime.InProcessPythonRuntime.initialize(
+                    self.spark.sparkContext._jvm.PythonUtils.toSeq(changed)
+                )
         finally:
             paths = self.spark.sparkContext._jvm.java.util.ArrayList()
             paths.add(self.site_packages)
+            paths.add(str(self.jep_dir.parent))
             runtime.InProcessPythonRuntime.initialize(
                 self.spark.sparkContext._jvm.PythonUtils.toSeq(paths)
             )
@@ -1431,6 +1523,29 @@ class BootstrapProbe {
         df = self.spark.range(4)
         rows = df.select(double(plus_one("id")), plus_one(double("id"))).collect()
         self.assertEqual([tuple(r) for r in rows], [(2 * (i + 1), 2 * i + 1) for i in range(4)])
+
+    def test_pipelined_arrow_worker_consumes_inprocess_results(self):
+        import pyarrow.compute as pc
+
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.functions import arrow_udf
+
+        conf = self.spark.sparkContext._jvm.org.apache.spark.SparkEnv.get().conf()
+        key = "spark.python.udf.pipelined.enabled"
+        previous = conf.get(key, "false")
+        conf.set(key, "true")
+        try:
+            double = inprocess_udf("long")(lambda x: pc.multiply(x, 2))
+            triple = inprocess_udf("long")(lambda x: pc.multiply(x, 3))
+            add = arrow_udf(lambda x, y: pc.add(x, y), "long")
+            with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "2"}):
+                query = self.spark.range(8, numPartitions=2).select(add(double("id"), triple("id")))
+                plan = query._jdf.queryExecution().executedPlan().toString()
+                self.assertIn("InProcessArrowEvalPython", plan)
+                self.assertIn("ArrowEvalPython", plan)
+                self.assertEqual([r[0] for r in query.collect()], [i * 5 for i in range(8)])
+        finally:
+            conf.set(key, previous)
 
     def test_duplicate_names_in_udf_arguments_are_rejected(self):
         import pyarrow as pa
