@@ -101,7 +101,9 @@ class InMemoryTableWithV2Filter(
               }
             }
           case p : Predicate if p.name().equals("=") =>
-            if (p.children().length == 2) {
+            // Pruning needs a plain reference to the partition column: a predicate on anything
+            // else, e.g. on a cast of it, says nothing about which partitions can be dropped.
+            if (p.children().length == 2 && p.children()(0).isInstanceOf[FieldReference]) {
               val filterRef = p.children()(0).asInstanceOf[FieldReference].references.head
               if (filterRef.toString.equals(ref.toString)) {
                 val matchingKey = p.children()(1).asInstanceOf[LiteralValue[_]].value
