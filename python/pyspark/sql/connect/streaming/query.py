@@ -333,6 +333,8 @@ class StreamingQueryListenerBus:
                 is_last_listener = len(self._listener_bus) == 1
                 execution_thread = None
                 if is_last_listener:
+                    # Keep a stable reference because the event thread may clear
+                    # self._execution_thread after this state lock is released.
                     execution_thread = self._execution_thread
                 else:
                     self._listener_bus.remove(listener)
@@ -354,8 +356,7 @@ class StreamingQueryListenerBus:
                 if execution_thread is not None:
                     execution_thread.join()
                 with self._listeners_state_lock:
-                    if self._execution_thread is execution_thread:
-                        self._execution_thread = None
+                    self._execution_thread = None
                     # The event thread may have cleared the listener bus after an exception.
                     if listener in self._listener_bus:
                         self._listener_bus.remove(listener)
