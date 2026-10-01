@@ -1051,11 +1051,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val withFilter = finalFilters.foldLeft[LogicalPlan](scanRelation)((plan, cond) => {
         Filter(cond, plan)
       })
-      // useInferredFilterEstimation() enables separate estimates for original predicates
-      // (including residuals) and inferred predicates; CBO uses the smaller estimate.
-      // When shouldEstimateInferredFilters is true, skip re-adding fully pushed predicates as
-      // adjustment Filters. Otherwise, re-add those that survive pruning when
-      // reflectsFullyPushedDownFilters() is false.
+      // For scans that return false from reflectsFullyPushedDownFilters(), re-add fully pushed
+      // predicates that survive pruning as adjustment Filters. Skip these Filters when the scan
+      // enables useInferredFilterEstimation() and has inferred filters after pruning. With CBO
+      // enabled, estimate original predicates (including residuals) and inferred predicates
+      // separately and use the smaller row count.
       val withAdjustmentFilters =
         withPostPushdownAdjustmentFilters(withFilter, scanRelation.outputBoundPushedFilters)
 
