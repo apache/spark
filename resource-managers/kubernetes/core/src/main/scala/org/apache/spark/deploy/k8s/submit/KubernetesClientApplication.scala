@@ -260,16 +260,22 @@ private[spark] class Client(
   }
 
   // SPARK-38079: best-effort cleanup for the two failure catch blocks between pod creation and
-  // gate removal. The pod and pre-resources are deleted independently -- each wrapped in its
-  // own Utils.tryLogNonFatalError -- so that a failure deleting one (e.g. a delete call itself
-  // hitting a permission or network error) neither masks the original exception the caller is
-  // about to (re)throw nor skips deleting the other.
+  // gate removal. The pod and each pre-resource are deleted independently -- every delete call
+  // wrapped in its own Utils.tryLogNonFatalError -- so that one of them failing (e.g. a delete
+  // call itself hitting a permission or network error) neither masks the original exception
+  // the caller is about to (re)throw, nor skips the rest. In particular, fabric8's
+  // resourceList(...).delete() deletes the given items sequentially and stops at the first
+  // non-404 exception, so pre-resources are deleted one at a time here rather than as a single
+  // resourceList(...).delete() call, which could otherwise leave every pre-resource after the
+  // one that failed undeleted (review comment #4129910518).
   private def deletePodAndPreResources(pod: Pod, preResources: Seq[HasMetadata]): Unit = {
     Utils.tryLogNonFatalError {
       kubernetesClient.pods().resource(pod).delete()
     }
-    Utils.tryLogNonFatalError {
-      kubernetesClient.resourceList(preResources: _*).delete()
+    preResources.foreach { resource =>
+      Utils.tryLogNonFatalError {
+        kubernetesClient.resource(resource).delete()
+      }
     }
   }
 }

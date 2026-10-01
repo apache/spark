@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.apiextensions.v1.{CustomResourceDefinition, CustomResourceDefinitionBuilder}
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
-import io.fabric8.kubernetes.client.dsl.PodResource
+import io.fabric8.kubernetes.client.dsl.{NamespaceableResource, PodResource}
 import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mock, MockitoAnnotations}
 import org.mockito.Mockito.{doThrow, inOrder, never, verify, when}
 import org.scalatest.BeforeAndAfter
@@ -193,6 +193,9 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   @Mock
   private var resourceList: RESOURCE_LIST = _
 
+  @Mock
+  private var namedResource: NamespaceableResource[HasMetadata] = _
+
   private var kconf: KubernetesDriverConf = _
   private var createdPodArgumentCaptor: ArgumentCaptor[Pod] = _
   private var createdResourcesArgumentCaptor: ArgumentCaptor[Array[HasMetadata]] = _
@@ -249,6 +252,10 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     doReturn(resourceList)
       .when(kubernetesClient)
       .resourceList(createdResourcesArgumentCaptor.capture(): _*)
+    // SPARK-38079: cleanup deletes each pre-resource individually (not as a single
+    // resourceList(...).delete() call -- see deletePodAndPreResources, review comment
+    // #4129910518), so any HasMetadata resolves to the same trackable mock here.
+    when(kubernetesClient.resource(ArgumentMatchers.any[HasMetadata]())).thenReturn(namedResource)
   }
 
   test("The client should configure the pod using the builder.") {
@@ -383,12 +390,12 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(thrown eq preResourceFailure)
     // Not just "delete() was called on some mock" -- pods().resource(...) must have been
     // called with the actual created (gated) pod, i.e. the same pod object this cleanup path
-    // is documented to delete, and resourceList()'s delete() must be reachable via the exact
-    // pre-resources that were passed to the failed serverSideApply() call.
+    // is documented to delete, and each pre-resource must be deleted individually (not as a
+    // single resourceList(...).delete() call, which stops at the first failing item).
     verify(namedPods).create()
     verify(podOperations).resource(podWithOwnerReference(gatedConfigMapName))
     verify(namedPods).delete()
-    verify(resourceList).delete()
+    verify(namedResource).delete()
     val preResourceCalls = createdResourcesArgumentCaptor.getAllValues.asScala
     assert(preResourceCalls.exists(_.exists(_.isInstanceOf[ConfigMap])),
       "the failed resourceList() call must have been for the pre-resources (the driver's " +
@@ -415,7 +422,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(thrown eq gateRemovalFailure)
     verify(podOperations).resource(podWithOwnerReference(gatedConfigMapName))
     verify(namedPods).delete()
-    verify(resourceList).delete()
+    verify(namedResource).delete()
     val preResourceCalls = createdResourcesArgumentCaptor.getAllValues.asScala
     assert(preResourceCalls.exists(_.exists(_.isInstanceOf[ConfigMap])),
       "the pre-resources deleted here must be the same ones created before the gate-removal " +
@@ -444,7 +451,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(thrown eq gateRemovalFailure,
       "the original failure that triggered cleanup must still be the one that propagates, " +
         "not a failure from within the best-effort cleanup itself")
-    verify(resourceList).delete()
+    verify(namedResource).delete()
   }
 
   test("SPARK-38079: a pod template's spec.nodeName is translated to an equivalent " +
