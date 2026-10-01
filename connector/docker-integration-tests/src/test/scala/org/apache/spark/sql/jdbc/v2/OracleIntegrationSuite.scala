@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
+import java.time.LocalDateTime
 import java.util.Locale
 
 import scala.util.Using
@@ -25,8 +26,10 @@ import scala.util.Using
 import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.OracleDatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -183,6 +186,21 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   }
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
+
+  test("SPARK-58876: V2 scan keeps the NTZ wall-clock decision pinned after a flip") {
+    val table = s"$catalogName.${namespaceOpt.get}.${caseConvert("datetime")}"
+    withDefaultTimeZone(LA) {
+      // loadTable (analysis) pins the wall-clock decision under the flag off; the flag then flips
+      // on before the scan's options are rebuilt and executed.
+      val df = withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
+        sql(s"SELECT time1 FROM $table WHERE name = 'amy'")
+      }
+      assert(df.schema.head.dataType === TimestampNTZType)
+      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+        assert(df.collect().head.get(0) === LocalDateTime.of(2022, 5, 19, 0, 0, 0))
+      }
+    }
+  }
 
   test("SPARK-46478: Revert SPARK-43049 to use varchar(255) for string") {
     val tableName = catalogName + ".t1"

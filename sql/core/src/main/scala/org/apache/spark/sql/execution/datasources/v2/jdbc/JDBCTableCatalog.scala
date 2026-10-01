@@ -154,7 +154,7 @@ class JDBCTableCatalog extends TableCatalog
   override def loadTable(ident: Identifier): Table = {
     JdbcUtils.withConnection(options) { conn =>
       val tableOptions = new JDBCOptions(options.parameters +
-        (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)) ++ JDBCOptions.planTimeOptions)
+        (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)) ++ dialect.planTimeOptions)
       JdbcUtils.classifyException(
         condition = "FAILED_JDBC.LOAD_TABLE",
         messageParameters = Map(

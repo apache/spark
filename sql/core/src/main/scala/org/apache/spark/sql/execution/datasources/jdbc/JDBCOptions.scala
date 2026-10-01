@@ -265,13 +265,13 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(false)
 
-  // Plan-time snapshot of the Oracle NTZ legacy flag. The pinned param (V2 catalog) wins, so the
-  // scan's rebuild keeps it.
-  val legacyOracleTimestampNTZMapping =
+  // Frozen plan-time wall-clock decision. A dialect pins it via planTimeOptions at each planning
+  // entry point; unpinned paths keep the java.sql.Timestamp conversion.
+  val timestampNTZAsWallClock: Boolean =
     parameters
-      .get(JDBC_LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING)
+      .get(JDBC_TIMESTAMP_NTZ_WALL_CLOCK)
       .map(_.toBoolean)
-      .getOrElse(SQLConf.get.legacyOracleTimestampNTZMappingEnabled)
+      .getOrElse(false)
 
   val hint = parameters.get(JDBC_HINT_STRING).map(value => {
     require(value.matches("(?s)^/\\*\\+ .* \\*/$"),
@@ -387,12 +387,7 @@ object JDBCOptions {
   val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
   val JDBC_PREFER_TIMESTAMP_NANOS = newOption("preferTimestampNanos")
   val JDBC_HINT_STRING = newOption("hint")
-  // Internal: pinned by the V2 catalog via planTimeOptions. newOption keeps it out of the driver
-  // connection properties.
-  val JDBC_LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING = newOption("__legacyOracleTimestampNTZMapping")
-
-  // Conf snapshots the V2 catalog pins into a table's options so the scan's rebuild keeps them.
-  private[sql] def planTimeOptions: Map[String, String] = Map(
-    JDBC_LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING ->
-      SQLConf.get.legacyOracleTimestampNTZMappingEnabled.toString)
+  // Internal: the resolved wall-clock decision a dialect pins at plan time. newOption keeps it out
+  // of the driver connection properties.
+  val JDBC_TIMESTAMP_NTZ_WALL_CLOCK = newOption("__timestampNTZAsWallClock")
 }

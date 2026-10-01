@@ -1745,25 +1745,23 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58876: Oracle reads/writes NTZ as wall-clock, legacy-gated, even wrapped") {
+  test("SPARK-58876: Oracle pins the NTZ wall-clock decision, legacy-gated, even wrapped") {
     val custom = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
-    }
-    // The decision reads the legacy flag frozen on JDBCOptions, so build options under each value.
-    def oracleOptions(legacy: Boolean): JDBCOptions = withSQLConf(
-        SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> legacy.toString) {
-      new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t", Map.empty[String, String])
     }
     val dialects = Seq[JdbcDialect](
       OracleDialect(),
       new AggregatedDialect(List(custom, OracleDialect())),
       new AggregatedDialect(List(OracleDialect(), custom)))
-    dialects.foreach { dialect =>
-      assert(dialect.timestampNTZAsWallClock(oracleOptions(legacy = false)), s"dialect=$dialect")
-      assert(!dialect.timestampNTZAsWallClock(oracleOptions(legacy = true)), s"dialect=$dialect")
+    val key = JDBCOptions.JDBC_TIMESTAMP_NTZ_WALL_CLOCK
+    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
+      dialects.foreach(d => assert(d.planTimeOptions.get(key).contains("true"), s"dialect=$d"))
     }
-    // Dialects that don't opt in keep the java.sql.Timestamp conversion.
-    assert(!NoopDialect.timestampNTZAsWallClock(oracleOptions(legacy = false)))
+    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+      dialects.foreach(d => assert(d.planTimeOptions.get(key).contains("false"), s"dialect=$d"))
+    }
+    // Dialects that don't opt in pin nothing and keep the java.sql.Timestamp conversion.
+    assert(NoopDialect.planTimeOptions.isEmpty)
   }
 
   test("SPARK-58876: Oracle getCatalystType maps only zoneless DATE/TIMESTAMP to NTZ, " +
@@ -1824,10 +1822,10 @@ class JDBCSuite extends SharedSparkSession {
 
   test("SPARK-58876: Oracle NTZ reads wall-clock via frozen options after a flag flip") {
     val schema = new StructType().add("t", TimestampNTZType, nullable = true)
-    // Options frozen at planning under legacy off.
+    // Decision pinned at planning under legacy off, the way an entry point stamps it.
     val options = withSQLConf(
         SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
-      new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t", Map.empty[String, String])
+      new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t", OracleDialect().planTimeOptions)
     }
     val ldt = LocalDateTime.of(1991, 11, 9, 0, 0, 0)
     // Flip the flag on after planning: the frozen options must still pick the wall-clock getter;

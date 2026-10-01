@@ -31,8 +31,6 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange, TableSummary}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLStmt}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -817,30 +815,6 @@ class JDBCTableCatalogSuite extends SharedSparkSession {
       sql("CACHE TABLE t1 SELECT id, name FROM h2.test.cache_t")
       val plan = sql("select * from t1").queryExecution.sparkPlan
       assert(plan.isInstanceOf[InMemoryTableScanExec])
-    }
-  }
-
-  test("SPARK-58876: a V2 scan keeps the NTZ legacy flag pinned by loadTable after a flag flip") {
-    withTable("h2.test.ntz_pin") {
-      withConnection { conn =>
-        conn.prepareStatement("""CREATE TABLE "test"."ntz_pin" (t TIMESTAMP)""").executeUpdate()
-      }
-      // Analysis (loadTable) runs with the flag off; the plan is optimized, and the scan's options
-      // rebuilt from the table's, only after it flips on.
-      val df = withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
-        sql("SELECT * FROM h2.test.ntz_pin")
-      }
-      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
-        // JDBCScan is a V1 scan, so the optimizer wraps it in a V1ScanWrapper.
-        val scan = df.queryExecution.optimizedPlan.collectFirst {
-          case s: DataSourceV2ScanRelation => s.scan.asInstanceOf[V1ScanWrapper].v1Scan
-        }.get.asInstanceOf[JDBCScan]
-        val scanOptions = scan.relation.jdbcOptions
-        assert(!scanOptions.legacyOracleTimestampNTZMapping)
-        // The pinned key must not reach the driver's connection properties.
-        assert(!scanOptions.asConnectionProperties.containsKey(
-          JDBCOptions.JDBC_LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING))
-      }
     }
   }
 }

@@ -218,11 +218,11 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
-   * Whether TimestampNTZType values are read and written as zoneless `LocalDateTime` rather than
-   * through `java.sql.Timestamp`. Dialects decide from the `JDBCOptions` of the read or write.
+   * Options a dialect pins at plan time so a later conf change can't alter an already-planned read
+   * or write when its options are rebuilt. Merged into the options at each planning entry point.
    */
   @Since("4.4.0")
-  def timestampNTZAsWallClock(options: JDBCOptions): Boolean = false
+  def planTimeOptions: Map[String, String] = Map.empty
 
   /**
    * Returns a factory for creating connections to the given JDBC URL.

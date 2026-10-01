@@ -371,6 +371,18 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   /**
+   * Merges the dialect's plan-time options into `parameters` so a later conf change can't alter an
+   * already-planned read or write when its options are rebuilt. Apply at each planning entry point.
+   * `url` overrides the one in `parameters` for callers that pass it separately.
+   */
+  def withPlanTimeOptions(
+      parameters: Map[String, String],
+      url: Option[String] = None): Map[String, String] =
+    url.orElse(CaseInsensitiveMap(parameters).get(JDBCOptions.JDBC_URL))
+      .map(u => parameters ++ JdbcDialects.get(u).planTimeOptions)
+      .getOrElse(parameters)
+
+  /**
    * Convert a [[ResultSet]] into an iterator of Catalyst Rows.
    */
   def resultSetToRows(
@@ -481,7 +493,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case TimestampType => JDBCValueGetter.TimestampGetter(dialect)
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeNTZGetter(dialect)
-    case TimestampNTZType if options.exists(dialect.timestampNTZAsWallClock) =>
+    case TimestampNTZType if options.exists(_.timestampNTZAsWallClock) =>
       JDBCValueGetter.TimestampNTZWallClockGetter
     case TimestampNTZType => JDBCValueGetter.TimestampNTZGetter(dialect)
     case t: TimestampNTZNanosType => JDBCValueGetter.TimestampNTZNanosGetter(t.precision)
@@ -553,7 +565,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
           stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
       }
 
-    case TimestampNTZType if dialect.timestampNTZAsWallClock(options) =>
+    case TimestampNTZType if options.timestampNTZAsWallClock =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setObject(pos + 1, row.getAs[java.time.LocalDateTime](pos))
     case TimestampNTZType =>

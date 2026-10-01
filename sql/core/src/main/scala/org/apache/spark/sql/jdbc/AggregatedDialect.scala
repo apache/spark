@@ -46,9 +46,7 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
     dialects.flatMap(_.getJDBCType(dt)).headOption
   }
 
-  override def timestampNTZAsWallClock(options: JDBCOptions): Boolean = {
-    dialects.exists(_.timestampNTZAsWallClock(options))
-  }
+  override def planTimeOptions: Map[String, String] = dialects.flatMap(_.planTimeOptions).toMap
 
   override def quoteIdentifier(colName: String): String = {
     dialects.head.quoteIdentifier(colName)
