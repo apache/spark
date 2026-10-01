@@ -261,7 +261,8 @@ private[spark] object Config extends Logging {
         "memory. PEAK_JVM_OFFHEAP_MEMORY policy chooses an executor with the biggest peak JVM " +
         "off-heap memory. " +
         "TOTAL_SHUFFLE_WRITE policy chooses an executor with the biggest total shuffle write. " +
-        "DISK_USED policy chooses an executor with the biggest used disk size. " +
+        "DISK_USED policy chooses an executor with the biggest disk size used by its " +
+        "stored blocks (e.g., disk-persisted RDD blocks). " +
         "ACTIVE_TASKS policy chooses an executor with the smallest number of active tasks. " +
         "If there is a tie, it chooses an executor with the smallest add-time. " +
         "It is recommended to use it with " +
@@ -272,6 +273,7 @@ private[spark] object Config extends Logging {
         "total task time, total task GC time, the number of failed tasks, " +
         "peak JVM on-heap memory, peak JVM off-heap memory, total shuffle write, " +
         "and disk used if exists. " +
+        "The dimensions are checked in this order and the first outlier found is chosen. " +
         "If there is no outlier it works like TOTAL_DURATION policy. " +
         "OUTLIER_NO_FALLBACK policy picks an outlier using the OUTLIER policy above. " +
         "If there is no outlier then no executor will be rolled.")
