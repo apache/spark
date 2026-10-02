@@ -1746,6 +1746,17 @@ package object config {
       .checkValue(_ > 0, "The minimum renewal interval must be a positive time value.")
       .createWithDefaultString("30s")
 
+  private[spark] val SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION =
+    ConfigBuilder("spark.security.oidc.requireRpcEncryption")
+      .doc("When OIDC credential propagation is enabled, whether to require RPC channel " +
+        "encryption. When true, Spark refuses to start if RPC encryption is not configured, " +
+        "instead of only logging a warning. Defaults to false to preserve the warn-by-default " +
+        "behavior described in the SPIP.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val DIRECT_CREDENTIAL_PROVIDERS_ENABLED =
     ConfigBuilder("spark.security.directCredentialProviders.enabled")
       .doc(
