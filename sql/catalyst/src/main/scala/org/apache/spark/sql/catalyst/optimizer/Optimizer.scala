@@ -1370,6 +1370,11 @@ object ConvertToCatalyst extends Rule[LogicalPlan] with PredicateHelper {
     case _ => arg.deterministic && CollapseProject.isCheap(arg)
   }
 
+  private def isPythonUDFWithEvalType(e: Expression, evalType: Int): Boolean = e match {
+    case u: PythonUDF => u.evalType == evalType
+    case _ => false
+  }
+
   /**
    * Converts the transpiled calls in one expression, leaving every argument at its use sites -- and
    * so keeping the Python UDF for a call that owes one of them a single evaluation.
@@ -1518,11 +1523,6 @@ object ConvertToCatalyst extends Rule[LogicalPlan] with PredicateHelper {
         expression.mapChildren(applyExpr(_, parentIsUdf = isScalarPythonUDF(expression),
           preEvaluate, inLambda || expression.isInstanceOf[LambdaFunction]))
     }
-  }
-
-  private def isPythonUDFWithEvalType(e: Expression, evalType: Int): Boolean = e match {
-    case u: PythonUDF => u.evalType == evalType
-    case _ => false
   }
 }
 
