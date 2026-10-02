@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog
 import java.util
 import java.util.Locale
 
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.join.JoinType
@@ -42,8 +43,9 @@ class InMemoryTableWithTableSample(
     name: String,
     columns: Array[Column],
     partitioning: Array[Transform],
-    properties: util.Map[String, String])
-  extends InMemoryBaseTable(name, columns, partitioning, properties) {
+    properties: util.Map[String, String],
+    constraints: Array[Constraint] = Array.empty)
+  extends InMemoryBaseTable(name, columns, partitioning, properties, constraints) {
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     InMemoryBaseTable.maybeSimulateFailedTableWrite(new CaseInsensitiveStringMap(properties))

@@ -22,7 +22,7 @@ import java.util.{HashMap, Map => JMap, OptionalLong}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, ExpressionSet}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Histogram, HistogramBin}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
@@ -30,6 +30,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.INTERNAL_METADATA_KEYS
 import org.apache.spark.sql.connector.catalog.{Column, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
+import org.apache.spark.sql.connector.catalog.constraints.Constraint.ValidationStatus
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
@@ -586,13 +588,164 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     // stays distinct.
     assert(!scanRelation.containsPattern(TreePattern.DATA_SOURCE_V2_RELATION))
   }
+
+  test("DataSourceV2Relation exposes only trusted primary keys as distinct keys") {
+    Seq(
+      (ValidationStatus.VALID, false, true),
+      (ValidationStatus.VALID, true, true),
+      (ValidationStatus.UNVALIDATED, true, true),
+      (ValidationStatus.UNVALIDATED, false, false),
+      (ValidationStatus.INVALID, false, false),
+      (ValidationStatus.INVALID, true, false)
+    ).foreach { case (validationStatus, rely, expected) =>
+      val primaryKey = Constraint.primaryKey(
+        "pk",
+        Array(FieldReference.column("id")))
+        .enforced(false)
+        .validationStatus(validationStatus)
+        .rely(rely)
+        .build()
+      val table = new FakeTableWithSchema(tableConstraints = Array(primaryKey))
+      val relation =
+        DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty())
+      val expectedKeys = if (expected) {
+        Set(ExpressionSet(Seq(relation.output.head)))
+      } else {
+        Set.empty[ExpressionSet]
+      }
+
+      assert(relation.distinctKeys === expectedKeys,
+        s"validationStatus=$validationStatus, rely=$rely")
+    }
+  }
+
+  test("DataSourceV2ScanRelation propagates complete table primary keys when safe") {
+    val primaryKey = Constraint.primaryKey(
+      "pk",
+      Array(FieldReference.column("id"), FieldReference.column("data")))
+      .enforced(false)
+      .validationStatus(ValidationStatus.VALID)
+      .build()
+    val schema = StructType(Seq(
+      StructField("id", IntegerType),
+      StructField("data", StringType)))
+    val table = new FakeTableWithSchema(schema, Array(primaryKey))
+    val relation =
+      DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty())
+    val scan = new Scan {
+      override def readSchema(): StructType = schema
+    }
+    val expectedKey = Set(ExpressionSet(relation.output))
+
+    val safeScan = DataSourceV2ScanRelation(
+      relation,
+      scan,
+      relation.output,
+      propagatesTableDistinctKeys = true)
+    assert(safeScan.distinctKeys === expectedKey)
+
+    val unsafeScan = DataSourceV2ScanRelation(relation, scan, relation.output)
+    assert(unsafeScan.distinctKeys.isEmpty)
+
+    val prunedScan = DataSourceV2ScanRelation(
+      relation,
+      scan,
+      relation.output.take(1),
+      propagatesTableDistinctKeys = true)
+    assert(prunedScan.distinctKeys.isEmpty)
+  }
+
+  test("DataSourceV2ScanRelation does not propagate narrowed primary key columns") {
+    val primaryKey = Constraint.primaryKey(
+      "pk",
+      Array(FieldReference.column("key")))
+      .enforced(false)
+      .validationStatus(ValidationStatus.VALID)
+      .build()
+    val fullKeyType = StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", IntegerType)))
+    val schema = StructType(Seq(StructField("key", fullKeyType)))
+    val table = new FakeTableWithSchema(schema, Array(primaryKey))
+    val relation =
+      DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty())
+    val narrowedKeyType = StructType(Seq(StructField("a", IntegerType)))
+    val narrowedOutput = Seq(relation.output.head.withDataType(narrowedKeyType))
+    val scan = new Scan {
+      override def readSchema(): StructType = narrowedOutput.toStructType
+    }
+    val scanRelation = DataSourceV2ScanRelation(
+      relation,
+      scan,
+      narrowedOutput,
+      propagatesTableDistinctKeys = true)
+
+    assert(relation.distinctKeys.nonEmpty)
+    assert(scanRelation.distinctKeys.isEmpty)
+  }
+
+  test("primary key distinct keys respect the propagation config") {
+    val primaryKey = Constraint.primaryKey(
+      "pk",
+      Array(FieldReference.column("id")))
+      .enforced(false)
+      .validationStatus(ValidationStatus.VALID)
+      .build()
+    val table = new FakeTableWithSchema(tableConstraints = Array(primaryKey))
+
+    withSQLConf(SQLConf.PROPAGATE_DISTINCT_KEYS_ENABLED.key -> "false") {
+      val relation =
+        DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty())
+      assert(relation.distinctKeys.isEmpty)
+    }
+  }
+
+  test("DataSourceV2Relation ignores malformed primary key references") {
+    val nullFieldNames = new NamedReference {
+      override def fieldNames(): Array[String] = null
+    }
+    Seq(
+      Array.empty[NamedReference],
+      Array(null.asInstanceOf[NamedReference]),
+      Array(nullFieldNames)
+    ).foreach { columns =>
+      val primaryKey = Constraint.primaryKey("pk", columns)
+        .enforced(false)
+        .validationStatus(ValidationStatus.VALID)
+        .build()
+      val table = new FakeTableWithSchema(tableConstraints = Array(primaryKey))
+      val relation =
+        DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty())
+
+      assert(relation.distinctKeys.isEmpty)
+    }
+  }
+
+  test("DataSourceV2Relation ignores nested primary key references") {
+    val primaryKey = Constraint.primaryKey(
+      "pk",
+      Array(FieldReference(Seq("key", "a"))))
+      .enforced(false)
+      .validationStatus(ValidationStatus.VALID)
+      .build()
+    val schema = StructType(Seq(StructField(
+      "key",
+      StructType(Seq(StructField("a", IntegerType))))))
+    val table = new FakeTableWithSchema(schema, Array(primaryKey))
+    val relation =
+      DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty())
+
+    assert(relation.distinctKeys.isEmpty)
+  }
 }
 
 private class FakeTableWithSchema(
-    tableSchema: StructType = StructType(Seq(StructField("id", IntegerType))))
+    tableSchema: StructType = StructType(Seq(StructField("id", IntegerType))),
+    tableConstraints: Array[Constraint] = Array.empty)
     extends Table {
 
   override def name(): String = "fake"
   override def schema(): StructType = tableSchema
+  override def constraints(): Array[Constraint] = tableConstraints
   override def capabilities(): java.util.Set[TableCapability] = java.util.Set.of()
 }
