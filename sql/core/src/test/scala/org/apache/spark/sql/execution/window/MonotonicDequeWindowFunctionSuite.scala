@@ -416,10 +416,8 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
     }
   }
 
-  // Multi-partition RANGE with forced spill: verifies cursor cleanup at partition
-  // boundary. With 9 keys each spilling, retaining one reader per key would exhaust
-  // file descriptors; correctness equivalence fails first if cleanup breaks ordering.
-  test("SPARK-58201: multi-partition RANGE with spill closes cursors at partition boundary") {
+  // Multi-partition RANGE with forced spill.
+  test("SPARK-58201: multi-partition RANGE with spill") {
     val df = spark.range(0, 200)
       .selectExpr(
         "id", "(id % 9) AS pk", "CAST(id / 3 AS INT) AS ord_val", "CAST(id AS INT) AS v")
