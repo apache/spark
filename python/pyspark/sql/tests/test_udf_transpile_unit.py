@@ -3006,6 +3006,40 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             [(-(2**63)) % -1, 5 % -(2**63)],
         )
 
+    def test_udf_transpile_floor_div_sign_and_width_boundaries(self):
+        # `//` is lowered as `div` (truncates toward zero) with a one-step
+        # correction toward -inf when the division is not exact and the operands'
+        # signs differ -- the four cases Python's floor division rounds away from
+        # `div`'s truncation. Pin each sign combination, the LongType width
+        # boundary (the halved range keeps `MinValue // -1` out, but the
+        # near-edge values still exercise the widening cast `div` does), and a
+        # NULL operand (transpiled NULL, interpreted raises -- the harness
+        # accepts that as the ANSI tier, but the transpiled side must not
+        # diverge on a non-NULL row).
+        L = LongType()
+        fdiv = lambda a, b: a // b  # noqa: E731
+        self.assertEqual(
+            self._native_vals(
+                fdiv,
+                L,
+                "a bigint, b bigint",
+                [(7, 2), (-7, 2), (7, -2), (-7, -2)],
+            ),
+            [7 // 2, -7 // 2, 7 // -2, -7 // -2],
+        )
+        # Near the edge of the halved range: `div` returns LongType (it
+        # widens), so the correction's `quotient - 1` must not overflow.
+        H = 2**62 - 1
+        self.assertEqual(
+            self._native_vals(
+                fdiv,
+                L,
+                "a bigint, b bigint",
+                [(H, 1), (H, -1), (-H, 1), (-H, -1), (H, H)],
+            ),
+            [H // 1, H // -1, -H // 1, -H // -1, H // H],
+        )
+
     def test_udf_transpile_numeric_falls_back(self):
         # Shapes with no exact lowering must stay interpreted rather than return a
         # silently different number. Each is documented in transpile.py.
