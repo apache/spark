@@ -177,6 +177,53 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     }
   }
 
+  test("task completion waits for an input pull and stops later pulls") {
+    val resources = new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(() => ())
+    val pulling = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+    val pulls = new AtomicInteger()
+    val consumer = new Thread(() => {
+      resources.pull {
+        pulling.countDown()
+        release.await()
+        pulls.incrementAndGet()
+        true
+      }
+    })
+    consumer.start()
+    assert(pulling.await(10, TimeUnit.SECONDS))
+    val closing = new Thread(() => resources.close())
+    closing.start()
+    closing.join(200)
+    // close() waits for the pull in progress, after marking input closed.
+    assert(closing.isAlive && resources.isInputClosed)
+    release.countDown()
+    closing.join(10000)
+    consumer.join(10000)
+    assert(!closing.isAlive && resources.isClosed && pulls.get == 1)
+    assert(!resources.pull { pulls.incrementAndGet(); true })
+    assert(pulls.get == 1)
+  }
+
+  test("task completion waits only briefly for a blocked input pull") {
+    val resources =
+      new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(() => (), 50L)
+    val pulling = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+    val consumer = new Thread(() => {
+      resources.pull { pulling.countDown(); release.await(); true }
+    })
+    consumer.start()
+    try {
+      assert(pulling.await(10, TimeUnit.SECONDS))
+      resources.close()
+      assert(resources.isClosed)
+    } finally {
+      release.countDown()
+      consumer.join(10000)
+    }
+  }
+
   gridTest("task completion defers cleanup until a pipelined iterator call returns")(
       Seq(true, false)) { failCall =>
     val entered = new CountDownLatch(1)

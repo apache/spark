@@ -44,26 +44,17 @@ abstract class EvalPythonEvaluatorFactory(
       context: TaskContext): Iterator[InternalRow]
 
   /**
-   * Projects the UDF arguments of each input row. The default copies non-primitive argument
-   * values out of the input row.
+   * Evaluates the UDFs over the input rows and returns, for each input row, its columns
+   * followed by its results. Returns None to let the evaluator buffer the input rows and join
+   * them with the results of `evaluate`, which receives only the projected arguments.
+   *
+   * @param inputs the UDF arguments, which `argMetas` and `schema` refer to by position
    */
-  protected def createInputProjection(
-      inputs: Seq[Expression],
-      partitionIndex: Int): InternalRow => InternalRow = {
-    val projection = MutableProjection.create(inputs, childOutput)
-    projection.initialize(partitionIndex)
-    projection
-  }
-
-  /**
-   * Evaluates UDFs whose arguments are exactly the input columns, in order. Returns, for each
-   * input row, its columns followed by its results, so that input rows need not be buffered
-   * to join them with the results. Returns None to buffer input rows instead.
-   */
-  protected def evaluateWithInputColumns(
+  protected def evaluateJoined(
       funcs: Seq[(ChainedPythonFunctions, Long)],
       argMetas: Array[Array[ArgumentMetadata]],
       iter: Iterator[InternalRow],
+      inputs: Seq[Expression],
       schema: StructType,
       context: TaskContext): Option[Iterator[InternalRow]] = None
 
@@ -117,15 +108,8 @@ abstract class EvalPythonEvaluatorFactory(
       }.toArray)
 
       val resultProj = UnsafeProjection.create(output, output)
-      val inputsAreChildOutput = allInputs.length == childOutput.length &&
-        allInputs.zip(childOutput).forall {
-          case (a: Attribute, c) => a.exprId == c.exprId
-          case _ => false
-        }
-      if (inputsAreChildOutput) {
-        val withInputs = evaluateWithInputColumns(pyFuncs, argMetas, iter, schema, context)
-        if (withInputs.isDefined) return withInputs.get.map(resultProj)
-      }
+      val joinedRows = evaluateJoined(pyFuncs, argMetas, iter, allInputs.toSeq, schema, context)
+      if (joinedRows.isDefined) return joinedRows.get.map(resultProj)
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
@@ -142,7 +126,8 @@ abstract class EvalPythonEvaluatorFactory(
         queue.close()
       }
 
-      val projection = createInputProjection(allInputs.toSeq, context.partitionId())
+      val projection = MutableProjection.create(allInputs.toSeq, childOutput)
+      projection.initialize(context.partitionId())
 
       // Add rows to queue to join later with the result.
       val projectedRowIter = iter.map { inputRow =>

@@ -1571,7 +1571,36 @@ class BootstrapFailureProbe {
             with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "3"}):
                 df = self.spark.range(10, numPartitions=2).selectExpr("CAST(id AS STRING) AS s")
                 rows = df.select(joined(pair("s"))).collect()
-            self.assertEqual([r[0] for r in rows], [f"{i}-{i}" for i in range(10)])
+                self.assertEqual([r[0] for r in rows], [f"{i}-{i}" for i in range(10)])
+                # A pass-through column makes the in-process node buffer and join input rows.
+                df = df.selectExpr("s", "CAST(s AS INT) AS id")
+                rows = df.select("id", joined(pair("s"))).collect()
+                self.assertEqual([tuple(r) for r in rows], [(i, f"{i}-{i}") for i in range(10)])
+        finally:
+            conf.set(key, previous)
+
+    def test_pipelined_worker_stopping_early_does_not_break_inprocess_input(self):
+        import pyarrow.compute as pc
+
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.functions import arrow_udf
+
+        conf = self.spark.sparkContext._jvm.org.apache.spark.SparkEnv.get().conf()
+        key = "spark.python.udf.pipelined.enabled"
+        previous = conf.get(key, "false")
+        conf.set(key, "true")
+        try:
+            double = inprocess_udf("long")(lambda x: pc.multiply(x, 2))
+            plus_one = arrow_udf(lambda x: pc.add(x, 1), "long")
+            with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "100"}):
+                # The task completes after one row while the writer thread still pulls input.
+                df = self.spark.range(0, 100000, 1, 2).selectExpr("id", "id % 7 AS k")
+                for _ in range(5):
+                    rows = df.select("k", plus_one(double("id"))).limit(1).collect()
+                    self.assertEqual(len(rows), 1)
+                # Later tasks in the same executor still run correctly.
+                total = df.select(plus_one(double("id")).alias("v")).groupBy().sum("v")
+                self.assertEqual(total.first()[0], sum(2 * i + 1 for i in range(100000)))
         finally:
             conf.set(key, previous)
 
