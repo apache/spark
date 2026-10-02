@@ -521,19 +521,13 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         AttributeReference("c", CharType(4))(),
         AttributeReference("v", VarcharType(5))(),
         AttributeReference("nested", ArrayType(CharType(4)))())
-      scala.util.Try(HiveScriptIOSchema.initOutputSerDe(hiveIOSchema, output).get) match {
-        case scala.util.Success((_, soi)) =>
-          val typeName = soi.getAllStructFieldRefs.get(0).getFieldObjectInspector.getTypeName
-          assert(typeName === "char(4)",
-            s"preserve-only must not rewrite CHAR to STRING, found $typeName")
-          assert(soi.getAllStructFieldRefs.get(1).getFieldObjectInspector.getTypeName ===
-            "varchar(5)")
-          assert(soi.getAllStructFieldRefs.get(2).getFieldObjectInspector.getTypeName ===
-            "array<char(4)>")
-        case scala.util.Failure(_) =>
-          // Hive TypeInfo may reject CHAR on this lineage. The standard-semantics
-          // rewrite would have succeeded with STRING inspectors.
-      }
+      val (_, soi) = HiveScriptIOSchema.initOutputSerDe(hiveIOSchema, output).get
+      assert(soi.getAllStructFieldRefs.get(0).getFieldObjectInspector.getTypeName ===
+        "char(4)")
+      assert(soi.getAllStructFieldRefs.get(1).getFieldObjectInspector.getTypeName ===
+        "varchar(5)")
+      assert(soi.getAllStructFieldRefs.get(2).getFieldObjectInspector.getTypeName ===
+        "array<char(4)>")
     }
   }
 

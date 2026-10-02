@@ -104,6 +104,31 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
+  test("SPARK-59277: TRANSFORM CHAR/VARCHAR null token without SerDe") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charInput = Seq[String](null, "ab").toDF("c")
+      checkAnswer(
+        charInput,
+        (child: SparkPlan) => createScriptTransformationExec(
+          script = "cat",
+          output = Seq(AttributeReference("c", CharType(4))()),
+          child = child,
+          ioschema = defaultIOSchema),
+        Seq(Row(null), Row("ab  ")))
+      val varcharInput = Seq[String](null, "xy").toDF("v")
+      checkAnswer(
+        varcharInput,
+        (child: SparkPlan) => createScriptTransformationExec(
+          script = "cat",
+          output = Seq(AttributeReference("v", VarcharType(5))()),
+          child = child,
+          ioschema = defaultIOSchema),
+        Seq(Row(null), Row("xy")))
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
   test("SPARK-59277: TRANSFORM CHAR overflow without SerDe raises EXCEED_LIMIT_LENGTH") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
@@ -179,7 +204,20 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
         (
           """{"value":"xy"}""",
           StructType(Seq(StructField("value", CharType(5)))),
-          Row(Row("xy   ")))).foreach { case (json, dataType, expected) =>
+          Row(Row("xy   "))),
+        ("""[null]""", ArrayType(CharType(4)), Row(Seq(null))),
+        (
+          """{"1":null}""",
+          MapType(IntegerType, CharType(4)),
+          Row(Map(1 -> null))),
+        (
+          """{"value":null}""",
+          StructType(Seq(StructField("value", CharType(5)))),
+          Row(Row(null))),
+        (
+          """{"ab":1}""",
+          MapType(CharType(4), IntegerType),
+          Row(Map("ab  " -> 1)))).foreach { case (json, dataType, expected) =>
         val input = Seq(json).toDF("value")
         checkAnswer(
           input,
@@ -293,6 +331,39 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
           child = child,
           ioschema = defaultIOSchema),
         Seq(Row(null), Row(Map(2 -> "cd  "))))
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-59277: colliding CHAR map keys without SerDe follow MAP_KEY_DEDUP_POLICY") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    val mapType = MapType(CharType(4), IntegerType)
+    val json = """{"a":1,"a ":2}"""
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val input = Seq(json).toDF("value")
+      val exception = intercept[Exception] {
+        QueryTest.executePlan(
+          createScriptTransformationExec(
+            script = "cat",
+            output = Seq(AttributeReference("value", mapType)()),
+            child = input.queryExecution.sparkPlan,
+            ioschema = defaultIOSchema),
+          spark.sqlContext)
+      }
+      val runtimeException = Iterator.iterate[Throwable](exception)(_.getCause)
+        .takeWhile(_ != null)
+        .collectFirst {
+          case s: org.apache.spark.SparkRuntimeException
+            if s.getCondition == "DUPLICATED_MAP_KEY" => s
+        }.getOrElse {
+          fail(s"expected DUPLICATED_MAP_KEY, got $exception")
+        }
+      checkError(
+        exception = runtimeException,
+        condition = "DUPLICATED_MAP_KEY",
+        parameters = Map(
+          "key" -> "a   ",
+          "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
     }
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }

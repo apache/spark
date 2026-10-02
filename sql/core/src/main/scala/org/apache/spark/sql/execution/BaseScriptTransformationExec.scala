@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.{
   ArrayBasedMapBuilder,
   ArrayData,
+  CharVarcharCodegenUtils,
   CharVarcharUtils,
   DateTimeUtils,
   GenericArrayData,
@@ -79,8 +80,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  // Snapshot on the driver. SparkPlan.session is @transient, so executor `conf` is the
-  // default SQLConf and would ignore withSQLConf / session standard-semantics.
+  // Snapshot at plan construction. CHAR_VARCHAR_STANDARD_SEMANTICS is PERSISTED, so a
+  // plan built under one setting must keep that path even if a later task SQLConf.get
+  // (ReadOnlySQLConf with the executing session) differs. SparkPlan.session is
+  // @transient, so executor `conf` cannot recover the planning session.
   private val standardCharVarcharSemantics: Boolean = conf.charVarcharStandardSemantics
 
   override def doExecute(): RDD[InternalRow] = {
@@ -223,8 +226,8 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     val converter = CatalystTypeConverters.createToCatalystConverter(attr.dataType)
     attr.dataType match {
       case dt @ (_: CharType | _: VarcharType) =>
-        // Preserve-only keeps CHAR/VARCHAR in the schema but does not apply SQL pad/overflow.
-        // Match CHAR/VARCHAR before `_: StringType` (they extend StringType).
+        // Without standard semantics, no-SerDe scalar CHAR/VARCHAR stays unsupported
+        // (they extend StringType, so this case must come before `_: StringType`).
         if (!standardCharVarcharSemantics) {
           throw QueryExecutionErrors.outputDataTypeUnsupportedByNodeWithoutSerdeError(
             nodeName, dt)
@@ -279,26 +282,31 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case dt @ (_: ArrayType | _: MapType | _: StructType)
           if standardCharVarcharSemantics && CharVarcharUtils.hasCharVarchar(dt) =>
         val physicalType = ScriptTransformationIOSchema.toUnboundedStringType(dt)
-        // JSON object keys are strings. Cast them to the declared map key type after parsing.
+        // JSON object keys are strings. Restore non-string keys inside the malformed
+        // wrapper, then apply CHAR/VARCHAR (and CHAR/VARCHAR map-key dedup) outside it.
         val jsonType = ScriptTransformationIOSchema.toJsonMapKeyType(physicalType)
+        val tz = Some(conf.sessionLocalTimeZone)
         val complexTypeFactory = JsonToStructs(
           jsonType,
           ioschema.outputSerdeProps.toMap,
           Literal(null),
-          Some(conf.sessionLocalTimeZone))
-        val parsedToPhysical = if (jsonType.sameType(physicalType)) {
+          tz)
+        val restoreJsonKeys = if (jsonType.sameType(physicalType)) {
           identity[Any] _
         } else {
-          val restoreMapKeys = ScriptTransformationIOSchema.makeJsonMapKeyRestorer(
-            physicalType, Some(conf.sessionLocalTimeZone))
-          value: Any => restoreMapKeys(value)
+          ScriptTransformationIOSchema.makeJsonToTargetRestorer(
+            jsonType, physicalType, tz)
         }
-        val toScala = CatalystTypeConverters.createToScalaConverter(physicalType)
+        val toDeclaredType = ScriptTransformationIOSchema.makeJsonToTargetRestorer(
+          physicalType, dt, tz)
         val parser = wrapperConvertException(
-          data => parsedToPhysical(
+          data => restoreJsonKeys(
             complexTypeFactory.nullSafeEval(UTF8String.fromString(data))),
           identity)
-        data => converter(toScala(parser(data)))
+        (data: String) => {
+          val parsed = parser(data)
+          if (parsed == null) null else toDeclaredType(parsed)
+        }
       case _: ArrayType | _: MapType | _: StructType =>
         val complexTypeFactory = JsonToStructs(attr.dataType,
           ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
@@ -454,76 +462,84 @@ object ScriptTransformationIOSchema {
   }
 
   /**
-   * Build a per-call map-key restorer that converts parsed JSON string keys
-   * back to the declared physical key type and validates the result through a
-   * fresh [[ArrayBasedMapBuilder]] on every invocation, so a failed key
-   * conversion or duplicate key cannot leave shared state dirty for the next row.
+   * Convert a Catalyst value from `sourceType` (JSON or unbounded STRING) to
+   * `targetType`. CHAR/VARCHAR leaves use write-side length checks. Maps always
+   * rebuild through a fresh [[ArrayBasedMapBuilder]] so CHAR/VARCHAR key
+   * collisions follow MAP_KEY_DEDUP_POLICY and a failed row cannot dirty the
+   * next one.
    */
-  private[sql] def makeJsonMapKeyRestorer(
+  private[sql] def makeJsonToTargetRestorer(
+      sourceType: DataType,
       targetType: DataType,
       timeZoneId: Option[String]): Any => Any = {
-    val jsonType = toJsonMapKeyType(targetType)
 
-    def make(jt: DataType, tt: DataType): Any => Any = (jt, tt) match {
-      case (ArrayType(jet, _), ArrayType(tet, _)) =>
-        val elem = make(jet, tet)
-        (input: Any) => {
-          val arr = input.asInstanceOf[ArrayData]
-          val n = arr.numElements()
-          val out = new Array[Any](n)
-          var i = 0
-          while (i < n) {
-            out(i) = if (arr.isNullAt(i)) null
-              else elem(arr.get(i, jet))
-            i += 1
+    def make(jt: DataType, tt: DataType): Any => Any = {
+      if (jt.sameType(tt) && !CharVarcharUtils.hasCharVarchar(tt)) {
+        identity
+      } else (jt, tt) match {
+        case (_, c: CharType) =>
+          (input: Any) =>
+            CharVarcharCodegenUtils.charTypeWriteSideCheck(
+              input.asInstanceOf[UTF8String], c.length)
+        case (_, v: VarcharType) =>
+          (input: Any) =>
+            CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
+              input.asInstanceOf[UTF8String], v.length)
+        case (ArrayType(jet, _), ArrayType(tet, _)) =>
+          val elem = make(jet, tet)
+          (input: Any) => {
+            val arr = input.asInstanceOf[ArrayData]
+            val n = arr.numElements()
+            val out = new Array[Any](n)
+            var i = 0
+            while (i < n) {
+              out(i) = if (arr.isNullAt(i)) null
+                else elem(arr.get(i, jet))
+              i += 1
+            }
+            new GenericArrayData(out)
           }
-          new GenericArrayData(out)
-        }
-
-      case (MapType(jkt, jvt, _), MapType(tkt, tvt, _)) =>
-        val keyCast: Any => Any = if (jkt.sameType(tkt)) identity
-          else {
-            val c = Cast(BoundReference(0, jkt, nullable = false),
-              tkt, timeZoneId)
-            (k: Any) => c.eval(InternalRow(k))
+        case (MapType(jkt, jvt, _), MapType(tkt, tvt, _)) =>
+          val keyConvert = make(jkt, tkt)
+          val valRestore = make(jvt, tvt)
+          (input: Any) => {
+            val map = input.asInstanceOf[MapData]
+            val n = map.numElements()
+            val builder = new ArrayBasedMapBuilder(tkt, tvt)
+            var i = 0
+            while (i < n) {
+              val k = keyConvert(map.keyArray().get(i, jkt))
+              val v = if (map.valueArray().isNullAt(i)) null
+                else valRestore(map.valueArray().get(i, jvt))
+              builder.put(k, v)
+              i += 1
+            }
+            builder.build()
           }
-        val valRestore = make(jvt, tvt)
-        (input: Any) => {
-          val map = input.asInstanceOf[MapData]
-          val n = map.numElements()
-          val builder = new ArrayBasedMapBuilder(tkt, tvt)
-          var i = 0
-          while (i < n) {
-            val k = keyCast(map.keyArray().get(i, jkt))
-            val v = if (map.valueArray().isNullAt(i)) null
-              else valRestore(map.valueArray().get(i, jvt))
-            builder.put(k, v)
-            i += 1
+        case (js: StructType, ts: StructType) =>
+          val restorers = js.fields.zip(ts.fields).map {
+            case (jf, tf) => make(jf.dataType, tf.dataType)
           }
-          builder.build()
-        }
-
-      case (js: StructType, ts: StructType) =>
-        val restorers = js.fields.zip(ts.fields).map {
-          case (jf, tf) => make(jf.dataType, tf.dataType)
-        }
-        (input: Any) => {
-          val row = input.asInstanceOf[InternalRow]
-          val out = new GenericInternalRow(ts.length)
-          var i = 0
-          while (i < ts.length) {
-            if (row.isNullAt(i)) out.setNullAt(i)
-            else out.update(i,
-              restorers(i)(row.get(i, js(i).dataType)))
-            i += 1
+          (input: Any) => {
+            val row = input.asInstanceOf[InternalRow]
+            val out = new GenericInternalRow(ts.length)
+            var i = 0
+            while (i < ts.length) {
+              if (row.isNullAt(i)) out.setNullAt(i)
+              else out.update(i,
+                restorers(i)(row.get(i, js(i).dataType)))
+              i += 1
+            }
+            out
           }
-          out
-        }
-
-      case _ => identity
+        case _ if !jt.sameType(tt) =>
+          val c = Cast(BoundReference(0, jt, nullable = false), tt, timeZoneId)
+          (input: Any) => c.eval(InternalRow(input))
+        case _ => identity
+      }
     }
 
-    make(jsonType, targetType)
+    make(sourceType, targetType)
   }
 
   val defaultFormat = Map(
