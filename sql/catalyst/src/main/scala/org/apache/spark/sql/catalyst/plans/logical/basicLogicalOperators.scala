@@ -2865,49 +2865,29 @@ object AsOfJoin {
           leftStruct.length == rightStruct.length && leftStruct.nonEmpty
         case _ => false
       }
-
-    /** Whole struct columns with identical schemas sort as a single struct value. */
-    def usesIdenticalStructSort(leftType: DataType, rightType: DataType): Boolean =
-      (leftType, rightType) match {
-        case (leftStruct: StructType, rightStruct: StructType) =>
-          leftStruct.sameType(rightStruct) && leftStruct.nonEmpty
-        case _ => false
-      }
   }
 
   /**
    * Sort-merge ASOF join sorts each side by these expressions (after equi-keys) so the
    * right-side buffer is ordered consistently with the MATCH_CONDITION comparison (scalar
-   * operands are already coerced to a common type; composites are handled case by case below).
+   * operands are already coerced to a common type).
    *
-   * SQL tuple literals `(t.a, t.b)` are flattened to scalar leaves. Whole struct columns
-   * (`t.k >= r.k`) sort by the struct value directly so nested struct shapes stay intact.
-   * A struct that can be NULL is never flattened: its leaves cannot tell a NULL struct from a
-   * struct of NULL fields, but the comparison can, so it sorts as one value, NULL first.
+   * Each side picks its own keys, because the two sides are never compared key by key. A SQL
+   * tuple `(t.a, t.b)` sorts by its parts. A tuple is never NULL, so this keeps the comparison
+   * order. Anything else sorts as one value, so a NULL struct comes before a struct of NULL
+   * fields, the same as in the comparison.
    * Array operands sort element-wise; length mismatches follow Spark array ordering semantics.
    */
   def matchSortExpressions(
       leftOperand: Expression,
-      rightOperand: Expression): (Seq[Expression], Seq[Expression]) = {
-    (leftOperand.dataType, rightOperand.dataType) match {
-      case (leftStruct: StructType, rightStruct: StructType)
-          if MatchConditionTypes.usesIdenticalStructSort(leftStruct, rightStruct) =>
-        if ((isSqlTupleStructOperand(leftOperand) || isSqlTupleStructOperand(rightOperand)) &&
-            !leftOperand.nullable && !rightOperand.nullable) {
-          val pairs = collectStructLeafPairs(
-            leftOperand, rightOperand, leftStruct, splitNullableStructs = false)
-          (pairs.map(_._1), pairs.map(_._2))
-        } else {
-          (Seq(leftOperand), Seq(rightOperand))
-        }
-      case _ =>
-        (Seq(leftOperand), Seq(rightOperand))
-    }
-  }
+      rightOperand: Expression): (Seq[Expression], Seq[Expression]) =
+    (matchSortKeys(leftOperand), matchSortKeys(rightOperand))
 
-  /** True for SQL `(col1, col2, ...)` tuple operands, which become [[CreateNamedStruct]]. */
-  private def isSqlTupleStructOperand(operand: Expression): Boolean =
-    operand.isInstanceOf[CreateNamedStruct]
+  /** A SQL tuple becomes [[CreateNamedStruct]] and sorts by its parts. */
+  private def matchSortKeys(operand: Expression): Seq[Expression] = operand match {
+    case tuple: CreateNamedStruct if tuple.valExprs.nonEmpty => tuple.valExprs
+    case other => Seq(other)
+  }
 
   private[catalyst] def normalizeMatchOperands(
       leftSet: AttributeSet,
@@ -3091,21 +3071,20 @@ object AsOfJoin {
     wrapCompositeOrderExpression(leafDiffs)
   }
 
-  /** `splitNullableStructs = false` keeps a struct pair whole when either side can be NULL. */
   private def collectStructLeafPairs(
       leftOperand: Expression,
       rightOperand: Expression,
-      structType: StructType,
-      splitNullableStructs: Boolean = true): Seq[(Expression, Expression)] = {
+      structType: StructType): Seq[(Expression, Expression)] = {
     structFieldExprs(leftOperand, structType)
       .zip(structFieldExprs(rightOperand, structType))
       .flatMap {
-        case (left, right)
-            if (splitNullableStructs || (!left.nullable && !right.nullable)) &&
-              MatchConditionTypes.usesStructDecomposition(left.dataType, right.dataType) =>
-          collectStructLeafPairs(
-            left, right, left.dataType.asInstanceOf[StructType], splitNullableStructs)
-        case pair => Seq(pair)
+        case (left, right) =>
+          if (MatchConditionTypes.usesStructDecomposition(left.dataType, right.dataType)) {
+            collectStructLeafPairs(
+              left, right, left.dataType.asInstanceOf[StructType])
+          } else {
+            Seq((left, right))
+          }
       }
   }
 
