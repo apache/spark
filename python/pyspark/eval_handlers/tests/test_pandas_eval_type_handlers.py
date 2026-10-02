@@ -47,7 +47,12 @@ if have_pandas and have_pyarrow:
     import pandas as pd
     import pyarrow as pa
 
-    from pyspark.eval_handlers._pandas import PandasScalarUDFHandler
+    from pyspark.eval_handlers._pandas import (
+        PandasMapUDFHandler,
+        PandasScalarIterUDFHandler,
+        PandasScalarUDFHandler,
+    )
+    from pyspark.sql.conversion import ArrowBatchTransformer
 
 _missing_message = pandas_requirement_message or pyarrow_requirement_message
 
@@ -72,14 +77,34 @@ def _handler(*udfs, runner_conf=None):
     )
 
 
+def _scalar_iter_handler(udf, return_type=None, args=(0,), runner_conf=None):
+    """Build a PandasScalarIterUDFHandler whose one UDF reads the given arg offsets."""
+    return PandasScalarIterUDFHandler(
+        udfs=[(udf, list(args), {}, return_type or LongType())],
+        runner_conf=runner_conf or RunnerConf({}),
+        eval_conf=None,
+    )
+
+
+def _map_handler(udf, return_type, runner_conf=None):
+    """Build a PandasMapUDFHandler from its ``(func, None, None, return_type)`` UDF tuple."""
+    return PandasMapUDFHandler(
+        udfs=[(udf, None, None, return_type)],
+        runner_conf=runner_conf or RunnerConf({}),
+        eval_conf=None,
+    )
+
+
 @unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
 class PandasEvalTypeHandlerRegistrationTests(unittest.TestCase):
     def test_pandas_eval_types_are_registered(self):
-        # The migrated pandas eval type dispatches to its handler by lookup.
-        self.assertIs(
-            get_eval_type_handler(PythonEvalType.SQL_SCALAR_PANDAS_UDF),
-            PandasScalarUDFHandler,
-        )
+        # Each migrated pandas eval type dispatches to its handler by lookup.
+        for eval_type, handler_cls in (
+            (PythonEvalType.SQL_SCALAR_PANDAS_UDF, PandasScalarUDFHandler),
+            (PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF, PandasScalarIterUDFHandler),
+            (PythonEvalType.SQL_MAP_PANDAS_ITER_UDF, PandasMapUDFHandler),
+        ):
+            self.assertIs(get_eval_type_handler(eval_type), handler_cls)
 
 
 @unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
@@ -154,6 +179,89 @@ class PandasScalarUDFHandlerTests(unittest.TestCase):
         conf = RunnerConf({"spark.sql.execution.arrow.useLargeVarTypes": "true"})
         out = list(_handler(to_str, runner_conf=conf).run(0, iter([_batch(a=[1, 2])])))
         self.assertTrue(pa.types.is_large_string(out[0].schema.field(0).type))
+
+
+@unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
+class PandasScalarIterUDFHandlerTests(unittest.TestCase):
+    def test_invokes_udf_over_batch_stream(self):
+        def add_one(series_iter):
+            for s in series_iter:
+                yield s + 1
+
+        handler = _scalar_iter_handler(add_one)
+        out = list(handler.run(0, iter([_batch(a=[1, 2]), _batch(a=[3])])))
+        self.assertEqual([b.column(0).to_pylist() for b in out], [[2, 3], [4]])
+
+    def test_coerces_output_to_return_type(self):
+        # The UDF yields int32, but the declared return type is LongType (int64).
+        def add_one(series_iter):
+            for s in series_iter:
+                yield (s + 1).astype("int32")
+
+        handler = _scalar_iter_handler(add_one)
+        out = list(handler.run(0, iter([_batch(a=[10, 20])])))
+        self.assertEqual(out[0].schema.field(0).type, pa.int64())
+        self.assertEqual(out[0].column(0).to_pylist(), [11, 21])
+
+    def test_rejects_row_count_mismatch(self):
+        # Emitting more rows than were consumed must fail (fail-fast row limit).
+        def too_many(series_iter):
+            for s in series_iter:
+                yield pd.Series(list(range(len(s) + 1)))
+
+        handler = _scalar_iter_handler(too_many)
+        with self.assertRaises(PySparkRuntimeError):
+            list(handler.run(0, iter([_batch(a=[1, 2])])))
+
+    def test_struct_return_takes_dataframe(self):
+        # struct_in_pandas="dict" + df_for_struct=True: a struct return is a DataFrame.
+        struct_type = StructType([StructField("x", LongType()), StructField("y", LongType())])
+
+        def to_struct(series_iter):
+            for s in series_iter:
+                yield pd.DataFrame({"x": s, "y": s * 10})
+
+        handler = _scalar_iter_handler(to_struct, return_type=struct_type)
+        out = list(handler.run(0, iter([_batch(a=[1, 2])])))
+        self.assertEqual(
+            out[0].column(0).to_pylist(),
+            [{"x": 1, "y": 10}, {"x": 2, "y": 20}],
+        )
+
+
+@unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
+class PandasMapUDFHandlerTests(unittest.TestCase):
+    _return_type = StructType([StructField("v", LongType())])
+
+    def test_maps_batch_stream(self):
+        # mapInPandas expands the wire struct into a DataFrame and re-wraps the output.
+        def double_v(df_iter):
+            for df in df_iter:
+                yield pd.DataFrame({"v": df["v"] * 2})
+
+        handler = _map_handler(double_v, self._return_type)
+        # mapInPandas sends a single struct column per batch; the handler expands it to
+        # a DataFrame, so build the input in that wire format here.
+        struct_batch = ArrowBatchTransformer.wrap_struct(_batch(v=[1, 2, 3]))
+        out = list(handler.run(0, iter([struct_batch])))
+        self.assertEqual(out[0].column(0).field("v").to_pylist(), [2, 4, 6])
+
+    def test_rejects_non_iterator_result(self):
+        # A UDF returning a DataFrame (not an iterator of them) is rejected before the
+        # input stream is even read, so the input batch shape is irrelevant.
+        handler = _map_handler(lambda df_iter: pd.DataFrame({"v": [1]}), self._return_type)
+        with self.assertRaises(PySparkTypeError):
+            list(handler.run(0, iter([_batch(v=[1, 2])])))
+
+    def test_rejects_wrong_element_type(self):
+        # Each yielded element must be a DataFrame for a struct return type.
+        def yields_series(df_iter):
+            for _ in df_iter:
+                yield pd.Series([1, 2])  # a Series, not a DataFrame
+
+        handler = _map_handler(yields_series, self._return_type)
+        with self.assertRaises(PySparkTypeError):
+            list(handler.run(0, iter([_batch(v=[1, 2])])))
 
 
 if __name__ == "__main__":
