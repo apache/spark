@@ -107,9 +107,8 @@ public interface Table extends Relation {
   default Constraint[] constraints() { return new Constraint[0]; }
 
   /**
-   * Returns the write distribution this table declares as the default for writes into it: one of
-   * {@link TableInfo#DISTRIBUTION_MODE_HASH}, {@link TableInfo#DISTRIBUTION_MODE_RANGE},
-   * {@link TableInfo#DISTRIBUTION_MODE_NONE}, or null if it declares none.
+   * Returns the write distribution this table declares as the default for writes into it, or null
+   * if it declares none.
    * <p>
    * This is a declared default only. A write may override it and a table may narrow it; what a
    * write actually requires is reported by
@@ -118,11 +117,12 @@ public interface Table extends Relation {
    *
    * @since 4.4.0
    */
-  default String writeDistributionMode() { return null; }
+  default WriteDistributionMode writeDistributionMode() { return null; }
 
   /**
-   * Returns the write ordering this table declares as the default for writes into it, empty if it
-   * declares none. See {@link #writeDistributionMode()}.
+   * Returns the write ordering this table declares as the default for writes into it, or an empty
+   * array, never null, if it declares none. Its keys take the shape described in
+   * {@link TableInfo#writeOrdering()}. See {@link #writeDistributionMode()}.
    *
    * @since 4.4.0
    */

@@ -611,7 +611,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       if (!ctx.createTableClauses().writeDistributionSpec.isEmpty ||
           !ctx.createTableClauses().writeOrderingSpec.isEmpty) {
         // A temp view cannot record a write distribution or ordering.
-        invalidStatement("CREATE TEMPORARY TABLE ... DISTRIBUTED BY/ORDERED BY", ctx)
+        invalidStatement("CREATE TEMPORARY TABLE ... DISTRIBUTED BY/ORDERED BY/UNORDERED", ctx)
       }
 
       val (_, _, _, _, options, location, _, _, _, _) =
@@ -1692,9 +1692,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
     if (!ctx.createTableClauses().writeDistributionSpec.isEmpty ||
       !ctx.createTableClauses().writeOrderingSpec.isEmpty) {
-      throw operationNotAllowed(s"A write distribution and ordering is not supported for CREATE " +
-        s"$syntaxTypeErrorStr statements. Please remove any DISTRIBUTED BY PARTITION, " +
-        "ORDERED BY, or UNORDERED clause specified in the statement.", ctx)
+      invalidStatement(s"CREATE $syntaxTypeErrorStr ... DISTRIBUTED BY/ORDERED BY/UNORDERED", ctx)
     }
 
     val spec = TableSpec(

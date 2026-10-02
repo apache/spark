@@ -33,29 +33,11 @@ import org.apache.spark.sql.types.StructType;
  */
 public class TableInfo {
 
-  /**
-   * Write distribution mode for {@code DISTRIBUTED BY PARTITION}: cluster each write by the
-   * table's partitioning. One of the three possible values of {@link #writeDistributionMode()}.
-   */
-  public static final String DISTRIBUTION_MODE_HASH = "hash";
-
-  /**
-   * Write distribution mode for a bare {@code ORDERED BY}: range-partition each write so the
-   * ordering holds across its tasks, not only within one.
-   */
-  public static final String DISTRIBUTION_MODE_RANGE = "range";
-
-  /**
-   * Write distribution mode for {@code UNORDERED} or {@code LOCALLY ORDERED BY}: do not
-   * distribute, so any ordering holds within a write task only.
-   */
-  public static final String DISTRIBUTION_MODE_NONE = "none";
-
   private final Column[] columns;
   private final Map<String, String> properties;
   private final Transform[] partitions;
   private final Constraint[] constraints;
-  private final String writeDistributionMode;
+  private final WriteDistributionMode writeDistributionMode;
   private final SortOrder[] writeOrdering;
 
   /**
@@ -89,21 +71,31 @@ public class TableInfo {
   public Constraint[] constraints() { return constraints; }
 
   /**
-   * The requested write distribution: {@link #DISTRIBUTION_MODE_HASH},
-   * {@link #DISTRIBUTION_MODE_RANGE}, {@link #DISTRIBUTION_MODE_NONE}, or null when the statement
-   * did not ask for one, which leaves the choice to the catalog.
+   * The requested write distribution, or null when the statement did not ask for one, which
+   * leaves the choice to the catalog.
    * <p>
    * Only catalogs that report
    * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING} see a
    * request; for any other catalog, Spark rejects the statement.
+   * <p>
+   * Spark passes the request only to the {@code TableInfo} overloads of
+   * {@link TableCatalog#createTable(Identifier, TableInfo)} and of the {@link StagingTableCatalog}
+   * methods {@code stageCreate}, {@code stageReplace} and {@code stageCreateOrReplace}. Their
+   * default implementations drop it, so a catalog that reports the capability must override each
+   * one it can be reached through.
    *
    * @since 4.4.0
    */
-  public String writeDistributionMode() { return writeDistributionMode; }
+  public WriteDistributionMode writeDistributionMode() { return writeDistributionMode; }
 
   /**
-   * The requested write ordering, empty when none was requested. Gated on the same capability as
-   * {@link #writeDistributionMode()}.
+   * The requested write ordering; never null, and empty when none was requested. Gated on the
+   * same capability and delivered the same way as {@link #writeDistributionMode()}.
+   * <p>
+   * A plain column is a {@link org.apache.spark.sql.connector.expressions.NamedReference}; any
+   * other key is a {@link Transform}, such as {@code bucket(16, id)}. Spark checks only that each
+   * referenced column exists in the table schema. It does not check that a key is orderable or
+   * that a transform accepts its arguments, so a catalog must reject a key it cannot honor.
    *
    * @since 4.4.0
    */
@@ -112,7 +104,7 @@ public class TableInfo {
   public static class Builder extends RelationBuilder<Builder> {
     protected Transform[] partitions = new Transform[0];
     protected Constraint[] constraints = new Constraint[0];
-    protected String writeDistributionMode = null;
+    protected WriteDistributionMode writeDistributionMode = null;
     protected SortOrder[] writeOrdering = new SortOrder[0];
 
     @Override
@@ -133,13 +125,14 @@ public class TableInfo {
      *
      * @since 4.4.0
      */
-    public Builder withWriteDistributionMode(String writeDistributionMode) {
+    public Builder withWriteDistributionMode(WriteDistributionMode writeDistributionMode) {
       this.writeDistributionMode = writeDistributionMode;
       return this;
     }
 
     /**
-     * Sets the requested write ordering. See {@link TableInfo#writeOrdering()}.
+     * Sets the requested write ordering, which must not be null. See
+     * {@link TableInfo#writeOrdering()}.
      *
      * @since 4.4.0
      */

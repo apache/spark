@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.TableSpec
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, TableCatalog, TableInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, TableCatalog, TableInfo, WriteDistributionMode}
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -35,7 +35,7 @@ case class CreateTableExec(
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
     ignoreIfExists: Boolean,
-    writeDistributionMode: String,
+    writeDistributionMode: WriteDistributionMode,
     writeOrdering: Seq[V2SortOrder]) extends LeafV2CommandExec {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 

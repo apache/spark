@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.expressions.{Literal => CatalystLiteral}
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, TableCatalogCapability, WriteDistributionMode}
 import org.apache.spark.sql.connector.expressions.{Expression, IdentityTransform, Literal, SortOrder, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.FloatType
 
 /**
  * Utility methods for the create-time write distribution and ordering requested by
@@ -32,7 +33,9 @@ object WriteDistributionAndOrdering {
    * True when a CREATE/REPLACE TABLE statement asked for a write distribution or ordering.
    * `UNORDERED` counts as a request.
    */
-  def isRequested(writeDistributionMode: String, writeOrdering: Seq[SortOrder]): Boolean = {
+  def isRequested(
+      writeDistributionMode: WriteDistributionMode,
+      writeOrdering: Seq[SortOrder]): Boolean = {
     writeDistributionMode != null || writeOrdering.nonEmpty
   }
 
@@ -44,13 +47,13 @@ object WriteDistributionAndOrdering {
       catalog: TableCatalog,
       ident: Identifier,
       operation: String,
-      writeDistributionMode: String,
+      writeDistributionMode: WriteDistributionMode,
       writeOrdering: Seq[SortOrder]): Unit = {
     if (isRequested(writeDistributionMode, writeOrdering) &&
         !catalog.capabilities().contains(
           TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING)) {
       throw QueryCompilationErrors.unsupportedTableOperationError(
-        catalog, ident, s"$operation ... DISTRIBUTED BY/ORDERED BY")
+        catalog, ident, s"$operation ... DISTRIBUTED BY/ORDERED BY/UNORDERED")
     }
   }
 
@@ -60,11 +63,18 @@ object WriteDistributionAndOrdering {
   }
 
   // `describe` prints a literal's internal value, e.g. `0` for DATE '1970-01-01', so literals are
-  // rendered through Catalyst to keep their type.
+  // rendered through Catalyst to keep their type. Catalyst renders a FLOAT as a CAST, which the
+  // parser does not accept here, so a finite FLOAT is rendered as `<v>F` instead. PARTITIONED BY
+  // in SHOW CREATE TABLE and the `Part N` rows of DESCRIBE render transforms with `describe`, so
+  // the same transform can print differently there.
   private def toSQL(e: Expression): String = e match {
-    case l: Literal[_] => CatalystLiteral(l.value, l.dataType).sql
+    case l: Literal[_] => (l.value, l.dataType) match {
+      case (f: Float, FloatType) if java.lang.Float.isFinite(f) => s"${f}F"
+      case (value, dataType) => CatalystLiteral.create(value, dataType).sql
+    }
     case t: IdentityTransform => t.ref.describe
-    case t: Transform => t.arguments().map(toSQL).mkString(s"${t.name}(", ", ", ")")
+    case t: Transform =>
+      t.arguments().map(toSQL).mkString(s"${quoteIfNeeded(t.name)}(", ", ", ")")
     case other => other.describe
   }
 }
