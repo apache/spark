@@ -17,6 +17,9 @@
 
 package org.apache.spark.util
 
+import java.lang.ref.WeakReference
+import java.time.LocalDateTime
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.PrivateMethodTester
@@ -200,6 +203,19 @@ class SizeEstimatorSuite
     val estimatedSize = SizeEstimator.estimate(createArray(1000, d1))
     assert(estimatedSize >= 4000, "Estimated size " + estimatedSize + " should be more than 4000")
     assert(estimatedSize <= 4200, "Estimated size " + estimatedSize + " should be less than 4200")
+  }
+
+  test("objects whose fields reflection can't read") {
+    // java.math and java.time are not opened to Spark, so these reference fields are read
+    // through Unsafe. BigDecimal (40) + its BigInteger unscaled value (40) + the int[4]
+    // magnitude of that BigInteger (32).
+    assertResult(112)(SizeEstimator.estimate(
+      new java.math.BigDecimal("12345678901234567890123456.0123456789")))
+    // LocalDateTime (24) + LocalDate (24) + LocalTime (24).
+    assertResult(72)(SizeEstimator.estimate(LocalDateTime.of(2020, 1, 2, 3, 4, 5, 6)))
+    // The referent of a java.lang.ref.Reference is still not counted.
+    assertResult(SizeEstimator.estimate(new WeakReference[AnyRef](null)))(
+      SizeEstimator.estimate(new WeakReference[AnyRef](new Array[Byte](1000))))
   }
 
   test("32-bit arch") {
