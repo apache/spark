@@ -16,9 +16,7 @@
  */
 package org.apache.spark.udf.worker.grpc
 
-import java.io.{File, FileOutputStream, InputStream}
-import java.net.URL
-import java.util.{Enumeration, Locale}
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import io.netty.channel.{Channel, EventLoopGroup, MultiThreadIoEventLoopGroup, ServerChannel}
@@ -115,13 +113,7 @@ private[grpc] object UnixDomainSocketTransport {
    *     mean we only trigger the "wrong-OS" native load attempt in
    *     this fallback branch.
    */
-  // Set once the Spark classifier jar's epoll library has been loaded, or
-  // once we have decided there is nothing to preload. detect() can run on
-  // many tasks.
-  private var nativeLibraryPrepared: Boolean = false
-
   def detect(): UnixDomainSocketTransport = {
-    prepareSparkEpollLibrary()
     val os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT)
     if (isLinux(os) && epollAvailable) {
       EpollTransport
@@ -146,85 +138,6 @@ private[grpc] object UnixDomainSocketTransport {
           s"(epoll: $epollErr, kqueue: $kqueueErr). " +
           "UDS-backed gRPC requires netty-transport-native-epoll on Linux or " +
           "netty-transport-native-kqueue on macOS.")
-    }
-  }
-
-  /**
-   * Load Spark's epoll JNI library when another jar embeds a different copy.
-   *
-   * Netty aborts if more than one
-   * `META-INF/native/libnetty_transport_native_epoll_<arch>.so` is visible and
-   * the bytes differ, then caches that failure for the JVM. sql tests hit this
-   * because snowflake-jdbc embeds a Netty 4.1 copy beside Spark's 4.2
-   * classifier jar. Loading Spark's copy first registers the JNI symbols, and
-   * `Epoll`'s initializer then skips Netty's duplicate check. A single copy is
-   * left for Netty to load itself. Spark RPC performs the same preload.
-   */
-  private def prepareSparkEpollLibrary(): Unit = {
-    if (nativeLibraryPrepared) {
-      return
-    }
-    this.synchronized {
-      if (nativeLibraryPrepared) {
-        return
-      }
-      nativeLibraryPrepared = true
-      val os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT)
-      if (!isLinux(os)) {
-        return
-      }
-      try {
-        val arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT) match {
-          case "amd64" | "x86_64" => "x86_64"
-          case "aarch64" | "arm64" => "aarch_64"
-          case other => other
-        }
-        val resource = s"META-INF/native/libnetty_transport_native_epoll_$arch.so"
-        val loader = classOf[UnixDomainSocketTransport].getClassLoader
-        val found: Enumeration[URL] = if (loader == null) {
-          ClassLoader.getSystemResources(resource)
-        } else {
-          loader.getResources(resource)
-        }
-        val urls = new java.util.ArrayList[URL]()
-        while (found.hasMoreElements) {
-          urls.add(found.nextElement())
-        }
-        if (urls.size < 2) {
-          return
-        }
-        var sparkCopy: URL = null
-        var i = 0
-        while (i < urls.size && sparkCopy == null) {
-          val url = urls.get(i)
-          if (url.toString.contains("netty-transport-native-epoll")) {
-            sparkCopy = url
-          }
-          i += 1
-        }
-        if (sparkCopy == null) {
-          return
-        }
-        val tmp = File.createTempFile("libnetty_transport_native_epoll_", ".so")
-        tmp.deleteOnExit()
-        val in: InputStream = sparkCopy.openStream()
-        try {
-          val out = new FileOutputStream(tmp)
-          try {
-            in.transferTo(out)
-          } finally {
-            out.close()
-          }
-        } finally {
-          in.close()
-        }
-        tmp.setReadable(true, true)
-        tmp.setExecutable(true, true)
-        System.load(tmp.getAbsolutePath)
-      } catch {
-        case _: Exception | _: LinkageError =>
-          // Epoll.isAvailable reports the failure if the library did not load.
-      }
     }
   }
 
