@@ -270,7 +270,7 @@ object SizeEstimator extends Logging {
         val s2 = sampleArray(array, state, rand, drawn, length)
         val size = math.min(s1, s2)
         state.size += math.max(s1, s2) +
-          (size * ((length - ARRAY_SAMPLE_SIZE) / ARRAY_SAMPLE_SIZE))
+          size * (length - ARRAY_SAMPLE_SIZE) / ARRAY_SAMPLE_SIZE
       }
     }
   }
