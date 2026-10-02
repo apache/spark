@@ -53,12 +53,16 @@ nested fields, decimal scale, and timestamp unit. Timezone-aware timestamps are 
 to `spark.sql.session.timeZone` without changing their UTC instants or copying their buffers.
 Timezone-naive and timezone-aware timestamps are not interchangeable. String and binary
 offset widths, including nested values, are converted as needed to match
-`spark.sql.execution.arrow.useLargeVarTypes`. These conversions can allocate new buffers.
-Other value types must match exactly: use an explicit PyArrow cast for numeric conversions.
+`spark.sql.execution.arrow.useLargeVarTypes`. Large, fixed-size and dictionary-encoded
+representations of the declared types (`large_list`, `fixed_size_list`, `string_view`,
+`binary_view`, `fixed_size_binary` and dictionary arrays) are cast to the declared type.
+These conversions can allocate new buffers. Other value types must match exactly: use an
+explicit PyArrow cast for numeric conversions.
 Map `keys_sorted` metadata is normalized to Spark's declared map type.
 Nested field nullability may differ if the actual values satisfy the declared nullability. Sliced results, including nested
 child slices, are copied to remove offsets that Arrow Java's CDI importer cannot
-read. Compatible results retain zero-copy transfer.
+read. Zero-length levels without a usable offsets buffer, which Arrow permits, are given
+one. Compatible results retain zero-copy transfer.
 Before exporting a result, the runtime performs full Arrow validation, including interior
 offsets, because the JVM reads result buffers without bounds checks: a malformed result,
 such as one built from raw buffers, could otherwise produce wrong values or crash the

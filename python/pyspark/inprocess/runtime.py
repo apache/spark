@@ -133,6 +133,127 @@ def _nullable_type(data_type: pa.DataType) -> pa.DataType:
     return data_type
 
 
+def _offset_width(data_type: pa.DataType) -> int:
+    if (
+        pa.types.is_string(data_type)
+        or pa.types.is_binary(data_type)
+        or pa.types.is_list(data_type)
+        or pa.types.is_map(data_type)
+    ):
+        return 4
+    if (
+        pa.types.is_large_string(data_type)
+        or pa.types.is_large_binary(data_type)
+        or pa.types.is_large_list(data_type)
+    ):
+        return 8
+    return 0
+
+
+def _child_arrays(array: pa.Array) -> list:
+    # List and map values ignore the parent's offset; struct fields are sliced to match it.
+    data_type = array.type
+    if (
+        pa.types.is_list(data_type)
+        or pa.types.is_large_list(data_type)
+        or pa.types.is_fixed_size_list(data_type)
+        or pa.types.is_map(data_type)
+    ):
+        return [array.values]
+    if pa.types.is_struct(data_type):
+        return [array.field(i) for i in range(data_type.num_fields)]
+    if pa.types.is_dictionary(data_type):
+        return [array.dictionary]
+    return []
+
+
+def _has_offsets_buffers(array: pa.Array) -> bool:
+    width = _offset_width(array.type)
+    if width:
+        offsets = array.buffers()[1]
+        if offsets is None or offsets.size < (array.offset + len(array) + 1) * width:
+            return False
+    return all(_has_offsets_buffers(child) for child in _child_arrays(array))
+
+
+def _repair_offsets(array: pa.Array) -> Optional[pa.Array]:
+    """Return a copy whose zero-length levels have offsets buffers, or None if unchanged.
+
+    Arrow permits a zero-length variable-width, list or map array without an offsets buffer,
+    or with a zero-size one, e.g. from PyArrow's IPC reader. Concatenation can crash on it,
+    and Arrow Java reads past it. Validation already rejects such buffers at other lengths.
+    """
+    data_type = array.type
+    if len(array) == 0:
+        return None if _has_offsets_buffers(array) else pa.array([], type=data_type)
+    children = _child_arrays(array)
+    repaired = [_repair_offsets(child) for child in children]
+    if all(child is None for child in repaired):
+        return None
+    children = [child if new is None else new for child, new in zip(children, repaired)]
+    if pa.types.is_struct(data_type):
+        mask = array.is_null() if array.null_count else None
+        return pa.StructArray.from_arrays(children, fields=list(data_type), mask=mask)
+    if pa.types.is_dictionary(data_type):
+        return pa.DictionaryArray.from_arrays(array.indices, children[0])
+    return pa.Array.from_buffers(
+        data_type,
+        len(array),
+        array.buffers()[: data_type.num_buffers],
+        null_count=array.null_count,
+        offset=array.offset,
+        children=children,
+    )
+
+
+def _canonical_type(data_type: pa.DataType) -> pa.DataType:
+    # Representations that Arrow casts to the type Spark declares without changing values,
+    # as the worker's schema enforcement does. Other differences must be cast explicitly.
+    if pa.types.is_dictionary(data_type):
+        return _canonical_type(data_type.value_type)
+    if pa.types.is_string_view(data_type):
+        return pa.string()
+    if pa.types.is_binary_view(data_type) or pa.types.is_fixed_size_binary(data_type):
+        return pa.binary()
+    if pa.types.is_struct(data_type):
+        return pa.struct([f.with_type(_canonical_type(f.type)) for f in data_type])
+    if (
+        pa.types.is_list(data_type)
+        or pa.types.is_large_list(data_type)
+        or pa.types.is_fixed_size_list(data_type)
+    ):
+        field = data_type.value_field
+        return pa.list_(field.with_type(_canonical_type(field.type)))
+    if pa.types.is_map(data_type):
+        field = data_type.item_field
+        return pa.map_(
+            _canonical_type(data_type.key_type),
+            field.with_type(_canonical_type(field.type)),
+            keys_sorted=data_type.keys_sorted,
+        )
+    return data_type
+
+
+def _nullable_fields(data_type: pa.DataType) -> pa.DataType:
+    # A cast target that keeps the declared types, but cannot reject hidden null children.
+    if pa.types.is_struct(data_type):
+        return pa.struct(
+            [f.with_type(_nullable_fields(f.type)).with_nullable(True) for f in data_type]
+        )
+    if pa.types.is_list(data_type) or pa.types.is_large_list(data_type):
+        field = data_type.value_field
+        child = field.with_type(_nullable_fields(field.type)).with_nullable(True)
+        return pa.list_(child) if pa.types.is_list(data_type) else pa.large_list(child)
+    if pa.types.is_map(data_type):
+        field = data_type.item_field
+        return pa.map_(
+            _nullable_fields(data_type.key_type),
+            field.with_type(_nullable_fields(field.type)).with_nullable(True),
+            keys_sorted=data_type.keys_sorted,
+        )
+    return data_type
+
+
 def _binary_layout(data_type: pa.DataType) -> pa.DataType:
     # Same physical layout with string types replaced by binary, so full validation checks
     # offsets without UTF-8. Spark strings may hold invalid UTF-8, which workers accept too.
@@ -140,6 +261,15 @@ def _binary_layout(data_type: pa.DataType) -> pa.DataType:
         return pa.binary()
     if pa.types.is_large_string(data_type):
         return pa.large_binary()
+    if pa.types.is_string_view(data_type):
+        return pa.binary_view()
+    if pa.types.is_dictionary(data_type):
+        return pa.dictionary(
+            data_type.index_type, _binary_layout(data_type.value_type), data_type.ordered
+        )
+    if pa.types.is_fixed_size_list(data_type):
+        field = data_type.value_field
+        return pa.list_(field.with_type(_binary_layout(field.type)), data_type.list_size)
     if pa.types.is_struct(data_type):
         return pa.struct([f.with_type(_binary_layout(f.type)) for f in data_type])
     if pa.types.is_list(data_type):
@@ -301,14 +431,21 @@ def _validate_result(
         raise TypeError(f"In-process UDF must return a pyarrow.Array, got {type(result).__name__}")
     if len(result) != expected_rows:
         raise ValueError(f"In-process UDF returned {len(result)} rows; expected {expected_rows}")
-    if _nullable_type(result.type) != _nullable_type(expected_type):
+    expected_key = _nullable_type(expected_type)
+    convert = _nullable_type(result.type) != expected_key
+    if convert and _nullable_type(_canonical_type(result.type)) != expected_key:
         raise TypeError(f"In-process UDF returned {result.type}; expected {expected_type}")
     if full_validation:
-        # Validate every offset before null checks, normalization or JVM buffer access.
+        # Validate every offset before conversion, null checks, normalization or JVM access.
         layout = _binary_layout(result.type)
         (result if layout == result.type else result.view(layout)).validate(full=True)
     else:
         result.validate()
+    repaired = _repair_offsets(result)
+    if repaired is not None:
+        result = repaired
+    if convert:
+        result = result.cast(_nullable_fields(expected_type))
     checker = null_checker if null_checker is not None else _null_checker(expected_type)
     if checker is not None:
         checker(result)
@@ -357,9 +494,16 @@ def _inprocess_invoke(
             raise ValueError("Mismatched input argument names")
         args = [value for name, value in zip(names, input_arrays) if not name]
         kwargs = {str(name): value for name, value in zip(names, input_arrays) if name}
-        result = _validate_result(
-            udf_func(*args, **kwargs), int(expected_rows), expected_type, checker, full_validation
-        )
+        output = udf_func(*args, **kwargs)
+        try:
+            result = _validate_result(
+                output, int(expected_rows), expected_type, checker, full_validation
+            )
+        except BaseException:
+            # The unvalidated result is a local of this and the validating frame. Capturing
+            # locals would call repr() on it, which reads its possibly malformed buffers.
+            traceback_with_locals = False
+            raise
         _results[handle] = result
         result._export_to_c(int(output_array_ptr), int(output_schema_ptr))
     except BaseException as error:

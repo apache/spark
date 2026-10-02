@@ -203,8 +203,10 @@ def inprocess_udf(return_type: Union[DataType, str], deterministic: bool = True)
     The result must have the same length as the input batch and its Arrow type
     must match the declared Spark type, including nested fields. Timezone-aware
     timestamps are relabeled to the session timezone without changing their instants;
-    string/binary offset widths are converted to match ``useLargeVarTypes``. Other
-    value types must match exactly. Nested nullability may be widened, but actual
+    string/binary offset widths are converted to match ``useLargeVarTypes``, and
+    ``large_list``, ``fixed_size_list``, ``string_view``, ``binary_view``,
+    ``fixed_size_binary`` and dictionary representations are cast to the declared type.
+    Other value types must match exactly. Nested nullability may be widened, but actual
     nulls cannot be returned in non-nullable fields. Sliced results are copied when
     required by Arrow Java.
 

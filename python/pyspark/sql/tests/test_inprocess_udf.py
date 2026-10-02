@@ -249,7 +249,11 @@ class InProcessUDFTests(ReusedSQLTestCase):
         def nested(x):
             import pyarrow as pa
 
-            return pa.array([{"s": ["hello"], "b": b"data"}] * len(x))
+            # Declare the field order: newer PyArrow versions sort inferred struct fields.
+            return pa.array(
+                [{"s": ["hello"], "b": b"data"}] * len(x),
+                pa.struct([("s", pa.list_(pa.string())), ("b", pa.binary())]),
+            )
 
         for zone in ["UTC", "Etc/UTC", "America/Los_Angeles"]:
             with self.sql_conf({"spark.sql.session.timeZone": zone}):

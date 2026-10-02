@@ -47,6 +47,8 @@ if _have_arrow_cdi:
 
     from pyspark.inprocess.runtime import (
         _binary_layout,
+        _canonical_type,
+        _has_offsets_buffers,
         _inprocess_invoke,
         _inprocess_register,
         _inprocess_release,
@@ -162,6 +164,36 @@ class InProcessRuntimeTests(unittest.TestCase):
                 with self.assertRaisesRegex(pa.ArrowInvalid, "non-monotonic offset"):
                     _validate_result(result, 2, result.type)
 
+    def test_validation_errors_do_not_capture_unvalidated_result_locals(self):
+        def wrong_length(x):
+            return pa.array([1, 2, 3])
+
+        def failing(x):
+            raise ValueError("user error")
+
+        for func, expected_locals in [(wrong_length, False), (failing, True)]:
+            with self.subTest(func=func.__name__):
+                self.register("locals", cloudpickle.dumps(func), traceback_with_locals=True)
+                array = ffi.new("struct ArrowArray*")
+                schema = ffi.new("struct ArrowSchema*")
+                pa.array([1, 2], pa.int64())._export_to_c(
+                    int(ffi.cast("uintptr_t", array)), int(ffi.cast("uintptr_t", schema))
+                )
+                with patch(
+                    "pyspark.inprocess.runtime._format_exception", return_value="formatted"
+                ) as format_exception:
+                    with self.assertRaisesRegex(RuntimeError, "formatted"):
+                        _inprocess_invoke(
+                            "locals",
+                            [int(ffi.cast("uintptr_t", array))],
+                            [int(ffi.cast("uintptr_t", schema))],
+                            0,
+                            0,
+                            2,
+                        )
+                self.assertEqual(format_exception.call_args.args[3], expected_locals)
+                _inprocess_release(["locals"])
+
     def test_full_validation_can_be_disabled_per_registration(self):
         offsets = pa.array([0, 5, 2], pa.int32()).buffers()[1]
         value = pa.Array.from_buffers(pa.string(), 2, [None, offsets, pa.py_buffer(b"hello")])
@@ -244,7 +276,11 @@ class InProcessRuntimeTests(unittest.TestCase):
                 _validate_result(pa.array([0], type=datatype), 1, value.type)
 
     def test_session_dependent_nested_string_and_binary_widths(self):
-        value = pa.array([{"s": ["hello", None], "b": b"data"}, None])
+        # Declare the field order: newer PyArrow versions sort inferred struct fields.
+        value = pa.array(
+            [{"s": ["hello", None], "b": b"data"}, None],
+            pa.struct([("s", pa.list_(pa.string())), ("b", pa.binary())]),
+        )
         expected = pa.struct(
             [pa.field("s", pa.list_(pa.large_string())), pa.field("b", pa.large_binary())]
         )
@@ -335,6 +371,64 @@ class InProcessRuntimeTests(unittest.TestCase):
                 wrapper = inprocess_udf(declared)(lambda x: x)
                 with self.assertRaisesRegex(RuntimeError, "expected"):
                     self.invoke(wrapper, [value], declared)
+
+    def test_zero_length_levels_get_offsets_buffers(self):
+        def strings(offsets):
+            return pa.Array.from_buffers(pa.string(), 0, [None, offsets, pa.py_buffer(b"")])
+
+        for offsets in [None, pa.py_buffer(b"")]:
+            empty = strings(offsets)
+            lists = pa.ListArray.from_arrays(pa.array([0] * 5, pa.int32()), empty)
+            entries = pa.array([], pa.int64())
+            cases = [
+                (empty, 0),
+                # A slice offset sends this through concatenation, which crashed on it.
+                (lists.slice(1), 3),
+                (pa.StructArray.from_arrays([lists], names=["a"]).slice(1), 3),
+                (pa.MapArray.from_arrays(pa.array([0, 0, 0], pa.int32()), empty, entries), 2),
+                (pa.DictionaryArray.from_arrays(pa.array([None, None], pa.int32()), empty), 2),
+            ]
+            for value, rows in cases:
+                with self.subTest(type=value.type, offsets=offsets):
+                    expected = _canonical_type(value.type)
+                    result = _validate_result(value, rows, expected)
+                    self.assertTrue(_has_offsets_buffers(result))
+                    self.assertEqual(result.to_pylist(), value.to_pylist())
+                    self.assertEqual(result.type, expected)
+
+    def test_equivalent_representations_are_cast_to_the_declared_type(self):
+        strings = pa.array(["a", None, "bc"])
+        cases = [
+            (pa.array([[1], None, [2, 3]], pa.large_list(pa.int64())), pa.list_(pa.int64())),
+            (pa.array([[1, 2], None, [3, 4]], pa.list_(pa.int64(), 2)), pa.list_(pa.int64())),
+            (strings.cast(pa.string_view()), pa.string()),
+            (strings.cast(pa.binary()).cast(pa.binary_view()), pa.binary()),
+            (pa.array([b"ab", None, b"cd"], pa.binary(2)), pa.binary()),
+            (strings.dictionary_encode(), pa.string()),
+            (
+                pa.array(
+                    [{"a": [["x"]]}, None, {"a": None}],
+                    pa.struct([("a", pa.large_list(pa.list_(pa.string_view())))]),
+                ),
+                pa.struct([("a", pa.list_(pa.list_(pa.string())))]),
+            ),
+        ]
+        for value, expected in cases:
+            with self.subTest(type=value.type):
+                result = _validate_result(value, 3, expected)
+                self.assertEqual(result.type, expected)
+                self.assertEqual(result.to_pylist(), value.to_pylist())
+
+    def test_other_representation_differences_are_rejected(self):
+        cases = [
+            (pa.array([[1], [2, 3]], pa.list_view(pa.int64())), pa.list_(pa.int64())),
+            (pa.array([1, 2], pa.int32()).dictionary_encode(), pa.int64()),
+            (pa.array([[1], [2, 3]], pa.large_list(pa.int32())), pa.list_(pa.int64())),
+        ]
+        for value, expected in cases:
+            with self.subTest(type=value.type):
+                with self.assertRaisesRegex(TypeError, "expected"):
+                    _validate_result(value, 2, expected)
 
     def test_zero_argument_udf_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "0-arg"):
