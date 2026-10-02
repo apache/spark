@@ -265,8 +265,6 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(false)
 
-  // Frozen plan-time wall-clock decision. A dialect pins it via planTimeOptions at each planning
-  // entry point; unpinned paths keep the java.sql.Timestamp conversion.
   val timestampNTZAsWallClock: Boolean =
     parameters
       .get(JDBC_TIMESTAMP_NTZ_WALL_CLOCK)
@@ -387,7 +385,5 @@ object JDBCOptions {
   val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
   val JDBC_PREFER_TIMESTAMP_NANOS = newOption("preferTimestampNanos")
   val JDBC_HINT_STRING = newOption("hint")
-  // Internal: the resolved wall-clock decision a dialect pins at plan time. newOption keeps it out
-  // of the driver connection properties.
   val JDBC_TIMESTAMP_NTZ_WALL_CLOCK = newOption("__timestampNTZAsWallClock")
 }
