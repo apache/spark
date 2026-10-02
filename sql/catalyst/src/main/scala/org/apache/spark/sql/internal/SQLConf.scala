@@ -5535,6 +5535,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_UDF_IN_PROCESS_FULL_VALIDATION =
+    buildConf("spark.sql.execution.pythonUDF.inProcess.fullValidation.enabled")
+      .doc("When true, in-process Python UDFs fully validate the Arrow structure of each " +
+        "result, including every offset of variable-width and nested values, before the JVM " +
+        "reads it. The JVM reads result buffers without bounds checks, so a malformed result, " +
+        "such as one built from raw buffers, can produce wrong values or crash the executor. " +
+        "String values are not checked for valid UTF-8. When false, only constant-time Arrow " +
+        "validation is performed. Worker-based Arrow UDFs do not validate their results.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val PYTHON_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
       .doc("Enable Arrow optimization in regular Python UDFs. This optimization " +

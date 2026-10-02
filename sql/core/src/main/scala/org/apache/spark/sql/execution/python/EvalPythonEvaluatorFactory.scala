@@ -55,6 +55,18 @@ abstract class EvalPythonEvaluatorFactory(
     projection
   }
 
+  /**
+   * Evaluates UDFs whose arguments are exactly the input columns, in order. Returns, for each
+   * input row, its columns followed by its results, so that input rows need not be buffered
+   * to join them with the results. Returns None to buffer input rows instead.
+   */
+  protected def evaluateWithInputColumns(
+      funcs: Seq[(ChainedPythonFunctions, Long)],
+      argMetas: Array[Array[ArgumentMetadata]],
+      iter: Iterator[InternalRow],
+      schema: StructType,
+      context: TaskContext): Option[Iterator[InternalRow]] = None
+
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] =
     new EvalPythonPartitionEvaluator
 
@@ -78,21 +90,6 @@ abstract class EvalPythonEvaluatorFactory(
       val iter = iters.head
       val context = TaskContext.get()
 
-      // The queue used to buffer input rows so we can drain it to
-      // combine input with output from Python.
-      // In pipelined mode, add() runs in the writer thread and remove() in the task thread.
-      // Use lock-free mode to avoid synchronized overhead (memory visibility is guaranteed
-      // by the blocking socket I/O between the two threads).
-      val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
-      val queue = HybridRowQueue(
-        context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)),
-        childOutput.length,
-        lockFree = pipelined)
-      context.addTaskCompletionListener[Unit] { ctx =>
-        queue.close()
-      }
-
       val (pyFuncs, inputs) = udfs.map(collectFunctions).unzip
 
       // flatten all the arguments
@@ -115,10 +112,37 @@ abstract class EvalPythonEvaluatorFactory(
           }
         }.toArray
       }.toArray
-      val projection = createInputProjection(allInputs.toSeq, context.partitionId())
       val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
         StructField(s"_$i", dt)
       }.toArray)
+
+      val resultProj = UnsafeProjection.create(output, output)
+      val inputsAreChildOutput = allInputs.length == childOutput.length &&
+        allInputs.zip(childOutput).forall {
+          case (a: Attribute, c) => a.exprId == c.exprId
+          case _ => false
+        }
+      if (inputsAreChildOutput) {
+        val withInputs = evaluateWithInputColumns(pyFuncs, argMetas, iter, schema, context)
+        if (withInputs.isDefined) return withInputs.get.map(resultProj)
+      }
+
+      // The queue used to buffer input rows so we can drain it to
+      // combine input with output from Python.
+      // In pipelined mode, add() runs in the writer thread and remove() in the task thread.
+      // Use lock-free mode to avoid synchronized overhead (memory visibility is guaranteed
+      // by the blocking socket I/O between the two threads).
+      val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
+      val queue = HybridRowQueue(
+        context.taskMemoryManager(),
+        new File(Utils.getLocalDir(SparkEnv.get.conf)),
+        childOutput.length,
+        lockFree = pipelined)
+      context.addTaskCompletionListener[Unit] { ctx =>
+        queue.close()
+      }
+
+      val projection = createInputProjection(allInputs.toSeq, context.partitionId())
 
       // Add rows to queue to join later with the result.
       val projectedRowIter = iter.map { inputRow =>
@@ -130,7 +154,6 @@ abstract class EvalPythonEvaluatorFactory(
         evaluate(pyFuncs, argMetas, projectedRowIter, schema, context)
 
       val joined = new JoinedRow
-      val resultProj = UnsafeProjection.create(output, output)
 
       outputRowIterator.map { outputRow =>
         resultProj(joined(queue.remove(), outputRow))

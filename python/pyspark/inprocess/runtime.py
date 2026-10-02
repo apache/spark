@@ -59,6 +59,7 @@ def _inprocess_register(
     hide_traceback: bool = False,
     simplified_traceback: bool = False,
     traceback_with_locals: bool = False,
+    full_validation: bool = True,
 ) -> None:
     try:
         require_minimum_pyarrow_version()
@@ -86,6 +87,7 @@ def _inprocess_register(
             hide_traceback,
             simplified_traceback,
             traceback_with_locals,
+            full_validation,
         )
     except BaseException as error:
         # In JEP, an uncaught SystemExit can terminate the entire executor JVM.
@@ -293,6 +295,7 @@ def _validate_result(
     expected_rows: int,
     expected_type: pa.DataType,
     null_checker: Optional[NullChecker] = None,
+    full_validation: bool = True,
 ) -> pa.Array:
     if not isinstance(result, pa.Array):
         raise TypeError(f"In-process UDF must return a pyarrow.Array, got {type(result).__name__}")
@@ -300,9 +303,12 @@ def _validate_result(
         raise ValueError(f"In-process UDF returned {len(result)} rows; expected {expected_rows}")
     if _nullable_type(result.type) != _nullable_type(expected_type):
         raise TypeError(f"In-process UDF returned {result.type}; expected {expected_type}")
-    # Validate every offset before null checks, normalization or JVM buffer access.
-    layout = _binary_layout(result.type)
-    (result if layout == result.type else result.view(layout)).validate(full=True)
+    if full_validation:
+        # Validate every offset before null checks, normalization or JVM buffer access.
+        layout = _binary_layout(result.type)
+        (result if layout == result.type else result.view(layout)).validate(full=True)
+    else:
+        result.validate()
     checker = null_checker if null_checker is not None else _null_checker(expected_type)
     if checker is not None:
         checker(result)
@@ -336,6 +342,7 @@ def _inprocess_invoke(
             hide_traceback,
             simplified_traceback,
             traceback_with_locals,
+            full_validation,
         ) = _udfs[handle]
         # The task closes the preceding batch's CDI references before invoking again.
         _results.pop(handle, None)
@@ -351,7 +358,7 @@ def _inprocess_invoke(
         args = [value for name, value in zip(names, input_arrays) if not name]
         kwargs = {str(name): value for name, value in zip(names, input_arrays) if name}
         result = _validate_result(
-            udf_func(*args, **kwargs), int(expected_rows), expected_type, checker
+            udf_func(*args, **kwargs), int(expected_rows), expected_type, checker, full_validation
         )
         _results[handle] = result
         result._export_to_c(int(output_array_ptr), int(output_schema_ptr))

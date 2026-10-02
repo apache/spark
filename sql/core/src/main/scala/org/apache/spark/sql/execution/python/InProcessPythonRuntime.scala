@@ -322,7 +322,8 @@ private[python] object InProcessPythonRuntime extends Logging {
         pythonVersion: String,
         hideTraceback: Boolean,
         simplifiedTraceback: Boolean,
-        tracebackWithLocals: Boolean): Long = {
+        tracebackWithLocals: Boolean,
+        fullValidation: Boolean): Long = {
       synchronized {
         checkState(running)
         registeredHandles += handle
@@ -341,7 +342,8 @@ private[python] object InProcessPythonRuntime extends Logging {
                 java.lang.Long.valueOf(schema.memoryAddress()), pythonVersion,
                 java.lang.Boolean.valueOf(hideTraceback),
                 java.lang.Boolean.valueOf(simplifiedTraceback),
-                java.lang.Boolean.valueOf(tracebackWithLocals))
+                java.lang.Boolean.valueOf(tracebackWithLocals),
+                java.lang.Boolean.valueOf(fullValidation))
             }
           }
         } {

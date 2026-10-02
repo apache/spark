@@ -21,6 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, PythonUDF}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.internal.SQLConf
 
 /** Row-based CDI execution, sharing the standard Python UDF evaluator contracts. */
 case class InProcessArrowEvalPythonExec(
@@ -47,7 +48,8 @@ case class InProcessArrowEvalPythonExec(
     new InProcessArrowEvalPythonEvaluatorFactory(
       child.output, udfs, output, conf.arrowMaxRecordsPerBatch, conf.arrowMaxBytesPerBatch,
       conf.sessionLocalTimeZone, conf.arrowUseLargeVarTypes, conf.pysparkHideTraceback,
-      conf.pysparkSimplifiedTraceback, conf.pysparkTracebackWithLocals, pythonMetrics)
+      conf.pysparkSimplifiedTraceback, conf.pysparkTracebackWithLocals,
+      conf.getConf(SQLConf.PYTHON_UDF_IN_PROCESS_FULL_VALIDATION), pythonMetrics)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =

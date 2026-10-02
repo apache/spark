@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, PythonU
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.Utils
@@ -54,6 +54,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     hideTraceback: Boolean,
     simplifiedTraceback: Boolean,
     tracebackWithLocals: Boolean,
+    fullValidation: Boolean,
     metrics: Map[String, SQLMetric])
   extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
 
@@ -62,23 +63,14 @@ class InProcessArrowEvalPythonEvaluatorFactory(
 
   /**
    * `evaluate` writes each projected row to Arrow before pulling the next input row, so the
-   * arguments need not be copied out of it. If they are exactly the input columns, the input
-   * row is used as is; otherwise they are written into a reused unsafe row buffer.
+   * arguments are written into a reused unsafe row buffer rather than copied value by value.
    */
   override protected def createInputProjection(
       inputs: Seq[Expression],
       partitionIndex: Int): InternalRow => InternalRow = {
-    val identity = inputs.length == childOutput.length && inputs.zip(childOutput).forall {
-      case (a: Attribute, c) => a.exprId == c.exprId
-      case _ => false
-    }
-    if (identity) {
-      row => row
-    } else {
-      val projection = UnsafeProjection.create(inputs, childOutput)
-      projection.initialize(partitionIndex)
-      projection
-    }
+    val projection = UnsafeProjection.create(inputs, childOutput)
+    projection.initialize(partitionIndex)
+    projection
   }
 
   override protected def evaluate(
@@ -86,7 +78,35 @@ class InProcessArrowEvalPythonEvaluatorFactory(
       argMetas: Array[Array[ArgumentMetadata]],
       rows: Iterator[InternalRow],
       inputSchema: StructType,
-      context: TaskContext): Iterator[InternalRow] = {
+      context: TaskContext): Iterator[InternalRow] =
+    evaluateBatches(funcs, argMetas, rows, inputSchema, context, includeInputColumns = false)
+
+  /**
+   * All input columns are UDF arguments, so they are written to Arrow regardless. Read them
+   * back from the exported input vectors instead of buffering and copying every input row,
+   * if each column's values are read back from Arrow exactly as written.
+   */
+  override protected def evaluateWithInputColumns(
+      funcs: Seq[(ChainedPythonFunctions, Long)],
+      argMetas: Array[Array[ArgumentMetadata]],
+      rows: Iterator[InternalRow],
+      inputSchema: StructType,
+      context: TaskContext): Option[Iterator[InternalRow]] = {
+    if (inputSchema.forall(f => InProcessArrowEvalPythonEvaluatorFactory.readsBack(f.dataType))) {
+      Some(evaluateBatches(
+        funcs, argMetas, rows, inputSchema, context, includeInputColumns = true))
+    } else {
+      None
+    }
+  }
+
+  private def evaluateBatches(
+      funcs: Seq[(ChainedPythonFunctions, Long)],
+      argMetas: Array[Array[ArgumentMetadata]],
+      rows: Iterator[InternalRow],
+      inputSchema: StructType,
+      context: TaskContext,
+      includeInputColumns: Boolean): Iterator[InternalRow] = {
     ArrowUtils.failDuplicatedFieldNames(inputSchema)
     val functions = funcs.map { case (chain, _) =>
       if (chain.funcs.size != 1) {
@@ -112,7 +132,9 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     // consumer on another thread, such as a pipelined Python writer or a TRANSFORM feed
     // thread, can race with cleanup; it needs IteratorResources and a materialized row.
     val evaluatingThread = Thread.currentThread()
-    lazy val materializeResult = UnsafeProjection.create(udfs.map(_.dataType).toArray)
+    lazy val materializeResult = UnsafeProjection.create(
+      ((if (includeInputColumns) inputSchema.map(_.dataType) else Nil) ++ udfs.map(_.dataType))
+        .toArray)
     val handles = functions.map(_ => UUID.randomUUID().toString)
     var registered = false
     var writer: ArrowWriter = null
@@ -186,7 +208,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
                 val func = functions(i)
                 initTime.add(runtime.register(handles(i), func.command.toArray,
                   expectedFields(i), func.pythonVer, hideTraceback, simplifiedTraceback,
-                  tracebackWithLocals))
+                  tracebackWithLocals, fullValidation))
               }
             }
             val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
@@ -256,7 +278,13 @@ class InProcessArrowEvalPythonEvaluatorFactory(
             }
 
             metrics("pythonNumRowsReceived") += count
-            val columns = results.toArray[ColumnVector]
+            // Input vectors are closed with the writer's root, not with the results.
+            val inputs = if (includeInputColumns) {
+              writer.root.getFieldVectors.asScala.map(new ArrowColumnVector(_))
+            } else {
+              Nil
+            }
+            val columns = (inputs ++ results).toArray[ColumnVector]
             batchIter = new ColumnarBatch(columns, count).rowIterator().asScala
           }
           batchIter.next()
@@ -269,6 +297,22 @@ class InProcessArrowEvalPythonEvaluatorFactory(
 }
 
 private[python] object InProcessArrowEvalPythonEvaluatorFactory {
+  /**
+   * Whether `ArrowColumnVector` returns exactly the values `ArrowWriter` wrote for this type.
+   * Types with derived Arrow representations, such as intervals, nanosecond timestamps, TIME,
+   * Variant, geospatial types and UDTs, keep the original rows instead.
+   */
+  def readsBack(dataType: DataType): Boolean = dataType match {
+    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
+        FloatType | DoubleType | BinaryType | DateType | TimestampType | TimestampNTZType => true
+    case _: DecimalType => true
+    case _: StringType => true
+    case ArrayType(elementType, _) => readsBack(elementType)
+    case MapType(keyType, valueType, _) => readsBack(keyType) && readsBack(valueType)
+    case StructType(fields) => fields.forall(f => readsBack(f.dataType))
+    case _ => false
+  }
+
   /**
    * A pipelined worker can consume input after task completion has requested cleanup.
    * Defer cleanup until that iterator call returns, without blocking the completion listener

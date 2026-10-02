@@ -66,7 +66,8 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     val field = ArrowUtils.toArrowField("result", LongType, true, "UTC")
     intercept[NullPointerException] {
       // This session deliberately has no interpreter, so invocation fails after allocation.
-      runtime.register("failed", new Array[Byte](1024 * 1024), field, "3.12", false, false, false)
+      runtime.register(
+        "failed", new Array[Byte](1024 * 1024), field, "3.12", false, false, false, true)
     }
     assert(ArrowUtils.rootAllocator.getAllocatedMemory == before)
     runtime.shutdown(waitMillis = 20)
@@ -102,7 +103,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
       .map(_ -> new SQLMetric("timing", 0L)).toMap
     val context = TaskContext.empty()
     class TestEvaluator extends InProcessArrowEvalPythonEvaluatorFactory(
-        Seq.empty, Seq.empty, Seq.empty, 10, 0L, "UTC", false, false, false, false, metrics) {
+        Seq.empty, Seq.empty, Seq.empty, 10, 0L, "UTC", false, false, false, false, true, metrics) {
       override private[python] def runtimeSession: InProcessPythonRuntime.InterpreterSession =
         runtime
 
@@ -127,7 +128,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
       PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF, true)
     var lookups = 0
     class TestEvaluator extends InProcessArrowEvalPythonEvaluatorFactory(
-        Seq.empty, Seq(udf), Seq.empty, 10, 0L, "UTC", false, false, false, false, metrics) {
+        Seq.empty, Seq(udf), Seq.empty, 10, 0L, "UTC", false, false, false, false, true, metrics) {
       override private[python] def runtimeSession: InProcessPythonRuntime.InterpreterSession = {
         lookups += 1
         runtime

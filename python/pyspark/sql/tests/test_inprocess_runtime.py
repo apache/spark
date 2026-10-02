@@ -162,6 +162,16 @@ class InProcessRuntimeTests(unittest.TestCase):
                 with self.assertRaisesRegex(pa.ArrowInvalid, "non-monotonic offset"):
                     _validate_result(result, 2, result.type)
 
+    def test_full_validation_can_be_disabled_per_registration(self):
+        offsets = pa.array([0, 5, 2], pa.int32()).buffers()[1]
+        value = pa.Array.from_buffers(pa.string(), 2, [None, offsets, pa.py_buffer(b"hello")])
+        # Only constant-time checks remain, which do not inspect interior offsets.
+        self.assertEqual(len(_validate_result(value, 2, value.type, full_validation=False)), 2)
+        self.register("full", cloudpickle.dumps(lambda x: x))
+        self.register("constant", cloudpickle.dumps(lambda x: x), full_validation=False)
+        self.assertTrue(_udfs["full"][6])
+        self.assertFalse(_udfs["constant"][6])
+
     def test_sorted_map_metadata_is_normalized_including_nested_maps(self):
         sorted_type = pa.map_(pa.string(), pa.int64(), keys_sorted=True)
         declared = pa.map_(pa.string(), pa.int64())
@@ -257,7 +267,7 @@ class InProcessRuntimeTests(unittest.TestCase):
             weakref.finalize(array, lambda: finalized.append(threading.get_ident()))
             return pa.array(array)
 
-        _udfs["owned"] = (produce, pa.int64(), lambda array: None, False, False, False)
+        _udfs["owned"] = (produce, pa.int64(), lambda array: None, False, False, False, True)
         for batch in range(2):
             array = ffi.new("struct ArrowArray*")
             schema = ffi.new("struct ArrowSchema*")

@@ -60,8 +60,12 @@ Nested field nullability may differ if the actual values satisfy the declared nu
 child slices, are copied to remove offsets that Arrow Java's CDI importer cannot
 read. Compatible results retain zero-copy transfer.
 Before exporting a result, the runtime performs full Arrow validation, including interior
-offsets. Like worker UDFs, it does not validate UTF-8 in string results, because Spark
-strings may contain invalid UTF-8 (for example, `CAST(X'FF' AS STRING)`).
+offsets, because the JVM reads result buffers without bounds checks: a malformed result,
+such as one built from raw buffers, could otherwise produce wrong values or crash the
+executor. It does not validate UTF-8 in string results, because Spark strings may contain
+invalid UTF-8 (for example, `CAST(X'FF' AS STRING)`). Worker-based Arrow UDFs do not
+validate their results. To skip the full validation and perform only constant-time
+checks, set `spark.sql.execution.pythonUDF.inProcess.fullValidation.enabled` to `false`.
 
 The API produces a regular `PythonUDF` expression with an in-process evaluation
 type. Spark's existing `ArrowEvalPython` planning rules handle aggregation,
@@ -73,9 +77,11 @@ to use Python workers.
 `maxRecordsPerBatch <= 0` means no row-count limit. The independent
 `spark.sql.execution.arrow.maxBytesPerBatch` limit still applies when positive.
 Only UDF arguments are converted to Arrow. Other columns stay in Spark rows,
-buffered in a spillable queue until the results are joined back. Duplicate nested
-field names in UDF arguments or declared results are rejected before Arrow Java
-reads their buffers.
+buffered in a spillable queue until the results are joined back. When every input
+column is a UDF argument and its type reads back from Arrow unchanged, the output
+reads those columns from the Arrow input vectors instead of buffering the rows.
+Duplicate nested field names in UDF arguments or declared results are rejected before
+Arrow Java reads their buffers.
 
 Each batch uses fresh input buffers. A Python function may retain an input array;
 later batches do not overwrite it. Retained arrays keep native memory alive, so
