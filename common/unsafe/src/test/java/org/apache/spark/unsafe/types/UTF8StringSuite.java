@@ -23,6 +23,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.regex.Pattern;
 
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
@@ -623,6 +624,33 @@ public class UTF8StringSuite {
     assertArrayEquals(
       new UTF8String[]{fromString("")},
       fromString("").split(fromString(""), 0));
+  }
+
+  @Test
+  public void splitWithCompiledPattern() {
+    // Covers both String.split's single-char fast path (",", "\\|", "a") and real regexes.
+    String[] patterns = {",", "\\|", "|", "[1-9]+", "\\s+", "", "a"};
+    String[] inputs = {"ab,def,ghi,", "a1b22c", "a b|c", "", "ab"};
+    int[] limits = {-1, 0, 1, 2, 100};
+    for (String p : patterns) {
+      Pattern compiled = Pattern.compile(p);
+      for (String s : inputs) {
+        for (int limit : limits) {
+          String clue = "pattern=" + p + ", input=" + s + ", limit=" + limit;
+          assertArrayEquals(
+            fromString(s).split(fromString(p), limit),
+            fromString(s).split(compiled, limit), clue);
+          assertArrayEquals(
+            fromString(s).splitLegacyTruncate(fromString(p), limit),
+            fromString(s).splitLegacyTruncate(compiled, limit), clue);
+        }
+      }
+    }
+    // A pattern compiled with flags must not take the single-char fast path, which would drop
+    // the flags.
+    assertArrayEquals(
+      new UTF8String[]{fromString("x"), fromString("y"), fromString("z")},
+      fromString("xAyaz").split(Pattern.compile("a", Pattern.CASE_INSENSITIVE), -1));
   }
 
   @Test

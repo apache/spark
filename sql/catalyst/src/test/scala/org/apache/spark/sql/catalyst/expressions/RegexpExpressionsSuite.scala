@@ -25,8 +25,10 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Unit tests for regular expression (regexp) related SQL expressions.
@@ -625,6 +627,26 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
       StringSplit(Literal("\"quote"), Literal("\"quote"), Literal(-1)) :: Nil)
+  }
+
+  test("split refreshes its cached pattern when the regex changes") {
+    // UnsafeProjection reuses its output buffer, so every input row's strings point into the
+    // same bytes: the cached regex must be a copy, or the same-length "[,;]+" would look equal
+    // to the "[0-9]" before it.
+    val toUnsafe = UnsafeProjection.create(Array[DataType](StringType, StringType))
+    val rows = Seq(
+      ("a1b2c", "[0-9]", Seq("a", "b", "c")),
+      ("a,b;c", "[,;]+", Seq("a", "b", "c")),
+      ("a1b,c", "[0-9]", Seq("a", "b,c")))
+    val expr = StringSplit($"a".string.at(0), $"b".string.at(1), Literal(-1))
+    val codegen = GenerateUnsafeProjection.generate(expr :: Nil)
+    rows.foreach { case (s, regex, expected) =>
+      val input = toUnsafe(create_row(s, regex))
+      val interpreted = expr.eval(input).asInstanceOf[ArrayData]
+      assert(interpreted.toSeq[UTF8String](StringType).map(_.toString) === expected)
+      val generated = codegen(input).getArray(0)
+      assert(generated.toSeq[UTF8String](StringType).map(_.toString) === expected)
+    }
   }
 
   test("SPARK-30759: cache initialization for literal patterns") {
