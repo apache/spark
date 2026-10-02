@@ -353,7 +353,9 @@ class PandasUDFTranspileTestsMixin:
             _RAISED,
             f"{name}: transpiled raised {on_error!r} but interpreted returned {off_values!r}",
         )
-        self.assertEqual(off_values, on_values, f"{name}: transpiled != interpreted")
+        # repr(), not assertEqual: a genuine NaN on both sides (preferIntExtensionDtype)
+        # must compare equal here, and float('nan') != float('nan') under assertEqual.
+        self.assertEqual(repr(off_values), repr(on_values), f"{name}: transpiled != interpreted")
 
     def _assert_falls_back(self, func, return_type, df, *cols, expect_reason=None):
         """Assert ``func`` is not rewritten AND behaves exactly as it does with the flag off.

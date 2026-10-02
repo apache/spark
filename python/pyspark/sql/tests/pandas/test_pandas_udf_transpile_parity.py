@@ -89,12 +89,14 @@ class TranspiledScalarPandasUDFParityTests(ScalarPandasUDFTestsMixin, ReusedSQLT
         try:
             for key in _TRANSPILE_CONF:
                 cls.spark.conf.unset(key)
-            del os.environ["TZ"]
-            if cls.tz_prev is not None:
-                os.environ["TZ"] = cls.tz_prev
-            time.tzset()
         finally:
-            ReusedSQLTestCase.tearDownClass()
+            try:
+                del os.environ["TZ"]
+                if cls.tz_prev is not None:
+                    os.environ["TZ"] = cls.tz_prev
+                time.tzset()
+            finally:
+                ReusedSQLTestCase.tearDownClass()
 
 
 if __name__ == "__main__":
