@@ -767,6 +767,9 @@ object QueryExecution {
       sparkSession: SparkSession,
       adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None,
       subquery: Boolean): Seq[Rule[SparkPlan]] = {
+    // Read once here so that both union barriers below, and the codegen gate they stamp for, answer
+    // from the same values however long preparation takes.
+    val unionConf = UnionConfSnapshot(sparkSession.sessionState.conf)
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
@@ -775,7 +778,14 @@ object QueryExecution {
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
+      // Must run before `EnsureRequirements`, which asks a `UnionExec` what it reports: it
+      // records the conf that answer depends on, so the following `StampUnionDecisions` freezes the
+      // decision under the same value the exchanges were planned against.
+      new SnapshotUnionPreparationConf(unionConf),
       EnsureRequirements(),
+      // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, and
+      // the answer to fix is the one the exchanges around it were planned against.
+      new StampUnionDecisions(unionConf),
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
       // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
@@ -788,7 +798,12 @@ object QueryExecution {
       RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,
       ApplyColumnarRulesAndInsertTransitions(
-        sparkSession.sessionState.columnarRules, outputsColumnar = false),
+        SnapshotUnionPreparationConf.after(unionConf, sparkSession.sessionState.columnarRules),
+        outputsColumnar = false),
+      // A barrier for a `UnionExec` an injected columnar rule just created, which has no decision
+      // yet and would otherwise take one wherever it is first asked. A decision already stamped on
+      // a node is kept.
+      new StampUnionDecisions(unionConf),
       CollapseCodegenStages()) ++
       (if (subquery) {
         Nil
