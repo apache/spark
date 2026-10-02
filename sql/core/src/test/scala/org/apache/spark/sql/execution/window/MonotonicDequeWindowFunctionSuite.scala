@@ -275,7 +275,7 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
         "id",
         "1 AS pk",
         """CASE
-           WHEN id % 4 = 0 THEN CAST(-0.0 AS DOUBLE)
+           WHEN id % 4 = 0 THEN CAST('-0.0' AS DOUBLE)
            WHEN id % 4 = 1 THEN CAST(0.0 AS DOUBLE)
            WHEN id % 4 = 2 THEN CAST(id AS DOUBLE)
            ELSE CAST(-id AS DOUBLE)
