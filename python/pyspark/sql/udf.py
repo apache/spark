@@ -92,38 +92,6 @@ def _create_udf(
     return udf_obj._wrapped()
 
 
-# Eval types the transpiler is allowed to rewrite.
-#
-# The first two are per-row scalar Python UDFs, where the function receives one Python scalar
-# per argument per row and returns one Python scalar. SQL_ARROW_BATCHED_UDF is the
-# Arrow-OPTIMIZED regular Python UDF; Arrow is only the transport there -- the worker still
-# calls the function once per row with Python scalars -- so its Python-level semantics are
-# exactly what the transpiler reproduces. Mind the naming collision: SQL_SCALAR_ARROW_UDF
-# (250) is a genuinely vectorized UDF that receives a pyarrow.Array, and
-# SQL_ARROW_BATCHED_UDF (101) is not.
-#
-# SQL_SCALAR_PANDAS_UDF is genuinely vectorized: the function receives a pandas.Series per
-# argument and must return a Series. It is admitted because a Series applies the arithmetic
-# and text operators element-wise with the same result Catalyst produces -- but only those.
-# Everything the scalar transpiler lowers around control flow and comparison would be wrong
-# on a Series (`if s:` raises, `s is None` is always False, `s < 0` treats a missing value as
-# False), so pyspark.sql.transpile gates the body on a strict allowlist and reproduces
-# pandas' NaN-is-missing rule explicitly. Read that module's "Scalar pandas UDFs" section
-# before widening this set.
-#
-# Membership rather than a negation, deliberately: a newly added eval type must be admitted
-# here consciously rather than inheriting transpilation because it failed to match an
-# exclusion. pyspark.sql.tests.arrow.test_arrow_python_udf_transpile has a canary over every
-# PythonEvalType that fails until a new one is triaged.
-_TRANSPILABLE_EVAL_TYPES = frozenset(
-    {
-        PythonEvalType.SQL_BATCHED_UDF,
-        PythonEvalType.SQL_ARROW_BATCHED_UDF,
-        PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-    }
-)
-
-
 def _create_py_udf(
     f: Callable[..., Any],
     returnType: "DataTypeOrString",
@@ -182,6 +150,38 @@ def _create_py_udf(
             eval_type = PythonEvalType.SQL_BATCHED_UDF
 
     return _create_udf(f, returnType, eval_type)
+
+
+# Eval types the transpiler is allowed to rewrite.
+#
+# The first two are per-row scalar Python UDFs, where the function receives one Python scalar
+# per argument per row and returns one Python scalar. SQL_ARROW_BATCHED_UDF is the
+# Arrow-OPTIMIZED regular Python UDF; Arrow is only the transport there -- the worker still
+# calls the function once per row with Python scalars -- so its Python-level semantics are
+# exactly what the transpiler reproduces. Mind the naming collision: SQL_SCALAR_ARROW_UDF
+# (250) is a genuinely vectorized UDF that receives a pyarrow.Array, and
+# SQL_ARROW_BATCHED_UDF (101) is not.
+#
+# SQL_SCALAR_PANDAS_UDF is genuinely vectorized: the function receives a pandas.Series per
+# argument and must return a Series. It is admitted because a Series applies the arithmetic
+# and text operators element-wise with the same result Catalyst produces -- but only those.
+# Everything the scalar transpiler lowers around control flow and comparison would be wrong
+# on a Series (`if s:` raises, `s is None` is always False, `s < 0` treats a missing value as
+# False), so pyspark.sql.transpile gates the body on a strict allowlist and reproduces
+# pandas' NaN-is-missing rule explicitly. Read that module's "Scalar pandas UDFs" section
+# before widening this set.
+#
+# Membership rather than a negation, deliberately: a newly added eval type must be admitted
+# here consciously rather than inheriting transpilation because it failed to match an
+# exclusion. pyspark.sql.tests.arrow.test_arrow_python_udf_transpile has a canary over every
+# PythonEvalType that fails until a new one is triaged.
+_TRANSPILABLE_EVAL_TYPES = frozenset(
+    {
+        PythonEvalType.SQL_BATCHED_UDF,
+        PythonEvalType.SQL_ARROW_BATCHED_UDF,
+        PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+    }
+)
 
 
 class UserDefinedFunction:

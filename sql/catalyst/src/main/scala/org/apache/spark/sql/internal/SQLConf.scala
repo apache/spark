@@ -685,14 +685,18 @@ object SQLConf {
         "which changes the values an Arrow-optimized UDF receives and so disables " +
         "transpilation. Scalar pandas UDFs are transpiled only for element-wise bodies " +
         "built from `+` `-` `*` `%`, unary `+`/`-` and `Series.isnull()` (and its aliases); " +
-        "anything else, including comparisons and any use of `if`, `and`, `or`, `not` or " +
-        "`is None`, falls back to interpreted Python, because those do not mean the same " +
-        "thing on a Series. Where a transpiled pandas UDF does differ, it is because numpy " +
+        "a `*` repeating a string Series requires a literal repeat count. Anything else, " +
+        "including comparisons and any use of `if`, `and`, `or`, `not` or `is None`, falls " +
+        "back to interpreted Python, because those do not mean the same thing on a Series. " +
+        "Where a transpiled pandas UDF does differ, it is because numpy " +
         "arithmetic is fixed-width: it wraps on integer overflow, keeps float32 through a " +
         "float literal, loses precision above 2^53 for an integral column carrying " +
         "NULLs (see spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype), and " +
-        "gives a missing value (or 0) for `a % 0` where ANSI raises REMAINDER_BY_ZERO. In " +
-        "each case the transpiled expression is the exact or ANSI-correct one. Other " +
+        "gives a missing value (or 0) for `a % 0` where ANSI raises REMAINDER_BY_ZERO -- in " +
+        "each of those cases the transpiled expression is the exact or ANSI-correct one. " +
+        "The other direction also happens: a fractional body declared with an integral " +
+        "return type raises interpreted but truncates transpiled, same as the return-type " +
+        "cast behavior for any transpiled Python UDF. Other " +
         "vectorized UDFs (arrow_udf, the iterator forms, grouped map/agg) are never " +
         "transpiled. This initial version only works with non-Connect Spark; Spark Connect " +
         "support is to follow. This is an *experimental* feature."

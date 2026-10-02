@@ -158,6 +158,12 @@ interpreted one is lossy, silent, or inconsistent:
   NULL, losing precision above 2**53 -- which makes the interpreted answer depend
   on how rows happen to be batched, and is avoided by
   ``preferIntExtensionDtype=true``.
+
+One case runs the other way: a fractional body (e.g. ``s * 1.5``) declared with an
+integral return type. Interpreted, the float64 result fails the Arrow conversion and
+raises; transpiled, the final ``Cast`` to the return type truncates instead. This is
+the general within-numeric return-type cast allowed below, not a special case for
+this UDF type -- see ``test_fractional_result_for_an_integral_return_type``.
 """
 
 import ast
@@ -1131,6 +1137,20 @@ class CatalystTranspiler(AbstractTranspiler):
                         f"name {name!r} is not in the UDF's parameter list "
                         "and free variables / closures are not supported"
                     )
+            case ast.Call() if self._series_semantics:
+                # The only calls a scalar pandas UDF may use. `_check_series_semantics` has
+                # already refused the others before we get here; checked ahead of the `len()`
+                # arm below (Python-scalar-only) so a direct caller skipping that pre-check
+                # still gets refused instead of the string-length lowering.
+                null_check = _match_series_null_check(body, params)
+                if null_check is None:
+                    raise UnsupportedOperationException(
+                        "the only calls the transpiler lowers for a scalar pandas UDF are "
+                        "`<param>.isnull()` / `.isna()` / `.notnull()` / `.notna()`; "
+                        f"falling back to interpreted Python for {ast.dump(body)[:120]}"
+                    )
+                receiver, positive = null_check
+                return self._lower_series_null_check(params, receiver, positive)
             case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
                 # SPARK-55214: Python ``len`` on a str is the number of Unicode
                 # code points; Spark ``length`` on a string column is character
@@ -1151,20 +1171,6 @@ class CatalystTranspiler(AbstractTranspiler):
                     "`is not None` guard or filter NULLs upstream."
                 )
                 return when(arg_col.isNull(), raise_error(err)).otherwise(length(arg_col))
-            case ast.Call() if self._series_semantics:
-                # The only calls a scalar pandas UDF may use. `_check_series_semantics` has
-                # already refused the others before we get here; this keeps the invariant
-                # local for anything that drives `_convert_chunk` directly. A call in the
-                # Python-scalar regimes still falls through to the catch-all below.
-                null_check = _match_series_null_check(body, params)
-                if null_check is None:
-                    raise UnsupportedOperationException(
-                        "the only calls the transpiler lowers for a scalar pandas UDF are "
-                        "`<param>.isnull()` / `.isna()` / `.notnull()` / `.notna()`; "
-                        f"falling back to interpreted Python for {ast.dump(body)[:120]}"
-                    )
-                receiver, positive = null_check
-                return self._lower_series_null_check(params, receiver, positive)
             case _:
                 raise UnsupportedOperationException(
                     f"AST node {type(body).__name__} is not supported by the "
