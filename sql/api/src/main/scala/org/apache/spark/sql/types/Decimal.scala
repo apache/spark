@@ -231,8 +231,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   /**
-   * Whether this Decimal is in the compact representation, i.e. backed by an unscaled Long
-   * (see `toUnscaledLong`) rather than by a BigDecimal.
+   * Whether this Decimal is in the compact representation, i.e. backed by an unscaled Long (see
+   * `toUnscaledLong`) rather than by a BigDecimal.
    */
   private[sql] def isCompact: Boolean = decimalVal.eq(null)
 
@@ -316,7 +316,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       // just below a bound (e.g. 2147483647.99999999) up past it and wrongly overflow.
       val truncated = decimalVal.bigDecimal.toBigInteger
       if (truncated.bitLength() < 32 &&
-          truncated.intValue() <= maxValue && truncated.intValue() >= minValue) {
+        truncated.intValue() <= maxValue && truncated.intValue() >= minValue) {
         f(truncated.longValue())
       } else {
         throw DataTypeErrors.castingCauseOverflowError(
