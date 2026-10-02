@@ -287,9 +287,10 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           .isNull(dataTypeMap(name).fieldName, getType(name)).end())
 
       // SPARK-59605: NULLs in an IN list are inert (`x IN (.., NULL)` matches the same rows as IN
-      // on the non-null values) and ORC's `in` cannot take them, so they are dropped rather than
-      // pushed as IS NULL like Parquet does. An empty or all-NULL list leaves nothing to push.
-      // Under Not(In), NOT(IN(non-nulls)) is over-inclusive but safe.
+      // on the non-null values) and ORC's `in` cannot take them, so they are dropped. (Parquet
+      // instead keeps the NULL as a set or equality member.) An empty or all-NULL list leaves
+      // nothing to push. Under Not(In), NOT(IN(non-nulls)) is over-inclusive but safe because ORC
+      // pushdown is advisory and Spark re-applies the full predicate after the scan.
       case In(name, values) if dataTypeMap.contains(name) && values.exists(_ != null) =>
         val castedValues =
           values.filter(_ != null).map(v => castLiteralValue(v, dataTypeMap(name).fieldType))
