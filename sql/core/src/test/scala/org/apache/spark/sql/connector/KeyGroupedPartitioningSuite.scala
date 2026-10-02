@@ -3545,6 +3545,19 @@ class KeyGroupedPartitioningSuite
       Row(1, "bb", "bb"), Row(2, "cc", "cc")))
   }
 
+  test("SPARK-59948: a scan's reported ordering on a nested field") {
+    val nestedItems = "nested_items"
+    createTable(nestedItems, Array(Column.create("id", LongType),
+      Column.create("s", new StructType().add("x", LongType))), Array.empty,
+      ordering = Array(sort(column("s.x"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)))
+    sql(s"INSERT INTO testcat.ns.$nestedItems VALUES " +
+      "(1, named_struct('x', 1L)), (2, named_struct('x', 2L))")
+
+    val df = sql(s"SELECT * FROM testcat.ns.$nestedItems SORT BY s.x")
+    assert(collect(df.queryExecution.executedPlan) { case s: SortExec => s }.isEmpty)
+    checkAnswer(df, Seq(Row(1L, Row(1L)), Row(2L, Row(2L))))
+  }
+
   test("SPARK-47094: SPJ: Support compatible buckets") {
     val table1 = "tab1e1"
     val table2 = "table2"

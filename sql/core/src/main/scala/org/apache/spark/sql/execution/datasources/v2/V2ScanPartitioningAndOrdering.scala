@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_NAME
-import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.DATA_SOURCE_V2_SCAN_RELATION
@@ -32,7 +32,7 @@ import org.apache.spark.util.collection.Utils.sequenceToOption
  * and ordering reported by data sources to their catalyst counterparts. Then, annotates the plan
  * with the partitioning and ordering result.
  */
-object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
+object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with AliasHelper with Logging {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val scanRules = Seq[LogicalPlan => LogicalPlan] (partitioning, ordering)
 
@@ -79,8 +79,12 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
       // output: truncating it here would also drop the sort orders on a partition key past a
       // pruned column, which still hold. `DataSourceV2ScanRelation.doCanonicalize` and
       // `DataSourceV2ScanExecBase.outputOrdering` restrict it to the scan output instead.
+      // A nested sort key such as `s.x` resolves to a new `Alias(GetStructField(...))` on every
+      // run of this rule. Strip the alias so repeated runs give equal plans and the ordering can
+      // satisfy a required ordering on the same field.
       val ordering =
         V2ExpressionUtils.toCatalystOrdering(scan.outputOrdering(), relation, relation.funCatalog)
+          .map(o => o.copy(child = trimAliases(o.child)))
       d.copy(ordering = Some(ordering))
   }
 }
