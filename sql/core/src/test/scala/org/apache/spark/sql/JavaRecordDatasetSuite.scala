@@ -78,4 +78,16 @@ class JavaRecordDatasetSuite extends QueryTest with SharedSparkSession {
         Row("Bob", "1 Main St"))
     }
   }
+
+  test("createDataFrame with a record class") {
+    val records = Seq(new SimpleRecord(1, "a", 1.0), new SimpleRecord(2, "b", 2.0))
+    val expected = Seq(Row(1, "a", 1.0), Row(2, "b", 2.0))
+    val fromList =
+      spark.createDataFrame(java.util.Arrays.asList(records: _*), classOf[SimpleRecord])
+    assert(fromList.columns.toSeq === Seq("id", "name", "value"))
+    checkAnswer(fromList, expected)
+    checkAnswer(
+      spark.createDataFrame(spark.sparkContext.parallelize(records), classOf[SimpleRecord]),
+      expected)
+  }
 }
