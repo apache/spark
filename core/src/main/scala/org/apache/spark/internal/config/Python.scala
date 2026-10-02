@@ -61,8 +61,9 @@ private[spark] object Python {
     .doc("Comma-separated executor directories containing packages for in-process Python UDFs. " +
       "These directories are processed with site.addsitedir after Spark distribution paths " +
       "and the process PYTHONPATH. JEP must be directly importable from these directories. " +
-      "Paths cannot contain quotes, newlines, NUL, surrogate characters or the platform " +
-      "path separator. Restart the executor process before changing these directories.")
+      "Paths cannot contain single quotes, newlines, NUL, surrogate characters (including " +
+      "supplementary Unicode characters) or the platform path separator. Restart the executor " +
+      "process before changing these directories.")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .version("4.4.0")
     .stringConf

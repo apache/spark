@@ -134,8 +134,9 @@ settings are rejected: the shared interpreter cannot apply per-session process
 environments. Configure environment variables before the executor starts, for example
 with `spark.executorEnv.NAME` (or the launching environment in local mode).
 At query execution on the driver, in-process UDFs reject positive
-`spark.executor.pyspark.memory`, `spark.sql.pyspark.udf.profiler`, and
-`spark.pythonWorkerEnv.*` settings. A Python memory value of `0` means no separate limit
+`spark.executor.pyspark.memory`, `spark.sql.pyspark.udf.profiler`,
+`spark.python.profile`, `spark.python.profile.memory`, and `spark.pythonWorkerEnv.*`
+settings. A Python memory value of `0` means no separate limit
 and is accepted. Python runs inside the JVM, so a separate Python process
 memory limit cannot be applied. Use executor memory settings for sizing, and worker-based
 UDFs when these Python worker features are needed. Worker-specific logging, faulthandler,

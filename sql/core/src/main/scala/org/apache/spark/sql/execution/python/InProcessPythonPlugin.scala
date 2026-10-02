@@ -51,8 +51,9 @@ private[python] class InProcessPythonExecutorPlugin extends ExecutorPlugin with 
 
   override def init(ctx: PluginContext, extraConf: JMap[String, String]): Unit = {
     logInfo("Initializing in-process Python runtime (jep SharedInterpreter).")
+    // Read outside the installation checks, so an invalid value is reported as such.
+    val sitePackages = ctx.conf().get(IN_PROCESS_SITE_PACKAGES)
     try {
-      val sitePackages = ctx.conf().get(IN_PROCESS_SITE_PACKAGES)
       // Resolve CDI classes inside the guarded call, so even a missing JAR gets a useful error.
       InProcessArrowBridge.verifyDependencies()
       InProcessPythonRuntime.initialize(sitePackages)

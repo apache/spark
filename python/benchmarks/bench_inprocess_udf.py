@@ -79,6 +79,9 @@ class InProcessUDFTimeBench:
             .config("spark.ui.enabled", "false")
             .config("spark.python.worker.reuse", "true")
             .config("spark.sql.shuffle.partitions", "1")
+            # Cached integer columns would otherwise send worker UDFs down their columnar
+            # input path, which batches by cache batch. In-process UDFs always read rows.
+            .config("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "false")
             .config("spark.sql.execution.arrow.maxRecordsPerBatch", batch_size)
             .config("spark.sql.execution.arrow.maxBytesPerBatch", 128 * 1024 * 1024)
             .getOrCreate()

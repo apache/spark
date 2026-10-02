@@ -21,7 +21,10 @@ import java.util.Collections
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
-import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskKilledException}
+import org.mockito.Mockito.{mock, when}
+
+import org.apache.spark.{SparkConf, SparkFunSuite, SparkIllegalArgumentException, TaskContext, TaskKilledException}
+import org.apache.spark.api.plugin.PluginContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, SimplePythonFunction}
 import org.apache.spark.internal.config.Python.IN_PROCESS_SITE_PACKAGES
 import org.apache.spark.sql.catalyst.InternalRow
@@ -75,6 +78,29 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     runtime.release(Seq("failed"))
     runtime.shutdown()
     assert(runtime.isTerminated)
+  }
+
+  test("plugin reports invalid sitePackages without the installation checklist") {
+    val ctx = mock(classOf[PluginContext])
+    when(ctx.conf()).thenReturn(new SparkConf().set(IN_PROCESS_SITE_PACKAGES.key, "/a'b"))
+    val e = intercept[SparkIllegalArgumentException] {
+      new InProcessPythonExecutorPlugin().init(ctx, Collections.emptyMap())
+    }
+    assert(e.getCondition == "INVALID_CONF_VALUE.REQUIREMENT")
+    assert(!e.getMessage.contains("libjep"))
+  }
+
+  test("task-side calls after shutdown report the shutdown") {
+    runtime.shutdown()
+    val field = ArrowUtils.toArrowField("result", LongType, true, "UTC")
+    Seq(
+      () => runtime.onInterpreterThread(()),
+      () => runtime.register("stopped", Array.emptyByteArray, field, "3.12",
+        false, false, false, true)
+    ).foreach { call =>
+      val e = intercept[IllegalStateException] { call() }
+      assert(e.getMessage.contains("has been stopped"))
+    }
   }
 
   test("lifecycle errors distinguish configuration mismatch from stopping") {
@@ -144,7 +170,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     runtime = new InProcessPythonRuntime.InterpreterSession()
     try {
       val error = intercept[IllegalStateException] { iterator.next() }
-      assert(error.getMessage.contains("not running"))
+      assert(error.getMessage.contains("has been stopped"))
       assert(lookups == 1)
     } finally {
       context.markTaskCompleted(None)

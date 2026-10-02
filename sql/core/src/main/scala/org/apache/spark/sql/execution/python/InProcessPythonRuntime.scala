@@ -63,8 +63,9 @@ private[python] object InProcessPythonRuntime extends Logging {
 
     def interpreterConfig(sitePackages: Seq[String]): JepConfig = {
       require(sitePackages.forall(Python.isValidInProcessPath),
-        s"Invalid ${Python.IN_PROCESS_SITE_PACKAGES.key}: paths cannot contain quotes, " +
-          "newlines, NUL, surrogate characters or the platform path separator")
+        s"Invalid ${Python.IN_PROCESS_SITE_PACKAGES.key}: paths cannot contain single quotes, " +
+          "newlines, NUL, surrogate characters (including supplementary Unicode characters) " +
+          "or the platform path separator")
       val config = new JepConfig().setClassEnquirer(new NamingConventionClassEnquirer(false))
       // Calling addIncludePaths with no arguments adds the working directory in JEP.
       if (sitePackages.nonEmpty) config.addIncludePaths(sitePackages: _*)
@@ -173,7 +174,7 @@ private[python] object InProcessPythonRuntime extends Logging {
       var started = false
       var cancelled = false
       val future = synchronized {
-        checkState(running)
+        checkRunning()
         executor.submit(new Callable[T] {
           override def call(): T = {
             gate.synchronized {
@@ -258,11 +259,18 @@ private[python] object InProcessPythonRuntime extends Logging {
       }
     }
 
+    // Tasks can only see a session that the plugin initialized, so a stopped one was shut down.
+    private def checkRunning(): Unit = {
+      checkState(running,
+        "In-process Python has been stopped (executor or SparkContext shutdown)")
+    }
+
     /** Enqueue cleanup after outstanding calls without creating an executor or waiting. */
     def release(handles: Seq[String]): Unit = synchronized {
       if (!executor.isShutdown && handles.nonEmpty) {
         executor.submit(new Runnable {
-          override def run(): Unit = {
+          // Nobody reads the returned future, so log failures here.
+          override def run(): Unit = Utils.tryLogNonFatalError {
             if (interp != null) interp.invoke("_inprocess_release", handles.asJava)
           }
         })
@@ -276,15 +284,15 @@ private[python] object InProcessPythonRuntime extends Logging {
       if (!running && registeredHandles.isEmpty && !executor.isShutdown) {
         executor.submit(new Runnable {
           override def run(): Unit = {
+            // Nobody reads the returned future, so log failures here. Flush the streams
+            // separately, so that a failed stdout flush does not lose buffered stderr output.
             if (interp != null) {
               try {
-                interp.exec("_results.clear(); _udfs.clear()")
+                Utils.tryLogNonFatalError { interp.exec("_results.clear(); _udfs.clear()") }
+                Utils.tryLogNonFatalError { interp.exec("sys.stdout.flush()") }
+                Utils.tryLogNonFatalError { interp.exec("sys.stderr.flush()") }
               } finally {
-                try {
-                  interp.exec("sys.stdout.flush(); sys.stderr.flush()")
-                } finally {
-                  try { interp.close() } finally { interp = null }
-                }
+                try Utils.tryLogNonFatalError { interp.close() } finally { interp = null }
               }
             }
           }
@@ -325,7 +333,7 @@ private[python] object InProcessPythonRuntime extends Logging {
         tracebackWithLocals: Boolean,
         fullValidation: Boolean): Long = {
       synchronized {
-        checkState(running)
+        checkRunning()
         registeredHandles += handle
       }
       // Arrow owns the temporary off-heap copy, including on failure or cancellation.

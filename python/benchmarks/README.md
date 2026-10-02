@@ -142,6 +142,9 @@ byte limit. Row limits are 10K for narrow integers, 1M for wide integers, and 10
 for strings. Thus the long-string workload permits about 95 MiB of string payload
 per full batch instead of splitting it at the default 64 MiB limit. Budget for
 8 GiB heap, 8 GiB direct memory, and additional Python/native allocations.
+The vectorized in-memory cache reader is disabled, so that all modes read cached rows
+and use these batch sizes. Otherwise, cached integer columns would send the worker
+UDFs through their columnar input path, which batches by cache batch.
 
 Report dependency versions and the Spark commit with results. Compute the primary
 speedup as worker Arrow UDF median divided by in-process UDF median. This removes

@@ -5218,7 +5218,7 @@
       },
       "MISSING_IN_PROCESS_PYTHON_PLUGIN" : {
         "message" : [
-          "In-process Python UDFs require <plugin> in spark.plugins. Install JEP and Arrow CDI on executors and configure the plugin before starting Spark."
+          "In-process Python UDFs require <plugin>, or a subclass of it, in spark.plugins. Install JEP and Arrow CDI on executors and configure the plugin before starting Spark."
         ]
       },
       "NETWORK_AUTH_MUST_BE_ENABLED" : {

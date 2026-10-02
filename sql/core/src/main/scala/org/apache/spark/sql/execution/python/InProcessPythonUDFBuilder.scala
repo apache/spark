@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.python
 import java.util.{Collections, List => JList}
 
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
@@ -31,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.NamedParametersSupport
 import org.apache.spark.sql.classic.{ColumnNodeExpression, ExpressionUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.Utils
 
 /**
  * JVM-side builder for in-process [[PythonUDF]] expressions, called from the Python API
@@ -77,22 +79,31 @@ object InProcessPythonUDFBuilder {
   }
 
   private[sql] def checkConfiguration(conf: SQLConf): Unit = {
+    val sparkConf = Option(SparkEnv.get).map(_.conf)
+    // The legacy profilers wrap the function with an accumulator, which is not supported.
+    val legacyProfilers = Seq("spark.python.profile", "spark.python.profile.memory")
+      .filter(key => sparkConf.exists(_.getBoolean(key, false)))
     val unsupported = Seq(
       Option.when(PythonWorkerEnvironment.read(conf).nonEmpty)("spark.pythonWorkerEnv.*"),
       conf.pythonUDFProfiler.map(_ => SQLConf.PYTHON_UDF_PROFILER.key),
-      Option(SparkEnv.get).flatMap(_.conf.get(PYSPARK_EXECUTOR_MEMORY)).filter(_ > 0)
-        .map(_ => PYSPARK_EXECUTOR_MEMORY.key)).flatten
+      sparkConf.flatMap(_.get(PYSPARK_EXECUTOR_MEMORY)).filter(_ > 0)
+        .map(_ => PYSPARK_EXECUTOR_MEMORY.key)).flatten ++ legacyProfilers
     unsupported.headOption.foreach { config =>
       throw new SparkException(
         errorClass = "INVALID_SPARK_CONFIG.UNSUPPORTED_IN_PROCESS_PYTHON_UDF",
         messageParameters = Map("config" -> config),
         cause = null)
     }
-    val plugin = "org.apache.spark.sql.execution.python.InProcessPythonPlugin"
-    if (!Option(SparkEnv.get).exists(_.conf.get(PLUGINS).contains(plugin))) {
+    // Subclasses inherit the executor plugin that initializes the interpreter.
+    val plugin = classOf[InProcessPythonPlugin]
+    val configured = Option(SparkEnv.get).toSeq.flatMap(_.conf.get(PLUGINS))
+    if (!configured.exists { name =>
+        Try(plugin.isAssignableFrom(Utils.classForName(name, initialize = false)))
+          .getOrElse(false)
+      }) {
       throw new SparkException(
         errorClass = "INVALID_SPARK_CONFIG.MISSING_IN_PROCESS_PYTHON_PLUGIN",
-        messageParameters = Map("plugin" -> plugin),
+        messageParameters = Map("plugin" -> plugin.getName),
         cause = null)
     }
   }

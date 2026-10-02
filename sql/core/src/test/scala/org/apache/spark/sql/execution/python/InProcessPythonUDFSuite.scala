@@ -97,6 +97,22 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("legacy Python profilers are rejected") {
+    for (key <- Seq("spark.python.profile", "spark.python.profile.memory")) {
+      SparkEnv.get.conf.set(key, "true")
+      try {
+        checkError(
+          exception = intercept[SparkException] {
+            InProcessPythonUDFBuilder.checkConfiguration(spark.sessionState.conf)
+          },
+          condition = "INVALID_SPARK_CONFIG.UNSUPPORTED_IN_PROCESS_PYTHON_UDF",
+          parameters = Map("config" -> key))
+      } finally {
+        SparkEnv.get.conf.remove(key)
+      }
+    }
+  }
+
   test("missing executor plugin is rejected before task submission") {
     SparkEnv.get.conf.remove(PLUGINS)
     val column = makeUDF("identity", col("id"))
@@ -108,6 +124,18 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
       condition = "INVALID_SPARK_CONFIG.MISSING_IN_PROCESS_PYTHON_PLUGIN",
       parameters = Map("plugin" ->
         "org.apache.spark.sql.execution.python.InProcessPythonPlugin"))
+  }
+
+  test("a subclass of the executor plugin satisfies the plugin check") {
+    SparkEnv.get.conf.set(PLUGINS, Seq(classOf[TunedInProcessPythonPlugin].getName))
+    InProcessPythonUDFBuilder.checkConfiguration(spark.sessionState.conf)
+    SparkEnv.get.conf.set(PLUGINS, Seq("com.example.MissingPlugin"))
+    checkError(
+      exception = intercept[SparkException] {
+        InProcessPythonUDFBuilder.checkConfiguration(spark.sessionState.conf)
+      },
+      condition = "INVALID_SPARK_CONFIG.MISSING_IN_PROCESS_PYTHON_PLUGIN",
+      parameters = Map("plugin" -> plugin))
   }
 
   test("AQE validates configuration while planning above a shuffle") {
@@ -246,3 +274,5 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
   }
 
 }
+
+class TunedInProcessPythonPlugin extends InProcessPythonPlugin
