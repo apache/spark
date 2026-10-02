@@ -131,4 +131,32 @@ class StreamlineStreamingAggregationRealTimeSuite extends StreamRealTimeModeSuit
       }
     )
   }
+
+  testWithAllStateVersions("global aggregation over empty input emits the initialized row") {
+    val inputData = LowLatencyMemoryStream[Int]
+
+    val agg = inputData.toDF()
+      .filter($"value" < 0)
+      .agg(count("*").as("count"), sum("value").as("sum"))
+
+    // The contains check tolerates repeated emissions from no-data batches in real-time mode,
+    // which the operator may produce in Update mode; it only asserts the rows are observed.
+    testStream(agg, OutputMode.Update, sink = new ContinuousMemorySink())(
+      StartStream(),
+      AddData(inputData, 1, 2),
+      // Every row is filtered out, so the aggregation input is empty for this batch: the
+      // initialized row must still be emitted, as the ordinary plan does.
+      CheckAnswerRowsContainsWithTimeout(60000, (0L, null)),
+      Execute { q =>
+        val aggregates = q.lastExecution.executedPlan.collect {
+          case a: StatefulStreamlineAggregateExec => a
+        }
+        assert(aggregates.size == 1,
+          s"expected the streamline aggregate operator, got:\n${q.lastExecution.executedPlan}")
+      },
+      AddData(inputData, -5),
+      CheckAnswerRowsContainsWithTimeout(60000, (1L, -5L)),
+      StopStream
+    )
+  }
 }
