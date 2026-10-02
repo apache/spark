@@ -647,12 +647,14 @@ class ColumnExpressionSuite extends SharedSparkSession {
 
   test("SPARK-59954: a With in a DECLARE VARIABLE default is evaluated once") {
     // `CreateVariableExec` evaluates the default on the driver, so the accumulator needs no job to
-    // read. The UDF is deterministic but not cheap, so the definition is one worth memoizing, and
-    // each default below reads it twice.
+    // read. `plus_one_counted` is deterministic but not cheap, so its definition is worth
+    // memoizing, and the first two defaults below each read it twice.
     val calls = sparkContext.longAccumulator("calls")
     spark.udf.register("plus_one_counted", (i: Int) => { calls.add(1); i + 1 })
-    withUserDefinedFunction("plus_one_counted" -> true) {
-      withSessionVariable("v1", "v2") {
+    spark.udf.register("plus_one_nondet",
+      udf((i: Int) => { calls.add(1); i + 1 }).asNondeterministic())
+    withUserDefinedFunction("plus_one_counted" -> true, "plus_one_nondet" -> true) {
+      withSessionVariable("v1", "v2", "v3", "v4") {
         sql("DECLARE OR REPLACE VARIABLE v1 INT DEFAULT nullif(plus_one_counted(1), 3)")
         assert(calls.value == 1, s"the NULLIF default called the UDF ${calls.value} times")
         checkAnswer(sql("SELECT v1"), Row(2))
@@ -661,6 +663,16 @@ class ColumnExpressionSuite extends SharedSparkSession {
         sql("DECLARE OR REPLACE VARIABLE v2 BOOLEAN DEFAULT plus_one_counted(1) BETWEEN 1 AND 3")
         assert(calls.value == 1, s"the BETWEEN default called the UDF ${calls.value} times")
         checkAnswer(sql("SELECT v2"), Row(true))
+
+        // A nondeterministic definition is evaluated once as well.
+        calls.reset()
+        sql("DECLARE OR REPLACE VARIABLE v3 INT DEFAULT nullif(plus_one_nondet(1), 3)")
+        assert(calls.value == 1, s"the nondeterministic default called it ${calls.value} times")
+        checkAnswer(sql("SELECT v3"), Row(2))
+
+        // A seeded form of the SPARK-59954 repro; its `Rand` is initialized through the `With`.
+        sql("DECLARE OR REPLACE VARIABLE v4 DOUBLE DEFAULT nullif(rand(5), 0.5)")
+        checkAnswer(sql("SELECT v4 IS NULL OR (v4 >= 0 AND v4 < 1)"), Row(true))
       }
     }
   }
