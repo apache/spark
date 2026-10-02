@@ -2161,4 +2161,28 @@ class WholeStageCodegenSuite extends SharedSparkSession
       checkAnswer(df, withoutWholeStage(df))
     }
   }
+
+  test("SPARK-33301: a split method reads a slot of a compacted mutable state array as a field") {
+    // `ExpandExec` holds an output of a type that is not primitive in a slot of a compacted
+    // mutable state array, such as `expand_mutableStateArray_0[0]`: a field, though not a name.
+    // An UNPIVOT of string columns gives such an output, which the projection above reads
+    // directly when the operators' consume functions are not split into methods of their own.
+    // Every block reads it, the ELSE too, and each reads it as the field it is, taking no
+    // argument for it.
+    withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
+      withTempView("t") {
+        spark.range(100).selectExpr("id", "concat('a', CAST(id % 50 AS STRING)) AS a",
+          "concat('a', CAST(id % 30 AS STRING)) AS b").createOrReplaceTempView("t")
+        val branches = (0 until 50).map(k => s"WHEN value = 'a$k' THEN id + $k").mkString(" ")
+        def df: DataFrame = sql(s"SELECT id, CASE $branches ELSE length(value) END AS v " +
+          "FROM t UNPIVOT (value FOR name IN (a, b))")
+        assert(splitsCaseWhen(df))
+        val readsSlot = "(?s)private byte \\w*caseWhen_\\d\\w*\\(([^)]*)\\) \\{" +
+          "(?:(?!\\nprivate ).)*mutableStateArray"
+        assert(genCode(df).exists(c => readsSlot.r.findFirstIn(c.body).nonEmpty))
+        assert(splitCaseWhenParameters(df).flatten.forall(!_.contains("mutableStateArray")))
+        checkAnswer(df, withoutWholeStage(df))
+      }
+    }
+  }
 }

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, LongType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
 
 /**
  * The policies of `CodegenContext.collectInputs`, one test per point where the places that move
@@ -137,6 +137,19 @@ class CollectInputsSuite extends SparkFunSuite with SQLHelper {
     assert(inputs.readsRow)
     ctx.currentVars = Seq(evaluated(0))
     assert(!ctx.collectInputs(Seq(input(0)), operator, Map.empty).get.readsRow)
+  }
+
+  test("a slot of a compacted mutable state array: a field for a whole stage split, refused for " +
+      "a common expression's method, passed as it is for an operator's") {
+    val ctx = context()
+    // A state of a type that is not primitive is compacted into an array, and its name is a slot.
+    val slot = ctx.addMutableState("UTF8String", "value")
+    assert(slot.matches("\\w+\\[\\d+\\]"), slot)
+    ctx.currentVars = Seq(ExprCode(EmptyBlock, FalseLiteral, JavaCode.variable(slot, StringType)))
+    val expr = Length(BoundReference(0, StringType, nullable = false))
+    assert(names(ctx.collectInputs(Seq(expr), InputPolicy.wholeStageSplit, Map.empty).get).isEmpty)
+    assert(ctx.collectInputs(Seq(expr), commonExpr, Map.empty).isEmpty)
+    assert(names(ctx.collectInputs(Seq(expr), operator, Map.empty).get) == Seq(slot))
   }
 
   test("the whole stage split leaves a block it cannot move inline, between the runs of calls") {

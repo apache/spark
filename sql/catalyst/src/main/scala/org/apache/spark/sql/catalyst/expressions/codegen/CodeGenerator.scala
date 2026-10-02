@@ -1248,14 +1248,16 @@ class CodegenContext extends Logging {
     // -- `posexplode_outer` gives its position the nullness `index == -1`, and a `Byte` or `Short`
     // literal's value is `(byte)1`. A field or a literal needs no parameter and is read as it
     // stands; so is a field handed out as a `VariableValue` where the policy says so, passing one
-    // being refused by the split methods' own check.
+    // being refused by the split methods' own check, a slot of a compacted array included.
     def take(v: ExprValue): Boolean = v match {
       case local: VariableValue =>
         val name = local.variableName
         val isName = name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
           name.forall(Character.isJavaIdentifierPart)
-        val taken = isName || !policy.onlyNames
-        if (taken && !(policy.fieldsNeedNoArgument && mutableStateNames.contains(name))) {
+        val isField = policy.fieldsNeedNoArgument &&
+          (mutableStateNames.contains(name) || isCompactedSlot(name))
+        val taken = isName || isField || !policy.onlyNames
+        if (taken && !isField) {
           args.getOrElseUpdate(name, local)
         }
         taken
@@ -1320,6 +1322,17 @@ class CodegenContext extends Logging {
       CollectedInputs(arguments, readsRow, inputsToEvaluate.toSeq)
     }
   }
+
+  /**
+   * Whether `name` is a slot of a compacted mutable state array, such as `mutableStateArray_0[3]`,
+   * which `addMutableState` hands out for a state it does not inline: a field of the class.
+   */
+  private def isCompactedSlot(name: String): Boolean = name match {
+    case CompactedSlot(array) => mutableStateNames.contains(array)
+    case _ => false
+  }
+
+  private val CompactedSlot = "([A-Za-z_$][\\w$]*)\\[\\d+\\]".r
 
   /**
    * Whether the code generated for `e` reads its subexpression elimination state, which
