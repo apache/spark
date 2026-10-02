@@ -483,7 +483,8 @@ private[spark] object SecurityManager {
    *
    * It is shared by the two credential-propagation paths so they cannot drift apart: the
    * direct-credential-provider path in `HadoopDelegationTokenManager` fails startup via
-   * `require()`, while OIDC credential propagation only warns.
+   * `require()`, while OIDC credential propagation warns by default and fails startup only when
+   * `spark.security.oidc.requireRpcEncryption` is true.
    */
   private[spark] def isRpcEncryptionEnabled(conf: SparkConf): Boolean = {
     conf.getBoolean(SSL_RPC_ENABLED_CONF, false) ||
