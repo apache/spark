@@ -237,9 +237,9 @@ private[window] class WindowSegmentTree(
    * Exception-safe: if aggregation throws, previously built state is preserved.
    */
   def build(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    // The segment tree indexes rows with 32-bit `Int`s. The window driver already rejects
-    // partitions larger than `Int.MaxValue` rows for this frame
-    // (see `WindowFunctionFrame.supportsLargePartition`); this check is a defensive backstop.
+    // The segment tree indexes rows with 32-bit Ints. The window driver rejects partitions
+    // larger than Int.MaxValue rows first (see WindowEvaluatorFactoryBase.checkPartitionSizeLimit);
+    // this check is a defensive backstop.
     val numRowsLong = rows.length
     if (numRowsLong > Int.MaxValue) {
       throw SparkException.internalError(

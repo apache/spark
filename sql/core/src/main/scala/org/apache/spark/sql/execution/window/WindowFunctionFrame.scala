@@ -489,9 +489,9 @@ final class SlidingWindowFunctionFrame(
 
     // Only recalculate and update when the buffer changes.
     if (processor != null && bufferUpdated) {
-      // The window driver rejects partitions larger than `Int.MaxValue` rows for this frame
-      // (see `supportsLargePartition`); `toIntExact` is a defensive backstop that fails loudly
-      // rather than silently truncating should that guard ever be bypassed.
+      // The window driver rejects partitions larger than Int.MaxValue rows before any frame runs
+      // (see WindowEvaluatorFactoryBase.checkPartitionSizeLimit); toIntExact is a defensive
+      // backstop that fails loudly rather than silently truncating if that guard is bypassed.
       processor.initialize(Math.toIntExact(input.length))
       val iter = buffer.iterator()
       while (iter.hasNext) {
@@ -527,9 +527,9 @@ final class UnboundedWindowFunctionFrame(
 
   /** Prepare the frame for calculating a new partition. Process all rows eagerly. */
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    // The window driver rejects partitions larger than `Int.MaxValue` rows for this frame (see
-    // `supportsLargePartition`); `toIntExact` is a defensive backstop that fails loudly rather
-    // than silently truncating should that guard ever be bypassed.
+    // The window driver rejects partitions larger than Int.MaxValue rows before any frame runs
+    // (see WindowEvaluatorFactoryBase.checkPartitionSizeLimit); toIntExact is a defensive
+    // backstop that fails loudly rather than silently truncating if that guard is bypassed.
     val numRows = Math.toIntExact(rows.length)
     if (processor != null) {
       processor.initialize(numRows)
@@ -602,9 +602,9 @@ final class UnboundedPrecedingWindowFunctionFrame(
     }
 
     if (processor != null) {
-      // The window driver rejects partitions larger than `Int.MaxValue` rows for this frame
-      // (see `supportsLargePartition`); `toIntExact` is a defensive backstop that fails loudly
-      // rather than silently truncating should that guard ever be bypassed.
+      // The window driver rejects partitions larger than Int.MaxValue rows before any frame runs
+      // (see WindowEvaluatorFactoryBase.checkPartitionSizeLimit); toIntExact is a defensive
+      // backstop that fails loudly rather than silently truncating if that guard is bypassed.
       processor.initialize(Math.toIntExact(input.length))
     }
   }
@@ -689,9 +689,9 @@ final class UnboundedFollowingWindowFunctionFrame(
 
     // Only recalculate and update when the buffer changes.
     if (processor != null && bufferUpdated) {
-      // The window driver rejects partitions larger than `Int.MaxValue` rows for this frame
-      // (see `supportsLargePartition`); `toIntExact` is a defensive backstop that fails loudly
-      // rather than silently truncating should that guard ever be bypassed.
+      // The window driver rejects partitions larger than Int.MaxValue rows before any frame runs
+      // (see WindowEvaluatorFactoryBase.checkPartitionSizeLimit); toIntExact is a defensive
+      // backstop that fails loudly rather than silently truncating if that guard is bypassed.
       processor.initialize(Math.toIntExact(input.length))
       if (nextRow != null) {
         processor.update(nextRow)
