@@ -353,23 +353,28 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   }
 
   test("Nested fields are not redundant with non-deterministic parents") {
-    val a = $"a".array(StructType.fromDDL("b struct<c: int, d: int>, e int, f int"))
+    // `getAttributeToExtractValues` only returns a column if its kept reads' leaf counts sum to
+    // fewer than its own leaf count. The kept reads below sum to 5, so `e` through `h` pad `a` to
+    // 6 leaves.
+    val a = $"a".array(StructType.fromDDL("b struct<c: int, d: int>, e int, f int, g int, h int"))
     // `a[ordinal].b` and `a[ordinal].b.c`.
     def parentAndChild(ordinal: Expression): Seq[ExtractValue] = {
       val parent = GetStructField(GetArrayItem(a, ordinal), 0, Some("b"))
       Seq(parent, GetStructField(parent, 0, Some("c")))
     }
 
-    val deterministic = parentAndChild(Literal(0))
-    assert(NestedColumnAliasing.getAttributeToExtractValues(deterministic, Seq.empty)
-      .values.toSeq == Seq(deterministic.take(1)))
-
-    // Each evaluation of `a[rand].b` may read a different array element, so `a[rand].b.c` is
-    // not redundant with it.
-    val nondeterministic =
-      parentAndChild(Cast(Multiply(Rand(Literal(0L)), Literal(2.0)), IntegerType))
-    assert(NestedColumnAliasing.getAttributeToExtractValues(nondeterministic, Seq.empty)
-      .values.toSeq == Seq(nondeterministic))
+    val deterministicReadPair = parentAndChild(Literal(0))
+    val nondeterministicReadPair = parentAndChild(Cast(Rand(Literal(0L)), IntegerType))
+    // `a[rand].b` is non-deterministic, so `a[rand].b.c` is not redundant with it, while the
+    // redundant deterministic `a[0].b.c` is still dropped.
+    assert(
+      NestedColumnAliasing.getAttributeToExtractValues(
+        deterministicReadPair ++ nondeterministicReadPair,
+        Seq.empty
+      )
+      .values
+      .toSeq == Seq(deterministicReadPair.take(1) ++ nondeterministicReadPair)
+    )
   }
 
   test("Nested field pruning for Project and Generate") {

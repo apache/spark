@@ -281,7 +281,7 @@ object NestedColumnAliasing {
           // See [[collectExtractValue]]: we only need to deal with [[GetArrayStructFields]] and
           // [[GetStructField]]
           case e @ (_: GetStructField | _: GetArrayStructFields) =>
-            !e.children.head.exists(nestedFieldSet.contains)
+            !e.children.head.exists(p => p.deterministic && nestedFieldSet.contains(p))
           case _ => true
         }
           // Discard [[ExtractValue]]s that contain aggregate functions.
