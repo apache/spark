@@ -645,6 +645,26 @@ class ColumnExpressionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59954: a With in a DECLARE VARIABLE default is evaluated once") {
+    // `CreateVariableExec` evaluates the default on the driver, so the accumulator needs no job to
+    // read. The UDF is deterministic but not cheap, so the definition is one worth memoizing, and
+    // each default below reads it twice.
+    val calls = sparkContext.longAccumulator("calls")
+    spark.udf.register("plus_one_counted", (i: Int) => { calls.add(1); i + 1 })
+    withUserDefinedFunction("plus_one_counted" -> true) {
+      withSessionVariable("v1", "v2") {
+        sql("DECLARE OR REPLACE VARIABLE v1 INT DEFAULT nullif(plus_one_counted(1), 3)")
+        assert(calls.value == 1, s"the NULLIF default called the UDF ${calls.value} times")
+        checkAnswer(sql("SELECT v1"), Row(2))
+
+        calls.reset()
+        sql("DECLARE OR REPLACE VARIABLE v2 BOOLEAN DEFAULT plus_one_counted(1) BETWEEN 1 AND 3")
+        assert(calls.value == 1, s"the BETWEEN default called the UDF ${calls.value} times")
+        checkAnswer(sql("SELECT v2"), Row(true))
+      }
+    }
+  }
+
   test("in") {
     val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
     checkAnswer(df.filter($"a".isin(1, 2)),
