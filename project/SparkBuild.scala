@@ -1480,7 +1480,23 @@ object SQL {
     // sql/core uses protoc-jar-maven-plugin which outputs to target/generated-sources.
     (Compile / PB.targets) := Seq(
       PB.gens.java -> target.value / "generated-sources"
-    )
+    ),
+    // snowflake-jdbc embeds unshaded Netty 4.1 native libraries under the same
+    // resource names as Spark's 4.2 classifier jars. Netty aborts when the bytes
+    // differ and caches that failure for the test JVM. Drop those copies.
+    (Test / fullClasspath) := {
+      val cp = (Test / fullClasspath).value
+      val dest = target.value / "test-classpath"
+      cp.map { entry =>
+        val jar = entry.data
+        val name = jar.getName
+        if (name.startsWith("snowflake-jdbc-") && name.endsWith(".jar")) {
+          entry.map(_ => stripSnowflakeNettyNatives(jar, dest))
+        } else {
+          entry
+        }
+      }
+    }
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
     if (sparkProtocExecPath.isDefined) {
@@ -1489,6 +1505,53 @@ object SQL {
       )
     } else {
       Seq.empty
+    }
+  }
+
+  private val unshadedNettyNatives = Set(
+    "META-INF/native/libnetty_transport_native_epoll_x86_64.so",
+    "META-INF/native/libnetty_transport_native_kqueue_x86_64.jnilib"
+  )
+
+  private def stripSnowflakeNettyNatives(jar: File, destDir: File): File = {
+    val stripped = destDir / s"${jar.getName.stripSuffix(".jar")}-no-unshaded-netty.jar"
+    if (stripped.exists() && stripped.lastModified() >= jar.lastModified()) {
+      stripped
+    } else {
+      IO.createDirectory(destDir)
+      val tmp = destDir / (stripped.getName + ".tmp")
+      val in = new java.util.zip.ZipInputStream(new BufferedInputStream(new FileInputStream(jar)))
+      val out = new java.util.zip.ZipOutputStream(
+        new BufferedOutputStream(new FileOutputStream(tmp)))
+      try {
+        val buffer = new Array[Byte](8192)
+        var entry = in.getNextEntry
+        while (entry != null) {
+          if (!unshadedNettyNatives.contains(entry.getName)) {
+            val copied = new java.util.zip.ZipEntry(entry.getName)
+            copied.setTime(entry.getTime)
+            out.putNextEntry(copied)
+            var read = in.read(buffer)
+            while (read >= 0) {
+              if (read > 0) {
+                out.write(buffer, 0, read)
+              }
+              read = in.read(buffer)
+            }
+            out.closeEntry()
+          }
+          in.closeEntry()
+          entry = in.getNextEntry
+        }
+      } finally {
+        in.close()
+        out.close()
+      }
+      if (stripped.exists()) {
+        IO.delete(stripped)
+      }
+      IO.move(tmp, stripped)
+      stripped
     }
   }
 }
