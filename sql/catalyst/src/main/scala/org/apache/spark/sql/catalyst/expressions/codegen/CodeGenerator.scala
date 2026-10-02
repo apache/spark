@@ -106,6 +106,69 @@ case class SubExprCodes(
     exprCodesNeedEvaluate: Seq[ExprCode])
 
 /**
+ * How [[CodegenContext.collectInputs]] answers at the points where moving generated code into a
+ * method needs a different answer for different callers. Each field is one such point; the
+ * companion holds the policies in use.
+ *
+ * @param rowWherever pass `INPUT_ROW` wherever it is set, rather than only where the code reads
+ *                    it.
+ * @param hoistDeferredInputs take an input the operator has not evaluated yet out of `currentVars`
+ *                            to be evaluated ahead of the method, rather than refuse the method.
+ * @param refuseSubExprStates refuse a node subexpression elimination has computed, rather than
+ *                            take the variables of its state and stop there.
+ * @param followCommonExprs follow a `With` and a `CommonExpressionRef` into the definitions the
+ *                          code computes, rather than walk them like any other node.
+ * @param onlyNames refuse a value no parameter can name, rather than pass over it.
+ * @param checkParamLength refuse a method whose parameters would pass the JVM's limit.
+ */
+private[sql] case class InputPolicy(
+    rowWherever: Boolean,
+    hoistDeferredInputs: Boolean,
+    refuseSubExprStates: Boolean,
+    followCommonExprs: Boolean,
+    onlyNames: Boolean,
+    checkParamLength: Boolean)
+
+private[sql] object InputPolicy {
+
+  /**
+   * The methods an operator moves its own code into - the subexpression functions, the aggregate
+   * functions, `ExpandExec`'s switch cases - whose callers check the parameter length themselves.
+   * See `CodeGenerator.getLocalInputVariableValues`.
+   */
+  val operatorMethod: InputPolicy = InputPolicy(
+    rowWherever = true,
+    hoistDeferredInputs = true,
+    refuseSubExprStates = false,
+    followCommonExprs = false,
+    onlyNames = false,
+    checkParamLength = false)
+
+  /** The method a `With` definition is computed in. See `CodegenContext.CommonExprSlots`. */
+  val commonExpressionMethod: InputPolicy = InputPolicy(
+    rowWherever = true,
+    hoistDeferredInputs = false,
+    refuseSubExprStates = true,
+    followCommonExprs = true,
+    onlyNames = true,
+    checkParamLength = true)
+}
+
+/**
+ * What [[CodegenContext.collectInputs]] found that the code generated for some expressions reads.
+ *
+ * @param arguments the local variables to pass, in the order the walk first met them.
+ * @param readsRow whether the code reads `INPUT_ROW` itself, through an input the operator has not
+ *                 put in `currentVars`.
+ * @param inputsToEvaluate the code of the inputs taken out of `currentVars`, under
+ *                         `InputPolicy.hoistDeferredInputs`, to be evaluated ahead of the method.
+ */
+private[sql] case class CollectedInputs(
+    arguments: Seq[VariableValue],
+    readsRow: Boolean,
+    inputsToEvaluate: Seq[ExprCode])
+
+/**
  * The main information about a new added function.
  *
  * @param functionName String representing the name of the function
@@ -317,76 +380,21 @@ class CodegenContext extends Logging {
      * call, the way `getLocalInputVariableValues` does for subexpression elimination, since that
      * evaluates it on rows that reach no reference.
      *
-     * Nor does a definition that is or holds a node subexpression elimination has computed, for
-     * which see the walk below. The two remaining refusals are local: `canPass` on a value no
-     * parameter can name, and the descriptor length at the end.
+     * Nor does a definition that is or holds a node subexpression elimination has computed. Which
+     * values the body reads there cannot be told from the tree: `Expression.genCode` reads the
+     * state, for a `With` as much as anything else since `With` overrides only `doGenCode`, while
+     * `Alias`, `Collate` and an identity `Cast` override `genCode` and generate their child again
+     * -- two different parameter lists. Refusing also keeps what this collects within what
+     * `getLocalInputVariableValues` collects for the operator's whole expression, which stops at a
+     * state as well and computes the parameters of the methods `ExpandExec` and the aggregates move
+     * this call into.
+     *
+     * The two remaining refusals are local: a value no parameter can name, and the descriptor
+     * length. The walk is `collectInputs`, under `InputPolicy.commonExpressionMethod`.
      */
-    private def methodArgs: Option[Seq[VariableValue]] = {
-      val args = mutable.LinkedHashMap.empty[String, VariableValue]
-      // False for a value no parameter can carry: `ExpandExec` hands out a `VariableValue` naming a
-      // slot of a compacted mutable state array, and a `SimpleExprValue` is an expression rather
-      // than a name -- `posexplode_outer` gives its position the nullness `index == -1`, and a
-      // `Byte` or `Short` literal's value is `(byte)1`. A field or a literal needs no parameter and
-      // is read as it stands.
-      def canPass(v: ExprValue): Boolean = v match {
-        case local: VariableValue =>
-          val name = local.variableName
-          val isName = name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
-            name.forall(Character.isJavaIdentifierPart)
-          if (isName) {
-            args.getOrElseUpdate(name, local)
-          }
-          isName
-        case _: GlobalValue | _: LiteralValue => true
-        case _ => false
-      }
-      var possible = INPUT_ROW == null ||
-        canPass(JavaCode.variable(INPUT_ROW, classOf[InternalRow]))
-      val visited = mutable.HashSet.empty[Long]
-      // The definitions of a `With` in the tree walked here, which reach `currentCommonExprs` only
-      // once that `With` is generated. Ids come from one counter, so one map serves every scope.
-      val nestedDefs = mutable.HashMap.empty[Long, Expression]
-      val toVisit = mutable.Stack[Expression](definition)
-      while (possible && toVisit.nonEmpty) {
-        val next = toVisit.pop()
-        // A node subexpression elimination has computed keeps the definition inline. Which values
-        // the body reads there cannot be told from the tree: `Expression.genCode` reads the state,
-        // for a `With` as much as anything else since `With` overrides only `doGenCode`, while
-        // `Alias`, `Collate` and an identity `Cast` override `genCode` and generate their child
-        // again -- two different parameter lists. Refusing also keeps what this collects within
-        // what `getLocalInputVariableValues` collects for the operator's whole expression, which
-        // stops at a state as well and computes the parameters of the methods `ExpandExec` and the
-        // aggregates move this call into.
-        if (subExprEliminationExprs.contains(ExpressionEquals(next))) {
-          possible = false
-        } else {
-          next match {
-            case ref: BoundReference if currentVars != null && currentVars(ref.ordinal) != null =>
-              val input = currentVars(ref.ordinal)
-              possible = input.code == EmptyBlock && canPass(input.value) && canPass(input.isNull)
-            case w: With =>
-              // Only `child` is generated: a definition is generated where a reference reaches it,
-              // so one no reference reaches is not in the body, and what it reads decides nothing.
-              w.defs.foreach(d => nestedDefs.put(d.id.id, d.child))
-              toVisit.push(w.child)
-            case ref: CommonExpressionRef =>
-              // The definition this reference fills, which it does inside this method, so what
-              // that definition reads has to come in as well. One belonging to a `With` in the
-              // tree walked here is in `nestedDefs`; a sibling of this definition, or one of an
-              // enclosing scope, is registered in `currentCommonExprs`.
-              if (visited.add(ref.id.id)) {
-                nestedDefs.get(ref.id.id)
-                  .orElse(currentCommonExprs.get(ref.id.id).map(_.definition))
-                  .foreach(toVisit.push)
-              }
-            case e => toVisit.pushAll(e.children)
-          }
-        }
-      }
-      val params = args.values.toSeq
-      Option.when(
-        possible && isValidParamLength(calculateParamLengthFromExprValues(params)))(params)
-    }
+    private def methodArgs: Option[Seq[VariableValue]] =
+      collectInputs(Seq(definition), InputPolicy.commonExpressionMethod, subExprEliminationExprs)
+        .map(_.arguments)
   }
 
   /**
@@ -1145,6 +1153,98 @@ class CodegenContext extends Logging {
        """.stripMargin
     } else {
       execute
+    }
+  }
+
+  /**
+   * What the code generated for `roots` reads from the scope it was generated in, for moving that
+   * code into a method: the local variables to pass and the inputs to evaluate first, or None
+   * where `policy` refuses the method. The code reads its inputs from `currentVars` and, where
+   * the operator sets one, from `INPUT_ROW`; from the states in `subExprs`; and, inside a `With`,
+   * from the definitions its references compute. A field or a literal is read as it stands.
+   *
+   * Every place that moves generated code into a method walks the code's expressions with this,
+   * so that a node binding a variable needs one change here; where those places need different
+   * answers, `policy` says which (see [[InputPolicy]]).
+   */
+  private[sql] def collectInputs(
+      roots: Seq[Expression],
+      policy: InputPolicy,
+      subExprs: Map[ExpressionEquals, SubExprEliminationState]): Option[CollectedInputs] = {
+    val args = mutable.LinkedHashMap.empty[String, VariableValue]
+    val inputsToEvaluate = mutable.ArrayBuffer.empty[ExprCode]
+    // Whether the code can read `v` from the method: false for a value no parameter can carry
+    // where the policy asks for names. `ExpandExec` hands out a `VariableValue` naming a slot of a
+    // compacted mutable state array, and a `SimpleExprValue` is an expression rather than a name
+    // -- `posexplode_outer` gives its position the nullness `index == -1`, and a `Byte` or `Short`
+    // literal's value is `(byte)1`. A field or a literal needs no parameter and is read as it
+    // stands.
+    def take(v: ExprValue): Boolean = v match {
+      case local: VariableValue =>
+        val name = local.variableName
+        val isName = name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
+          name.forall(Character.isJavaIdentifierPart)
+        val taken = isName || !policy.onlyNames
+        if (taken) {
+          args.getOrElseUpdate(name, local)
+        }
+        taken
+      case _: GlobalValue | _: LiteralValue => true
+      case _ => !policy.onlyNames
+    }
+    var possible = !policy.rowWherever || INPUT_ROW == null ||
+      take(JavaCode.variable(INPUT_ROW, classOf[InternalRow]))
+    var readsRow = false
+    val visited = mutable.HashSet.empty[Long]
+    // The definitions of a `With` in the trees walked here, which reach `currentCommonExprs` only
+    // once that `With` is generated. Ids come from one counter, so one map serves every scope.
+    val nestedDefs = mutable.HashMap.empty[Long, Expression]
+    val toVisit = mutable.Stack[Expression](roots: _*)
+    while (possible && toVisit.nonEmpty) {
+      val next = toVisit.pop()
+      // A state is looked up before anything else; no input is a common subexpression, since
+      // `EquivalentExpressions` skips leaves.
+      subExprs.get(ExpressionEquals(next)) match {
+        case Some(state) =>
+          possible = !policy.refuseSubExprStates &&
+            take(state.eval.value) && take(state.eval.isNull)
+        case None => next match {
+          case ref: BoundReference if currentVars != null && currentVars(ref.ordinal) != null =>
+            val input = currentVars(ref.ordinal)
+            if (input.code != EmptyBlock) {
+              if (policy.hoistDeferredInputs) {
+                inputsToEvaluate += input.copy()
+                input.code = EmptyBlock
+              } else {
+                possible = false
+              }
+            }
+            possible &&= take(input.value) && take(input.isNull)
+          case _: BoundReference =>
+            readsRow = true
+          case w: With if policy.followCommonExprs =>
+            // Only `child` is generated: a definition is generated where a reference reaches it,
+            // so one no reference reaches is not in the code, and what it reads decides nothing.
+            w.defs.foreach(d => nestedDefs.put(d.id.id, d.child))
+            toVisit.push(w.child)
+          case ref: CommonExpressionRef if policy.followCommonExprs =>
+            // The definition this reference fills, where the reference is, so what that
+            // definition reads is read here as well. One belonging to a `With` in the trees walked
+            // here is in `nestedDefs`; a sibling of the definition walked, or one of an enclosing
+            // scope, is registered in `currentCommonExprs`.
+            if (visited.add(ref.id.id)) {
+              nestedDefs.get(ref.id.id)
+                .orElse(currentCommonExprs.get(ref.id.id).map(_.definition))
+                .foreach(toVisit.push)
+            }
+          case e => toVisit.pushAll(e.children)
+        }
+      }
+    }
+    val arguments = args.values.toSeq
+    Option.when(possible && (!policy.checkParamLength ||
+        isValidParamLength(calculateParamLengthFromExprValues(arguments)))) {
+      CollectedInputs(arguments, readsRow, inputsToEvaluate.toSeq)
     }
   }
 
@@ -2220,51 +2320,19 @@ object CodeGenerator extends Logging {
    *
    * Second value: Returns the set of `ExprCodes`s which are necessary codes before
    * evaluating subexpressions.
+   *
+   * The walk is `CodegenContext.collectInputs` under `InputPolicy.operatorMethod`, which never
+   * refuses.
    */
   def getLocalInputVariableValues(
       ctx: CodegenContext,
       expr: Expression,
       subExprs: Map[ExpressionEquals, SubExprEliminationState] = Map.empty)
       : (Set[VariableValue], Set[ExprCode]) = {
-    val argSet = mutable.Set[VariableValue]()
-    val exprCodesNeedEvaluate = mutable.Set[ExprCode]()
-
-    if (ctx.INPUT_ROW != null) {
-      argSet += JavaCode.variable(ctx.INPUT_ROW, classOf[InternalRow])
-    }
-
-    // Collects local variables from a given `expr` tree
-    val collectLocalVariable = (ev: ExprValue) => ev match {
-      case vv: VariableValue => argSet += vv
-      case _ =>
-    }
-
-    val stack = mutable.Stack[Expression](expr)
-    while (stack.nonEmpty) {
-      stack.pop() match {
-        case ref: BoundReference if ctx.currentVars != null &&
-            ctx.currentVars(ref.ordinal) != null =>
-          val exprCode = ctx.currentVars(ref.ordinal)
-          // If the referred variable is not evaluated yet.
-          if (exprCode.code != EmptyBlock) {
-            exprCodesNeedEvaluate += exprCode.copy()
-            exprCode.code = EmptyBlock
-          }
-          collectLocalVariable(exprCode.value)
-          collectLocalVariable(exprCode.isNull)
-
-        case e =>
-          subExprs.get(ExpressionEquals(e)) match {
-            case Some(state) =>
-              collectLocalVariable(state.eval.value)
-              collectLocalVariable(state.eval.isNull)
-            case None =>
-              stack.pushAll(e.children)
-          }
-      }
-    }
-
-    (argSet.toSet, exprCodesNeedEvaluate.toSet)
+    val inputs = ctx.collectInputs(Seq(expr), InputPolicy.operatorMethod, subExprs).get
+    // The sets are built in the order the walk met their elements, as they always were: a caller
+    // turns them into a parameter list in their iteration order.
+    (mutable.Set(inputs.arguments: _*).toSet, mutable.Set(inputs.inputsToEvaluate: _*).toSet)
   }
 
   /**
