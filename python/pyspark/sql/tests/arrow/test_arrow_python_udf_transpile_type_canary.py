@@ -86,8 +86,11 @@ _PICKLED = PythonEvalType.SQL_BATCHED_UDF
 _ARROW = PythonEvalType.SQL_ARROW_BATCHED_UDF
 
 # Classes exported from pyspark.sql.types that are not usable column types: the abstract
-# root, and StructField (a field descriptor rather than a type).
-_NOT_COLUMN_TYPES = frozenset({T.DataType, T.StructField})
+# root, StructField (a field descriptor rather than a type), and the bare UserDefinedType
+# base (its sqlType() raises NotImplementedError; real UDTs are user-authored subclasses
+# this module can't enumerate). None of these are in __all__, so _concrete_data_type_classes
+# never sees them anyway -- named here only so a reader doesn't wonder why they're missing.
+_NOT_COLUMN_TYPES = frozenset({T.DataType, T.StructField, T.UserDefinedType})
 
 
 # --------------------------------------------------------------------------------------
