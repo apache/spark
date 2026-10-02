@@ -1836,6 +1836,16 @@ class WholeStageCodegenSuite extends SharedSparkSession
   private def withSplitAlways[T](body: => T): T =
     withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS_METHOD_LIMIT.key -> "0")(body)
 
+  /** The splits recorded in generating `df`'s stages with them recorded, as the gate first does. */
+  private def recordedSplits(df: DataFrame): Int = df.queryExecution.executedPlan.collect {
+    case w: WholeStageCodegenExec => w.generate(splitRecording = true)._1.wholeStageSplitsRecorded
+  }.sum
+
+  /** `CASE WHEN v = 0 THEN v * 0 ... ELSE end END AS r FROM t`, `n` branches. */
+  private def caseWhenOverT(n: Int, end: Int): String = (0 until n)
+    .map(i => s"WHEN v = $i THEN v * $i")
+    .mkString("SELECT CASE ", " ", s" ELSE $end END AS r FROM t")
+
   /** The rows of `query` computed without whole stage codegen, which each test checks against. */
   private def withoutWholeStage(query: => DataFrame): Seq[Row] =
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
@@ -1906,21 +1916,95 @@ class WholeStageCodegenSuite extends SharedSparkSession
 
   test("SPARK-33301: the trial compile of a stage past the limit reports nothing") {
     // The unsplit code of 300 branches has a method past the JIT limit; it is compiled only to
-    // decide to split, so the once-per-JVM warning about such a method is not spent on it.
+    // decide to split, so the once-per-JVM warning about such a method is not spent on it. The
+    // JDK backend compiles and reports on a thread of its own, which the trial goes to as well.
     withTempView("t") {
       spark.range(100).selectExpr("id AS v").createOrReplaceTempView("t")
-      val query = (0 until 300).map(i => s"WHEN v = $i THEN v * $i")
-        .mkString("SELECT CASE ", " ", " ELSE -1 END AS r FROM t")
-      // The warning is once per JVM and INFO after it, so the test reads every level.
-      val logs = new LogAppender("the trial compile's reports")
-      withLogAppender(logs,
-          loggerNames = Seq("org.apache.spark.sql.catalyst.expressions.codegen.CodeCompiler"),
-          level = Some(Level.DEBUG)) {
-        assert(splitsCaseWhen(sql(query)))
-        sql(query).collect()
+      val query = caseWhenOverT(300, end = -1)
+      for (backend <- Seq("janino", "jdk")) {
+        withSQLConf(SQLConf.CODEGEN_COMPILER.key -> backend) {
+          // The warning is once per JVM and INFO after it, so the test reads every level, of the
+          // logger the compilers report under.
+          val logs = new LogAppender("the trial compile's reports")
+          withLogAppender(logs,
+              loggerNames = Seq(classOf[CodeGenerator[_, _]].getName),
+              level = Some(Level.DEBUG)) {
+            assert(splitsCaseWhen(sql(query)))
+            sql(query).collect()
+          }
+          assert(!logs.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+            "too long to be JIT compiled")), backend)
+        }
       }
-      assert(!logs.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
-        "too long to be JIT compiled")))
+    }
+  }
+
+  test("SPARK-33301: the code a stage keeps unsplit reports its method past the JIT limit") {
+    // The trial compile holds its reports back for the code kept. With the limit raised past
+    // HotSpot's 8000 bytes, the unsplit code of 300 branches is kept although the JIT leaves its
+    // method interpreted, which is reported as for any compiled code. The query differs from the
+    // test above's, so that its code is not in the compile cache, where no report is made again.
+    withTempView("t") {
+      spark.range(100).selectExpr("id AS v").createOrReplaceTempView("t")
+      val query = caseWhenOverT(300, end = -7)
+      for (backend <- Seq("janino", "jdk")) {
+        withSQLConf(SQLConf.CODEGEN_COMPILER.key -> backend,
+            SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS_METHOD_LIMIT.key -> "65535") {
+          val logs = new LogAppender("the kept code's reports")
+          withLogAppender(logs,
+              loggerNames = Seq(classOf[CodeGenerator[_, _]].getName),
+              level = Some(Level.DEBUG)) {
+            assert(!splitsCaseWhen(sql(query)))
+          }
+          assert(logs.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+            "too long to be JIT compiled")), backend)
+        }
+      }
+    }
+  }
+
+  test("SPARK-33301: which code a stage keeps, from its trial compiles") {
+    // `chooseCode`'s decisions past the method limit, with the compile replaced, so that a split
+    // can fail to compile and a method can be as large as a decision needs.
+    withTempView("t") {
+      spark.range(100).selectExpr("id AS v").createOrReplaceTempView("t")
+      val stage = sql(caseWhenOverT(300, end = -1)).queryExecution.executedPlan.collectFirst {
+        case w: WholeStageCodegenExec => w
+      }.get
+      val unsplit = stage.generate(splitRecording = true)
+      assert(unsplit._1.wholeStageSplitsRecorded > 0)
+      lazy val split = stage.generate(splitRecording = false)
+      def stats(largestMethod: Int): ByteCodeStats = ByteCodeStats(largestMethod, 0, 0)
+      val failure = new IllegalStateException("does not compile")
+      def choose(
+          compile: CodeAndComment => ByteCodeStats, fallBack: Boolean = true): CodeAndComment =
+        stage.chooseCode(unsplit, () => split, compile, fallBack)._2
+      // The split is kept where it makes the stage's largest method smaller...
+      assert(choose(c => if (c eq unsplit._2) stats(20000) else stats(3000)) eq split._2)
+      // ...and not where it leaves it as it was: the method past the limit holds nothing it moves.
+      assert(choose(_ => stats(20000)) eq unsplit._2)
+      // A split that fails to compile leaves the unsplit code, which compiled; under testing, or
+      // with the fallback off, the failure is thrown, as a stage's failure to compile is.
+      def splitFails(c: CodeAndComment): ByteCodeStats =
+        if (c eq unsplit._2) stats(20000) else throw failure
+      assert(choose(splitFails) eq unsplit._2)
+      assert(intercept[IllegalStateException](choose(splitFails, fallBack = false)) eq failure)
+      // An unsplit code that fails to compile is remembered, so the stage goes straight to its
+      // split the next time, the failure costing a compile only once. A copy of the code no other
+      // test generates keeps the memory to this test.
+      val fresh = (unsplit._1,
+        new CodeAndComment(unsplit._2.body + "\n/* a failed trial */", unsplit._2.comment))
+      var trials = 0
+      def unsplitFails(c: CodeAndComment): ByteCodeStats = {
+        if (c eq fresh._2) {
+          trials += 1
+          throw failure
+        }
+        stats(3000)
+      }
+      assert(stage.chooseCode(fresh, () => split, unsplitFails, true)._2 eq split._2)
+      assert(stage.chooseCode(fresh, () => split, unsplitFails, true)._2 eq split._2)
+      assert(trials === 1)
     }
   }
 
@@ -2029,6 +2113,9 @@ class WholeStageCodegenSuite extends SharedSparkSession
           .selectExpr(s"CASE $twice ELSE c0 + c0 END AS v")
         assert(splitsCaseWhen(evaluated))
         checkAnswer(evaluated, withoutWholeStage(evaluated))
+        // A split no block can take is not recorded, so the gate compiles no trial for it.
+        assert(recordedSplits(df) === 0)
+        assert(recordedSplits(evaluated) > 0)
       }
     }
   }

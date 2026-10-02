@@ -448,17 +448,6 @@ class CodegenContext extends Logging {
   private val commonExprMethodTakesRow: mutable.Map[Long, Boolean] = mutable.HashMap.empty
 
   /**
-   * Whether whole-stage code generation records its expression splits rather than making them:
-   * `WholeStageCodegenExec.doCodeGen` first generates a stage this way, the code in one piece as
-   * with `spark.sql.codegen.wholeStage.splitExpressions` off, and generates it again with the
-   * splits made only when that code is past the method limit or fails to compile.
-   */
-  private[sql] var wholeStageSplitRecording: Boolean = false
-
-  /** The splits [[splitExpressionsWithSources]] would have made while recording. */
-  private[sql] var wholeStageSplitsRecorded: Int = 0
-
-  /**
    * Allocates a value slot and a `computed` flag per definition, generates `f` with them in scope,
    * then takes them out of scope again. A reference generated inside `f` reads the slots back by
    * id and fills them the first time it is reached on a row -- the enclosing `With` only clears the
@@ -872,32 +861,41 @@ class CodegenContext extends Logging {
       funcName: String,
       funcCode: String,
       className: String) = {
+    if (!classFunctions(className).contains(funcName)) {
+      addedFunctions += className -> funcName
+    }
     classSize(className) += funcCode.length
     classFunctions(className) += funcName -> funcCode
   }
 
-  /** The names of every class's functions, for `removeFunctionsSince`. */
-  private def functionsSnapshot(): Map[String, Set[String]] =
-    classFunctions.map { case (className, functions) => className -> functions.keySet.toSet }.toMap
+  /**
+   * Every function added, as its class and name, in the order added, for `removeFunctionsSince`.
+   * Only a name its class did not have yet: a name added again replaces the function's code, which
+   * a removal must not undo.
+   */
+  private val addedFunctions = mutable.ArrayBuffer.empty[(String, String)]
+
+  /** Marks the functions and classes added so far, for `removeFunctionsSince`. */
+  private def functionsMark(): (Int, Int) = (addedFunctions.length, classes.length)
 
   /**
-   * Removes every function added since `snapshot` was taken, and every class added since then,
-   * which held only such functions: the code that called them has been discarded.
+   * Removes every function added since `mark` was taken, and every class added since then, which
+   * held only such functions: the code that called them has been discarded.
    */
-  private def removeFunctionsSince(snapshot: Map[String, Set[String]]): Unit = {
-    classFunctions.foreach { case (className, functions) =>
-      val kept = snapshot.getOrElse(className, Set.empty)
-      functions.keys.filterNot(kept.contains).toSeq.foreach { name =>
-        classSize(className) -= functions(name).length
-        functions.remove(name)
-      }
+  private def removeFunctionsSince(mark: (Int, Int)): Unit = {
+    val (functionsBefore, classesBefore) = mark
+    addedFunctions.drop(functionsBefore).foreach { case (className, name) =>
+      classFunctions(className).remove(name).foreach(code => classSize(className) -= code.length)
+      splitCallArguments.remove(name)
     }
-    classes.filterNot { case (className, _) => snapshot.contains(className) }.foreach {
-      case (className, _) =>
-        classSize.remove(className)
-        classFunctions.remove(className)
+    addedFunctions.dropRightInPlace(addedFunctions.length - functionsBefore)
+    // `addClass` prepends, so the classes added since the mark come first.
+    val classesAdded = classes.length - classesBefore
+    classes.take(classesAdded).foreach { case (className, _) =>
+      classSize.remove(className)
+      classFunctions.remove(className)
     }
-    classes.filterInPlace { case (className, _) => snapshot.contains(className) }
+    classes.remove(0, classesAdded)
   }
 
   /**
@@ -1348,12 +1346,15 @@ class CodegenContext extends Logging {
   /**
    * Whether the code generated for `e` reads its subexpression elimination state, which
    * `Expression.genCode` does; a node that overrides `genCode` may generate its child instead, as
-   * `Alias`, `Collate` and a `Cast` that changes nothing do, and then reads what is below it.
+   * `Alias`, `Collate` and a `Cast` that changes nothing do, and then reads what is below it. A
+   * `Cast` says which it does; any other override is refused, being told from the class
+   * (`CodeGenerator.leavesGenCodeToExpression`) rather than asked, since a method on `Expression`
+   * saying the same would default to reading the state, and so accept an expression from outside
+   * Spark whose override generates its child.
    */
   private def readsSubExprState(e: Expression): Boolean = e match {
     case c: Cast => !c.generatesChildCode
-    case _ => e.getClass.getMethod("genCode", classOf[CodegenContext]).getDeclaringClass ==
-      classOf[Expression]
+    case _ => CodeGenerator.leavesGenCodeToExpression.get(e.getClass)
   }
 
   /**
@@ -1395,6 +1396,20 @@ class CodegenContext extends Logging {
         foldFunctions)
     }
   }
+
+  /**
+   * Whether whole-stage code generation records its expression splits rather than making them:
+   * `WholeStageCodegenExec.doCodeGen` first generates a stage this way, the code in one piece as
+   * with `spark.sql.codegen.wholeStage.splitExpressions` off, and generates it again with the
+   * splits made only when that code is past the method limit or fails to compile.
+   */
+  private[sql] var wholeStageSplitRecording: Boolean = false
+
+  /**
+   * The splits [[splitExpressionsWithSources]] would have made while recording: the code of an
+   * expression with a block a method could take, which [[splitWholeStage]] moves into methods.
+   */
+  private[sql] var wholeStageSplitsRecorded: Int = 0
 
   /**
    * `splitExpressionsWithCurrentInputs` for pieces of code whose expressions are known, which it
@@ -1439,7 +1454,7 @@ class CodegenContext extends Logging {
     } else if (!SQLConf.get.wholeStageSplitExpressions) {
       codes.mkString("\n")
     } else if (wholeStageSplitRecording) {
-      if (buildCodeBlocksOf(codes).length > 1) {
+      if (wholeStageBlocks(pieces, extraArguments).exists(_._2.isDefined)) {
         wholeStageSplitsRecorded += 1
       }
       codes.mkString("\n")
@@ -1457,22 +1472,14 @@ class CodegenContext extends Logging {
       returnType: String,
       makeSplitFunction: String => String,
       foldFunctions: Seq[String] => String): String = {
-    val blocks = buildCodeBlocksOf(pieces.map(_._1))
-    val sources = pieces.map(_._2).toIndexedSeq
-    val arguments = if (blocks.length <= 1) {
-      Nil
-    } else {
-      blocks.map { case (_, indices) =>
-        wholeStageSplitArguments(indices.flatMap(sources), extraArguments)
-      }
-    }
-    if (arguments.forall(_.isEmpty)) {
+    val blocks = wholeStageBlocks(pieces, extraArguments)
+    if (blocks.forall(_._2.isEmpty)) {
       pieces.map(_._1).mkString("\n")
     } else {
       val func = freshName(funcName)
       // A block left in place splits the calls into runs, each grouped on its own; their groups
       // are named after the run, so that two runs' groups do not share a name.
-      val inRuns = arguments.exists(_.isEmpty)
+      val inRuns = blocks.exists(_._2.isEmpty)
       val code = new StringBuilder
       val run = mutable.ArrayBuffer.empty[SplitCall]
       var runs = 0
@@ -1484,16 +1491,34 @@ class CodegenContext extends Logging {
         run.clear()
         runs += 1
       }
-      blocks.zip(arguments).zipWithIndex.foreach {
-        case (((body, _), Some(args)), i) =>
+      blocks.zipWithIndex.foreach {
+        case ((body, Some(args)), i) =>
           run += splitCall(s"${func}_$i", args ++ extraArguments, returnType,
             makeSplitFunction(body))
-        case (((body, _), None), _) =>
+        case ((body, None), _) =>
           endRun()
           code.append(body).append("\n")
       }
       endRun()
       code.toString
+    }
+  }
+
+  /**
+   * The blocks `splitWholeStage` packs `pieces` into, each with the arguments of the method it
+   * becomes, or None where it stays in place, as every block does where there is only one.
+   */
+  private def wholeStageBlocks(
+      pieces: Seq[(String, Seq[Expression])],
+      extraArguments: Seq[(String, String)]): Seq[(String, Option[Seq[(String, String)]])] = {
+    val blocks = buildCodeBlocksOf(pieces.map(_._1))
+    if (blocks.length <= 1) {
+      blocks.map { case (body, _) => body -> None }
+    } else {
+      val sources = pieces.map(_._2).toIndexedSeq
+      blocks.map { case (body, indices) =>
+        body -> wholeStageSplitArguments(indices.flatMap(sources), extraArguments)
+      }
     }
   }
 
@@ -1646,7 +1671,7 @@ class CodegenContext extends Logging {
            """.stripMargin
     val call = s"${addNewFunction(name, code)}(${arguments.map(_._2).mkString(", ")})"
     if (Utils.isTesting) {
-      splitCallsMade += call -> arguments.map(_._2)
+      splitCallArguments(name) = arguments.map(_._2)
     }
     SplitCall(call, arguments)
   }
@@ -1719,10 +1744,13 @@ class CodegenContext extends Logging {
     }.sum
 
   /**
-   * Under testing, every call to a split function with the names it passes, for
-   * `assertSplitCallsWithin`.
+   * Under testing, the names every split function's calls pass, by the function's name, for
+   * `assertSplitCallsWithin`. A function `removeFunctionsSince` removes leaves it too.
    */
-  private val splitCallsMade = mutable.ArrayBuffer.empty[(String, Seq[String])]
+  private val splitCallArguments = mutable.HashMap.empty[String, Seq[String]]
+
+  /** A name and an opening parenthesis: a call, or a keyword such as `if`. */
+  private val CallSite = "(?<![\\w$])([A-Za-z_$][\\w$]*)\\s*\\(".r
 
   /**
    * Under testing, asserts that every call to a split function in `body`, the code of the method
@@ -1736,12 +1764,13 @@ class CodegenContext extends Logging {
       body: String,
       parameters: Seq[String],
       method: String): Unit = {
-    if (Utils.isTesting) {
-      splitCallsMade.foreach { case (call, args) =>
-        if (("(?<![\\w$])" + java.util.regex.Pattern.quote(call)).r.findFirstIn(body).nonEmpty) {
+    if (Utils.isTesting && splitCallArguments.nonEmpty) {
+      CallSite.findAllMatchIn(body).foreach { site =>
+        val function = site.group(1)
+        splitCallArguments.get(function).foreach { args =>
           val missing = args.filterNot(parameters.contains)
-          assert(missing.isEmpty,
-            s"$method calls $call, passing ${missing.mkString(", ")}, which $method does not take")
+          assert(missing.isEmpty, s"$method calls $function, passing ${missing.mkString(", ")}, " +
+            s"which $method does not take")
         }
       }
     }
@@ -1968,9 +1997,9 @@ class CodegenContext extends Logging {
     // The code of the non-split pass is discarded when the split pass below is taken, and with it
     // the calls to every function added while generating it, such as the split methods of a CASE
     // WHEN or a `With` definition's method. With the whole stage split on, those functions are
-    // removed then; with it off, the class keeps them, as it did before that split existed.
-    val functionsBeforeNonSplit =
-      if (SQLConf.get.wholeStageSplitExpressions) Some(functionsSnapshot()) else None
+    // removed then; with it off, the class keeps them, as it did before that split existed, so
+    // that turning the split off gives back the code generated before it.
+    val functionsBeforeNonSplit = functionsMark()
     val nonSplitCode = {
       val allStates = mutable.ArrayBuffer.empty[SubExprEliminationState]
       commonExprs.map { expr =>
@@ -2005,7 +2034,9 @@ class CodegenContext extends Logging {
     val needSplit = nonSplitCode.map(_.eval.code.length).sum > SQLConf.get.methodSplitThreshold
     val (subExprsMap, exprCodes) = if (needSplit) {
       if (inputVarsForAllFuncs.map(calculateParamLengthFromExprValues).forall(isValidParamLength)) {
-        functionsBeforeNonSplit.foreach(removeFunctionsSince)
+        if (SQLConf.get.wholeStageSplitExpressions) {
+          removeFunctionsSince(functionsBeforeNonSplit)
+        }
         val localSubExprEliminationExprs =
           mutable.HashMap.empty[ExpressionEquals, SubExprEliminationState]
 
@@ -2655,6 +2686,17 @@ object CodeGenerator extends Logging {
       getValue(vector, sqlDataType, rowId)
     }
   }
+
+  /**
+   * Whether a class of expression leaves `genCode` to `Expression`, which reads the expression's
+   * subexpression elimination state, for `CodegenContext.readsSubExprState`: one reflective lookup
+   * per class.
+   */
+  private[codegen] val leavesGenCodeToExpression: ClassValue[java.lang.Boolean] =
+    new ClassValue[java.lang.Boolean] {
+      override def computeValue(c: Class[_]): java.lang.Boolean =
+        c.getMethod("genCode", classOf[CodegenContext]).getDeclaringClass == classOf[Expression]
+    }
 
   /**
    * This methods returns two values in a Tuple.

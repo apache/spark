@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.Locale
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.{HexFormat, Locale}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import scala.collection.mutable
+import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
+
+import com.google.common.cache.{Cache, CacheBuilder}
 
 import org.apache.spark.{broadcast, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.LogKeys.{CODEGEN_STAGE_ID, CONFIG, ERROR, HUGE_METHOD_LIMIT, MAX_METHOD_CODE_SIZE, TREE_NODE}
@@ -607,6 +612,21 @@ object WholeStageCodegenExec {
   // Visible for testing
   def codeGenTime: Long = _codeGenTime.get
 
+  /**
+   * The unsplit codes whose trial compile failed (`WholeStageCodegenExec.chooseCode`), by
+   * [[failureKey]]: a digest of the code and the backend that compiled it rather than the code,
+   * which runs to megabytes for the stages that fail.
+   */
+  private val unsplitFailures: Cache[String, java.lang.Boolean] =
+    CacheBuilder.newBuilder().maximumSize(SQLConf.get.codegenCacheMaxEntries).build()
+
+  /** The key of `code` in [[unsplitFailures]]. */
+  private def failureKey(code: CodeAndComment): String = {
+    val digest = MessageDigest.getInstance("SHA-256")
+      .digest(code.body.getBytes(StandardCharsets.UTF_8))
+    s"${CodeCompiler.active(code).getClass.getName}:${HexFormat.of.formatHex(digest)}"
+  }
+
   // Reset generation time of Java source code.
   // Visible for testing
   def resetCodeGenTime(): Unit = _codeGenTime.set(0L)
@@ -669,34 +689,93 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
    * Generates code for this subtree.
    *
    * Under `spark.sql.codegen.wholeStage.splitExpressions` the stage's code is first generated with
-   * its expression splits recorded rather than made, in one piece as with the conf off. Only when
-   * a split was possible and that code fails to compile, or has a method past
-   * `spark.sql.codegen.wholeStage.splitExpressions.methodLimit` (HotSpot's JIT limit by default),
-   * is it generated again with the splits made. A stage the JIT compiles whole therefore keeps
-   * the code it had without the split, which a split's calls would only slow down; the trial
-   * compile of the code kept is the one [[doExecute]] finds in the compile cache.
+   * its expression splits recorded rather than made, in one piece as with the conf off, and only
+   * where a split is possible is that code compiled to choose between it and the code with the
+   * splits made ([[chooseCode]]). A stage the JIT compiles whole keeps the code it had without the
+   * split, which a split's calls would only slow down; the trial compile of the code kept is the
+   * one [[doExecute]] finds in the compile cache.
    *
    * @return the tuple of the codegen context and the actual generated source.
    */
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
     if (!conf.wholeStageSplitExpressions || conf.wholeStageSplitExpressionsMethodLimit == 0) {
-      return generate(splitRecording = false)
+      generate(splitRecording = false)
+    } else {
+      chooseCode(generate(splitRecording = true), () => generate(splitRecording = false),
+        source => CodeGenerator.compile(source)._2,
+        fallBackOnFailure = !Utils.isTesting && conf.codegenFallback)
     }
-    val (ctx, source) = generate(splitRecording = true)
-    if (ctx.wholeStageSplitsRecorded == 0) {
-      return (ctx, source)
+  }
+
+  /**
+   * Which of the stage's two codes [[doCodeGen]] returns: `unsplit`, generated with its expression
+   * splits recorded, or the code `split` generates with them made. Each is compiled by `compile`
+   * as a trial ([[CodeCompiler.trial]]), and the reports of a method past the JIT limit are made
+   * for the code kept.
+   *
+   *  - Where no split was recorded, `unsplit` is all there is.
+   *  - Where it compiles with no method past
+   *    `spark.sql.codegen.wholeStage.splitExpressions.methodLimit` (HotSpot's JIT limit by
+   *    default), it is kept: the JIT compiles it whole.
+   *  - Where it fails to compile, the split is the only code that can run. The compiler caches no
+   *    failure, and failing again costs as much as the first time, about a second for a CASE WHEN
+   *    of thousands of branches, so the stage goes straight to the split the next time.
+   *  - Otherwise the split is kept if it makes the stage's largest method smaller, moving code out
+   *    of a method the JIT leaves interpreted. Where the largest method holds no splittable
+   *    expression, the split would only slow down code that runs compiled; and where the split
+   *    fails to compile, the unsplit code runs as it did before the split existed, unless
+   *    `fallBackOnFailure` is false, under testing or with `spark.sql.codegen.fallback` off, where
+   *    the failure is thrown as [[doExecute]] throws one.
+   */
+  private[execution] def chooseCode(
+      unsplit: (CodegenContext, CodeAndComment),
+      split: () => (CodegenContext, CodeAndComment),
+      compile: CodeAndComment => ByteCodeStats,
+      fallBackOnFailure: Boolean): (CodegenContext, CodeAndComment) = {
+    if (unsplit._1.wholeStageSplitsRecorded == 0) {
+      return unsplit
     }
-    val keep = try {
-      val (_, stats) = CodeCompiler.quietly(CodeGenerator.compile(source))
-      stats.maxMethodCodeSize <= conf.wholeStageSplitExpressionsMethodLimit
-    } catch {
-      case NonFatal(_) => false
+    val failureKey = WholeStageCodegenExec.failureKey(unsplit._2)
+    if (WholeStageCodegenExec.unsplitFailures.getIfPresent(failureKey) != null) {
+      return split()
     }
-    if (keep) (ctx, source) else generate(splitRecording = false)
+    val (unsplitStats, unsplitTrial) =
+      CodeCompiler.trial(failureExpected = true)(compile(unsplit._2))
+    unsplitStats match {
+      case Success(stats)
+          if stats.maxMethodCodeSize <= conf.wholeStageSplitExpressionsMethodLimit =>
+        unsplitTrial.report()
+        unsplit
+      case Failure(_) =>
+        WholeStageCodegenExec.unsplitFailures.put(failureKey, java.lang.Boolean.TRUE)
+        // `doExecute` compiles the split, reporting as any compile does.
+        split()
+      case Success(stats) =>
+        val splitCode = split()
+        val (splitStats, splitTrial) =
+          CodeCompiler.trial(failureExpected = false)(compile(splitCode._2))
+        splitStats match {
+          case Success(smaller) if smaller.maxMethodCodeSize < stats.maxMethodCodeSize =>
+            splitTrial.report()
+            splitCode
+          case Success(_) =>
+            unsplitTrial.report()
+            unsplit
+          case Failure(e) if !fallBackOnFailure =>
+            throw e
+          case Failure(_) =>
+            logWarning(log"Whole-stage codegen stage " +
+              log"(id=${MDC(CODEGEN_STAGE_ID, codegenStageId)}) failed to compile with its " +
+              log"expressions split, so it runs its code without the split:\n " +
+              log"${MDC(TREE_NODE, treeString)}")
+            unsplitTrial.report()
+            unsplit
+        }
+    }
   }
 
   /** The stage's code, its expression splits recorded or made; see [[doCodeGen]]. */
-  private def generate(splitRecording: Boolean): (CodegenContext, CodeAndComment) = {
+  private[execution] def generate(splitRecording: Boolean): (CodegenContext, CodeAndComment) = {
     val startTime = System.nanoTime()
     val ctx = new CodegenContext
     ctx.wholeStageSplitRecording = splitRecording

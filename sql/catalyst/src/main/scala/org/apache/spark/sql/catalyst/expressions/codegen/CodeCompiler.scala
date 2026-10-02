@@ -26,6 +26,7 @@ import javax.tools.{Diagnostic, DiagnosticCollector, FileObject, ForwardingJavaF
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{Cache, CacheBuilder}
@@ -334,28 +335,62 @@ object CodeCompiler extends Logging {
   /** Lets a test see the first warning again. */
   private[catalyst] def resetHugeMethodWarning(): Unit = hugeMethodWarned.set(false)
 
-  private val trialCompile = new ThreadLocal[java.lang.Boolean] {
-    override def initialValue(): java.lang.Boolean = false
+  /**
+   * A compile whose result its caller may discard ([[trial]]). What the compile would report of
+   * methods past the JIT limit is held here, for the caller to report if it keeps the code.
+   *
+   * @param failureExpected whether a failure to compile is an answer the caller asks for, which the
+   *                        compile then logs at debug level rather than as an error.
+   */
+  private[sql] final class TrialCompile private[codegen] (val failureExpected: Boolean) {
+    private val hugeMethods = mutable.ArrayBuffer.empty[(String, String, Int)]
+
+    private[codegen] def holdHugeMethod(className: String, methodName: String, size: Int): Unit =
+      hugeMethods += ((className, methodName, size))
+
+    /** Makes the reports the compile held back, for the code its caller keeps. */
+    def report(): Unit = hugeMethods.foreach { case (className, methodName, size) =>
+      logHugeMethod(className, methodName, size)
+    }
+  }
+
+  private val currentTrial = new ThreadLocal[TrialCompile]
+
+  /**
+   * Runs `body`, a compile whose result its caller may discard, holding back its reports of methods
+   * past the JIT limit until the caller keeps the code ([[TrialCompile.report]]); and, where
+   * `failureExpected`, its report of a failure to compile, which is then the answer the caller is
+   * asking for. Whole-stage codegen compiles a stage this way to decide whether to split its
+   * expressions (`spark.sql.codegen.wholeStage.splitExpressions.methodLimit`). The trial is the
+   * calling thread's, and a backend that compiles on a thread of its own carries it there
+   * ([[withTrial]]), as the JDK backend does.
+   */
+  private[sql] def trial[T](failureExpected: Boolean)(body: => T): (Try[T], TrialCompile) = {
+    val trial = new TrialCompile(failureExpected)
+    (withTrial(trial)(Try(body)), trial)
+  }
+
+  /** The trial the calling thread compiles under, or null outside one. */
+  private[codegen] def activeTrial: TrialCompile = currentTrial.get
+
+  /** Runs `body` on this thread under `trial`, which is null outside one. */
+  private[codegen] def withTrial[T](trial: TrialCompile)(body: => T): T = {
+    val previous = currentTrial.get
+    currentTrial.set(trial)
+    try body finally currentTrial.set(previous)
+  }
+
+  private def failureExpected: Boolean = {
+    val trial = currentTrial.get
+    trial != null && trial.failureExpected
   }
 
   /**
-   * Runs `body`, a compile whose result its caller may discard, without its reports: a method past
-   * the JIT limit or a failure to compile is the answer the caller is asking for, not something
-   * to warn about. Whole-stage codegen compiles a stage's unsplit code this way to decide whether
-   * to split it (`spark.sql.codegen.wholeStage.splitExpressions.methodLimit`). Every backend
-   * reports on the calling thread, which is the one this marks.
+   * Reports a failure to compile generated code, at debug level in a trial that expects one
+   * ([[trial]]).
    */
-  private[sql] def quietly[T](body: => T): T = {
-    val previous = trialCompile.get
-    trialCompile.set(true)
-    try body finally trialCompile.set(previous)
-  }
-
-  private[codegen] def isQuiet: Boolean = trialCompile.get
-
-  /** Reports a failure to compile generated code, unless the compile is a trial ([[quietly]]). */
   private[codegen] def logCompileFailure(e: Throwable): Unit = {
-    if (isQuiet) {
+    if (failureExpected) {
       logDebug("Failed to compile the generated Java code of a trial compile.", e)
     } else {
       logError("Failed to compile the generated Java code.", e)
@@ -373,7 +408,9 @@ object CodeCompiler extends Logging {
    * executor, since the driver compiles each stage before its tasks do and has reported it.
    */
   private[catalyst] def logHugeMethod(className: String, methodName: String, size: Int): Unit = {
-    if (isQuiet) {
+    val trial = currentTrial.get
+    if (trial != null) {
+      trial.holdHugeMethod(className, methodName, size)
       return
     }
     val limit = CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT
@@ -454,7 +491,7 @@ object CodeCompiler extends Logging {
    * the default conf instead of the calling session's.
    */
   private[codegen] def logGeneratedCodeOnFailure(code: CodeAndComment, maxLines: Int): Unit = {
-    if (isQuiet) {
+    if (failureExpected) {
       return
     }
     val formatted = s"\n${CodeFormatter.format(code, maxLines)}"
@@ -1350,9 +1387,12 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
     // not carry a cause, or downstream resolution can fail in non-local deployments.
     val parentLoader = new ParentClassLoader(resolveLoader)
 
+    // The compile reports from the worker, so a trial compile's marker goes there with it.
+    val trial = CodeCompiler.activeTrial
     val future = compileExecutor.submit(new Callable[(GeneratedClass, ByteCodeStats)] {
-      override def call(): (GeneratedClass, ByteCodeStats) =
+      override def call(): (GeneratedClass, ByteCodeStats) = CodeCompiler.withTrial(trial) {
         doCompile(code, source, resolveLoader, parentLoader, failureLogMaxLines)
+      }
     })
     try {
       // Await uninterruptibly: the result is cached and the worker must finish its
