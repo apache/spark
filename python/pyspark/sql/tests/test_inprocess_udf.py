@@ -565,8 +565,13 @@ class BootstrapFailureProbe {
             source_file.write_text(source)
             env = os.environ.copy()
             # This direct JVM probe needs no Spark installation and always imports source.
+            # Py4J comes from the same place as in this process, e.g. Spark's source zip.
+            import py4j
+
             env["SPARK_HOME"] = directory
-            env["PYTHONPATH"] = str(self.python_source)
+            env["PYTHONPATH"] = os.pathsep.join(
+                [str(self.python_source), str(Path(py4j.__file__).parents[1])]
+            )
             result = subprocess.run(
                 [
                     str(Path(java_home) / "bin" / "java"),
