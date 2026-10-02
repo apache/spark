@@ -252,10 +252,9 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
       }
       checkError(
         exception = ex,
-        condition = "_LEGACY_ERROR_TEMP_0035",
-        parameters = Map("message" -> (s"A write distribution and ordering is not supported for " +
-          s"CREATE $datasetSqlSyntax statements. Please remove any DISTRIBUTED BY PARTITION, " +
-          "ORDERED BY, or UNORDERED clause specified in the statement.")),
+        condition = "INVALID_STATEMENT_OR_CLAUSE",
+        parameters = Map(
+          "operation" -> s"CREATE $datasetSqlSyntax ... DISTRIBUTED BY/ORDERED BY/UNORDERED"),
         queryContext = ex.getQueryContext.map(toExpectedContext)
       )
     }

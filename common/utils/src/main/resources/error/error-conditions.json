@@ -7342,7 +7342,7 @@
   "SPECIFY_DISTRIBUTED_BY_PARTITION_WITHOUT_PARTITIONING_IS_NOT_ALLOWED" : {
     "message" : [
       "Cannot specify DISTRIBUTED BY PARTITION for a table that has no partitioning.",
-      "Please add PARTITIONED BY or CLUSTERED BY ... INTO ... BUCKETS, or drop the clause and use only ORDERED BY."
+      "Please add PARTITIONED BY or CLUSTERED BY ... INTO ... BUCKETS, or drop the clause. A statement that defines no schema (no column list, no typed partition columns, and no AS SELECT) cannot declare partitioning, so it cannot use DISTRIBUTED BY PARTITION."
     ],
     "sqlState" : "42908"
   },

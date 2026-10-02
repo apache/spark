@@ -660,7 +660,7 @@ case class CreateTable(
     tableSpec: TableSpecBase,
     ignoreIfExists: Boolean,
     // Null writeDistributionMode means the statement did not request one.
-    writeDistributionMode: String = null,
+    writeDistributionMode: WriteDistributionMode = null,
     writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends UnaryCommand with V2CreateTablePlan {
 
@@ -725,7 +725,7 @@ case class CreateTableAsSelect(
     ignoreIfExists: Boolean,
     isAnalyzed: Boolean = false,
     // Null writeDistributionMode means the statement did not request one.
-    writeDistributionMode: String = null,
+    writeDistributionMode: WriteDistributionMode = null,
     writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends V2CreateTableAsSelectPlan {
 
@@ -942,7 +942,7 @@ case class ReplaceTable(
     tableSpec: TableSpecBase,
     orCreate: Boolean,
     // Null writeDistributionMode means the statement did not request one.
-    writeDistributionMode: String = null,
+    writeDistributionMode: WriteDistributionMode = null,
     writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends UnaryCommand with V2CreateTablePlan {
 
@@ -975,7 +975,7 @@ case class ReplaceTableAsSelect(
     orCreate: Boolean,
     isAnalyzed: Boolean = false,
     // Null writeDistributionMode means the statement did not request one.
-    writeDistributionMode: String = null,
+    writeDistributionMode: WriteDistributionMode = null,
     writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends V2CreateTableAsSelectPlan {
 

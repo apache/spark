@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.TableSpec
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, TableCatalog, TableInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, TableCatalog, TableInfo, WriteDistributionMode}
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -37,7 +37,7 @@ case class ReplaceTableExec(
     tableSpec: TableSpec,
     orCreate: Boolean,
     invalidateCache: (TableCatalog, Identifier) => Unit,
-    writeDistributionMode: String,
+    writeDistributionMode: WriteDistributionMode,
     writeOrdering: Seq[V2SortOrder]) extends LeafV2CommandExec {
 
   val tableProperties = CatalogV2Util.convertTableProperties(tableSpec)
@@ -74,7 +74,7 @@ case class AtomicReplaceTableExec(
     tableSpec: TableSpec,
     orCreate: Boolean,
     invalidateCache: (TableCatalog, Identifier) => Unit,
-    writeDistributionMode: String,
+    writeDistributionMode: WriteDistributionMode,
     writeOrdering: Seq[V2SortOrder]) extends LeafV2CommandExec {
 
   val tableProperties = CatalogV2Util.convertTableProperties(tableSpec)

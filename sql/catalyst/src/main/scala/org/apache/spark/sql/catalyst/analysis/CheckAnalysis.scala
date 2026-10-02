@@ -992,8 +992,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                   "cols" -> badReferences.map(r => toSQLId(r)).mkString(", ")))
             }
 
-            // PreprocessTableCreation only normalizes RewritableTransform references, so the
-            // ordering is also checked here.
+            // PreprocessTableCreation only normalizes column and RewritableTransform references,
+            // so the ordering is also checked here.
             val badOrderingReferences =
               create.writeOrdering.flatMap(_.expression().references()).toSet
                 .map((ref: NamedReference) => ref.fieldNames)

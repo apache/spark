@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.catalyst.util.WriteDistributionAndOrdering
-import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog, WriteDistributionMode}
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
@@ -730,11 +730,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   private def failIfWriteDistributionOrOrdering(
       ident: TableIdentifier,
       operation: String,
-      writeDistributionMode: String,
+      writeDistributionMode: WriteDistributionMode,
       writeOrdering: Seq[V2SortOrder]): Unit = {
     if (WriteDistributionAndOrdering.isRequested(writeDistributionMode, writeOrdering)) {
       throw QueryCompilationErrors.unsupportedTableOperationError(
-        ident, s"$operation ... DISTRIBUTED BY/ORDERED BY")
+        ident, s"$operation ... DISTRIBUTED BY/ORDERED BY/UNORDERED")
     }
   }
 

@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeConstants, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, fractionalSecondsDigits, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampLTZNanos, stringToTimestampNTZNanos, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogContext, PathElement, SupportsNamespaces, TableCatalog, TableInfo, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogContext, PathElement, SupportsNamespaces, TableCatalog, TableWritePrivilege, WriteDistributionMode}
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, LogicalExpressions, MonthsTransform, NullOrdering, SortDirection, SortOrder => V2SortOrder, Transform, YearsTransform}
@@ -6305,15 +6305,21 @@ class AstBuilder extends DataTypeAstBuilder
    * `DISTRIBUTED BY PARTITION` and `[LOCALLY] ORDERED BY ... | UNORDERED`.
    *
    * Returns the distribution mode and the ordering. The mode is null when the statement did not ask
-   * for one, which leaves the choice to the catalog; "none" is an explicit request.
+   * for one, which leaves the choice to the catalog; `NONE` is an explicit request.
+   * `DISTRIBUTED BY PARTITION` is rejected when `partitionTransforms` is empty.
    */
   private def writeSpecsFrom(
-      ctx: CreateTableClausesContext): (String, Seq[V2SortOrder]) = {
+      ctx: CreateTableClausesContext,
+      partitionTransforms: Seq[Transform]): (WriteDistributionMode, Seq[V2SortOrder]) = {
     checkDuplicateClauses(ctx.writeDistributionSpec, "DISTRIBUTED BY PARTITION", ctx)
     checkDuplicateClauses(ctx.writeOrderingSpec, "ORDERED BY/UNORDERED", ctx)
 
     val distributionSpec = ctx.writeDistributionSpec.asScala.headOption.orNull
     val orderingSpec = ctx.writeOrderingSpec.asScala.headOption.orNull
+    // Bucketing counts as partitioning here; CLUSTER BY does not.
+    if (distributionSpec != null && partitionTransforms.isEmpty) {
+      throw QueryParsingErrors.distributedByPartitionWithoutPartitioningError(ctx)
+    }
     if (distributionSpec == null && orderingSpec == null) {
       (null, Seq.empty)
     } else {
@@ -6327,15 +6333,15 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def toDistributionMode(
       distributionSpec: WriteDistributionSpecContext,
-      orderingSpec: WriteOrderingSpecContext): String = {
+      orderingSpec: WriteOrderingSpecContext): WriteDistributionMode = {
     // Only called when at least one of the two clauses is present, so orderingSpec is non-null
     // here whenever distributionSpec is null.
     if (distributionSpec != null) {
-      TableInfo.DISTRIBUTION_MODE_HASH
+      WriteDistributionMode.HASH
     } else if (orderingSpec.UNORDERED != null || orderingSpec.LOCALLY != null) {
-      TableInfo.DISTRIBUTION_MODE_NONE
+      WriteDistributionMode.NONE
     } else {
-      TableInfo.DISTRIBUTION_MODE_RANGE
+      WriteDistributionMode.RANGE
     }
   }
 
@@ -6365,7 +6371,12 @@ class AstBuilder extends DataTypeAstBuilder
       direction.defaultNullOrdering
     }
 
-    LogicalExpressions.sort(visitTransform(ctx.transform), direction, nullOrdering)
+    // A plain column is passed as a bare reference rather than as `identity(col)`.
+    val key = visitTransform(ctx.transform) match {
+      case t: IdentityTransform => t.ref
+      case t => t
+    }
+    LogicalExpressions.sort(key, direction, nullOrdering)
   }
 
   protected def getSerdeInfo(
@@ -6512,12 +6523,8 @@ class AstBuilder extends DataTypeAstBuilder
       partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
     val partitioning = partitionTransforms ++ clusterBySpec.map(_.asTransform)
 
-    val (writeDistributionMode, writeOrdering) = writeSpecsFrom(ctx.createTableClauses())
-
-    // Bucketing counts as partitioning here; CLUSTER BY does not.
-    if (writeDistributionMode == TableInfo.DISTRIBUTION_MODE_HASH && partitionTransforms.isEmpty) {
-      throw QueryParsingErrors.distributedByPartitionWithoutPartitioning(ctx.createTableClauses())
-    }
+    val (writeDistributionMode, writeOrdering) =
+      writeSpecsFrom(ctx.createTableClauses(), partitionTransforms)
 
     Option(ctx.query).map(plan) match {
       case Some(query) =>
@@ -6613,12 +6620,8 @@ class AstBuilder extends DataTypeAstBuilder
     val partitioning = partitionTransforms ++ clusterBySpec.map(_.asTransform)
 
     val identifierContext = ctx.replaceTableHeader().identifierReference()
-    val (writeDistributionMode, writeOrdering) = writeSpecsFrom(ctx.createTableClauses())
-
-    // Bucketing counts as partitioning here; CLUSTER BY does not.
-    if (writeDistributionMode == TableInfo.DISTRIBUTION_MODE_HASH && partitionTransforms.isEmpty) {
-      throw QueryParsingErrors.distributedByPartitionWithoutPartitioning(ctx.createTableClauses())
-    }
+    val (writeDistributionMode, writeOrdering) =
+      writeSpecsFrom(ctx.createTableClauses(), partitionTransforms)
 
     Option(ctx.query).map(plan) match {
       case Some(query) =>
