@@ -459,7 +459,7 @@ object DeserializerBuildHelper {
           val getter = addToPath(path, field.name, field.enc.dataType, newTypePath)
           expressionWithNullSafety(
             createDeserializer(field.enc, getter, newTypePath),
-            field.enc.nullable,
+            field.nullable,
             newTypePath)
       }
       exprs.If(

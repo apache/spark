@@ -64,10 +64,15 @@ class JavaRecordDatasetSuite extends QueryTest with SharedSparkSession {
     checkDataset(df.as[Person], new Person("Bob", 30, new Address("S", "C")))
   }
 
-  test("null value for a primitive record component") {
-    val df = spark.sql("SELECT 'Bob' AS name, CAST(NULL AS INT) AS age, NULL AS address")
-    val e = intercept[SparkRuntimeException](df.as[Person].collect())
-    assert(e.getCondition === "NOT_NULL_ASSERT_VIOLATION")
+  test("null value for a primitive or @Nonnull record component") {
+    val primitive = spark.sql("SELECT 'Bob' AS name, CAST(NULL AS INT) AS age, NULL AS address")
+    val nonnull = spark.sql("SELECT CAST(NULL AS STRING) AS name, 1 AS count, 'n' AS note")
+    Seq(
+      () => primitive.as[Person].collect(),
+      () => nonnull.as(Encoders.record(classOf[NonnullRecord])).collect()).foreach { collect =>
+      val e = intercept[SparkRuntimeException](collect())
+      assert(e.getCondition === "NOT_NULL_ASSERT_VIOLATION")
+    }
   }
 
   test("query a record Dataset with SQL") {

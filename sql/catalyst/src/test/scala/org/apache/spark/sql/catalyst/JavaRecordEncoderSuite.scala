@@ -22,10 +22,12 @@ import java.util.{Arrays, HashSet => JHashSet, Map => JMap}
 
 import test.org.apache.spark.sql.JavaRecordEncoderTestData._
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SparkSerDeUtils
@@ -101,6 +103,21 @@ class JavaRecordEncoderSuite extends CodegenInterpretedPlanTest {
       assert(decoded.ints().toSeq === record.ints().toSeq)
       assert(decoded.strings().toSeq === record.strings().toSeq)
       assert(decoded.addresses().toSeq === record.addresses().toSeq)
+    }
+  }
+
+  test("null in a @Nonnull reference component fails to decode") {
+    // Decode from a schema where every column is nullable, as when reading arbitrary data.
+    val encoder = encoderFor(Encoders.record(classOf[NonnullRecord]))
+    val attrs = toAttributes(encoder.schema).map(_.withNullability(true))
+    val deserializer = encoder.resolveAndBind(attrs).createDeserializer()
+    val note = UTF8String.fromString("n")
+    assert(deserializer(InternalRow(UTF8String.fromString("a"), 1, null)) ===
+      new NonnullRecord("a", 1, null))
+    Seq(InternalRow(null, 1, note), InternalRow(UTF8String.fromString("a"), null, note)).foreach {
+      row =>
+        val e = intercept[SparkRuntimeException](deserializer(row))
+        assert(e.getCondition === "NOT_NULL_ASSERT_VIOLATION")
     }
   }
 
