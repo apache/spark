@@ -80,6 +80,26 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
     assert(physical.head.missingInput.isEmpty)
   }
 
+  test("a committed write that invalidates a cached in-process plan does not fail") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(3).write.parquet(path)
+      val cached = spark.read.parquet(path).select(makeUDF("identity", col("id")))
+      cached.cache()
+      try {
+        assert(spark.sharedState.cacheManager.lookupCachedData(cached).nonEmpty)
+        // Re-caching plans the entry in this session, which rejects in-process UDFs.
+        withSQLConf(SQLConf.PYTHON_UDF_PROFILER.key -> "perf") {
+          spark.range(3, 5).write.mode("append").parquet(path)
+        }
+        assert(spark.sharedState.cacheManager.lookupCachedData(cached).isEmpty)
+        assert(spark.read.parquet(path).count() == 5)
+      } finally {
+        cached.unpersist()
+      }
+    }
+  }
+
   test("unsupported configuration added after column creation fails before task submission") {
     val column = makeUDF("identity", col("id"))
     for (partitionEvaluator <- Seq("true", "false")) {
