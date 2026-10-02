@@ -876,20 +876,42 @@ class UserCredentialManagerSuite extends SparkFunSuite {
         e.getMessage.getFormattedMessage.contains("encryption")
     }
 
-  test("warnIfRpcEncryptionDisabled: warns when encryption is not configured") {
+  test("checkRpcEncryption: warns when encryption is not configured") {
     val appender = new LogAppender(oidcWarningKeyFragment)
     withLogAppender(appender) {
-      UserCredentialManager.warnIfRpcEncryptionDisabled(new SparkConf(loadDefaults = false))
+      UserCredentialManager.checkRpcEncryption(new SparkConf(loadDefaults = false))
     }
     assert(hasOidcEncryptionWarning(appender))
   }
 
-  test("warnIfRpcEncryptionDisabled: does not warn when encryption is configured") {
+  test("checkRpcEncryption: does not warn when encryption is configured") {
     val appender = new LogAppender(oidcWarningKeyFragment)
     withLogAppender(appender) {
       val conf = new SparkConf(loadDefaults = false).set("spark.ssl.rpc.enabled", "true")
-      UserCredentialManager.warnIfRpcEncryptionDisabled(conf)
+      UserCredentialManager.checkRpcEncryption(conf)
     }
+    assert(!hasOidcEncryptionWarning(appender))
+  }
+
+  test("checkRpcEncryption: fails fast when requireRpcEncryption is true without encryption") {
+    val conf = new SparkConf(loadDefaults = false)
+      .set(SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION, true)
+    val e = intercept[IllegalArgumentException] {
+      UserCredentialManager.checkRpcEncryption(conf)
+    }
+    assert(e.getMessage.contains(SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION.key))
+    assert(e.getMessage.contains("RPC channel"))
+  }
+
+  test("checkRpcEncryption: does not fail when requireRpcEncryption is true with encryption") {
+    val appender = new LogAppender(oidcWarningKeyFragment)
+    withLogAppender(appender) {
+      val conf = new SparkConf(loadDefaults = false)
+        .set(SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION, true)
+        .set("spark.ssl.rpc.enabled", "true")
+      UserCredentialManager.checkRpcEncryption(conf) // must not throw
+    }
+    // When encryption is configured, neither the warning nor the exception fires.
     assert(!hasOidcEncryptionWarning(appender))
   }
 
@@ -902,6 +924,15 @@ class UserCredentialManagerSuite extends SparkFunSuite {
         conf, (_, _) => (), Some(new CredentialProviderLoader()))
     }
     assert(hasOidcEncryptionWarning(appender))
+  }
+
+  test("create fails fast when OIDC requires RPC encryption but it is not configured") {
+    // Guards the wiring: create() must enforce when requireRpcEncryption is set.
+    val conf = createSparkConf().set(SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION, true)
+    val e = intercept[IllegalArgumentException] {
+      UserCredentialManager.create(conf, (_, _) => (), Some(new CredentialProviderLoader()))
+    }
+    assert(e.getMessage.contains(SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION.key))
   }
 
   test("create does not warn when OIDC is disabled") {
