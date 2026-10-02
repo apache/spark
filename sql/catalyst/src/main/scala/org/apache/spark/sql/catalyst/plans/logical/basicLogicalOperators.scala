@@ -3100,15 +3100,12 @@ object AsOfJoin {
     structFieldExprs(leftOperand, structType)
       .zip(structFieldExprs(rightOperand, structType))
       .flatMap {
-        case (left, right) =>
-          val canSplit = splitNullableStructs || (!left.nullable && !right.nullable)
-          if (canSplit &&
-              MatchConditionTypes.usesStructDecomposition(left.dataType, right.dataType)) {
-            collectStructLeafPairs(
-              left, right, left.dataType.asInstanceOf[StructType], splitNullableStructs)
-          } else {
-            Seq((left, right))
-          }
+        case (left, right)
+            if (splitNullableStructs || (!left.nullable && !right.nullable)) &&
+              MatchConditionTypes.usesStructDecomposition(left.dataType, right.dataType) =>
+          collectStructLeafPairs(
+            left, right, left.dataType.asInstanceOf[StructType], splitNullableStructs)
+        case pair => Seq(pair)
       }
   }
 
