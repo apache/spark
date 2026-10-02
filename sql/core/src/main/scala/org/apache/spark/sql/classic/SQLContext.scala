@@ -29,7 +29,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
 import org.apache.spark.sql.{Encoder, ExperimentalMethods, Row}
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.classic.SparkSession.{builder => newSparkSessionBuilder}
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
@@ -389,42 +388,6 @@ object SQLContext extends sql.SQLContextCompanion {
   /** @inheritdoc */
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
     newSparkSessionBuilder().sparkContext(sparkContext).getOrCreate().sqlContext
-  }
-
-  /**
-   * Converts an iterator of Java Beans to InternalRow using the provided bean info & schema. This
-   * is not related to the singleton, but is a static method for internal use.
-   */
-  private[sql] def beansToRows(
-      data: Iterator[_],
-      beanClass: Class[_],
-      attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
-    def createStructConverter(cls: Class[_], fieldTypes: Seq[DataType]): Any => InternalRow = {
-      val methodConverters =
-        JavaTypeInference
-          .getJavaBeanReadableProperties(cls)
-          .zip(fieldTypes)
-          .map { case (property, fieldType) =>
-            val method = property.getReadMethod
-            method -> createConverter(method.getReturnType, fieldType)
-          }
-      value =>
-        if (value == null) {
-          null
-        } else {
-          new GenericInternalRow(methodConverters.map { case (method, converter) =>
-            converter(method.invoke(value))
-          })
-        }
-    }
-
-    def createConverter(cls: Class[_], dataType: DataType): Any => Any = dataType match {
-      case struct: StructType => createStructConverter(cls, struct.map(_.dataType))
-      case _ => CatalystTypeConverters.createToCatalystConverter(dataType)
-    }
-
-    val dataConverter = createStructConverter(beanClass, attrs.map(_.dataType))
-    data.map(dataConverter)
   }
 
   /**
