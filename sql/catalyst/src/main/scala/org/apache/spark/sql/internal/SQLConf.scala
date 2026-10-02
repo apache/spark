@@ -5464,8 +5464,8 @@ object SQLConf {
     buildConf("spark.sql.pyspark.udf.profiler.samplingInterval")
       .doc("The interval in milliseconds at which the sampling profiler samples the call stack.")
       .version("4.4.0")
-      .timeConf(TimeUnit.MILLISECONDS)
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
   val PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED =
