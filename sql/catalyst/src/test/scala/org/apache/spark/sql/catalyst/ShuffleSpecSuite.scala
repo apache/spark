@@ -761,63 +761,90 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("SPARK-59887: a spec over a transform of an expression pairs with nothing") {
+  test("SPARK-59887: a spec over a transform of an expression pairs only with the same shape") {
     // A join pairs its two sides up by the column each partition expression references. Over
-    // `a = b` it would pair `bucket(4, a + 1)` with `bucket(4, b)`, and over `s = b` it would pair
-    // `bucket(4, s.x)` with `bucket(4, b)`. A row with `a = b` sits in a different bucket on each
-    // side.
+    // `a = b` it would pair `bucket(4, a + 1)` with `bucket(4, b)`, and over `s = t` it would pair
+    // `bucket(4, s.x)` with `bucket(4, t.y)`. A row with `a = b` sits in a different bucket on each
+    // side. `bucket(4, a + 1)` and `bucket(4, b + 1)` are the same function of `a` and of `b`, so
+    // they pair up.
     val fn = new FakeBucket
     val a = $"a".long
     val b = $"b".long
-    val s = $"s".struct(new StructType().add("x", LongType))
+    val structType = new StructType().add("x", LongType).add("y", LongType)
+    val s = $"s".struct(structType)
+    val t = $"t".struct(structType)
     // A spec clustered on the column its one partition expression references.
     def keyed(expression: Expression): KeyedShuffleSpec =
       KeyedShuffleSpec(
         KeyedPartitioning(Seq(expression), Seq(InternalRow(0L), InternalRow(1L))),
         ClusteredDistribution(expression.references.toSeq))
-    def bucket(argument: Expression, numBuckets: Int): TransformExpression =
+    def bucket(numBuckets: Int, argument: Expression): TransformExpression =
       TransformExpression(fn, Seq(argument), Some(numBuckets))
-    def spec(argument: Expression, numBuckets: Int): KeyedShuffleSpec =
-      keyed(bucket(argument, numBuckets))
-    // Whether the two sides of one reduce, `bucket(8, argument)` with `bucket(4, b)`, pair up.
-    def pairedByReduce(argument: Expression): Boolean =
-      keyed(bucket(argument, 8).reducedTogetherWith(bucket(b, 4)))
-        .isCompatibleWith(keyed(bucket(b, 4).reducedTogetherWith(bucket(argument, 8))))
-    val overColumn = spec(a, 4)
-    val column = spec(b, 4)
+    def spec(numBuckets: Int, argument: Expression): KeyedShuffleSpec =
+      keyed(bucket(numBuckets, argument))
+    // Whether the two sides of one reduce, `bucket(8, left)` with `bucket(4, right)`, pair up.
+    def pairedByReduce(left: Expression, right: Expression): Boolean =
+      keyed(bucket(8, left).reducedTogetherWith(bucket(4, right)))
+        .isCompatibleWith(keyed(bucket(4, right).reducedTogetherWith(bucket(8, left))))
+    val column = spec(4, b)
 
     withSQLConf(
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-      assert(overColumn.isCompatibleWith(column), "two columns pair up")
-      assert(overColumn.canCreatePartitioning)
-      assert(spec(a, 8).areKeysCompatible(column, allowReduce = true),
+      assert(spec(4, a).isCompatibleWith(column), "two columns pair up")
+      assert(spec(4, a).canCreatePartitioning)
+      assert(spec(8, a).areKeysCompatible(column, allowReduce = true),
         "the fixture reduces two columns")
-      assert(pairedByReduce(a), "two columns reduced together share one key space")
-      assert(keyed(b).areKeysCompatible(overColumn, allowReduce = true),
+      assert(pairedByReduce(a, b), "two columns reduced together share one key space")
+      assert(keyed(b).areKeysCompatible(spec(4, a), allowReduce = true),
         "an identity side reduces onto a column's transform")
 
-      Seq("an expression" -> (a + 1L), "a struct field" -> GetStructField(s, 0)).foreach {
-        case (shape, argument) =>
-          val over = spec(argument, 4)
-          assert(!over.isCompatibleWith(column), s"over $shape")
-          assert(!column.isCompatibleWith(over), s"over $shape, the other way round")
-          assert(!over.isCompatibleWith(over), s"over $shape, not even with itself")
-          assert(!over.canCreatePartitioning, s"over $shape, nor a layout to shuffle onto")
+      Seq(
+        ("an expression", a + 1L, b + 1L, b + 2L),
+        ("a struct field", GetStructField(s, 0), GetStructField(t, 0), GetStructField(t, 1))
+      ).foreach { case (shape, argument, sameShape, otherShape) =>
+        val over = spec(4, argument)
+        assert(over.isCompatibleWith(spec(4, sameShape)), s"over $shape, the same shape")
+        assert(over.isCompatibleWith(over), s"over $shape, with itself")
+        assert(!over.isCompatibleWith(spec(4, otherShape)), s"over $shape, another shape")
+        assert(!over.isCompatibleWith(column), s"over $shape, against a column")
+        assert(!column.isCompatibleWith(over), s"over $shape, the other way round")
+        assert(!over.canCreatePartitioning, s"over $shape, no layout to shuffle onto")
 
-          // A reduce pairs the two sides up the same way, so it is refused as well, whichever
-          // side reduces. So is a pair an earlier join reduced together, and an identity side.
-          assert(!spec(argument, 8).areKeysCompatible(column, allowReduce = true), s"over $shape")
-          assert(!column.areKeysCompatible(spec(argument, 8), allowReduce = true), s"over $shape")
-          assert(!over.areKeysCompatible(spec(b, 8), allowReduce = true), s"over $shape")
-          assert(!pairedByReduce(argument), s"over $shape, reduced together")
-          assert(!keyed(b).areKeysCompatible(over, allowReduce = true),
-            s"over $shape, reducing an identity side")
+        // Over the same shape, such a pair reduces as two columns do, whichever side reduces. It
+        // does not reduce onto another shape or a column, and an identity side does not reduce
+        // onto it.
+        assert(spec(8, argument).areKeysCompatible(spec(4, sameShape), allowReduce = true),
+          s"over $shape, reducing the same shape")
+        assert(spec(4, sameShape).areKeysCompatible(spec(8, argument), allowReduce = true),
+          s"over $shape, reducing the same shape the other way round")
+        assert(!spec(8, argument).areKeysCompatible(spec(4, otherShape), allowReduce = true),
+          s"over $shape, reducing another shape")
+        assert(!spec(8, argument).areKeysCompatible(column, allowReduce = true), s"over $shape")
+        assert(!column.areKeysCompatible(spec(8, argument), allowReduce = true), s"over $shape")
+        assert(!over.areKeysCompatible(spec(8, b), allowReduce = true), s"over $shape")
+        assert(!keyed(b).areKeysCompatible(over, allowReduce = true),
+          s"over $shape, reducing an identity side")
+        // Keys an earlier join reduced are in the space of that reduce. Two transforms reduced
+        // through the same pairing pair over the same shape, as two columns do. `bucket(12)`
+        // reduced with `bucket(8)` holds buckets of 4, with `bucket(18)` buckets of 6, and
+        // unreduced buckets of 12.
+        assert(pairedByReduce(argument, sameShape), s"over $shape, reduced together")
+        assert(!pairedByReduce(argument, otherShape),
+          s"over $shape, another shape reduced together")
+        val reducedWith8 = keyed(bucket(12, argument).reducedTogetherWith(bucket(8, a)))
+        assert(!reducedWith8.isCompatibleWith(
+          keyed(bucket(12, sameShape).reducedTogetherWith(bucket(18, b)))),
+          s"over $shape, reduced through different pairings")
+        assert(!reducedWith8.isCompatibleWith(spec(12, sameShape)),
+          s"over $shape, reduced against unreduced")
+        assert(!spec(12, sameShape).isCompatibleWith(reducedWith8),
+          s"over $shape, unreduced against reduced")
 
-          // One such member does not keep a sibling from serving as the layout.
-          assert(ShuffleSpecCollection(Seq(over, overColumn)).canCreatePartitioning)
+        // One such member does not keep a sibling from serving as the layout.
+        assert(ShuffleSpecCollection(Seq(over, spec(4, a))).canCreatePartitioning)
       }
     }
   }

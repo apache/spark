@@ -377,21 +377,22 @@ case class EnsureRequirements(
     val shouldConsiderMinParallelism = children.zip(specs).forall { case (child, spec) =>
       spec.forall(!_.canCreatePartitioning) || child.isInstanceOf[ShuffleExchangeLike]
     }
-    // Choose all the specs that can be used to shuffle other children, keeping only the members
-    // that can serve as the layout. Any other member would build a partitioning its own child is
-    // not laid out on.
-    val candidateSpecs = children.zip(specs).collect {
-      case (child, Some(spec)) if spec.canCreatePartitioning &&
-          (!shouldConsiderMinParallelism ||
-            child.outputPartitioning.numPartitions >= conf.defaultNumShufflePartitions) =>
-        child -> spec.flatten.filter(_.canCreatePartitioning)
+    // Choose all the children whose spec can be used to shuffle other children, each with the
+    // members that can serve as the layout. Any other member would build a partitioning its own
+    // child is not laid out on, and it does not count towards the ranking below either.
+    val candidateSpecs = children.zip(specs).flatMap {
+      case (child, Some(spec)) if !shouldConsiderMinParallelism ||
+          child.outputPartitioning.numPartitions >= conf.defaultNumShufflePartitions =>
+        val members = spec.flatten.filter(_.canCreatePartitioning)
+        if (members.nonEmpty) Some(child -> members) else None
+      case _ => None
     }
     // Rank on two things at once. A child with no `ShuffleExchangeLike` node comes first, since
     // keeping it costs nothing. For instance, if we have:
     //   A: (No_Exchange, 100) <---> B: (Exchange, 120)
     // it's better to pick A and change B to (Exchange, 100) instead of picking B and insert a
     // new shuffle for A. Then the best parallelism decides, and for a collection that is the best
-    // any member offers, since a collection has no count of its own.
+    // any serving member offers, since a collection has no count of its own.
     //
     // What the winner contributes is its members, the alternatives the layout is picked from below.
     // Empty when no child can serve as the layout.
@@ -410,7 +411,7 @@ case class EnsureRequirements(
     val pairings: Seq[(LeafShuffleSpec, Seq[Option[LeafShuffleSpec]])] = bestMembers.map { member =>
       member -> childMembers.map(_.find(member.isCompatibleWith))
     }
-    // Which children the winner reaches at all, over all of its members.
+    // Which children the winner reaches at all, over all of its serving members.
     val reached: Seq[Boolean] = pairings.map(_._2).transpose.map(_.exists(_.isDefined))
     // The member picked has to pair with every child the winner reaches. A child it does not
     // reach, and a child that is not in the decision, are shuffled whichever member wins, so
@@ -1135,9 +1136,11 @@ case class EnsureRequirements(
       // the skew of joining on keys that are coarser than the join keys. Key order and duplicated
       // cluster keys don't matter.
       def allClusterKeysCovered: Boolean =
-        // Every column a partition expression references counts as covered. A scan reports one
-        // per expression (`KeyedPartitioning.supportsExpressions`).
-        distribution.allClusterKeysAmong(partitioning.expressions.flatMap(_.references))
+        // Only an expression over a single column covers that column. One over several, e.g.
+        // `b + c`, maps to no position (`KeyedShuffleSpec.keyPositions`). The spec turns it away
+        // or projects it away, so its columns are not covered.
+        distribution.allClusterKeysAmong(
+          partitioning.expressions.filter(_.references.size == 1).flatMap(_.references))
 
       // The coverage requirement is a comparison of expressions, while `keysMaySatisfy` can end in
       // a projection of the partition keys, so the cheap question is asked first. The requirement

@@ -604,10 +604,10 @@ private[sql] object GroupPartitionsExec {
                   // `reduced` came from the one member `checkKeyGroupCompatible` paired
                   // this side on, which need not be the member being rewritten. The keys are
                   // reduced once, from the shared key rows, so `reduced` describes them
-                  // whichever member this is. Its argument is a bare column, since the pairing
-                  // admits no other. The member's own argument takes its place, since that need
-                  // not be one. A side shuffled onto this layout reports `bucket(8, b + 1)` next
-                  // to `bucket(8, id)`, or `b + 1` next to an identity `id`.
+                  // whichever member this is. Only its function says that, so the member's own
+                  // argument takes the place of `reduced`'s. A side shuffled onto this layout
+                  // reports `bucket(8, b + 1)` next to `bucket(8, id)`, or `b + 1` next to an
+                  // identity `id`.
                   val argument = expr match {
                     case t: TransformExpression => t.children
                     case e => Seq(e)
