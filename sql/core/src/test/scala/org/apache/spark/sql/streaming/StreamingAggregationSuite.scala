@@ -1180,6 +1180,80 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     )
   }
 
+  testWithAllStateVersions("streamline aggregation: multi-partition empty batch emits exactly " +
+    "one initialized row in update mode", streamlineEnabled) {
+    val inputData = MemoryStream[Int](2)
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .agg(count("*").as("count"), sum("value").as("sum"))
+
+    testStream(aggregated, Update)(
+      AddData(inputData, 1, 2, 3, 4),
+      // Both partitions have no surviving rows, and the batch must seed the global key exactly
+      // once, not once per empty partition.
+      CheckLastBatch((0L, null))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: an empty sibling partition does not seed " +
+    "a non-empty batch", streamlineEnabled) {
+    val inputData = MemoryStream[Int](2)
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .agg(count("*").as("count"), sum("value").as("sum"))
+
+    testStream(aggregated, Update)(
+      // Only one partition carries the surviving row; the empty sibling must not add a row.
+      AddData(inputData, -5),
+      CheckLastBatch((1L, -5L))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: coalesce(1) with a 0 partition RDD still " +
+    "initializes the global aggregate", streamlineEnabled) {
+    val inputSource = new BlockRDDBackedSource(spark)
+    MockSourceProvider.withMockSources(inputSource) {
+      val aggregated: Dataset[Long] =
+        spark.readStream.format((new MockSourceProvider).getClass.getCanonicalName)
+          .load().coalesce(1).groupBy().count().as[Long]
+
+      testStream(aggregated, Complete())(
+        // The very first batch is an empty trigger with a 0-partition RDD: without an
+        // initialization path for it, no state is written and Complete emits nothing.
+        AddBlockData(inputSource),
+        CheckLastBatch(0),
+        AddBlockData(inputSource, Seq(1)),
+        CheckLastBatch(1),
+        AddBlockData(inputSource), // another empty trigger with a 0-partition RDD
+        CheckLastBatch(1),
+        AddBlockData(inputSource, Seq(2, 3)),
+        CheckLastBatch(3),
+        StopStream
+      )
+    }
+  }
+
+  testWithAllStateVersions("streamline aggregation: a 0 partition source batch still initializes " +
+    "the global aggregate", streamlineEnabled) {
+    val inputSource = new BlockRDDBackedSource(spark)
+    MockSourceProvider.withMockSources(inputSource) {
+      val aggregated: Dataset[Long] =
+        spark.readStream.format((new MockSourceProvider).getClass.getCanonicalName)
+          .load().groupBy().count().as[Long]
+
+      testStream(aggregated, Complete())(
+        // The first batch has no blocks at all: the source RDD has zero partitions.
+        AddBlockData(inputSource),
+        CheckLastBatch(0),
+        AddBlockData(inputSource, Seq(1)),
+        CheckLastBatch(1),
+        StopStream
+      )
+    }
+  }
+
   testWithAllStateVersions("streamline aggregation: grouped aggregation over empty input emits " +
     "no rows", streamlineEnabled) {
     val inputData = MemoryStream[Int]
