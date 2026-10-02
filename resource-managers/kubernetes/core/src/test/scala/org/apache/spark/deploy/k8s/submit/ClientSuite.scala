@@ -252,9 +252,8 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     doReturn(resourceList)
       .when(kubernetesClient)
       .resourceList(createdResourcesArgumentCaptor.capture(): _*)
-    // SPARK-38079: cleanup deletes each pre-resource individually (not as a single
-    // resourceList(...).delete() call -- see deletePodAndPreResources, review comment
-    // #4129910518), so any HasMetadata resolves to the same trackable mock here.
+    // SPARK-38079: deletePodAndPreResources deletes each pre-resource individually, so any
+    // HasMetadata resolves to the same trackable mock here.
     when(kubernetesClient.resource(ArgumentMatchers.any[HasMetadata]())).thenReturn(namedResource)
   }
 
@@ -278,11 +277,10 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     // edit function would satisfy the verify() above without ever removing the gate.
     assert(editFnCaptor.getValue.apply(podWithOwnerReference(gatedConfigMapName)) ===
       fullExpectedPodGateRemoved(gatedConfigMapName))
-    // SPARK-38079 review (dongjoon-hyun, #4129910551): checking each call happened is not
-    // enough to show the pod is created *before* its pre-resources, or that the gate is
-    // removed only *after* that -- these are independent verify() calls, so e.g. swapping the
-    // order of the create() and resourceList() calls inside run() would still satisfy them
-    // all. Pin down the actual order with InOrder instead.
+    // Checking each call happened is not enough to show the pod is created *before* its
+    // pre-resources, or that the gate is removed only *after* that -- independent verify()
+    // calls would still pass even if run() swapped the order of its create() and
+    // resourceList() calls. Pin down the actual order with InOrder instead.
     val order = inOrder(namedPods, kubernetesClient)
     order.verify(namedPods).create()
     order.verify(kubernetesClient).resourceList(ArgumentMatchers.any[Array[HasMetadata]](): _*)
@@ -332,10 +330,10 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     verify(namedPods).create()
 
     // The (single) resourceList(...) call creating the driver's own config map must already
-    // carry the owner reference -- there is no separate, later "refresh" call, unlike before
-    // this refactor. The pod stays scheduling-gated (so kubelet cannot attempt to mount it)
-    // for as long as this has not yet happened, avoiding the "configmap ... not found" mount
-    // race (SPARK-38079) without ever creating the config map ownerless.
+    // carry the owner reference -- there is no separate, later "refresh" call. The pod stays
+    // scheduling-gated (so kubelet cannot attempt to mount it) for as long as this has not yet
+    // happened, avoiding the "configmap ... not found" mount race (SPARK-38079) without ever
+    // creating the config map ownerless.
     val resourceListCall = createdResourcesArgumentCaptor.getAllValues.get(0)
     val configMaps = resourceListCall
       .filter(_.isInstanceOf[ConfigMap]).map(_.asInstanceOf[ConfigMap])
