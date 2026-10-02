@@ -2861,6 +2861,22 @@ class MergeSubplansSuite extends PlanTest {
       s"the merged scan should re-derive the reported ordering; got ${scans.head.ordering}")
   }
 
+  test("SPARK-59948: merge DSv2 scans reporting an ordering on a nested field") {
+    // Each scan derives its `s.x ASC` report separately. The nested key resolves to a fresh
+    // `Alias(GetStructField(...))` per derivation, so unless the alias is stripped the two
+    // reports never compare equal and the merge is declined.
+    val table = new TestV2Table(StructType(Seq(
+      StructField("s", StructType(Seq(StructField("x", IntegerType)))),
+      StructField("b", IntegerType), StructField("c", StringType))),
+      reportedOrderingCols = Seq("s.x"))
+    val q = testRelation.select(
+      ScalarSubquery(v2ScanReportingOn(table, Seq("s", "b")).groupBy()(sum($"b").as("sum_b"))),
+      ScalarSubquery(v2ScanReportingOn(table, Seq("s", "c")).groupBy()(sum($"c").as("sum_c"))))
+    val optimized = Optimize.execute(q.analyze)
+
+    assert(v2Scans(optimized).length == 1, s"the two scans should be fused into one:\n$optimized")
+  }
+
   test("SPARK-58549: do not merge when the rebuilt scan re-derives less than the combined " +
     "ordering") {
     // One input reports `a ASC`, the other `a ASC, c ASC`, so the combined requirement is the
