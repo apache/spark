@@ -2790,6 +2790,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         """SELECT map_entries(from_json(
           |  '{"a":1,"b":2,"a":3}',
           |  'MAP<CHAR(2), INT>'))""".stripMargin
+      val exactRepeatAfterCollisionQuery =
+        """SELECT from_json('{"a":1,"a ":2,"a":3}', 'MAP<CHAR(2), INT>')"""
       val varcharOverflowQuery =
         """SELECT from_json('{"abc":1}', 'MAP<VARCHAR(2), INT>')"""
       val varcharOverflowFailfastQuery =
@@ -2834,7 +2836,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assertDuplicateMapKey(malformedValueBeforeDuplicateQuery)
       checkAnswer(sql(exactCharJsonQuery), Row(Map("a " -> 2)))
       checkAnswer(sql(exactVarcharJsonQuery), Row(Map("ab" -> 2)))
-      checkAnswer(sql(interleavedCharJsonQuery), Row(Seq(Row("a ", 3), Row("b ", 2))))
+      checkAnswer(sql(interleavedCharJsonQuery), Row(Seq(Row("b ", 2), Row("a ", 3))))
+      assertDuplicateMapKey(exactRepeatAfterCollisionQuery)
       assertDuplicateMapKey(badJsonKeyBeforeDuplicateQuery)
       checkAnswer(sql(badKeyThenSiblingQuery), Row(2))
       withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
@@ -2872,7 +2875,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         checkAnswer(sql(nestedJsonQuery), Row(Map("outer" -> Map("a " -> 2))))
         checkAnswer(sql(badValueBeforeDuplicateQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(malformedValueBeforeDuplicateQuery), Row(Map("a " -> 2)))
-        checkAnswer(sql(interleavedCharJsonQuery), Row(Seq(Row("a ", 3), Row("b ", 2))))
+        checkAnswer(sql(interleavedCharJsonQuery), Row(Seq(Row("b ", 2), Row("a ", 3))))
+        checkAnswer(sql(exactRepeatAfterCollisionQuery), Row(Map("a " -> 3)))
         checkAnswer(sql(badJsonKeyBeforeDuplicateQuery), Row(Map("a " -> 2)))
         withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
           checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
@@ -2946,6 +2950,14 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         """SELECT from_json(
           |  '{"a":[1,"bad",99],"b":[3]}',
           |  'MAP<CHAR(2), ARRAY<INT>>')""".stripMargin
+      val stringNestedArrayLeakQuery =
+        """SELECT map_keys(from_json(
+          |  '{"a":[1,"bad",99],"b":[3]}',
+          |  'MAP<STRING, ARRAY<INT>>'))""".stripMargin
+      val stringNestedArrayMapQuery =
+        """SELECT from_json(
+          |  '{"a":[1,"bad",99],"b":[3]}',
+          |  'MAP<STRING, ARRAY<INT>>')""".stripMargin
 
       Seq(true, false).foreach { partial =>
         withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
@@ -2955,6 +2967,10 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
             checkAnswer(sql(nestedArrayMapQuery), Row(Map("b " -> Seq(3))))
           }
         }
+      }
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+        checkAnswer(sql(stringNestedArrayLeakQuery), Row(Seq("b")))
+        checkAnswer(sql(stringNestedArrayMapQuery), Row(Map("b" -> Seq(3))))
       }
     }
   }

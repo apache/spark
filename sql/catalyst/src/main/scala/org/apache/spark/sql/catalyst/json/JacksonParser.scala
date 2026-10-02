@@ -685,14 +685,19 @@ class JacksonParser(
     var badRecordException: Option[Throwable] = None
 
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      keys += UTF8String.fromString(parser.currentName)
+      val name = UTF8String.fromString(parser.currentName)
       try {
         values += fieldConverter.apply(parser)
+        keys += name
       } catch {
         case err: PartialValueException if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(err.cause))
           values += err.partialResult
+          keys += name
         case NonFatal(e) if drainErrors =>
+          // Omit the failed pair so remaining keys stay in the partial map.
+          // skipRemainingValue drains leftover nested tokens that skipChildren
+          // would miss after a converter stopped inside an array or object.
           badRecordException = badRecordException.orElse(Some(e))
           skipRemainingValue(parser, mapDepth)
       }
@@ -748,6 +753,9 @@ class JacksonParser(
       }
       try {
         val key = CharVarcharUtils.applyTextParseSemantics(rawKey, keyType)
+        // Re-insert so LAST_WIN follows the latest occurrence of this raw name,
+        // matching StaxXmlParser.convertConstrainedMap.
+        lastEntries.remove(rawKey)
         lastEntries.update(rawKey, (key, value))
       } catch {
         case NonFatal(e) =>
