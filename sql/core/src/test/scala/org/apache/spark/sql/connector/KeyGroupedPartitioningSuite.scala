@@ -3555,32 +3555,37 @@ class KeyGroupedPartitioningSuite
   private val customReportingTableName = s"$customReportingCatalogName.ns.$table"
   private def plusOneKey(column: String): Expression =
     new GeneralScalarExpression("+", Array[Expression](FieldReference(column), literal(1)))
+  private def nestedKey(column: String): Expression =
+    ApplyTransform("f", Seq(ApplyTransform("g", Seq(FieldReference(column)))))
+  private def ignoredReportWarning(report: String, kind: String, columns: String): String =
+    s"Spark ignores the $report reported by $customReportingTableName " +
+      s"(scan ${classOf[CustomReportingScan].getName}) because the $kind columns " +
+      s"cannot be resolved: $columns."
 
   private def withCustomReportingTable(f: CustomReportingCatalog => Unit): Unit = {
-    spark.conf.set(s"spark.sql.catalog.$customReportingCatalogName",
-      classOf[CustomReportingCatalog].getName)
-    val reportingCatalog = spark.sessionState.catalogManager.catalog(customReportingCatalogName)
-      .asInstanceOf[CustomReportingCatalog]
-    try {
-      val reportingColumns = Array(
-        Column.create("id", IntegerType),
-        Column.create("data", StringType),
-        Column.create("s", new StructType().add("x", IntegerType)))
-      createTable(table, reportingColumns, Array(identity("id")), catalog = reportingCatalog)
-      sql(s"INSERT INTO $customReportingTableName VALUES " +
-          "(1, 'aa', named_struct('x', 10)), (2, 'bb', named_struct('x', 20))")
-      createTable(table, columns, Array(identity("id")))
-      sql(s"INSERT INTO testcat.ns.$table VALUES " +
-          "(1, 'cc', cast('2020-01-03' as timestamp)), " +
-          "(2, 'dd', cast('2020-01-04' as timestamp))")
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withSQLConf(
+        s"spark.sql.catalog.$customReportingCatalogName" -> classOf[CustomReportingCatalog].getName,
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val reportingCatalog = spark.sessionState.catalogManager.catalog(customReportingCatalogName)
+        .asInstanceOf[CustomReportingCatalog]
+      try {
+        val reportingColumns = Array(
+          Column.create("id", IntegerType),
+          Column.create("data", StringType),
+          Column.create("s", new StructType().add("x", IntegerType)))
+        createTable(table, reportingColumns, Array(identity("id")), catalog = reportingCatalog)
+        sql(s"INSERT INTO $customReportingTableName VALUES " +
+            "(1, 'aa', named_struct('x', 10)), (2, 'bb', named_struct('x', 20))")
+        createTable(table, columns, Array(identity("id")))
+        sql(s"INSERT INTO testcat.ns.$table VALUES " +
+            "(1, 'cc', cast('2020-01-03' as timestamp)), " +
+            "(2, 'dd', cast('2020-01-04' as timestamp))")
         f(reportingCatalog)
+      } finally {
+        reportingCatalog.reportedKeys = Seq.empty
+        reportingCatalog.reportedOrdering = Seq.empty
+        reportingCatalog.clearTables()
       }
-    } finally {
-      reportingCatalog.reportedKeys = Seq.empty
-      reportingCatalog.reportedOrdering = Seq.empty
-      reportingCatalog.clearTables()
-      spark.conf.unset(s"spark.sql.catalog.$customReportingCatalogName")
     }
   }
 
@@ -3604,19 +3609,22 @@ class KeyGroupedPartitioningSuite
   }
 
   test("SPARK-59721: an unresolvable reported partition key falls back to unknown partitioning") {
-    val nestedTransform =
-      ApplyTransform("f", Seq(ApplyTransform("g", Seq(FieldReference("missing")))))
     // CustomReportingCatalog is not a FunctionCatalog, so a `bucket` key would be dropped even with
     // a resolvable column. The warning assertion shows the unresolvable column is what drops it.
     val cases = Seq[(Seq[Expression], Option[String])](
       (Seq(identity("id")), None),
+      (Seq(identity("ID")), None),
       (Seq(bucket(4, "missing")), Some("missing")),
-      (Seq(nestedTransform), Some("missing")),
+      (Seq(nestedKey("missing")), Some("missing")),
       (Seq(identity("id"), identity("missing")), Some("missing")),
       (Seq(identity("missing"), bucket(4, "missing")), Some("missing")),
       (Seq(plusOneKey("id"), identity("missing")), Some("missing")),
       (Seq(plusOneKey("missing")), Some("missing")),
-      (Seq(identity("s.missing")), Some("s.missing (FIELD_NOT_FOUND)")))
+      (Seq(identity("s.missing")), Some("s.missing (FIELD_NOT_FOUND)")),
+      (Seq(ChildrenOverridingTransform("identity", Seq(FieldReference("missing")), Seq.empty)),
+        Some("missing")),
+      (Seq(ChildrenOverridingTransform("identity", Seq(FieldReference("id")),
+        Seq(FieldReference("missing")))), None))
     withCustomReportingTable { reportingCatalog =>
       cases.foreach { case (keys, unresolvedColumns) =>
         reportingCatalog.reportedKeys = keys
@@ -3625,10 +3633,9 @@ class KeyGroupedPartitioningSuite
         val keysString = keys.map(_.describe()).mkString(", ")
         unresolvedColumns match {
           case Some(columnsString) =>
-            assert(warnings.nonEmpty, s"no warning for keys [$keysString]")
-            assert(warnings.forall(_.contains(s"reported by $customReportingTableName ")), warnings)
-            assert(warnings.forall(_.contains(classOf[CustomReportingScan].getName)), warnings)
-            assert(warnings.forall(_.contains(s"resolved: $columnsString.")), warnings)
+            assert(warnings.toSet ==
+              Set(ignoredReportWarning("KeyGroupedPartitioning", "partition key", columnsString)),
+              keysString)
             assert(reportingScan.keyGroupedPartitioning.isEmpty, keysString)
             assert(collectShuffles(plan).nonEmpty, keysString)
           case None =>
@@ -3644,28 +3651,40 @@ class KeyGroupedPartitioningSuite
     withCustomReportingTable { reportingCatalog =>
       withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true") {
         reportingCatalog.reportedKeys = Seq(identity("id"))
-        reportingCatalog.reportedOrdering = Seq(
-          sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
-        val (_, keptScan, keptWarnings) =
-          customReportingJoin("ordering columns cannot be resolved")
-        assert(keptWarnings.isEmpty, keptWarnings)
-        assert(keptScan.ordering.map(_.map(_.child.references.map(_.name).toSeq)) ==
-          Some(Seq(Seq("id"))))
-
-        reportingCatalog.reportedOrdering = Seq(
-          sort(FieldReference("missing"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
-        val (_, reportingScan, warnings) =
-          customReportingJoin("ordering columns cannot be resolved")
-        assert(warnings.nonEmpty)
-        assert(warnings.forall(_.contains(s"reported by $customReportingTableName ")), warnings)
-        assert(warnings.forall(_.contains(classOf[CustomReportingScan].getName)), warnings)
-        assert(warnings.forall(_.contains("resolved: missing.")), warnings)
-        assert(reportingScan.ordering.isEmpty)
-        assert(reportingScan.keyGroupedPartitioning.isDefined)
-        val derivedOrdering = reportingScan.outputOrdering.map { o =>
-          (o.child.references.map(_.name).toSeq, o.direction)
+        Seq[(SortOrder, String)](
+          (sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST), "id"),
+          (sort(FieldReference("ID"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST), "ID"),
+          (sort(FieldReference("index"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+            "index"),
+          (ChildrenOverridingSortOrder(FieldReference("id"), Seq(FieldReference("missing"))), "id")
+        ).foreach { case (order, column) =>
+          reportingCatalog.reportedOrdering = Seq(order)
+          val (_, keptScan, keptWarnings) =
+            customReportingJoin("ordering columns cannot be resolved")
+          assert(keptWarnings.isEmpty, keptWarnings)
+          assert(keptScan.ordering.map(_.map(_.child.references.map(_.name).toSeq)) ==
+            Some(Seq(Seq(column))), order.describe())
         }
-        assert(derivedOrdering == Seq((Seq("id"), Ascending)))
+
+        Seq[(SortOrder, String)](
+          (sort(FieldReference("missing"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+            "missing"),
+          (ChildrenOverridingSortOrder(FieldReference("missing"), Seq.empty), "missing"),
+          (sort(FieldReference(Seq.empty[String]), SortDirection.ASCENDING,
+            NullOrdering.NULLS_FIRST), "<empty>")
+        ).foreach { case (order, columnsString) =>
+          reportingCatalog.reportedOrdering = Seq(order)
+          val (_, reportingScan, warnings) =
+            customReportingJoin("ordering columns cannot be resolved")
+          assert(warnings.toSet ==
+            Set(ignoredReportWarning("ordering", "ordering", columnsString)), columnsString)
+          assert(reportingScan.ordering.isEmpty)
+          assert(reportingScan.keyGroupedPartitioning.isDefined)
+          val derivedOrdering = reportingScan.outputOrdering.map { o =>
+            (o.child.references.map(_.name).toSeq, o.direction)
+          }
+          assert(derivedOrdering == Seq((Seq("id"), Ascending)))
+        }
       }
     }
   }
@@ -3673,7 +3692,7 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59721: a reported partition key that cannot be converted still fails") {
     val cases = Seq(
       (plusOneKey("id"), "id + 1"),
-      (ApplyTransform("f", Seq(ApplyTransform("g", Seq(FieldReference("id"))))), "g(id)"))
+      (nestedKey("id"), "g(id)"))
     withCustomReportingTable { reportingCatalog =>
       cases.foreach { case (key, expr) =>
         reportingCatalog.reportedKeys = Seq(key)
@@ -9507,4 +9526,30 @@ case class CustomReportingScan(
     keys.toArray,
     inner.asInstanceOf[SupportsReportPartitioning].outputPartitioning().numPartitions())
   override def outputOrdering(): Array[SortOrder] = ordering.toArray
+}
+
+/**
+ * A connector-defined transform whose `children()` differs from its `arguments()`, which the
+ * default `Transform.children()` returns.
+ */
+case class ChildrenOverridingTransform(
+    name: String,
+    args: Seq[Expression],
+    childExprs: Seq[Expression]) extends Transform {
+  override def arguments(): Array[Expression] = args.toArray
+  override def children(): Array[Expression] = childExprs.toArray
+  override def references(): Array[NamedReference] =
+    args.collect { case ref: NamedReference => ref }.toArray
+}
+
+/**
+ * A connector-defined sort order whose `children()` differs from `{expression()}`, which the
+ * default `SortOrder.children()` returns.
+ */
+case class ChildrenOverridingSortOrder(
+    expression: Expression,
+    childExprs: Seq[Expression]) extends SortOrder {
+  override def direction(): SortDirection = SortDirection.ASCENDING
+  override def nullOrdering(): NullOrdering = NullOrdering.NULLS_FIRST
+  override def children(): Array[Expression] = childExprs.toArray
 }

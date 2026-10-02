@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.DATA_SOURCE_V2_SCAN_RELATION
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NamedReference, SortOrder => V2SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{SupportsReportOrdering, SupportsReportPartitioning}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, UnknownPartitioning}
 import org.apache.spark.util.ArrayImplicits._
@@ -50,8 +50,8 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
         if d.keyGroupedPartitioning.isEmpty =>
       val catalystPartitioning = scan.outputPartitioning() match {
         case kgp: KeyGroupedPartitioning =>
-          val keys = kgp.keys()
-          val unresolvedColumns = unresolvableColumns(keys.toImmutableArraySeq, relation)
+          val keys = kgp.keys().toImmutableArraySeq
+          val unresolvedColumns = unresolvableColumns(keys, relation)
           val partitioning = if (unresolvedColumns.nonEmpty) {
             logWarning(
               log"Spark ignores the KeyGroupedPartitioning reported by " +
@@ -61,8 +61,7 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
             None
           } else {
             sequenceToOption(
-              keys.map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog))
-                .toImmutableArraySeq)
+              keys.map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog)))
           }
           // Keep the partitioning when at least one of its keys is still in the scan output: the
           // scan projects the pruned key positions away when reporting its physical output
@@ -96,8 +95,9 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
           log"Spark ignores the ordering reported by ${MDC(RELATION_NAME, relation.name)} " +
             log"(scan ${MDC(CLASS_NAME, scan.getClass.getName)}) because the ordering columns " +
             log"cannot be resolved: ${MDC(COLUMN_NAMES, unresolvedColumns.mkString(", "))}.")
-        // With no reported ordering, DataSourceV2ScanExecBase.outputOrdering may still derive one
-        // from a kept key-grouped partitioning, which does not depend on the dropped report.
+        // Use None, not Some(Nil): only None lets DataSourceV2ScanExecBase.outputOrdering derive an
+        // ordering from a kept key-grouped partitioning, which does not depend on the dropped
+        // report.
         d.copy(ordering = None)
       } else {
         // The ordering is kept as reported, even where it references columns pruned out of the
@@ -113,26 +113,34 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
   private def unresolvableColumns(
       exprs: Seq[V2Expression],
       relation: LogicalPlan): Seq[String] = {
-    // Walk `children()` instead of calling `V2Expression.references()`: the conversion resolves
-    // every reference reachable through `arguments()`/`expression()`, while `references()` can
-    // return fewer. `ApplyTransform` returns only its top-level arguments, which would miss
-    // `f(g(missing))`, and a connector-defined `Transform` can return anything.
-    def references(expr: V2Expression): Seq[NamedReference] = expr match {
+    // Walk the accessors the conversion reads, `Transform.arguments()` and
+    // `SortOrder.expression()`, instead of `V2Expression.references()` or `children()`: a connector
+    // can override those to disagree with the conversion, and `ApplyTransform.references()` returns
+    // only its top-level arguments, which would miss `f(g(missing))`. Other expressions, such as
+    // `GeneralScalarExpression`, go through `children()`.
+    def collectReferences(expr: V2Expression): Seq[NamedReference] = expr match {
       case ref: NamedReference => Seq(ref)
-      case other => other.children().toImmutableArraySeq.flatMap(references)
+      case t: Transform => t.arguments().toImmutableArraySeq.flatMap(collectReferences)
+      case s: V2SortOrder => collectReferences(s.expression())
+      case other => other.children().toImmutableArraySeq.flatMap(collectReferences)
     }
-    exprs.flatMap(references).flatMap { ref =>
-      val name = ref.fieldNames.toImmutableArraySeq.quoted
-      try {
-        if (V2ExpressionUtils.resolveRefOpt(ref, relation).isDefined) {
-          None
-        } else {
-          Some(name)
+    exprs.flatMap(collectReferences).flatMap { ref =>
+      if (ref.fieldNames.isEmpty) {
+        // An empty name can be neither quoted nor resolved: both throw.
+        Some("<empty>")
+      } else {
+        val name = ref.fieldNames.toImmutableArraySeq.quoted
+        try {
+          if (V2ExpressionUtils.resolveRefOpt(ref, relation).isDefined) {
+            None
+          } else {
+            Some(name)
+          }
+        } catch {
+          // A nested-field extraction error or an ambiguous reference throws instead of returning
+          // None.
+          case e: AnalysisException => Some(s"$name (${e.getCondition})")
         }
-      } catch {
-        // A nested-field extraction error or an ambiguous reference throws instead of returning
-        // None.
-        case e: AnalysisException => Some(s"$name (${e.getCondition})")
       }
     }.distinct
   }
