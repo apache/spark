@@ -174,6 +174,12 @@ class AbstractTranspiler(object):
         when present and falls back to the combo otherwise, so existing varieties
         do not move. Without this, every new type a variety supports is another
         entry in a fixed category enum matched against the caller's guess.
+
+        A tuple whose ``Column`` is ``None`` (``(None, categories)``) is treated
+        exactly like a plain ``None`` decline: no option is produced. Any other
+        malformed return (a non-Column, a wrong-length categories list) is refused
+        so the UDF falls back to interpreted Python rather than breaking at call
+        time.
         """
         pass
 
@@ -1411,11 +1417,31 @@ def _transpile_func(
                             # must never break a working UDF" invariant. Skip it.
                             if transpiled_column is None:
                                 continue
+                            # The JVM matches options to bound column types by
+                            # index and drops the WHOLE option set if any one
+                            # list's length differs from the param count, so a
+                            # wrong-length list here would silently neuter every
+                            # other variety's options. Refuse it instead.
+                            if len(categories) != len(public_params):
+                                raise UnsupportedOperationException(
+                                    f"transpiler returned {len(categories)} input "
+                                    f"categories for {len(public_params)} parameters"
+                                )
                             input_categories.append(list(categories))
-                        else:
+                        elif isinstance(result, Column):
                             transpiled_column = result
                             input_categories.append(
                                 [combo.get(i, "numeric") for i in range(len(public_params))]
+                            )
+                        else:
+                            # Anything that is neither a Column nor a
+                            # (Column, categories) tuple is a malformed return;
+                            # appending it would surface a raw JVM NPE at call
+                            # time. Refuse so the UDF falls back cleanly.
+                            raise UnsupportedOperationException(
+                                f"transpiler returned an unsupported result of type "
+                                f"{type(result).__name__}; expected a Column, a "
+                                "(Column, list[str]) tuple, or None"
                             )
                         transpiled.append(transpiled_column)
                 except Exception as e:
