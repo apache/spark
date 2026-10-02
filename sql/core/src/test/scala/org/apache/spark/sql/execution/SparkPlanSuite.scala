@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{ByteArrayOutputStream, ObjectOutputStream}
+import java.io.{ObjectOutputStream, OutputStream}
 import java.lang.management.ManagementFactory
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
@@ -26,14 +26,13 @@ import scala.concurrent.duration.Duration
 
 import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.rdd.{EmptyRDD, RDD}
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
   Attribute, AttributeReference, Expression, ExprId, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
 import org.apache.spark.sql.catalyst.trees.LeafLike
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
@@ -57,47 +56,51 @@ class SparkPlanSuite extends SharedSparkSession {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
-      SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> "true",
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
       SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
-      val cached = spark.range(0, 8, 1, 2).selectExpr("id % 2 AS key").cache()
-      try {
-        cached.count()
-        val query = cached.groupBy("key").count()
-        checkAnswer(query, Seq(Row(0L, 4L), Row(1L, 4L)))
+      withTempPath { path =>
+        spark.range(0, 8, 1, 2).selectExpr("id % 2 AS key").write.parquet(path.getAbsolutePath)
+        val query = spark.read.parquet(path.getAbsolutePath).groupBy("key").count()
+        QueryTest.checkAnswer(query, Seq(Row(0L, 4L), Row(1L, 4L)), checkToRDD = false)
 
         val plan = query.queryExecution.executedPlan
         val exchanges = plan.collect { case exchange: ShuffleExchangeExec => exchange }
         assert(exchanges.size == 1)
         val scan = exchanges.head.child.collectFirst {
-          case scan: InMemoryTableScanExec => scan
+          case scan: FileSourceScanExec => scan
         }.get
         assert(scan.supportsColumnar)
         val columnarRDD = scan.executeColumnar()
+        def lineage(rdd: RDD[_]): Seq[RDD[_]] = {
+          rdd +: rdd.dependencies.flatMap(d => lineage(d.rdd))
+        }
+        assert(lineage(exchanges.head.inputRDD).exists(_ eq columnarRDD),
+          "the job must create the columnar RDD, or the test exercises nothing")
         val stageRDD = plan.execute()
 
-        var serializedStageRDD = false
+        var serializedScan = false
         var serializedColumnarRDD = false
-        val out = new ObjectOutputStream(new ByteArrayOutputStream()) {
+        val out = new ObjectOutputStream(OutputStream.nullOutputStream()) {
           enableReplaceObject(true)
           override protected def replaceObject(obj: AnyRef): AnyRef = {
-            serializedStageRDD ||= obj eq stageRDD
+            serializedScan ||= obj eq scan
             serializedColumnarRDD ||= obj eq columnarRDD
             obj
           }
         }
         try {
           // DAGScheduler serializes the complete (stage.rdd, stage.func) tuple for a result task.
-          // The upstream scan RDD is outside the downstream stage's input lineage.
-          // Captured plans must not reintroduce it through their columnar execution caches.
+          // The scan's columnar wrapper RDD is outside the downstream stage's input lineage.
+          // The captured plan must not reintroduce it through its columnar execution cache.
+          // FileSourceScanExec.inputRDD is a separate cache and is not covered by this fix.
           val taskFunc = (_: TaskContext, rows: Iterator[InternalRow]) => rows.size
           out.writeObject((stageRDD, taskFunc))
         } finally {
           out.close()
         }
-        assert(serializedStageRDD)
+        assert(serializedScan, "the downstream stage no longer captures the upstream plan")
         assert(!serializedColumnarRDD, "upstream columnar RDD was captured across the shuffle")
-      } finally {
-        cached.unpersist()
       }
     }
   }
