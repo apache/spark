@@ -67,19 +67,9 @@ case class ProjectAggregationBufferExec(
         (expressions, inputSchema) =>
           MutableProjection.create(expressions, inputSchema))
 
-      if (!isFinalAggregate && groupingExpressions.isEmpty && !iter.hasNext) {
-        // A global aggregation must still materialize its initialized buffer when a batch has no
-        // input rows, as HashAggregateExec does for the ordinary plan. This projection is planned
-        // on a single partition for a global aggregation, so this guard fires exactly once per
-        // empty batch and never when the batch has input rows. Without the seed the downstream
-        // merge never sees a row, so no state is written and no result is emitted.
+      iter.map { row =>
         numOutputRows += 1
-        Iterator.single[UnsafeRow](aggProcessor.initializeEmptyGroupingKey())
-      } else {
-        iter.map { row =>
-          numOutputRows += 1
-          aggProcessor.process(row)
-        }
+        aggProcessor.process(row)
       }
     }
   }
@@ -129,16 +119,5 @@ class ProjectAggregationBufferProcessor(
     val buffer = newAggregationBuffer()
     processRow(buffer, newInput)
     generateOutput(groupingKey, buffer)
-  }
-
-  /**
-   * Returns the initialized buffer for the empty grouping key of a global aggregation. Mirrors
-   * HashAggregateExec's outputForEmptyGroupingKeyWithoutInput: unlike `process`, no input row
-   * updates the buffer, so the aggregate functions contribute only their initial values.
-   */
-  def initializeEmptyGroupingKey(): UnsafeRow = {
-    val emptyGroupingKey = groupingProjection.apply(InternalRow.empty)
-    val buffer = newAggregationBuffer()
-    generateOutput(emptyGroupingKey, buffer)
   }
 }

@@ -156,17 +156,20 @@ class StreamlineStreamingAggregationRealTimeSuite extends StreamRealTimeModeSuit
         }
         assert(sink.allData.forall(_ == Row(0L, null)),
           s"unexpected rows for the empty batch: ${sink.allData}")
-        sink.clear()
       },
       AddData(inputData, -5),
       Execute { q =>
+        // The sink does not order rows across batches, so the checks do not rely on arrival
+        // order. Only the batch with -5 and later batches can emit the accumulated row, so a
+        // second one proves a later empty batch kept the accumulated value; a reset would emit
+        // the initialized row instead and the count would never reach two.
         eventually(timeout(60.seconds)) {
-          assert(sink.allData.contains(Row(1L, -5L)),
-            s"missing the accumulated row: ${sink.allData}")
+          assert(sink.allData.count(_ == Row(1L, -5L)) >= 2,
+            s"expected the accumulated row from a later empty batch: ${sink.allData}")
         }
-        // No-data batches must keep re-emitting the accumulated value, never a stale one.
-        assert(sink.allData.last == Row(1L, -5L),
-          s"the last emitted row must be the accumulated result: ${sink.allData}")
+        val emitted = sink.allData
+        assert(emitted.forall(r => r == Row(0L, null) || r == Row(1L, -5L)),
+          s"unexpected rows: $emitted")
         val aggregates = q.lastExecution.executedPlan.collect {
           case a: StatefulStreamlineAggregateExec => a
         }
