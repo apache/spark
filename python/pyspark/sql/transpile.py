@@ -1884,8 +1884,16 @@ class CatalystTranspiler(AbstractTranspiler):
                         if both_integral:
                             quotient = call_function("div", left_col, right_col)
                             remainder = left_col.__mod__(right_col)
+                            # `div` truncates toward zero where Python `//` floors toward
+                            # -inf, so subtract one when the division is not exact and the
+                            # operands' signs differ -- the cases truncation went the
+                            # wrong way. Read the signs off the operands directly rather
+                            # off `remainder`'s sign: Spark's `%` (Remainder) takes the
+                            # dividend's sign, which happens to match, but spelling the
+                            # condition in terms of the operands keeps the lowering
+                            # correct if that invariant ever moves.
                             needs_floor = (remainder != lit(0)) & (
-                                (remainder < lit(0)) != (right_col < lit(0))
+                                (left_col < lit(0)) != (right_col < lit(0))
                             )
                             return when(needs_floor, quotient - lit(1)).otherwise(quotient)
                         if both_numeric:
