@@ -785,6 +785,25 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInvalidPath("$[\"\"\"]")
   }
 
+  test("legacy Variant paths treat backslashes literally") {
+    val input = """{"a\nb":1,"a\\nb":2}"""
+    val path = "$['a\\nb']"
+
+    withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> "false") {
+      testVariantGet(input, path, IntegerType, 1)
+    }
+
+    withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> "true") {
+      testVariantGet(input, path, IntegerType, 2)
+
+      val escapedQuote = """$['a\'b']"""
+      checkErrorInExpression[SparkRuntimeException](
+        variantGet("""{"a'b":1}""", escapedQuote, IntegerType),
+        "INVALID_VARIANT_GET_PATH",
+        Map("path" -> escapedQuote, "functionName" -> "`variant_get`"))
+    }
+  }
+
   test("SPARK-58672: validate char/varchar target types in variant_get") {
     def check(dataType: DataType, expected: Boolean): Unit = {
       assert(

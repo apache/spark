@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -154,6 +154,18 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
     assert(outputs.length == 1,
       s"Expected exactly one scan relation but found ${outputs.length}:\n$plan")
     outputs.head
+  }
+
+  gridTest("Variant path escapes in pushed scans")(Seq(false, true)) { legacy =>
+    withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> legacy.toString) {
+      withVariantParquetData(
+        "v variant",
+        """(parse_json(r'{"a\nb":1,"a\\nb":2}'))""") {
+        val pushed = sql("""select variant_get(v, r'$["a\nb"]', 'int') from T""")
+        assertShreddedStruct(scanColumnType(pushed.queryExecution.optimizedPlan, "v"))
+        checkAnswer(pushed, Row(if (legacy) 2 else 1))
+      }
+    }
   }
 
   test("aggregate function argument variant_get is hoisted below the aggregate and shredded") {

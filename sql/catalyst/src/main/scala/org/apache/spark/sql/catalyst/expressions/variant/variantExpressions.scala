@@ -369,8 +369,17 @@ object VariantPathParser extends RegexParsers {
 
   override def skipWhitespace: Boolean = false
 
+  // Parse key segment like `.name`, `['name']`, or `["name"]`.
+  private def literalBackslashKey: Parser[VariantPathSegment] =
+    for {
+      key <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^']*".r <~ "']" |
+        "[\"" ~> """[^"]*""".r <~ "\"]"
+    } yield {
+      ObjectExtraction(key)
+    }
+
   // Parse `.name`, `['name']`, or `["name"]`. Dot keys are literal; bracket keys decode escapes.
-  private def key: Parser[VariantPathSegment] =
+  private def escapedKey: Parser[VariantPathSegment] =
     '.' ~> "[^\\.\\[]+".r ^^ ObjectExtraction |
       "['" ~> """(?:\\[\s\S]|[^'\\])*""".r <~ "']" ^^ { k =>
         ObjectExtraction(unescapeQuotedKey(k, '\''))
@@ -424,9 +433,15 @@ object VariantPathParser extends RegexParsers {
     result.append(quote).append(']').toString
   }
 
-  private val parser: Parser[List[VariantPathSegment]] = phrase(root ~> rep(key | index))
+  private val escapedParser = phrase(root ~> rep(escapedKey | index))
+  private val literalBackslashParser = phrase(root ~> rep(literalBackslashKey | index))
 
   def parse(str: String): Option[Array[VariantPathSegment]] = {
+    val parser = if (SQLConf.get.getConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL)) {
+      literalBackslashParser
+    } else {
+      escapedParser
+    }
     try {
       this.parseAll(parser, str) match {
         case Success(result, _) => Some(result.toArray)
