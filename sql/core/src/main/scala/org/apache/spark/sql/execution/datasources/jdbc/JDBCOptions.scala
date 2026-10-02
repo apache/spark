@@ -117,8 +117,8 @@ class JDBCOptions(
     // driver returned for a URL is different on the driver and executors due to classpath
     // differences.
     userSpecifiedDriverClass.getOrElse {
-      // An empty url (noopOptions) carries no connection, hence no driver.
-      if (url.isEmpty) "" else DriverManager.getDriver(url).getClass.getCanonicalName
+      if (parameters.contains(JDBC_NOOP)) ""
+      else DriverManager.getDriver(url).getClass.getCanonicalName
     }
   }
 
@@ -387,7 +387,12 @@ object JDBCOptions {
   val JDBC_PREFER_TIMESTAMP_NANOS = newOption("preferTimestampNanos")
   val JDBC_HINT_STRING = newOption("hint")
   val JDBC_TIMESTAMP_NTZ_WALL_CLOCK = newOption("__timestampNTZAsWallClock")
+  // Internal marker: skips driver resolution so a connection-less instance can be built.
+  val JDBC_NOOP = newOption("__noop")
 
+  // A connection-less instance for callers that only need the row converter, not a live
+  // connection. The __noop marker skips driver resolution so no driver need be registered.
   lazy val noopOptions: JDBCOptions =
-    new JDBCOptions(Map(JDBC_URL -> "", JDBC_TABLE_NAME -> "unused"))
+    new JDBCOptions(
+      CaseInsensitiveMap(Map(JDBC_URL -> "", JDBC_TABLE_NAME -> "unused", JDBC_NOOP -> "true")))
 }
