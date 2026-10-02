@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, Ove
 import org.apache.spark.sql.catalyst.transactions.TransactionUtils
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, ReplaceDataProjections, WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege, WriteDistributionMode}
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder, Transform}
 import org.apache.spark.sql.connector.metric.CustomMetric
@@ -78,7 +78,7 @@ case class CreateTableAsSelectExec(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     ifNotExists: Boolean,
-    writeDistributionMode: String,
+    writeDistributionMode: WriteDistributionMode,
     writeOrdering: Seq[V2SortOrder],
     transaction: Option[Transaction] = None)
   extends V2CreateTableAsSelectBaseExec with TransactionalExec {
@@ -127,7 +127,7 @@ case class AtomicCreateTableAsSelectExec(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     ifNotExists: Boolean,
-    writeDistributionMode: String,
+    writeDistributionMode: WriteDistributionMode,
     writeOrdering: Seq[V2SortOrder])
   extends V2CreateTableAsSelectBaseExec {
 
@@ -175,7 +175,7 @@ case class ReplaceTableAsSelectExec(
     writeOptions: Map[String, String],
     orCreate: Boolean,
     invalidateCache: (TableCatalog, Identifier) => Unit,
-    writeDistributionMode: String,
+    writeDistributionMode: WriteDistributionMode,
     writeOrdering: Seq[V2SortOrder],
     transaction: Option[Transaction] = None)
   extends V2CreateTableAsSelectBaseExec with TransactionalExec {
@@ -248,7 +248,7 @@ case class AtomicReplaceTableAsSelectExec(
     writeOptions: Map[String, String],
     orCreate: Boolean,
     invalidateCache: (TableCatalog, Identifier) => Unit,
-    writeDistributionMode: String,
+    writeDistributionMode: WriteDistributionMode,
     writeOrdering: Seq[V2SortOrder])
   extends V2CreateTableAsSelectBaseExec {
 

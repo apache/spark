@@ -86,7 +86,7 @@ public class DelegatingTable implements Table {
   }
 
   @Override
-  public String writeDistributionMode() {
+  public WriteDistributionMode writeDistributionMode() {
     return info.writeDistributionMode();
   }
 

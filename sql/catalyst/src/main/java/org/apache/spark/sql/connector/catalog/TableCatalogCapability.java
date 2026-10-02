@@ -97,10 +97,28 @@ public enum TableCatalogCapability {
   /**
    * Signals that the TableCatalog supports a write distribution and ordering requested upon table
    * creation in SQL, with {@code DISTRIBUTED BY PARTITION} and {@code [LOCALLY] ORDERED BY ...} /
-   * {@code UNORDERED}. The request is passed to APIs like {@link TableCatalog#createTable}.
+   * {@code UNORDERED}. The request reaches the catalog only through the {@link TableInfo}
+   * overloads:
+   * <ul>
+   *   <li>{@link TableCatalog#createTable(Identifier, TableInfo)}</li>
+   *   <li>{@link StagingTableCatalog#stageCreate(Identifier, TableInfo)}</li>
+   *   <li>{@link StagingTableCatalog#stageReplace(Identifier, TableInfo)}</li>
+   *   <li>{@link StagingTableCatalog#stageCreateOrReplace(Identifier, TableInfo)}</li>
+   * </ul>
+   * Their default implementations drop the request, so a catalog that reports this capability must
+   * override each one it can be reached through. A {@link StagingTableCatalog} needs all four,
+   * because a {@code CREATE TABLE} without {@code AS SELECT} is not staged and arrives at
+   * {@code createTable}.
    * <p>
    * Without this capability, such a statement fails with
    * {@code UNSUPPORTED_FEATURE.TABLE_OPERATION} before anything is created or dropped.
+   * <p>
+   * The request may be combined with {@code CLUSTER BY}. Spark passes the clustering columns and
+   * the requested distribution and ordering to the catalog without reconciling them, so the
+   * catalog interprets the combination or rejects it.
+   * <p>
+   * A {@link DelegatingTable} reports the declared distribution and ordering, but Spark reads and
+   * writes it through the v1 path, which does not apply them.
    */
   SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING
 }

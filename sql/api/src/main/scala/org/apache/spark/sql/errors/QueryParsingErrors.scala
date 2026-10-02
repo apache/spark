@@ -1086,7 +1086,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx = null)
   }
 
-  def distributedByPartitionWithoutPartitioning(ctx: ParserRuleContext): Throwable = {
+  def distributedByPartitionWithoutPartitioningError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "SPECIFY_DISTRIBUTED_BY_PARTITION_WITHOUT_PARTITIONING_IS_NOT_ALLOWED",
       ctx)

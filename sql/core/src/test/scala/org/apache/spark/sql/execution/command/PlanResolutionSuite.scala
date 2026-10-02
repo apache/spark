@@ -36,10 +36,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpe
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableContext, TableWritePrivilege, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableContext, TableWritePrivilege, V1Table, WriteDistributionMode}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NullOrdering, SortDirection, Transform}
-import org.apache.spark.sql.connector.expressions.LogicalExpressions.{bucket, identity, sort}
+import org.apache.spark.sql.connector.expressions.LogicalExpressions.{bucket, sort}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -3710,7 +3710,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       "p2" -> "v2")
 
     val expectedOrdering = Seq(
-      sort(identity(FieldReference("id")),
+      sort(FieldReference("id"),
         SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
 
@@ -3723,7 +3723,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           .add("description", StringType)
           .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
         assert(create.partitioning.isEmpty)
-        assert(create.writeDistributionMode == "range")
+        assert(create.writeDistributionMode == WriteDistributionMode.RANGE)
         assert(create.writeOrdering == expectedOrdering)
         assert(create.tableSpec.properties == expectedProperties)
         assert(create.ignoreIfExists)
@@ -3756,7 +3756,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     )
 
     val expectedOrdering = Seq(
-      sort(identity(FieldReference("id")),
+      sort(FieldReference("id"),
         SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
 
@@ -3769,7 +3769,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           .add("description", StringType)
           .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
         assert(create.partitioning == expectedPartitioning)
-        assert(create.writeDistributionMode == "hash")
+        assert(create.writeDistributionMode == WriteDistributionMode.HASH)
         assert(create.writeOrdering == expectedOrdering)
         assert(create.tableSpec.properties == expectedProperties)
         assert(create.ignoreIfExists)
@@ -3801,7 +3801,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     )
 
     val expectedOrdering = Seq(
-      sort(identity(FieldReference("id")),
+      sort(FieldReference("id"),
         SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
 
@@ -3814,7 +3814,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           .add("description", StringType)
           .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
         assert(create.partitioning == expectedPartitioning)
-        assert(create.writeDistributionMode == "none")
+        assert(create.writeDistributionMode == WriteDistributionMode.NONE)
         assert(create.writeOrdering == expectedOrdering)
         assert(create.tableSpec.properties == expectedProperties)
         assert(create.ignoreIfExists)
@@ -3847,7 +3847,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         assert(ctas.tableSpec.properties == expectedProperties)
         assert(ctas.writeOptions.isEmpty)
         assert(ctas.partitioning.isEmpty)
-        assert(ctas.writeDistributionMode == "none")
+        assert(ctas.writeDistributionMode == WriteDistributionMode.NONE)
         assert(ctas.writeOrdering.isEmpty)
         assert(ctas.ignoreIfExists)
 
@@ -3881,7 +3881,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         assert(replace.tableName == Identifier.of(Array.empty, "tab"))
         assert(replace.tableSpec.properties == expectedProperties)
         assert(replace.partitioning.isEmpty)
-        assert(replace.writeDistributionMode == "range")
+        assert(replace.writeDistributionMode == WriteDistributionMode.RANGE)
         assert(replace.writeOrdering == expectedOrdering)
 
       case other =>
@@ -3914,7 +3914,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         assert(rtas.tableName == Identifier.of(Array.empty, "tab"))
         assert(rtas.tableSpec.properties == expectedProperties)
         assert(rtas.partitioning.isEmpty)
-        assert(rtas.writeDistributionMode == "range")
+        assert(rtas.writeDistributionMode == WriteDistributionMode.RANGE)
         assert(rtas.writeOrdering == expectedOrdering)
 
       case other =>
