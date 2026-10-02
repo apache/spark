@@ -280,7 +280,7 @@ class StreamingQueryListenerBus:
         self._execution_thread: Optional[Thread] = None
         # Protects _listener_bus and _execution_thread shared by API callers and the event thread.
         self._listeners_state_lock = Lock()
-        # Serialize listener lifecycle changes while allowing the event thread to acquire
+        # Serializes listener lifecycle changes while allowing the event thread to acquire
         # _listeners_state_lock and drain pending events when the last listener is removed.
         self._lifecycle_lock = Lock()
 
