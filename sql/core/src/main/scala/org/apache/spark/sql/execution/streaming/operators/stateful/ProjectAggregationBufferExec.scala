@@ -28,8 +28,9 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * This class handles the part of aggregation functions in the input rows, based on the function's
  * mode. This class intends to either initialize the aggregation buffer or complete the aggregate
  * buffer and produce the result, so it is expected to be used for two aggregate modes:
- * 1) partial merge 2) final. This class is pass-through and does not perform the actual
- * aggregation.
+ * 1) partial, which initializes the buffer for each input row, and 2) final, which completes the
+ * merged buffer. The partial merge stage is the stateful streamline aggregate, not this class.
+ * This class is pass-through and does not perform the actual aggregation.
  */
 case class ProjectAggregationBufferExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]] = None,
