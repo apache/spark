@@ -53,10 +53,12 @@ class ErrorsTest(unittest.TestCase):
         json.loads(ERROR_CLASSES_JSON, object_pairs_hook=detect_duplication)
 
     def test_error_classes_used_in_source_are_valid(self):
-        # Every PySpark exception raised with a literal errorClass must refer to a condition
-        # defined in error-conditions.json, and its literal messageParameters keys must match
+        # PySparkException builds its message from error-conditions.json whenever no message is
+        # passed. For every such call with a literal errorClass, whatever the exception class is
+        # named, the condition must be defined and the literal messageParameters keys must match
         # the placeholders of the message template. Otherwise building the exception fails and
         # the intended error message is lost.
+
         # Known issues tracked separately. Remove the entry when the linked issue is fixed.
         known_issues = {
             # SPARK-57965
@@ -82,11 +84,14 @@ class ErrorsTest(unittest.TestCase):
                 for node in ast.walk(tree):
                     if not isinstance(node, ast.Call):
                         continue
-                    func = node.func
-                    name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
-                    if not name.startswith("PySpark"):
-                        continue
                     kwargs = {kw.arg: kw.value for kw in node.keywords}
+                    # A message passed positionally or as message= is used as is, and the
+                    # condition may then be a JVM one that is not in error-conditions.json.
+                    message = kwargs.get("message", ast.Constant(value=None))
+                    if node.args or not (
+                        isinstance(message, ast.Constant) and message.value is None
+                    ):
+                        continue
                     error_class = kwargs.get("errorClass")
                     if not (
                         isinstance(error_class, ast.Constant) and isinstance(error_class.value, str)
