@@ -46,8 +46,9 @@ and non-NULL (see ``_is_never_null_boolean``); chain links need no such gate,
 because every comparison lowering is total.
 
 That short-circuit is an EVALUATION-time property only, and it does not by itself
-survive the optimizer. Four divergences, all measured rather than reasoned about.
-None of them is specific to chained comparisons: the ``and`` form of each repro
+survive the optimizer. Four optimizer rules diverge, all measured rather than
+reasoned about, and the last bullet adds the NaN value-level difference. None of
+them is specific to chained comparisons: the ``and`` form of each repro
 (``a < b and b < c`` for ``a < b < c``) predates this lowering and diverges
 identically, so a chain is new syntax reaching an existing hole.
 
