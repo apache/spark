@@ -18,6 +18,7 @@
 import array
 import ctypes
 import datetime
+import decimal
 import json
 import os
 import pickle
@@ -3608,6 +3609,32 @@ class TypesTestsMixin:
     def test_cal_interval_in_collect(self):
         with self.assertRaises(PySparkNotImplementedError):
             self.spark.sql("SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001)").first()[0]
+
+
+class VariantValTests(unittest.TestCase):
+    def test_decimal_precision(self):
+        values = [
+            "123.45",
+            "-123456789.123456789",
+            "12345678901234567890123456789012345678",
+            "-12345678901234567890.123456789012345678",
+            "0.12345678901234567890123456789012345678",
+            "0.00000000000000000000000000000000000001",
+        ]
+        for precision in [1, 28, 38]:
+            with self.subTest(precision=precision), decimal.localcontext() as context:
+                context.prec = precision
+                context.traps[decimal.Inexact] = True
+                context.clear_flags()
+                for text in values:
+                    with self.subTest(precision=precision, text=text):
+                        expected = decimal.Decimal(text)
+                        variant = VariantVal.parseJson(text)
+                        self.assertEqual(variant.toPython(), expected)
+                        self.assertEqual(variant.toJson(), str(expected))
+                        self.assertEqual(str(variant), str(expected))
+                self.assertEqual(context.prec, precision)
+                self.assertFalse(any(context.flags.values()))
 
 
 class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
