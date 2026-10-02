@@ -398,7 +398,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val inputMetrics =
       Option(TaskContext.get()).map(_.taskMetrics().inputMetrics).getOrElse(new InputMetrics)
     val fromRow = ExpressionEncoder(schema).resolveAndBind().createDeserializer()
-    val internalRows = resultSetToSparkInternalRows(resultSet, dialect, schema, inputMetrics)
+    val internalRows = resultSetToSparkInternalRows(
+      resultSet, dialect, schema, inputMetrics, options = JDBCOptions.noopOptions)
     internalRows.map(fromRow)
   }
 
@@ -408,7 +409,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       schema: StructType,
       inputMetrics: InputMetrics,
       fetchAndTransformToInternalRowsMetric: Option[SQLMetric] = None,
-      options: Option[JDBCOptions] = None): Iterator[InternalRow] = {
+      options: JDBCOptions): Iterator[InternalRow] = {
     new NextIterator[InternalRow] {
       private[this] val rs = resultSet
       private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema, options)
@@ -465,7 +466,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
   private def makeGetters(
       dialect: JdbcDialect,
       schema: StructType,
-      options: Option[JDBCOptions]): Array[JDBCValueGetter] = {
+      options: JDBCOptions): Array[JDBCValueGetter] = {
     val replaced = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     replaced.fields.map(sf => makeGetter(sf.dataType, dialect, sf.metadata, options))
   }
@@ -474,7 +475,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       dt: DataType,
       dialect: JdbcDialect,
       metadata: Metadata,
-      options: Option[JDBCOptions]): JDBCValueGetter = dt match {
+      options: JDBCOptions): JDBCValueGetter = dt match {
     case BooleanType => JDBCValueGetter.BooleanGetter
     case DateType => JDBCValueGetter.DateGetter(dialect)
     case _: TimeType => JDBCValueGetter.TimeGetter
@@ -493,7 +494,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case TimestampType => JDBCValueGetter.TimestampGetter(dialect)
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeNTZGetter(dialect)
-    case TimestampNTZType if options.exists(_.timestampNTZAsWallClock) =>
+    case TimestampNTZType if options.timestampNTZAsWallClock =>
       JDBCValueGetter.TimestampNTZWallClockGetter
     case TimestampNTZType => JDBCValueGetter.TimestampNTZGetter(dialect)
     case t: TimestampNTZNanosType => JDBCValueGetter.TimestampNTZNanosGetter(t.precision)

@@ -401,7 +401,7 @@ class JDBCRDD(
         schema,
         inputMetrics,
         Some(fetchAndTransformToInternalRowsMetric),
-        Some(options))
+        options)
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())

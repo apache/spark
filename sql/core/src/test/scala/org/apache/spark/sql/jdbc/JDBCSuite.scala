@@ -1813,7 +1813,7 @@ class JDBCSuite extends SharedSparkSession {
       when(rs.next()).thenReturn(true, false)
       when(rs.getObject(1, classOf[java.time.LocalDateTime])).thenReturn(ldt)
       val rows = JdbcUtils.resultSetToSparkInternalRows(
-        rs, OracleDialect(), schema, new InputMetrics, options = Some(options)).toArray
+        rs, OracleDialect(), schema, new InputMetrics, options = options).toArray
       assert(rows.length === 1)
       assert(rows.head.getLong(0) === DateTimeUtils.localDateTimeToMicros(ldt))
     }
@@ -1838,7 +1838,7 @@ class JDBCSuite extends SharedSparkSession {
         StructField("va", ArrayType(VarcharType(2)))))
 
       val rows = JdbcUtils.resultSetToSparkInternalRows(
-        rs, NoopDialect, schema, new InputMetrics).toArray
+        rs, NoopDialect, schema, new InputMetrics, options = JDBCOptions.noopOptions).toArray
       assert(rows.length === 1)
       assert(rows.head.getUTF8String(0).toString === "a  ")
       assert(rows.head.getUTF8String(1).toString === "bb")
