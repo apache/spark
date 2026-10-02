@@ -2533,6 +2533,28 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self._vals(strlen_guarded, L, "a string", [("ab",), (None,)]),
             [2, None],
         )
+        # The guard has to actually leave the plan. A dead ``raise_error`` still
+        # blocks predicate movement. ``len(x) > 0`` is not a "definitely boolean"
+        # compare (``len`` is a call), so it only transpiles under a numeric return
+        # type, where the transpiled cast makes the bool 0/1 (the interpreted path
+        # nulls it -- a pre-existing hole in the return-type gate) -- and it must
+        # not grow a second check on the ``length`` result, which is an int or a
+        # raise, never NULL.
+        self.assertNotIn("raise_error", self._transpiled_plan(strlen_guarded, L, "a string"))
+        self.assertIn("raise_error", self._transpiled_plan(strlen, L, "a string"))
+        guarded_cmp = lambda x: (len(x) > 0) if x is not None else None  # noqa: E731
+        self.assertEqual(
+            self._vals(guarded_cmp, L, "a string", [("ab",), ("",), (None,)]),
+            [1, 0, None],
+        )
+        self.assertNotIn("raise_error", self._transpiled_plan(guarded_cmp, L, "a string"))
+        len_cmp = lambda x: len(x) > 0  # noqa: E731
+        cmp_plan = self._transpiled_plan(len_cmp, L, "a string")
+        self.assertIn("cannot call len()", cmp_plan)
+        self.assertNotIn("cannot compare", cmp_plan)
+        self.assertEqual(self._vals(len_cmp, L, "a string", [("ab",), ("",)]), [1, 0])
+        # Dropping the compare's check must not drop the one ``len`` still needs.
+        self._raises(len_cmp, "a string", [(None,)], needle="len()")
         self._raises(strlen, "a string", [(None,)], needle="len()")
         self._raises(strlen, "a long", [(5,)], needle="")
 
@@ -3063,6 +3085,30 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             quiet_udf, quiet = self._udf_and_warnings(guarded, BooleanType())
             self.assertTrue(quiet_udf.transpiled, f"guarded must transpile: {quiet}")
             self.assertNotIn(needle, quiet)
+            # ``len`` raises on NULL the same way ``>`` does, so it warns the same
+            # way -- and only for the check it actually kept. ``len(x) > 0`` must
+            # not also warn about the comparison: the ``length`` result is not NULL.
+            unguarded_len = lambda x: len(x)  # noqa: E731
+            len_cmp = lambda x: len(x) > 0  # noqa: E731
+            _, len_warned = self._udf_and_warnings(unguarded_len, LongType())
+            self.assertIn("`len` on x", len_warned)
+            # LongType, not BooleanType: this compare is not classified as boolean
+            # (``len`` is a call), so a boolean return type refuses the lowering.
+            cmp_udf, cmp_warned = self._udf_and_warnings(len_cmp, LongType())
+            self.assertTrue(cmp_udf.transpiled, f"len compare must transpile: {cmp_warned}")
+            self.assertIn("`len` on x", cmp_warned)
+            self.assertNotIn("comparison `>`", cmp_warned)
+            self.assertFalse(UserDefinedFunction(len_cmp, BooleanType()).transpiled)
+
+            def guarded_len(x):
+                if x is not None:
+                    return len(x)
+                else:
+                    return None
+
+            quiet_len, quiet_len_w = self._udf_and_warnings(guarded_len, LongType())
+            self.assertTrue(quiet_len.transpiled, f"guarded len must transpile: {quiet_len_w}")
+            self.assertNotIn(needle, quiet_len_w)
 
     def test_udf_transpile_null_check_blocks_predicate_pushdown(self):
         # Why the checks are worth dropping. RaiseError is throwable, and

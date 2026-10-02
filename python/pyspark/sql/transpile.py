@@ -421,6 +421,11 @@ class CatalystTranspiler(AbstractTranspiler):
             case ast.BinOp(left=left, right=right):
                 # Catalyst arithmetic and concat propagate NULL from either side.
                 return self._is_never_null(params, left) and self._is_never_null(params, right)
+            case ast.Call(func=ast.Name(id="len"), args=[_], keywords=[]):
+                # The lowering raises on NULL or returns ``length``; neither is NULL,
+                # so a parent (``len(x) > 0``) must not add a second check. A non-string
+                # argument never produces a column -- that variant is dropped first.
+                return True
             case ast.IfExp(test=test, body=body, orelse=orelse):
                 # Each branch is lowered under the facts its test proves, so ask
                 # about the branches the same way.
@@ -1150,19 +1155,22 @@ class CatalystTranspiler(AbstractTranspiler):
                 # raises TypeError in Python, while Spark ``length(NULL)`` is
                 # NULL, so guard like value comparisons: raise on NULL, else
                 # ``length``. A caller that already proved non-null (``if x is
-                # not None: return len(x)``) takes the otherwise branch.
+                # not None: return len(x)``) drops the guard, same as a comparison.
                 if self._category(params, arg) != "string":
                     raise UnsupportedOperationException(
                         "`len` is only lowered for string operands; other "
                         "types fall back to interpreted Python"
                     )
                 arg_col = self._convert_chunk(params, arg)
-                err = lit(
+                return self._raise_on_null(
+                    params,
+                    [(arg, arg_col)],
+                    "`len`",
                     "Python UDF transpiler: cannot call len() on NULL; "
                     "Python would raise TypeError here. Add an "
-                    "`is not None` guard or filter NULLs upstream."
+                    "`is not None` guard or filter NULLs upstream.",
+                    length(arg_col),
                 )
-                return when(arg_col.isNull(), raise_error(err)).otherwise(length(arg_col))
             case _:
                 raise UnsupportedOperationException(
                     f"AST node {type(body).__name__} is not supported by the "
