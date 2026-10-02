@@ -347,6 +347,14 @@ public class CollationSupportSuite {
     assertContains("aBcDe", "BCD", UTF8_LCASE, true);
     assertContains("aBcDe", "abcde", UNICODE_CI, true);
     assertContains("aBcDe", "AbCdE", UNICODE_CI, true);
+    // ASCII fast path: false starts, bytes just outside A-Z / a-z, needle longer than target.
+    assertContains("aBxAbC", "abc", UTF8_LCASE, true);
+    assertContains("abxab", "abc", UTF8_LCASE, false);
+    assertContains("@", "`", UTF8_LCASE, false);
+    assertContains("`", "@", UTF8_LCASE, false);
+    assertContains("[", "{", UTF8_LCASE, false);
+    assertContains("{", "[", UTF8_LCASE, false);
+    assertContains("abc", "abcd", UTF8_LCASE, false);
     // Accent variation.
     assertContains("aBcDe", "bćd", UTF8_BINARY, false);
     assertContains("aBcDe", "BćD", UTF8_BINARY, false);
