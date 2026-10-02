@@ -21,7 +21,9 @@ Handler-flavor tests live alongside their module, e.g. the Arrow handlers in
 ``test_arrow_eval_type_handlers``.
 """
 
+import os
 import unittest
+from unittest.mock import patch
 
 from pyspark.eval_handlers._base import (
     BatchEvalTypeHandler,
@@ -37,14 +39,8 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamSerializer,
 )
 
-
-class _RunnerConf:
-    """Minimal stand-in for the worker's RunnerConf, exposing only the fields
-    the handlers under test read."""
-
-    use_large_var_types = False
-    assign_cols_by_name = True
-    map_in_batch_legacy_accept_any_iterable = False
+with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+    from pyspark.worker_util import RunnerConf
 
 
 class EvalTypeHandlerTests(unittest.TestCase):
@@ -58,7 +54,7 @@ class EvalTypeHandlerTests(unittest.TestCase):
             CoGroupedEvalTypeHandler,
         ):
             with self.assertRaises(TypeError):
-                base([], _RunnerConf(), None)
+                base([], RunnerConf({}), None)
 
     def test_category_bases_are_not_registered(self):
         # Only concrete subclasses that declare an eval type are registered.
@@ -84,12 +80,12 @@ class EvalTypeHandlerTests(unittest.TestCase):
             def run(self, split_index, data):
                 return data
 
-        self.assertIsInstance(_Batch([], _RunnerConf(), None).serializer, ArrowStreamSerializer)
+        self.assertIsInstance(_Batch([], RunnerConf({}), None).serializer, ArrowStreamSerializer)
         self.assertIsInstance(
-            _Grouped([], _RunnerConf(), None).serializer, ArrowStreamGroupSerializer
+            _Grouped([], RunnerConf({}), None).serializer, ArrowStreamGroupSerializer
         )
         self.assertIsInstance(
-            _CoGrouped([], _RunnerConf(), None).serializer, ArrowStreamCoGroupSerializer
+            _CoGrouped([], RunnerConf({}), None).serializer, ArrowStreamCoGroupSerializer
         )
 
     def test_run_produces_output(self):
@@ -98,7 +94,7 @@ class EvalTypeHandlerTests(unittest.TestCase):
                 for item in data:
                     yield item * 2
 
-        handler = _Doubler([], _RunnerConf(), None)
+        handler = _Doubler([], RunnerConf({}), None)
         self.assertEqual(list(handler.run(0, iter([1, 2, 3]))), [2, 4, 6])
 
     def test_duplicate_eval_type_rejected(self):
