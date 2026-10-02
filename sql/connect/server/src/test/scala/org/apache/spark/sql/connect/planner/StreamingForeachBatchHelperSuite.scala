@@ -27,7 +27,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.SparkIllegalStateException
 import org.apache.spark.sql.connect.SparkConnectTestUtils
-import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.sql.test.SharedSparkSession
@@ -128,8 +128,14 @@ class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSu
     val clonedHolder = manager.getOrCreateClonedSessionHolder(batchDf)
     // The id is pinned for the whole query: every batch resolves to the same holder.
     assert(manager.getOrCreateClonedSessionHolder(batchDf) eq clonedHolder)
+    // The holder is registered in the global session manager and never expires by inactivity, so
+    // close() must unregister it; a broken unregister step would leak it until server shutdown.
+    assert(
+      SparkConnectService.sessionManager.getIsolatedSessionIfPresent(clonedHolder.key).isDefined)
 
     manager.close()
+    assert(
+      SparkConnectService.sessionManager.getIsolatedSessionIfPresent(clonedHolder.key).isEmpty)
     checkError(
       exception =
         intercept[SparkIllegalStateException](manager.getOrCreateClonedSessionHolder(batchDf)),
