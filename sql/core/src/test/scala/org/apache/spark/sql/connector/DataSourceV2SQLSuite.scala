@@ -2683,9 +2683,9 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("DeleteFrom: a condition reading a computed value twice is translated as a whole") {
-    // BETWEEN reads `id + p` twice. Pre-evaluating it under the DELETE would leave the condition
-    // reading a column the table does not have, so it has to reach translation inlined.
+  test("SPARK-59962: DeleteFrom: a condition reading a value twice reaches the source inlined") {
+    // BETWEEN reads `id + p` twice. Pre-evaluating it would put a `Project` where the planner
+    // expects the table, so the condition has to reach the source inlined.
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")

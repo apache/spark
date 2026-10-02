@@ -67,12 +67,13 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         // changed anything: `mapExpressions` and `withNewChildren` preserve reference equality when
         // they rewrite nothing, which is what makes this detectable.
         if ((rewrittenAgg eq agg) && (rewrittenProj eq proj)) p else rewrittenProj
-      // A command's own expressions are not evaluated over its children's rows: they are stored as
+      // A command's own expressions are not evaluated over its children's rows: most are stored as
       // metadata or turned into source predicates. A definition hoisted into a child would leave
-      // them reading a column only that `Project` produces, so it is substituted instead. Analysis
-      // lets no command but `CreateVariable` hold a nondeterministic expression; one that does
-      // keeps its `With` rather than be read twice. `CreateVariable` is left out because its
-      // default is evaluated, so a definition there is worth memoizing.
+      // them reading a column only that `Project` produces, or leave the command over a child its
+      // planner does not expect, so it is substituted instead. Analysis lets no command but
+      // `CreateVariable` hold a nondeterministic expression; one that does keeps its `With` rather
+      // than be read twice. `CreateVariable` is left out: its default is evaluated rather than
+      // stored, so a definition there should be memoized, not inlined.
       case c: Command if !c.isInstanceOf[CreateVariable] &&
           c.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         c.mapExpressions(_.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {

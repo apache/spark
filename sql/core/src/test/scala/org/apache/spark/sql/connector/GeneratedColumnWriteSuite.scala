@@ -456,7 +456,7 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  test("generated column expression reading a computed value twice") {
+  test("SPARK-59962: CREATE TABLE with a generation expression reading a value twice") {
     // NULLIF reads `a + b` twice. The table is created from the expression rather than evaluating
     // it, so nothing may be pre-evaluated under the CREATE TABLE.
     val tblName = "my_tab"

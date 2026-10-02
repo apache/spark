@@ -486,10 +486,10 @@ class RewriteWithExpressionSuite extends PlanTest {
     )
   }
 
-  test("a With in a command's condition is inlined instead of hoisted into its child") {
+  test("SPARK-59962: a With in a command's condition is inlined instead of hoisted") {
     val a = testRelation.output.head
     // The condition is translated into source predicates, not evaluated over the child's rows, so a
-    // `Project` under the command would leave it reading a column the table does not have.
+    // `Project` under the command would sit where the planner expects the table.
     val condition = With(a + a) { case Seq(ref) => ref < 10 && ref > 0 }
     comparePlans(
       Optimizer.execute(DeleteFromTable(testRelation, condition)),
@@ -502,7 +502,7 @@ class RewriteWithExpressionSuite extends PlanTest {
       DeleteFromTable(testRelation, If(a > 0, (a + a) < 10 && (a + a) > 0, Literal(false))))
   }
 
-  test("a nondeterministic definition in a command keeps its With") {
+  test("SPARK-59962: a nondeterministic definition in a command keeps its With") {
     // Analysis keeps nondeterministic expressions out of every command but `CreateVariable`, so
     // this only pins that the rule would not read such a definition twice.
     val a = testRelation.output.head

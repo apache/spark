@@ -259,9 +259,10 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
   }
 
-  test("delete with a condition reading a computed value twice") {
-    // BETWEEN reads `id + pk` twice. The condition also drives scan push-down and runtime group
-    // filtering over the table itself, where a column pre-evaluated under the write is not found.
+  test("SPARK-59962: delete with a condition reading a computed value twice") {
+    // BETWEEN reads `id + pk` twice. A group-based delete pushes the condition down to the scan
+    // and reuses it for runtime group filtering, where a column pre-evaluated under the write is
+    // not found.
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }

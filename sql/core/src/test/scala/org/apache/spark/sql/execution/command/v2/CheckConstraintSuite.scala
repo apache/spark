@@ -147,7 +147,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
-  test("Predicate of a check reading a computed value twice") {
+  test("SPARK-59962: Predicate of a check reading a computed value twice") {
     // NULLIF reads `id + 1` twice. The predicate stored in the catalog is built from the check as
     // the optimizer leaves it, so it must not refer to a column pre-evaluated under the command.
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
@@ -156,8 +156,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       val constraint = getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl"))
       assert(constraint.predicateSql() == "nullif(id + 1, 3) > 0")
       assert(constraint.predicate() != null)
-      assert(!constraint.predicate().toString.contains("_common_expr"),
-        s"the stored predicate refers to a pre-evaluated column: ${constraint.predicate()}")
+      val references = constraint.predicate().references().map(_.fieldNames().mkString(".")).toSet
+      assert(references == Set("id"),
+        s"the stored predicate refers to columns other than id: ${constraint.predicate()}")
     }
   }
 
