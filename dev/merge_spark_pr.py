@@ -942,7 +942,9 @@ def maybe_compile_check(ref_name, cherry=False):
     commit, or an untracked source file left over from a manual conflict resolution, compiles
     here and is absent from the push. (A resolved-but-never-`git add`ed conflict is NOT the
     case -- the commit itself fails while files are unmerged, so the check is never reached.)
-    So warn when the tree is dirty rather than report a green that is about something else.
+    So warn when the tree is dirty rather than report a green that is about something else,
+    and name the remedy (`git add` + `git commit --amend`) since the fix is the commit, not
+    the build.
 
     Declining runs no build and no git -- the git.run mock raises if a regression moves a
     git call above the prompt, which otherwise would run real git in the committer's repo on
@@ -986,6 +988,23 @@ def maybe_compile_check(ref_name, cherry=False):
     True
     >>> run.call_args[1]["cwd"]
     '/repo'
+
+    A dirty tree still builds, but warns first -- and the warning names the remedy
+    (`git add` + `git commit --amend`) alongside the porcelain output:
+
+    >>> with (
+    ...     patch("builtins.input", return_value="y"),
+    ...     patch.object(git, "run", side_effect=["/repo\\n", " M foo.scala\\n"]),
+    ...     patch("subprocess.call", return_value=0),
+    ...     redirect_stdout(StringIO()) as out,
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_MERGE_PR_1_MASTER")
+    >>> "git commit --amend" in out.getvalue()
+    True
+    >>> "M foo.scala" in out.getvalue()  # porcelain output is strip()ed before printing
+    True
+    >>> "Compile check passed." in out.getvalue()
+    True
 
     A red build aborts the merge (SystemExit from fail) when the override is declined:
 
@@ -1059,7 +1078,9 @@ def maybe_compile_check(ref_name, cherry=False):
         print_error(
             "Working tree is not clean, so what compiles below is not exactly the commit that "
             "would be pushed -- the uncommitted or untracked changes below compile here but "
-            "are not in the push:\n%s" % dirty
+            "are not in the push. If any of them belong in the merge, 'git add' them and "
+            "'git commit --amend' before pushing; if they are unrelated scratch, ignore this "
+            "and carry on:\n%s" % dirty
         )
     try:
         status = subprocess.call(COMPILE_CHECK_CMD, cwd=root)
