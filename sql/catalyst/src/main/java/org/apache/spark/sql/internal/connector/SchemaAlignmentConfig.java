@@ -23,28 +23,28 @@ import org.apache.spark.sql.connector.catalog.Table;
  * Schema alignment configuration for DSv2 batch/row-level writes to a {@link Table}, exposed via
  * {@link SupportsConfigurableSchemaAlignment}.
  */
-public interface SchemaAlignmentConfig {
+public class SchemaAlignmentConfig {
 
   /** The default data source v2 configuration. */
-  SchemaAlignmentConfig DEFAULT = new SchemaAlignmentConfig() {};
+  public static final SchemaAlignmentConfig DEFAULT = new SchemaAlignmentConfig();
 
   /**
    * When the {@code ANSI} store-assignment cast check runs for writes to a table, under
    * {@code spark.sql.storeAssignmentPolicy=ANSI}. Has no effect under the {@code STRICT} policy.
    */
-  enum AnsiStoreAssignmentCastCheck {
+  public enum AnsiStoreAssignmentCastCheck {
     /** (default) Reject incompatible casts at analysis. See {@code Cast.canANSIStoreAssign}. */
-    AT_ANALYSIS,
+    ANALYSIS,
 
     /**
      * Insert an ANSI cast check, so malformed values or overflows fail at execution time instead
      * of being rejected during analysis.
      */
-    AT_RUNTIME
+    RUNTIME
   }
 
   /** When the {@code ANSI} store-assignment cast check runs. */
-  default AnsiStoreAssignmentCastCheck ansiStoreAssignmentCastCheck() {
-    return AnsiStoreAssignmentCastCheck.AT_ANALYSIS;
+  public AnsiStoreAssignmentCastCheck ansiStoreAssignmentCastCheck() {
+    return AnsiStoreAssignmentCastCheck.ANALYSIS;
   }
 }

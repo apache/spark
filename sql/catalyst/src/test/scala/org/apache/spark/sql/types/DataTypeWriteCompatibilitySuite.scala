@@ -153,7 +153,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
     )
   }
 
-  test("AT_RUNTIME does not relax struct field ordering") {
+  test("RUNTIME does not relax struct field ordering") {
     val writeStruct = StructType(Seq(
       StructField("first", FloatType, nullable = false),
       StructField("second", StringType, nullable = false)))
@@ -167,7 +167,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
         DataTypeUtils.canWrite("", writeStruct, readStruct, byName = true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy,
           errMsg => errs += errMsg,
-          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.AT_RUNTIME)
+          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME)
       ),
       condition = "INCOMPATIBLE_DATA_FOR_TABLE.UNEXPECTED_COLUMN_NAME",
       parameters = Map(
@@ -179,7 +179,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
     )
   }
 
-  test("AT_RUNTIME does not relax array element nullability") {
+  test("RUNTIME does not relax array element nullability") {
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException](
@@ -187,12 +187,12 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
           ArrayType(LongType, containsNull = false), byName = true,
           analysis.caseSensitiveResolution, "arr", storeAssignmentPolicy,
           errMsg => errs += errMsg,
-          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.AT_RUNTIME)),
+          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME)),
       condition = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_ARRAY_ELEMENTS",
       parameters = Map("tableName" -> "``", "colName" -> "`arr`"))
   }
 
-  test("AT_RUNTIME does not relax map value nullability") {
+  test("RUNTIME does not relax map value nullability") {
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException](
@@ -200,12 +200,12 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
           MapType(StringType, LongType, valueContainsNull = false), byName = true,
           analysis.caseSensitiveResolution, "m", storeAssignmentPolicy,
           errMsg => errs += errMsg,
-          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.AT_RUNTIME)),
+          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME)),
       condition = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_MAP_VALUES",
       parameters = Map("tableName" -> "``", "colName" -> "`m`"))
   }
 
-  test("AT_RUNTIME does not relax struct field nullability") {
+  test("RUNTIME does not relax struct field nullability") {
     val writeType = StructType(Seq(StructField("x", LongType, nullable = true)))
     val readType = StructType(Seq(StructField("x", LongType, nullable = false)))
     val errs = new mutable.ArrayBuffer[String]()
@@ -214,12 +214,12 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
         DataTypeUtils.canWrite("", writeType, readType, byName = true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy,
           errMsg => errs += errMsg,
-          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.AT_RUNTIME)),
+          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME)),
       condition = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_COLUMN",
       parameters = Map("tableName" -> "``", "colName" -> "`t`.`x`"))
   }
 
-  test("AT_RUNTIME allows complex-to-string casts") {
+  test("RUNTIME allows complex-to-string casts") {
     Seq(
       ArrayType(IntegerType),
       MapType(StringType, IntegerType),
@@ -228,12 +228,12 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
         DataTypeUtils.canWrite("", writeType, StringType, byName = true,
           analysis.caseSensitiveResolution, "c", storeAssignmentPolicy,
           _ => (),
-          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.AT_RUNTIME),
-        s"$writeType -> string should be allowed under AT_RUNTIME")
+          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME),
+        s"$writeType -> string should be allowed under RUNTIME")
     }
   }
 
-  test("AT_RUNTIME rejects unsupported datetime-to-variant casts") {
+  test("RUNTIME rejects unsupported datetime-to-variant casts") {
     Seq(
       TimeType(TimeType.DEFAULT_PRECISION),
       TimeType(TimeType.MAX_PRECISION),
@@ -245,7 +245,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
           DataTypeUtils.canWrite("", writeType, VariantType, byName = true,
             analysis.caseSensitiveResolution, "v", storeAssignmentPolicy,
             errMsg => errs += errMsg,
-            ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.AT_RUNTIME)),
+            ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME)),
         condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
         parameters = Map(
           "tableName" -> "``",
@@ -255,7 +255,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
     }
   }
 
-  test("AT_RUNTIME does not relax UDT field-name validation") {
+  test("RUNTIME does not relax UDT field-name validation") {
     // A UDT backed by STRUCT<b, a> written by name into STRUCT<a, b> must be rejected on the
     // field-name mismatch; deferring the ANSI cast check must not unwrap the UDT and silently swap
     // fields positionally.
@@ -276,7 +276,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
         DataTypeUtils.canWrite("", udtType, readType, byName = true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy,
           errMsg => errs += errMsg,
-          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.AT_RUNTIME)),
+          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME)),
       condition = "INCOMPATIBLE_DATA_FOR_TABLE.UNEXPECTED_COLUMN_NAME",
       parameters = Map(
         "tableName" -> "``",

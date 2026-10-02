@@ -26,7 +26,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
-import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck.{AT_ANALYSIS, AT_RUNTIME}
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck.{ANALYSIS, RUNTIME}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DecimalType.{forType, fromDecimal}
 
@@ -114,7 +114,7 @@ object DataTypeUtils {
       context: String,
       storeAssignmentPolicy: StoreAssignmentPolicy.Value,
       addError: String => Unit,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = AT_ANALYSIS): Boolean = {
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = ANALYSIS): Boolean = {
     (write, read) match {
       case (wArr: ArrayType, rArr: ArrayType) =>
         // run compatibility check first to produce all error messages
@@ -202,7 +202,7 @@ object DataTypeUtils {
       case (_: NullType, _) if storeAssignmentPolicy == ANSI => true
 
       case (w: AtomicType, r: AtomicType)
-          if storeAssignmentPolicy == ANSI && ansiStoreAssignmentCastCheck == AT_ANALYSIS =>
+          if storeAssignmentPolicy == ANSI && ansiStoreAssignmentCastCheck == ANALYSIS =>
         if (!Cast.canANSIStoreAssign(w, r)) {
           throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
             tableName, context, w.catalogString, r.catalogString
@@ -224,10 +224,10 @@ object DataTypeUtils {
         canWrite(tableName, w, r.asInstanceOf[UserDefinedType[_]].sqlType, byName, resolver,
           context, storeAssignmentPolicy, addError, ansiStoreAssignmentCastCheck)
 
-      // AT_RUNTIME defers to the inserted ANSI cast, which fails on malformed or overflowing
+      // RUNTIME defers to the inserted ANSI cast, which fails on malformed or overflowing
       // values at runtime. Clearly invalid conversion are still rejected either in an earlier
       // branch of this match clause, or in checkAnalysis.
-      case (w, r) if storeAssignmentPolicy == ANSI && ansiStoreAssignmentCastCheck == AT_RUNTIME =>
+      case (w, r) if storeAssignmentPolicy == ANSI && ansiStoreAssignmentCastCheck == RUNTIME =>
         (w, r) match {
           // Long/decimal -> timestamp can silently overflow, and variant -> complex types doesn't
           // enforce nested field non-nullability. Keep rejecting them for now.

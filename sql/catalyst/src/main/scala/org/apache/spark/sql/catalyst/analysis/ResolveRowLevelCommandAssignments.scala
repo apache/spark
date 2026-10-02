@@ -90,7 +90,7 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     target.collectFirst {
       case ExtractV2Table(table: SupportsConfigurableSchemaAlignment) =>
         table.schemaAlignmentConfig().ansiStoreAssignmentCastCheck()
-    }.getOrElse(AnsiStoreAssignmentCastCheck.AT_ANALYSIS)
+    }.getOrElse(AnsiStoreAssignmentCastCheck.ANALYSIS)
   }
 
   private def validateStoreAssignmentPolicy(): Unit = {

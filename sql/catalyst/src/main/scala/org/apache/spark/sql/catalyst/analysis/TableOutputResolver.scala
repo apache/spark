@@ -37,7 +37,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
-import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck.AT_ANALYSIS
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck.ANALYSIS
 import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralType, MapType, StructType, UserDefinedType}
 
 object TableOutputResolver extends SQLConfHelper with Logging {
@@ -97,7 +97,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       byName: Boolean,
       conf: SQLConf,
       defaultValueFillMode: DefaultValueFillMode.Value = NONE,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = AT_ANALYSIS): LogicalPlan = {
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = ANALYSIS): LogicalPlan = {
     resolveOutputColumnsInternal(
       tableName, expected, query, byName, conf, defaultValueFillMode,
       ansiStoreAssignmentCastCheck)._1
@@ -116,7 +116,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       byName: Boolean,
       conf: SQLConf,
       defaultValueFillMode: DefaultValueFillMode.Value = NONE,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = AT_ANALYSIS
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = ANALYSIS
   ): (LogicalPlan, Set[String]) = {
     resolveOutputColumnsInternal(
       tableName, expected, query, byName, conf, defaultValueFillMode,
@@ -190,7 +190,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       addError: String => Unit,
       colPath: Seq[String],
       defaultValueFillMode: DefaultValueFillMode.Value,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = AT_ANALYSIS): Expression = {
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = ANALYSIS): Expression = {
 
     val fillChildDefaultValue = defaultValueFillMode == RECURSE
     (value.dataType, col.dataType) match {

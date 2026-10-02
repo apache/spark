@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
-import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck.AT_ANALYSIS
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck.ANALYSIS
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -60,8 +60,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    * @param coerceNestedTypes whether to coerce nested types to match the target type
    *                         for complex types
    * @param ansiStoreAssignmentCastCheck when the ANSI store-assignment cast check runs:
-   *                                     AT_ANALYSIS (default) rejects an unsafe cast at analysis
-   *                                     time; AT_RUNTIME rejects invalid values at execution time.
+   *                                     ANALYSIS (default) rejects an unsafe cast at analysis
+   *                                     time; RUNTIME rejects invalid values at execution time.
    * @return aligned update assignments that match table attributes
    */
   def alignUpdateAssignments(
@@ -69,7 +69,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       assignments: Seq[Assignment],
       fromStar: Boolean,
       coerceNestedTypes: Boolean,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = AT_ANALYSIS): Seq[Assignment] = {
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = ANALYSIS): Seq[Assignment] = {
 
     val errors = new mutable.ArrayBuffer[String]()
 
@@ -106,15 +106,15 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    * @param coerceNestedTypes whether to coerce nested types to match the target type
    *                          for complex types
    * @param ansiStoreAssignmentCastCheck when the ANSI store-assignment cast check runs:
-   *                                     AT_ANALYSIS (default) rejects an unsafe cast at analysis
-   *                                     time; AT_RUNTIME rejects invalid values at execution time.
+   *                                     ANALYSIS (default) rejects an unsafe cast at analysis
+   *                                     time; RUNTIME rejects invalid values at execution time.
    * @return aligned insert assignments that match table attributes
    */
   def alignInsertAssignments(
       attrs: Seq[Attribute],
       assignments: Seq[Assignment],
       coerceNestedTypes: Boolean = false,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = AT_ANALYSIS): Seq[Assignment] = {
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = ANALYSIS): Seq[Assignment] = {
 
     val errors = new mutable.ArrayBuffer[String]()
 

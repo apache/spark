@@ -58,7 +58,7 @@ abstract class SchemaAlignmentTestCatalog extends InMemoryRowLevelOperationTable
 class RelaxedSchemaAlignmentCatalog extends SchemaAlignmentTestCatalog {
   override protected def tableConfig: SchemaAlignmentConfig = new SchemaAlignmentConfig {
     override def ansiStoreAssignmentCastCheck(): AnsiStoreAssignmentCastCheck =
-      AnsiStoreAssignmentCastCheck.AT_RUNTIME
+      AnsiStoreAssignmentCastCheck.RUNTIME
   }
 }
 
@@ -88,7 +88,7 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     withSQLConf(
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString)(f)
 
-  test("AT_RUNTIME: INSERT of an ANSI-incompatible cast") {
+  test("RUNTIME: INSERT of an ANSI-incompatible cast") {
     withTable(s"$relaxed.t", s"$strict.t") {
       sql(s"CREATE TABLE $relaxed.t (id INT) USING foo")
       sql(s"CREATE TABLE $strict.t (id INT) USING foo")
@@ -109,7 +109,7 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("AT_RUNTIME: UPDATE with an ANSI-incompatible cast") {
+  test("RUNTIME: UPDATE with an ANSI-incompatible cast") {
     withTable(s"$relaxed.t", s"$strict.t") {
       sql(s"CREATE TABLE $relaxed.t (id INT, data INT) USING foo")
       sql(s"CREATE TABLE $strict.t (id INT, data INT) USING foo")
@@ -132,7 +132,7 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("AT_RUNTIME: MERGE with an ANSI-incompatible cast") {
+  test("RUNTIME: MERGE with an ANSI-incompatible cast") {
     withTable(s"$relaxed.t", s"$strict.t") {
       sql(s"CREATE TABLE $relaxed.t (id INT, data INT) USING foo")
       sql(s"CREATE TABLE $strict.t (id INT, data INT) USING foo")
@@ -158,7 +158,7 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("AT_RUNTIME: structurally impossible casts are still rejected") {
+  test("RUNTIME: structurally impossible casts are still rejected") {
     withTable(s"$relaxed.t") {
       sql(s"CREATE TABLE $relaxed.t (d DATE) USING foo")
       withAnsiPolicy {
@@ -171,7 +171,7 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("AT_RUNTIME: complex-to-string cast is deferred") {
+  test("RUNTIME: complex-to-string cast is deferred") {
     withTable(s"$relaxed.t", s"$strict.t") {
       sql(s"CREATE TABLE $relaxed.t (c STRING) USING foo")
       sql(s"CREATE TABLE $strict.t (c STRING) USING foo")
@@ -191,7 +191,7 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("AT_RUNTIME: long and decimal to timestamp casts are rejected") {
+  test("RUNTIME: long and decimal to timestamp casts are rejected") {
     withTable(s"$relaxed.t") {
       sql(s"CREATE TABLE $relaxed.t (c TIMESTAMP) USING foo")
       withAnsiPolicy {
@@ -208,7 +208,7 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("AT_RUNTIME: variant-to-complex casts are rejected") {
+  test("RUNTIME: variant-to-complex casts are rejected") {
     Seq(
       "STRUCT<a: INT>" -> "parse_json('{}')",
       "ARRAY<INT>" -> "parse_json('[]')",
@@ -299,7 +299,7 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
       }
     }
 
-  test("AT_RUNTIME: renamed nested struct field is still rejected") {
+  test("RUNTIME: renamed nested struct field is still rejected") {
     val target = new StructType()
       .add("s", new StructType().add("a", IntegerType).add("b", IntegerType))
     val source = spark.createDataFrame(
