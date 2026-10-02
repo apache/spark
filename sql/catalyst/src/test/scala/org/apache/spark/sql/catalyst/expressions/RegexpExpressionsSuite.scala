@@ -629,7 +629,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringSplit(Literal("\"quote"), Literal("\"quote"), Literal(-1)) :: Nil)
   }
 
-  test("split refreshes its cached pattern when the regex changes") {
+  test("SPARK-59961: split refreshes its cached pattern when the regex changes") {
     // UnsafeProjection reuses its output buffer, so every input row's strings point into the
     // same bytes: the cached regex must be a copy, or the same-length "[,;]+" would look equal
     // to the "[0-9]" before it.
