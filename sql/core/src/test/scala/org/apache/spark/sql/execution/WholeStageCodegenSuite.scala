@@ -2127,4 +2127,38 @@ class WholeStageCodegenSuite extends SharedSparkSession
       checkAnswer(df, withoutWholeStage(sql(query)))
     }
   }
+
+  /**
+   * The CASE WHEN, `With` and group methods declared in `df`'s stages that nothing in the stage
+   * calls.
+   */
+  private def uncalledSplitMethods(df: DataFrame): Seq[String] = genCode(df).flatMap { c =>
+    val declared = "private \\w+ (\\w*(?:caseWhen|computeCommonExpr)\\w*)\\(".r
+      .findAllMatchIn(c.body).map(_.group(1)).toSeq
+    declared.filter(name => s"(?<![\\w$$])$name\\(".r.findAllIn(c.body).length == 1)
+  }
+
+  test("SPARK-33301: functions added in a discarded pass of subexpression elimination go") {
+    // Subexpression elimination generates its subexpressions once without splitting and, when
+    // that code is too large, again split, discarding the first; the methods the first pass
+    // added go with it, `computeCommonExpr` methods of a `nullif` included, whose calls to the
+    // first pass's CASE WHEN methods would otherwise name methods no longer declared. Every
+    // method left is called.
+    val caseWhen = largeCaseWhen("id", 300)
+    val second = (1 to 300).map(k => s"WHEN id = $k THEN id + $k")
+      .mkString("CASE ", " ", " ELSE 0 END")
+    def df: DataFrame = spark.range(10).selectExpr(s"($caseWhen) + 1 AS a",
+      s"($caseWhen) + 2 AS b", s"IF(id < 0, 0, nullif($second, 0)) AS c",
+      s"IF(id < 0, 0, nullif($second, 0)) AS d")
+    assert(splitsCaseWhen(df))
+    assert(uncalledSplitMethods(df).isEmpty, uncalledSplitMethods(df))
+    checkAnswer(df, withoutWholeStage(df))
+    // With the split off, the class keeps what the first pass added, as before the split: here
+    // the `computeCommonExpr` method of the first generation of the `nullif`.
+    withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
+      assert(!splitsCaseWhen(df))
+      assert(uncalledSplitMethods(df).exists(_.contains("computeCommonExpr")))
+      checkAnswer(df, withoutWholeStage(df))
+    }
+  }
 }

@@ -865,6 +865,30 @@ class CodegenContext extends Logging {
     classFunctions(className) += funcName -> funcCode
   }
 
+  /** The names of every class's functions, for `removeFunctionsSince`. */
+  private def functionsSnapshot(): Map[String, Set[String]] =
+    classFunctions.map { case (className, functions) => className -> functions.keySet.toSet }.toMap
+
+  /**
+   * Removes every function added since `snapshot` was taken, and every class added since then,
+   * which held only such functions: the code that called them has been discarded.
+   */
+  private def removeFunctionsSince(snapshot: Map[String, Set[String]]): Unit = {
+    classFunctions.foreach { case (className, functions) =>
+      val kept = snapshot.getOrElse(className, Set.empty)
+      functions.keys.filterNot(kept.contains).toSeq.foreach { name =>
+        classSize(className) -= functions(name).length
+        functions.remove(name)
+      }
+    }
+    classes.filterNot { case (className, _) => snapshot.contains(className) }.foreach {
+      case (className, _) =>
+        classSize.remove(className)
+        classFunctions.remove(className)
+    }
+    classes.filterInPlace { case (className, _) => snapshot.contains(className) }
+  }
+
   /**
    * Declares all function code. If the added functions are too many, split them into nested
    * sub-classes to avoid hitting Java compiler constant pool limitation.
@@ -1912,6 +1936,12 @@ class CodegenContext extends Logging {
     // elimination.
     val commonExprs = equivalentExpressions.getCommonSubexpressions
 
+    // The code of the non-split pass is discarded when the split pass below is taken, and with it
+    // the calls to every function added while generating it, such as the split methods of a CASE
+    // WHEN or a `With` definition's method. With the whole stage split on, those functions are
+    // removed then; with it off, the class keeps them, as it did before that split existed.
+    val functionsBeforeNonSplit =
+      if (SQLConf.get.wholeStageSplitExpressions) Some(functionsSnapshot()) else None
     val nonSplitCode = {
       val allStates = mutable.ArrayBuffer.empty[SubExprEliminationState]
       commonExprs.map { expr =>
@@ -1946,6 +1976,7 @@ class CodegenContext extends Logging {
     val needSplit = nonSplitCode.map(_.eval.code.length).sum > SQLConf.get.methodSplitThreshold
     val (subExprsMap, exprCodes) = if (needSplit) {
       if (inputVarsForAllFuncs.map(calculateParamLengthFromExprValues).forall(isValidParamLength)) {
+        functionsBeforeNonSplit.foreach(removeFunctionsSince)
         val localSubExprEliminationExprs =
           mutable.HashMap.empty[ExpressionEquals, SubExprEliminationState]
 
