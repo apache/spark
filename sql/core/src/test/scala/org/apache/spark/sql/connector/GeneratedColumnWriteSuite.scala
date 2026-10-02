@@ -456,6 +456,23 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("generated column expression reading a computed value twice") {
+    // NULLIF reads `a + b` twice. The table is created from the expression rather than evaluating
+    // it, so nothing may be pre-evaluated under the CREATE TABLE.
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  b INT,
+             |  c INT GENERATED ALWAYS AS (nullif(a + b, 3))
+             |) USING foo""".stripMargin)
+      sql(s"INSERT INTO testcat.$tblName(a, b) VALUES (1, 1), (1, 2)")
+      checkAnswer(
+        spark.table(s"testcat.$tblName"),
+        Seq(Row(1, 1, 2), Row(1, 2, null)))
+    }
+  }
+
   test("allowNullableIngest config controls missing non-generated columns") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {

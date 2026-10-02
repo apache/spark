@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, PlanHelper, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Command, CreateVariable, LogicalPlan, PlanHelper, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, CURRENT_LIKE, WITH_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
@@ -67,6 +67,17 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         // changed anything: `mapExpressions` and `withNewChildren` preserve reference equality when
         // they rewrite nothing, which is what makes this detectable.
         if ((rewrittenAgg eq agg) && (rewrittenProj eq proj)) p else rewrittenProj
+      // A command's own expressions are not evaluated over its children's rows: they are stored as
+      // metadata or turned into source predicates. A definition hoisted into a child would leave
+      // them reading a column only that `Project` produces, so it is substituted instead. Analysis
+      // lets no command but `CreateVariable` hold a nondeterministic expression; one that does
+      // keeps its `With` rather than be read twice. `CreateVariable` is left out because its
+      // default is evaluated, so a definition there is worth memoizing.
+      case c: Command if !c.isInstanceOf[CreateVariable] &&
+          c.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
+        c.mapExpressions(_.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+          case w: With => inlineDefs(w)(_.child.deterministic)
+        })
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         applyInternal(p)
     }
@@ -267,13 +278,16 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
    */
   private def inlineDefsThatGainNothing(w: With): Expression = {
     val multiplyReferenced = multiplyReferencedIds(w.child, w.defs)
-    val (toInline, toKeep) = w.defs.partition { d =>
-      canSubstitute(d.child, d.id, multiplyReferenced)
-    }
-    if (toInline.isEmpty) {
+    inlineDefs(w)(d => canSubstitute(d.child, d.id, multiplyReferenced))
+  }
+
+  /** `w` with the definitions `toInline` selects substituted at their references. */
+  private def inlineDefs(w: With)(toInline: CommonExpressionDef => Boolean): Expression = {
+    val (inlined, toKeep) = w.defs.partition(toInline)
+    if (inlined.isEmpty) {
       w
     } else {
-      val refToExpr = toInline.map(d => d.id -> d.child).toMap
+      val refToExpr = inlined.map(d => d.id -> d.child).toMap
       val newChild = w.child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
         // A ref of a definition kept here, or of an enclosing `With`, is left for its owner.
         case ref: CommonExpressionRef if refToExpr.contains(ref.id) => refToExpr(ref.id)

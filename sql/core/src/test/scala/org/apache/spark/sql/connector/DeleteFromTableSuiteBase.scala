@@ -259,6 +259,20 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
   }
 
+  test("delete with a condition reading a computed value twice") {
+    // BETWEEN reads `id + pk` twice. The condition also drives scan push-down and runtime group
+    // filtering over the table itself, where a column pre-evaluated under the write is not found.
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE (id + pk) BETWEEN 2 AND 4")
+
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(3, 3, "hr") :: Nil)
+  }
+
   test("delete with aliases") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }

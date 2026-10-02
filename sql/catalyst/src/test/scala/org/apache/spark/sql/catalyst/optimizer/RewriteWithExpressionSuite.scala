@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -484,6 +484,32 @@ class RewriteWithExpressionSuite extends PlanTest {
           condition = Some((a + x) < 10 && (a + x) > 0)
         )
     )
+  }
+
+  test("a With in a command's condition is inlined instead of hoisted into its child") {
+    val a = testRelation.output.head
+    // The condition is translated into source predicates, not evaluated over the child's rows, so a
+    // `Project` under the command would leave it reading a column the table does not have.
+    val condition = With(a + a) { case Seq(ref) => ref < 10 && ref > 0 }
+    comparePlans(
+      Optimizer.execute(DeleteFromTable(testRelation, condition)),
+      DeleteFromTable(testRelation, (a + a) < 10 && (a + a) > 0))
+
+    // Nor is one in a conditional branch kept: a `With` translates to no source predicate.
+    val inBranch = If(a > 0, With(a + a) { case Seq(ref) => ref < 10 && ref > 0 }, Literal(false))
+    comparePlans(
+      Optimizer.execute(DeleteFromTable(testRelation, inBranch)),
+      DeleteFromTable(testRelation, If(a > 0, (a + a) < 10 && (a + a) > 0, Literal(false))))
+  }
+
+  test("a nondeterministic definition in a command keeps its With") {
+    // Analysis keeps nondeterministic expressions out of every command but `CreateVariable`, so
+    // this only pins that the rule would not read such a definition twice.
+    val a = testRelation.output.head
+    val delete = DeleteFromTable(testRelation, With(Rand(Literal(0L)) + a) { case Seq(ref) =>
+      ref < 10 && ref > 0
+    })
+    assert(Optimizer.execute(delete) == delete)
   }
 
   test("SPARK-58902: a With left in a conditional branch of an aggregate still converges") {
