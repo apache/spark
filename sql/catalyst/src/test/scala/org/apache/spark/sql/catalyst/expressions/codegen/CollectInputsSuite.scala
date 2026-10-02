@@ -20,13 +20,15 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType}
 
 /**
  * The policies of `CodegenContext.collectInputs`, one test per point where the places that move
- * generated code into a method answer differently.
+ * generated code into a method answer differently; and the whole stage split built on it.
  */
-class CollectInputsSuite extends SparkFunSuite {
+class CollectInputsSuite extends SparkFunSuite with SQLHelper {
 
   private def evaluated(i: Int): ExprCode =
     ExprCode(EmptyBlock, JavaCode.isNullVariable(s"isNull_$i"),
@@ -135,5 +137,40 @@ class CollectInputsSuite extends SparkFunSuite {
     assert(inputs.readsRow)
     ctx.currentVars = Seq(evaluated(0))
     assert(!ctx.collectInputs(Seq(input(0)), operator, Map.empty).get.readsRow)
+  }
+
+  test("the whole stage split leaves a block it cannot move inline, between the runs of calls") {
+    // Under whole stage codegen (`currentVars` set), each piece is a block at this threshold; the
+    // middle one reads an input not evaluated yet, so it stays where it is, and the calls before
+    // and after it are two runs.
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      val ctx = context()
+      ctx.currentVars = Seq(evaluated(0), deferred(1))
+      val pieces = Seq(
+        "int a = value_0;" -> Seq(input(0)),
+        "int b = value_1;" -> Seq(input(1)),
+        "int c = value_0;" -> Seq(input(0)))
+      val code = ctx.splitExpressionsWithSources(pieces, "f")
+      val calls = "f_\\d+_\\d+\\(value_0, isNull_0\\)".r.findAllIn(code).toSeq
+      assert(calls.length == 2, code)
+      val inline = code.indexOf("int b = value_1;")
+      assert(code.indexOf(calls.head) < inline && inline < code.lastIndexOf(calls.last), code)
+      assert(!code.contains("int a = value_0;") && !code.contains("int c = value_0;"),
+        "the other blocks are in methods")
+    }
+  }
+
+  test("a split call passing what its enclosing method does not take fails the audit") {
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      val ctx = context()
+      ctx.currentVars = Seq(evaluated(0))
+      val code = ctx.splitExpressionsWithSources(
+        Seq("int a = value_0;" -> Seq(input(0)), "int b = value_0;" -> Seq(input(0))), "f")
+      ctx.assertSplitCallsWithin(code, Seq("value_0", "isNull_0"), "m")
+      val e = intercept[AssertionError] {
+        ctx.assertSplitCallsWithin(code, Seq("value_0"), "m")
+      }
+      assert(e.getMessage.contains("passing isNull_0, which m does not take"), e.getMessage)
+    }
   }
 }
