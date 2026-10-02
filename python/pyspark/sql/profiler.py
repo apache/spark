@@ -144,10 +144,10 @@ class WorkerSamplingProfiler:
         task_context: "TaskContext",
         sampling_interval: float = 100,
     ) -> None:
-        self._callstack_data = {}
+        self._callstack_data: dict[int, dict] = {}
         self._task_context = task_context
         self._sampling_interval = sampling_interval
-        self._sampling_thread = None
+        self._sampling_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
     def __enter__(self) -> "WorkerSamplingProfiler":
@@ -160,9 +160,10 @@ class WorkerSamplingProfiler:
         exc_val: Optional[BaseException],
         exc_tb: Optional[TracebackType],
     ) -> None:
+        assert self._sampling_thread is not None
         self._stop_event.set()
         self._sampling_thread.join()
-        WorkerSamplingProfiler._sampling_thread = None
+        self._sampling_thread = None
 
     def save(self, accumulator: Accumulator["ProfileResultsV2"]) -> None:
         accumulator.add({self._get_task_key(): {"sampling": {"callstack": self._callstack_data}}})
