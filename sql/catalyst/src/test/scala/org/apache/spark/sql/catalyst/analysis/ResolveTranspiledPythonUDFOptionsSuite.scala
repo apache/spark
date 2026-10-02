@@ -19,10 +19,19 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Concat, Expression, Literal, PythonUDF, TranspiledPythonUDF}
+import org.apache.spark.sql.catalyst.expressions.{
+  Add,
+  Alias,
+  AttributeReference,
+  Concat,
+  Expression,
+  Literal,
+  PythonUDF,
+  TranspiledPythonUDF
+}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{ArrayType, LongType, MapType, StringType}
 
 /**
  * Unit tests for [[ResolveTranspiledPythonUDFOptions]], which prunes a
@@ -83,6 +92,43 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
       List(Concat(Seq(a, a))), List(List("string")))
     val pruned = prune(node, LocalRelation(a))
     assert(pruned.transpiledOptions.isEmpty)
+  }
+
+  test("keeps the map option for a map column and drops it for a non-map column") {
+    // Mirrors `def f(x: dict, y: int): return y + 1` (SPARK-55219): the map param is
+    // pinned "map" and the numeric one "numeric", so the option survives only when
+    // the first argument is a MapType. The body reads only the numeric param.
+    // AttributeReferences are built directly because the `$"a".map(...)` DSL helper
+    // collides with the `map` method inherited from TreeNode.
+    val m = AttributeReference("a", MapType(StringType, StringType))()
+    val n = $"b".long
+    val opt = Add(n, Literal(1L))
+    val node = TranspiledPythonUDF("udf", pyUDF(Seq(m, n)), List(opt), List(List("map", "numeric")))
+    val pruned = prune(node, LocalRelation(m, n))
+    assert(pruned.transpiledOptions == List(opt))
+    assert(pruned.optionInputCategories.isEmpty)
+
+    val s = $"a".string
+    val dropped =
+      TranspiledPythonUDF("udf", pyUDF(Seq(s, n)), List(opt), List(List("map", "numeric")))
+    assert(prune(dropped, LocalRelation(s, n)).transpiledOptions.isEmpty)
+  }
+
+  test("keeps the array option for an array column and drops it for a non-array column") {
+    // Same shape as the map test, with the first param pinned "array" (SPARK-55219).
+    val arr = AttributeReference("a", ArrayType(StringType))()
+    val n = $"b".long
+    val opt = Add(n, Literal(1L))
+    val node =
+      TranspiledPythonUDF("udf", pyUDF(Seq(arr, n)), List(opt), List(List("array", "numeric")))
+    val pruned = prune(node, LocalRelation(arr, n))
+    assert(pruned.transpiledOptions == List(opt))
+    assert(pruned.optionInputCategories.isEmpty)
+
+    val s = $"a".string
+    val dropped =
+      TranspiledPythonUDF("udf", pyUDF(Seq(s, n)), List(opt), List(List("array", "numeric")))
+    assert(prune(dropped, LocalRelation(s, n)).transpiledOptions.isEmpty)
   }
 
   test("leaves options untouched when categories are empty (no restriction)") {

@@ -940,13 +940,24 @@ def _annotation_base_name(annotation: Optional[ast.AST]) -> Optional[str]:
 
     ``dict[str, str]`` and bare ``dict`` both come back ``"dict"``; a stringized
     annotation (``def f(a: "int")``) is unwrapped to its text; an attribute
-    spelling (``typing.Dict[str, str]``) unwraps to the attribute name. ``None``
-    means the annotation is absent or not a simple name we recognise.
+    spelling (``typing.Dict[str, str]``) unwraps to the attribute name.
+    ``Annotated[X, ...]`` is transparent (the runtime type IS ``X``), so it
+    unwraps to ``X`` -- ``Annotated[int, ...]`` is ``"numeric"``. ``None`` means
+    the annotation is absent or not a simple name we recognise.
     """
     if annotation is None:
         return None
     if isinstance(annotation, ast.Subscript):
-        annotation = annotation.value
+        inner = annotation.value
+        # ``Annotated[X, metadata...]`` is a transparent wrapper: the runtime
+        # type is ``X``, so unwrap to it (e.g. ``Annotated[int, ...]`` -> "numeric").
+        base = inner.id if isinstance(inner, ast.Name) else getattr(inner, "attr", None)
+        if base in ("Annotated",):
+            slice_node = annotation.slice
+            args = slice_node.elts if isinstance(slice_node, ast.Tuple) else [slice_node]
+            if args:
+                return _annotation_base_name(args[0])
+        annotation = inner
     if isinstance(annotation, ast.Name):
         return annotation.id
     if isinstance(annotation, ast.Attribute):
@@ -959,15 +970,19 @@ def _annotation_base_name(annotation: Optional[ast.AST]) -> Optional[str]:
 def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
     """Map a parameter's type annotation to a category
     (``"numeric"``/``"string"``/``"bool"``/``"binary"``/``"map"``/``"array"``),
-    or ``None`` when it's absent or unrecognised (the caller then tries both
-    numeric and string)."""
+    or ``None`` when it's absent or unrecognised. ``_param_category_combos``
+    treats an absent annotation as untyped (tries both numeric and string) but a
+    present-but-unrecognised one as "do not party on" (falls back to interpreted
+    Python), so returning ``None`` for a present annotation is not the same as
+    the annotation being absent."""
     name = _annotation_base_name(annotation)
     # str -> "string", int/float -> "numeric", bool -> "bool", bytes -> "binary"
     # (matching the constant handling in ``_category``). dict/Dict/Mapping ->
     # "map", list/List/Sequence -> "array": pinning them stops the untyped
     # numeric/string blow-up and lets the JVM keep the option only against a
     # matching MapType/ArrayType column (SPARK-55219). Anything unrecognised
-    # returns None so the caller tries both numeric and string.
+    # returns None; a present-but-unrecognised annotation then makes the
+    # caller fall back rather than infer numeric/string.
     if name == "str":
         return "string"
     if name in ("int", "float"):
@@ -987,11 +1002,17 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
     """Per-variant maps ``{public_param_index -> category}`` where category is
     one of ``"numeric"``/``"string"``/``"bool"``/``"binary"``/``"map"``/``"array"``.
 
-    A typed param (``def f(a: str, b: int)``) is pinned to its category; an
-    untyped param is tried as both numeric and string. To cap plan growth, when
-    more than three params are untyped we collapse the untyped ones to the
-    all-numeric and all-string variants (encourage typing inputs to keep the
-    matrix small) while keeping every typed param pinned.
+    A param whose annotation names a recognised category (``def f(a: str, b: int,
+    c: dict)``) is pinned to it. A param with NO annotation is tried as both
+    numeric and string -- the transpiler's core inference, so the JVM can pick the
+    option matching the actual column type. A param whose annotation is present
+    but names no recognised category (``set``, ``tuple``, ``Optional[dict]``, a
+    custom class) does NOT party on: we refuse to infer numeric/string for a type
+    the caller explicitly declared, so the function yields no variant and falls
+    back to interpreted Python. Annotate it with a recognised category to opt back
+    in. To cap plan growth, when more than three params lack an annotation we
+    collapse those to the all-numeric and all-string variants (encourage typing
+    inputs to keep the matrix small) while keeping every annotated param pinned.
     """
     n = len(public_params)
     all_args = _positional_args(function_ast)
@@ -999,11 +1020,20 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
     candidates: List[List[str]] = []
     untyped = 0
     for arg in public_args:
-        cat = _annotation_category(arg.annotation)
-        if cat is None:
+        if arg.annotation is None:
+            # No annotation: try both basic categories so the JVM can pick the
+            # option matching the bound column (the core inference).
             candidates.append(["numeric", "string"])
             untyped += 1
         else:
+            cat = _annotation_category(arg.annotation)
+            if cat is None:
+                # Present but unrecognised (set, tuple, Optional[dict], a custom
+                # class): refuse to infer numeric/string for a type the caller
+                # declared. Returning no variant makes the UDF fall back to
+                # interpreted Python rather than run a numeric/string lowering
+                # over a complex column.
+                return []
             candidates.append([cat])
     if untyped > 3:
         # Cap the 2**untyped blow-up, but keep each typed param pinned to its

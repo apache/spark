@@ -2674,6 +2674,10 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self.assertEqual(cat("def f(a: Sequence[int]): ..."), "array")
         self.assertEqual(cat("def f(a: typing.List[int]): ..."), "array")
         self.assertEqual(cat('def f(a: "list"): ...'), "array")
+        # Annotated[X, ...] is transparent: unwrap to X.
+        self.assertEqual(cat("def f(a: Annotated[int, 'pos']): ..."), "numeric")
+        self.assertEqual(cat("def f(a: Annotated[dict, 'pos']): ..."), "map")
+        self.assertEqual(cat("def f(a: typing.Annotated[str, 'x']): ..."), "string")
         # Unrelated / absent annotations stay untyped.
         self.assertIsNone(_annotation_category(None))
         self.assertEqual(cat("def f(a: int): ..."), "numeric")
@@ -2699,6 +2703,37 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         fn = _ast.parse("def f(a: list, b: dict): return b").body[0]
         combos = _param_category_combos(fn, ["a", "b"])
         self.assertEqual(combos, [{0: "array", 1: "map"}])
+
+    def test_param_category_combos_present_unrecognized_falls_back(self):
+        # A present-but-unrecognised annotation (set, tuple, Optional[dict], a
+        # custom class) must NOT be inferred as numeric/string -- that would
+        # blow up the option matrix and risk running a numeric/string lowering
+        # over a complex column. Instead the function yields no variant and
+        # falls back to interpreted Python. An absent annotation still tries
+        # both numeric and string (the core inference).
+        import ast as _ast
+
+        from pyspark.sql.transpile import _param_category_combos
+
+        # Present but unrecognised -> no variant (fall back).
+        for src in (
+            "def f(a: set): ...",
+            "def f(a: tuple): ...",
+            "def f(a: Optional[dict]): ...",
+            "def f(a: Widget): ...",
+        ):
+            fn = _ast.parse(src).body[0]
+            self.assertEqual(_param_category_combos(fn, ["a"]), [], src)
+
+        # Mixed: one present-unrecognised param still kills the whole matrix,
+        # even when the others are fine -- we refuse to guess a category for it.
+        fn = _ast.parse("def f(a: set, b: int): return b").body[0]
+        self.assertEqual(_param_category_combos(fn, ["a", "b"]), [])
+
+        # Absent annotation is NOT the same: it stays untyped (numeric + string).
+        fn = _ast.parse("def f(a, b): return b").body[0]
+        combos = _param_category_combos(fn, ["a", "b"])
+        self.assertEqual(len(combos), 4)
 
     def test_udf_transpile_map_and_array_input_categories(self):
         # A map/array-annotated param is pinned to its category, so the option
@@ -2748,6 +2783,27 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             projected = df.select(u("a", "b"))
             self.assertGreater(self._eval_python_count(projected), 0)
             self.assertEqual([r[0] for r in projected.collect()], [2])
+
+    def test_udf_transpile_present_unrecognized_annotation_falls_back(self):
+        # A param annotated with a type we do not recognise (set, tuple) must not
+        # be inferred as numeric/string. The transpiler yields no option, so the
+        # UDF falls back to interpreted Python instead of blowing up the option
+        # matrix (SPARK-55219).
+        def set_plus(x: set, y: int):
+            return y + 1
+
+        def tuple_plus(x: tuple, y: int):
+            return y + 1
+
+        with self.sql_conf(_TRANSPILE_ON):
+            for func in (set_plus, tuple_plus):
+                u = UserDefinedFunction(func, LongType())
+                self.assertEqual([], u.transpiled, f"{func} must not transpile")
+                # Interpreted Python still runs and returns the right value.
+                df = self.spark.createDataFrame([(1, 1)], "a long, b long")
+                projected = df.select(u("a", "b"))
+                self.assertGreater(self._eval_python_count(projected), 0, str(func))
+                self.assertEqual([r[0] for r in projected.collect()], [2], str(func))
 
 
 if __name__ == "__main__":
