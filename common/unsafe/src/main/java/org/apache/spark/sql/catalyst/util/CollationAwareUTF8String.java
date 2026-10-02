@@ -743,10 +743,58 @@ public class CollationAwareUTF8String {
   public static boolean lowercaseContains(final UTF8String target, final UTF8String pattern) {
     // Fast path for ASCII-only strings.
     if (target.isFullAscii() && pattern.isFullAscii()) {
-      return target.toLowerCase().contains(pattern.toLowerCase());
+      return lowercaseContainsAscii(target, pattern);
     }
     // Slow path for non-ASCII strings.
     return CollationAwareUTF8String.lowercaseIndexOfSlow(target, pattern, 0) >= 0;
+  }
+
+  /**
+   * ASCII-only, case-insensitive {@code contains}: whether {@code target} contains {@code pattern}
+   * when both operands are lower-cased, comparing bytes with {@code A-Z} folded to {@code a-z}.
+   * Both operands must be full ASCII (the caller checks via {@link UTF8String#isFullAscii}). This
+   * mirrors {@link UTF8String#contains} -- a first-byte prefilter then a byte-wise match -- but
+   * allocates nothing rather than materializing lowercased copies of the haystack and needle.
+   */
+  private static boolean lowercaseContainsAscii(final UTF8String target, final UTF8String pattern) {
+    final int patternBytes = pattern.numBytes();
+    if (patternBytes == 0) {
+      return true;
+    }
+    final int lastStart = target.numBytes() - patternBytes;
+    // Match the first byte against both of its cases, so the scan loop does no case folding.
+    final byte first = pattern.getByte(0);
+    final byte firstLower = foldAsciiLowerCase(first);
+    final byte firstUpper = foldAsciiUpperCase(first);
+    for (int i = 0; i <= lastStart; i++) {
+      final byte b = target.getByte(i);
+      if (b != firstLower && b != firstUpper) {
+        continue;
+      }
+      int matched = 1;
+      while (matched < patternBytes) {
+        byte t = foldAsciiLowerCase(target.getByte(i + matched));
+        byte p = foldAsciiLowerCase(pattern.getByte(matched));
+        if (t != p) {
+          break;
+        }
+        matched++;
+      }
+      if (matched == patternBytes) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Folds an ASCII byte to lower case ({@code A-Z} -> {@code a-z}); other bytes are unchanged. */
+  private static byte foldAsciiLowerCase(final byte b) {
+    return (b >= 'A' && b <= 'Z') ? (byte) (b + 0x20) : b;
+  }
+
+  /** Folds an ASCII byte to upper case ({@code a-z} -> {@code A-Z}); other bytes are unchanged. */
+  private static byte foldAsciiUpperCase(final byte b) {
+    return (b >= 'a' && b <= 'z') ? (byte) (b - 0x20) : b;
   }
 
   /**
