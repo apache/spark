@@ -448,39 +448,58 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         Row(Timestamp.valueOf("2026-06-29 10:03:00"), 1, "v1.1")))
   }
 
-  test("NULL whole STRUCT column MATCH_CONDITION never matches") {
-    // A NULL struct must never match, the same as a NULL scalar operand.
-    for {
-      (nullStruct, one, five) <- Seq(
-        ("CAST(NULL AS STRUCT<a: INT>)", "named_struct('a', 1)", "named_struct('a', 5)"),
-        ("CAST(NULL AS STRUCT<a: INT, b: INT>)",
-          "named_struct('a', 1, 'b', 1)", "named_struct('a', 5, 'b', 5)"),
-        ("CAST(NULL AS STRUCT<e: STRUCT<a: INT>>)",
-          "named_struct('e', named_struct('a', 1))", "named_struct('e', named_struct('a', 5))"),
-        // Non-NULL values of this type are all equal.
-        ("CAST(NULL AS STRUCT<e: STRUCT<>>)",
-          "named_struct('e', named_struct())", "named_struct('e', named_struct())"))
-      ansiEnabled <- Seq(true, false)
-    } {
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
-        def asOfTags(joinType: String, left: String, op: String, rights: String): DataFrame =
-          sql(
-            s"""
-               |SELECT r.tag
-               |FROM VALUES ($left, 'l') AS t(k, tag)
-               |$joinType ASOF JOIN VALUES $rights AS r(k, tag)
-               |  MATCH_CONDITION (t.k $op r.k)
-               |""".stripMargin)
-        checkSortMergeAsOf(
-          asOfTags("", nullStruct, ">=", s"($nullStruct, 'rnull'), ($one, 'r1')"), Nil)
-        checkSortMergeAsOf(asOfTags("", nullStruct, "<=", s"($one, 'r1')"), Nil)
-        checkSortMergeAsOf(asOfTags("", five, ">=", s"($nullStruct, 'rnull')"), Nil)
-        // LEFT ASOF JOIN keeps the NULL left row with NULL right columns.
-        checkSortMergeAsOf(
-          asOfTags("LEFT", nullStruct, ">=", s"($nullStruct, 'rnull'), ($one, 'r1')"),
-          Row(null) :: Nil)
+  gridTest("NULL whole STRUCT column MATCH_CONDITION never matches")(Seq(
+      ("CAST(NULL AS STRUCT<a: INT>)", "named_struct('a', 1)", "named_struct('a', 5)"),
+      ("CAST(NULL AS STRUCT<a: INT, b: INT>)",
+        "named_struct('a', 1, 'b', 1)", "named_struct('a', 5, 'b', 5)"),
+      ("CAST(NULL AS STRUCT<e: STRUCT<a: INT>>)",
+        "named_struct('e', named_struct('a', 1))", "named_struct('e', named_struct('a', 5))"),
+      // Non-NULL values of this type are all equal.
+      ("CAST(NULL AS STRUCT<e: STRUCT<>>)",
+        "named_struct('e', named_struct())", "named_struct('e', named_struct())"))) {
+    case (nullStruct, one, five) =>
+      // A NULL struct must never match, the same as a NULL scalar operand.
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+          def asOfTags(joinType: String, left: String, op: String, rights: String): DataFrame =
+            sql(
+              s"""
+                 |SELECT r.tag
+                 |FROM VALUES ($left, 'l') AS t(k, tag)
+                 |$joinType ASOF JOIN VALUES $rights AS r(k, tag)
+                 |  MATCH_CONDITION (t.k $op r.k)
+                 |""".stripMargin)
+          checkSortMergeAsOf(
+            asOfTags("", nullStruct, ">=", s"($nullStruct, 'rnull'), ($one, 'r1')"), Nil)
+          checkSortMergeAsOf(asOfTags("", nullStruct, "<=", s"($one, 'r1')"), Nil)
+          checkSortMergeAsOf(asOfTags("", five, ">=", s"($nullStruct, 'rnull')"), Nil)
+          // LEFT ASOF JOIN keeps the NULL left row with NULL right columns.
+          checkSortMergeAsOf(
+            asOfTags("LEFT", nullStruct, ">=", s"($nullStruct, 'rnull'), ($one, 'r1')"),
+            Row(null) :: Nil)
+        }
       }
-    }
+  }
+
+  gridTest("whole STRUCT column MATCH_CONDITION matches a struct whose fields are all NULL")(Seq(
+      ">=" -> Seq(Row("allnull")), "<=" -> Seq(Row("allnull")), ">" -> Nil, "<" -> Nil)) {
+    case (op, expected) =>
+      // Two structs of NULL fields are equal, and a NULL struct never matches.
+      val allNull = "named_struct('a', CAST(NULL AS INT), 'b', CAST(NULL AS INT))"
+      val nullStruct = "CAST(NULL AS STRUCT<a: INT, b: INT>)"
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+          checkSortMergeAsOf(
+            sql(
+              s"""
+                 |SELECT r.tag
+                 |FROM VALUES ($allNull, 'l') AS t(k, tag)
+                 |ASOF JOIN VALUES ($nullStruct, 'rnull'), ($allNull, 'allnull') AS r(k, tag)
+                 |  MATCH_CONDITION (t.k $op r.k)
+                 |""".stripMargin),
+            expected)
+        }
+      }
   }
 
   test("nested STRUCT column MATCH_CONDITION keeps a NULL inner struct apart from NULL fields") {
