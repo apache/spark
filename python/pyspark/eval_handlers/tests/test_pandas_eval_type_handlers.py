@@ -246,12 +246,32 @@ class PandasMapUDFHandlerTests(unittest.TestCase):
         out = list(handler.run(0, iter([struct_batch])))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [2, 4, 6])
 
+    def test_legacy_accepts_any_iterable(self):
+        # With the legacy flag on (its default), a UDF may return any iterable -- here a
+        # plain list of DataFrames -- which the handler adapts via iter() before verifying.
+        def as_list(df_iter):
+            return [pd.DataFrame({"v": df["v"] * 2}) for df in df_iter]
+
+        handler = _map_handler(as_list, self._return_type)
+        struct_batch = ArrowBatchTransformer.wrap_struct(_batch(v=[1, 2, 3]))
+        out = list(handler.run(0, iter([struct_batch])))
+        self.assertEqual(out[0].column(0).field("v").to_pylist(), [2, 4, 6])
+
     def test_rejects_non_iterator_result(self):
-        # A UDF returning a DataFrame (not an iterator of them) is rejected before the
-        # input stream is even read, so the input batch shape is irrelevant.
-        handler = _map_handler(lambda df_iter: pd.DataFrame({"v": [1]}), self._return_type)
-        with self.assertRaises(PySparkTypeError):
+        # With the legacy accept-any-iterable flag off, a UDF returning a DataFrame (not
+        # an iterator of them) is rejected as a non-iterator before the input stream is
+        # read, so the input batch shape is irrelevant.
+        strict = RunnerConf(
+            {"spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled": "false"}
+        )
+        handler = _map_handler(
+            lambda df_iter: pd.DataFrame({"v": [1]}), self._return_type, runner_conf=strict
+        )
+        with self.assertRaises(PySparkTypeError) as cm:
             list(handler.run(0, iter([_batch(v=[1, 2])])))
+        # The non-iterator branch reports the actual type ("DataFrame"); the per-element
+        # branch (test_rejects_wrong_element_type) reports "iterator of ...".
+        self.assertEqual(cm.exception.getMessageParameters()["actual"], "DataFrame")
 
     def test_rejects_wrong_element_type(self):
         # Each yielded element must be a DataFrame for a struct return type.
