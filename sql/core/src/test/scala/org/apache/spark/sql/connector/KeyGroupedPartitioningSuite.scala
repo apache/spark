@@ -3594,14 +3594,14 @@ class KeyGroupedPartitioningSuite
        |JOIN testcat.ns.$table t2 ON t1.id = t2.id
        |""".stripMargin)
 
-  private def customReportingJoin(warningText: String): (SparkPlan, BatchScanExec, Seq[String]) = {
+  private def customReportingJoin(): (SparkPlan, BatchScanExec, Seq[String]) = {
     val df = customReportingJoinDf()
     val logAppender = new LogAppender("custom reported partitioning or ordering")
     withLogAppender(logAppender, level = Some(Level.WARN)) {
       checkAnswer(df, Seq(Row("aa", "cc"), Row("bb", "dd")))
     }
     val warnings = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
-      .filter(_.contains(warningText)).toSeq
+      .filter(_.contains("columns cannot be resolved")).toSeq
     val plan = df.queryExecution.executedPlan
     val reportingScans = collectScans(plan).filter(_.scan.isInstanceOf[CustomReportingScan])
     assert(reportingScans.length == 1)
@@ -3618,6 +3618,8 @@ class KeyGroupedPartitioningSuite
       (Seq(nestedKey("missing")), Some("missing")),
       (Seq(identity("id"), identity("missing")), Some("missing")),
       (Seq(identity("missing"), bucket(4, "missing")), Some("missing")),
+      (Seq(identity("missing"), bucket(4, "absent"), identity("missing")),
+        Some("missing, absent")),
       (Seq(plusOneKey("id"), identity("missing")), Some("missing")),
       (Seq(plusOneKey("missing")), Some("missing")),
       (Seq(identity("s.missing")), Some("s.missing (FIELD_NOT_FOUND)")),
@@ -3628,8 +3630,7 @@ class KeyGroupedPartitioningSuite
     withCustomReportingTable { reportingCatalog =>
       cases.foreach { case (keys, unresolvedColumns) =>
         reportingCatalog.reportedKeys = keys
-        val (plan, reportingScan, warnings) =
-          customReportingJoin("partition key columns cannot be resolved")
+        val (plan, reportingScan, warnings) = customReportingJoin()
         val keysString = keys.map(_.describe()).mkString(", ")
         unresolvedColumns match {
           case Some(columnsString) =>
@@ -3652,30 +3653,28 @@ class KeyGroupedPartitioningSuite
       withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true") {
         reportingCatalog.reportedKeys = Seq(identity("id"))
         Seq[(SortOrder, String)](
-          (sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST), "id"),
-          (sort(FieldReference("ID"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST), "ID"),
-          (sort(FieldReference("index"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
-            "index"),
+          (sort(FieldReference("id"), SortDirection.ASCENDING), "id"),
+          (sort(FieldReference("ID"), SortDirection.ASCENDING), "ID"),
+          (sort(FieldReference("index"), SortDirection.ASCENDING), "index"),
           (ChildrenOverridingSortOrder(FieldReference("id"), Seq(FieldReference("missing"))), "id")
         ).foreach { case (order, column) =>
           reportingCatalog.reportedOrdering = Seq(order)
-          val (_, keptScan, keptWarnings) =
-            customReportingJoin("ordering columns cannot be resolved")
+          val (_, keptScan, keptWarnings) = customReportingJoin()
           assert(keptWarnings.isEmpty, keptWarnings)
           assert(keptScan.ordering.map(_.map(_.child.references.map(_.name).toSeq)) ==
             Some(Seq(Seq(column))), order.describe())
         }
 
-        Seq[(SortOrder, String)](
-          (sort(FieldReference("missing"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
-            "missing"),
-          (ChildrenOverridingSortOrder(FieldReference("missing"), Seq.empty), "missing"),
-          (sort(FieldReference(Seq.empty[String]), SortDirection.ASCENDING,
-            NullOrdering.NULLS_FIRST), "<empty>")
-        ).foreach { case (order, columnsString) =>
-          reportingCatalog.reportedOrdering = Seq(order)
-          val (_, reportingScan, warnings) =
-            customReportingJoin("ordering columns cannot be resolved")
+        Seq[(Seq[SortOrder], String)](
+          (Seq(sort(FieldReference("missing"), SortDirection.ASCENDING)), "missing"),
+          (Seq(ChildrenOverridingSortOrder(FieldReference("missing"), Seq.empty)), "missing"),
+          (Seq(sort(FieldReference(Seq.empty[String]), SortDirection.ASCENDING)), "<empty>"),
+          (Seq(
+            sort(FieldReference("id"), SortDirection.ASCENDING),
+            sort(FieldReference("missing"), SortDirection.ASCENDING)), "missing")
+        ).foreach { case (ordering, columnsString) =>
+          reportingCatalog.reportedOrdering = ordering
+          val (_, reportingScan, warnings) = customReportingJoin()
           assert(warnings.toSet ==
             Set(ignoredReportWarning("ordering", "ordering", columnsString)), columnsString)
           assert(reportingScan.ordering.isEmpty)
@@ -9538,8 +9537,6 @@ case class ChildrenOverridingTransform(
     childExprs: Seq[Expression]) extends Transform {
   override def arguments(): Array[Expression] = args.toArray
   override def children(): Array[Expression] = childExprs.toArray
-  override def references(): Array[NamedReference] =
-    args.collect { case ref: NamedReference => ref }.toArray
 }
 
 /**

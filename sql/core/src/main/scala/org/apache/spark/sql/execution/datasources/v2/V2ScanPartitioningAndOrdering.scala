@@ -117,7 +117,7 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
     // `SortOrder.expression()`, instead of `V2Expression.references()` or `children()`: a connector
     // can override those to disagree with the conversion, and `ApplyTransform.references()` returns
     // only its top-level arguments, which would miss `f(g(missing))`. Other expressions, such as
-    // `GeneralScalarExpression`, go through `children()`.
+    // `GeneralScalarExpression`, which the conversion rejects, go through `children()`.
     def collectReferences(expr: V2Expression): Seq[NamedReference] = expr match {
       case ref: NamedReference => Seq(ref)
       case t: Transform => t.arguments().toImmutableArraySeq.flatMap(collectReferences)
@@ -125,17 +125,14 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
       case other => other.children().toImmutableArraySeq.flatMap(collectReferences)
     }
     exprs.flatMap(collectReferences).flatMap { ref =>
-      if (ref.fieldNames.isEmpty) {
+      val parts = ref.fieldNames.toImmutableArraySeq
+      if (parts.isEmpty) {
         // An empty name can be neither quoted nor resolved: both throw.
         Some("<empty>")
       } else {
-        val name = ref.fieldNames.toImmutableArraySeq.quoted
+        val name = parts.quoted
         try {
-          if (V2ExpressionUtils.resolveRefOpt(ref, relation).isDefined) {
-            None
-          } else {
-            Some(name)
-          }
+          Option.when(V2ExpressionUtils.resolveRefOpt(ref, relation).isEmpty)(name)
         } catch {
           // A nested-field extraction error or an ambiguous reference throws instead of returning
           // None.

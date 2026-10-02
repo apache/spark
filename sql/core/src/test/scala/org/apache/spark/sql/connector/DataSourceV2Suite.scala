@@ -391,31 +391,29 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
   }
 
   test("SPARK-59721: ignore an unresolvable ordering reported with connector-defined classes") {
-    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
-      Seq(
-        classOf[OrderAndPartitionAwareDataSource],
-        classOf[JavaOrderAndPartitionAwareDataSource]
-      ).foreach { cls =>
-        withClue(cls.getName) {
-          val df = spark.read
-            .option("partitionKeys", "i")
-            .option("orderKeys", "missing")
-            .format(cls.getName)
-            .load()
-          val logAppender = new LogAppender("unresolvable reported ordering")
-          withLogAppender(logAppender, level = Some(Level.WARN)) {
-            checkAnswer(df, Seq(Row(1, 4), Row(1, 5), Row(3, 5), Row(2, 6), Row(4, 1), Row(4, 2)))
-          }
-          val warnings = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
-            .filter(_.contains("ordering columns cannot be resolved"))
-          assert(warnings.nonEmpty)
-          assert(warnings.forall(_.contains("cannot be resolved: missing.")), warnings)
-          val scanRelations = df.queryExecution.optimizedPlan.collect {
-            case d: DataSourceV2ScanRelation => d
-          }
-          assert(scanRelations.length == 1)
-          assert(scanRelations.head.ordering.isEmpty)
+    Seq(
+      classOf[OrderAndPartitionAwareDataSource],
+      classOf[JavaOrderAndPartitionAwareDataSource]
+    ).foreach { cls =>
+      withClue(cls.getName) {
+        val df = spark.read
+          .option("partitionKeys", "i")
+          .option("orderKeys", "missing")
+          .format(cls.getName)
+          .load()
+        val logAppender = new LogAppender("unresolvable reported ordering")
+        withLogAppender(logAppender, level = Some(Level.WARN)) {
+          checkAnswer(df, Seq(Row(1, 4), Row(1, 5), Row(3, 5), Row(2, 6), Row(4, 1), Row(4, 2)))
         }
+        val scanRelation = getScanRelation(df)
+        val expectedWarning =
+          s"Spark ignores the ordering reported by ${scanRelation.name} " +
+            s"(scan ${scanRelation.scan.getClass.getName}) because the ordering columns " +
+            "cannot be resolved: missing."
+        val warnings = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+          .filter(_.contains("ordering columns cannot be resolved"))
+        assert(warnings.toSet == Set(expectedWarning), warnings)
+        assert(scanRelation.ordering.isEmpty)
       }
     }
   }
