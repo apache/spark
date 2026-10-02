@@ -39,7 +39,7 @@ For more information on async_profiler see the [Async Profiler Manual](https://k
 To enable code profiling, first enable the code profiling plugin via
 
 ```
-spark.plugins=org.apache.spark.profiler.ProfilerPlugin
+spark.plugins=ProfilerPlugin
 ```
 
 Then enable the profiling in the configuration.
@@ -150,7 +150,7 @@ On Kubernetes, spark will try to shut down the executor pods while the profiler 
   --master <master-url> \
   --deploy-mode <deploy-mode> \
   -c spark.executor.extraJavaOptions="-XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -XX:+PreserveFramePointer" \
-  -c spark.plugins=org.apache.spark.profiler.ProfilerPlugin \
+  -c spark.plugins=ProfilerPlugin \
   -c spark.profiler.executor.enabled=true \
   -c spark.profiler.executor.fraction=0.10 \
   -c spark.profiler.dfsDir=s3a://my-bucket/spark/profiles/ \

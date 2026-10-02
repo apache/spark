@@ -594,7 +594,7 @@ request are increased by `spark.kubernetes.executor.resizeFactor`, up to
 the container is not restarted.
 
 ```
---conf spark.plugins=org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin
+--conf spark.plugins=ExecutorResizePlugin
 --conf spark.kubernetes.executor.resizeInterval=1m
 ```
 
@@ -625,7 +625,7 @@ the filesystem usage of its local directories and reports the highest usage rati
 up to `spark.kubernetes.executor.pvc.resizeMaxStorage`.
 
 ```
---conf spark.plugins=org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin
+--conf spark.plugins=ExecutorPVCResizePlugin
 --conf spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.claimName=OnDemand
 --conf spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.storageClass=gp3
 --conf spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.sizeLimit=100Gi
@@ -684,7 +684,7 @@ the replacement executors behave rather than the resources of the existing ones.
 registered together:
 
 ```
---conf spark.plugins=org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin,org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin
+--conf spark.plugins=ExecutorResizePlugin,ExecutorPVCResizePlugin
 ```
 
 All of these features operate at the level of the driver, not of an individual job or session. In a
@@ -2126,7 +2126,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>1min</code></td>
   <td>
     Interval between executor resize operations. To disable, set 0.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    Takes effect only when <code>ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2136,7 +2136,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>0.9</code></td>
   <td>
     The threshold to resize. It should be in (0, 1).
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    Takes effect only when <code>ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2146,7 +2146,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>0.1</code></td>
   <td>
     The factor to resize. It should be in (0, 1].
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    Takes effect only when <code>ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2157,7 +2157,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     The upper bound of the executor container memory limit that the resize plugin can grow to.
     By default, it is <code>Long.MaxValue</code>, which means no upper bound.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    Takes effect only when <code>ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.4.0</td>
@@ -2168,7 +2168,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Interval between executor PVC resize operations, in minutes. Defaults to 5 minutes.
     Set to 0 to disable. Must be 0 or a positive multiple of 5 minutes.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    Takes effect only when <code>ExecutorPVCResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2178,7 +2178,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>0.5</code></td>
   <td>
     The PVC usage ratio (used / capacity) above which the driver triggers a resize.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    Takes effect only when <code>ExecutorPVCResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2188,7 +2188,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>1.0</code></td>
   <td>
     The factor to grow PVC storage by, relative to the current request.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    Takes effect only when <code>ExecutorPVCResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2199,7 +2199,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     The upper bound of the PVC storage request that the resize plugin can grow to.
     By default, it is <code>Long.MaxValue</code>, which means no upper bound.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    Takes effect only when <code>ExecutorPVCResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.4.0</td>
