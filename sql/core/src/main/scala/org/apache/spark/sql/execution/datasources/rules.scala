@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, RewritableTransform, Transform}
+import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
@@ -339,46 +339,35 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       } else {
         // Resolve and normalize partition columns as necessary
         val resolver = conf.resolver
-        // Throws an exception if a reference cannot be resolved
-        def normalizeReferences(transform: RewritableTransform): Transform = {
-          val rewritten = transform.references().map { ref =>
-            val position = SchemaUtils
-              .findColumnPosition(ref.fieldNames().toImmutableArraySeq, schema, resolver)
-            FieldReference(SchemaUtils.getColumnName(position, schema))
-          }
-          transform.withReferences(rewritten.toImmutableArraySeq)
-        }
-
         val normalizedPartitions = partitioning.map {
-          case transform: RewritableTransform => normalizeReferences(transform)
+          case transform: RewritableTransform =>
+            val rewritten = transform.references().map { ref =>
+              // Throws an exception if the reference cannot be resolved
+              val position = SchemaUtils
+                .findColumnPosition(ref.fieldNames().toImmutableArraySeq, schema, resolver)
+              FieldReference(SchemaUtils.getColumnName(position, schema))
+            }
+            transform.withReferences(rewritten.toImmutableArraySeq)
           case other => other
         }
 
         // Unlike the partitioning, an unresolvable ordering reference is kept as is for
         // CheckAnalysis to report, and each reference is normalized independently.
-        def normalizeResolvableReferences(transform: RewritableTransform): Transform = {
-          val rewritten = transform.references().map { ref =>
-            val fieldNames = ref.fieldNames().toImmutableArraySeq
-            if (schema.findNestedField(fieldNames, resolver = resolver).isDefined) {
-              FieldReference(
-                SchemaUtils.getColumnName(
-                  SchemaUtils.findColumnPosition(fieldNames, schema, resolver), schema))
-            } else {
-              ref
-            }
-          }
-          transform.withReferences(rewritten.toImmutableArraySeq)
+        def normalizeResolvable(ref: NamedReference): NamedReference = {
+          schema.findNestedField(ref.fieldNames().toImmutableArraySeq, resolver = resolver)
+            .map { case (path, field) => FieldReference(path :+ field.name) }
+            .getOrElse(ref)
         }
 
         val normalizedOrdering = create.writeOrdering.map { sortOrder =>
-          sortOrder.expression() match {
+          val key = sortOrder.expression() match {
+            case ref: NamedReference => normalizeResolvable(ref)
             case transform: RewritableTransform =>
-              LogicalExpressions.sort(
-                normalizeResolvableReferences(transform),
-                sortOrder.direction(),
-                sortOrder.nullOrdering())
-            case _ => sortOrder
+              transform.withReferences(
+                transform.references().map(normalizeResolvable).toImmutableArraySeq)
+            case other => other
           }
+          LogicalExpressions.sort(key, sortOrder.direction(), sortOrder.nullOrdering())
         }
 
         create.withPartitioning(normalizedPartitions).withWriteOrdering(normalizedOrdering)

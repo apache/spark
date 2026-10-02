@@ -233,7 +233,7 @@ case class DescribeTableExec(
       rows += emptyRow()
       rows += toCatalystRow("# Write Distribution and Ordering", "", "")
       if (table.writeDistributionMode() != null) {
-        rows += toCatalystRow("Distribution", table.writeDistributionMode(), "")
+        rows += toCatalystRow("Distribution", table.writeDistributionMode().toString, "")
       }
       if (table.writeOrdering().nonEmpty) {
         rows += toCatalystRow(
