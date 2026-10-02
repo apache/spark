@@ -3084,6 +3084,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val WHOLESTAGE_SPLIT_EXPRESSIONS_METHOD_LIMIT =
+    buildConf("spark.sql.codegen.wholeStage.splitExpressions.methodLimit")
+      .internal()
+      .doc("The largest method, in bytes of bytecode, a whole stage keeps unsplit when " +
+        "spark.sql.codegen.wholeStage.splitExpressions is true. The stage's code is first " +
+        "generated with no expression split and compiled; only when that fails or a method " +
+        "is past this size is it generated again with the expressions split. The default is " +
+        "HotSpot's limit for JIT-compiling a method, so a stage the JIT compiles whole keeps " +
+        "the code it had without the split; 0 always splits.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "The method limit must not be negative")
+      .createWithDefault(8000)
+
   val WHOLESTAGE_BROADCAST_CLEANED_SOURCE_THRESHOLD =
     buildConf("spark.sql.codegen.broadcastCleanedSourceThreshold")
       .internal()
@@ -9247,6 +9262,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def methodSplitThreshold: Int = getConf(CODEGEN_METHOD_SPLIT_THRESHOLD)
 
   def wholeStageSplitExpressions: Boolean = getConf(WHOLESTAGE_SPLIT_EXPRESSIONS)
+
+  def wholeStageSplitExpressionsMethodLimit: Int =
+    getConf(WHOLESTAGE_SPLIT_EXPRESSIONS_METHOD_LIMIT)
 
   def wholeStageSplitConsumeFuncByOperator: Boolean =
     getConf(WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR)

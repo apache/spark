@@ -448,6 +448,17 @@ class CodegenContext extends Logging {
   private val commonExprMethodTakesRow: mutable.Map[Long, Boolean] = mutable.HashMap.empty
 
   /**
+   * Whether whole-stage code generation records its expression splits rather than making them:
+   * `WholeStageCodegenExec.doCodeGen` first generates a stage this way, the code in one piece as
+   * with `spark.sql.codegen.wholeStage.splitExpressions` off, and generates it again with the
+   * splits made only when that code is past the method limit or fails to compile.
+   */
+  private[sql] var wholeStageSplitRecording: Boolean = false
+
+  /** The splits [[splitExpressionsWithSources]] would have made while recording. */
+  private[sql] var wholeStageSplitsRecorded: Int = 0
+
+  /**
    * Allocates a value slot and a `computed` flag per definition, generates `f` with them in scope,
    * then takes them out of scope again. A reference generated inside `f` reads the slots back by
    * id and fills them the first time it is reached on a row -- the enclosing `With` only clears the
@@ -1426,6 +1437,11 @@ class CodegenContext extends Logging {
       splitExpressionsWithCurrentInputs(
         codes, funcName, extraArguments, returnType, makeSplitFunction, foldFunctions)
     } else if (!SQLConf.get.wholeStageSplitExpressions) {
+      codes.mkString("\n")
+    } else if (wholeStageSplitRecording) {
+      if (buildCodeBlocksOf(codes).length > 1) {
+        wholeStageSplitsRecorded += 1
+      }
       codes.mkString("\n")
     } else {
       splitWholeStage(

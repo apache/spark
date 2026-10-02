@@ -668,11 +668,38 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
   /**
    * Generates code for this subtree.
    *
+   * Under `spark.sql.codegen.wholeStage.splitExpressions` the stage's code is first generated with
+   * its expression splits recorded rather than made, in one piece as with the conf off. Only when
+   * a split was possible and that code fails to compile, or has a method past
+   * `spark.sql.codegen.wholeStage.splitExpressions.methodLimit` (HotSpot's JIT limit by default),
+   * is it generated again with the splits made. A stage the JIT compiles whole therefore keeps
+   * the code it had without the split, which a split's calls would only slow down; the trial
+   * compile of the code kept is the one [[doExecute]] finds in the compile cache.
+   *
    * @return the tuple of the codegen context and the actual generated source.
    */
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
+    if (!conf.wholeStageSplitExpressions || conf.wholeStageSplitExpressionsMethodLimit == 0) {
+      return generate(splitRecording = false)
+    }
+    val (ctx, source) = generate(splitRecording = true)
+    if (ctx.wholeStageSplitsRecorded == 0) {
+      return (ctx, source)
+    }
+    val keep = try {
+      val (_, stats) = CodeCompiler.quietly(CodeGenerator.compile(source))
+      stats.maxMethodCodeSize <= conf.wholeStageSplitExpressionsMethodLimit
+    } catch {
+      case NonFatal(_) => false
+    }
+    if (keep) (ctx, source) else generate(splitRecording = false)
+  }
+
+  /** The stage's code, its expression splits recorded or made; see [[doCodeGen]]. */
+  private def generate(splitRecording: Boolean): (CodegenContext, CodeAndComment) = {
     val startTime = System.nanoTime()
     val ctx = new CodegenContext
+    ctx.wholeStageSplitRecording = splitRecording
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
 
     // main next function.

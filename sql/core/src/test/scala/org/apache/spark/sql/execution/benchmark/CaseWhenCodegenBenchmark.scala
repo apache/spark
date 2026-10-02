@@ -26,16 +26,19 @@ import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * `CASE WHEN`s under whole stage codegen, with their code split into methods
- * (`spark.sql.codegen.wholeStage.splitExpressions`, the default), without the split, and without
- * whole stage codegen.
+ * `CASE WHEN`s under whole stage codegen: split as needed, the default
+ * (`spark.sql.codegen.wholeStage.splitExpressions`, with a stage split only when its unsplit code
+ * has a method past HotSpot's JIT limit or does not compile), without the split, with every
+ * splittable expression split (`spark.sql.codegen.wholeStage.splitExpressions.methodLimit` 0),
+ * and without whole stage codegen.
  *
  * Each rung runs one DataFrame, built once, so parsing and analysis are out of the timings;
  * planning and code generation still run per action, and compilation is cached. A rung runs the
- * split, then twice without it, then the split again: the two runs without it are the same code,
- * so their difference is the noise a difference between the split and the code without it is to
- * be read against, and the order alternates. Each rung prints the largest method of its stages
- * with the split and without it.
+ * default, then twice without the split, then the default again: the two runs without it are the
+ * same code, so their difference is the noise a difference between the default and the code
+ * without the split is to be read against, and the order alternates. Then the split made always,
+ * which is what the default declines under the limit. Each rung prints the largest method of its
+ * stages under the default, split always, and not split.
  *
  * The shapes: one `CASE WHEN` of 2 to 300 branches in a projection, where the small rungs price a
  * call per method against code kept in the stage's method, and the large ones the stage's method
@@ -80,7 +83,9 @@ object CaseWhenCodegenBenchmark extends SqlBasedBenchmark {
 
   private def rung(title: String, query: => DataFrame): Unit = {
     val benchmark = new Benchmark(title, rows, output = output)
-    val splitSize = largestStageMethod(query)
+    val always = SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS_METHOD_LIMIT.key -> "0"
+    val defaultSize = largestStageMethod(query)
+    val alwaysSize = withSQLConf(always) { largestStageMethod(query) }
     val unsplitSize = withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
       largestStageMethod(query)
     }
@@ -88,21 +93,22 @@ object CaseWhenCodegenBenchmark extends SqlBasedBenchmark {
       size.map(bytes => s"$bytes bytes").getOrElse("a stage past 64KB, which falls back,")
     // scalastyle:off println
     benchmark.out.println(
-      s"largest method of the stages: ${describe(splitSize)} split, " +
-        s"${describe(unsplitSize)} not split")
+      s"largest method of the stages: ${describe(defaultSize)} split as needed, " +
+        s"${describe(alwaysSize)} split always, ${describe(unsplitSize)} not split")
     // scalastyle:on println
     val df = query
     def run(conf: (String, String)): Unit = withSQLConf(conf) { df.noop() }
-    val split = SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "true"
+    val asNeeded = SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "true"
     val off = SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false"
     // A stage that does not compile falls back to running without whole stage codegen; the
     // benchmark harness runs as a test, where it throws instead, so that is what is timed here.
     val notSplit =
       if (unsplitSize.isDefined) SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false" else off
-    benchmark.addCase("split", numIters = 5) { _ => run(split) }
+    benchmark.addCase("split as needed", numIters = 5) { _ => run(asNeeded) }
     benchmark.addCase("not split", numIters = 5) { _ => run(notSplit) }
     benchmark.addCase("not split again", numIters = 5) { _ => run(notSplit) }
-    benchmark.addCase("split again", numIters = 5) { _ => run(split) }
+    benchmark.addCase("split as needed again", numIters = 5) { _ => run(asNeeded) }
+    benchmark.addCase("split always", numIters = 5) { _ => run(always) }
     benchmark.addCase("whole stage codegen off", numIters = 5) { _ => run(off) }
     benchmark.run()
   }

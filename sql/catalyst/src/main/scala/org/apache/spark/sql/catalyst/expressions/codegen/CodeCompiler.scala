@@ -334,6 +334,34 @@ object CodeCompiler extends Logging {
   /** Lets a test see the first warning again. */
   private[catalyst] def resetHugeMethodWarning(): Unit = hugeMethodWarned.set(false)
 
+  private val trialCompile = new ThreadLocal[java.lang.Boolean] {
+    override def initialValue(): java.lang.Boolean = false
+  }
+
+  /**
+   * Runs `body`, a compile whose result its caller may discard, without its reports: a method past
+   * the JIT limit or a failure to compile is the answer the caller is asking for, not something
+   * to warn about. Whole-stage codegen compiles a stage's unsplit code this way to decide whether
+   * to split it (`spark.sql.codegen.wholeStage.splitExpressions.methodLimit`). Every backend
+   * reports on the calling thread, which is the one this marks.
+   */
+  private[sql] def quietly[T](body: => T): T = {
+    val previous = trialCompile.get
+    trialCompile.set(true)
+    try body finally trialCompile.set(previous)
+  }
+
+  private[codegen] def isQuiet: Boolean = trialCompile.get
+
+  /** Reports a failure to compile generated code, unless the compile is a trial ([[quietly]]). */
+  private[codegen] def logCompileFailure(e: Throwable): Unit = {
+    if (isQuiet) {
+      logDebug("Failed to compile the generated Java code of a trial compile.", e)
+    } else {
+      logError("Failed to compile the generated Java code.", e)
+    }
+  }
+
   /**
    * Reports a generated method whose bytecode is past HotSpot's JIT limit
    * ([[CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT]]). The first time in the driver that such a
@@ -345,6 +373,9 @@ object CodeCompiler extends Logging {
    * executor, since the driver compiles each stage before its tasks do and has reported it.
    */
   private[catalyst] def logHugeMethod(className: String, methodName: String, size: Int): Unit = {
+    if (isQuiet) {
+      return
+    }
     val limit = CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT
     val wholeStage = className.contains("GeneratedIteratorForCodegenStage")
     // `WholeStageCodegenExec` falls back on the largest method of the stage, so with a limit
@@ -423,6 +454,9 @@ object CodeCompiler extends Logging {
    * the default conf instead of the calling session's.
    */
   private[codegen] def logGeneratedCodeOnFailure(code: CodeAndComment, maxLines: Int): Unit = {
+    if (isQuiet) {
+      return
+    }
     val formatted = s"\n${CodeFormatter.format(code, maxLines)}"
     if (Utils.isTesting) {
       logError(formatted)
@@ -472,11 +506,11 @@ object JaninoCodeCompiler extends CodeCompiler with Logging {
         CodeCompiler.computeByteCodeStats(evaluator.getBytecodes.asScala)
       } catch {
         case e: InternalCompilerException =>
-          logError("Failed to compile the generated Java code.", e)
+          CodeCompiler.logCompileFailure(e)
           CodeCompiler.logGeneratedCodeOnFailure(code, SQLConf.get.loggingMaxLinesForCodegen)
           throw QueryExecutionErrors.internalCompilerError(e)
         case e: CompileException =>
-          logError("Failed to compile the generated Java code.", e)
+          CodeCompiler.logCompileFailure(e)
           CodeCompiler.logGeneratedCodeOnFailure(code, SQLConf.get.loggingMaxLinesForCodegen)
           throw QueryExecutionErrors.compilerError(e)
       }
@@ -1370,7 +1404,7 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
       task.call().booleanValue()
     } catch {
       case NonFatal(e) =>
-        logError("Failed to compile the generated Java code.", e)
+        CodeCompiler.logCompileFailure(e)
         logSourceOnFailure()
         throw QueryExecutionErrors.internalCompilerError(
           new InternalCompilerException(e.getMessage, e))
@@ -1389,7 +1423,7 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
         case parts => parts.mkString("\n")
       }
       val ex = new CompileException(message, null)
-      logError("Failed to compile the generated Java code.", ex)
+      CodeCompiler.logCompileFailure(ex)
       logSourceOnFailure()
       throw QueryExecutionErrors.compilerError(ex)
     }
