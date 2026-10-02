@@ -936,6 +936,22 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     assert(e.getMessage.contains(SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION.key))
   }
 
+  test("create: a missing token file is reported before the RPC-encryption enforce error") {
+    // Pins the check order: with requireRpcEncryption=true and no RPC encryption, both the
+    // token-file check and checkRpcEncryption would throw. The required-config checks must run
+    // first, so the token-file error (not the encryption enforce error) surfaces. Moving
+    // checkRpcEncryption before the token-file check would fail this test.
+    val conf = new SparkConf(loadDefaults = false)
+      .set(SECURITY_OIDC_ENABLED, true)
+      .set(SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION, true)
+    // Deliberately not setting SECURITY_OIDC_IDENTITY_TOKEN_FILE and no RPC encryption.
+    val e = intercept[IllegalArgumentException] {
+      UserCredentialManager.create(conf, (_, _) => (), Some(new CredentialProviderLoader()))
+    }
+    assert(e.getMessage.contains(SECURITY_OIDC_IDENTITY_TOKEN_FILE.key))
+    assert(!e.getMessage.contains(SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION.key))
+  }
+
   test("create does not warn when OIDC is disabled") {
     val appender = new LogAppender(oidcWarningKeyFragment)
     withLogAppender(appender) {
