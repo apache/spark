@@ -36,6 +36,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.optimizer.ReplaceNullWithFalseInPredicate
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.FileSourceScanExec
@@ -71,35 +72,6 @@ case class Person(name: String, age: Int, contacts: Seq[Contact])
 
 abstract class OrcQueryTest extends OrcTest {
   import testImplicits._
-
-  test("SPARK-59605: ORC IN filter with NULL matches with pushdown on and off") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark.sql(
-        "SELECT * FROM VALUES " +
-          "(CAST(NULL AS INT), 'null'), (1, 'a'), (2, 'b'), (3, 'c') AS t(id, label)")
-        .write.orc(path)
-
-      Seq("true", "false").foreach { pushdown =>
-        withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> pushdown) {
-          checkAnswer(
-            spark.read.orc(path)
-              .where("id IN (1, 3, NULL)")
-              .select("id", "label")
-              .orderBy("id", "label"),
-            Seq(Row(1, "a"), Row(3, "c")))
-
-          // NOT IN with NULL: under three-valued logic every row evaluates to FALSE or NULL,
-          // never TRUE, so the result is empty.
-          checkAnswer(
-            spark.read.orc(path)
-              .where("id NOT IN (1, 3, NULL)")
-              .select("id", "label"),
-            Seq.empty[Row])
-        }
-      }
-    }
-  }
 
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
@@ -459,10 +431,43 @@ abstract class OrcQueryTest extends OrcTest {
         checkPredicate($"a".isNull, List(null).map(Row(_, null)))
         checkPredicate($"b".isNotNull, List())
         checkPredicate($"a".isin(3, 5, 7), List(3, 5, 7).map(Row(_, null)))
+        checkPredicate($"a".isin(3, 5, 7, null), List(3, 5, 7).map(Row(_, null)))
         checkPredicate($"a" > 0 && $"a" < 3, List(1).map(Row(_, null)))
         checkPredicate($"a" < 1 || $"a" > 8, List(9).map(Row(_, null)))
         checkPredicate(!($"a" > 3), List(1, 3).map(Row(_, null)))
         checkPredicate(!($"a" > 0 && $"a" < 3), List(3, 5, 7, 9).map(Row(_, null)))
+      }
+    }
+  }
+
+  test("SPARK-59605: null values in pushed ORC filters return correct results") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.sql(
+          "SELECT * FROM VALUES " +
+            "(CAST(NULL AS INT), 'null'), (1, 'a'), (2, 'b'), (3, 'c') AS t(id, label)")
+          .write.orc(path)
+        val df = spark.read.orc(path)
+
+        checkAnswer(df.where("id IN (1, 3, NULL)"), Seq(Row(1, "a"), Row(3, "c")))
+
+        // Without excluding this rule, NOT IN (.., NULL) is folded to false and ORC is not read.
+        withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+            ReplaceNullWithFalseInPredicate.ruleName) {
+          checkAnswer(df.where("id NOT IN (1, 3, NULL)"), Seq.empty[Row])
+          checkAnswer(df.where("id NOT IN (1, 3, NULL) OR label = 'b'"), Row(2, "b"))
+        }
+
+        // A scalar subquery over an empty table yields NULL at runtime, after optimization.
+        withTempView("t", "empty_t") {
+          df.createOrReplaceTempView("t")
+          Seq.empty[Int].toDF("v").createOrReplaceTempView("empty_t")
+          checkAnswer(sql("SELECT * FROM t WHERE id > (SELECT max(v) FROM empty_t)"), Nil)
+          checkAnswer(
+            sql("SELECT * FROM t WHERE id = (SELECT max(v) FROM empty_t) OR id = 1"),
+            Row(1, "a"))
+        }
       }
     }
   }

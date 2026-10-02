@@ -449,8 +449,8 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
                 checkFilterPredicate(ts(0) >= $"ts", PredicateLeaf.Operator.LESS_THAN_EQUALS)
                 checkFilterPredicate(ts(3) <= $"ts", PredicateLeaf.Operator.LESS_THAN)
 
-                // In covers the per-value castLiteralValue path (values.map(...)) in
-                // buildLeafSearchArgument, exercising the nanos literal cast for every element.
+                // In covers the per-value castLiteralValue path in buildLeafSearchArgument,
+                // exercising the nanos literal cast for every element.
                 checkFilterPredicate(
                   In($"ts", Seq(ts(0), ts(2))), PredicateLeaf.Operator.IN)
               }
@@ -730,24 +730,35 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     ).toImmutableArraySeq).isEmpty)
   }
 
-  test("SPARK-59605: IN filter with a NULL literal drops the NULL and pushes the rest") {
+  test("SPARK-59605: null literals in pushed filters do not fail SearchArgument creation") {
     import org.apache.spark.sql.sources._
-    val schema = StructType(Array(StructField("a", IntegerType, nullable = true)))
+    val schema = StructType(Array(
+      StructField("a", IntegerType, nullable = true),
+      StructField("s", StringType, nullable = true)))
 
     def sarg(filter: Filter): Option[String] =
       OrcFilters.createFilter(schema, Array(filter).toImmutableArraySeq)
         .map(_.asInstanceOf[SearchArgumentImpl].toOldString)
 
-    // A NULL literal is inert: IN (1, 3, NULL) pushes the same SearchArgument as IN (1, 3).
-    assert(sarg(In("a", Array[Any](1, 3, null))) === sarg(In("a", Array[Any](1, 3))))
-    assert(sarg(In("a", Array[Any](1, 3, null))).isDefined)
+    // NULLs in an IN list are dropped and the non-null values are pushed.
+    assert(sarg(In("a", Array[Any](1, 3, null))) === Some("leaf-0 = (IN a 1 3), expr = leaf-0"))
+    assert(sarg(Not(In("a", Array[Any](1, 3, null)))) ===
+      Some("leaf-0 = (IN a 1 3), expr = (not leaf-0)"))
+    assert(sarg(In("s", Array[Any]("a", null))) === Some("leaf-0 = (IN s a), expr = leaf-0"))
 
-    // IN (NULL) has no non-null value to push, so no SearchArgument is generated.
+    // An all-NULL or empty IN list has nothing to push.
     assert(sarg(In("a", Array[Any](null))).isEmpty)
-
-    // Not(IN (1, 3, NULL)) still builds and matches Not(IN (1, 3)); Not(IN (NULL)) pushes nothing.
-    assert(sarg(Not(In("a", Array[Any](1, 3, null)))) === sarg(Not(In("a", Array[Any](1, 3)))))
     assert(sarg(Not(In("a", Array[Any](null)))).isEmpty)
+    assert(sarg(In("a", Array.empty[Any])).isEmpty)
+
+    // A null comparison value is not pushed; `<=> null` is pushed as IS NULL.
+    Seq(
+      EqualTo("a", null), LessThan("a", null), LessThanOrEqual("a", null),
+      GreaterThan("a", null), GreaterThanOrEqual("a", null)).foreach { filter =>
+      assert(sarg(filter).isEmpty, s"$filter should not be pushed")
+    }
+    assert(sarg(EqualNullSafe("a", null)) === sarg(IsNull("a")))
+    assert(sarg(EqualNullSafe("a", null)).isDefined)
   }
 
   test("SPARK-27160: Fix casting of the DecimalType literal") {

@@ -241,33 +241,39 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
     // call is mandatory. ORC `SearchArgument` builder requires that all leaf predicates must be
     // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
+    // A null value reaches the comparison leaves below through a runtime scalar subquery that
+    // returns NULL (SPARK-43402). Such a comparison is never TRUE, so it is not pushed.
     expression match {
-      case EqualTo(name, value) if dataTypeMap.contains(name) =>
+      case EqualTo(name, value) if dataTypeMap.contains(name) && value != null =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
         Some(builder.startAnd()
           .equals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
+
+      case EqualNullSafe(name, null) if dataTypeMap.contains(name) =>
+        Some(builder.startAnd()
+          .isNull(dataTypeMap(name).fieldName, getType(name)).end())
 
       case EqualNullSafe(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
         Some(builder.startAnd()
           .nullSafeEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
-      case LessThan(name, value) if dataTypeMap.contains(name) =>
+      case LessThan(name, value) if dataTypeMap.contains(name) && value != null =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
         Some(builder.startAnd()
           .lessThan(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
-      case LessThanOrEqual(name, value) if dataTypeMap.contains(name) =>
+      case LessThanOrEqual(name, value) if dataTypeMap.contains(name) && value != null =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
         Some(builder.startAnd()
           .lessThanEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
-      case GreaterThan(name, value) if dataTypeMap.contains(name) =>
+      case GreaterThan(name, value) if dataTypeMap.contains(name) && value != null =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
         Some(builder.startNot()
           .lessThanEquals(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
-      case GreaterThanOrEqual(name, value) if dataTypeMap.contains(name) =>
+      case GreaterThanOrEqual(name, value) if dataTypeMap.contains(name) && value != null =>
         val castedValue = castLiteralValue(value, dataTypeMap(name).fieldType)
         Some(builder.startNot()
           .lessThan(dataTypeMap(name).fieldName, getType(name), castedValue).end())
@@ -280,20 +286,15 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         Some(builder.startNot()
           .isNull(dataTypeMap(name).fieldName, getType(name)).end())
 
-      case In(name, values) if dataTypeMap.contains(name) =>
-        // SPARK-59605: a NULL in the IN list is inert (`x IN (.., NULL)` matches the same rows as
-        // IN on the non-null values), and castLiteralValue would NPE on a null literal. Drop NULLs;
-        // if none remain (e.g. `IN (NULL)`) there is nothing safe to push. Under Not(In) the pushed
-        // NOT(IN(non-nulls)) is over-inclusive but safe: Spark re-applies the full predicate.
-        val nonNullValues = values.filter(_ != null)
-        if (nonNullValues.isEmpty) {
-          None
-        } else {
-          val fieldType = dataTypeMap(name).fieldType
-          val castedValues = nonNullValues.map(v => castLiteralValue(v, fieldType))
-          Some(builder.startAnd().in(dataTypeMap(name).fieldName, getType(name),
-            castedValues.map(_.asInstanceOf[AnyRef]): _*).end())
-        }
+      // SPARK-59605: NULLs in an IN list are inert (`x IN (.., NULL)` matches the same rows as IN
+      // on the non-null values) and ORC's `in` cannot take them, so they are dropped rather than
+      // pushed as IS NULL like Parquet does. An empty or all-NULL list leaves nothing to push.
+      // Under Not(In), NOT(IN(non-nulls)) is over-inclusive but safe.
+      case In(name, values) if dataTypeMap.contains(name) && values.exists(_ != null) =>
+        val castedValues =
+          values.filter(_ != null).map(v => castLiteralValue(v, dataTypeMap(name).fieldType))
+        Some(builder.startAnd().in(dataTypeMap(name).fieldName, getType(name),
+          castedValues.map(_.asInstanceOf[AnyRef]): _*).end())
 
       case _ => None
     }
