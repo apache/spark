@@ -58,12 +58,9 @@ private[spark] object MavenUtils extends Logging {
 
   private class IvyResolutionCancellation {
     private val requested = new AtomicBoolean(false)
-    private val activeIvy = new AtomicReference[Ivy]()
     private val httpHandler = new AtomicReference[HttpClientHandler]()
 
     def isCancelled: Boolean = requested.get()
-
-    def setActiveIvy(ivy: Ivy): Unit = activeIvy.set(ivy)
 
     def installUrlHandler(): () => Unit = {
       val previousHandler = URLHandlerRegistry.getDefault
@@ -90,10 +87,7 @@ private[spark] object MavenUtils extends Logging {
     def cancel(resolutionThread: Thread): Unit = {
       requested.set(true)
       closeHttpHandler()
-      Option(activeIvy.get()) match {
-        case Some(ivy) => ivy.interrupt(resolutionThread)
-        case None => resolutionThread.interrupt()
-      }
+      resolutionThread.interrupt()
     }
   }
 
@@ -690,7 +684,6 @@ private[spark] object MavenUtils extends Logging {
         // scalastyle:on println
 
         val ivy = Ivy.newInstance(ivySettings)
-        cancellation.foreach(_.setActiveIvy(ivy))
         ivy.pushContext()
 
         // Set resolve options to download transitive dependencies as well
@@ -721,6 +714,7 @@ private[spark] object MavenUtils extends Logging {
         // resolve dependencies
         checkCancelled(isCancelled)
         val rr: ResolveReport = ivy.resolve(md, resolveOptions)
+        checkCancelled(isCancelled)
         if (rr.hasError) {
           // SPARK-46302: When there are some corrupted jars in the local maven repo,
           // we try to continue without the cache
@@ -736,14 +730,15 @@ private[spark] object MavenUtils extends Logging {
             ivy.popContext()
 
             val noCacheIvy = Ivy.newInstance(noCacheIvySettings.get)
-            cancellation.foreach(_.setActiveIvy(noCacheIvy))
             noCacheIvy.pushContext()
 
             checkCancelled(isCancelled)
             val noCacheRr = noCacheIvy.resolve(md, resolveOptions)
+            checkCancelled(isCancelled)
             if (noCacheRr.hasError) {
               throw new RuntimeException(noCacheRr.getAllProblemMessages.toString)
             }
+            checkCancelled(isCancelled)
             noCacheIvy.retrieve(noCacheRr.getModuleDescriptor.getModuleRevisionId, retrieveOptions)
             val dependencyPaths = resolveDependencyPaths(
               noCacheRr.getArtifacts.toArray, packagesDirectory)
@@ -754,6 +749,7 @@ private[spark] object MavenUtils extends Logging {
             throw new RuntimeException(rr.getAllProblemMessages.toString)
           }
         } else {
+          checkCancelled(isCancelled)
           ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId, retrieveOptions)
           val dependencyPaths = resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
           ivy.popContext()

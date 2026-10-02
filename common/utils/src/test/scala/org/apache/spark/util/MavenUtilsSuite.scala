@@ -29,9 +29,11 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-import org.apache.ivy.core.module.descriptor.MDArtifact
+import org.apache.ivy.core.module.descriptor.{DependencyDescriptor, MDArtifact}
+import org.apache.ivy.core.resolve.{ResolveData, ResolvedModuleRevision}
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.resolver.{AbstractResolver, ChainResolver, FileSystemResolver, IBiblioResolver}
+import org.apache.ivy.util.url.URLHandlerRegistry
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
@@ -192,6 +194,7 @@ class MavenUtilsSuite
       val resolver = new RuntimeDependencyResolver(
         ivySettingsPath = Some(settings.toString),
         ivyPath = Some(tempIvyPath))
+      val previousUrlHandler = URLHandlerRegistry.getDefault
 
       val resolved = resolver.resolve(
         URI.create(s"ivy://${main.toString}"),
@@ -200,6 +203,7 @@ class MavenUtilsSuite
 
       assert(resolved.exists(_.getFileName.toString.contains("my.runtime.lib_mylib-0.1")))
       assert(resolved.forall(_.startsWith(Paths.get(tempIvyPath))))
+      assert(URLHandlerRegistry.getDefault eq previousUrlHandler)
     }
   }
 
@@ -326,6 +330,7 @@ class MavenUtilsSuite
       val resolver = new RuntimeDependencyResolver(
         ivySettingsPath = Some(settings.toString),
         ivyPath = Some(Paths.get(tempIvyPath, "cancelled").toString))
+      val previousUrlHandler = URLHandlerRegistry.getDefault
       val resolution = Future {
         resolver.resolve(
           URI.create("ivy://my.runtime.active:mylib:0.1"),
@@ -339,6 +344,7 @@ class MavenUtilsSuite
       intercept[CancellationException] {
         SparkThreadUtils.awaitResultNoSparkExceptionConversion(resolution, 5.seconds)
       }
+      assert(URLHandlerRegistry.getDefault eq previousUrlHandler)
 
       val next = MavenCoordinate("my.runtime.after.cancel", "mylib", "0.1")
       IvyTestUtils.withRepository(next, None, None) { repo =>
@@ -353,6 +359,71 @@ class MavenUtilsSuite
       releaseRequest.countDown()
       server.close()
       SparkThreadUtils.awaitResultNoSparkExceptionConversion(serverFuture, 5.seconds)
+      executor.shutdownNow()
+    }
+  }
+
+  test("runtime dependency resolver waits for an uncooperative Ivy worker") {
+    val executor = Executors.newFixedThreadPool(2)
+    implicit val executionContext: ExecutionContext =
+      ExecutionContext.fromExecutorService(executor)
+    val resolverEntered = new CountDownLatch(1)
+    val releaseResolver = new CountDownLatch(1)
+    val resolverCompleted = new AtomicBoolean(false)
+    try {
+      val blockingResolver = new FileSystemResolver {
+        override def getDependency(
+            _descriptor: DependencyDescriptor,
+            _data: ResolveData): ResolvedModuleRevision = {
+          resolverEntered.countDown()
+          var released = false
+          while (!released) {
+            try {
+              released = releaseResolver.await(100, TimeUnit.MILLISECONDS)
+            } catch {
+              case _: InterruptedException =>
+            }
+          }
+          resolverCompleted.set(true)
+          null
+        }
+      }
+      blockingResolver.setName("blocking")
+      val settings = MavenUtils.buildIvySettings(
+        remoteRepos = None,
+        ivyPath = Some(Paths.get(tempIvyPath, "uncooperative").toString))
+      settings.addResolver(blockingResolver)
+      settings.setDefaultResolver(blockingResolver.getName)
+
+      val cancelled = new AtomicBoolean(false)
+      val resolution = Future {
+        MavenUtils.resolveMavenCoordinatesWithCancellation(
+          "my.runtime.uncooperative:mylib:0.1",
+          settings,
+          noCacheIvySettings = None,
+          transitive = true,
+          exclusions = Nil,
+          isTest = true,
+          isCancelled = () => cancelled.get())
+      }
+
+      assert(resolverEntered.await(5, TimeUnit.SECONDS))
+      cancelled.set(true)
+      val delayedRelease = Future {
+        try {
+          Thread.sleep(3000)
+        } finally {
+          releaseResolver.countDown()
+        }
+      }
+
+      intercept[CancellationException] {
+        SparkThreadUtils.awaitResultNoSparkExceptionConversion(resolution, 10.seconds)
+      }
+      assert(resolverCompleted.get())
+      SparkThreadUtils.awaitResultNoSparkExceptionConversion(delayedRelease, 5.seconds)
+    } finally {
+      releaseResolver.countDown()
       executor.shutdownNow()
     }
   }
