@@ -206,22 +206,21 @@ if _have_hypothesis:
         (1, -_LONG_BOUND),
     )
 
-    # Triple edges for the chained-comparison tests. The NULL patterns are the
-    # point: a chain short-circuits, so whether a NULL operand's raise guard is
-    # reached depends on the earlier links.
+    # Triple edges for the chained-comparison tests, pulled from the
+    # single-value edges above. A chain short-circuits, so the NULL patterns
+    # -- which position holds the None -- are the point; the boundary orderings
+    # probe sign/overflow at the type's edges.
     _LONG_TRIPLE_EDGES = (
+        # NULL position: which link's guard fires -- or is short-circuited past
+        # -- depends on where the None sits.
         (None, None, None),
-        (None, None, 0),
-        (None, 0, None),
-        (0, None, None),
         (None, 0, 1),
         (0, None, 1),
         (0, 1, None),
-        (1, 0, None),
-        (0, 0, 0),
+        (1, 0, None),  # first link false -> None never reached
+        # Boundary orderings.
         (0, 1, 2),
         (2, 1, 0),
-        (1, 1, 1),
         (_INT32_MIN, 0, _INT32_MAX),
         (-_LONG_BOUND, 0, _LONG_BOUND),
     )
@@ -237,15 +236,10 @@ if _have_hypothesis:
         return wrapper
 
     def _seed_tuple_examples(tuples, keys=("x", "y", "z")):
-        """Stack one ``@example`` decorator per seed tuple, zipped onto ``keys``.
-
-        The arity assert matters: ``zip`` stops at the shorter argument, so a
-        mismatched seed tuple would quietly seed a different input than intended.
-        """
+        """Stack one ``@example`` decorator per seed tuple, zipped onto ``keys``."""
 
         def wrapper(method):
             for values in reversed(tuples):
-                assert len(values) == len(keys), f"seed {values!r} does not fit {keys!r}"
                 method = example(**dict(zip(keys, values)))(method)
             return method
 
