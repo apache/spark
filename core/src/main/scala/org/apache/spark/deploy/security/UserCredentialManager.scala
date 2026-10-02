@@ -539,8 +539,9 @@ private[spark] object UserCredentialManager extends Logging {
    */
   private[security] def warnIfRpcEncryptionDisabled(sparkConf: SparkConf): Unit = {
     if (!SecurityManager.isRpcEncryptionEnabled(sparkConf)) {
-      // The remediation hint is emitted as plain log text (not an MDC(REASON, ...)) so it does not
-      // pollute the structured `reason` field, which is used elsewhere for operation-failure
+      // The remediation hint is carried under MDC(LogKeys.MESSAGE, ...) rather than
+      // MDC(LogKeys.REASON, ...): REASON is used elsewhere for the reason an operation failed, so
+      // keeping the hint out of it leaves the structured `reason` field clean for real failure
       // reasons. We say credentials "may be" (not "will be") transmitted in cleartext because the
       // channel could still be protected outside Spark (e.g. a service mesh or a private network),
       // which Spark cannot detect. We also point at the SPIP's stricter mode so operators who want
