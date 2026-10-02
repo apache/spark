@@ -5465,6 +5465,7 @@ object SQLConf {
       .doc("The interval in milliseconds at which the sampling profiler samples the call stack.")
       .version("4.4.0")
       .timeConf(TimeUnit.MILLISECONDS)
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .createWithDefault(100)
 
   val PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED =
