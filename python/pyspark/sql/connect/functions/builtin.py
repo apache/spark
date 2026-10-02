@@ -2343,6 +2343,19 @@ def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Colum
 variant_strip_nulls.__doc__ = pysparkfuncs.variant_strip_nulls.__doc__
 
 
+def variant_pick(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
+    if len(paths) == 0:
+        raise PySparkValueError(
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "paths"},
+        )
+    cols = [p if isinstance(p, Column) else lit(p) for p in paths]
+    return _invoke_function("variant_pick", _to_col(v), *cols)
+
+
+variant_pick.__doc__ = pysparkfuncs.variant_pick.__doc__
+
+
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     assert isinstance(path, (Column, str))
     if isinstance(path, str):

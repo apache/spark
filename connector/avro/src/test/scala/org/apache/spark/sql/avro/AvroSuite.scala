@@ -43,13 +43,14 @@ import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
 import org.apache.spark.sql.connector.catalog.TableCapability
-import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
+import org.apache.spark.sql.execution.{FileSourceScanExec, FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileDataSourceV2, FileTable}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
@@ -1255,6 +1256,108 @@ abstract class AvroSuite
     assertExceptionMsg[FileNotFoundException](e, "File not_exists.avsc does not exist")
   }
 
+  // spark.sql.avro.schemaUrlAllowedSchemes is a static SQL config, so it cannot be set with
+  // withSQLConf; these drive AvroOptions directly under a SQLConf provided via withExistingConf.
+  // testFile returns a "file:" URL, so its scheme is an explicit "file"; the scheme-less path that
+  // resolves against the default file system is covered by its own test below.
+  test("SPARK-59329: avroSchemaUrl scheme allowlist permits an allowed scheme") {
+    val avroSchemaUrl = testFile("test_sub.avsc")
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val conf = new SQLConf()
+    conf.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file"))
+    SQLConf.withExistingConf(conf) {
+      val options = new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
+      assert(options.schema.isDefined)
+    }
+  }
+
+  test("SPARK-59329: avroSchemaUrl allowlist rejects a disallowed scheme " +
+    "before opening the file system") {
+    // An explicit non-"file" scheme is rejected by the allowlist check, which runs before the
+    // file system for the URL is instantiated -- so this surfaces the clean allowlist error
+    // rather than a lower-level failure from trying to load the s3a file system. The URL uses an
+    // upper-case "S3A" scheme so the lower-case "s3a" in the message pins the scheme-side case
+    // folding: dropping the fold on the scheme leaves no lower-case "s3a" in the message.
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val conf = new SQLConf()
+    conf.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file"))
+    SQLConf.withExistingConf(conf) {
+      val e = intercept[AnalysisException] {
+        new AvroOptions(Map("avroSchemaUrl" -> "S3A://bucket/user.avsc"), hadoopConf)
+      }
+      assert(e.getCondition == "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE")
+      assert(e.getMessage.contains("avroSchemaUrl"))
+      assert(e.getMessage.contains("not in the allowlist"))
+      assert(e.getMessage.contains("The scheme 's3a'"))
+    }
+  }
+
+  test("SPARK-59329: avroSchemaUrl scheme allowlist is disabled by default") {
+    val avroSchemaUrl = testFile("test_sub.avsc")
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    // The empty default skips the scheme check entirely, preserving the previous behavior.
+    val conf = new SQLConf()
+    SQLConf.withExistingConf(conf) {
+      assert(conf.getConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES).isEmpty)
+      val options = new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
+      assert(options.schema.isDefined)
+    }
+  }
+
+  test("SPARK-59329: avroSchemaUrl scheme allowlist is case-insensitive") {
+    val avroSchemaUrl = testFile("test_sub.avsc")
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    // Allowlist entries and the URL scheme are compared case-insensitively: an upper-case "FILE"
+    // entry still permits the "file" scheme. Dropping the allowlist's case folding fails this.
+    val conf = new SQLConf()
+    conf.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("FILE"))
+    SQLConf.withExistingConf(conf) {
+      val options = new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
+      assert(options.schema.isDefined)
+    }
+  }
+
+  test("SPARK-59329: avroSchemaUrl allowlist resolves a scheme-less path " +
+    "against the default file system") {
+    // testFile returns a "file:" URL, so strip the scheme to get a genuinely scheme-less path.
+    // This exercises the FileSystem.getDefaultUri fallback that the other cases do not reach.
+    val avroSchemaUrl = new URI(testFile("test_sub.avsc")).getPath
+    assert(new URI(avroSchemaUrl).getScheme == null)
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    // The default file system is "file", so allowing "file" permits the scheme-less path ...
+    val allowed = new SQLConf()
+    allowed.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file"))
+    SQLConf.withExistingConf(allowed) {
+      assert(new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf).schema.isDefined)
+    }
+    // ... and an allowlist without it rejects the same path, reporting the resolved "file" scheme.
+    val disallowed = new SQLConf()
+    disallowed.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("s3a"))
+    SQLConf.withExistingConf(disallowed) {
+      val e = intercept[AnalysisException] {
+        new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
+      }
+      assert(e.getMessage.contains("The scheme 'file'"))
+    }
+  }
+
+  test("SPARK-59329: the allowlist rejection echoes the parsed allowlist") {
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    // "file://" is the shape an operator is most likely to write by mistake: it parses to one
+    // entry ("file://", not "file") that matches nothing, so every read then fails with a scheme
+    // that looks like it should be allowed. Echoing what the config parsed to is what makes the
+    // message readable, so pin it: dropping the parsed allowlist from the message fails here.
+    val conf = new SQLConf()
+    conf.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file://"))
+    SQLConf.withExistingConf(conf) {
+      val e = intercept[AnalysisException] {
+        new AvroOptions(Map("avroSchemaUrl" -> testFile("test_sub.avsc")), hadoopConf)
+      }
+      assert(e.getMessage.contains("The scheme 'file'"))
+      assert(e.getMessage.contains("not in the allowlist [file://]"))
+    }
+  }
+
   test("support user provided avro schema with defaults for missing fields") {
     val avroSchema =
       """
@@ -1733,6 +1836,143 @@ abstract class AvroSuite
         new StructType().add("foo", StringType).add("foo_map", MapType(StringType, IntegerType)))
       assert(reloadedDf.select($"foo".as("string"), $"foo_map".as("simple_map")).collect().toSet ===
         expectedDf.collect().toSet)
+    }
+  }
+
+  test("SPARK-59108: positionalFieldMatching resolves fields against the full schema") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 5).selectExpr("id AS a", "id * 100 AS b", "id * 10000 AS c")
+        .write.format("avro").save(path)
+      // The names differ from the file's, so only the positions can pair the two schemas.
+      val renamedSchema = new StructType()
+        .add("x", LongType).add("y", LongType).add("z", LongType)
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema(renamedSchema)
+        .load(path)
+
+      val rows = (0 until 5).map(i => Row(i.toLong, i * 100L, i * 10000L))
+      checkAnswer(df, rows)
+      // A column keeps its own Avro field however few of them the query projects.
+      checkAnswer(df.select("z"), rows.map(r => Row(r.get(2))))
+      checkAnswer(df.select("y"), rows.map(r => Row(r.get(1))))
+      checkAnswer(df.select("x", "z"), rows.map(r => Row(r.get(0), r.get(2))))
+      checkAnswer(df.select("z", "x"), rows.map(r => Row(r.get(2), r.get(0))))
+      checkAnswer(df.select("y", "z"), rows.map(r => Row(r.get(1), r.get(2))))
+      checkAnswer(df.selectExpr("sum(z)"), Row(100000L))
+      // With pushdown on, the filter runs inside the deserializer; with it off, it runs above the
+      // scan.
+      // Either way a wrong pairing drops rows rather than only returning wrong values for them.
+      Seq("true", "false").foreach { pushDown =>
+        withSQLConf(SQLConf.AVRO_FILTER_PUSHDOWN_ENABLED.key -> pushDown) {
+          checkAnswer(df.where("z = 20000").select("z"), Row(20000L))
+          checkAnswer(df.where("z > 20000").select("x"), Seq(Row(3L), Row(4L)))
+        }
+      }
+      // A projection of no columns at all.
+      checkAnswer(df.selectExpr("count(1)"), Row(5L))
+
+      // The projected schema carries the schema's own spelling whatever casing the query used, so
+      // the name lookup that resolves a position finds the field either way.
+      val mixedCase = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema(new StructType().add("Xx", LongType).add("yY", LongType).add("ZZ", LongType))
+        .load(path)
+      Seq("true", "false").foreach { caseSensitive =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+          checkAnswer(mixedCase.select("ZZ"), rows.map(r => Row(r.get(2))))
+        }
+      }
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        checkAnswer(mixedCase.select("zz"), rows.map(r => Row(r.get(2))))
+      }
+    }
+  }
+
+  test("SPARK-59108: positionalFieldMatching with a partition column in the schema") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 4).selectExpr("id AS a", "id * 100 AS b", "id % 2 AS p")
+        .write.partitionBy("p").format("avro").save(path)
+      // p is a partition column, so the files hold a and b only and the data schema is x and z.
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, p int, z long")
+        .load(path)
+
+      checkAnswer(df.select("z"), (0 until 4).map(i => Row(i * 100L)))
+      checkAnswer(df.select("x"), (0 until 4).map(i => Row(i.toLong)))
+      checkAnswer(df.select("p", "z"), (0 until 4).map(i => Row(i % 2, i * 100L)))
+      checkAnswer(df.where("p = 1").select("z"), Seq(Row(100L), Row(300L)))
+    }
+  }
+
+  test("SPARK-59108: positionalFieldMatching with a nested record and the avroSchema option") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 3).selectExpr(
+          "id AS a",
+          "named_struct('f1', id * 10, 'f2', cast(id AS string)) AS r",
+          "id * 1000 AS c")
+        .write.format("avro").save(path)
+
+      // Only the top level is a projection, so the nested record keeps resolving by its own
+      // positions. Reading the struct alone would take Avro field 0, a long, and fail.
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, s struct<g1: long, g2: string>, z long")
+        .load(path)
+      checkAnswer(df.select("s"), (0 until 3).map(i => Row(Row(i * 10L, i.toString))))
+      checkAnswer(df.select("s.g2"), (0 until 3).map(i => Row(i.toString)))
+      checkAnswer(df.select("z"), (0 until 3).map(i => Row(i * 1000L)))
+
+      // The avroSchema option supplies the Avro side, and the data schema is inferred from it, so
+      // the positions are the option's.
+      val avroSubset =
+        """{"type":"record","name":"topLevelRecord","fields":[
+          |{"name":"a","type":"long"},
+          |{"name":"c","type":"long"}]}""".stripMargin
+      val fromOption = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .option("avroSchema", avroSubset)
+        .load(path)
+      checkAnswer(fromOption.select("c"), (0 until 3).map(i => Row(i * 1000L)))
+      checkAnswer(fromOption.select("a"), (0 until 3).map(i => Row(i.toLong)))
+    }
+  }
+
+  test("SPARK-59108: a position past the end of the Avro schema reads null") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 3).selectExpr("id AS a", "id * 100 AS b").write.format("avro").save(path)
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, y long, z long")
+        .load(path)
+
+      // z is at position 2 of the schema and the file has two fields, so it has no Avro field to
+      // read and comes back null however few columns the query projects.
+      checkAnswer(df.select("z"), Seq(Row(null), Row(null), Row(null)))
+      checkAnswer(df, (0 until 3).map(i => Row(i.toLong, i * 100L, null)))
+    }
+  }
+
+  test("SPARK-59108: positionalFieldMatching fails a mispaired type rather than reading it") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 3).selectExpr("id AS a", "cast(id AS string) AS b", "id * 10 AS c")
+        .write.format("avro").save(path)
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, y long, z long")
+        .load(path)
+
+      // y takes Avro field 1, which is a string, so the read fails instead of returning the values
+      // of a neighbouring field.
+      val ex = intercept[SparkException](df.select("y").collect())
+      assert(Utils.exceptionString(ex).contains("Cannot convert Avro"))
+      checkAnswer(df.select("z"), (0 until 3).map(i => Row(i * 10L)))
     }
   }
 
@@ -3733,6 +3973,35 @@ class AvroV1Suite extends AvroSuite {
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
 
+  test("SPARK-59108: two positional reads of different columns share one widened scan") {
+    // SPARK-59107 named avro under this option, so the two subqueries used to keep their own scans.
+    // They share one now, and the values are the file's either way because each column resolves
+    // against the data schema. AQE off because `AdaptiveSparkPlanExec` is a leaf node, so with it
+    // on the scan underneath is not reachable from the executed plan.
+    withSQLConf(
+        SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
+        SQLConf.IGNORE_MISSING_FILES.key -> "false",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(0, 5).selectExpr("id AS a", "id * 10 AS b", "id * 100 AS c")
+          .write.format("avro").save(path)
+        withTempView("t") {
+          spark.read.option("positionalFieldMatching", true.toString).format("avro").load(path)
+            .createOrReplaceTempView("t")
+          // b and c sit at data schema positions 1 and 2, so the merged read of the two has to
+          // resolve against the data schema rather than against its own projection.
+          val df = sql("SELECT (SELECT sum(b) FROM t), (SELECT sum(c) FROM t)")
+          checkAnswer(df, Row(100L, 1000L))
+          val scanColumns = df.queryExecution.executedPlan
+            .collectWithSubqueries { case s: FileSourceScanExec => s }
+            .map(_.requiredSchema.fieldNames.sorted.toSeq)
+          assert(scanColumns === Seq(Seq("b", "c")))
+        }
+      }
+    }
+  }
+
   test("SPARK-36271: V1 insert should check schema field name too") {
     withView("v") {
       spark.range(1).createTempView("v")
@@ -3771,6 +4040,43 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  test("SPARK-59108: two positional reads of different columns share one widened scan") {
+    // SPARK-57205 withheld SCAN_MERGING from AvroTable under this option, so the two subqueries
+    // used to keep their own scans. The table declares it now, they share one, and the values are
+    // the file's either way because each column resolves against the data schema. FileTable
+    // withholds the capability when the reads are not strict, so pin that rather than inherit it.
+    withSQLConf(
+        SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
+        SQLConf.IGNORE_MISSING_FILES.key -> "false") {
+      val dsV2 = DataSource.lookupDataSourceV2("avro", spark.sessionState.conf)
+        .get.asInstanceOf[FileDataSourceV2]
+      val positional = dsV2.getTable(new StructType(), Array.empty,
+        JCollections.singletonMap("positionalFieldMatching", "true"))
+      assert(positional.capabilities().contains(TableCapability.SCAN_MERGING))
+
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(0, 5).selectExpr("id AS a", "id * 10 AS b", "id * 100 AS c")
+          .write.format("avro").save(path)
+        withTempView("t") {
+          spark.read.option("positionalFieldMatching", true.toString).format("avro").load(path)
+            .createOrReplaceTempView("t")
+          // b and c sit at data schema positions 1 and 2, so the merged read of the two has to
+          // resolve against the data schema rather than against its own projection.
+          val df = sql("SELECT (SELECT sum(b) FROM t), (SELECT sum(c) FROM t)")
+          checkAnswer(df, Row(100L, 1000L))
+          // Distinct by canonical form: the merged subquery is referenced twice, so it is
+          // collected once per reference.
+          val scanColumns = df.queryExecution.optimizedPlan
+            .collectWithSubqueries { case r: DataSourceV2ScanRelation => r }
+            .distinctBy(_.canonicalized)
+            .map(_.output.map(_.name).sorted)
+          assert(scanColumns === Seq(Seq("b", "c")))
+        }
+      }
+    }
+  }
 
   test("Avro source v2: support partition pruning") {
     withTempPath { dir =>
@@ -3939,10 +4245,8 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
   }
 
   test("SPARK-57205: Avro V2 declares SCAN_MERGING and merges scans differing only in columns") {
-    // AvroTable withholds the capability under positionalFieldMatching, because the deserializer is
-    // built from the pruned read schema while the Avro side stays unpruned, so catalyst field i of
-    // the projection takes Avro field i of that schema and widening the projection shifts values.
-    // FileTable also withholds it when the reads are not strict, so pin that rather than inherit.
+    // FileTable withholds the capability when the reads are not strict, so pin that rather than
+    // inherit it.
     withSQLConf(
         SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
         SQLConf.IGNORE_MISSING_FILES.key -> "false") {
@@ -3952,9 +4256,6 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       val v2Table = dsV2.getTable(
         new StructType(), Array.empty, JCollections.emptyMap[String, String]())
       assert(v2Table.capabilities().contains(TableCapability.SCAN_MERGING))
-      val positional = dsV2.getTable(new StructType(), Array.empty,
-        JCollections.singletonMap("positionalFieldMatching", "true"))
-      assert(!positional.capabilities().contains(TableCapability.SCAN_MERGING))
 
       withTempPath { dir =>
         val path = dir.getCanonicalPath
@@ -4004,6 +4305,50 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
             "columnType" -> expectedType,
             "format" -> "Avro"))
       }
+    }
+  }
+}
+
+// The allowlist is a static SQL config, so it cannot be set with `withSQLConf`; it is fixed on the
+// session here via `sparkConf`. These go through a real `spark.read ... load()` so they pin the
+// production path the option guards: that the value set on the session reaches the `SQLConf.get`
+// the check reads, that the check fires in a read, and that a session cannot relax it.
+class AvroSchemaUrlAllowlistSuite extends QueryTest with SharedSparkSession {
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key, "file")
+
+  private val testAvro = testFile("test.avro")
+
+  test("SPARK-59329: an allowed avroSchemaUrl scheme is permitted through a read") {
+    // testFile returns a "file:" URL, whose scheme "file" is allowed.
+    val result = spark.read.option("avroSchemaUrl", testFile("test_sub.avsc"))
+      .format("avro").load(testAvro).collect()
+    val expected = spark.read.format("avro").load(testAvro).select("string").collect()
+    assert(result.sameElements(expected))
+  }
+
+  test("SPARK-59329: a disallowed avroSchemaUrl scheme is rejected through a read") {
+    val e = intercept[AnalysisException] {
+      spark.read.option("avroSchemaUrl", "s3a://bucket/user.avsc")
+        .format("avro").load(testAvro).collect()
+    }
+    assert(e.getCondition == "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE")
+    assert(e.getMessage.contains("not in the allowlist"))
+  }
+
+  test("SPARK-59329: a session cannot relax the avroSchemaUrl scheme allowlist") {
+    // buildStaticConf makes the allowlist an operator-level boundary: neither the DataFrame conf
+    // API nor SQL SET can widen it at runtime.
+    val key = StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key
+    Seq[() => Unit](
+      () => spark.conf.set(key, "s3a"),
+      () => spark.sql(s"SET $key=s3a").collect()
+    ).foreach { f =>
+      checkError(
+        exception = intercept[AnalysisException](f()),
+        condition = "CANNOT_MODIFY_STATIC_CONFIG",
+        parameters = Map("key" -> s""""$key""""))
     }
   }
 }

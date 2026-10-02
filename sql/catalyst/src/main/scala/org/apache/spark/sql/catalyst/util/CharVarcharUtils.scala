@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
@@ -154,6 +155,29 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       }.getOrElse(field)
     }
     StructType(fields)
+  }
+
+  /**
+   * Applies assignment semantics when parsing text into a typed schema. CHAR values are padded,
+   * and excess trailing spaces are trimmed when the remaining value fits. Non-space overflow
+   * raises EXCEED_LIMIT_LENGTH. Null stays null, and unbounded STRING is unchanged.
+   *
+   * With first-class CHAR/VARCHAR semantics enabled, for example,
+   * `from_json('{"c":"ab"}', 'c CHAR(4)')` produces `"ab  "`, while parsing `{"v":"abcd"}`
+   * as `v VARCHAR(3)` in FAILFAST mode raises EXCEED_LIMIT_LENGTH.
+   */
+  def applyTextParseSemantics(value: UTF8String, dt: DataType): UTF8String = {
+    if (value == null) {
+      null
+    } else {
+      dt match {
+        case c: CharType =>
+          CharVarcharCodegenUtils.charTypeWriteSideCheck(value, c.length)
+        case v: VarcharType =>
+          CharVarcharCodegenUtils.varcharTypeWriteSideCheck(value, v.length)
+        case _ => value
+      }
+    }
   }
 
   /**
@@ -295,6 +319,11 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
     val rawTypes = attrs.map(attr => getRawType(attr.metadata))
     if (rawTypes.exists(_.isEmpty)) {
       attrs
+    } else if (attrs.exists(attr => !RowOrdering.isOrderable(attr.dataType))) {
+      // Comparing a non-orderable type, such as a struct holding a MAP, is rejected later by
+      // CheckAnalysis. Leave it alone so the error names the attribute the user wrote rather
+      // than the rewritten struct.
+      attrs
     } else {
       val typeWithTargetCharLength = rawTypes.map(_.get).reduce(typeWithWiderCharLength)
       attrs.zip(rawTypes.map(_.get)).map { case (attr, rawType) =>
@@ -337,12 +366,27 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           val fieldExpr = GetStructField(expr, i, Some(field.name))
           val padded = padCharToTargetLength(
             fieldExpr, field.dataType, targets(i).dataType, alwaysPad)
-          needPadding = padded.isDefined
+          // Accumulate: any single field needing padding means the struct must be rebuilt,
+          // otherwise the padding computed for earlier fields would be discarded.
+          needPadding |= padded.isDefined
           createStructExprs += Literal(field.name)
           createStructExprs += padded.getOrElse(fieldExpr)
           i += 1
         }
-        if (needPadding) Some(CreateNamedStruct(createStructExprs.toSeq)) else None
+        if (needPadding) {
+          val struct = CreateNamedStruct(createStructExprs.toSeq)
+          // Rebuilding the struct field by field loses the nullability of the struct itself:
+          // GetStructField on a NULL struct yields NULL fields, which CreateNamedStruct would
+          // turn into a non-NULL struct of NULLs. Guard it the same way the scan-side rewrite
+          // in processStringForCharVarchar does.
+          Some(if (expr.nullable) {
+            If(IsNull(expr), Literal(null, struct.dataType), struct)
+          } else {
+            struct
+          })
+        } else {
+          None
+        }
 
       case (ArrayType(et, containsNull), ArrayType(target, _)) =>
         val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)

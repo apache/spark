@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, CTERelationRef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, CTERelationRef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedCTERelation, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -59,9 +59,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
     def collectCommands(p: LogicalPlan): Seq[LogicalPlan] = p match {
       case c @ (_: Command | _: ParsedStatement | _: InsertIntoDir) => Seq(c)
       case u: UnresolvedWith =>
-        collectCommands(u.child) ++ u.cteRelations.flatMap {
-          case (_, relation, _) => collectCommands(relation)
-        }
+        collectCommands(u.child) ++ u.cteRelations.flatMap(r => collectCommands(r.plan))
       case p => p.children.flatMap(collectCommands)
     }
     val commands = collectCommands(plan)
@@ -143,7 +141,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         val newNames = ArrayBuffer.empty[String]
         newNames ++= outerCTERelationNames
         relations.foreach {
-          case (name, relation, _) =>
+          case UnresolvedCTERelation(name, relation, _, _) =>
             if (startOfQuery && outerCTERelationNames.exists(resolver(_, name))) {
               throw QueryCompilationErrors.ambiguousRelationAliasNameInNestedCTEError(name)
             }
@@ -264,7 +262,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
   }
 
   private def resolveCTERelations(
-      relations: Seq[(String, SubqueryAlias, Option[Int])],
+      relations: Seq[UnresolvedCTERelation],
       isLegacy: Boolean,
       forceInline: Boolean,
       outerCTEDefs: Seq[(String, CTERelationDef)],
@@ -277,7 +275,11 @@ object CTESubstitution extends Rule[LogicalPlan] {
     } else {
       outerCTEDefs
     }
-    for ((name, relation, maxDepth) <- relations) {
+    for (UnresolvedCTERelation(name, relation, maxDepth, materialized) <- relations) {
+      // A MATERIALIZED CTE cannot be evaluated once when the CTEs are inlined here.
+      if (alwaysInline && materialized.contains(true)) {
+        throw QueryCompilationErrors.materializedCTEAlwaysInlinedError(name, relation.origin)
+      }
       // If recursion is allowed (RECURSIVE keyword specified)
       // then it has higher priority than outer or previous relations.
       // Therefore, we construct a `CTERelationDef` for the current relation.
@@ -285,7 +287,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       // referencing to, we first check if it is a reference to this one. If yes, then we set the
       // reference as being recursive.
       val recursiveCTERelation = if (allowRecursion) {
-        Some(name -> CTERelationDef(relation, maxDepth = maxDepth))
+        Some(name -> CTERelationDef(relation, maxDepth = maxDepth, materialized = materialized))
       } else {
         // If there is an outer recursive CTE relative to this one, and this one isn't recursive,
         // then the self reference with the first-check priority is going to be the CteRelationDef
@@ -353,9 +355,9 @@ object CTESubstitution extends Rule[LogicalPlan] {
       val cteRelation = if (allowRecursion) {
         recursiveCTERelation
         .map(_._2.copy(child = substituted))
-        .getOrElse(CTERelationDef(substituted, maxDepth = maxDepth))
+        .getOrElse(CTERelationDef(substituted, maxDepth = maxDepth, materialized = materialized))
       } else {
-        CTERelationDef(substituted)
+        CTERelationDef(substituted, materialized = materialized)
       }
       if (!alwaysInline) {
         cteDefs += cteRelation

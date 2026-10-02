@@ -177,18 +177,31 @@ public class OneForOneStreamManagerSuite {
     // ChunkFetchRequest path.
     TransportClient otherApp = Mockito.mock(TransportClient.class);
     Mockito.when(otherApp.getClientId()).thenReturn("app2");
+    Mockito.when(otherApp.getChannel()).thenReturn(dummyChannel);
     Assertions.assertThrows(SecurityException.class,
       () -> manager.checkAuthorization(otherApp, streamChunkId));
 
-    // The owning application is allowed.
+    // The owning application, on the connection that registered the stream, is allowed.
     TransportClient owner = Mockito.mock(TransportClient.class);
     Mockito.when(owner.getClientId()).thenReturn("app1");
+    Mockito.when(owner.getChannel()).thenReturn(dummyChannel);
     manager.checkAuthorization(owner, streamChunkId);
 
-    // With authentication disabled the client id is null and the check is a no-op, preserving
-    // the default behavior.
+    // With authentication disabled the client id is null; requests are still only allowed from
+    // the connection that registered the stream.
     TransportClient noAuth = Mockito.mock(TransportClient.class);
     Mockito.when(noAuth.getClientId()).thenReturn(null);
+    Mockito.when(noAuth.getChannel()).thenReturn(dummyChannel);
     manager.checkAuthorization(noAuth, streamChunkId);
+
+    // A never-authenticated client (null client id) on a different connection is rejected:
+    // streams are bound to the registering connection, so a raw second connection cannot read
+    // another application's in-flight stream by guessing its stream id.
+    Channel otherChannel = Mockito.mock(Channel.class, Mockito.RETURNS_SMART_NULLS);
+    TransportClient hijacker = Mockito.mock(TransportClient.class);
+    Mockito.when(hijacker.getClientId()).thenReturn(null);
+    Mockito.when(hijacker.getChannel()).thenReturn(otherChannel);
+    Assertions.assertThrows(SecurityException.class,
+      () -> manager.checkAuthorization(hijacker, streamChunkId));
   }
 }

@@ -262,6 +262,28 @@ ci_classic_minimum = [
     "psutil",
 ]
 
+ci_classic_pandas_3 = [
+    {include-group = "internal_numpy"},
+    {include-group = "internal_py4j"},
+    {include-group = "internal_pyspark_devtool"},
+    {include-group = "pandas_on_spark_extra"},
+    # torch should be installed with ml_torch group
+    {include-group = "ml_extra_base"},
+    {include-group = "internal_test"},
+    "pyarrow>=23.0.0",
+    # Make sure no other conflicts with pandas 3
+    "pandas>=3.0.0",
+]
+
+ci_connect_pandas_3 = [
+    "grpcio==1.76.0",
+    "grpcio-status==1.76.0",
+    "googleapis-common-protos==1.71.0",
+    "zstandard==0.25.0",
+    "protobuf==6.33.5",
+    "graphviz==0.20.3",
+]
+
 ci_lint = [
     {include-group = "internal_lint"},
     {include-group = "ml_extra_base"},

@@ -24,10 +24,9 @@ import org.scalatest.Assertions.assert
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NamedReference, SortOrder, Transform}
-import org.apache.spark.sql.connector.expressions.filter.{And, Predicate}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, And, Predicate}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwriteV2, WriteBuilder, WriterCommitMessage}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -78,14 +77,16 @@ class InMemoryTableWithV2Filter(
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeV2Filtering {
 
     override def filterAttributes(): Array[NamedReference] = {
-      partitioning.flatMap(_.references)
-        .filter(ref => readSchema.findNestedField(
-          ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
+      identityPartitionAttributes
     }
 
     override def filter(filters: Array[Predicate]): Unit = {
-      if (partitioning.length == 1 && partitioning.head.references().length == 1) {
-        val ref = partitioning.head.references().head
+      if (filters.exists(_.isInstanceOf[AlwaysFalse])) {
+        data = Seq.empty
+        return
+      }
+      if (partitioning.length == 1 && identityPartitionReferences.length == 1) {
+        val ref = identityPartitionReferences.head
         filters.foreach {
           case p : Predicate if p.name().equals("IN") =>
             if (p.children().length > 1) {
@@ -202,14 +203,19 @@ object InMemoryTableWithV2Filter {
     }
   }
 
+  /**
+   * Whether every predicate has a shape [[evalPredicate]] can evaluate: a plain column, or a
+   * column and a literal. A predicate over an expression, e.g. a cast, is not supported and
+   * returned to Spark, as a real connector without expression support would do.
+   */
   def supportsPredicates(predicates: Array[Predicate]): Boolean = {
-    predicates.flatMap(splitAnd).forall {
-      case p: Predicate if p.name().equals("=") => true
-      case p: Predicate if p.name().equals("<=>") => true
-      case p: Predicate if p.name().equals("IS_NULL") => true
-      case p: Predicate if p.name().equals("IS_NOT_NULL") => true
-      case p: Predicate if p.name().equals("ALWAYS_TRUE") => true
-      case _ => false
+    predicates.flatMap(splitAnd).forall { p =>
+      (p.name(), p.children().toSeq) match {
+        case ("=" | "<=>", Seq(_: NamedReference, _: LiteralValue[_])) => true
+        case ("IS_NULL" | "IS_NOT_NULL", Seq(_: NamedReference)) => true
+        case ("ALWAYS_TRUE", _) => true
+        case _ => false
+      }
     }
   }
 

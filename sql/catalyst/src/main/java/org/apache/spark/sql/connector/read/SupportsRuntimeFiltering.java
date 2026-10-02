@@ -50,7 +50,8 @@ public interface SupportsRuntimeFiltering extends SupportsRuntimeV2Filtering {
    * The provided expressions must be interpreted as a set of filters that are ANDed together.
    * Implementations may use the filters to prune initially planned {@link InputPartition}s.
    * <p>
-   * Spark tracks runtime-filter eligibility by root attribute. If {@link #filterAttributes()}
+   * Spark currently tracks runtime-filter eligibility by root attribute. If
+   * {@link #filterAttributes()}
    * returns a nested reference, this method may receive a filter on another nested field under
    * the same root. Implementations must inspect each filter and use only filters they can apply.
    * Nested paths are encoded in a V1 {@link Filter} as dot-separated names, with each path part

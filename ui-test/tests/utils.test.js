@@ -16,6 +16,7 @@
  */
 
 
+import '../../core/src/main/resources/org/apache/spark/ui/static/jquery.min.js';
 import * as utils from '../../core/src/main/resources/org/apache/spark/ui/static/utils.js';
 
 test('ConvertDurationString', function () {
@@ -87,4 +88,25 @@ test('errorMessageCell escapes HTML in error messages', function () {
   const multiLine = utils.errorMessageCell('boom\n' + payload);
   expect(multiLine).not.toContain(payload);
   expect(multiLine).toContain('&lt;img src=x onerror=alert(document.domain)&gt;');
+});
+
+test('formatLogsCells escapes custom log names and URLs', function () {
+  // Names and URLs are escaped, and the href attribute is quoted.
+  const rendered = utils.formatLogsCells(
+    {'<b>stdout</b>': 'http://worker:8081/log?a=1&b="2"'}, 'display');
+  expect(rendered).toBe(
+    '<div><a href="http://worker:8081/log?a=1&amp;b=&quot;2&quot;">&lt;b&gt;stdout&lt;/b&gt;</a></div>');
+
+  // Only http(s) and relative URLs become links; other schemes render as text.
+  ['javascript:alert(1)', 'JAVAS\tCRIPT:alert(1)', 'data:text/html,x'].forEach(function (url) {
+    expect(utils.formatLogsCells({'stdout': url}, 'display')).toBe('<div>stdout</div>');
+  });
+
+  expect(utils.formatLogsCells({'stderr': 'logPage/?self&logType=stderr'}, 'display'))
+    .toBe('<div><a href="logPage/?self&amp;logType=stderr">stderr</a></div>');
+  expect(utils.formatLogsCells({'stdout': 'https://worker:8081/logPage'}, 'display'))
+    .toBe('<div><a href="https://worker:8081/logPage">stdout</a></div>');
+
+  // Non-display rendering returns the log names for sorting and filtering.
+  expect(utils.formatLogsCells({'stdout': 'javascript:alert(1)'}, 'sort')).toEqual(['stdout']);
 });

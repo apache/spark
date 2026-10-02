@@ -94,13 +94,20 @@ private[spark] trait DecisionTreeModel {
    *         Leaves are indexed in pre-order from 0.
    */
   def predictLeaf(features: Vector): Double = {
-    val leaf = rootNode.predictImpl(features)
-    assert(leaf.leafIndex >= 0, "Leaf indices are not assigned.")
-    leaf.leafIndex.toDouble
+    DecisionTreeModel.predictLeaf(features, rootNode)
   }
 
   def getEstimatedSize(): Long = {
     org.apache.spark.util.SizeEstimator.estimate(rootNode)
+  }
+}
+
+private[spark] object DecisionTreeModel {
+
+  private[ml] def predictLeaf(features: Vector, rootNode: Node): Double = {
+    val leaf = rootNode.predictImpl(features)
+    assert(leaf.leafIndex >= 0, "Leaf indices are not assigned.")
+    leaf.leafIndex.toDouble
   }
 }
 
@@ -161,6 +168,64 @@ private[spark] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 }
 
 private[ml] object TreeEnsembleModel {
+
+  private[ml] def predictRaw[M <: DecisionTreeModel](
+      features: Vector,
+      trees: Array[M],
+      treeWeights: Array[Double]): Double = {
+    var prediction = 0.0
+    var i = 0
+    while (i < trees.length) {
+      prediction += trees(i).rootNode.predictImpl(features).prediction * treeWeights(i)
+      i += 1
+    }
+    prediction
+  }
+
+  private[ml] def predictRaw[M <: DecisionTreeModel](
+      features: Vector,
+      trees: Array[M]): Double = {
+    var prediction = 0.0
+    var i = 0
+    while (i < trees.length) {
+      prediction += trees(i).rootNode.predictImpl(features).prediction
+      i += 1
+    }
+    prediction
+  }
+
+  private[ml] def predictRaw(
+      features: Vector,
+      rootNodes: Array[Node],
+      treeWeights: Array[Double]): Double = {
+    var prediction = 0.0
+    var i = 0
+    while (i < rootNodes.length) {
+      prediction += rootNodes(i).predictImpl(features).prediction * treeWeights(i)
+      i += 1
+    }
+    prediction
+  }
+
+  private[ml] def predictRaw(features: Vector, rootNodes: Array[Node]): Double = {
+    var prediction = 0.0
+    var i = 0
+    while (i < rootNodes.length) {
+      prediction += rootNodes(i).predictImpl(features).prediction
+      i += 1
+    }
+    prediction
+  }
+
+  private[ml] def predictLeaf(features: Vector, rootNodes: Array[Node]): Vector = {
+    val indices = Array.ofDim[Double](rootNodes.length)
+    var i = 0
+    while (i < rootNodes.length) {
+      indices(i) = DecisionTreeModel.predictLeaf(features, rootNodes(i))
+      i += 1
+    }
+    Vectors.dense(indices)
+  }
 
   /**
    * Given a tree ensemble model, compute the importance of each feature.
@@ -229,7 +294,7 @@ private[ml] object TreeEnsembleModel {
       maxFeatureIndex + 1
     }
     if (d == 0) {
-      assert(totalImportances.size == 0, s"Unknown error in computing feature" +
+      assert(totalImportances.isEmpty, s"Unknown error in computing feature" +
         s" importance: No splits found, but some non-zero importances.")
     }
     val (indices, values) = totalImportances.iterator.toSeq.sortBy(_._1).unzip

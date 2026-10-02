@@ -39,6 +39,7 @@ import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.expressions.variant.{ObjectExtraction, VariantPathParser}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MICROS
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, RebaseSpec}
 import org.apache.spark.sql.execution.datasources.VariantMetadata
 import org.apache.spark.sql.execution.datasources.parquet.types.ops.{ParquetFilterOps, ParquetTypeOps}
@@ -942,7 +943,15 @@ class ParquetFilters(
       case ParquetDateType =>
         value.isInstanceOf[Date] || value.isInstanceOf[LocalDate]
       case ParquetTimestampMicrosType | ParquetTimestampMillisType =>
-        value.isInstanceOf[Timestamp] || value.isInstanceOf[Instant]
+        // A micros/millis column may be read under a nanosecond type (widening TIMESTAMP(6) to
+        // nanos). Pushing a sub-microsecond bound through the micros/millis converter truncates it
+        // and can over-prune row groups, so only push down a bound on the microsecond grid; a
+        // sub-microsecond one falls back to a full scan. Mirrors the decimal scale-match guard.
+        value match {
+          case i: Instant => i.getNano % NANOS_PER_MICROS == 0
+          case t: Timestamp => t.getNanos % NANOS_PER_MICROS == 0
+          case _ => false
+        }
       case FrameworkFilterOps(ops) => ops.acceptsValue(value)
       case ParquetSchemaType(decimalType: DecimalLogicalTypeAnnotation, INT32, _) =>
         isDecimalMatched(value, decimalType)

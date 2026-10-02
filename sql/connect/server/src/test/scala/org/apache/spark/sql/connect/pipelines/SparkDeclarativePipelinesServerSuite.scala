@@ -26,6 +26,8 @@ import org.apache.spark.connect.proto.{Expression, OutputType, PipelineCommand, 
 import org.apache.spark.connect.proto.PipelineCommand.{DefineFlow, DefineOutput}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
+import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, UnqualifiedColumnName}
+import org.apache.spark.sql.pipelines.graph.AutoCdcFlow
 
 class SparkDeclarativePipelinesServerSuite
     extends SparkDeclarativePipelinesServerTest
@@ -133,7 +135,10 @@ class SparkDeclarativePipelinesServerSuite
       columns: Seq[String] = Seq.empty,
       exceptColumns: Seq[String] = Seq.empty,
       trackHistoryColumns: Seq[String] = Seq.empty,
-      trackHistoryExceptColumns: Seq[String] = Seq.empty): DefineFlow = {
+      trackHistoryExceptColumns: Seq[String] = Seq.empty,
+      ignoreNullUpdates: Boolean = false,
+      ignoreNullUpdatesColumns: Seq[String] = Seq.empty,
+      ignoreNullUpdatesExceptColumns: Seq[String] = Seq.empty): DefineFlow = {
     val autoCdcDetails = DefineFlow.AutoCdcFlowDetails
       .newBuilder()
       .setSource("src")
@@ -146,6 +151,11 @@ class SparkDeclarativePipelinesServerSuite
       autoCdcDetails.addTrackHistoryColumnList(unresolvedColumn(c)))
     trackHistoryExceptColumns.foreach(c =>
       autoCdcDetails.addTrackHistoryExceptColumnList(unresolvedColumn(c)))
+    if (ignoreNullUpdates) autoCdcDetails.setIgnoreNullUpdates(true)
+    ignoreNullUpdatesColumns.foreach(c =>
+      autoCdcDetails.addIgnoreNullUpdatesColumnList(unresolvedColumn(c)))
+    ignoreNullUpdatesExceptColumns.foreach(c =>
+      autoCdcDetails.addIgnoreNullUpdatesExceptColumnList(unresolvedColumn(c)))
     DefineFlow
       .newBuilder()
       .setDataflowGraphId(graphId)
@@ -212,6 +222,117 @@ class SparkDeclarativePipelinesServerSuite
     }
     assert(
       ex.getMessage.contains("AUTOCDC_BOTH_TRACK_HISTORY_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST"))
+  }
+
+  // Retrieves the (unresolved) AutoCdcFlow registered for the given graph so its ChangeArgs can be
+  // inspected. The graph must be non-empty (its target table defined), so build() succeeds.
+  private def registeredAutoCdcFlow(graphId: String): AutoCdcFlow =
+    getDefaultSessionHolder.dataflowGraphRegistry
+      .getDataflowGraphOrThrow(graphId)
+      .toDataflowGraph
+      .flows
+      .collectFirst { case f: AutoCdcFlow => f }
+      .getOrElse(fail("Expected an AutoCdcFlow in the graph"))
+
+  // Defines the "target" streaming table the AutoCDC flows below write into, so the graph is not
+  // empty when inspected.
+  private def defineTargetTable(graphId: String)(implicit
+      stub: proto.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub): Unit =
+    sendPlan(
+      buildPlanFromPipelineCommand(
+        PipelineCommand
+          .newBuilder()
+          .setDefineOutput(
+            DefineOutput
+              .newBuilder()
+              .setDataflowGraphId(graphId)
+              .setOutputName("target")
+              .setOutputType(OutputType.TABLE))
+          .build()))
+
+  test("AutoCDC: ignore_null_updates flag maps to an all-columns ignore-null selection") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      defineTargetTable(graphId)
+      sendPlan(
+        buildPlanFromPipelineCommand(
+          PipelineCommand
+            .newBuilder()
+            .setDefineFlow(
+              autoCdcDefineFlow(graphId, DefineFlow.SCDType.SCD_TYPE_1, ignoreNullUpdates = true))
+            .build()))
+      // "All columns" is an ExcludeColumns selection with an empty list.
+      assert(
+        registeredAutoCdcFlow(graphId).changeArgs.ignoreNullSelection
+          .contains(ColumnSelection.ExcludeColumns(Seq.empty)))
+    }
+  }
+
+  test("AutoCDC: ignore_null_updates_column_list maps to an include ignore-null selection") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      defineTargetTable(graphId)
+      sendPlan(
+        buildPlanFromPipelineCommand(
+          PipelineCommand
+            .newBuilder()
+            .setDefineFlow(autoCdcDefineFlow(
+              graphId,
+              DefineFlow.SCDType.SCD_TYPE_1,
+              ignoreNullUpdatesColumns = Seq("val")))
+            .build()))
+      assert(
+        registeredAutoCdcFlow(graphId).changeArgs.ignoreNullSelection
+          .contains(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("val")))))
+    }
+  }
+
+  test(
+    "AutoCDC: ignore_null_updates_except_column_list maps to an except ignore-null selection") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      defineTargetTable(graphId)
+      sendPlan(
+        buildPlanFromPipelineCommand(
+          PipelineCommand
+            .newBuilder()
+            .setDefineFlow(autoCdcDefineFlow(
+              graphId,
+              DefineFlow.SCDType.SCD_TYPE_1,
+              ignoreNullUpdatesExceptColumns = Seq("ts")))
+            .build()))
+      assert(
+        registeredAutoCdcFlow(graphId).changeArgs.ignoreNullSelection
+          .contains(ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("ts")))))
+    }
+  }
+
+  // Every combination of more than one of the three mutually-exclusive ignore-null options
+  // (all-columns flag, include list, except list) must be rejected server-side.
+  namedGridTest("AutoCDC: conflicting ignore-null options are rejected server-side")(
+    Map(
+      "(all + column_list)" -> ((true, Seq("val"), Seq.empty[String])),
+      "(all + except_column_list)" -> ((true, Seq.empty[String], Seq("ts"))),
+      "(column_list + except_column_list)" -> ((false, Seq("val"), Seq("ts"))),
+      "(all + column_list + except_column_list)" -> ((true, Seq("val"), Seq("ts"))))) {
+    case (ignoreNullUpdates, columns, exceptColumns) =>
+      val ex = intercept[Exception] {
+        withRawBlockingStub { implicit stub =>
+          val graphId = createDataflowGraph
+          sendPlan(
+            buildPlanFromPipelineCommand(
+              PipelineCommand
+                .newBuilder()
+                .setDefineFlow(autoCdcDefineFlow(
+                  graphId,
+                  DefineFlow.SCDType.SCD_TYPE_1,
+                  ignoreNullUpdates = ignoreNullUpdates,
+                  ignoreNullUpdatesColumns = columns,
+                  ignoreNullUpdatesExceptColumns = exceptColumns))
+                .build()))
+        }
+      }
+      assert(ex.getMessage.contains("AUTOCDC_CONFLICTING_IGNORE_NULL_UPDATES_OPTIONS"))
   }
 
   test(

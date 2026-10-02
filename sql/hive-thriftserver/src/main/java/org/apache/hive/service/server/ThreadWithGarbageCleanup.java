@@ -55,8 +55,8 @@ public class ThreadWithGarbageCleanup extends Thread {
     Long threadId = this.getId();
     RawStore threadLocalRawStore = threadRawStoreMap.get(threadId);
     if (threadLocalRawStore != null) {
-      LOG.debug("RawStore: " + threadLocalRawStore + ", for the thread: " +
-          this.getName()  +  " will be closed now.");
+      LOG.debug("RawStore: {}, for the thread: {} will be closed now.",
+          threadLocalRawStore, this.getName());
       threadLocalRawStore.shutdown();
       threadRawStoreMap.remove(threadId);
     }
@@ -69,8 +69,8 @@ public class ThreadWithGarbageCleanup extends Thread {
     Long threadId = this.getId();
     RawStore threadLocalRawStore = HiveMetaStore.HMSHandler.getRawStore();
     if (threadLocalRawStore != null && !threadRawStoreMap.containsKey(threadId)) {
-      LOG.debug("Adding RawStore: " + threadLocalRawStore + ", for the thread: " +
-          this.getName() + " to threadRawStoreMap for future cleanup.");
+      LOG.debug("Adding RawStore: {}, for the thread: {} " +
+          "to threadRawStoreMap for future cleanup.", threadLocalRawStore, this.getName());
       threadRawStoreMap.put(threadId, threadLocalRawStore);
     }
   }

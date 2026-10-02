@@ -742,6 +742,42 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT from_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', 'Asia/Kolkata')
+-- !query analysis
+Project [from_utc_timestamp(2015-07-23 17:00:00.123456789, Asia/Kolkata) AS from_utc_timestamp(TIMESTAMP_LTZ '2015-07-23 17:00:00.123456789', Asia/Kolkata)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', 'Asia/Kolkata')
+-- !query analysis
+Project [to_utc_timestamp(2015-07-23 17:00:00.123456789, Asia/Kolkata) AS to_utc_timestamp(TIMESTAMP_LTZ '2015-07-23 17:00:00.123456789', Asia/Kolkata)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(
+    to_utc_timestamp('2015-07-24 00:00:00.1234567 UTC' :: timestamp_ltz(7), 'Asia/Kolkata'))
+-- !query analysis
+Project [typeof(to_utc_timestamp(cast(2015-07-24 00:00:00.1234567 UTC as timestamp_ltz(7)), Asia/Kolkata)) AS typeof(to_utc_timestamp(CAST(2015-07-24 00:00:00.1234567 UTC AS TIMESTAMP_LTZ(7)), Asia/Kolkata))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT from_utc_timestamp(CAST(NULL AS timestamp_ltz(9)), 'Asia/Kolkata')
+-- !query analysis
+Project [from_utc_timestamp(cast(null as timestamp_ltz(9)), Asia/Kolkata) AS from_utc_timestamp(CAST(NULL AS TIMESTAMP_LTZ(9)), Asia/Kolkata)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', CAST(NULL AS STRING))
+-- !query analysis
+Project [to_utc_timestamp(2015-07-23 17:00:00.123456789, cast(null as string)) AS to_utc_timestamp(TIMESTAMP_LTZ '2015-07-23 17:00:00.123456789', CAST(NULL AS STRING))#x]
++- OneRowRelation
+
+
+-- !query
 SELECT max(c), min(c) FROM VALUES
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
@@ -1012,6 +1048,38 @@ Sort [c#x ASC NULLS FIRST], true
          :  +- Project [cast(1582-10-04 12:30:45.1234567 as timestamp_ltz(7)) AS c#x]
          :     +- OneRowRelation
          +- Project [cast(1582-10-15 23:59:59.123456789 as timestamp_ltz(9)) AS CAST(1582-10-15 23:59:59.123456789 AS TIMESTAMP_LTZ(9))#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.1234567' :: timestamp_ltz(7) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.12345678' :: timestamp_ltz(8)) ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Project [typeof(c#x) AS typeof(c)#x, c#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Union false, false
+         :- Project [cast(c#x as timestamp_ltz(8)) AS c#x]
+         :  +- Project [cast(2020-01-01 00:00:00.1234567 as timestamp_ltz(7)) AS c#x]
+         :     +- OneRowRelation
+         +- Project [cast(2021-07-15 12:34:56.12345678 as timestamp_ltz(8)) AS CAST(2021-07-15 12:34:56.12345678 AS TIMESTAMP_LTZ(8))#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.12345678' :: timestamp_ltz(8) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.123456789' :: timestamp_ltz(9)) ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Project [typeof(c#x) AS typeof(c)#x, c#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Union false, false
+         :- Project [cast(c#x as timestamp_ltz(9)) AS c#x]
+         :  +- Project [cast(2020-01-01 00:00:00.12345678 as timestamp_ltz(8)) AS c#x]
+         :     +- OneRowRelation
+         +- Project [cast(2021-07-15 12:34:56.123456789 as timestamp_ltz(9)) AS CAST(2021-07-15 12:34:56.123456789 AS TIMESTAMP_LTZ(9))#x]
             +- OneRowRelation
 
 
@@ -1621,3 +1689,44 @@ SELECT element_at(map(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 'a',
 -- !query analysis
 Project [element_at(map(2019-12-31 16:00:00.000000001, a, 2019-12-31 16:00:00.000000999, b), 2019-12-31 16:00:00.000000001, None, true) AS element_at(map(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', a, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999', b), TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001')#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(SECOND, 5, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC')
+-- !query analysis
+Project [timestampadd(SECOND, cast(5 as bigint), 2019-12-31 16:00:00.000000123, Some(America/Los_Angeles)) AS timestampadd(SECOND, 5, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000123')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(MICROSECOND, 2, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC')
+-- !query analysis
+Project [timestampadd(MICROSECOND, cast(2 as bigint), 2019-12-31 16:00:00.000000123, Some(America/Los_Angeles)) AS timestampadd(MICROSECOND, 2, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000123')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 300, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC')
+-- !query analysis
+Project [timestampadd(NANOSECOND, cast(300 as bigint), 2019-12-31 16:00:00.000000123, Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, 300, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000123')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, -300, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000100 UTC')
+-- !query analysis
+Project [timestampadd(NANOSECOND, cast(-300 as bigint), 2019-12-31 16:00:00.0000001, Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, -300, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000100')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 900, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000200 UTC')
+-- !query analysis
+Project [timestampadd(NANOSECOND, cast(900 as bigint), 2019-12-31 16:00:00.0000002, Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, 900, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000200')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]

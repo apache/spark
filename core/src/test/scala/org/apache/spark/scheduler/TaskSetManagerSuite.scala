@@ -2164,7 +2164,7 @@ class TaskSetManagerSuite
     // if the time threshold has not been exceeded, no speculative run should be triggered
     clock.advance(1000*60*60)
     assert(!manager.checkSpeculatableTasks(0))
-    assert(sched.speculativeTasks.size == 0)
+    assert(sched.speculativeTasks.isEmpty)
 
     // Now the task should have been running for 60 minutes and 1 second
     clock.advance(1000)
@@ -2177,7 +2177,7 @@ class TaskSetManagerSuite
     } else {
       // If the feature flag is turned off, or the stage contains too many tasks
       assert(!manager.checkSpeculatableTasks(0))
-      assert(sched.speculativeTasks.size == 0)
+      assert(sched.speculativeTasks.isEmpty)
     }
   }
 
@@ -2353,7 +2353,7 @@ class TaskSetManagerSuite
     }
     clock.advance(1000*60*60)
     assert(!manager.checkSpeculatableTasks(0))
-    assert(sched.speculativeTasks.size == 0)
+    assert(sched.speculativeTasks.isEmpty)
     // Now the task should have been running for 60 minutes and 1 second
     clock.advance(1000)
     assert(manager.checkSpeculatableTasks(0))
@@ -2459,7 +2459,7 @@ class TaskSetManagerSuite
     clock.advance(1000)
     manager.checkSpeculatableTasks(sched.MIN_TIME_TO_SPECULATION)
     // The task is not considered as speculative task due to minimum threshold interval of 3s
-    assert(sched.speculativeTasks.size == 0)
+    assert(sched.speculativeTasks.isEmpty)
     clock.advance(2000)
     manager.checkSpeculatableTasks(sched.MIN_TIME_TO_SPECULATION)
     // After 3s have elapsed now the task is marked as speculative task

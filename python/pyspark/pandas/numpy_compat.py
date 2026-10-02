@@ -14,19 +14,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Callable, Tuple, Union, no_type_check
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, no_type_check
 
 import numpy as np
 
 from pyspark.loose_version import LooseVersion
 from pyspark.pandas._typing import SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
+from pyspark.pandas.typedef.typehints import as_spark_type
 from pyspark.pandas.utils import _floor_divide_func
 from pyspark.sql import Column
 from pyspark.sql import functions as F
 from pyspark.sql.pandas.functions import pandas_udf
-from pyspark.sql.types import BooleanType, DoubleType
+from pyspark.sql.types import (
+    BooleanType,
+    ByteType,
+    DataType,
+    DoubleType,
+    FloatType,
+    IntegralType,
+    NullType,
+    NumericType,
+    TimestampNTZType,
+    TimestampType,
+)
 
+# Spark SQL expressions determine the result types of the Spark-backed mappings below. Those types
+# can differ from pandas for the same NumPy ufunc. For example, some Spark math expressions, such as
+# sqrt, convert a FloatType input to DoubleType, so a float32 pandas-on-Spark Series can return
+# float64. This explains only output-type differences. Casting an operand before evaluation can
+# still change values and must be reviewed separately.
 unary_np_spark_mappings = {
     "abs": F.abs,
     "absolute": F.abs,
@@ -220,6 +237,7 @@ def _fmin_func(c1: Column, c2: Column) -> Column:
     return F.when(c1 == c2, tie).otherwise(F.least(c1, c2))
 
 
+# Spark SQL expressions also determine the result types of these binary mappings.
 binary_np_spark_mappings = {
     "arctan2": F.atan2,
     "bitwise_and": lambda c1, c2: c1.bitwiseAND(c2),
@@ -275,6 +293,7 @@ binary_np_spark_mappings = {
 
 
 def _modf_fractional_func(c: Column) -> Column:
+    # Keep Spark's DoubleType result for FloatType input, as in other mapped math functions.
     c_double = c.cast("double")
     # signum * (abs % 1) keeps the fractional magnitude with the sign of the input,
     # including the signed zero of a whole number (for example -2.0 -> -0.0), the same
@@ -323,6 +342,7 @@ def _frexp_is_special_value(c: Column) -> Column:
 
 
 def _frexp_mantissa_func(c: Column) -> Column:
+    # Keep Spark's DoubleType mantissa for FloatType input, as in other mapped math functions.
     c_double = c.cast("double")
     return F.when(_frexp_is_special_value(c), c_double).otherwise(
         _frexp_scale(c_double, _frexp_finite_exponent(c_double))
@@ -349,6 +369,8 @@ def _frexp_exponent_func(c: Column) -> Column:
 # Every multi-output ufunc numpy ships (modf, frexp) has exactly two outputs, so each entry
 # maps to a pair of Column->Column functions applied independently and returned as a 2-tuple
 # that numpy's __array_ufunc__ unpacks (for example `fractional, integral = np.modf(series)`).
+# Spark also determines each output type. With FloatType input, both modf outputs and the frexp
+# mantissa are DoubleType.
 multi_output_np_spark_mappings = {
     # np.frexp(x) -> (mantissa, exponent) with x == mantissa * 2**exponent, the mantissa
     # keeping x's sign at a magnitude in [0.5, 1).
@@ -356,6 +378,115 @@ multi_output_np_spark_mappings = {
     # np.modf(x) -> (fractional part, integral part); the integral part is exactly trunc.
     "modf": (_modf_fractional_func, unary_np_spark_mappings["trunc"]),
 }
+
+
+# The ufuncs using this group accept both boolean and integer operands in pandas.
+_INTEGRAL_INPUT_TYPES = (BooleanType, IntegralType)
+# Some ufuncs reject a decimal column, so the float types are spelled out rather than using
+# NumericType, which includes DecimalType.
+_NUMERIC_INPUT_TYPES = (BooleanType, IntegralType, FloatType, DoubleType)
+# For the ufuncs that accept a decimal column too.
+_NUMERIC_OR_DECIMAL_INPUT_TYPES = (BooleanType, NumericType)
+# np.isnan and its neighbours have a datetime64 loop, which reports NaT.
+_NUMERIC_OR_TIMESTAMP_INPUT_TYPES = _NUMERIC_INPUT_TYPES + (TimestampType, TimestampNTZType)
+# np.sign is the one ufunc with no boolean loop, and NumericType excludes BooleanType.
+_SIGN_INPUT_TYPES = (NumericType,)
+# pandas reads an all-null column as False for the two-operand bitwise operators.
+_BITWISE_INPUT_TYPES = _INTEGRAL_INPUT_TYPES + (NullType,)
+
+
+# Spark input types accepted by each NumPy ufunc in pandas-on-Spark, based on pandas behavior.
+# Each inner tuple describes one operand. Checking these types before building a Spark expression
+# prevents unsupported inputs from being silently cast; for example, np.fmod on string values "7"
+# and "2" would otherwise return 1.0. A ufunc is omitted when it runs inside a pandas UDF, its
+# mapping is unreachable, or its accepted types cannot be described independently for each operand,
+# as with np.fmax.
+_np_spark_accepted_types: Dict[str, Tuple[Tuple[type, ...], ...]] = {
+    "absolute": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "arccos": (_NUMERIC_INPUT_TYPES,),
+    "arccosh": (_NUMERIC_INPUT_TYPES,),
+    "arcsin": (_NUMERIC_INPUT_TYPES,),
+    "arcsinh": (_NUMERIC_INPUT_TYPES,),
+    "arctan": (_NUMERIC_INPUT_TYPES,),
+    "arctan2": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "arctanh": (_NUMERIC_INPUT_TYPES,),
+    "bitwise_and": (_BITWISE_INPUT_TYPES, _BITWISE_INPUT_TYPES),
+    "bitwise_or": (_BITWISE_INPUT_TYPES, _BITWISE_INPUT_TYPES),
+    "bitwise_xor": (_BITWISE_INPUT_TYPES, _BITWISE_INPUT_TYPES),
+    "cbrt": (_NUMERIC_INPUT_TYPES,),
+    "ceil": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "copysign": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "cos": (_NUMERIC_INPUT_TYPES,),
+    "cosh": (_NUMERIC_INPUT_TYPES,),
+    "deg2rad": (_NUMERIC_INPUT_TYPES,),
+    "degrees": (_NUMERIC_INPUT_TYPES,),
+    "exp": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "exp2": (_NUMERIC_INPUT_TYPES,),
+    "expm1": (_NUMERIC_INPUT_TYPES,),
+    "fabs": (_NUMERIC_INPUT_TYPES,),
+    "float_power": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "floor": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "fmod": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "frexp": (_NUMERIC_INPUT_TYPES,),
+    "heaviside": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "hypot": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "invert": (_INTEGRAL_INPUT_TYPES,),
+    "isfinite": (_NUMERIC_OR_TIMESTAMP_INPUT_TYPES,),
+    "isinf": (_NUMERIC_OR_TIMESTAMP_INPUT_TYPES,),
+    "isnan": (_NUMERIC_OR_TIMESTAMP_INPUT_TYPES,),
+    # np.ldexp builds x * 2**exp and takes the exponent from an integer loop only.
+    "ldexp": (_NUMERIC_INPUT_TYPES, _INTEGRAL_INPUT_TYPES),
+    "left_shift": (_INTEGRAL_INPUT_TYPES, _INTEGRAL_INPUT_TYPES),
+    "log": (_NUMERIC_INPUT_TYPES,),
+    "log10": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "log1p": (_NUMERIC_INPUT_TYPES,),
+    "log2": (_NUMERIC_INPUT_TYPES,),
+    "logaddexp": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "logaddexp2": (_NUMERIC_INPUT_TYPES, _NUMERIC_INPUT_TYPES),
+    "logical_xor": (_NUMERIC_OR_TIMESTAMP_INPUT_TYPES, _NUMERIC_OR_TIMESTAMP_INPUT_TYPES),
+    "modf": (_NUMERIC_INPUT_TYPES,),
+    # pandas Series accepts boolean input for np.negative and np.positive, although raw NumPy
+    # arrays do not.
+    "negative": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "positive": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "rad2deg": (_NUMERIC_INPUT_TYPES,),
+    "radians": (_NUMERIC_INPUT_TYPES,),
+    "reciprocal": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "right_shift": (_INTEGRAL_INPUT_TYPES, _INTEGRAL_INPUT_TYPES),
+    "rint": (_NUMERIC_INPUT_TYPES,),
+    "sign": (_SIGN_INPUT_TYPES,),
+    "signbit": (_NUMERIC_INPUT_TYPES,),
+    "sin": (_NUMERIC_INPUT_TYPES,),
+    "sinh": (_NUMERIC_INPUT_TYPES,),
+    "sqrt": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "square": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+    "tan": (_NUMERIC_INPUT_TYPES,),
+    "tanh": (_NUMERIC_INPUT_TYPES,),
+    "trunc": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
+}
+
+
+def _check_operand_types(op_name: str, inputs: Tuple[Any, ...]) -> None:
+    accepted_per_operand = _np_spark_accepted_types.get(op_name)
+    if accepted_per_operand is None:
+        return
+
+    data_types: List[Optional[DataType]] = []
+    for inp in inputs:
+        if isinstance(inp, IndexOpsMixin):
+            data_types.append(inp.spark.data_type)
+        else:
+            # A scalar has no Spark type; an unmappable one gives None and goes unchecked.
+            data_types.append(as_spark_type(type(inp), raise_error=False))
+    for data_type, accepted in zip(data_types, accepted_per_operand):
+        if data_type is not None and not isinstance(data_type, accepted):
+            raise TypeError(
+                "ufunc '%s' is not supported for the input types (%s)."
+                % (
+                    op_name,
+                    ", ".join("unknown" if dt is None else dt.simpleString() for dt in data_types),
+                )
+            )
 
 
 # Copied from pandas.
@@ -430,8 +561,29 @@ def maybe_dispatch_ufunc_to_spark_func(
     ser_or_index: IndexOpsMixin, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
 ) -> Union[SeriesOrIndex, Tuple[SeriesOrIndex, SeriesOrIndex]]:
     from pyspark.pandas.base import column_op
+    from pyspark.pandas.data_type_ops.base import transform_boolean_operand_to_numeric
 
     op_name = ufunc.__name__
+
+    # Check before building the expression, so the error comes from the ufunc call itself.
+    if method == "__call__" and kwargs.get("out") is None:
+        _check_operand_types(op_name, inputs)
+        if op_name in ("invert", "negative") and isinstance(
+            ser_or_index.spark.data_type, BooleanType
+        ):
+            # np.invert on a boolean is a logical not, and pandas reads np.negative the same way;
+            # Spark keeps that meaning in the logical_not entry instead.
+            op_name = "logical_not"
+        elif op_name in _np_spark_accepted_types:
+            # Spark SQL math expressions do not accept BooleanType columns, so represent those
+            # columns as ByteType before evaluation. The shared helper turns a Python bool scalar
+            # into an int32 literal instead; preserving that behavior avoids changing overflow
+            # semantics in its other arithmetic callers. Apply the conversion only to ufuncs in
+            # the accepted-type table because other mappings either keep an operand's type, as
+            # np.fmax does, or handle booleans themselves.
+            inputs = tuple(
+                transform_boolean_operand_to_numeric(inp, spark_type=ByteType()) for inp in inputs
+            )
 
     if (
         method == "__call__"

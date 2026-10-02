@@ -223,7 +223,7 @@ trait SparkTestSuite
     } else {
       Seq(LogManager.getRootLogger)
     }
-    if (loggers.size == 0) {
+    if (loggers.isEmpty) {
       throw new SparkException(s"Cannot get any logger to add the appender")
     }
     val restoreLevels = loggers.map(_.getLevel)

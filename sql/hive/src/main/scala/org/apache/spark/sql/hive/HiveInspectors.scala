@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.common.`type`.{HiveChar, HiveDecimal, HiveInterval
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.hive.serde2.objectinspector.{StructField => HiveStructField, _}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
-import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfoFactory}
+import org.apache.hadoop.hive.serde2.typeinfo.{CharTypeInfo, DecimalTypeInfo, TypeInfoFactory, VarcharTypeInfo}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.datasources.DaysWritable
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.TimestampNanosVal
@@ -102,10 +103,6 @@ import org.apache.spark.unsafe.types.UTF8String
  *   Map: java.util.Map
  *   Struct: Object[] / java.util.List / java POJO
  *   Union: class StandardUnion { byte tag; Object object }
- *
- * NOTICE: HiveVarchar/HiveChar is not supported by catalyst, it will be simply considered as
- *  String type.
- *
  *
  * 2. Hive ObjectInspector is a group of flexible APIs to inspect value in different data
  *  representation, and developers can extend those API as needed, so technically,
@@ -280,7 +277,30 @@ private[hive] trait HiveInspectors {
       (o: Any) =>
         x.getWritableConstantValue
     case x: PrimitiveObjectInspector => x match {
-      // TODO we don't support the HiveVarcharObjectInspector yet.
+      case hvoi: HiveVarcharObjectInspector =>
+        val length = hvoi.getTypeInfo.asInstanceOf[VarcharTypeInfo].getLength
+        charVarcharWrapper(
+          dataType match {
+            case v: VarcharType => Some(v.length)
+            case _ => None
+          },
+          length,
+          hvoi.preferWritable(),
+          CharVarcharCodegenUtils.varcharTypeWriteSideCheck,
+          (value, size) => new HiveVarchar(value, size),
+          (value, size) => new hiveIo.HiveVarcharWritable(new HiveVarchar(value, size)))
+      case hcoi: HiveCharObjectInspector =>
+        val length = hcoi.getTypeInfo.asInstanceOf[CharTypeInfo].getLength
+        charVarcharWrapper(
+          dataType match {
+            case c: CharType => Some(c.length)
+            case _ => None
+          },
+          length,
+          hcoi.preferWritable(),
+          CharVarcharCodegenUtils.charTypeWriteSideCheck,
+          (value, size) => new HiveChar(value, size),
+          (value, size) => new hiveIo.HiveCharWritable(new HiveChar(value, size)))
       case _: StringObjectInspector if x.preferWritable() =>
         withNullSafe(o => getStringWritable(o))
       case _: StringObjectInspector =>
@@ -313,21 +333,6 @@ private[hive] trait HiveInspectors {
         withNullSafe(o => getByteWritable(o))
       case _: ByteObjectInspector =>
         withNullSafe(o => o.asInstanceOf[java.lang.Byte])
-        // To spark HiveVarchar and HiveChar are same as string
-      case _: HiveVarcharObjectInspector if x.preferWritable() =>
-        withNullSafe(o => getStringWritable(o))
-      case _: HiveVarcharObjectInspector =>
-        withNullSafe { o =>
-            val s = o.asInstanceOf[UTF8String].toString
-            new HiveVarchar(s, s.length)
-        }
-      case _: HiveCharObjectInspector if x.preferWritable() =>
-        withNullSafe(o => getStringWritable(o))
-      case _: HiveCharObjectInspector =>
-        withNullSafe { o =>
-            val s = o.asInstanceOf[UTF8String].toString
-            new HiveChar(s, s.length)
-          }
       case _: JavaHiveDecimalObjectInspector =>
         withNullSafe(o =>
           HiveDecimal.create(o.asInstanceOf[Decimal].toJavaBigDecimal))
@@ -490,6 +495,39 @@ private[hive] trait HiveInspectors {
       identity[Any]
   }
 
+  private def charVarcharWrapper(
+      targetLength: Option[Int],
+      inspectorLength: Int,
+      preferWritable: Boolean,
+      writeSideCheck: (UTF8String, Int) => UTF8String,
+      toJava: (String, Int) => Any,
+      toWritable: (String, Int) => Any): Any => Any = {
+    if (preferWritable) {
+      targetLength match {
+        case Some(length) =>
+          withNullSafe { value =>
+            val checked = writeSideCheck(value.asInstanceOf[UTF8String], length)
+            toWritable(checked.toString, inspectorLength)
+          }
+        case None =>
+          withNullSafe(value => getStringWritable(value))
+      }
+    } else {
+      targetLength match {
+        case Some(length) =>
+          withNullSafe { value =>
+            val checked = writeSideCheck(value.asInstanceOf[UTF8String], length)
+            toJava(checked.toString, inspectorLength)
+          }
+        case None =>
+          withNullSafe { value =>
+            val string = value.asInstanceOf[UTF8String].toString
+            toJava(string, string.length)
+          }
+      }
+    }
+  }
+
   /**
    * Builds unwrappers ahead of time according to object inspector
    * types to avoid pattern matching and branching costs per row.
@@ -583,7 +621,8 @@ private[hive] trait HiveInspectors {
         val constant = ym.getWritableConstantValue.asInstanceOf[HiveIntervalYearMonth]
         _ => constant.getTotalMonths
       case pi: PrimitiveObjectInspector => pi match {
-        // We think HiveVarchar/HiveChar is also a String
+        // Untyped conversion extracts the raw value. The typed overload applies CHAR/VARCHAR
+        // padding and overflow checks.
         case hvoi: HiveVarcharObjectInspector if hvoi.preferWritable() =>
           data: Any => {
             if (data != null) {
@@ -806,8 +845,9 @@ private[hive] trait HiveInspectors {
    * Catalyst `dataType` to preserve nanosecond timestamp precision. The plain
    * `unwrapperFor(ObjectInspector)` cannot do this because a Hive `TimestampObjectInspector`
    * maps to micros by default; here the nanos timestamp types are produced as `TimestampNanosVal`,
-   * recursing through array/map/struct so nested nanos timestamps round-trip correctly. Any other
-   * type is delegated to the `ObjectInspector`-only overload.
+   * recursing through array/map/struct so nested nanos timestamps round-trip correctly. CHAR and
+   * VARCHAR targets also apply their read-side length and padding checks. Any other type is
+   * delegated to the `ObjectInspector`-only overload.
    */
   def unwrapperFor(objectInspector: ObjectInspector, dataType: DataType): Any => Any =
     (objectInspector, dataType) match {
@@ -829,6 +869,26 @@ private[hive] trait HiveInspectors {
             null
           }
         }
+      case (_, c: CharType) =>
+        val unwrapper = unwrapperFor(objectInspector)
+        data: Any => {
+          val value = unwrapper(data).asInstanceOf[UTF8String]
+          if (value == null) {
+            null
+          } else {
+            CharVarcharCodegenUtils.charTypeReadSideCheck(value, c.length)
+          }
+        }
+      case (_, v: VarcharType) =>
+        val unwrapper = unwrapperFor(objectInspector)
+        data: Any => {
+          val value = unwrapper(data).asInstanceOf[UTF8String]
+          if (value == null) {
+            null
+          } else {
+            CharVarcharCodegenUtils.varcharTypeReadSideCheck(value, v.length)
+          }
+        }
       case (li: ListObjectInspector, ArrayType(elementType, _)) =>
         val unwrapper = unwrapperFor(li.getListElementObjectInspector, elementType)
         data: Any => {
@@ -843,10 +903,24 @@ private[hive] trait HiveInspectors {
       case (mi: MapObjectInspector, MapType(keyType, valueType, _)) =>
         val keyUnwrapper = unwrapperFor(mi.getMapKeyObjectInspector, keyType)
         val valueUnwrapper = unwrapperFor(mi.getMapValueObjectInspector, valueType)
+        val needsKeyValidation = CharVarcharUtils.hasCharVarchar(keyType)
         data: Any => {
           if (data != null) {
             val map = mi.getMap(data)
-            if (map == null) null else ArrayBasedMapData(map, keyUnwrapper, valueUnwrapper)
+            if (map == null) {
+              null
+            } else if (needsKeyValidation) {
+              val builder = new ArrayBasedMapBuilder(keyType, valueType)
+              val it = map.entrySet().iterator().asInstanceOf[
+                java.util.Iterator[java.util.Map.Entry[Any, Any]]]
+              while (it.hasNext) {
+                val e = it.next()
+                builder.put(keyUnwrapper(e.getKey), valueUnwrapper(e.getValue))
+              }
+              builder.build()
+            } else {
+              ArrayBasedMapData(map, keyUnwrapper, valueUnwrapper)
+            }
           } else {
             null
           }
@@ -939,7 +1013,14 @@ private[hive] trait HiveInspectors {
     case MapType(keyType, valueType, _) =>
       ObjectInspectorFactory.getStandardMapObjectInspector(
         toInspector(keyType), toInspector(valueType))
-    case StringType => PrimitiveObjectInspectorFactory.javaStringObjectInspector
+    // Hive object inspectors preserve the CHAR/VARCHAR length but have no collation metadata.
+    case c: CharType =>
+      PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector(
+        toHiveCharTypeInfo(c))
+    case v: VarcharType =>
+      PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector(
+        toHiveVarcharTypeInfo(v))
+    case _: StringType => PrimitiveObjectInspectorFactory.javaStringObjectInspector
     case IntegerType => PrimitiveObjectInspectorFactory.javaIntObjectInspector
     case DoubleType => PrimitiveObjectInspectorFactory.javaDoubleObjectInspector
     case BooleanType => PrimitiveObjectInspectorFactory.javaBooleanObjectInspector
@@ -978,6 +1059,20 @@ private[hive] trait HiveInspectors {
       messageParameters = Map("typeName" -> toSQLType(dataType)))
   }
 
+  private def toHiveCharTypeInfo(dataType: CharType): CharTypeInfo = {
+    if (dataType.length < 1 || dataType.length > HiveChar.MAX_CHAR_LENGTH) {
+      throw unsupportedHiveType(dataType)
+    }
+    TypeInfoFactory.getCharTypeInfo(dataType.length)
+  }
+
+  private def toHiveVarcharTypeInfo(dataType: VarcharType): VarcharTypeInfo = {
+    if (dataType.length < 1 || dataType.length > HiveVarchar.MAX_VARCHAR_LENGTH) {
+      throw unsupportedHiveType(dataType)
+    }
+    TypeInfoFactory.getVarcharTypeInfo(dataType.length)
+  }
+
   /**
    * Map the catalyst expression to ObjectInspector, however,
    * if the expression is `Literal` or foldable, a constant writable object inspector returns;
@@ -986,7 +1081,11 @@ private[hive] trait HiveInspectors {
    * @return Hive java objectinspector (recursively).
    */
   def toInspector(expr: Expression): ObjectInspector = expr match {
-    case Literal(value, StringType) =>
+    case Literal(value, c: CharType) =>
+      getHiveCharWritableConstantObjectInspector(value, c)
+    case Literal(value, v: VarcharType) =>
+      getHiveVarcharWritableConstantObjectInspector(value, v)
+    case Literal(value, _: StringType) =>
       getStringWritableConstantObjectInspector(value)
     case Literal(value, IntegerType) =>
       getIntWritableConstantObjectInspector(value)
@@ -1075,23 +1174,41 @@ private[hive] trait HiveInspectors {
     case _ => e.children.forall(canEarlyEval)
   }
 
-  def inspectorToDataType(inspector: ObjectInspector): DataType = inspector match {
+  def inspectorToDataType(inspector: ObjectInspector): DataType =
+    inspectorToDataType(inspector, SQLConf.get.charVarcharFirstClassTypes)
+
+  /**
+   * Maps a Hive inspector to a Catalyst type. When `preserveCharVarchar` is true, CHAR/VARCHAR
+   * inspectors stay CHAR/VARCHAR even if first-class types are disabled. Runtime compatibility
+   * checks use that mode so analysis snapshots are not compared against a conf-dependent STRING
+   * rewrite.
+   */
+  def inspectorToDataType(
+      inspector: ObjectInspector,
+      preserveCharVarchar: Boolean): DataType = inspector match {
     case s: StructObjectInspector =>
       StructType(s.getAllStructFieldRefs.asScala.map(f =>
         types.StructField(
-          f.getFieldName, inspectorToDataType(f.getFieldObjectInspector), nullable = true)
+          f.getFieldName,
+          inspectorToDataType(f.getFieldObjectInspector, preserveCharVarchar),
+          nullable = true)
       ).toArray)
-    case l: ListObjectInspector => ArrayType(inspectorToDataType(l.getListElementObjectInspector))
+    case l: ListObjectInspector =>
+      ArrayType(inspectorToDataType(l.getListElementObjectInspector, preserveCharVarchar))
     case m: MapObjectInspector =>
       MapType(
-        inspectorToDataType(m.getMapKeyObjectInspector),
-        inspectorToDataType(m.getMapValueObjectInspector))
+        inspectorToDataType(m.getMapKeyObjectInspector, preserveCharVarchar),
+        inspectorToDataType(m.getMapValueObjectInspector, preserveCharVarchar))
     case _: WritableStringObjectInspector => StringType
     case _: JavaStringObjectInspector => StringType
-    case _: WritableHiveVarcharObjectInspector => StringType
-    case _: JavaHiveVarcharObjectInspector => StringType
-    case _: WritableHiveCharObjectInspector => StringType
-    case _: JavaHiveCharObjectInspector => StringType
+    // Hive object inspectors cannot represent collations, so Hive function results use the
+    // default collation while preserving CHAR/VARCHAR length under first-class semantics.
+    case hvoi: HiveVarcharObjectInspector if preserveCharVarchar =>
+      VarcharType(hvoi.getTypeInfo.asInstanceOf[VarcharTypeInfo].getLength)
+    case _: HiveVarcharObjectInspector => StringType
+    case hcoi: HiveCharObjectInspector if preserveCharVarchar =>
+      CharType(hcoi.getTypeInfo.asInstanceOf[CharTypeInfo].getLength)
+    case _: HiveCharObjectInspector => StringType
     case _: WritableIntObjectInspector => IntegerType
     case _: JavaIntObjectInspector => IntegerType
     case _: WritableDoubleObjectInspector => DoubleType
@@ -1122,6 +1239,51 @@ private[hive] trait HiveInspectors {
     case _: JavaVoidObjectInspector => NullType
   }
 
+  /**
+   * Analysis snapshots the Catalyst return type, but runtime inspectors are rebuilt from the
+   * current children (including foldability and session CHAR/VARCHAR settings). STRING may drift
+   * to or from a bounded string type across that boundary. Two bounded types must match exactly:
+   * accepting a different kind or length would apply the snapshotted conversion to an incompatible
+   * runtime value.
+   */
+  def checkCompatibleHiveReturnType(
+      inspector: ObjectInspector,
+      expectedType: DataType): Unit = {
+    checkCompatibleHiveReturnType(
+      inspectorToDataType(inspector, preserveCharVarchar = true),
+      expectedType)
+  }
+
+  def checkCompatibleHiveReturnType(
+      runtimeType: DataType,
+      expectedType: DataType): Unit = {
+    if (!compatibleHiveReturnType(runtimeType, expectedType)) {
+      throw SparkException.internalError(
+        s"Hive function runtime type ${runtimeType.catalogString} is incompatible " +
+          s"with analysis type ${expectedType.catalogString}.")
+    }
+  }
+
+  private def compatibleHiveReturnType(
+      runtimeType: DataType,
+      expectedType: DataType): Boolean = {
+    (runtimeType, expectedType) match {
+      case (rt: CharType, et: CharType) => rt == et
+      case (rt: VarcharType, et: VarcharType) => rt == et
+      case (_: CharType | _: VarcharType, _: CharType | _: VarcharType) => false
+      case (_: StringType, _: CharType | _: VarcharType) => true
+      case (_: CharType | _: VarcharType, _: StringType) => true
+      case (ArrayType(rt, _), ArrayType(et, _)) => compatibleHiveReturnType(rt, et)
+      case (MapType(rk, rv, _), MapType(ek, ev, _)) =>
+        compatibleHiveReturnType(rk, ek) && compatibleHiveReturnType(rv, ev)
+      case (rt: StructType, et: StructType) if rt.length == et.length =>
+        rt.fields.zip(et.fields).forall { case (rf, ef) =>
+          rf.name == ef.name && compatibleHiveReturnType(rf.dataType, ef.dataType)
+        }
+      case (rt, et) => rt.sameType(et)
+    }
+  }
+
   private def decimalTypeInfoToCatalyst(inspector: PrimitiveObjectInspector): DecimalType = {
     val info = inspector.getTypeInfo.asInstanceOf[DecimalTypeInfo]
     DecimalType(info.precision(), info.scale())
@@ -1130,6 +1292,36 @@ private[hive] trait HiveInspectors {
   private def getStringWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
       TypeInfoFactory.stringTypeInfo, getStringWritable(value))
+
+  private def getHiveCharWritableConstantObjectInspector(
+      value: Any,
+      dataType: CharType): ObjectInspector = {
+    val writable = if (value == null) {
+      null
+    } else {
+      val checked = CharVarcharCodegenUtils.charTypeWriteSideCheck(
+        value.asInstanceOf[UTF8String], dataType.length)
+      new hiveIo.HiveCharWritable(
+        new HiveChar(checked.toString, dataType.length))
+    }
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      toHiveCharTypeInfo(dataType), writable)
+  }
+
+  private def getHiveVarcharWritableConstantObjectInspector(
+      value: Any,
+      dataType: VarcharType): ObjectInspector = {
+    val writable = if (value == null) {
+      null
+    } else {
+      val checked = CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
+        value.asInstanceOf[UTF8String], dataType.length)
+      new hiveIo.HiveVarcharWritable(
+        new HiveVarchar(checked.toString, dataType.length))
+    }
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      toHiveVarcharTypeInfo(dataType), writable)
+  }
 
   private def getIntWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
@@ -1296,7 +1488,9 @@ private[hive] trait HiveInspectors {
       case IntegerType => intTypeInfo
       case LongType => longTypeInfo
       case ShortType => shortTypeInfo
-      case StringType => stringTypeInfo
+      case c: CharType => toHiveCharTypeInfo(c)
+      case v: VarcharType => toHiveVarcharTypeInfo(v)
+      case _: StringType => stringTypeInfo
       case d: DecimalType => decimalTypeInfo(d)
       case DateType => dateTypeInfo
       case TimestampType => timestampTypeInfo

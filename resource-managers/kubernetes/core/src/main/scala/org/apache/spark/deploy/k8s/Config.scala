@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigBindingPolicy, ConfigBuilder, DYN_ALLOCATION_ENABLED}
+import org.apache.spark.network.util.ByteUnit
 
 private[spark] object Config extends Logging {
 
@@ -239,14 +240,14 @@ private[spark] object Config extends Logging {
   object ExecutorRollPolicy extends Enumeration {
     val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS,
       PEAK_JVM_ONHEAP_MEMORY, PEAK_JVM_OFFHEAP_MEMORY, TOTAL_SHUFFLE_WRITE, DISK_USED,
-      OUTLIER, OUTLIER_NO_FALLBACK = Value
+      ACTIVE_TASKS, OUTLIER, OUTLIER_NO_FALLBACK = Value
   }
 
   val EXECUTOR_ROLL_POLICY =
     ConfigBuilder("spark.kubernetes.executor.rollPolicy")
       .doc("Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME, " +
         "TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS, PEAK_JVM_ONHEAP_MEMORY, " +
-        "PEAK_JVM_OFFHEAP_MEMORY, OUTLIER (default), and OUTLIER_NO_FALLBACK. " +
+        "PEAK_JVM_OFFHEAP_MEMORY, ACTIVE_TASKS, OUTLIER (default), and OUTLIER_NO_FALLBACK. " +
         "When executor roll happens, Spark uses this policy to choose " +
         "an executor and decommission it. The built-in policies are based on executor summary." +
         "ID policy chooses an executor with the smallest executor ID. " +
@@ -260,6 +261,11 @@ private[spark] object Config extends Logging {
         "off-heap memory. " +
         "TOTAL_SHUFFLE_WRITE policy chooses an executor with the biggest total shuffle write. " +
         "DISK_USED policy chooses an executor with the biggest used disk size. " +
+        "ACTIVE_TASKS policy chooses an executor with the smallest number of active tasks. " +
+        "If there is a tie, it chooses an executor with the smallest add-time. " +
+        "It is recommended to use it with " +
+        "spark.kubernetes.executor.minTasksPerExecutorBeforeRolling " +
+        "because newly started executors usually have no active tasks. " +
         "OUTLIER policy chooses an executor with outstanding statistics which is bigger than" +
         "at least two standard deviation from the mean in average task time, " +
         "total task time, total task GC time, and the number of failed tasks if exists. " +
@@ -284,15 +290,15 @@ private[spark] object Config extends Logging {
 
   val EXECUTOR_RESIZE_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.resizeInterval")
-      .doc("Interval between executor resize operations. To disable, set 0 (default)")
+      .doc("Interval between executor resize operations. To disable, set 0.")
       .version("4.2.0")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= 0, "Interval should be non-negative")
-      .createWithDefault(0)
+      .createWithDefaultString("1m")
 
   val EXECUTOR_RESIZE_THRESHOLD =
     ConfigBuilder("spark.kubernetes.executor.resizeThreshold")
-      .doc("The threshold to resize.")
+      .doc("The threshold to resize. It should be in (0, 1).")
       .version("4.2.0")
       .doubleConf
       .checkValue(v => 0 < v && v < 1, "The threshold should be in (0, 1)")
@@ -300,11 +306,20 @@ private[spark] object Config extends Logging {
 
   val EXECUTOR_RESIZE_FACTOR =
     ConfigBuilder("spark.kubernetes.executor.resizeFactor")
-      .doc("The factor to resize.")
+      .doc("The factor to resize. It should be in (0, 1].")
       .version("4.2.0")
       .doubleConf
       .checkValue(v => 0 < v && v <= 1, "The factor should be in (0, 1]")
       .createWithDefault(0.1)
+
+  val EXECUTOR_RESIZE_MAX_MEMORY =
+    ConfigBuilder("spark.kubernetes.executor.resizeMaxMemory")
+      .doc("The upper bound of the executor container memory limit that the resize plugin " +
+        "can grow to. By default, it is Long.MaxValue, which means no upper bound.")
+      .version("4.4.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "The maximum memory should be positive")
+      .createWithDefault(Long.MaxValue)
 
   val PVC_RESIZE_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.pvc.resizeInterval")
@@ -332,6 +347,15 @@ private[spark] object Config extends Logging {
       .doubleConf
       .checkValue(v => 0 < v && v <= 1, "The factor should be in (0, 1]")
       .createWithDefault(1.0)
+
+  val PVC_RESIZE_MAX_STORAGE =
+    ConfigBuilder("spark.kubernetes.executor.pvc.resizeMaxStorage")
+      .doc("The upper bound of the PVC storage request that the resize plugin can grow to. " +
+        "By default, it is Long.MaxValue, which means no upper bound.")
+      .version("4.4.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "The maximum storage should be positive")
+      .createWithDefault(Long.MaxValue)
 
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
@@ -383,8 +407,10 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME =
     ConfigBuilder(s"$KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX.serviceAccountName")
-      .doc("Service account that is used when running the executor pod." +
-        "If this parameter is not setup, the fallback logic will use the driver's service account.")
+      .doc("Service account that is used when running the executor pod. " +
+        "If this parameter is not setup, the fallback logic will use the value of " +
+        "spark.kubernetes.authenticate.driver.serviceAccountName. Both are ignored when the " +
+        "executor pod template already names a non-empty service account.")
       .version("3.1.0")
       .stringConf
       .createOptional
@@ -919,7 +945,9 @@ private[spark] object Config extends Logging {
   val KUBERNETES_ANNOTATE_EXIT_EXCEPTION =
     ConfigBuilder("spark.kubernetes.driver.annotateExitException")
       .doc("If set to true, Spark will store the exit exception failed applications in" +
-        s" the Kubernetes API server using the $EXIT_EXCEPTION_ANNOTATION annotation.")
+        s" the Kubernetes API server using the $EXIT_EXCEPTION_ANNOTATION annotation. Note that" +
+        " the annotation is visible to anyone who can get the driver pod. The parts of the exit" +
+        " exception matching `spark.redaction.string.regex` are redacted.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)

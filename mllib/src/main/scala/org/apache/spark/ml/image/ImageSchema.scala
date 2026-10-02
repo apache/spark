@@ -157,9 +157,11 @@ object ImageSchema {
         (3, ocvTypes("CV_8UC3"))
       }
 
-      val imageSize = height * width * nChannels
+      // Compute in Long so a large image cannot overflow the multiplication and slip past the
+      // size assertion below.
+      val imageSize = height.toLong * width * nChannels
       assert(imageSize < 1e9, "image is too large")
-      val decoded = Array.ofDim[Byte](imageSize)
+      val decoded = Array.ofDim[Byte](imageSize.toInt)
 
       // Grayscale images in Java require special handling to get the correct intensity
       if (isGray) {

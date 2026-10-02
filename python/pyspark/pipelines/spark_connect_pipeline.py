@@ -15,12 +15,16 @@
 # limitations under the License.
 #
 from datetime import timezone
-from typing import Any, Dict, Iterator, Mapping, Optional, Sequence, cast
+from typing import TYPE_CHECKING, Any, Iterator, Mapping, Optional, Sequence, cast
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.errors.exceptions.base import PySparkValueError
 from pyspark.pipelines.logging_utils import log_with_provided_timestamp
 from pyspark.sql import SparkSession
+from pyspark.sql.metrics import ObservedMetrics, PlanMetrics
+
+if TYPE_CHECKING:
+    from pyspark.sql.connect.client.core import _ExecutePlanResponseItem
 
 
 def create_dataflow_graph(
@@ -46,16 +50,22 @@ def create_dataflow_graph(
     return properties["pipeline_command_result"].create_dataflow_graph_result.dataflow_graph_id
 
 
-def handle_pipeline_events(iter: Iterator[Dict[str, Any]]) -> None:
+def handle_pipeline_events(iter: Iterator["_ExecutePlanResponseItem"]) -> None:
     """
     Prints out the pipeline events received from the Spark Connect server.
     """
     for result in iter:
-        if "pipeline_command_result" in result.keys():
+        if isinstance(result, (PlanMetrics, ObservedMetrics)):
+            continue
+        elif not isinstance(result, dict):
+            raise PySparkValueError(
+                f"Pipeline logs stream handler received an unexpected result: {result}"
+            )
+        elif "pipeline_command_result" in result:
             # We expect to get a pipeline_command_result back in response to the initial StartRun
             # command.
             continue
-        elif "pipeline_event_result" not in result.keys():
+        elif "pipeline_event_result" not in result:
             raise PySparkValueError(
                 f"Pipeline logs stream handler received an unexpected result: {result}"
             )
@@ -73,7 +83,7 @@ def start_run(
     refresh: Optional[Sequence[str]],
     dry: bool,
     storage: str,
-) -> Iterator[Dict[str, Any]]:
+) -> Iterator["_ExecutePlanResponseItem"]:
     """Start a run of the dataflow graph in the Spark Connect server.
 
     :param spark: SparkSession.

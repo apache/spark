@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming.runtime
 
+import java.util.{Collections, IdentityHashMap}
 import java.util.concurrent._
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
+
+import scala.annotation.tailrec
+import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.internal.LogKeys.{BATCH_ID, PRETTY_ID_STRING}
@@ -29,7 +33,7 @@ import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, OneTimeTri
 import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, CommitMetadataBase, OffsetSeqBase, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreWriter
 import org.apache.spark.sql.streaming.Trigger
-import org.apache.spark.util.{Clock, ThreadUtils}
+import org.apache.spark.util.{Clock, ErrorNotifier, ThreadUtils}
 
 /**
  * Class to execute micro-batches when async progress tracking is enabled
@@ -54,6 +58,10 @@ class AsyncProgressTrackingMicroBatchExecution(
 
   // to cache the batch id of the last batch written to storage
   private val lastBatchPersistedToDurableStorage = new AtomicLong(-1)
+
+  // Error that caused RTM to interrupt the query execution thread. ErrorNotifier retains the
+  // first async error, which may instead be an earlier failure from a non-interrupting operation.
+  private val interruptingAsyncError = new AtomicReference[Throwable]()
 
   // used to check during the first batch if the pipeline is stateful
   private var isFirstBatch: Boolean = true
@@ -149,7 +157,13 @@ class AsyncProgressTrackingMicroBatchExecution(
   private def interruptStreamExecutionWithError(th: Throwable): Unit = {
     logError(log"Interrupting stream execution due to error in async " +
       log"progress tracking for query ${MDC(PRETTY_ID_STRING, prettyIdString)}", th)
-    errorNotifier.markError(th)
+    if (interruptingAsyncError.compareAndSet(null, th)) {
+      // Do not attach the primary error to an earlier retained error. The final wrapper points to
+      // both, and sharing the primary across those branches breaks Throwable's rendered chain.
+      errorNotifier.tryMarkError(th)
+    } else {
+      errorNotifier.markError(th)
+    }
 
     // Immediately stop further processing.
     sparkSession.sparkContext.cancelJobGroup(runId.toString)
@@ -301,22 +315,35 @@ class AsyncProgressTrackingMicroBatchExecution(
   }
 
   /**
-   * Categorize a raw IO failure surfaced via an async log-write future, then route it through
-   * the standard async error handling path. CompletableFuture wraps the underlying cause in
-   * CompletionException, so unwrap before checking whether it has already been categorized.
-   * `wrapAsLogWriteFailure` is one of the [[StreamingErrors]] log-write-failure factories.
+   * Normalize and categorize a failure from an async log-write future, then route it through the
+   * standard async error handling path.
+   *
+   * @param wrapAsLogWriteFailure factory for an uncategorized log-write failure
    */
-  private def handleAsyncLogWriteError(
+  private[streaming] def handleAsyncLogWriteError(
       asyncWriteError: Throwable,
       batchId: Long,
       wrapAsLogWriteFailure: (Long, String, Throwable) => Throwable): Unit = {
-    val rootCause = asyncWriteError match {
-      case ce: CompletionException if ce.getCause != null => ce.getCause
-      case ee: ExecutionException if ee.getCause != null => ee.getCause
-      case other => other
+    val seenWrappers = Collections.newSetFromMap(
+      new IdentityHashMap[Throwable, java.lang.Boolean]())
+    @tailrec
+    def unwrapFutureFailure(error: Throwable): Throwable = {
+      if (!seenWrappers.add(error)) {
+        error
+      } else {
+        error match {
+          case _: SparkThrowable => error
+          case wrapper: CompletionException if wrapper.getCause != null =>
+            unwrapFutureFailure(wrapper.getCause)
+          case wrapper: ExecutionException if wrapper.getCause != null =>
+            unwrapFutureFailure(wrapper.getCause)
+          case other => other
+        }
+      }
     }
+    val rootCause = unwrapFutureFailure(asyncWriteError)
     val categorized = if (rootCause.isInstanceOf[SparkThrowable]) {
-      asyncWriteError
+      rootCause
     } else {
       wrapAsLogWriteFailure(batchId, resolvedCheckpointRoot, rootCause)
     }
@@ -332,16 +359,13 @@ class AsyncProgressTrackingMicroBatchExecution(
     try {
       super.runActivatedStream(sparkSessionForStream)
     } catch {
-      case e: Throwable
-        if StreamExecution.isInterruptionException(e, sparkSession.sparkContext) &&
-          errorNotifier.getError().isDefined =>
-        throw new SparkRuntimeException(
-          errorClass = "STREAMING_ASYNC_OPERATION_FAILED",
-          messageParameters = Map("message" -> errorNotifier.getError().get.getMessage),
-          cause = errorNotifier.getError().get
-        )
       case e: Throwable =>
-        throw e
+        throw getAsyncOperationFailure(
+          thrownError = e,
+          isInterruption = StreamExecution.isInterruptionException(
+            e, sparkSession.sparkContext),
+          interruptingError = Option(interruptingAsyncError.get()),
+          notifierError = errorNotifier.getError()).getOrElse(e)
     }
   }
 
@@ -383,7 +407,7 @@ class AsyncProgressTrackingMicroBatchExecution(
 
   // used for testing
   def areWritesPendingOrInProgress(): Boolean = {
-    asyncWritesExecutorService.getQueue.size() > 0 || asyncWritesExecutorService.getActiveCount > 0
+    !asyncWritesExecutorService.getQueue.isEmpty || asyncWritesExecutorService.getActiveCount > 0
   }
 
   override protected def getTrigger(): TriggerExecutor = validateAndGetTrigger()
@@ -465,6 +489,35 @@ object AsyncProgressTrackingMicroBatchExecution {
   // for testing purposes
   val ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK =
     "_asyncProgressTrackingOverrideSinkSupportCheck"
+
+  /**
+   * @return an async-operation wrapper with the interrupting error as its cause and any
+   *         independent earlier error as suppressed context, or None when the thrown error is
+   *         unrelated or fatal
+   */
+  private[streaming] def getAsyncOperationFailure(
+      thrownError: Throwable,
+      isInterruption: Boolean,
+      interruptingError: Option[Throwable],
+      notifierError: Option[Throwable]): Option[SparkRuntimeException] = {
+    val primaryError = interruptingError.orElse(notifierError)
+    val shouldWrap = (isInterruption && primaryError.isDefined) ||
+      (NonFatal(thrownError) && interruptingError.isDefined &&
+        notifierError.exists(_ eq thrownError))
+
+    primaryError.filter(_ => shouldWrap).map { error =>
+      val failure = new SparkRuntimeException(
+        errorClass = "STREAMING_ASYNC_OPERATION_FAILED",
+        messageParameters = Map("message" -> error.getMessage),
+        cause = error)
+      notifierError
+        .filterNot(_ eq error)
+        // A shared node renders as [CIRCULAR REFERENCE] after the first branch prints it.
+        .filter(ErrorNotifier.haveDisjointThrowableGraphs(error, _))
+        .foreach(failure.addSuppressed)
+      failure
+    }
+  }
 
   private def getAsyncProgressTrackingCheckpointingIntervalMs(
       extraOptions: Map[String, String],
