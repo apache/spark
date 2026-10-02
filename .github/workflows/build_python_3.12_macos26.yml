@@ -23,9 +23,6 @@ on:
   schedule:
     - cron: '0 23 */2 * *'
   workflow_dispatch:
-  push:
-    branches:
-      - py-packaging-test-cleanup
 
 jobs:
   run-build:
@@ -33,6 +30,6 @@ jobs:
       packages: write
     name: Run
     uses: ./.github/workflows/python_hosted_runner_test.yml
-    if: github.repository == 'apache/spark' || github.event_name == 'push'
+    if: github.repository == 'apache/spark'
     with:
       os: macos-26

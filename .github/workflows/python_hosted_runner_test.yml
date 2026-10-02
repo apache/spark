@@ -155,8 +155,6 @@ jobs:
       BRANCH: ${{ inputs.branch }}
       PYSPARK_TEST_TIMEOUT: 450
     steps:
-      - name: Disk space at start
-        run: df -h .
       - name: Bootstrap composite actions
         uses: actions/checkout@v7
       - name: Checkout and sync Spark repository
@@ -225,6 +223,3 @@ jobs:
         with:
           name: unit-tests-log-${{ inputs.os }}-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
           path: "**/target/unit-tests.log"
-      - name: Disk space at end
-        if: always()
-        run: df -h .
