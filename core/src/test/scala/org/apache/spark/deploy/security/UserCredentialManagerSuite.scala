@@ -28,7 +28,7 @@ import scala.jdk.CollectionConverters._
 
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.security._
 
@@ -887,7 +887,8 @@ class UserCredentialManagerSuite extends SparkFunSuite {
   test("checkRpcEncryption: does not warn when encryption is configured") {
     val appender = new LogAppender(oidcWarningKeyFragment)
     withLogAppender(appender) {
-      val conf = new SparkConf(loadDefaults = false).set("spark.ssl.rpc.enabled", "true")
+      val conf = new SparkConf(loadDefaults = false)
+        .set(SecurityManager.SSL_RPC_ENABLED_CONF, "true")
       UserCredentialManager.checkRpcEncryption(conf)
     }
     assert(!hasOidcEncryptionWarning(appender))
@@ -908,7 +909,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     withLogAppender(appender) {
       val conf = new SparkConf(loadDefaults = false)
         .set(SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION, true)
-        .set("spark.ssl.rpc.enabled", "true")
+        .set(SecurityManager.SSL_RPC_ENABLED_CONF, "true")
       UserCredentialManager.checkRpcEncryption(conf) // must not throw
     }
     // When encryption is configured, neither the warning nor the exception fires.

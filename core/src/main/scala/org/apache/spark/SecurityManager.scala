@@ -496,7 +496,7 @@ private[spark] object SecurityManager {
    * OIDC credential-propagation warning and the direct-credential-provider `require()` message so
    * the two stay in sync with [[isRpcEncryptionEnabled]].
    */
-  private[spark] def rpcEncryptionRemediation: String =
+  private[spark] val rpcEncryptionRemediation: String =
     s"Enable RPC encryption via $SSL_RPC_ENABLED_CONF=true, or ${NETWORK_AUTH_ENABLED.key}=true " +
       s"together with one of ${Network.NETWORK_CRYPTO_ENABLED.key} / " +
       s"${SASL_ENCRYPTION_ENABLED.key}."

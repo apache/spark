@@ -498,13 +498,6 @@ private[spark] object UserCredentialManager extends Logging {
     if (!sparkConf.get(SECURITY_OIDC_ENABLED)) {
       None
     } else {
-      // Credentials are transmitted to executors over Spark's RPC channel (via
-      // UpdateUserCredentials broadcasts and TaskDescription delivery). If RPC encryption is not
-      // configured, those credentials travel in cleartext. Per the SPIP, enabling credential
-      // propagation without RPC encryption logs a warning by default; operators can opt into a
-      // fail-fast mode via spark.security.oidc.requireRpcEncryption.
-      checkRpcEncryption(sparkConf)
-
       // Enforce the invariant explicitly rather than silently allocating a fresh loader (which
       // SparkContext would not own and therefore never close, leaking provider resources).
       val selectionLoader = loader.getOrElse {
@@ -519,6 +512,15 @@ private[spark] object UserCredentialManager extends Logging {
           s"${SECURITY_OIDC_IDENTITY_TOKEN_FILE.key} must be set when " +
             s"${SECURITY_OIDC_ENABLED.key} is true")
       }
+
+      // Credentials are transmitted to executors over Spark's RPC channel (via
+      // UpdateUserCredentials broadcasts and TaskDescription delivery). If RPC encryption is not
+      // configured, those credentials travel in cleartext. Per the SPIP, enabling credential
+      // propagation without RPC encryption logs a warning by default; operators can opt into a
+      // fail-fast mode via spark.security.oidc.requireRpcEncryption. This check runs after the
+      // required-config checks above so a missing token file is not masked by an encryption
+      // warning/error about an unrelated setting.
+      checkRpcEncryption(sparkConf)
 
       val tokenIngestor = new FileTokenIngestor(Paths.get(tokenFile))
       Some(new UserCredentialManager(
