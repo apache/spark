@@ -377,10 +377,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def withPlanTimeOptions(
       parameters: Map[String, String],
-      url: Option[String] = None): Map[String, String] =
-    url.orElse(CaseInsensitiveMap(parameters).get(JDBCOptions.JDBC_URL))
-      .map(u => parameters ++ JdbcDialects.get(u).planTimeOptions)
+      url: Option[String] = None): Map[String, String] = {
+    val caseInsensitive = CaseInsensitiveMap(parameters)
+    url.orElse(caseInsensitive.get(JDBCOptions.JDBC_URL))
+      .map(u => caseInsensitive.originalMap ++ JdbcDialects.get(u).planTimeOptions)
       .getOrElse(parameters)
+  }
 
   /**
    * Convert a [[ResultSet]] into an iterator of Catalyst Rows.
