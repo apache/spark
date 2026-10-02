@@ -246,9 +246,10 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.executor.rollPolicy")
       .doc("Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME, " +
         "TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS, PEAK_JVM_ONHEAP_MEMORY, " +
-        "PEAK_JVM_OFFHEAP_MEMORY, OUTLIER (default), and OUTLIER_NO_FALLBACK. " +
+        "PEAK_JVM_OFFHEAP_MEMORY, TOTAL_SHUFFLE_WRITE, DISK_USED, " +
+        "OUTLIER (default), and OUTLIER_NO_FALLBACK. " +
         "When executor roll happens, Spark uses this policy to choose " +
-        "an executor and decommission it. The built-in policies are based on executor summary." +
+        "an executor and decommission it. The built-in policies are based on executor summary. " +
         "ID policy chooses an executor with the smallest executor ID. " +
         "ADD_TIME policy chooses an executor with the smallest add-time. " +
         "TOTAL_GC_TIME policy chooses an executor with the biggest total task GC time. " +
@@ -259,10 +260,14 @@ private[spark] object Config extends Logging {
         "memory. PEAK_JVM_OFFHEAP_MEMORY policy chooses an executor with the biggest peak JVM " +
         "off-heap memory. " +
         "TOTAL_SHUFFLE_WRITE policy chooses an executor with the biggest total shuffle write. " +
-        "DISK_USED policy chooses an executor with the biggest used disk size. " +
-        "OUTLIER policy chooses an executor with outstanding statistics which is bigger than" +
+        "DISK_USED policy chooses an executor with the biggest disk size used by its " +
+        "stored blocks (e.g., disk-persisted RDD blocks). " +
+        "OUTLIER policy chooses an executor with outstanding statistics which is bigger than " +
         "at least two standard deviation from the mean in average task time, " +
-        "total task time, total task GC time, and the number of failed tasks if exists. " +
+        "total task time, total task GC time, the number of failed tasks, " +
+        "peak JVM on-heap memory, peak JVM off-heap memory, total shuffle write, " +
+        "and disk used if exists. " +
+        "The dimensions are checked in this order and the first outlier found is chosen. " +
         "If there is no outlier it works like TOTAL_DURATION policy. " +
         "OUTLIER_NO_FALLBACK policy picks an outlier using the OUTLIER policy above. " +
         "If there is no outlier then no executor will be rolled.")
