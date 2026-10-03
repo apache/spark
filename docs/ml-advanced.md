@@ -42,7 +42,7 @@ license: |
 # Optimization of linear methods (developer)
 
 ## Limited-memory BFGS (L-BFGS)
-[L-BFGS](http://en.wikipedia.org/wiki/Limited-memory_BFGS) is an optimization 
+[L-BFGS](https://en.wikipedia.org/wiki/Limited-memory_BFGS) is an optimization 
 algorithm in the family of quasi-Newton methods to solve the optimization problems of the form 
 `$\min_{\wv \in\R^d} \; f(\wv)$`. The L-BFGS method approximates the objective function locally as a 
 quadratic without evaluating the second partial derivatives of the objective function to construct the 

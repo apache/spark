@@ -22,7 +22,7 @@ license: |
 * Table of contents
 {:toc}
 
-[Dimensionality reduction](http://en.wikipedia.org/wiki/Dimensionality_reduction) is the process 
+[Dimensionality reduction](https://en.wikipedia.org/wiki/Dimensionality_reduction) is the process 
 of reducing the number of variables under consideration.
 It can be used to extract latent features from raw and noisy features
 or compress data while maintaining the structure.
@@ -30,7 +30,7 @@ or compress data while maintaining the structure.
 
 ## Singular value decomposition (SVD)
 
-[Singular value decomposition (SVD)](http://en.wikipedia.org/wiki/Singular_value_decomposition)
+[Singular value decomposition (SVD)](https://en.wikipedia.org/wiki/Singular_value_decomposition)
 factorizes a matrix into three matrices: $U$, $\Sigma$, and $V$ such that
 
 `\[
@@ -109,7 +109,7 @@ The same code applies to `IndexedRowMatrix` if `U` is defined as an
 
 ## Principal component analysis (PCA)
 
-[Principal component analysis (PCA)](http://en.wikipedia.org/wiki/Principal_component_analysis) is a
+[Principal component analysis (PCA)](https://en.wikipedia.org/wiki/Principal_component_analysis) is a
 statistical method to find a rotation such that the first coordinate has the largest variance
 possible, and each succeeding coordinate, in turn, has the largest variance possible. The columns of
 the rotation matrix are called principal components. PCA is used widely in dimensionality reduction.
