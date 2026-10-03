@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
@@ -42,7 +43,9 @@ import org.apache.spark.sql.internal.SQLConf
  *  - Expand projection count >= configured threshold
  *  - No non-distinct aggregates or FILTER clauses on distinct
  *    aggregates (checked via `expand.producedAttributes` being
- *    a subset of the inner aggregate's GROUP BY)
+ *    a subset of the inner aggregate's GROUP BY, plus a direct
+ *    check for duplicate-sensitive aggregates such as `count(1)`
+ *    that reference no attribute)
  *  - The pre-aggregate's group-by column count does not exceed
  *    the inner aggregate's (minus gid), which rejects composite
  *    distinct expressions (e.g. `col1 + col2`) that introduce
@@ -86,7 +89,10 @@ object OptimizeExpand extends Rule[LogicalPlan] {
    *  1. The Expand is produced by [[RewriteDistinctAggregates]]
    *     (gid present in inner GROUP BY).
    *  2. All Expand-produced attributes are consumed by the inner
-   *     GROUP BY (rejects non-distinct aggs and FILTER clauses).
+   *     GROUP BY (rejects non-distinct aggs and FILTER clauses),
+   *     and the inner aggregate holds no duplicate-sensitive
+   *     aggregate (rejects `count(1)`, which the check above
+   *     cannot see because it references no attribute).
    *  3. The pre-aggregate's group-by column count does not exceed
    *     the inner aggregate's (minus gid). Composite distinct
    *     expressions like `col1 + col2` fan out into more leaf
@@ -106,6 +112,18 @@ object OptimizeExpand extends Rule[LogicalPlan] {
     val innerGroupByAttrs = AttributeSet(
       innerAgg.groupingExpressions.flatMap(_.references))
     if (!expand.producedAttributes.subsetOf(innerGroupByAttrs)) return false
+
+    // Check 2b: an aggregate that references no attribute, such as count(1)
+    // from COUNT(1) or COUNT(*), gets no dedicated Expand output column and so
+    // passes the check above. Pre-aggregating would make it count the distinct
+    // rows rather than the base rows, so reject any duplicate-sensitive
+    // aggregate directly.
+    val hasDuplicateSensitiveAgg = innerAgg.aggregateExpressions.exists(_.exists {
+      case ae: AggregateExpression =>
+        !ae.isDistinct && !EliminateDistinct.isDuplicateAgnostic(ae.aggregateFunction)
+      case _ => false
+    })
+    if (hasDuplicateSensitiveAgg) return false
 
     // Check 3: composite expressions like col1 + col2 fan out into
     // more leaf attributes than inner group-by slots, making the
