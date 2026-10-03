@@ -71,7 +71,7 @@ case class ParquetPartitionReaderFactory(
   private val resultSchema = StructType(partitionSchema.fields ++ readDataSchema.fields)
   private val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
   private val enableVectorizedReader: Boolean =
-    ParquetUtils.isBatchReadSupportedForSchema(sqlConf, resultSchema)
+    ParquetUtils.isBatchReadSupportedForSchema(sqlConf, resultSchema, strictlyColumnar = false)
   private val supportsColumnar = enableVectorizedReader && sqlConf.wholeStageEnabled &&
     !WholeStageCodegenExec.isTooManyFields(sqlConf, resultSchema)
   private val enableRecordFilter: Boolean = sqlConf.parquetRecordFilterEnabled

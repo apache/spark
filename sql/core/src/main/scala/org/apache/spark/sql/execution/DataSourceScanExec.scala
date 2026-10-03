@@ -738,7 +738,7 @@ case class FileSourceScanExec(
     val requiredWholeStageCodegenSettings =
       conf.wholeStageEnabled && !WholeStageCodegenExec.isTooManyFields(conf, schema)
     requiredWholeStageCodegenSettings &&
-      relation.fileFormat.supportBatch(relation.sparkSession, schema)
+      relation.fileFormat.supportBatch(relation.sparkSession, schema, strictlyColumnar = false)
   }
 
   private lazy val needsUnsafeRowConversion: Boolean = {
@@ -749,7 +749,15 @@ case class FileSourceScanExec(
     }
   }
 
-  lazy val inputRDD: RDD[InternalRow] = {
+  lazy val inputRDD: RDD[InternalRow] = createInputRDD(strictlyColumnar = false)
+
+  lazy val inputRDDStrictlyColumnar: RDD[InternalRow] = createInputRDD(strictlyColumnar = true)
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    inputRDD :: Nil
+  }
+
+  private def createInputRDD(strictlyColumnar: Boolean): RDD[InternalRow] = {
     val options = relation.options +
       (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
@@ -760,7 +768,8 @@ case class FileSourceScanExec(
         requiredSchema = requiredSchema,
         filters = pushedDownFilters,
         options = options,
-        hadoopConf = getHadoopConf(relation.sparkSession, relation.options))
+        hadoopConf = getHadoopConf(relation.sparkSession, relation.options),
+        strictlyColumnar)
 
     val readRDD = if (bucketedScan) {
       createBucketedReadRDD(relation.bucketSpec.get, readFile, dynamicallySelectedPartitions)
@@ -771,9 +780,15 @@ case class FileSourceScanExec(
     readRDD
   }
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    inputRDD :: Nil
-  }
+  /**
+   * The input RDD, coalesced to a single partition when this scan runs in single-task mode. This
+   * enforces the `SinglePartition` output partitioning reported by `outputPartitioning`, which is
+   * estimated from the statically-selected files and may not correspond exactly to the number of
+   * partitions the input RDD produces after dynamic pruning. Coalescing here keeps the query
+   * correct in either case.
+   */
+  private[spark] lazy val maybeCoalesceInputRDD: RDD[InternalRow] =
+    createMaybeCoalesceInputRDD(inputRDD)
 
   /**
    * The input RDD, coalesced to a single partition when this scan runs in single-task mode. This
@@ -782,14 +797,17 @@ case class FileSourceScanExec(
    * partitions the input RDD produces after dynamic pruning. Coalescing here keeps the query
    * correct in either case.
    */
-  private[spark] lazy val maybeCoalesceInputRDD: RDD[InternalRow] = {
-    if (useSingleTaskExecution && inputRDD.getNumPartitions > 1) {
-      inputRDD.coalesce(1)
-    } else if (useSingleTaskExecution && inputRDD.getNumPartitions == 0) {
+  private[spark] lazy val maybeCoalesceStrictlyColumnarInputRDD: RDD[InternalRow] =
+    createMaybeCoalesceInputRDD(inputRDDStrictlyColumnar)
+
+  private def createMaybeCoalesceInputRDD(rdd: RDD[InternalRow]) : RDD[InternalRow] = {
+    if (useSingleTaskExecution && rdd.getNumPartitions > 1) {
+      rdd.coalesce(1)
+    } else if (useSingleTaskExecution && rdd.getNumPartitions == 0) {
       // All files were pruned away; produce a single empty partition to match `SinglePartition`.
       sparkContext.parallelize[InternalRow](Nil, 1)
     } else {
-      inputRDD
+      rdd
     }
   }
 
@@ -817,7 +835,8 @@ case class FileSourceScanExec(
   protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     val numOutputRows = longMetric("numOutputRows")
     val scanTime = longMetric("scanTime")
-    maybeCoalesceInputRDD.asInstanceOf[RDD[ColumnarBatch]].mapPartitionsInternal { batches =>
+    maybeCoalesceStrictlyColumnarInputRDD.asInstanceOf[RDD[ColumnarBatch]].mapPartitionsInternal {
+      batches =>
       new Iterator[ColumnarBatch] {
 
         override def hasNext: Boolean = {
