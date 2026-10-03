@@ -596,7 +596,9 @@ private[netty] class RequestMessage(
 
   /** Manually serialize [[RequestMessage]] to minimize the size. */
   def serialize(nettyEnv: NettyRpcEnv): ByteBuffer = {
-    val bos = new ByteBufferOutputStream()
+    // The RpcAddress preamble plus a typical control message exceeds the 32-byte default, so
+    // start at 512 to hold the common messages without repeated grow-and-copy on this hot path.
+    val bos = new ByteBufferOutputStream(512)
     val out = new DataOutputStream(bos)
     try {
       writeRpcAddress(out, senderAddress)
