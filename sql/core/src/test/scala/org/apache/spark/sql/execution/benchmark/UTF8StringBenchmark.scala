@@ -86,8 +86,11 @@ object UTF8StringBenchmark extends BenchmarkBase {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("UTF8String ASCII case conversion") {
+      // scalastyle:off caselocale
+      // These exercise UTF8String.toLowerCase/toUpperCase, which are locale-independent.
       caseBenchmark("toLowerCase", _.toLowerCase, 128)
       caseBenchmark("toUpperCase", _.toUpperCase, 128)
+      // scalastyle:on caselocale
     }
   }
 }
