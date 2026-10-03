@@ -8369,6 +8369,19 @@
     ],
     "sqlState" : "54011"
   },
+  "UDF_LIMITS" : {
+    "message" : [
+      "A UDF resource limit was exceeded."
+    ],
+    "subClass" : {
+      "ROW_SIZE" : {
+        "message" : [
+          "The projected input row size <actualRowSize> bytes exceeds the maximum allowed size <maxRowSize> bytes."
+        ]
+      }
+    },
+    "sqlState" : "54000"
+  },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
       "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF.",

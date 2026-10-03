@@ -5436,6 +5436,33 @@ object SQLConf {
           "be -1 (no limit) or greater than zero and less than or equal to INT_MAX.")
       .createWithDefault(-1)
 
+  val PYTHON_UDF_ROW_SIZE_GUARD_ENABLED =
+    buildConf("spark.sql.execution.python.udf.rowSizeGuard.enabled")
+      .internal()
+      .doc("When true, guard pickle-serialized (non-Arrow) Python UDF evaluation against " +
+        "top-level string and binary argument payloads whose combined size exceeds " +
+        "rowSizeGuard.maxRowHeapFraction of executor heap. The guard checks the projected " +
+        "arguments before conversion and pickling. Nested inputs are not estimated.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PYTHON_UDF_ROW_SIZE_GUARD_MAX_ROW_HEAP_FRACTION =
+    buildConf("spark.sql.execution.python.udf.rowSizeGuard.maxRowHeapFraction")
+      .internal()
+      .doc("Maximum combined byte size of one projected input row's top-level string and " +
+        "binary Python UDF arguments, as a fraction of executor max heap. The default 0.083 " +
+        "is approximately 1/12 of the executor heap; conversion and pickling can require " +
+        "multiple copies of the argument bytes.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doubleConf
+      .checkValue(v => v > 0.0 && v <= 1.0,
+        "The value of spark.sql.execution.python.udf.rowSizeGuard.maxRowHeapFraction " +
+          "must be in (0.0, 1.0].")
+      .createWithDefault(0.083)
+
   val PYTHON_UDF_BUFFER_SIZE =
     buildConf("spark.sql.execution.python.udf.buffer.size")
       .doc(
