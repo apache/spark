@@ -58,6 +58,13 @@ public class JavaDatasetSuite implements Serializable {
   private transient TestSparkSession spark;
   private transient JavaSparkContext jsc;
 
+  @Test
+  public void debugCodegenFromJava() {
+    // SPARK-35198: a direct Java call must not require the Scala implicit helper.
+    Dataset<Long> df = spark.range(10);
+    Assertions.assertDoesNotThrow(df::debugCodegen);
+  }
+
   @BeforeEach
   public void setUp() {
     // Trigger static initializer of TestData

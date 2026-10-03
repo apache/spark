@@ -65,6 +65,19 @@ from pyspark.testing.utils import (
 
 
 class DataFrameTestsMixin:
+    def test_debug_codegen(self):
+        # SPARK-35198: the direct API works for classic and Connect DataFrames.
+        df = self.spark.range(10)
+        expected = io.StringIO()
+        actual = io.StringIO()
+        with redirect_stdout(expected):
+            df.explain(mode="codegen")
+        with redirect_stdout(actual):
+            result = df.debugCodegen()
+        self.assertIsNone(result)
+        self.assertIn("WholeStageCodegen subtrees.", actual.getvalue())
+        self.assertEqual(actual.getvalue(), expected.getvalue())
+
     def test_range(self):
         self.assertEqual(self.spark.range(1, 1).count(), 0)
         self.assertEqual(self.spark.range(1, 0, -1).count(), 1)
