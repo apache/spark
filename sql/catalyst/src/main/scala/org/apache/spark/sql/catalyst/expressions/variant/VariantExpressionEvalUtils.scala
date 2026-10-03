@@ -100,14 +100,11 @@ object VariantExpressionEvalUtils {
     segments.foreach {
       case o: VariantBuilder.ObjectKeySegment =>
         val key = o.key
-        // Dot notation only parses keys with no `.` or `[` (and at least one char); anything else
-        // must use bracket notation so the rendered path round-trips to the same segments.
         if (key.nonEmpty && !key.contains('.') && !key.contains('[')) {
           sb.append('.').append(key)
-        } else if (!key.contains('\'')) {
-          sb.append("['").append(key).append("']")
         } else {
-          sb.append("[\"").append(key).append("\"]")
+          val quote = if (key.contains('\'')) '"' else '\''
+          sb.append(VariantPathParser.quoteKey(key, quote))
         }
       case a: VariantBuilder.ArrayIndexSegment => sb.append('[').append(a.index).append(']')
     }

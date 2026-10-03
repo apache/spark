@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.variant
 
 import java.time.ZoneId
 
+import scala.util.matching.Regex
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.SparkRuntimeException
@@ -369,7 +370,7 @@ object VariantPathParser extends RegexParsers {
   override def skipWhitespace: Boolean = false
 
   // Parse key segment like `.name`, `['name']`, or `["name"]`.
-  private def key: Parser[VariantPathSegment] =
+  private def literalBackslashKey: Parser[VariantPathSegment] =
     for {
       key <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^']*".r <~ "']" |
         "[\"" ~> """[^"]*""".r <~ "\"]"
@@ -377,9 +378,70 @@ object VariantPathParser extends RegexParsers {
       ObjectExtraction(key)
     }
 
-  private val parser: Parser[List[VariantPathSegment]] = phrase(root ~> rep(key | index))
+  // Parse `.name`, `['name']`, or `["name"]`. Dot keys are literal; bracket keys decode escapes.
+  private def escapedKey: Parser[VariantPathSegment] =
+    '.' ~> "[^\\.\\[]+".r ^^ ObjectExtraction |
+      "['" ~> """(?:\\[\s\S]|[^'\\])*""".r <~ "']" ^^ { k =>
+        ObjectExtraction(unescapeQuotedKey(k, '\''))
+      } |
+      "[\"" ~> """(?:\\[\s\S]|[^"\\])*""".r <~ "\"]" ^^ { k =>
+        ObjectExtraction(unescapeQuotedKey(k, '"'))
+      }
+
+  // Match `\uXXXX` or a backslash followed by any character. Unknown escapes remain literal.
+  private val escapeSeq = """\\(u[0-9a-fA-F]{4}|[\s\S])""".r
+
+  // Decode RFC 9535 escapes. Unknown and malformed escapes remain literal for compatibility.
+  // A quote is escapable only when it matches the surrounding delimiter.
+  private def unescapeQuotedKey(raw: String, quote: Char): String =
+    if (raw.indexOf('\\') < 0) raw
+    else escapeSeq.replaceAllIn(raw, m =>
+      Regex.quoteReplacement(decodeEscape(m.group(1), quote)))
+
+  private def decodeEscape(esc: String, quote: Char): String = esc match {
+    case "b" => "\b"
+    case "f" => "\f"
+    case "n" => "\n"
+    case "r" => "\r"
+    case "t" => "\t"
+    case "/" => "/"
+    case "\\" => "\\"
+    case "'" if quote == '\'' => "'"
+    case "\"" if quote == '"' => "\""
+    case s if s.length == 5 => Integer.parseInt(s.substring(1), 16).toChar.toString
+    case other => "\\" + other
+  }
+
+  // Return a bracket segment that parses back to `key`.
+  private[variant] def quoteKey(key: String, quote: Char): String = {
+    val result = new java.lang.StringBuilder(key.length + 4).append('[').append(quote)
+    var i = 0
+    while (i < key.length) {
+      key.charAt(i) match {
+        case '\\' => result.append("\\\\")
+        case c if c == quote => result.append('\\').append(c)
+        case '\b' => result.append("\\b")
+        case '\f' => result.append("\\f")
+        case '\n' => result.append("\\n")
+        case '\r' => result.append("\\r")
+        case '\t' => result.append("\\t")
+        case c if c < 0x20 => result.append("\\u%04x".format(c.toInt))
+        case c => result.append(c)
+      }
+      i += 1
+    }
+    result.append(quote).append(']').toString
+  }
+
+  private val escapedParser = phrase(root ~> rep(escapedKey | index))
+  private val literalBackslashParser = phrase(root ~> rep(literalBackslashKey | index))
 
   def parse(str: String): Option[Array[VariantPathSegment]] = {
+    val parser = if (SQLConf.get.getConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL)) {
+      literalBackslashParser
+    } else {
+      escapedParser
+    }
     try {
       this.parseAll(parser, str) match {
         case Success(result, _) => Some(result.toArray)
