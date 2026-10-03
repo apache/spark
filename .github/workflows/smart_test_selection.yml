@@ -1,0 +1,398 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to you under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: "Smart class-level test selection"
+
+on:
+  push:
+    branches:
+    - '**'
+
+permissions:
+  contents: read
+  copilot-requests: write
+  packages: read
+
+# Copilot CLI authentication and permissions follow:
+# https://docs.github.com/en/copilot/how-tos/copilot-cli/automate-copilot-cli/automate-with-actions
+jobs:
+  select-tests:
+    name: Select class-level tests
+    # Allow this draft branch in the personal fork to verify the workflow before merging.
+    if: >-
+      (github.repository == 'apache/spark' ||
+      (github.repository == 'zhengruifeng/spark' &&
+      github.ref == 'refs/heads/ai-test-selection-post-merge-ci')) &&
+      github.ref != 'refs/heads/branch-4.x'
+    # `ubuntu-slim` is lighter than `ubuntu-latest`.
+    # Please see https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
+    runs-on: ubuntu-slim
+    outputs:
+      python_tests: ${{ steps.smart-test-selection.outputs.python_tests || '' }}
+      jvm_tests: ${{ steps.smart-test-selection.outputs.jvm_tests || '[]' }}
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - name: Set up Node.js for Copilot CLI
+      id: setup-copilot-cli
+      continue-on-error: true
+      uses: actions/setup-node@v6
+      with:
+        node-version: 24.13.0
+    - name: Install Copilot CLI
+      id: install-copilot-cli
+      if: steps.setup-copilot-cli.outcome == 'success'
+      continue-on-error: true
+      run: npm install -g @github/copilot
+    - name: Select class-level tests with Copilot CLI
+      id: smart-test-selection
+      if: steps.install-copilot-cli.outcome == 'success'
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        selections_file=$(mktemp)
+        trap 'rm -f "$selections_file"' EXIT
+        commit=$(git rev-parse HEAD)
+        subject=$(git show -s --format=%s "$commit")
+        changed_files=$(git show --format= --name-only "$commit")
+        prompt=$(python3 - "$subject" "$changed_files" <<'PY'
+        from pathlib import Path
+        import sys
+
+        template = Path("dev/smart_test_selection_prompt.md").read_text(encoding="utf-8")
+        print(
+            template.replace("{{COMMIT_SUBJECT}}", sys.argv[1]).replace(
+                "{{CHANGED_FILES}}", sys.argv[2]))
+        PY
+        )
+        selection=$(copilot -s -p "$prompt" --allow-tool=read --deny-tool='shell,write,url' \
+          --no-ask-user || true)
+        commit_selection=$(printf '%s' "$selection" | python3 dev/smart_test_selection.py validate)
+        printf '%s\n' "$commit_selection" >> "$selections_file"
+        merged_selection=$(python3 dev/smart_test_selection.py merge < "$selections_file")
+        selected_jvm_tests=$(python3 - "$merged_selection" <<'PY'
+        import json
+        import sys
+
+        print(json.dumps(json.loads(sys.argv[1])["jvm"], separators=(",", ":")))
+        PY
+        )
+        selected_python_tests=$(python3 - "$merged_selection" <<'PY'
+        import json
+        import sys
+
+        print(",".join(json.loads(sys.argv[1])["python"]))
+        PY
+        )
+        echo "jvm_tests=$selected_jvm_tests" >> "$GITHUB_OUTPUT"
+        echo "python_tests=$selected_python_tests" >> "$GITHUB_OUTPUT"
+        if [ "$selected_jvm_tests" != "[]" ] || [ -n "$selected_python_tests" ]; then
+          echo "Selected JVM tests: $selected_jvm_tests"
+          echo "Selected Python tests: ${selected_python_tests:-none}"
+        else
+          echo "No valid test targets were selected."
+        fi
+        {
+          printf '### Smart class-level test selection\n\n'
+          printf 'Commit: `%s`\n\n' "$commit"
+          printf 'JVM: `%s`\n\nPython: `%s`\n' \
+            "$selected_jvm_tests" "${selected_python_tests:-none}"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+  # Compile Spark once with SBT so the parallel test jobs can reuse its artifact.
+  precompile:
+    name: Precompile Spark with SBT
+    needs: select-tests
+    if: >-
+      needs.select-tests.result == 'success' && (!cancelled()) &&
+      (needs.select-tests.outputs.jvm_tests != '[]' ||
+      needs.select-tests.outputs.python_tests != '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Let the test jobs fall back to a local build if the compile artifact is unavailable.
+    continue-on-error: true
+    env:
+      HADOOP_PROFILE: hadoop3
+      HIVE_PROFILE: hive2.3
+      SKIP_MIMA: true
+      SKIP_UNIDOC: true
+      SPARK_LOCAL_IP: localhost
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - name: Cache SBT and Maven
+      uses: actions/cache@v5
+      with:
+        path: |
+          build/apache-maven-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-${{ runner.os }}-
+    - name: Cache Coursier local repository
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/coursier
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          coursier-${{ runner.os }}-
+    - name: Free up disk space
+      run: |
+        if [ -f ./dev/free_disk_space ]; then
+          ./dev/free_disk_space
+        fi
+    - name: Install Java 17
+      uses: actions/setup-java@v5
+      with:
+        distribution: zulu
+        java-version: 17
+    - name: Precompile Spark
+      run: |
+        ./build/sbt -Phadoop-3 -Pyarn -Pspark-ganglia-lgpl -Phadoop-cloud -Phive \
+          -Pkubernetes -Pjvm-profiler -Pkinesis-asl -Phive-thriftserver \
+          -Pdocker-integration-tests -Pkubernetes-integration-tests -Pvolcano \
+          Test/package streaming-kinesis-asl-assembly/assembly connect/assembly assembly/package
+    - name: Package compile output
+      run: |
+        find . -type d -name target -not -path './build/*' -not -path './.git/*' -print0 \
+          | tar --null -cf - -T - | zstd -c -T0 > compile-artifact.tar.zst
+        ls -lh compile-artifact.tar.zst
+    - name: Upload compile artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: smart-selected-spark-compile-${{ github.run_id }}
+        path: compile-artifact.tar.zst
+        retention-days: 1
+        if-no-files-found: error
+
+  run-jvm-tests:
+    name: Run selected JVM tests
+    needs: [select-tests, precompile]
+    if: >-
+      needs.select-tests.result == 'success' && (!cancelled()) &&
+      needs.select-tests.outputs.jvm_tests != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      SELECTED_JVM_TESTS: ${{ needs.select-tests.outputs.jvm_tests }}
+      HADOOP_PROFILE: hadoop3
+      HIVE_PROFILE: hive2.3
+      SKIP_MIMA: true
+      SKIP_PACKAGING: true
+      SKIP_UNIDOC: true
+      SPARK_LOCAL_IP: localhost
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - name: Restore SBT and Maven cache
+      uses: actions/cache/restore@v5
+      with:
+        path: |
+          build/apache-maven-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-${{ runner.os }}-
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
+      with:
+        path: ~/.cache/coursier
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          coursier-${{ runner.os }}-
+    - name: Free up disk space
+      run: |
+        if [ -f ./dev/free_disk_space ]; then
+          ./dev/free_disk_space
+        fi
+    - name: Install Java 17
+      uses: actions/setup-java@v5
+      with:
+        distribution: zulu
+        java-version: 17
+    - name: Install Python 3.12
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+        architecture: x64
+    - name: Download precompiled artifact
+      id: download-precompiled
+      if: needs.precompile.result == 'success'
+      continue-on-error: true
+      uses: actions/download-artifact@v8
+      with:
+        name: smart-selected-spark-compile-${{ github.run_id }}
+    - name: Extract precompiled artifact
+      id: extract-precompiled
+      if: steps.download-precompiled.outcome == 'success'
+      continue-on-error: true
+      run: |
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
+    - name: Run selected JVM test classes
+      shell: 'script -q -e -c "bash {0}"'
+      run: |
+        export TERM=vt100
+        export SERIAL_SBT_TESTS=1
+        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
+          export SKIP_SCALA_BUILD=true
+          echo "Reusing precompiled artifact, skipping local SBT build."
+        fi
+        # The job output contains only the JVM array; the helper accepts a selection object.
+        printf '{"jvm":%s}' "$SELECTED_JVM_TESTS" | python3 dev/smart_test_selection.py run-jvm
+    - name: Upload test results to report
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: smart-selected-jvm-test-results-${{ github.run_id }}
+        path: |
+          **/target/test-reports/*.xml
+          **/target/surefire-reports/*.xml
+    - name: Test Summary
+      if: always()
+      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2.6
+      with:
+        paths: |
+          **/target/test-reports/*.xml
+          **/target/surefire-reports/*.xml
+    - name: Upload unit test log files
+      if: ${{ !success() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: smart-selected-jvm-unit-tests-log-${{ github.run_id }}
+        path: "**/target/*.log"
+
+  run-python-tests:
+    name: Run selected PySpark tests
+    needs: [select-tests, precompile]
+    if: >-
+      needs.select-tests.result == 'success' && (!cancelled()) &&
+      needs.select-tests.outputs.python_tests != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    # This is the static Python 3.12 image built from dev/spark-test-image/python-312
+    # for build_and_test.yml.
+    container:
+      image: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-312-cache:master-static
+      options: >-
+        --cap-add=SYS_PTRACE
+        --security-opt seccomp=unconfined
+    env:
+      SELECTED_PYTHON_TESTS: ${{ needs.select-tests.outputs.python_tests }}
+      HADOOP_PROFILE: hadoop3
+      HIVE_PROFILE: hive2.3
+      PYSPARK_TEST_TIMEOUT: 450
+      SKIP_MIMA: true
+      SKIP_PACKAGING: true
+      SKIP_UNIDOC: true
+      SPARK_LOCAL_IP: localhost
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - name: Restore SBT and Maven cache
+      uses: actions/cache/restore@v5
+      with:
+        path: |
+          build/apache-maven-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-${{ runner.os }}-
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
+      with:
+        path: ~/.cache/coursier
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          coursier-${{ runner.os }}-
+    - name: Free up disk space
+      shell: 'script -q -e -c "bash {0}"'
+      run: ./dev/free_disk_space_container
+    - name: Install Java 17
+      uses: actions/setup-java@v5
+      with:
+        distribution: zulu
+        java-version: 17
+    - name: List Python packages
+      shell: 'script -q -e -c "bash {0}"'
+      run: |
+        python3.12 --version
+        python3.12 -m pip list
+    - name: Download precompiled artifact
+      id: download-precompiled
+      if: needs.precompile.result == 'success'
+      continue-on-error: true
+      uses: actions/download-artifact@v8
+      with:
+        name: smart-selected-spark-compile-${{ github.run_id }}
+    - name: Extract precompiled artifact
+      id: extract-precompiled
+      if: steps.download-precompiled.outcome == 'success'
+      continue-on-error: true
+      run: |
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
+    - name: Build Spark for selected Python test files
+      if: steps.extract-precompiled.outcome != 'success'
+      run: ./build/sbt -Phive Test/package
+    - name: Run selected Python test files
+      shell: 'script -q -e -c "bash {0}"'
+      run: |
+        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
+          export SKIP_SCALA_BUILD=true
+          echo "Reusing precompiled artifact, skipping local SBT build."
+        fi
+        old_ifs=$IFS
+        IFS=,
+        for test_name in $SELECTED_PYTHON_TESTS; do
+          echo "Running $test_name"
+          ./python/run-tests --parallelism=1 --python-executables python3.12 \
+            --testnames "$test_name"
+        done
+        IFS=$old_ifs
+    - name: Upload test results to report
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: smart-selected-python-test-results-${{ github.run_id }}
+        path: |
+          **/target/test-reports/*.xml
+          **/target/surefire-reports/*.xml
+    - name: Test Summary
+      if: always()
+      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2.6
+      with:
+        paths: |
+          **/target/test-reports/*.xml
+          **/target/surefire-reports/*.xml
+    - name: Upload unit test log files
+      if: ${{ !success() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: smart-selected-python-unit-tests-log-${{ github.run_id }}
+        path: "**/target/*.log"
