@@ -121,8 +121,24 @@ private[spark] class Client(
         .withMountPath(SPARK_CONF_DIR_INTERNAL)
         .endVolumeMount()
       .build()
+    // SPARK-38079: a pod template (spark.kubernetes.driver.podTemplateFile) may already pin
+    // spec.nodeName to a specific node. The Kubernetes API rejects creating a pod that has
+    // both a non-empty spec.nodeName and a non-empty spec.schedulingGates (added below) --
+    // "nodeName cannot be set until all schedulingGates have been cleared" -- since nodeName
+    // is meant to be set only once nothing (including scheduling) stands between the pod and
+    // that node. Translate it to an equivalent kubernetes.io/hostname nodeSelector entry
+    // instead, which (unlike nodeName) is created and read normally on a gated pod and has
+    // the same effect once the scheduler runs -- unless spark.kubernetes.driver.node.selector.
+    // kubernetes.io/hostname (via BasicDriverFeatureStep, applied earlier in
+    // builder.buildFromFeatures() above) already set that same key: that explicit user
+    // configuration always wins, so it is never overwritten by this fallback.
+    val pinnedNodeName = Option(resolvedDriverSpec.pod.pod.getSpec.getNodeName)
+      .filter(_.nonEmpty)
+      .filter(_ => !Option(resolvedDriverSpec.pod.pod.getSpec.getNodeSelector)
+        .exists(_.containsKey("kubernetes.io/hostname")))
     val resolvedDriverPod = new PodBuilder(resolvedDriverSpec.pod.pod)
       .editSpec()
+        .withNodeName(null)
         .addToContainers(resolvedDriverContainer)
         .addNewVolume()
           .withName(SPARK_CONF_VOLUME_DRIVER)
@@ -131,48 +147,80 @@ private[spark] class Client(
             .withName(configMapName)
             .endConfigMap()
           .endVolume()
+        .addToNodeSelector(
+          pinnedNodeName.map(nodeName => Map("kubernetes.io/hostname" -> nodeName))
+            .getOrElse(Map.empty[String, String]).asJava)
+        // SPARK-38079: holds the pod unschedulable -- so kubelet cannot attempt to mount
+        // anything on it -- until its pre-resources exist (see below). Only removed once
+        // that is true, right before the watch loop; see the "Remove the pre-resources
+        // scheduling gate" step below for why this makes an ownerless-resource window,
+        // and its consequences (a shutdown hook), unnecessary.
+        .addNewSchedulingGate(PRE_RESOURCES_SCHEDULING_GATE)
         .endSpec()
       .build()
     val driverPodName = resolvedDriverPod.getMetadata.getName
 
-    // setup resources before pod creation
-    val preKubernetesResources = resolvedDriverSpec.driverPreKubernetesResources
-    try {
-      kubernetesClient.resourceList(preKubernetesResources: _*).forceConflicts().serverSideApply()
-    } catch {
-      case NonFatal(e) =>
-        logError("Please check \"kubectl auth can-i create [resource]\" first." +
-          " It should be yes. And please also check your feature step implementation.")
-        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
-        throw e
-    }
+    // SPARK-38079: the driver's own base config map (mounted as SPARK_CONF_VOLUME_DRIVER
+    // above) must also be created before the pod is schedulable, to avoid a "configmap ...
+    // not found" mount race between the driver pod and the config map it depends on.
+    val preKubernetesResources = resolvedDriverSpec.driverPreKubernetesResources ++ Seq(configMap)
 
     var watch: Watch = null
-    var createdDriverPod: Pod = null
-    try {
-      createdDriverPod =
+    val createdDriverPod: Pod =
+      try {
         kubernetesClient.pods().inNamespace(conf.namespace).resource(resolvedDriverPod).create()
-    } catch {
-      case NonFatal(e) =>
-        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
-        logError("Please check \"kubectl auth can-i create pod\" first. It should be yes.")
-        throw e
-    }
+      } catch {
+        case NonFatal(e) =>
+          logError("Please check \"kubectl auth can-i create pod\" first. It should be yes.")
+          throw e
+      }
 
-    // Refresh all pre-resources' owner references
+    // SPARK-38079: some of the pre-resources above (e.g. the Kerberos keytab/delegation token
+    // secrets, the driver Kubernetes credentials secret) carry credentials. Now that the
+    // driver pod exists, its UID is known, so each pre-resource's owner reference can be set
+    // before -- and included in -- the single call that creates it. The pod itself is still
+    // scheduling-gated, so nothing can be scheduled against it (and so nothing can attempt to
+    // mount these resources) until they exist -- but they are never ownerless at any point
+    // after this call: either it succeeds and every pre-resource already has an owner
+    // reference, or it fails and none of them (that made it to the server) are left
+    // referencing anything, since the driver pod that would have owned them is deleted in the
+    // catch block below.
     try {
       addOwnerReference(createdDriverPod, preKubernetesResources)
       kubernetesClient.resourceList(preKubernetesResources: _*).forceConflicts().serverSideApply()
     } catch {
       case NonFatal(e) =>
-        kubernetesClient.pods().resource(createdDriverPod).delete()
-        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+        logError("Please check \"kubectl auth can-i create [resource]\" first." +
+          " It should be yes. And please also check your feature step implementation.")
+        deletePodAndPreResources(createdDriverPod, preKubernetesResources)
+        throw e
+    }
+
+    // SPARK-38079: remove the pre-resources scheduling gate now that its pre-resources exist,
+    // letting the scheduler proceed with this pod. If this process is terminated abruptly
+    // before this point (e.g. Ctrl-C, SIGTERM, or a fatal JVM error), the driver pod is left
+    // behind still gated -- inert (kubelet cannot schedule/mount anything on a gated pod) and
+    // visible as `Pending`/`SchedulingGated` via any standard pod listing. That is a low-
+    // severity leak, in the same class Spark already accepts elsewhere for a process killed
+    // right after pod creation (e.g. Ctrl-C before the watch loop below starts), so no
+    // shutdown hook is registered to guard this window.
+    try {
+      kubernetesClient.pods().inNamespace(conf.namespace).withName(driverPodName).edit(
+        (currentPod: Pod) => new PodBuilder(currentPod)
+          .editSpec()
+            .removeMatchingFromSchedulingGates(_.getName == PRE_RESOURCES_SCHEDULING_GATE)
+            .endSpec()
+          .build())
+    } catch {
+      case NonFatal(e) =>
+        logError("Please check \"kubectl auth can-i patch pod\" first. It should be yes.")
+        deletePodAndPreResources(createdDriverPod, preKubernetesResources)
         throw e
     }
 
     // setup resources after pod creation, and refresh all resources' owner references
     try {
-      val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
+      val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources
       addOwnerReference(createdDriverPod, otherKubernetesResources)
       kubernetesClient.resourceList(otherKubernetesResources: _*).forceConflicts().serverSideApply()
     } catch {
@@ -207,6 +255,26 @@ private[spark] class Client(
       logInfo(log"Deployed Spark application ${MDC(APP_NAME, conf.appName)} with " +
         log"application ID ${MDC(APP_ID, conf.appId)} and " +
         log"submission ID ${MDC(SUBMISSION_ID, sId)} into Kubernetes")
+    }
+  }
+
+  // SPARK-38079: best-effort cleanup for the two failure catch blocks between pod creation and
+  // gate removal. The pod and each pre-resource are deleted independently -- every delete call
+  // wrapped in its own Utils.tryLogNonFatalError -- so that one of them failing (e.g. a delete
+  // call itself hitting a permission or network error) neither masks the original exception
+  // the caller is about to (re)throw, nor skips the rest. In particular, fabric8's
+  // resourceList(...).delete() deletes the given items sequentially and stops at the first
+  // non-404 exception, so pre-resources are deleted one at a time here rather than as a single
+  // resourceList(...).delete() call, which could otherwise leave every pre-resource after the
+  // one that failed undeleted.
+  private def deletePodAndPreResources(pod: Pod, preResources: Seq[HasMetadata]): Unit = {
+    Utils.tryLogNonFatalError {
+      kubernetesClient.pods().resource(pod).delete()
+    }
+    preResources.foreach { resource =>
+      Utils.tryLogNonFatalError {
+        kubernetesClient.resource(resource).delete()
+      }
     }
   }
 }
