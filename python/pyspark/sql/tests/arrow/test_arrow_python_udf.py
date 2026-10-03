@@ -270,6 +270,31 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             rounded = df.select(f("v").alias("d")).first().d
             self.assertEqual(rounded, Decimal("1.233999999999999986"))
 
+    def test_decimal_round_half_up(self):
+        # The returned decimal is rescaled to the declared scale the same way CAST does
+        # (HALF_UP), so 1.005 becomes 1.01 and not 1.00. The legacy pandas conversion does
+        # not use this converter (pyarrow rejects or truncates such values there), so it is
+        # switched off like in test_decimal_round.
+        with self.sql_conf(
+            {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": False}
+        ):
+            df = self.spark.sql(
+                "SELECT * FROM VALUES ('1.005'), ('1.015'), ('1.025'), ('-1.005'), ('0.125') AS t(v)"
+            )
+
+            @udf(returnType=DecimalType(10, 2))
+            def f(v: str):
+                return Decimal(v)
+
+            expected = [
+                r.d for r in df.select(col("v").cast(DecimalType(10, 2)).alias("d")).collect()
+            ]
+            actual = [r.d for r in df.select(f("v").alias("d")).collect()]
+            self.assertEqual(actual, expected)
+            self.assertEqual(
+                actual, [Decimal(v) for v in ["1.01", "1.02", "1.03", "-1.01", "0.13"]]
+            )
+
     def test_err_return_type(self):
         with self.assertRaises(PySparkNotImplementedError) as pe:
             udf(lambda x: x, VarcharType(10), useArrow=True)
