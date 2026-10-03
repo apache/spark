@@ -113,21 +113,23 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
 
     if (requiredSchema.length == 1 &&
-      requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
+      ExprUtils.isCorruptRecordColumn(
+        requiredSchema.head.name, parsedOptions.columnNameOfCorruptRecord)) {
       throw QueryCompilationErrors.queryFromRawFilesIncludeCorruptRecordColumnError()
     }
 
     // Don't push any filter which refers to the "virtual" column which cannot present in the input.
     // Such filters will be applied later on the upper layer.
     val actualFilters =
-      filters.filterNot(_.references.contains(parsedOptions.columnNameOfCorruptRecord))
+      filters.filterNot(_.references.exists(
+        ExprUtils.isCorruptRecordColumn(_, parsedOptions.columnNameOfCorruptRecord)))
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
-      val actualDataSchema = StructType(
-        dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
-      val actualRequiredSchema = StructType(
-        requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+      val actualDataSchema = ExprUtils.schemaWithoutCorruptRecordColumn(
+        dataSchema, parsedOptions.columnNameOfCorruptRecord)
+      val actualRequiredSchema = ExprUtils.schemaWithoutCorruptRecordColumn(
+        requiredSchema, parsedOptions.columnNameOfCorruptRecord)
       // Use column pruning when specified by Catalyst, except when one or more columns have
       // existence default value(s), since in that case we instruct the CSV parser to disable column
       // pruning and instead read each entire row in order to correctly assign the default value(s).
