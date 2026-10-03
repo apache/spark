@@ -62,6 +62,14 @@ class SparkOptimizer(
   override def preCBORules: Seq[Rule[LogicalPlan]] =
     Seq(OptimizeMetadataOnlyDeleteFromTable)
 
+  // Runs inside the operator optimization batch (before RewritePredicateSubquery), so the rule can
+  // observe the uncorrelated InSubquery shape while the self-join multiplicity is still
+  // unobservable. Placed here rather than in Catalyst's Optimizer because its repeatability guard
+  // depends on file-source semantics (LogicalRelation / HadoopFsRelation / ParquetFileFormat) that
+  // live in sql/core.
+  override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
+    super.extendedOperatorOptimizationRules :+ RewriteSelfJoinInequalityToAggregate
+
   override def defaultBatches: Seq[Batch] = flattenBatches(Seq(
     preOptimizationBatches,
     super.defaultBatches,
