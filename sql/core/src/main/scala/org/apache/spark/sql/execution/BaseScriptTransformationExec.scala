@@ -230,6 +230,14 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case TimestampNTZType =>
         wrapperConvertException(data => DateTimeUtils.stringToTimestampWithoutTimeZone(
           UTF8String.fromString(data)).map(DateTimeUtils.microsToLocalDateTime).orNull, converter)
+      // The nanos parsers already produce the internal TimestampNanosVal, so pass it through.
+      case TimestampNTZNanosType(precision) =>
+        wrapperConvertException(data => DateTimeUtils.stringToTimestampNTZNanos(
+          UTF8String.fromString(data), precision).orNull, any => any)
+      case TimestampLTZNanosType(precision) =>
+        wrapperConvertException(data => DateTimeUtils.stringToTimestampLTZNanos(
+          UTF8String.fromString(data), precision,
+          DateTimeUtils.getZoneId(conf.sessionLocalTimeZone)).orNull, any => any)
       case CalendarIntervalType => wrapperConvertException(
         data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
         converter)
