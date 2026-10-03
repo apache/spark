@@ -45,7 +45,7 @@ import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, Clock, ManualClock, SystemClock}
+import org.apache.spark.util.{AccumulatorV2, Clock, ManualClock, SparkExitCode, SystemClock}
 import org.apache.spark.util.ArrayImplicits._
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
@@ -703,6 +703,85 @@ class TaskSetManagerSuite
     manager.executorLost(
       "execC", "host2", ExecutorExited(1, true, "Terminated due to issue with running tasks"))
     assert(sched.taskSetsFailed.contains(taskSet.id))
+  }
+
+  test("OOM retries use structured executor loss reasons") {
+    val conf = new SparkConf().set(config.SCHEDULER_OOM_RETRY_ENABLED, true)
+    sc = new SparkContext("local", "test", conf)
+    val clock = new ManualClock(1)
+    sched = new FakeTaskScheduler(sc, clock)
+    val containerOom = ExecutorExited(137, exitCausedByApp = true)
+    containerOom.isOutOfMemoryError = true
+    val reasons = Seq(
+      (ExecutorExited(SparkExitCode.OOM, exitCausedByApp = true), true),
+      (containerOom, true),
+      (ExecutorExited(137, exitCausedByApp = true), false),
+      (ExecutorExited(SparkExitCode.OOM, exitCausedByApp = false), false))
+
+    for (((reason, expectedOom), stageId) <- reasons.zipWithIndex) {
+      withClue(s"executor loss $reason: ") {
+        val execId = s"exec$stageId"
+        sched.addExecutor(execId, "host1")
+        val manager = new TaskSetManager(sched,
+          FakeTask.createTaskSet(1, stageId, stageAttemptId = 0),
+          MAX_TASK_FAILURES, clock = clock)
+        val task = manager.resourceOffer(execId, "host1", ANY)._1.get
+        manager.taskInfos(task.taskId).launchSucceeded()
+        sched.removeExecutor(execId)
+        manager.executorLost(execId, "host1", reason)
+
+        val failure = sched.endedTasks(task.index).asInstanceOf[ExecutorLostFailure]
+        assert(failure.isOutOfMemoryError === expectedOom)
+        assert(manager.isPendingOomRetry(task.index) === expectedOom)
+        assert(!manager.oomRetryNeedsIsolation(task.index))
+      }
+    }
+  }
+
+  for (exceptionFirst <- Seq(true, false)) {
+    test(s"OOM retries count each failed attempt once (exception first: $exceptionFirst)") {
+      val conf = new SparkConf().set(config.SCHEDULER_OOM_RETRY_ENABLED, true)
+      sc = new SparkContext("local", "test", conf)
+      val clock = new ManualClock(1)
+      sched = new FakeTaskScheduler(sc, clock, ("exec1", "host1"), ("exec2", "host2"))
+      val manager = new TaskSetManager(
+        sched, FakeTask.createTaskSet(2), MAX_TASK_FAILURES, clock = clock)
+      val first = manager.resourceOffer("exec1", "host1", ANY)._1.get
+      manager.taskInfos(first.taskId).launchSucceeded()
+      val failure = new ExceptionFailure(
+        new RuntimeException("spill failed", new OutOfMemoryError("heap")), Nil)
+
+      def loseExecutor(): Unit = {
+        sched.removeExecutor("exec1")
+        manager.executorLost("exec1", "host1",
+          ExecutorExited(SparkExitCode.OOM, exitCausedByApp = true))
+      }
+
+      if (exceptionFirst) {
+        manager.handleFailedTask(first.taskId, TaskState.FAILED, failure)
+        loseExecutor()
+      } else {
+        loseExecutor()
+        manager.handleFailedTask(first.taskId, TaskState.FAILED, failure)
+      }
+      assert(manager.isPendingOomRetry(first.index))
+      assert(!manager.oomRetryNeedsIsolation(first.index))
+      assert(manager.copiesRunning(first.index) === 0)
+
+      val second = manager.resourceOffer("exec2", "host2", ANY)._1.get
+      assert(second.index === first.index)
+      manager.taskInfos(second.taskId).launchSucceeded()
+      manager.handleFailedTask(second.taskId, TaskState.FAILED, failure)
+      assert(manager.isPendingOomRetry(first.index))
+      assert(manager.oomRetryNeedsIsolation(first.index))
+
+      val third = manager.resourceOfferOomRetry(
+        first.index, "exec2", "host2", taskCpus = 1, taskResources = Map.empty).get
+      manager.handleSuccessfulTask(third.taskId, createTaskResult(0))
+      assert(manager.successful(first.index))
+      assert(!manager.isPendingOomRetry(first.index))
+      assert(!manager.oomRetryNeedsIsolation(first.index))
+    }
   }
 
   test("SPARK-31837: Shift to the new highest locality level if there is when recomputeLocality") {
@@ -3072,6 +3151,21 @@ class TaskSetManagerSuite
     manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
     assert(sched.taskSetsFailed.contains(taskSet.id),
       "a pipelined task set must abort after the first task failure")
+  }
+
+  test("OOM recovery does not retry individual tasks in a pipelined task set") {
+    sc = new SparkContext(new SparkConf().setMaster("local").setAppName("test")
+      .set(config.SCHEDULER_OOM_RETRY_ENABLED, true))
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = pipelinedTaskSet()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+    val task = manager.resourceOffer("exec1", "host1", ANY)._1.get
+
+    manager.handleFailedTask(task.taskId, TaskState.FAILED,
+      new ExceptionFailure(new OutOfMemoryError("test OOM"), Nil))
+
+    assert(sched.taskSetsFailed.contains(taskSet.id))
+    assert(manager.pendingOomRetries.isEmpty)
   }
 
   test("pipelined task set counts an executor-loss failure that would normally be uncounted") {

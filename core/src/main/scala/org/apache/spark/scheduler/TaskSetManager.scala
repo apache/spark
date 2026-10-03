@@ -135,6 +135,29 @@ private[spark] class TaskSetManager(
   val successful = new Array[Boolean](numTasks)
   private val numFailures = new Array[Int](numTasks)
 
+  // Sparse state for OOM-affected partitions: failure count and time of the latest OOM. The
+  // deadline also bounds retries waiting behind another task's executor reservation.
+  private val oomRetries = new HashMap[Int, (Int, Long)]
+
+  private[scheduler] def isPendingOomRetry(index: Int): Boolean = {
+    !isZombie && oomRetries.contains(index) && !successful(index) && copiesRunning(index) == 0
+  }
+
+  private[scheduler] def pendingOomRetries: Seq[Int] = {
+    oomRetries.keysIterator.filter(isPendingOomRetry).toSeq.sorted
+  }
+
+  private[scheduler] def oomRetryNeedsIsolation(index: Int): Boolean = {
+    oomRetryIsolationTimeRemaining(index) > 0
+  }
+
+  private[scheduler] def oomRetryIsolationTimeRemaining(index: Int): Long = {
+    if (!sched.oomRetryEnabled) return 0L
+    oomRetries.get(index).collect { case (failures, failedAt) if failures >= 2 =>
+      sched.oomRetryIsolationTimeoutMs - (clock.getTimeMillis() - failedAt)
+    }.getOrElse(0L)
+  }
+
   // Add the tid of task into this HashSet when the task is killed by other attempt tasks.
   // This happened while we set the `spark.speculation` to true. The task killed by others
   // should not resubmit while executor lost.
@@ -345,7 +368,8 @@ private[spark] class TaskSetManager(
       indexOffset -= 1
       val index = list(indexOffset)
       if (!isTaskExcludededOnExecOrNode(index, execId, host) &&
-          !(speculative && hasAttemptOnHost(index, host))) {
+          !(speculative && (hasAttemptOnHost(index, host) || oomRetries.contains(index))) &&
+          !oomRetryNeedsIsolation(index)) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
         // Speculatable task should only be launched when at most one copy of the
@@ -371,6 +395,34 @@ private[spark] class TaskSetManager(
     taskSetExcludelistHelperOpt.exists { excludeList =>
       excludeList.isNodeExcludedForTask(host, index) ||
         excludeList.isExecutorExcludedForTask(execId, index)
+    }
+  }
+
+  private def isOfferExcluded(execId: String, host: String): Boolean = {
+    taskSetExcludelistHelperOpt.exists { excludeList =>
+      excludeList.isNodeExcludedForTaskSet(host) ||
+        excludeList.isExecutorExcludedForTaskSet(execId)
+    }
+  }
+
+  private[scheduler] def canRunOomRetry(index: Int, execId: String, host: String): Boolean = {
+    isPendingOomRetry(index) && !isOfferExcluded(execId, host) &&
+      !isTaskExcludededOnExecOrNode(index, execId, host)
+  }
+
+  /** OOM recovery favors memory headroom over preferred locations, without changing task CPUs. */
+  private[scheduler] def resourceOfferOomRetry(
+      index: Int,
+      execId: String,
+      host: String,
+      taskCpus: BigDecimal,
+      taskResources: Map[String, Map[String, Long]]): Option[TaskDescription] = {
+    if (canRunOomRetry(index, execId, host)) {
+      // Other pending-task lists are cleaned lazily, just as for the ordinary dequeue path.
+      Some(prepareLaunchingTask(execId, host, index, TaskLocality.ANY, false,
+        taskCpus, taskResources, clock.getTimeMillis()))
+    } else {
+      None
     }
   }
 
@@ -476,11 +528,7 @@ private[spark] class TaskSetManager(
       taskResourceAssignments: Map[String, Map[String, Long]] = Map.empty)
     : (Option[TaskDescription], Boolean, Int) =
   {
-    val offerExcluded = taskSetExcludelistHelperOpt.exists { excludeList =>
-      excludeList.isNodeExcludedForTaskSet(host) ||
-        excludeList.isExecutorExcludedForTaskSet(execId)
-    }
-    if (!isZombie && !offerExcluded) {
+    if (!isZombie && !isOfferExcluded(execId, host)) {
       val curTime = clock.getTimeMillis()
 
       var allowedLocality = maxLocality
@@ -885,6 +933,7 @@ private[spark] class TaskSetManager(
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       numFailures(index) = 0
+      oomRetries.remove(index)
       if (tasksSuccessful == numTasks) {
         isZombie = true
       }
@@ -977,6 +1026,7 @@ private[spark] class TaskSetManager(
         tasksSuccessful += 1
         successful(index) = true
         numFailures(index) = 0
+        oomRetries.remove(index)
         if (tasksSuccessful == numTasks) {
           isZombie = true
         }
@@ -1005,6 +1055,17 @@ private[spark] class TaskSetManager(
     info.markFinished(state, clock.getTimeMillis())
     val index = info.index
     copiesRunning(index) -= 1
+    val isOom = reason match {
+      case e: ExceptionFailure => e.isOutOfMemoryError
+      case e: ExecutorLostFailure => e.exitCausedByApp && e.isOutOfMemoryError
+      case _ => false
+    }
+    if (sched.oomRetryEnabled && !isBarrier && !taskSet.isPipelined &&
+        !successful(index) && isOom) {
+      val failures = oomRetries.get(index).map(_._1).getOrElse(0) + 1
+      oomRetries(index) = (failures, clock.getTimeMillis())
+      speculatableTasks -= index
+    }
     var accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty
     var metricPeaks: Array[Long] = Array.empty
     val failureReason = log"Lost ${MDC(TASK_NAME, taskName(tid))} " +
@@ -1291,8 +1352,12 @@ private[spark] class TaskSetManager(
           // that the task is not running, and it is NetworkFailure rather than TaskFailure.
           case _ => !info.launching
         }
-        handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId,
-          exitCausedByApp, Some(reason.toString)))
+        val failure = ExecutorLostFailure(info.executorId, exitCausedByApp, Some(reason.toString))
+        failure.isOutOfMemoryError = exitCausedByApp && (reason match {
+          case e: ExecutorExited => e.isOutOfMemoryError
+          case _ => false
+        })
+        handleFailedTask(tid, TaskState.FAILED, failure)
       }
     }
     // recalculate valid locality levels and waits when executor is lost
@@ -1311,7 +1376,8 @@ private[spark] class TaskSetManager(
     for (tid <- runningTasksSet) {
       val info = taskInfos(tid)
       val index = info.index
-      if (!successful(index) && copiesRunning(index) == 1 && !speculatableTasks.contains(index)) {
+      if (!successful(index) && copiesRunning(index) == 1 && !speculatableTasks.contains(index) &&
+          !oomRetries.contains(index)) {
         val runtimeMs = info.timeRunning(currentTimeMillis)
 
         def checkMaySpeculate(): Boolean = {
