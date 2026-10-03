@@ -5221,6 +5221,11 @@
           "<sparkSubmitDeployModeKey> can only be \"cluster\" or \"client\"."
         ]
       },
+      "MISSING_IN_PROCESS_PYTHON_PLUGIN" : {
+        "message" : [
+          "In-process Python UDFs require <plugin>, or a subclass of it, in spark.plugins. Install JEP and Arrow CDI on executors and configure the plugin before starting Spark."
+        ]
+      },
       "NETWORK_AUTH_MUST_BE_ENABLED" : {
         "message" : [
           "<networkAuthEnabledConf> must be enabled when enabling encryption."
@@ -5239,6 +5244,11 @@
       "RESERVED_PYTHON_WORKER_ENV_VAR_NAME" : {
         "message" : [
           "The environment variable name <name>, set under <prefix>, is reserved for Spark. Names beginning with <reservedPrefixes>, and the names <reservedNames>, are set by Spark for its own Python workers and cannot be set by a session."
+        ]
+      },
+      "UNSUPPORTED_IN_PROCESS_PYTHON_UDF" : {
+        "message" : [
+          "In-process Python UDFs do not support <config>. Unset this configuration or use Python worker UDFs."
         ]
       }
     },

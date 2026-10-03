@@ -21,6 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkException
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
@@ -1674,7 +1675,8 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       // Extend the set of types with the new types found in the current project node
       case p: Project =>
         pythonUDFEvalTypesInUpperProjects ++ p.projectList.flatMap(_.collect {
-          case udf: PythonUDF if isScalarPythonUDF(udf) =>
+          case udf: PythonUDF if isScalarPythonUDF(udf) &&
+              udf.evalType != PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF =>
             correctEvalType(udf, pythonUDFArrowFallbackOnUDT)
         }).toSet
 
