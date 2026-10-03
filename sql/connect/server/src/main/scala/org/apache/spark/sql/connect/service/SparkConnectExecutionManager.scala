@@ -18,14 +18,16 @@
 package org.apache.spark.sql.connect.service
 
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, Executors, ScheduledExecutorService, TimeUnit}
-import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, Executor, Executors, Semaphore}
+import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.common.cache.CacheBuilder
+import io.grpc.{Context, Status}
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
@@ -33,7 +35,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.connect.IllegalStateErrors
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE, CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT, CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE, CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT, CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL, CONNECT_EXECUTE_MAX_CONCURRENT_QUERIES, CONNECT_EXECUTE_MAX_CONCURRENT_QUERIES_TIMEOUT}
 import org.apache.spark.sql.connect.execution.ExecuteGrpcResponseSender
 import org.apache.spark.sql.connect.planner.InvalidInputErrors
 import org.apache.spark.util.ThreadUtils
@@ -60,12 +62,46 @@ object ExecuteKey {
 }
 
 /**
+ * Marker trait for exceptions that should be surfaced to the client as retryable. When an error
+ * carrying this trait is converted to a gRPC status, a `google.rpc.RetryInfo` detail is attached
+ * so that Spark Connect clients transparently re-submit the request. See
+ * `ErrorUtils.buildStatusFromThrowable`.
+ */
+private[connect] trait RetryableGrpcError { self: Throwable => }
+
+/**
+ * Thrown when a query cannot acquire an execution slot within
+ * `spark.connect.execute.maxConcurrentQueries.timeout` while the concurrency limit is reached. It
+ * is retryable: the client re-submits the request, re-joining the FIFO wait queue.
+ */
+private[connect] class SparkConnectConcurrentExecutionsTimeoutException(
+    limit: Int,
+    timeout: String)
+    extends SparkSQLException(
+      errorClass = "CONNECT.EXECUTE_CONCURRENT_LIMIT_TIMEOUT",
+      messageParameters = Map("limit" -> limit.toString, "timeout" -> timeout))
+    with RetryableGrpcError
+
+/** A semaphore permit that can be released at most once. */
+private[connect] class ExecutionPermit(private val semaphore: Semaphore) {
+  private val released = new AtomicBoolean(false)
+
+  def release(): Unit = {
+    if (released.compareAndSet(false, true)) {
+      semaphore.release()
+    }
+  }
+}
+
+/**
  * Global tracker of all ExecuteHolder executions.
  *
  * All ExecuteHolders are created, and removed through it. It keeps track of all the executions,
  * and removes executions that have been abandoned.
  */
 private[connect] class SparkConnectExecutionManager() extends Logging {
+
+  private var acceptingExecutions = true
 
   /** Concurrent hash table containing all the current executions. */
   private val executions: ConcurrentMap[ExecuteKey, ExecuteHolder] =
@@ -84,13 +120,131 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   private val scheduledExecutor: AtomicReference[ScheduledExecutorService] =
     new AtomicReference[ScheduledExecutorService]()
 
+  /** Configured maximum number of concurrent executions (<= 0 means unlimited). */
+  private val maxConcurrentQueries: Int =
+    SparkEnv.get.conf.get(CONNECT_EXECUTE_MAX_CONCURRENT_QUERIES)
+
+  /**
+   * Time in milliseconds a query waits for an execution slot before giving up with a retryable
+   * error. 0 means wait indefinitely. Only relevant when the concurrency limit is enabled.
+   */
+  private val acquireTimeoutMs: Long =
+    SparkEnv.get.conf.get(CONNECT_EXECUTE_MAX_CONCURRENT_QUERIES_TIMEOUT)
+
+  /**
+   * Semaphore to control the maximum number of concurrent executions. When maxConcurrentQueries >
+   * 0, this semaphore limits concurrent executions. Acquiring a permit means an execution slot is
+   * available. The semaphore is fair so that, up to the acquire timeout, waiters are served in
+   * FIFO order.
+   */
+  private val executionSemaphore =
+    new Semaphore(if (maxConcurrentQueries > 0) maxConcurrentQueries else Int.MaxValue, true)
+
+  private val directExecutor: Executor = (command: Runnable) => command.run()
+
+  locally {
+    logInfo(
+      log"Spark Connect execution semaphore initialized with maxConcurrentQueries=" +
+        log"${MDC(LogKeys.MAX_SLOTS, maxConcurrentQueries)} " +
+        log"(${MDC(LogKeys.NUM_SLOTS, getAvailableExecutionSlots)} permits)")
+  }
+
+  /**
+   * Get the current number of permits available in the execution semaphore. Exposed for testing.
+   */
+  private[connect] def getAvailableExecutionSlots: Int = {
+    executionSemaphore.availablePermits()
+  }
+
+  /** Get the approximate number of queries waiting for an execution slot. Exposed for testing. */
+  private[connect] def getExecutionQueueLength: Int = {
+    executionSemaphore.getQueueLength
+  }
+
+  /**
+   * Acquire a permit from the execution semaphore before starting a new execution. Waiters are
+   * served in FIFO order. If `acquireTimeoutMs` is 0, this blocks until a slot is available.
+   * Otherwise it waits at most that long and, on timeout, throws a retryable
+   * [[SparkConnectConcurrentExecutionsTimeoutException]] so the client re-submits the request.
+   */
+  private[connect] def acquireExecutionSlot(): ExecutionPermit = {
+    val availableBefore = executionSemaphore.availablePermits()
+    if (availableBefore == 0) {
+      val queueLength = executionSemaphore.getQueueLength
+      logInfo(
+        log"All execution slots are in use. Query will wait in queue. " +
+          log"Queue length: ${MDC(LogKeys.THREAD_POOL_WAIT_QUEUE_SIZE, queueLength)}")
+    }
+
+    val grpcContext = Context.current()
+    if (grpcContext.isCancelled) {
+      throw cancelledException()
+    }
+
+    val waitingThread = Thread.currentThread()
+    val cancellationListener: Context.CancellationListener =
+      (_: Context) => waitingThread.interrupt()
+    grpcContext.addListener(cancellationListener, directExecutor)
+
+    var acquired = false
+    try {
+      acquired = if (acquireTimeoutMs > 0) {
+        executionSemaphore.tryAcquire(acquireTimeoutMs, TimeUnit.MILLISECONDS)
+      } else {
+        executionSemaphore.acquire()
+        true
+      }
+    } catch {
+      case _: InterruptedException if grpcContext.isCancelled =>
+        Thread.interrupted()
+        throw cancelledException()
+      case e: InterruptedException =>
+        Thread.currentThread().interrupt()
+        throw e
+    } finally {
+      grpcContext.removeListener(cancellationListener)
+    }
+
+    if (grpcContext.isCancelled) {
+      if (acquired) {
+        executionSemaphore.release()
+      }
+      Thread.interrupted()
+      throw cancelledException()
+    }
+
+    if (!acquired) {
+      logInfo(
+        log"Query gave up waiting for an execution slot after " +
+          log"${MDC(LogKeys.TIMEOUT, acquireTimeoutMs)} ms and will be asked to retry.")
+      throw new SparkConnectConcurrentExecutionsTimeoutException(
+        maxConcurrentQueries,
+        s"$acquireTimeoutMs ms")
+    }
+
+    if (availableBefore == 0) {
+      logInfo(log"Query acquired execution slot and will start")
+    }
+    new ExecutionPermit(executionSemaphore)
+  }
+
+  private def cancelledException() = {
+    Status.CANCELLED
+      .withDescription("ExecutePlan RPC was cancelled while queued")
+      .asRuntimeException()
+  }
+
+  private def serviceUnavailableException() =
+    Status.UNAVAILABLE.withDescription("Spark Connect service is stopping").asRuntimeException()
+
   /**
    * Create a new ExecuteHolder and register it with this global manager and with its session.
    */
   private[connect] def createExecuteHolder(
       executeKey: ExecuteKey,
       request: proto.ExecutePlanRequest,
-      sessionHolder: SessionHolder): ExecuteHolder = {
+      sessionHolder: SessionHolder,
+      executionPermit: Option[ExecutionPermit] = None): ExecuteHolder = {
     val opId = executeKey.operationId
     val executeHolder = executions.compute(
       executeKey,
@@ -118,7 +272,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
             errorClass = "INVALID_HANDLE.OPERATION_ABANDONED",
             messageParameters = Map("handle" -> opId))
         }
-        new ExecuteHolder(executeKey, request, sessionHolder)
+        new ExecuteHolder(executeKey, request, sessionHolder, executionPermit)
       })
 
     sessionHolder.addOperationId(opId)
@@ -149,31 +303,40 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
    * execution if still running, free all resources.
    */
   private[connect] def removeExecuteHolder(key: ExecuteKey, abandoned: Boolean = false): Unit = {
-    val executeHolder = executions.get(key)
+    var removedHolder: ExecuteHolder = null
+    executions.computeIfPresent(
+      key,
+      (_, executeHolder) => {
+        // Put into abandonedTombstones before removing it from executions, so that the client ends
+        // up getting an INVALID_HANDLE.OPERATION_ABANDONED error on a retry.
+        if (abandoned) {
+          abandonedTombstones.put(key, executeHolder.getExecuteInfo)
+          executeHolder.sessionHolder.closeOperation(executeHolder)
+        }
+        removedHolder = executeHolder
+        null
+      })
 
-    if (executeHolder == null) {
+    if (removedHolder == null) {
       return
     }
+    val executeHolder = removedHolder
 
-    // Put into abandonedTombstones before removing it from executions, so that the client ends up
-    // getting an INVALID_HANDLE.OPERATION_ABANDONED error on a retry.
-    if (abandoned) {
-      abandonedTombstones.put(key, executeHolder.getExecuteInfo)
+    try {
       executeHolder.sessionHolder.closeOperation(executeHolder)
-    }
+      updateLastExecutionTime()
+      logInfo(log"ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, key)} is removed.")
+      executeHolder.close()
 
-    // Remove the execution from the map *after* putting it in abandonedTombstones.
-    executions.remove(key)
-    executeHolder.sessionHolder.closeOperation(executeHolder)
-
-    updateLastExecutionTime()
-
-    logInfo(log"ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, key)} is removed.")
-
-    executeHolder.close()
-    if (abandoned) {
-      // Update in abandonedTombstones: above it wasn't yet updated with closedTime etc.
-      abandonedTombstones.put(key, executeHolder.getExecuteInfo)
+      if (abandoned) {
+        // Update in abandonedTombstones: above it wasn't yet updated with closedTime etc.
+        abandonedTombstones.put(key, executeHolder.getExecuteInfo)
+      }
+    } finally {
+      executeHolder.releaseExecutionPermit()
+      logDebug(
+        log"Execution slot released. Available slots: " +
+          log"${MDC(LogKeys.NUM_SLOTS, getAvailableExecutionSlots)}")
     }
   }
 
@@ -190,7 +353,24 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       request: proto.ExecutePlanRequest,
       sessionHolder: SessionHolder,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): ExecuteHolder = {
-    val executeHolder = createExecuteHolder(executeKey, request, sessionHolder)
+    // Acquire a slot from the semaphore before starting execution.
+    // This blocks if max concurrent queries limit is reached.
+    val executionPermit = acquireExecutionSlot()
+
+    val executeHolder =
+      try {
+        synchronized {
+          if (!acceptingExecutions) {
+            throw serviceUnavailableException()
+          }
+          createExecuteHolder(executeKey, request, sessionHolder, Some(executionPermit))
+        }
+      } catch {
+        case t: Throwable =>
+          executionPermit.release()
+          throw t
+      }
+
     try {
       // SPARK-53339: Validate the plan before starting the execution thread.
       // postStarted() was moved into executeInternal(), so invalid plans that previously
@@ -288,16 +468,23 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   }
 
   private[connect] def shutdown(): Unit = {
+    synchronized {
+      acceptingExecutions = false
+    }
+
     val executor = scheduledExecutor.getAndSet(null)
     if (executor != null) {
       ThreadUtils.shutdown(executor, FiniteDuration(1, TimeUnit.MINUTES))
     }
 
-    // note: this does not cleanly shut down the executions, but the server is shutting down.
-    executions.clear()
+    executions.keySet().asScala.foreach(key => removeExecuteHolder(key))
     abandonedTombstones.invalidateAll()
 
     updateLastExecutionTime()
+  }
+
+  private[connect] def start(): Unit = synchronized {
+    acceptingExecutions = true
   }
 
   /**

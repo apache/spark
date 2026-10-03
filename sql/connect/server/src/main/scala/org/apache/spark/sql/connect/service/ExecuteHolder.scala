@@ -39,7 +39,8 @@ import org.apache.spark.util.SystemClock
 private[connect] class ExecuteHolder(
     val executeKey: ExecuteKey,
     val request: proto.ExecutePlanRequest,
-    val sessionHolder: SessionHolder)
+    val sessionHolder: SessionHolder,
+    private val executionPermit: Option[ExecutionPermit] = None)
     extends Logging {
 
   val session = sessionHolder.session
@@ -341,6 +342,11 @@ private[connect] class ExecuteHolder(
 
   /** Get key used by SparkConnectExecutionManager global tracker. */
   def key: ExecuteKey = executeKey
+
+  /** Release the execution permit, if this holder owns one. */
+  private[connect] def releaseExecutionPermit(): Unit = {
+    executionPermit.foreach(_.release())
+  }
 
   /** Get the operation ID. */
   def operationId: String = key.operationId
