@@ -45,8 +45,9 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, RealTimeTrigger, Sink, Source, StreamingQueryPlanTraverseHelper}
-import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CheckpointVersionManager, CommitLog, CommitLogType, CommitMetadataV3, OffsetLogType, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2, SinkMetadataInfo}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CheckpointVersionManager, CommitLog, CommitLogType, CommitMetadataV3, OffsetLogType, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase, OffsetSeqMetadataV2, SinkMetadataInfo}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
@@ -55,7 +56,7 @@ import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.PartitionOffsetWithIndex
 import org.apache.spark.sql.streaming.Trigger
-import org.apache.spark.util.{Clock, ErrorNotifier, Utils}
+import org.apache.spark.util.{Clock, ErrorNotifier, SerializableConfiguration, Utils}
 
 class MicroBatchExecution(
     sparkSession: SparkSession,
@@ -825,9 +826,15 @@ class MicroBatchExecution(
 
         // update offset metadata
         nextOffsets.metadataOpt.foreach { metadata =>
-          OffsetSeqMetadata.setSessionConf(metadata, sparkSessionToRunBatches.sessionState.conf)
+          val committedBatchId = commitLog.getLatestBatchId().getOrElse(-1L)
+          val metadataWithRecoveredPartitions = recoverStatefulShufflePartitions(
+            metadata, sparkSessionToRunBatches, committedBatchId)
+          OffsetSeqMetadata.setSessionConf(
+            metadataWithRecoveredPartitions, sparkSessionToRunBatches.sessionState.conf)
           execCtx.offsetSeqMetadata = OffsetSeqMetadata(
-            metadata.batchWatermarkMs, metadata.batchTimestampMs, sparkSessionToRunBatches.conf)
+            metadataWithRecoveredPartitions.batchWatermarkMs,
+            metadataWithRecoveredPartitions.batchTimestampMs,
+            sparkSessionToRunBatches.conf)
           watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf, logicalPlan)
           watermarkTracker.setWatermark(metadata.batchWatermarkMs)
         }
@@ -896,6 +903,42 @@ class MicroBatchExecution(
         logInfo(s"Starting new streaming query.")
         execCtx.batchId = 0
         watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf, logicalPlan)
+    }
+  }
+
+  private def recoverStatefulShufflePartitions(
+      metadata: OffsetSeqMetadataBase,
+      sparkSessionToRunBatches: SparkSession,
+      committedBatchId: Long): OffsetSeqMetadataBase = {
+    if (metadata.version != OffsetSeqLog.VERSION_2 ||
+        OffsetSeqMetadata.readValueOpt(
+          metadata, SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL).isDefined ||
+        committedBatchId < 0) {
+      metadata
+    } else {
+      metadata match {
+        case v2: OffsetSeqMetadataV2 =>
+          try {
+            val stateMetadataReader = new StateMetadataPartitionReader(
+              new Path(checkpointFile("state")).getParent.toString,
+              new SerializableConfiguration(sparkSessionToRunBatches.sessionState.newHadoopConf()),
+              committedBatchId)
+            stateMetadataReader.stateStoreNumPartitions.map { numPartitions =>
+              logWarning(log"Recovered state-store partition count " +
+                log"${MDC(CONFIG, SQLConf.SHUFFLE_PARTITIONS.key)}=" +
+                log"${MDC(NUM_PARTITIONS, numPartitions)} " +
+                log"from checkpoint state metadata because it was missing from the offset log")
+              OffsetSeqMetadata.withStatefulShufflePartitions(v2, numPartitions)
+            }.getOrElse(metadata)
+          } catch {
+            case NonFatal(e) =>
+              logWarning(log"Failed to recover state-store partition count from checkpoint " +
+                log"${MDC(ERROR, e.getMessage)}")
+              metadata
+          }
+        case _ =>
+          metadata
+      }
     }
   }
 
