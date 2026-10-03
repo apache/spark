@@ -21,6 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
@@ -412,9 +413,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
           val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
           Some(cd.copy(plan = newKey, cachedRepresentation = newCache))
         } catch {
-          // Re-caching follows the command that invalidated the entry, e.g. a committed write.
-          // Planning the entry in this session can fail; drop it rather than fail the command.
-          case NonFatal(e) =>
+          // Re-caching follows the command that invalidated the entry, e.g. a committed write,
+          // and plans the entry in that command's session. In-process Python UDFs check that
+          // session's configuration while planning; if it rejects them, drop the entry rather
+          // than fail a command whose work is done. Other failures still propagate.
+          case e: SparkException
+              if CacheManager.RecacheConfigurationErrors.contains(e.getCondition) =>
             logWarning(log"Failed to rebuild the cache entry while attempting to recache", e)
             None
         }
@@ -709,6 +713,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 }
 
 object CacheManager extends Logging {
+  private val RecacheConfigurationErrors = Set(
+    "INVALID_SPARK_CONFIG.UNSUPPORTED_IN_PROCESS_PYTHON_UDF",
+    "INVALID_SPARK_CONFIG.MISSING_IN_PROCESS_PYTHON_PLUGIN")
+
   def logCacheOperation(f: => MessageWithContext): Unit = {
     logBasedOnLevel(SQLConf.get.dataframeCacheLogLevel)(f)
   }
