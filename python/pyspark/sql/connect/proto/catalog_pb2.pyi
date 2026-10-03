@@ -1126,9 +1126,29 @@ class ClearCache(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    ALL_SESSIONS_FIELD_NUMBER: builtins.int
+    all_sessions: builtins.bool
+    """(Optional) Whether to clear cached data across all sessions. Defaults to true when omitted."""
     def __init__(
         self,
+        *,
+        all_sessions: builtins.bool | None = ...,
     ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_all_sessions", b"_all_sessions", "all_sessions", b"all_sessions"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_all_sessions", b"_all_sessions", "all_sessions", b"all_sessions"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_all_sessions", b"_all_sessions"]
+    ) -> typing_extensions.Literal["all_sessions"] | None: ...
 
 global___ClearCache = ClearCache
 
