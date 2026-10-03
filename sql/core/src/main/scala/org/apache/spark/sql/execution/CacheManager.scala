@@ -115,7 +115,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       storageLevel: StorageLevel): Unit = {
     cacheQueryInternal(
       query.sparkSession,
-      query.queryExecution.analyzed,
+      // Use the result plan, not `analyzed`: for a CALL the analyzed plan is the empty-output
+      // `Call` node, and caching it would re-run the procedure (a second invocation) when the
+      // cache is materialized. `resultLogicalPlan` is the already-executed `CommandResult`
+      // holding the rows, mirroring how `DataFrameWriter` reads a CALL's result.
+      query.queryExecution.resultLogicalPlan,
       query.queryExecution.normalized,
       tableName,
       storageLevel

@@ -231,7 +231,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
                 UnresolvedIdentifier(
                   catalog.name +: ident.namespace.toImmutableArraySeq :+ ident.name),
                 partitioningAsV2,
-                df.queryExecution.analyzed,
+                df.queryExecution.resultLogicalPlan,
                 tableSpec,
                 finalOptions,
                 ignoreIfExists = createMode == SaveMode.Ignore)
@@ -538,7 +538,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
         ReplaceTableAsSelect(
           UnresolvedIdentifier(nameParts),
           partitioningAsV2,
-          df.queryExecution.analyzed,
+          df.queryExecution.resultLogicalPlan,
           tableSpec,
           writeOptions = writeOptions.toMap,
           orCreate = true) // Create the table if it doesn't exist
@@ -564,7 +564,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
         CreateTableAsSelect(
           UnresolvedIdentifier(nameParts),
           partitioningAsV2,
-          df.queryExecution.analyzed,
+          df.queryExecution.resultLogicalPlan,
           tableSpec,
           writeOptions = extraOptions.toMap,
           other == SaveMode.Ignore)

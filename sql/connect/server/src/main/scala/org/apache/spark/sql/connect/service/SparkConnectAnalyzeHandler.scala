@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.BYTE_SIZE
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Call, LogicalPlan}
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
@@ -89,7 +89,12 @@ private[connect] class SparkConnectAnalyzeHandler(
 
     def getDataFrameWithoutExecuting(rel: LogicalPlan): DataFrame = {
       val qe = session.sessionState.executePlan(rel, CommandExecutionMode.SKIP)
-      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
+      /*
+       * Command execution is skipped here, so a CALL is left unexecuted and its result schema is
+       * empty (a procedure's columns are known only after it runs). Executing spark.sql("CALL ...")
+       * goes through the command path instead and does report the real schema.
+       */
+      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.resultSchema))
     }
 
     request.getAnalyzeCase match {
@@ -102,7 +107,10 @@ private[connect] class SparkConnectAnalyzeHandler(
             .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
             .build())
       case proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN =>
+        // Stage any CALL so EXPLAIN renders it without invoking the procedure, as
+        // ExplainCommand does: a runnable `Call` is planned to CallExec, which runs it.
         val rel = transformRelationPlan(request.getExplain.getPlan)
+          .transform { case c: Call => c.copy(execute = false) }
         val queryExecution = getDataFrameWithoutExecuting(rel).queryExecution
         val explainString = request.getExplain.getExplainMode match {
           case proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE =>

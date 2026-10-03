@@ -55,7 +55,10 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
 
-  private val logicalPlan = df.queryExecution.logical
+  // Use the executed result plan, not `logical`: for a CALL the source is the empty-output `Call`
+  // node until it runs, so V2 writes must read the already-executed `CommandResult` (matching
+  // DataFrameWriter). For every other source this is the analyzed plan.
+  private val logicalPlan = df.queryExecution.resultLogicalPlan
 
   private var provider: Option[String] = None
 
