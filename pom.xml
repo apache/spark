@@ -3049,6 +3049,11 @@
                 <head>Note:</head>
               </tag>
               <tag>
+                <name>implNote</name>
+                <placement>a</placement>
+                <head>Implementation Note:</head>
+              </tag>
+              <tag>
                 <name>group</name>
                 <placement>X</placement>
               </tag>

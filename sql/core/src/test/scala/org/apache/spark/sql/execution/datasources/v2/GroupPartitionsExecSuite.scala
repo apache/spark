@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, Literal, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyReducer, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, DaysFunctionWithToYearsReducerWithLongResult, DaysToYearsReducerWithLongResult, Reducer, YearsFunctionWithToYearsReducerWithLongResult}
@@ -76,8 +76,8 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // This node re-reports the child's expressions, projected to `joinKeyPositions`. A reduce that
     // happened below it has to survive that, or a further join above reads the reported transform
     // as if it still described the keys.
-    val reducedExpr = TransformExpression(BucketFunction, Seq(exprA), Some(12))
-      .reducedTogetherWith(TransformExpression(BucketFunction, Seq(exprA), Some(8)))
+    val reducedExpr = TransformExpression(BucketFunction, Seq(Literal(12), exprA))
+      .reducedTogetherWith(TransformExpression(BucketFunction, Seq(Literal(8), exprA)))
     val child = DummySparkPlan(outputPartitioning =
       KeyedPartitioning(Seq(reducedExpr, exprB), Seq(row(1, 10), row(2, 20), row(1, 30))))
     val gpe = GroupPartitionsExec(child, joinKeyPositions = Some(Seq(0)))
@@ -93,7 +93,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // Same for a node that reduces the other position. The position it does not reduce passes
     // through, marker and all.
     val reducingGpe = GroupPartitionsExec(child, reducers = Some(Seq(None, Some(
-      KeyReducer(BucketReducer(2), TransformExpression(BucketFunction, Seq(exprB), Some(2)))))))
+      KeyReducer(BucketReducer(2), TransformExpression(BucketFunction, Seq(Literal(2), exprB)))))))
     reducingGpe.outputPartitioning match {
       case kp: KeyedPartitioning =>
         assert(kp.expressions.head === reducedExpr, "the unreduced position keeps its marker")
@@ -331,7 +331,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       override def resultType(): DataType = IntegerType
       override def displayName(): String = "mod2"
     }
-    val reducer = KeyReducer(mod2, TransformExpression(BucketFunction, Seq(exprA), Some(2)))
+    val reducer = KeyReducer(mod2, TransformExpression(BucketFunction, Seq(Literal(2), exprA)))
     val partitionKeys = Seq(row(1), row(2), row(3))
     val child = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys)

@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.plans.physical
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.annotation.tailrec
 import scala.collection.immutable.BitSet
 import scala.collection.mutable
 
@@ -1104,20 +1103,16 @@ object KeyedPartitioning {
   }
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
-    def isSupportedTransform(transform: TransformExpression): Boolean = {
-      transform.children.size == 1 && isReference(transform.children.head)
-    }
-
-    @tailrec
-    def isReference(e: Expression): Boolean = e match {
-      case _: Attribute => true
-      case g: GetStructField => isReference(g.child)
-      case _ => false
-    }
+    // Exactly one column argument, and it must be a plain column reference.
+    def isSupportedTransform(transform: TransformExpression): Boolean =
+      transform.columnSlots match {
+        case Seq(col) => TransformExpression.isColumnRef(col)
+        case _ => false
+      }
 
     expressions.forall {
       case t: TransformExpression if isSupportedTransform(t) => true
-      case e: Expression if isReference(e) => true
+      case e: Expression if TransformExpression.isColumnRef(e) => true
       case _ => false
     }
   }
@@ -2079,8 +2074,11 @@ case class KeyedShuffleSpec(
         case (left: TransformExpression, right: TransformExpression) =>
           if (allowReduce && canReduceKeys) left.isCompatible(right)
           else left.isSameFunction(right)
-        case (_: AttributeReference, _: TransformExpression) |
-             (_: TransformExpression, _: AttributeReference) => allowReduce && canReduceKeys
+        // Identity on one side, a transform on the other: see retargetForIdentity.
+        case (col: AttributeReference, t: TransformExpression) =>
+          allowReduce && canReduceKeys && retargetForIdentity(t, col).isDefined
+        case (t: TransformExpression, col: AttributeReference) =>
+          allowReduce && canReduceKeys && retargetForIdentity(t, col).isDefined
         case _ => false
       }
     }
@@ -2096,6 +2094,17 @@ case class KeyedShuffleSpec(
       !conf.v2BucketingPartiallyClusteredDistributionEnabled &&
       conf.v2BucketingAllowCompatibleTransforms
   }
+
+  /**
+   * `t` retargeted at the identity side's key `col`, or None if its argument types do not match
+   * the bound function's declared types, since evaluating it would then fail. The compatibility
+   * gate and `reducersBothWays` must agree on this -- a gate admitting a pair the reducer refuses
+   * would pair raw keys and drop matches -- so both call it.
+   */
+  private def retargetForIdentity(
+      t: TransformExpression,
+      col: AttributeReference): Option[TransformExpression] =
+    Some(t.withReference(col)).filter(_.argsMatchInputTypes)
 
   /**
    * Compute the reducers for both sides of a join between this shuffle spec and `other`, in a
@@ -2168,11 +2177,11 @@ case class KeyedShuffleSpec(
       // is guaranteed to have exactly one leaf child (asserted in keyPositions), which
       // `IdentityReducer` binds to ordinal 0.
       case (a: AttributeReference, t: TransformExpression) =>
-        (Some(KeyReducer(IdentityReducer(t.withReference(a)), t)), None)
+        (retargetForIdentity(t, a).map(r => KeyReducer(IdentityReducer(r), t)), None)
 
       // Symmetric: identity transform on the other side.
       case (t: TransformExpression, a: AttributeReference) =>
-        (None, Some(KeyReducer(IdentityReducer(t.withReference(a)), t)))
+        (None, retargetForIdentity(t, a).map(r => KeyReducer(IdentityReducer(r), t)))
 
       case (_, _) => (None, None)
     }
@@ -2212,7 +2221,8 @@ case class KeyedShuffleSpec(
 
     val newExpressions = partitioning.expressions.zip(keyPositions).map {
       case (te: TransformExpression, positionSet) =>
-        te.copy(children = te.children.map(_ => clustering(positionSet.head)))
+        // Replace the column argument with the other side's key; literal parameters stay.
+        te.rewriteColumnSlots(_ => clustering(positionSet.head))
       case (_, positionSet) => clustering(positionSet.head)
     }
     // The shuffled side is laid out on this side's partitions, so it shares their layout, with one
