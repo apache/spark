@@ -87,7 +87,10 @@ class ExternalAppendOnlyUnsafeRowArray(
 
   private var spillableArray: UnsafeExternalSorter = _
   private var totalSpillBytes: Long = 0
-  private var numRows = 0
+  // The number of rows buffered. This is a `Long` because the spillable backing store can hold
+  // more than `Int.MaxValue` rows (e.g. a single large window partition); a 32-bit counter would
+  // overflow and wrap negative, silently corrupting downstream length checks.
+  private var numRows: Long = 0
 
   // A counter to keep track of total modifications done to this array since its creation.
   // This helps to invalidate iterators when there are changes done to the backing array.
@@ -95,7 +98,7 @@ class ExternalAppendOnlyUnsafeRowArray(
 
   private var numFieldsPerRow = 0
 
-  def length: Int = numRows
+  def length: Long = numRows
 
   def isEmpty: Boolean = numRows == 0
 
