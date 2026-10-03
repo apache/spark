@@ -415,7 +415,7 @@ class CodegenContext extends Logging {
                |}
            """.stripMargin)
           if (INPUT_ROW != null && args.exists(_.variableName == INPUT_ROW)) {
-            commonExprFunctionsTakingRow += funcName
+            functionsTakingRow += funcName
           }
           code"$funcFullName(${args.map(_.variableName).mkString(", ")});"
         case None =>
@@ -463,13 +463,21 @@ class CodegenContext extends Logging {
   var currentCommonExprs: mutable.Map[Long, CommonExprSlots] = mutable.HashMap.empty
 
   /**
-   * The methods `CommonExprSlots.build` made of `With` definitions that take `INPUT_ROW`: code that
-   * calls one passes the row, so a method split out of that code must take the row too. Known by
-   * the function's name, which is in the code that calls it, rather than by the definition: one
-   * `With` can be generated more than once, as a method in one place and inline in another, and
-   * the split computes its arguments only after all of them are generated.
+   * The functions added so far that take `INPUT_ROW`: the methods `CommonExprSlots.build` makes
+   * of `With` definitions, and the split and group functions of a whole stage split. Code that
+   * calls one passes the row, so a method split out of that code must take the row too, whether
+   * the row is read there or passed on - a CASE WHEN inside a CASE WHEN's branch, split first,
+   * leaves its calls in the outer one's block. Known by the function's name, which is in the code
+   * that calls it, rather than by the definition: one `With` can be generated more than once, as
+   * a method in one place and inline in another, and the split computes its arguments only after
+   * all of them are generated.
    */
-  private val commonExprFunctionsTakingRow = mutable.HashSet.empty[String]
+  private val functionsTakingRow = mutable.HashSet.empty[String]
+
+  /** Whether `code` calls a function that takes `INPUT_ROW` ([[functionsTakingRow]]). */
+  private def callsFunctionTakingRow(code: String): Boolean =
+    functionsTakingRow.nonEmpty && CodeGenerator.CallSite.findAllMatchIn(code)
+      .exists(m => functionsTakingRow.contains(m.group(1)))
 
   /**
    * Allocates a value slot and a `computed` flag per definition, generates `f` with them in scope,
@@ -1585,17 +1593,16 @@ class CodegenContext extends Logging {
    * for `sources` compiles inside it, besides `extraArguments`; None where that code reads a local
    * no function could take, or the arguments with `extraArguments` would pass the JVM's limit.
    * `INPUT_ROW` comes last, and only where the code reads it (`CollectedInputs.readsRow`) or
-   * `code` calls a `With` definition's method that takes it: an operator may leave it naming a
-   * local that is out of scope where other code is generated, as a join does after generating the
-   * variables of its build side.
+   * `code` calls a function that takes it ([[functionsTakingRow]]): an operator may leave it
+   * naming a local that is out of scope where other code is generated, as a join does after
+   * generating the variables of its build side.
    */
   private def wholeStageSplitArguments(
       sources: Seq[Expression],
       code: String,
       extraArguments: Seq[(String, String)]): Option[Seq[(String, String)]] = {
     collectInputs(sources, InputPolicy.wholeStageSplit, subExprEliminationExprs).flatMap { in =>
-      val readsRow = in.readsRow ||
-        commonExprFunctionsTakingRow.exists(f => code.contains(s"$f("))
+      val readsRow = in.readsRow || callsFunctionTakingRow(code)
       val locals = if (!readsRow || mutableStateNames.contains(INPUT_ROW)) {
         Some(in.arguments)
       } else {
@@ -1737,6 +1744,9 @@ class CodegenContext extends Logging {
          |}
            """.stripMargin
     val call = s"${addNewFunction(name, code)}(${arguments.map(_._2).mkString(", ")})"
+    if (INPUT_ROW != null && arguments.exists(_._2 == INPUT_ROW)) {
+      functionsTakingRow += name
+    }
     if (audited && Utils.isTesting) {
       splitCallArguments(name) = arguments.map(_._2)
     }

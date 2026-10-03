@@ -2314,6 +2314,35 @@ class WholeStageCodegenSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-33301: a CASE WHEN inside a CASE WHEN's branch, whose common expression takes " +
+      "the build side's row, leaves the outer split its calls, which pass the row on") {
+    // The inner CASE WHEN is split first, and its methods take the row because the `With` of
+    // its `nullif` became a method that takes it; the outer CASE WHEN's block then holds the
+    // calls to the inner's methods, which pass the row, so the outer's method must take it too
+    // although the outer's own expressions read it nowhere. Found by the differential fuzz.
+    withSplitAlways {
+      withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+        withTempView("l", "r") {
+          spark.range(200).selectExpr("id % 20 AS k", "id % 300 AS v").createOrReplaceTempView("l")
+          spark.range(100).selectExpr("id % 20 AS k", "id % 7 AS w", "id % 11 AS a")
+            .createOrReplaceTempView("r")
+          val inner = "CASE WHEN r.w = 0 THEN nullif(r.a * 3 + l.v, 1) " +
+            (1 to 5).map(k => s"WHEN r.w = $k THEN r.a + $k").mkString(" ") + " ELSE r.w END"
+          val outer = s"CASE WHEN l.v = 0 THEN 0 WHEN l.v = 1 THEN $inner " +
+            (2 to 40).map(k => s"WHEN l.v = $k THEN l.v * $k").mkString(" ") + " ELSE 0 END"
+          Seq("MERGE", "BROADCAST").foreach { hint =>
+            val query = s"SELECT /*+ $hint(r) */ l.k, l.v, r.w FROM l JOIN r " +
+              s"ON l.k = r.k AND $outer > 5"
+            val df = sql(query)
+            assert(splitsCaseWhen(df), query)
+            assert(splitCaseWhenTakesRow(df), query)
+            checkAnswer(df, withoutWholeStage(sql(query)))
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-33301: a CASE WHEN stays out of the streamed-only condition of an outer join") {
     withSplitAlways {
       // With `splitStreamedSideJoinCondition`, an outer join evaluates the part of its condition
