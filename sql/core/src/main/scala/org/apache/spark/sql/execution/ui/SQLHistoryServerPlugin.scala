@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.ui
 import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.status.{AppHistoryServerPlugin, ElementTrackingStore}
-import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.{SparkUI, WebUI}
 
 class SQLHistoryServerPlugin extends AppHistoryServerPlugin {
   override def createListeners(conf: SparkConf, store: ElementTrackingStore): Seq[SparkListener] = {
@@ -32,6 +32,10 @@ class SQLHistoryServerPlugin extends AppHistoryServerPlugin {
     if (sqlStatusStore.executionsCount() > 0) {
       new SQLTab(sqlStatusStore, ui)
     }
+  }
+
+  override def setupStaticResources(ui: WebUI): Unit = {
+      ui.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
   }
 
   override def displayOrder: Int = 0

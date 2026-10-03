@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.status.AppHistoryServerPlugin
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.util.{ShutdownHookManager, SystemClock, Utils}
@@ -155,6 +156,7 @@ class HistoryServer(
     attachHandler(ApiRootResource.getServletHandler(this))
 
     addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
+    AppHistoryServerPlugin.loadPlugins().foreach(_.setupStaticResources(this))
     addRenderLogHandler(this, conf)
 
     val contextHandler = new ServletContextHandler
