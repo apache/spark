@@ -39,6 +39,13 @@ import org.apache.spark.tags.DockerTest
 class StarRocksIntegrationSuite extends SharedJDBCIntegrationSuite {
   override val db = new StarRocksDatabaseOnDocker
 
+  // StarRocks reports a missing table as error 1064 with SQLSTATE 42000, the same SQLSTATE it
+  // uses for syntax errors, and it shares MySQLDialect, so it cannot take part in the shared
+  // classification checks until it gets a classifier of its own.
+  override protected def excluded: Seq[String] = Seq(
+    "SPARK-59369: a non-existent table is not classified as a syntax error",
+    "SPARK-59369: a missing privilege is not classified as a syntax error")
+
   override def sleepBeforeTesting(): Unit = Thread.sleep(60000)
 
   override def createSharedTable(conn: Connection): Unit = {
