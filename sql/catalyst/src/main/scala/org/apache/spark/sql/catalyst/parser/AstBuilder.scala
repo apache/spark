@@ -48,10 +48,10 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeConstants, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, fractionalSecondsDigits, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampLTZNanos, stringToTimestampNTZNanos, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogContext, PathElement, SupportsNamespaces, TableCatalog, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogContext, PathElement, SupportsNamespaces, TableCatalog, TableWritePrivilege, WriteDistributionMode}
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, LogicalExpressions, MonthsTransform, NullOrdering, SortDirection, SortOrder => V2SortOrder, Transform, YearsTransform}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LEGACY_BANG_EQUALS_NOT, LEGACY_CONSECUTIVE_STRING_LITERALS}
@@ -5825,7 +5825,15 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitPartitionTransform(
-      ctx: PartitionTransformContext): Transform = withOrigin(ctx) {
+      ctx: PartitionTransformContext): Transform = {
+    visitTransform(ctx.transform)
+  }
+
+  /**
+   * Build a [[Transform]] from a transform context. Shared by partitioning (PARTITIONED BY) and by
+   * the write ordering (ORDERED BY), which allow the same transform syntax.
+   */
+  private def visitTransform(ctx: TransformContext): Transform = withOrigin(ctx) {
     def getFieldReference(
         ctx: ApplyTransformContext,
         arg: V2Expression): FieldReference = {
@@ -5851,7 +5859,7 @@ class AstBuilder extends DataTypeAstBuilder
       }
     }
 
-    ctx.transform match {
+    ctx match {
       case identityCtx: IdentityTransformContext =>
         IdentityTransform(FieldReference(typedVisit[Seq[String]](identityCtx.qualifiedName)))
 
@@ -6292,6 +6300,85 @@ class AstBuilder extends DataTypeAstBuilder
       collation, serdeInfo, clusterBySpec)
   }
 
+  /**
+   * Parse the optional write distribution and ordering clauses of a CREATE/REPLACE TABLE statement:
+   * `DISTRIBUTED BY PARTITION` and `[LOCALLY] ORDERED BY ... | UNORDERED`.
+   *
+   * Returns the distribution mode and the ordering. The mode is null when the statement did not ask
+   * for one, which leaves the choice to the catalog; `NONE` is an explicit request.
+   * `DISTRIBUTED BY PARTITION` is rejected when `partitionTransforms` is empty.
+   */
+  private def writeSpecsFrom(
+      ctx: CreateTableClausesContext,
+      partitionTransforms: Seq[Transform]): (WriteDistributionMode, Seq[V2SortOrder]) = {
+    checkDuplicateClauses(ctx.writeDistributionSpec, "DISTRIBUTED BY PARTITION", ctx)
+    checkDuplicateClauses(ctx.writeOrderingSpec, "ORDERED BY/UNORDERED", ctx)
+
+    val distributionSpec = ctx.writeDistributionSpec.asScala.headOption.orNull
+    val orderingSpec = ctx.writeOrderingSpec.asScala.headOption.orNull
+    // Bucketing counts as partitioning here; CLUSTER BY does not.
+    if (distributionSpec != null && partitionTransforms.isEmpty) {
+      throw QueryParsingErrors.distributedByPartitionWithoutPartitioningError(ctx)
+    }
+    if (distributionSpec == null && orderingSpec == null) {
+      (null, Seq.empty)
+    } else {
+      (toDistributionMode(distributionSpec, orderingSpec), toOrdering(orderingSpec))
+    }
+  }
+
+  /**
+   * Derive the write distribution mode from how the ordering was asked for. An explicit
+   * `DISTRIBUTED BY PARTITION` wins, which leaves `LOCALLY` with no effect beside it.
+   */
+  private def toDistributionMode(
+      distributionSpec: WriteDistributionSpecContext,
+      orderingSpec: WriteOrderingSpecContext): WriteDistributionMode = {
+    // Only called when at least one of the two clauses is present, so orderingSpec is non-null
+    // here whenever distributionSpec is null.
+    if (distributionSpec != null) {
+      WriteDistributionMode.HASH
+    } else if (orderingSpec.UNORDERED != null || orderingSpec.LOCALLY != null) {
+      WriteDistributionMode.NONE
+    } else {
+      WriteDistributionMode.RANGE
+    }
+  }
+
+  private def toOrdering(orderingSpec: WriteOrderingSpecContext): Seq[V2SortOrder] = {
+    if (orderingSpec != null && orderingSpec.writeOrder != null) {
+      orderingSpec.writeOrder.fields.asScala.map(visitWriteOrderField).toSeq
+    } else {
+      Seq.empty
+    }
+  }
+
+  /**
+   * Create a v2 sort order for one field of a write ordering.
+   */
+  override def visitWriteOrderField(ctx: WriteOrderFieldContext): V2SortOrder = withOrigin(ctx) {
+    val direction = if (ctx.DESC != null) {
+      SortDirection.DESCENDING
+    } else {
+      SortDirection.ASCENDING
+    }
+
+    val nullOrdering = if (ctx.FIRST != null) {
+      NullOrdering.NULLS_FIRST
+    } else if (ctx.LAST != null) {
+      NullOrdering.NULLS_LAST
+    } else {
+      direction.defaultNullOrdering
+    }
+
+    // A plain column is passed as a bare reference rather than as `identity(col)`.
+    val key = visitTransform(ctx.transform) match {
+      case t: IdentityTransform => t.ref
+      case t => t
+    }
+    LogicalExpressions.sort(key, direction, nullOrdering)
+  }
+
   protected def getSerdeInfo(
       rowFormatCtx: Seq[RowFormatContext],
       createFileFormatCtx: Seq[CreateFileFormatContext],
@@ -6400,10 +6487,15 @@ class AstBuilder extends DataTypeAstBuilder
    *     [COMMENT table_comment]
    *     [DEFAULT COLLATION collation_name]
    *     [TBLPROPERTIES (property_name=property_value, ...)]
+   *     [DISTRIBUTED BY PARTITION]
+   *     [[LOCALLY] ORDERED BY (write_order_fields) | UNORDERED]
    *
    *   partition_fields:
    *     col_name, transform(col_name), transform(constant, col_name), ... |
    *     col_name data_type [NOT NULL] [COMMENT col_comment], ...
+   *
+   *   write_order_fields:
+   *     transform(col_name) [ASC|DESC] [NULLS FIRST|LAST], ...
    * }}}
    */
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
@@ -6427,10 +6519,12 @@ class AstBuilder extends DataTypeAstBuilder
         s"CREATE TEMPORARY TABLE ...$asSelect, use CREATE TEMPORARY VIEW instead", ctx)
     }
 
-    val partitioning =
-      partitionExpressions(partTransforms, partCols, ctx) ++
-        bucketSpec.map(_.asTransform) ++
-        clusterBySpec.map(_.asTransform)
+    val partitionTransforms =
+      partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
+    val partitioning = partitionTransforms ++ clusterBySpec.map(_.asTransform)
+
+    val (writeDistributionMode, writeOrdering) =
+      writeSpecsFrom(ctx.createTableClauses(), partitionTransforms)
 
     Option(ctx.query).map(plan) match {
       case Some(query) =>
@@ -6455,7 +6549,8 @@ class AstBuilder extends DataTypeAstBuilder
           collation, serdeInfo, external, constraints = Nil)
         val nameSlot = withIdentClause(identifierContext, identifiers =>
           withOrigin(identifierContext) { UnresolvedIdentifier(identifiers) })
-        CreateTableAsSelect(nameSlot, partitioning, query, tableSpec, Map.empty, ifNotExists)
+        CreateTableAsSelect(nameSlot, partitioning, query, tableSpec, Map.empty, ifNotExists,
+          writeDistributionMode = writeDistributionMode, writeOrdering = writeOrdering)
       case None =>
         withIdentClause(identifierContext, identifiers => {
           val namedConstraints =
@@ -6468,7 +6563,9 @@ class AstBuilder extends DataTypeAstBuilder
           // Note: table schema includes both the table columns list and the partition columns
           // with data type.
           val allColumns = columns ++ partCols
-          CreateTable(identifier, allColumns, partitioning, tableSpec, ignoreIfExists = ifNotExists)
+          CreateTable(identifier, allColumns, partitioning, tableSpec,
+            ignoreIfExists = ifNotExists,
+            writeDistributionMode = writeDistributionMode, writeOrdering = writeOrdering)
         })
     }
   }
@@ -6496,10 +6593,15 @@ class AstBuilder extends DataTypeAstBuilder
    *     [COMMENT table_comment]
    *     [DEFAULT COLLATION collation_name]
    *     [TBLPROPERTIES (property_name=property_value, ...)]
+   *     [DISTRIBUTED BY PARTITION]
+   *     [[LOCALLY] ORDERED BY (write_order_fields) | UNORDERED]
    *
    *   partition_fields:
    *     col_name, transform(col_name), transform(constant, col_name), ... |
    *     col_name data_type [NOT NULL] [COMMENT col_comment], ...
+   *
+   *   write_order_fields:
+   *     transform(col_name) [ASC|DESC] [NULLS FIRST|LAST], ...
    * }}}
    */
   override def visitReplaceTable(ctx: ReplaceTableContext): LogicalPlan = withOrigin(ctx) {
@@ -6513,12 +6615,14 @@ class AstBuilder extends DataTypeAstBuilder
       invalidStatement(s"REPLACE TABLE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
 
-    val partitioning =
-      partitionExpressions(partTransforms, partCols, ctx) ++
-        bucketSpec.map(_.asTransform) ++
-        clusterBySpec.map(_.asTransform)
+    val partitionTransforms =
+      partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
+    val partitioning = partitionTransforms ++ clusterBySpec.map(_.asTransform)
 
     val identifierContext = ctx.replaceTableHeader().identifierReference()
+    val (writeDistributionMode, writeOrdering) =
+      writeSpecsFrom(ctx.createTableClauses(), partitionTransforms)
+
     Option(ctx.query).map(plan) match {
       case Some(query) =>
         // RTAS path: push the identifier placeholder into the `name` slot (see CTAS above).
@@ -6539,7 +6643,8 @@ class AstBuilder extends DataTypeAstBuilder
         val nameSlot = withIdentClause(identifierContext, identifiers =>
           withOrigin(identifierContext) { UnresolvedIdentifier(identifiers) })
         ReplaceTableAsSelect(nameSlot, partitioning, query, tableSpec,
-          writeOptions = Map.empty, orCreate = orCreate)
+          writeOptions = Map.empty, orCreate = orCreate,
+          writeDistributionMode = writeDistributionMode, writeOrdering = writeOrdering)
       case None =>
         withIdentClause(identifierContext, identifiers => {
           val namedConstraints =
@@ -6552,7 +6657,8 @@ class AstBuilder extends DataTypeAstBuilder
           // Note: table schema includes both the table columns list and the partition columns
           // with data type.
           val allColumns = columns ++ partCols
-          ReplaceTable(identifier, allColumns, partitioning, tableSpec, orCreate = orCreate)
+          ReplaceTable(identifier, allColumns, partitioning, tableSpec, orCreate = orCreate,
+            writeDistributionMode = writeDistributionMode, writeOrdering = writeOrdering)
         })
     }
   }

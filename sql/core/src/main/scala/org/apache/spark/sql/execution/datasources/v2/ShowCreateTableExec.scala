@@ -25,11 +25,12 @@ import org.apache.spark.sql.catalyst.analysis.ResolvedTable
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog, V1Table}
-import org.apache.spark.sql.connector.expressions.BucketTransform
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, CharVarcharUtils, WriteDistributionAndOrdering}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog, V1Table, WriteDistributionMode}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform,
+  Expression => V2Expression, Literal, NamedReference, Transform}
 import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -58,6 +59,7 @@ case class ShowCreateTableExec(
       }.toMap
     showTableOptions(builder, tableOptions)
     showTablePartitioning(table, builder)
+    showTableWriteDistributionAndOrdering(table, builder)
     showTableComment(table, builder)
     showTableCollation(table, builder)
     showTableLocation(table, builder)
@@ -121,6 +123,72 @@ case class ShowCreateTableExec(
           builder ++= s"SORTED BY ${bucket.sortColumnNames.mkString("(", ", ", ")")}\n"
         }
         builder ++= s"INTO ${bucket.numBuckets} BUCKETS\n"
+      }
+    }
+  }
+
+  /**
+   * True for a sort key expression the `transform` grammar rule can represent: a column
+   * reference, or a transform with at least one argument, each a column reference or a literal
+   * the `constant` rule can spell with the same type.
+   */
+  private def isSpellable(e: V2Expression): Boolean = e match {
+    case _: NamedReference => true
+    case t: Transform =>
+      t.arguments().nonEmpty && t.arguments().forall {
+        case _: NamedReference => true
+        case l: Literal[_] => isSpellableLiteral(l)
+        case _ => false
+      }
+    case _ => false
+  }
+
+  // Lists only the types whose rendering parses back as a `constant` of the same type. A typed
+  // NULL, a collated string, NaN, and infinity have none, nor does a FLOAT of maximal magnitude,
+  // whose shortest rendering exceeds the parser's range.
+  private def isSpellableLiteral(l: Literal[_]): Boolean = (l.value, l.dataType) match {
+    case (null, dataType) => dataType == NullType
+    case (f: Float, FloatType) => java.lang.Float.isFinite(f) && math.abs(f) < Float.MaxValue
+    case (d: Double, DoubleType) => java.lang.Double.isFinite(d)
+    case (_, s: StringType) => DataTypeUtils.isDefaultStringCharOrVarcharType(s)
+    case (_, BooleanType | ByteType | ShortType | IntegerType | LongType | _: DecimalType |
+        BinaryType | DateType | TimestampType | TimestampNTZType | _: DayTimeIntervalType |
+        _: YearMonthIntervalType) => true
+    case _ => false
+  }
+
+  /**
+   * Emits the table's declared write distribution and ordering as clauses. Pairs with no clause
+   * form, such as `HASH` without partitioning or an unspellable sort key, are omitted.
+   */
+  private def showTableWriteDistributionAndOrdering(
+      table: Table,
+      builder: StringBuilder): Unit = {
+    if (table.writeOrdering().forall(o => isSpellable(o.expression()))) {
+      val orderBy = if (table.writeOrdering().nonEmpty) {
+        Some(table.writeOrdering()
+          .map(WriteDistributionAndOrdering.describeSortOrder)
+          .mkString("ORDERED BY (", ", ", ")"))
+      } else {
+        None
+      }
+      // Bucketing counts as partitioning here; CLUSTER BY does not.
+      val hasPartitioning = table.partitioning.exists {
+        case ClusterByTransform(_) => false
+        case _ => true
+      }
+      (table.writeDistributionMode(), orderBy) match {
+        case (WriteDistributionMode.HASH, Some(o)) if hasPartitioning =>
+          builder ++= s"DISTRIBUTED BY PARTITION $o\n"
+        case (WriteDistributionMode.HASH, None) if hasPartitioning =>
+          builder ++= "DISTRIBUTED BY PARTITION\n"
+        case (WriteDistributionMode.RANGE, Some(o)) =>
+          builder ++= s"$o\n"
+        case (WriteDistributionMode.NONE, Some(o)) =>
+          builder ++= s"LOCALLY $o\n"
+        case (WriteDistributionMode.NONE, None) =>
+          builder ++= "UNORDERED\n"
+        case _ =>
       }
     }
   }
