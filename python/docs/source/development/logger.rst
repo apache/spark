@@ -167,3 +167,44 @@ This approach aligns with the standard Python logging practices.
     file_logger.warning(f"User {user} takes an {action}", user=user, action=action)
 
 The log messages will be saved in `application.log` in the same JSON format.
+
+Spark Connect Client Logging
+============================
+
+The Spark Connect Python client logs through one logger per module, all rooted at
+``pyspark.sql.connect``. Every Connect log record is emitted through a single handler on that
+root logger, in the same JSON format described above.
+
+============================================  ==========================================
+Logger                                        Covers
+============================================  ==========================================
+``pyspark.sql.connect``                       Root of the hierarchy, sets the default level
+``pyspark.sql.connect.client.core``           RPC requests and responses, Arrow batches, plan compression
+``pyspark.sql.connect.client.retries``        Retries and backoff, including gRPC ``UNAVAILABLE``
+``pyspark.sql.connect.client.reattach``       Reattachable execution streams
+``pyspark.sql.connect.client.artifact``       Artifact uploads
+``pyspark.sql.connect.dataframe``             DataFrame operations
+``pyspark.sql.connect.plan``                  Logical plan construction and cached relation cleanup
+``pyspark.sql.connect.session``               Session lifecycle
+============================================  ==========================================
+
+Connect logging is disabled by default. Setting the ``SPARK_CONNECT_LOG_LEVEL`` environment
+variable enables the whole hierarchy at that level:
+
+.. code-block:: bash
+
+    export SPARK_CONNECT_LOG_LEVEL=debug
+
+``DEBUG`` on the whole hierarchy is verbose, because ``client.core`` dumps every request and
+response. To follow one area instead, set the level on that logger with the standard Python
+logging module. For example, to watch the client retry against an unresponsive server without
+the rest of the output:
+
+.. code-block:: python
+
+    import logging
+
+    logging.getLogger("pyspark.sql.connect.client.retries").setLevel(logging.DEBUG)
+
+Levels are read when a message is logged, so this takes effect at any point, including after the
+session has been created.

@@ -50,7 +50,7 @@ from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.column import Column
 from pyspark.sql.connect.conversion import storage_level_to_proto
 from pyspark.sql.connect.expressions import Expression, SubqueryExpression
-from pyspark.sql.connect.logging import logger
+from pyspark.sql.connect.logging import getLogger
 from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb2
 from pyspark.sql.connect.types import UnparsedDataType, pyspark_types_to_proto_types
 from pyspark.sql.types import DataType, StructType
@@ -61,6 +61,9 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.connect.udf import UserDefinedFunction
+
+
+logger = getLogger(__name__)
 
 
 class LogicalPlan:
