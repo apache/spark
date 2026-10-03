@@ -653,6 +653,8 @@ class SparseVector(Vector):
         >>> a.norm(2)
         5.0
         """
+        if p == np.inf and self.size > 0 and self.values.size == 0:
+            return np.float64(0.0)
         return np.linalg.norm(self.values, p)
 
     def __reduce__(self) -> Tuple[Type["SparseVector"], Tuple[int, bytes, bytes]]:
