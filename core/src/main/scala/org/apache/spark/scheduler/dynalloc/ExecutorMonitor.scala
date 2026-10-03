@@ -40,7 +40,8 @@ private[spark] class ExecutorMonitor(
     client: ExecutorAllocationClient,
     listenerBus: LiveListenerBus,
     clock: Clock,
-    metrics: ExecutorAllocationManagerSource = null)
+    metrics: ExecutorAllocationManagerSource = null,
+    isShuffleReliablyStored: Int => Boolean = _ => false)
   extends SparkListener with CleanerListener with Logging {
 
   private val idleTimeoutNs = TimeUnit.SECONDS.toNanos(
@@ -205,7 +206,7 @@ private[spark] class ExecutorMonitor(
     }
 
     val shuffleStages = event.stageInfos.flatMap { s =>
-      s.shuffleDepId.toSeq.map { shuffleId =>
+      s.shuffleDepId.filterNot(isShuffleReliablyStored).toSeq.map { shuffleId =>
         s.stageId -> shuffleId
       }
     }
