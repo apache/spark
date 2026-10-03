@@ -2082,4 +2082,21 @@ class FilterPushdownSuite extends PlanTest {
     val optimizedC = Optimize.execute(queryC)
     comparePlans(optimizedC, queryC, checkAnalysis = false)
   }
+
+  test("SPARK-59871: predicates pushed through a join form a balanced tree") {
+    val n = 32
+    // n distinct conjuncts, all referencing the left relation only, so they all push left.
+    val conjuncts = (1 to n).map(i => (attrA > i): Expression)
+    val query = testRelation.join(testRelation1, Inner).where(conjuncts.reduce(And)).analyze
+    val optimized = PushPredicateThroughJoin(query)
+    val pushed = optimized.collectFirst { case Join(Filter(cond, _), _, _, _, _) => cond }
+    assert(pushed.isDefined, s"expected predicates pushed to the left child, got:\n$optimized")
+    def andDepth(e: Expression): Int = e match {
+      case And(l, r) => 1 + math.max(andDepth(l), andDepth(r))
+      case _ => 0
+    }
+    // buildBalancedPredicate is ceil(log2(32)) = 5 deep; a linear reduce would be n - 1 = 31.
+    assert(andDepth(pushed.get) <= 5,
+      s"expected a balanced conjunction, got depth ${andDepth(pushed.get)}")
+  }
 }
