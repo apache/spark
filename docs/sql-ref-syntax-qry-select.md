@@ -215,6 +215,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 * [Table-valued Function](sql-ref-syntax-qry-select-tvf.html)
 * [JSON_QUERY](sql-ref-syntax-qry-select-json-query.html)
 * [JSON_ARRAY](sql-ref-syntax-qry-select-json-array.html)
+* [JSON_OBJECT](sql-ref-syntax-qry-select-json-object.html)
 * [JSON_VALUE](sql-ref-syntax-qry-select-json-value.html)
 * [JSON_EXISTS](sql-ref-syntax-qry-select-json-exists.html)
 * [Window Function](sql-ref-syntax-qry-select-window.html)

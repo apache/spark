@@ -4212,22 +4212,26 @@ class AstBuilder extends DataTypeAstBuilder
       (JsonValueBehavior.Default, Some(expression(d.defaultExpr)))
   }
 
-  // A clause-free JSON_ARRAY / JSON_QUERY that is a top-level JSON_ARRAY element stays on the
-  // direct path. Those expressions emit JSON text implicitly, and the parent JSON_ARRAY must see
-  // that lexical fact before analyzer rewrites can wrap the child in a Cast.
-  private def isTopLevelJsonArrayElement(ctx: RuleContext): Boolean = {
+  // Whether `ctx` is a lexical value of an enclosing JSON constructor (a JSON_ARRAY element or a
+  // JSON_OBJECT value). Such a nested constructor stays on the direct path so the parent can splice
+  // it raw before analyzer rewrites wrap it in a Cast. A JSON_OBJECT key is excluded: keys are
+  // never spliced raw, so a nested constructor there may route through resolution and be shadowed.
+  // Transparent wrappers (parentheses, a postfix COLLATE, a bare predicate) are walked through.
+  private def isDirectJsonConstructorArgument(ctx: RuleContext): Boolean = {
     @scala.annotation.tailrec
-    def loop(parent: RuleContext): Boolean = parent match {
+    def loop(prev: RuleContext, parent: RuleContext): Boolean = parent match {
       case null => false
       case _: JsonArrayValueContext => true
+      case m: JsonObjectMemberContext => prev eq m.valueExpr
+      case m: JsonObjectCommaMemberContext => prev eq m.valueExpr
       case _: ExpressionContext | _: ValueExpressionDefaultContext |
           _: ParenthesizedExpressionContext | _: CollateContext =>
-        loop(parent.getParent)
+        loop(parent, parent.getParent)
       case p: PredicatedContext if p.predicate() == null =>
-        loop(parent.getParent)
+        loop(parent, parent.getParent)
       case _ => false
     }
-    loop(ctx.getParent)
+    loop(ctx, ctx.getParent)
   }
 
   /**
@@ -4295,7 +4299,7 @@ class AstBuilder extends DataTypeAstBuilder
     val path = string(visitStringLit(ctx.path))
     if (ctx.returning == null && ctx.wrapper == null && ctx.quotes == null &&
         ctx.emptyBehavior == null && ctx.errorBehavior == null &&
-        !isTopLevelJsonArrayElement(ctx)) {
+        !isDirectJsonConstructorArgument(ctx)) {
       UnresolvedFunction("json_query", Seq(jsonExpr, Literal(path)), isDistinct = false)
     } else {
       // Default RETURNING is STRING. JSON_QUERY returns the fragment verbatim (no length-enforcing
@@ -4355,7 +4359,7 @@ class AstBuilder extends DataTypeAstBuilder
     // clause/nesting checks come first to skip the recursive per-value FORMAT scans when a clause
     // already forces direct construction.
     val routeThroughResolution =
-      ctx.returning == null && ctx.nullBehavior == null && !isTopLevelJsonArrayElement(ctx) &&
+      ctx.returning == null && ctx.nullBehavior == null && !isDirectJsonConstructorArgument(ctx) &&
         !ctx.values.asScala.exists(_.FORMAT() != null) &&
         !arrayValues.exists(JsonArray.isImplicitlyJson)
     if (routeThroughResolution) {
@@ -4390,6 +4394,76 @@ class AstBuilder extends DataTypeAstBuilder
         .map(buildJsonConstructorNullBehavior)
         .getOrElse(JsonConstructorNullBehavior.Absent)
       JsonArray(arrayValues, formatJson, needsValidation, nullBehavior, returning)
+    }
+  }
+
+  /**
+   * Create a [[JsonObjectExpr]] expression for the SQL:2016 `JSON_OBJECT` constructor function.
+   * The `ON NULL` clause defaults to `NULL` when absent, per the standard.
+   */
+  override def visitJsonObject(ctx: JsonObjectContext): Expression = withOrigin(ctx) {
+    // Parse key-value pairs, tagging each value's explicit `FORMAT JSON` flag. The standard
+    // `key VALUE value` / `key : value` forms and the compatibility `key, value` form are separate
+    // grammar alternatives, so only one list is populated for a single constructor. Only the
+    // standard forms carry `FORMAT JSON`; the comma form never does.
+    val standardMembers = ctx.jsonObjectMember().asScala.map { memberCtx =>
+      (expression(memberCtx.keyExpr), expression(memberCtx.valueExpr), memberCtx.FORMAT() != null)
+    }.toSeq
+    val taggedMembers = if (standardMembers.nonEmpty) {
+      standardMembers
+    } else {
+      ctx.jsonObjectCommaMember().asScala.map { memberCtx =>
+        (expression(memberCtx.keyExpr), expression(memberCtx.valueExpr), false)
+      }.toSeq
+    }
+    val members = taggedMembers.map { case (k, v, _) => (k, v) }
+    // Freeze each value's splice decision from the lexical argument so a later optimizer rewrite
+    // that swaps the child cannot change it (see [[ImplicitlyFormattedAsJson]]):
+    //  - `rawJson`: spliced raw as already-JSON text -- an explicit `FORMAT JSON`, or a lexically
+    //    nested JSON constructor (via `rawJsonValue`, seen through a pass-through `COLLATE` but not
+    //    a `CAST(... AS STRING)`, which cancels splicing).
+    //  - `needsValidation`: raw text is arbitrary user input to JSON-validate at eval -- only an
+    //    explicit `FORMAT JSON` on a non-constructor; a nested constructor is trusted.
+    val formatArgs = taggedMembers.map { case (_, v, explicit) =>
+      val implicitlyJson = JsonObjectExpr.rawJsonValue(v).isDefined
+      (explicit || implicitlyJson, explicit && !implicitlyJson)
+    }
+    val rawJson = formatArgs.map(_._1)
+    val needsValidation = formatArgs.map(_._2)
+    // Route a clause-free call through routine resolution so a same-named routine can shadow it,
+    // mirroring JSON_ARRAY. The comma form (the pre-existing MySQL-style spelling a user routine
+    // may match) routes even with a nested JSON producer value, so argument shape no longer removes
+    // routine candidates; the unshadowed built-in still splices it raw via the carrier attached
+    // below. Explicit FORMAT JSON and the dedicated VALUE form keep a raw value on the direct path
+    // (its lexical splice must stay frozen; VALUE syntax has no pre-existing routine call anyway).
+    val isCommaForm = standardMembers.isEmpty
+    val routeThroughResolution =
+      ctx.returning == null && ctx.nullBehavior == null &&
+        !isDirectJsonConstructorArgument(ctx) &&
+        (isCommaForm || !rawJson.contains(true))
+    if (routeThroughResolution) {
+      // Carry a nested producer's lexical raw eligibility to the built-in; transparent, so a
+      // shadowing routine and qualified/generic calls are unaffected.
+      val routedArgs = members.flatMap { case (k, v) =>
+        val carried =
+          if (JsonObjectExpr.rawJsonValue(v).isDefined) JsonImplicitFormatCarrier(v) else v
+        Seq(k, carried)
+      }
+      UnresolvedFunction("json_object", routedArgs, isDistinct = false)
+    } else {
+      // Default RETURNING is STRING (the result is JSON text). A CHAR/VARCHAR RETURNING is
+      // normalized to STRING: JSON_OBJECT serializes the fragment itself and never advertises a
+      // length it does not enforce (CharVarcharUtils honors preserveCharVarcharTypeInfo, so it
+      // cannot be used). A non-string RETURNING is left for checkInputDataTypes to reject.
+      val returning = Option(ctx.returning).map(typedVisit[DataType]).map {
+        case c: CharType => c.toStringType
+        case v: VarcharType => v.toStringType
+        case other => other
+      }.getOrElse(StringType)
+      // JSON_OBJECT defaults to NULL ON NULL per the standard (emits keys with null values).
+      val nullBehavior = Option(ctx.nullBehavior)
+        .map(buildJsonConstructorNullBehavior).getOrElse(JsonConstructorNullBehavior.Null)
+      JsonObjectExpr(members, rawJson, needsValidation, nullBehavior, returning)
     }
   }
 
