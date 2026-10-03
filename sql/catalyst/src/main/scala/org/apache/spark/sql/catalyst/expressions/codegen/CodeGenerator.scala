@@ -1454,7 +1454,7 @@ class CodegenContext extends Logging {
     } else if (!SQLConf.get.wholeStageSplitExpressions) {
       codes.mkString("\n")
     } else if (wholeStageSplitRecording) {
-      if (wholeStageBlocks(pieces, extraArguments).exists(_._2.isDefined)) {
+      if (wholeStageSplitPossible(pieces, extraArguments)) {
         wholeStageSplitsRecorded += 1
       }
       codes.mkString("\n")
@@ -1520,6 +1520,24 @@ class CodegenContext extends Logging {
         body -> wholeStageSplitArguments(indices.flatMap(sources), extraArguments)
       }
     }
+  }
+
+  /**
+   * Whether `splitWholeStage` might split some block of `pieces`, for recording. It errs only
+   * towards yes, which costs the stage a trial compile and nothing else, so that recording does
+   * not pack the blocks: packing measures every piece with its comments stripped, which costs more
+   * than generating the stage. A second block starts only after the pieces before it pass
+   * `methodSplitThreshold`, and stripping only shortens them; and a block that splits has the
+   * inputs of each of its pieces collected.
+   */
+  private def wholeStageSplitPossible(
+      pieces: Seq[(String, Seq[Expression])],
+      extraArguments: Seq[(String, String)]): Boolean = {
+    pieces.dropRight(1).iterator.map(_._1.length.toLong).sum >
+      SQLConf.get.methodSplitThreshold &&
+      pieces.exists { case (_, sources) =>
+        wholeStageSplitArguments(sources, extraArguments).isDefined
+      }
   }
 
   /**
