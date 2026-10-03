@@ -691,7 +691,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (_: Long, _: TimeType) =>
       s"TIME '$toString'"
     case (v: Long, TimestampType) =>
-      s"TIMESTAMP '$toString'"
+      s"${dataType.sql} '$toString'"
     case (v: Long, TimestampNTZType) =>
       s"TIMESTAMP_NTZ '$toString'"
     // toString strips trailing zeros (display-only); pad back to exactly `precision` digits
