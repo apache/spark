@@ -306,6 +306,27 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     verify(labeledPods).delete()
   }
 
+  test("SPARK-58908: doKillExecutors does not report ExecutorKilled when failures must count") {
+    schedulerBackendUnderTest.start()
+
+    when(podsWithNamespace.withField(any(), any())).thenReturn(labeledPods)
+    when(podsWithNamespace.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
+    when(labeledPods.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
+    when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
+    when(labeledPods.withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1", "2")).thenReturn(labeledPods)
+    when(labeledPods.resources()).thenReturn(Arrays.asList[PodResource]().stream)
+
+    // killExecutors records !countFailures: a heartbeat expiry stores false, other kills true.
+    schedulerBackendUnderTest.executorsPendingToRemove.put("1", false)
+    schedulerBackendUnderTest.executorsPendingToRemove.put("2", true)
+
+    schedulerBackendUnderTest.doKillExecutors(Seq("1", "2"))
+
+    // Executor 1's loss reason is reported by the caller, so it must not be pre-empted here.
+    verify(driverEndpointRef, never()).send(RemoveExecutor("1", ExecutorKilled))
+    verify(driverEndpointRef).send(RemoveExecutor("2", ExecutorKilled))
+  }
+
   test("Annotates executor pods with deletion cost when configured") {
     sparkConf.set(KUBERNETES_EXECUTOR_POD_DELETION_COST, 7)
     schedulerBackendUnderTest.start()
