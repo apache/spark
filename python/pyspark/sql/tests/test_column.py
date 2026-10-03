@@ -31,10 +31,6 @@ from pyspark.testing.utils import have_pandas, pandas_requirement_message
 
 
 class ColumnTestsMixin:
-    def assert_column_resolution_error(self, exception, *, classic_condition, connect_condition):
-        """Assert the API-specific condition for a shared Classic/Connect test."""
-        self.assertEqual(exception.getCondition(), classic_condition)
-
     def test_column_name_encoding(self):
         """Ensure that created columns has `str` type consistently."""
         columns = self.spark.createDataFrame([("Alice", 1)], ["name", "age"]).columns
@@ -838,10 +834,9 @@ class ColumnTestsMixin:
             df.withColumn("c", sf.col("c").cast("string")).withColumn(
                 "c", sf.col("c").cast("int")
             ).select(df.c).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
-            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        self.assertEqual(
+            error.exception.getCondition(),
+            "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
         )
 
     def test_resolve_after_select_alias_shadow(self):
@@ -851,10 +846,9 @@ class ColumnTestsMixin:
         df = self.spark.sql("SELECT 1 AS c")
         with self.assertRaises(AnalysisException) as error:
             df.select(df.c.cast("string").alias("c")).select(df.c).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
-            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        self.assertEqual(
+            error.exception.getCondition(),
+            "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
         )
 
     def test_resolve_after_withcolumnrenamed(self):
@@ -864,10 +858,9 @@ class ColumnTestsMixin:
         df = self.spark.sql("SELECT 1 AS c")
         with self.assertRaises(AnalysisException) as error:
             df.withColumnRenamed("c", "c2").select(df.c).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        self.assertEqual(
+            error.exception.getCondition(),
+            "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
         )
 
     def test_resolve_after_drop(self):
@@ -876,10 +869,9 @@ class ColumnTestsMixin:
         df = self.spark.sql("SELECT 1 AS c, 2 AS d")
         with self.assertRaises(AnalysisException) as error:
             df.drop("c").select(df.c).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        self.assertEqual(
+            error.exception.getCondition(),
+            "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
         )
 
     def test_resolve_generator_after_projection(self):
@@ -888,10 +880,9 @@ class ColumnTestsMixin:
         projected = df.select(sf.lit(0).alias("keep"))
         with self.assertRaises(AnalysisException) as error:
             projected.select(sf.explode(df.arr)).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        self.assertEqual(
+            error.exception.getCondition(),
+            "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
         )
 
     def test_resolve_through_filter(self):
@@ -929,10 +920,9 @@ class ColumnTestsMixin:
         df = self.spark.sql("SELECT 1 AS c")
         with self.assertRaises(AnalysisException) as error:
             df.groupBy().agg(sf.sum("c").alias("c")).select(df.c).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
-            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        self.assertEqual(
+            error.exception.getCondition(),
+            "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
         )
 
     def test_resolve_after_pivot(self):
@@ -1101,11 +1091,7 @@ class ColumnTestsMixin:
         a, b = df.alias("a"), df.alias("b")
         with self.assertRaises(AnalysisException) as error:
             a.join(b, a.c == b.c).select(df.c).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="_LEGACY_ERROR_TEMP_1182",
-            connect_condition="AMBIGUOUS_COLUMN_REFERENCE",
-        )
+        self.assertEqual(error.exception.getCondition(), "_LEGACY_ERROR_TEMP_1182")
 
     def test_resolve_after_subquery_view(self):
         # Persisting the DataFrame as a temp view and reading it back via
@@ -1128,10 +1114,9 @@ class ColumnTestsMixin:
         df2 = self.spark.range(5)
         with self.assertRaises(AnalysisException) as error:
             df1.select(df2.id).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
-            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        self.assertEqual(
+            error.exception.getCondition(),
+            "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
         )
 
     def test_resolve_df_star(self):
