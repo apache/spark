@@ -3887,6 +3887,19 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         self.assertEqual(list(r), [1, 2, 3])
         self.assertEqual([v for v in r], [1, 2, 3])
 
+    def test_variant_builder_size_limit(self):
+        from pyspark.sql.variant_utils import VariantBuilder
+
+        for json_str in ['"%s"' % ("a" * 100), '{"%s": 1}' % ("k" * 100)]:
+            with self.assertRaises(PySparkValueError) as pe:
+                VariantBuilder(size_limit=64).build(json_str)
+
+            self.check_error(
+                exception=pe.exception,
+                errorClass="VARIANT_SIZE_LIMIT_EXCEEDED",
+                messageParameters={"size_limit": "64"},
+            )
+
 
 class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
     def test_verify_type_exception_msg(self):

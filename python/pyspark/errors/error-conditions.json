@@ -194,7 +194,7 @@
   },
   "DATA_SOURCE_EXTRANEOUS_FILTERS": {
     "message": [
-      "<type>.pushFilters() returned filters that are not part of the input. Make sure that each returned filter is one of the input filters by reference."
+      "<type>.pushFilters() returned filters that are not part of the input. Make sure that each returned filter is one of the input filters by reference. Input filters: <input>. Extraneous filters: <extraneous>."
     ]
   },
   "DATA_SOURCE_INVALID_RETURN_TYPE": {
@@ -450,6 +450,11 @@
   "INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP": {
     "message": [
       "Invalid number of dataframes in group <dataframes_in_group>."
+    ]
+  },
+  "INVALID_OPERATION_UUID_ID": {
+    "message": [
+      "Parameter value <arg_name> must be a valid UUID format: <origin>"
     ]
   },
   "INVALID_PANDAS_UDF": {
@@ -1151,6 +1156,12 @@
       "<data_type> is not supported in conversion to Arrow."
     ]
   },
+  "UNSUPPORTED_FILTER": {
+    "message": [
+      "Unsupported filter <name>."
+    ],
+    "sqlState": "0A000"
+  },
   "UNSUPPORTED_JOIN_TYPE": {
     "message": [
       "Unsupported join type: '<typ>'. Supported join types include: <supported>."
@@ -1255,6 +1266,12 @@
     "message": [
       "Value for `<arg_name>` must be between <lower_bound> and <upper_bound> (inclusive), got <actual>"
     ]
+  },
+  "VARIANT_SIZE_LIMIT_EXCEEDED": {
+    "message": [
+      "Cannot build variant bigger than <size_limit> bytes."
+    ],
+    "sqlState": "22023"
   },
   "WKB_PARSE_ERROR" : {
     "message" : [
