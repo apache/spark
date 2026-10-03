@@ -26,10 +26,13 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{
   AutoCdcReservedNames,
   ColumnSelection,
+  Scd1BatchProcessor,
+  ScdType,
   UnqualifiedColumnName
 }
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.LongType
 
 /**
  * Tests covering AutoCDC's interaction with non-key schema evolution across pipeline runs. The
@@ -49,6 +52,77 @@ class AutoCdcScd1SchemaEvolutionSuite
     with AutoCdcGraphExecutionTestMixin {
 
   import testImplicits._
+
+  test("legacy SCD1 CDC metadata schema evolves to include the version map") {
+    val targetName = s"$catalog.$namespace.target"
+    val auxiliaryName = auxTableNameFor("target")
+    val cdcMetadataCol = AutoCdcReservedNames.cdcMetadataColName
+    val deleteSequence = Scd1BatchProcessor.cdcDeleteSequenceFieldName
+    val upsertSequence = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    val legacyMetadataDdl =
+      s"$cdcMetadataCol STRUCT<$deleteSequence:BIGINT,$upsertSequence:BIGINT> NOT NULL"
+
+    spark.sql(
+      s"CREATE TABLE $targetName " +
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $legacyMetadataDdl)"
+    )
+    spark.sql(
+      s"""CREATE TABLE $auxiliaryName (id INT NOT NULL, $legacyMetadataDdl) """ +
+      s"""TBLPROPERTIES (""" +
+      s"""'${AutoCdcAuxiliaryTable.scdTypePropertyKey}' = '${ScdType.Type1.label}', """ +
+      s"""'${AutoCdcAuxiliaryTable.keyColumnNamesProperty}' = '["id"]')"""
+    )
+
+    spark.sql(
+      s"INSERT INTO $targetName VALUES " +
+      s"(1, 'alice', CAST(5 AS BIGINT), " +
+      s"named_struct('$deleteSequence', CAST(NULL AS BIGINT), " +
+      s"'$upsertSequence', CAST(5 AS BIGINT))), " +
+      s"(3, 'carol', CAST(5 AS BIGINT), " +
+      s"named_struct('$deleteSequence', CAST(NULL AS BIGINT), " +
+      s"'$upsertSequence', CAST(5 AS BIGINT)))"
+    )
+    spark.sql(
+      s"INSERT INTO $auxiliaryName VALUES " +
+      s"(2, named_struct('$deleteSequence', CAST(5 AS BIGINT), " +
+      s"'$upsertSequence', CAST(NULL AS BIGINT))), " +
+      s"(4, named_struct('$deleteSequence', CAST(5 AS BIGINT), " +
+      s"'$upsertSequence', CAST(NULL AS BIGINT)))"
+    )
+
+    val stream = MemoryStream[(Int, String, Long)]
+    // Update one legacy target row and one legacy tombstone. The other rows remain untouched,
+    // demonstrating that both rewritten and existing metadata values acquire a null version map.
+    stream.addData((1, "alicia", 6L), (2, "ignored-delete-value", 6L))
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream.toDF().toDF("id", "name", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version"),
+      deleteCondition = Some(functions.col("id") === 2)))
+
+    val expectedMetadataSchema = Scd1BatchProcessor.cdcMetadataColSchema(LongType)
+    assert(
+      spark.table(targetName).schema(cdcMetadataCol).dataType ===
+        expectedMetadataSchema.asNullable)
+    assert(
+      spark.table(auxiliaryName).schema(cdcMetadataCol).dataType === expectedMetadataSchema)
+    checkAnswer(
+      spark.table(targetName),
+      Seq(
+        Row(1, "alicia", 6L, cdcMeta(None, Some(6L))),
+        Row(3, "carol", 5L, cdcMeta(None, Some(5L)))
+      )
+    )
+    checkAnswer(
+      spark.table(auxiliaryName),
+      Seq(
+        Row(2, cdcMeta(Some(6L), None)),
+        Row(4, cdcMeta(Some(5L), None))
+      )
+    )
+  }
 
   test("a nullable non-key column merges correctly with mixed NULL and non-NULL values") {
     // Single MemoryStream with `email` as nullable from the start. Run #1 emits a row with

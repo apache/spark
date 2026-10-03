@@ -90,13 +90,17 @@ trait AutoCdcCatalogExecutionTestBase {
     new StructType()
       .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, sequencingType)
       .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, sequencingType)
+      .add(
+        Scd1BatchProcessor.versionMapFieldName,
+        Scd1VersionMap.mapType(sequencingType)
+      )
 
   /**
-   * Build a [[Row]] matching the [[AutoCdcReservedNames.cdcMetadataColName]] struct's two fields,
+   * Build a [[Row]] matching the [[AutoCdcReservedNames.cdcMetadataColName]] struct's three fields,
    * in the order produced by [[Scd1BatchProcessor.constructCdcMetadataCol]]:
    */
   protected def cdcMetadataRow[T](deleteSeq: Option[T], upsertSeq: Option[T]): Row =
-    Row(deleteSeq.getOrElse(null), upsertSeq.getOrElse(null))
+    Row(deleteSeq.getOrElse(null), upsertSeq.getOrElse(null), null)
 
   /**
    * Create a table in the test catalog under the given DSv2 [[Identifier]] using `schema`,
