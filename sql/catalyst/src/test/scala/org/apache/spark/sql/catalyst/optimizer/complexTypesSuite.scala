@@ -239,6 +239,18 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     checkRule(query, expected)
   }
 
+  test("SPARK-59604: simplify map lookups in reverse entry order with LAST_WIN") {
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      val entries = Seq($"id", $"id" + 1L, Literal(1L), $"nullable_id", $"id", $"id" + 2L)
+      val query = relation.select(GetMapValue(CreateMap(entries), $"nullable_id") as "value")
+      val expected = relation.select(
+        CaseKeyWhen($"nullable_id",
+          Seq($"id", $"id" + 2L, Literal(1L), $"nullable_id", $"id", $"id" + 1L)) as "value")
+
+      comparePlans(SimplifyExtractValueOps(query.analyze), expected.analyze)
+    }
+  }
+
   test("simplify map ops, dynamic lookup, dynamic keys, lookup is equivalent to one of the keys") {
     val query = relation
       .select(
