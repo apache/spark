@@ -344,9 +344,22 @@ object CodeCompiler extends Logging {
    */
   private[sql] final class TrialCompile private[codegen] (val failureExpected: Boolean) {
     private val hugeMethods = mutable.ArrayBuffer.empty[(String, String, Int)]
+    private val methods = mutable.ArrayBuffer.empty[(String, Int)]
 
     private[codegen] def holdHugeMethod(className: String, methodName: String, size: Int): Unit =
       hugeMethods += ((className, methodName, size))
+
+    private[codegen] def recordMethod(methodName: String, size: Int): Unit =
+      methods += ((methodName, size))
+
+    /**
+     * The bytecode size of every method the compile produced, by its name in the source, the
+     * largest where a name is in more than one class; empty where the compile was a hit in the
+     * compile cache, which produces nothing. Janino names a private method of an inner class with
+     * a `$` after its name in the source.
+     */
+    def methodSizes: Map[String, Int] =
+      methods.groupMapReduce(_._1.stripSuffix("$"))(_._2)(math.max)
 
     /** Makes the reports the compile held back, for the code its caller keeps. */
     def report(): Unit = hugeMethods.foreach { case (className, methodName, size) =>
@@ -454,6 +467,7 @@ object CodeCompiler extends Logging {
           method.getAttributes.collect { case attr: CodeAttribute =>
             val byteCodeSize = attr.code.length
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
+            Option(currentTrial.get).foreach(_.recordMethod(method.getName, byteCodeSize))
             if (byteCodeSize > CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT) {
               logHugeMethod(cf.getThisClassName, method.getName, byteCodeSize)
             }

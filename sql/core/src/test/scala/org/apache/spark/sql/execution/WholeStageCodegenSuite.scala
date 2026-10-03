@@ -20,13 +20,15 @@ package org.apache.spark.sql.execution
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.Duration
 
+import scala.util.{Failure, Try}
+
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, With}
-import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
+import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodegenContext, CodeGenerator, WholeStageSplit}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -1838,7 +1840,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
 
   /** The splits recorded in generating `df`'s stages with them recorded, as the gate first does. */
   private def recordedSplits(df: DataFrame): Int = df.queryExecution.executedPlan.collect {
-    case w: WholeStageCodegenExec => w.generate(splitRecording = true)._1.wholeStageSplitsRecorded
+    case w: WholeStageCodegenExec => w.generate(WholeStageSplit.Record)._1.wholeStageSplitsRecorded
+      .length
   }.sum
 
   /** `CASE WHEN v = 0 THEN v * 0 ... ELSE end END AS r FROM t`, `n` branches. */
@@ -1911,6 +1914,49 @@ class WholeStageCodegenSuite extends SharedSparkSession
       assert(!splitsCaseWhen(query()))
       assert(withSplitAlways(splitsCaseWhen(query())))
       checkAnswer(query(), withoutWholeStage(query()))
+      // So does a stage with no CASE WHEN whose common subexpressions take the split pass of
+      // subexpression elimination, whose discarded first pass keeps the helpers it added, as
+      // with the conf off.
+      val common = () => sql((0 until 8).map { i =>
+        s"concat(cast(array(v, v + $i, v * 2) AS STRING), cast(array(v, v + $i, v * 2) AS " +
+          s"STRING)) AS c$i"
+      }.mkString("SELECT ", ", ", " FROM t"))
+      assert(genCode(common()).map(_.body) ===
+        withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
+          genCode(common()).map(_.body)
+        })
+    }
+  }
+
+  test("SPARK-33301: a stage splits only the CASE WHENs in its methods past the limit") {
+    // The filter's CASE WHEN is generated into `processNext`, which stays under the limit; the
+    // projection's into a method of its own, past it. Only the projection's is split: the
+    // filter's would only be slowed down by the calls, in a method the JIT compiles whole.
+    withTempView("t") {
+      spark.range(100).selectExpr("id AS v").createOrReplaceTempView("t")
+      def caseWhen(n: Int, base: Int): String =
+        (0 until n).map(i => s"WHEN v = $i THEN v * ${base + i}").mkString("CASE ", " ", " END")
+      val query = () => sql(s"SELECT ${caseWhen(300, 9000)} AS r FROM t " +
+        s"WHERE ${caseWhen(64, 7000)} > 5")
+      val Seq(code) = genCode(query())
+      def methodsWith(literal: String): Set[String] = CodeGenerator.wholeStageSplitMarkersByMethod(
+        code.body.replace(literal, CodeGenerator.wholeStageSplitMarker(0))).getOrElse(0, Set.empty)
+      assert(methodsWith("9001L").nonEmpty && methodsWith("9001L").forall(_.contains("caseWhen")),
+        "the projection's CASE WHEN is split")
+      assert(methodsWith("7001L").nonEmpty && !methodsWith("7001L").exists(_.contains("caseWhen")),
+        "the filter's CASE WHEN stays where it was")
+      checkAnswer(query(), withoutWholeStage(query()))
+    }
+  }
+
+  test("SPARK-33301: the group calls of a split outside a stage are not held to its audit") {
+    // Under testing every call a whole stage split leaves in a subexpression's method is checked
+    // against that method's parameters. A struct hash split by `splitExpressions` passes its own
+    // locals to its group functions, which is right, and is not checked.
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      val struct = (0 until 200).map(i => s"'f$i', id + $i").mkString("named_struct(", ", ", ")")
+      val df = sql(s"SELECT hash($struct) + 1 AS a, hash($struct) + 2 AS b FROM range(10)")
+      checkAnswer(df, withoutWholeStage(df))
     }
   }
 
@@ -1940,71 +1986,121 @@ class WholeStageCodegenSuite extends SharedSparkSession
   }
 
   test("SPARK-33301: the code a stage keeps unsplit reports its method past the JIT limit") {
-    // The trial compile holds its reports back for the code kept. With the limit raised past
-    // HotSpot's 8000 bytes, the unsplit code of 300 branches is kept although the JIT leaves its
-    // method interpreted, which is reported as for any compiled code. The query differs from the
-    // test above's, so that its code is not in the compile cache, where no report is made again.
+    // The trial compile holds its reports back for the code kept. Here the default limit keeps
+    // the split of 300 branches, whose code in one piece was compiled in a trial and is not kept.
+    // That code then leaves the compile cache, so a later compile of it reports its method past
+    // the JIT limit, as for any compiled code: with the split turned off, and with the limit
+    // raised past HotSpot's 8000 bytes, where the stage keeps the code in one piece although the
+    // JIT leaves its method interpreted.
     withTempView("t") {
       spark.range(100).selectExpr("id AS v").createOrReplaceTempView("t")
       val query = caseWhenOverT(300, end = -7)
+      def reports(confs: (String, String)*): Boolean = {
+        val logs = new LogAppender("the kept code's reports")
+        withLogAppender(logs,
+            loggerNames = Seq(classOf[CodeGenerator[_, _]].getName),
+            level = Some(Level.DEBUG)) {
+          // Compiled here rather than by running the query, which compiles with the session's
+          // class loader, and so with Janino whatever the backend (`CodeCompiler.active`).
+          withSQLConf(confs: _*)(genCode(sql(query)).foreach(CodeGenerator.compile))
+        }
+        logs.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+          "too long to be JIT compiled"))
+      }
       for (backend <- Seq("janino", "jdk")) {
-        withSQLConf(SQLConf.CODEGEN_COMPILER.key -> backend,
-            SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS_METHOD_LIMIT.key -> "65535") {
-          val logs = new LogAppender("the kept code's reports")
-          withLogAppender(logs,
-              loggerNames = Seq(classOf[CodeGenerator[_, _]].getName),
-              level = Some(Level.DEBUG)) {
+        withSQLConf(SQLConf.CODEGEN_COMPILER.key -> backend) {
+          assert(splitsCaseWhen(sql(query)))
+          assert(reports(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false"), backend)
+          assert(reports(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS_METHOD_LIMIT.key -> "65535"), backend)
+          withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS_METHOD_LIMIT.key -> "65535") {
             assert(!splitsCaseWhen(sql(query)))
           }
-          assert(logs.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
-            "too long to be JIT compiled")), backend)
         }
       }
     }
   }
 
   test("SPARK-33301: which code a stage keeps, from its trial compiles") {
-    // `chooseCode`'s decisions past the method limit, with the compile replaced, so that a split
-    // can fail to compile and a method can be as large as a decision needs.
+    // `chooseCode`'s decisions, with the compile replaced, so that a method can be as large as a
+    // decision needs and a split can fail to compile.
     withTempView("t") {
       spark.range(100).selectExpr("id AS v").createOrReplaceTempView("t")
       val stage = sql(caseWhenOverT(300, end = -1)).queryExecution.executedPlan.collectFirst {
         case w: WholeStageCodegenExec => w
       }.get
-      val unsplit = stage.generate(splitRecording = true)
-      assert(unsplit._1.wholeStageSplitsRecorded > 0)
-      lazy val split = stage.generate(splitRecording = false)
-      def stats(largestMethod: Int): ByteCodeStats = ByteCodeStats(largestMethod, 0, 0)
+      val recorded = stage.generate(WholeStageSplit.Record)
+      val ctx = recorded._1
+      assert(ctx.wholeStageSplitsRecorded.length === 1)
+      // The method the CASE WHEN's code lands in.
+      val Seq(method) = CodeGenerator.wholeStageSplitMarkersByMethod(ctx.wholeStageSplitSource)
+        .get(0).toSeq.flatten
       val failure = new IllegalStateException("does not compile")
-      def choose(
-          compile: CodeAndComment => ByteCodeStats, fallBack: Boolean = true): CodeAndComment =
-        stage.chooseCode(unsplit, () => split, compile, fallBack)._2
-      // The split is kept where it makes the stage's largest method smaller...
-      assert(choose(c => if (c eq unsplit._2) stats(20000) else stats(3000)) eq split._2)
-      // ...and not where it leaves it as it was: the method past the limit holds nothing it moves.
-      assert(choose(_ => stats(20000)) eq unsplit._2)
-      // A split that fails to compile leaves the unsplit code, which compiled; under testing, or
-      // with the fallback off, the failure is thrown, as a stage's failure to compile is.
-      def splitFails(c: CodeAndComment): ByteCodeStats =
-        if (c eq unsplit._2) stats(20000) else throw failure
-      assert(choose(splitFails) eq unsplit._2)
-      assert(intercept[IllegalStateException](choose(splitFails, fallBack = false)) eq failure)
-      // An unsplit code that fails to compile is remembered, so the stage goes straight to its
-      // split the next time, the failure costing a compile only once. A copy of the code no other
-      // test generates keeps the memory to this test.
-      val fresh = (unsplit._1,
-        new CodeAndComment(unsplit._2.body + "\n/* a failed trial */", unsplit._2.comment))
-      var trials = 0
-      def unsplitFails(c: CodeAndComment): ByteCodeStats = {
-        if (c eq fresh._2) {
-          trials += 1
-          throw failure
-        }
-        stats(3000)
+      // Each case its own copy of the code, since a decision is remembered by the code.
+      var copies = 0
+      def fresh(): (CodegenContext, CodeAndComment) = {
+        copies += 1
+        (ctx, new CodeAndComment(recorded._2.body + s"\n/* copy $copies */", recorded._2.comment))
       }
-      assert(stage.chooseCode(fresh, () => split, unsplitFails, true)._2 eq split._2)
-      assert(stage.chooseCode(fresh, () => split, unsplitFails, true)._2 eq split._2)
-      assert(trials === 1)
+      class Run(whole: Map[String, Int], split: Option[Map[String, Int]]) {
+        val code = fresh()
+        val splitCode = (ctx, new CodeAndComment(code._2.body + "\n/* split */", code._2.comment))
+        var splitAsked = Seq.empty[Option[Set[Seq[Seq[Expression]]]]]
+        var compiles = 0
+        var invalidated = Seq.empty[CodeAndComment]
+        def choose(throwSplitFailure: Boolean = false): CodeAndComment = stage.chooseCode(code,
+          only => { splitAsked :+= only; splitCode },
+          (c, _) => {
+            compiles += 1
+            WholeStageCodegenExec.TrialResult(
+              Try(if (c eq code._2) whole else split.getOrElse(throw failure)), () => ())
+          },
+          c => invalidated :+= c, throwSplitFailure)._2
+      }
+      val recordedOnly = Some(Set(ctx.wholeStageSplitsRecorded.head))
+      // The split is kept where it lowers the bytes past the limit, and the code in one piece
+      // leaves the compile cache.
+      val kept = new Run(Map(method -> 20000), Some(Map(method -> 3000)))
+      assert(kept.choose() eq kept.splitCode._2)
+      assert(kept.splitAsked === Seq(recordedOnly) && kept.invalidated === Seq(kept.code._2))
+      // A larger method that holds nothing marked does not stop the split of the one that does.
+      val beside = new Run(Map(method -> 9000, "other" -> 12000),
+        Some(Map(method -> 1500, "other" -> 12000)))
+      assert(beside.choose() eq beside.splitCode._2)
+      // A method past the limit that holds nothing marked, or a method run once, is left alone,
+      // with no split generated.
+      for (whole <- Seq(Map(method -> 1000, "other" -> 20000), Map(method -> 1000,
+          "init" -> 20000))) {
+        val left = new Run(whole, None)
+        assert(left.choose() eq left.code._2)
+        assert(left.splitAsked.isEmpty && left.compiles === 1)
+      }
+      // A split that leaves the bytes past the limit as they were is not kept, and leaves the
+      // compile cache itself.
+      val same = new Run(Map(method -> 20000), Some(Map(method -> 20000)))
+      assert(same.choose() eq same.code._2)
+      assert(same.invalidated === Seq(same.splitCode._2))
+      // A split that fails to compile leaves the code in one piece, which compiled, and is not
+      // tried again; under testing the failure is thrown.
+      val fails = new Run(Map(method -> 20000), None)
+      assert(fails.choose() eq fails.code._2)
+      assert(fails.choose() eq fails.code._2)
+      assert(fails.compiles === 2)
+      val thrown = new Run(Map(method -> 20000), None)
+      assert(intercept[IllegalStateException](thrown.choose(throwSplitFailure = true)) eq failure)
+      // Code in one piece that fails to compile has every expression split, and the decision is
+      // remembered: the next generation asks for the same split with no trial.
+      val broken = new Run(Map.empty, Some(Map.empty)) {
+        override def choose(throwSplitFailure: Boolean): CodeAndComment = stage.chooseCode(code,
+          only => { splitAsked :+= only; splitCode },
+          (_, _) => {
+            compiles += 1
+            WholeStageCodegenExec.TrialResult(Failure(failure), () => ())
+          },
+          _ => (), throwSplitFailure)._2
+      }
+      assert(broken.choose() eq broken.splitCode._2)
+      assert(broken.choose() eq broken.splitCode._2)
+      assert(broken.splitAsked === Seq(None, None) && broken.compiles === 1)
     }
   }
 

@@ -139,17 +139,17 @@ class CollectInputsSuite extends SparkFunSuite with SQLHelper {
     assert(!ctx.collectInputs(Seq(input(0)), operator, Map.empty).get.readsRow)
   }
 
-  test("a slot of a compacted mutable state array: a field for a whole stage split, refused for " +
-      "a common expression's method, passed as it is for an operator's") {
+  test("a slot of a compacted mutable state array is a field under every policy, never a " +
+      "parameter, which no method could declare") {
     val ctx = context()
     // A state of a type that is not primitive is compacted into an array, and its name is a slot.
     val slot = ctx.addMutableState("UTF8String", "value")
     assert(slot.matches("\\w+\\[\\d+\\]"), slot)
     ctx.currentVars = Seq(ExprCode(EmptyBlock, FalseLiteral, JavaCode.variable(slot, StringType)))
     val expr = Length(BoundReference(0, StringType, nullable = false))
-    assert(names(ctx.collectInputs(Seq(expr), InputPolicy.wholeStageSplit, Map.empty).get).isEmpty)
-    assert(ctx.collectInputs(Seq(expr), commonExpr, Map.empty).isEmpty)
-    assert(names(ctx.collectInputs(Seq(expr), operator, Map.empty).get) == Seq(slot))
+    for (policy <- Seq(InputPolicy.wholeStageSplit, commonExpr, operator)) {
+      assert(names(ctx.collectInputs(Seq(expr), policy, Map.empty).get).isEmpty, policy)
+    }
   }
 
   test("the whole stage split leaves a block it cannot move inline, between the runs of calls") {
@@ -158,6 +158,7 @@ class CollectInputsSuite extends SparkFunSuite with SQLHelper {
     // and after it are two runs.
     withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
       val ctx = context()
+      ctx.wholeStageSplit = WholeStageSplit.Split(None)
       ctx.currentVars = Seq(evaluated(0), deferred(1))
       val pieces = Seq(
         "int a = value_0;" -> Seq(input(0)),
@@ -176,6 +177,7 @@ class CollectInputsSuite extends SparkFunSuite with SQLHelper {
   test("a split call passing what its enclosing method does not take fails the audit") {
     withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
       val ctx = context()
+      ctx.wholeStageSplit = WholeStageSplit.Split(None)
       ctx.currentVars = Seq(evaluated(0))
       val code = ctx.splitExpressionsWithSources(
         Seq("int a = value_0;" -> Seq(input(0)), "int b = value_0;" -> Seq(input(0))), "f")
