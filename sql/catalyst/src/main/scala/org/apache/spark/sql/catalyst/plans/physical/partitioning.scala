@@ -2139,14 +2139,14 @@ case class KeyedShuffleSpec(
     transform.children.forall(_.isInstanceOf[Attribute])
 
   /**
-   * `transform` with its argument replaced by `column`. Only a transform of bare columns can be
-   * rebuilt this way. Any other argument would lose what surrounds its column, e.g. the `+ 1` of
+   * `transform`, whose arguments are bare columns, with each replaced by `key`, which may be any
+   * expression. Any other argument would lose what surrounds its column, e.g. the `+ 1` of
    * `bucket(4, b + 1)`.
    */
-  private def rebuiltOver(transform: TransformExpression, column: Expression)
+  private def rebuiltOver(transform: TransformExpression, key: Expression)
       : TransformExpression = {
-    assert(argumentsAreColumns(transform), s"Cannot rebuild $transform over $column")
-    transform.copy(children = transform.children.map(_ => column))
+    assert(argumentsAreColumns(transform), s"Cannot rebuild $transform over $key")
+    transform.copy(children = transform.children.map(_ => key))
   }
 
   /**
