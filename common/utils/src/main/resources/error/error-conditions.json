@@ -1054,6 +1054,24 @@
     ],
     "sqlState" : "55019"
   },
+  "CHECKPOINT_DIRECTORY_PARTITION_COUNT_MISMATCH" : {
+    "message" : [
+      "The checkpoint directory <path> records <expected> partition(s) but <found> partition file(s) were found."
+    ],
+    "subClass" : {
+      "MISSING_FILES" : {
+        "message" : [
+          "One or more trailing part files may have been lost. Use `spark.checkpoint.verifyPartitionCount.enabled=false` to bypass this check and load the truncated directory as-is."
+        ]
+      },
+      "UNEXPECTED_FILES" : {
+        "message" : [
+          "The directory contains part files that were not written by the checkpoint that recorded the count. Use `spark.checkpoint.verifyPartitionCount.enabled=false` to bypass this check and load all part files as-is."
+        ]
+      }
+    },
+    "sqlState" : "58030"
+  },
   "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
       "Checksum verification failed, the file may be corrupted. File: <fileName>",
