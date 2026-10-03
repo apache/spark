@@ -306,6 +306,21 @@ private[spark] class ContextCleaner(
     mgr != null && !mgr.usesStreamingShuffleOutputTracker && mgr.holdsShuffle(shuffleId)
   }
 
+  /**
+   * Notify listeners that the files of `shuffleId` were removed outside of this cleaner (e.g. by
+   * SQL shuffle dependency cleanup) while the shuffle stays registered on the MapOutputTracker.
+   * Unlike `doCleanupShuffle`, this fires `shuffleFilesRemoved` rather than `shuffleCleaned`, since
+   * the shuffle's map outputs are not unregistered.
+   */
+  def notifyShuffleFilesRemoved(shuffleId: Int): Unit = {
+    try {
+      listeners.asScala.foreach(_.shuffleFilesRemoved(shuffleId))
+    } catch {
+      case e: Exception =>
+        logError(log"Error notifying removal of shuffle ${MDC(SHUFFLE_ID, shuffleId)}", e)
+    }
+  }
+
   /** Perform broadcast cleanup. */
   def doCleanupBroadcast(broadcastId: Long, blocking: Boolean): Unit = {
     try {
@@ -376,6 +391,11 @@ private object ContextCleaner {
 private[spark] trait CleanerListener {
   def rddCleaned(rddId: Int): Unit
   def shuffleCleaned(shuffleId: Int): Unit
+  /**
+   * Called when a shuffle's files were removed but the shuffle is still registered on the
+   * MapOutputTracker (see `ContextCleaner.notifyShuffleFilesRemoved`).
+   */
+  def shuffleFilesRemoved(shuffleId: Int): Unit = {}
   def broadcastCleaned(broadcastId: Long): Unit
   def accumCleaned(accId: Long): Unit
   def checkpointCleaned(rddId: Long): Unit
