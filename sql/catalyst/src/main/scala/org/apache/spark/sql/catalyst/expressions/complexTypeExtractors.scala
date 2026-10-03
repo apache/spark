@@ -547,9 +547,14 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     val hm = new java.util.HashMap[Any, Int]((len * 1.5).toInt)
     var i = 0
     while (i < len) {
-      // putIfAbsent preserves first-match semantics for maps with duplicate keys (allowed at
-      // the physical level by [[ArrayBasedMapData]]), matching the linear scan path.
-      hm.putIfAbsent(keys.get(i, keyType), i)
+      // Null keys are skipped so this map describes the same key set as the other lookup
+      // paths. Unlike them it is a no-op rather than a fix: a non-null lookup key can never
+      // hash-match a null entry here. See [[LinearExecutor]] for the case that does matter.
+      if (!keys.isNullAt(i)) {
+        // putIfAbsent preserves first-match semantics for maps with duplicate keys (allowed at
+        // the physical level by [[ArrayBasedMapData]]), matching the linear scan path.
+        hm.putIfAbsent(keys.get(i, keyType), i)
+      }
       i += 1
     }
     hm
@@ -572,12 +577,18 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     val mask = cap - 1
     var i = 0
     while (i < len) {
-      var h = hashKeyOnDriver(keys.get(i, keyType), keyType) & mask
-      // Open addressing with linear probing; duplicates take the next free slot so that the
-      // lookup (which stops at the first match) returns the first-inserted index -- matches
-      // [[buildHashIndex]] / [[ArrayBasedMapData]] first-wins semantics.
-      while (buckets(h) != -1) h = (h + 1) & mask
-      buckets(h) = i
+      // Null keys are skipped, as in [[buildHashIndex]]. This is load-bearing here: the
+      // generated probe reads a candidate key with a primitive getter, which on a null slot
+      // returns the type's zero value, so a bucket for a null key would let a lookup of 0
+      // match it.
+      if (!keys.isNullAt(i)) {
+        var h = hashKeyOnDriver(keys.get(i, keyType), keyType) & mask
+        // Open addressing with linear probing; duplicates take the next free slot so that the
+        // lookup (which stops at the first match) returns the first-inserted index -- matches
+        // [[buildHashIndex]] / [[ArrayBasedMapData]] first-wins semantics.
+        while (buckets(h) != -1) h = (h + 1) & mask
+        buckets(h) = i
+      }
       i += 1
     }
     (buckets, mask)
@@ -651,7 +662,14 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
       var i = 0
       var found = false
       while (i < length && !found) {
-        if (ordering.equiv(keys.get(i, keyType), ordinal)) {
+        // Skip null keys. `ordinal` is never null here (the caller is null-safe on both
+        // inputs), so a null key can never be the one being looked up. The guard is required
+        // rather than cosmetic: `ordering` is the key type's natural ordering, and for a
+        // primitive key type it unboxes its arguments, turning a null key into the type's
+        // zero value -- which would make a lookup of 0 match it. `get` is already null-aware,
+        // so null-check what it returned rather than asking `isNullAt` separately.
+        val key = keys.get(i, keyType)
+        if (key != null && ordering.equiv(key, ordinal)) {
           found = true
         } else {
           i += 1
@@ -693,6 +711,13 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
            |int $index = -1;
            |
            |for (int $i = 0; $i < $length; $i++) {
+           |  // Skip null keys: `ordinal` is never null here, so a null key can never be the
+           |  // one being looked up. A primitive getter reads a null slot back as the java
+           |  // type's default value, which would let a lookup of 0 match; an object getter
+           |  // returns null, which the compare below would dereference.
+           |  if ($keys.isNullAt($i)) {
+           |    continue;
+           |  }
            |  $keyJavaType $loopKey = ${CodeGenerator.getValue(keys, keyType, i)};
            |  if (${ctx.genEqual(keyType, loopKey, eval2)}) {
            |    $index = $i;
