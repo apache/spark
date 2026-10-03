@@ -90,4 +90,25 @@ public class JavaUtilsSuite {
     assertEquals(1, JavaUtils.listFiles(symlink).size());
     assertEquals(1, JavaUtils.listPaths(symlink).size());
   }
+
+  @Test
+  public void testCheckArgumentUsesMessageVerbatim() {
+    // The no-varargs overload must not run the message through String.format: a '%' in the
+    // message is preserved rather than interpreted as a (here invalid) format conversion, which
+    // would otherwise throw an IllegalFormatException and mask the intended error.
+    String msg = "invalid value: 100% done, %d unparsed";
+    assertDoesNotThrow(() -> JavaUtils.checkArgument(true, msg));
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+      () -> JavaUtils.checkArgument(false, msg));
+    assertEquals(msg, e.getMessage());
+  }
+
+  @Test
+  public void testCheckStateUsesMessageVerbatim() {
+    String msg = "bad state: 50% done, %s missing";
+    assertDoesNotThrow(() -> JavaUtils.checkState(true, msg));
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+      () -> JavaUtils.checkState(false, msg));
+    assertEquals(msg, e.getMessage());
+  }
 }
