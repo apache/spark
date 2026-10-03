@@ -23,7 +23,9 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
-import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{
+  CommitLog, CommitMetadata, OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog,
+  OffsetSeqMetadata, OffsetSeqMetadataV2}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.internal.SQLConf
@@ -106,6 +108,38 @@ class OfflineStateRepartitionSuite extends StreamTest
       condition = "STATE_REPARTITION_INVALID_PARAMETER.IS_NOT_GREATER_THAN_ZERO",
       parameters = Map("parameter" -> "numPartitions")
     )
+  }
+
+  Seq(1, 2).foreach { offsetLogVersion =>
+    test(s"Missing shuffle partitions metadata is not a repartition batch " +
+      s"(offset log v$offsetLogVersion)") {
+      def assertNotRepartitionBatch(
+          previousConf: Map[String, String],
+          currentConf: Map[String, String]): Unit = {
+        withTempDir { dir =>
+          val offsetLog = new OffsetSeqLog(spark, s"${dir.getAbsolutePath}/offsets")
+
+          def makeOffset(conf: Map[String, String]): OffsetSeqBase = {
+            if (offsetLogVersion == 1) {
+              OffsetSeq(Seq.empty, Some(OffsetSeqMetadata(conf = conf)))
+            } else {
+              OffsetMap(Map.empty, OffsetSeqMetadataV2(conf = conf))
+            }
+          }
+
+          assert(offsetLog.add(0, makeOffset(previousConf)))
+          assert(offsetLog.add(1, makeOffset(currentConf)))
+          assert(!isRepartitionBatch(1, offsetLog))
+        }
+      }
+
+      val shufflePartitionsKey = SQLConf.SHUFFLE_PARTITIONS.key
+      val configuredPartitions = Map(shufflePartitionsKey -> "3")
+
+      assertNotRepartitionBatch(Map.empty, Map.empty)
+      assertNotRepartitionBatch(configuredPartitions, Map.empty)
+      assertNotRepartitionBatch(Map.empty, configuredPartitions)
+    }
   }
 
   Seq(1, 2).foreach { ckptVersion =>
