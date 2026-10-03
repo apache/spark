@@ -35,8 +35,9 @@ import org.apache.spark.internal.config.Network.{RPC_ASK_TIMEOUT, RPC_MESSAGE_MA
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus, MapStatus, MergeStatus}
-import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus, MapStatus,
+  MapStatusChecksum, MergeStatus}
+import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockManagerId, BlockManagerMasterEndpoint, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util.collection.Utils.createArray
 
@@ -272,7 +273,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       masterTracker.registerShuffle(20, 100, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
       (0 until 100).foreach { i =>
         masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
-          BlockManagerId("999", "mps", 1000), createArray(4000000, 0L), 5, 100))
+          BlockManagerId("999", "mps", 1000), createArray(4000000, 0L), 5, 100, None))
       }
       val senderAddress = RpcAddress("localhost", 12345)
       val rpcCallContext = mock(classOf[RpcCallContext])
@@ -284,6 +285,27 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       assert(1 == masterTracker.getNumCachedSerializedBroadcast)
       masterTracker.unregisterShuffle(20)
       assert(0 == masterTracker.getNumCachedSerializedBroadcast)
+    }
+  }
+
+  test("MapStatus checksum mismatch triggers MetadataFetchFailedException") {
+    val newConf = new SparkConf
+    newConf.set(SHUFFLE_MAP_STATUS_CHECKSUM_ENABLED, true)
+
+    withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
+      val masterTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+      masterTracker.registerShuffle(30, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+      val sizes = Array[Long](1000L)
+      val validChecksum = MapStatusChecksum.compute(sizes, MapStatusChecksum.CRC32_ALG)
+      val corruptedChecksum = validChecksum.map(_ + 1)
+      val status = new CompressedMapStatus(
+        BlockManagerId("a", "hostA", 1000), sizes, mapTaskId = 0L,
+        checksumVal = 0L, nonEmptyChecksum = corruptedChecksum)
+      masterTracker.registerMapOutput(30, 0, status)
+
+      intercept[MetadataFetchFailedException] {
+        masterTracker.getMapSizesByExecutorId(30, 0)
+      }
     }
   }
 
@@ -579,7 +601,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       masterTracker.registerShuffle(20, 100, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
       (0 until 100).foreach { i =>
         masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
-          BlockManagerId("999", "mps", 1000), createArray(4000000, 0L), 5, 100))
+          BlockManagerId("999", "mps", 1000), createArray(4000000, 0L), 5, 100, None))
       }
 
       val mapWorkerRpcEnv = createRpcEnv("spark-worker", "localhost", 0, new SecurityManager(conf))
@@ -626,7 +648,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       masterTracker.registerShuffle(20, 100, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
       (0 until 100).foreach { i =>
         masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
-          BlockManagerId("999", "mps", 1000), createArray(4000000, 0L), 5, 100))
+          BlockManagerId("999", "mps", 1000), createArray(4000000, 0L), 5, 100, None))
       }
       masterTracker.registerMergeResult(20, 0, MergeStatus(BlockManagerId("999", "mps", 1000), 0,
         bitmap1, 1000L))
