@@ -4,6 +4,10 @@ Copyright 2014 and onwards The Apache Software Foundation.
 This product includes software developed at
 The Apache Software Foundation (http://www.apache.org/).
 
+This product includes a Java port of algorithms and test vectors from the
+Intel Decimal Floating-Point Math Library (Intel RDFP Math Library 2.0 Update 4).
+Copyright (c) 2007-2025, Intel Corp.
+
 
 Export Control Notice
 ---------------------

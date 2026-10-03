@@ -68,6 +68,9 @@
       files="src/main/java/org/apache/spark/network/util/LimitedInputStream.java" />
     <suppress checks="Header"
       files="src/test/java/org/apache/spark/util/collection/TestTimSort.java" />
+    <!-- Intel-derived LibBID files carry the complete BSD-3-Clause header. -->
+    <suppress checks="Header"
+      files=".*[\\/]org[\\/]bidfp[\\/].*"/>
     <suppress checks=".*"
               files="src/main/java/org/apache/spark/sql/execution/streaming/state/StateMessage.java"/>
     <suppress checks=".*"
