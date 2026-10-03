@@ -874,6 +874,21 @@ final class ShuffleBlockFetcherIterator(
             } else {
               throwFetchFailedException(blockId, mapIndex, address, new IOException(msg.message))
             }
+          } else if (blockId.isShuffleChunk &&
+              pushBasedFetchHelper.isStaleChunk(blockId.asInstanceOf[ShuffleBlockChunkId])) {
+            // Chunk-granularity stale-push fallback: fall back to fetching only the original
+            // blocks for this chunk (not the whole merged block). Other chunks of the same
+            // merged block are unaffected and can still be read from the merged block.
+            logWarning(log"Found stale pushed map index in ${MDC(BLOCK_ID, blockId)} from " +
+              log"${MDC(URI, address)}, falling back to fetch the original blocks for this chunk")
+            buf.release()
+            // Only this chunk falls back; a stale chunk doesn't mean the host is unhealthy.
+            pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(
+              blockId, address, fallbackPendingChunks = false)
+            // Set result to null to trigger another iteration of the while loop to get either
+            // a SuccessFetchResult or a FailureFetchResult for the fallback blocks.
+            result = null
+            null
           } else {
             try {
               val bufIn = buf.createInputStream()
