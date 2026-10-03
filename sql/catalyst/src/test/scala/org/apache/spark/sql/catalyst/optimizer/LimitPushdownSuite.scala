@@ -335,6 +335,16 @@ class LimitPushdownSuite extends PlanTest {
       GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
   }
 
+  test("SPARK-57125: Push down limit through Offset folds the merged limit") {
+    // The merged LocalLimit must be folded without a later ConstantFolding run.
+    object OptimizeOnlyLimitPushDown extends RuleExecutor[LogicalPlan] {
+      val batches = Batch("Limit pushdown", Once, LimitPushDown) :: Nil
+    }
+    comparePlans(
+      OptimizeOnlyLimitPushDown.execute(testRelation.offset(2).limit(1).analyze),
+      GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
+  }
+
   test("SPARK-39511: Push limit 1 to right side if join type is LeftSemiOrAnti") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
       comparePlans(
