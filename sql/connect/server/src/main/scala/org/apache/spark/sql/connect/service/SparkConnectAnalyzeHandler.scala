@@ -88,7 +88,10 @@ private[connect] class SparkConnectAnalyzeHandler(
     def transformRelationPlan(plan: proto.Plan) = transformRelation(plan.getRoot)
 
     def getDataFrameWithoutExecuting(rel: LogicalPlan): DataFrame = {
-      val qe = session.sessionState.executePlan(rel, CommandExecutionMode.SKIP)
+      // Spark Connect re-resolves the plan on each request, so the analyzed plan already reflects
+      // the latest table state and the refresh phase would only re-issue redundant catalog loads.
+      val qe = session.sessionState.executePlan(
+        rel, CommandExecutionMode.SKIP, refreshPhaseEnabled = false)
       new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
     }
 
