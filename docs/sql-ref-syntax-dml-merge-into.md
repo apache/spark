@@ -487,5 +487,7 @@ SELECT * FROM students;
 
 ### Related Statements
 
+* [DELETE FROM statement](sql-ref-syntax-dml-delete-from.html)
 * [INSERT TABLE statement](sql-ref-syntax-dml-insert-table.html)
 * [SELECT statement](sql-ref-syntax-qry-select.html)
+* [UPDATE statement](sql-ref-syntax-dml-update.html)
