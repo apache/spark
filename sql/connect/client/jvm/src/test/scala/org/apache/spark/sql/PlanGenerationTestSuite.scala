@@ -2402,6 +2402,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.make_time(fn.lit(12), fn.lit(13), fn.lit(14))
   }
 
+  temporalFunctionTest("try_make_time") {
+    fn.try_make_time(fn.lit(12), fn.lit(13), fn.lit(14))
+  }
+
   temporalFunctionTest("current_time") {
     fn.current_time()
   }
