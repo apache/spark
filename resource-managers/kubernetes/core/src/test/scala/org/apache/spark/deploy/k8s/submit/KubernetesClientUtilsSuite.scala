@@ -29,7 +29,7 @@ import io.fabric8.kubernetes.api.model.ConfigMapBuilder
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.Config
+import org.apache.spark.deploy.k8s.{Config, Constants}
 import org.apache.spark.util.Utils
 
 class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
@@ -60,26 +60,54 @@ class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
     assert(output === expectedOutput)
   }
 
-  test("verify load files, truncates the content to maxSize, when keys are very large in number.") {
+  test("SPARK-54694: loadSparkConfDirFiles no longer silently truncates/skips files " +
+      "when their combined size would exceed the config map max size") {
+    // Before SPARK-54694, files were silently dropped here to stay under maxSize,
+    // which could leave an application running with missing configuration. Now, all
+    // conf dir files are loaded as-is; enforcing the size limit is the responsibility
+    // of `validateConfigMapSize`, called right before the config map is actually built.
     val input = (for (i <- 10000 to 1 by -1) yield (s"testConf.${i}" -> "test123456")).toMap
     val sparkConf = testSetup(input.map(f => f._1 -> f._2.getBytes(StandardCharsets.UTF_8)))
       .set(Config.CONFIG_MAP_MAXSIZE.key, "60")
     val output = KubernetesClientUtils.loadSparkConfDirFiles(sparkConf)
-    val expectedOutput = Map("testConf.1" -> "test123456", "testConf.2" -> "test123456")
-    assert(output === expectedOutput)
-    val output1 = KubernetesClientUtils.loadSparkConfDirFiles(
-      sparkConf.set(Config.CONFIG_MAP_MAXSIZE.key, "250000"))
-    assert(output1 === input)
+    assert(output === input)
   }
 
-  test("verify load files, truncates the content to maxSize, when keys are equal in length.") {
-    val input = (for (i <- 9 to 1 by -1) yield (s"testConf.${i}" -> "test123456")).toMap
-    val sparkConf = testSetup(input.map(f => f._1 -> f._2.getBytes(StandardCharsets.UTF_8)))
-      .set(Config.CONFIG_MAP_MAXSIZE.key, "80")
-    val output = KubernetesClientUtils.loadSparkConfDirFiles(sparkConf)
-    val expectedOutput = Map("testConf.1" -> "test123456", "testConf.2" -> "test123456",
-      "testConf.3" -> "test123456")
-    assert(output === expectedOutput)
+  test("SPARK-54694: validateConfigMapSize fails fast when config map data exceeds maxSize") {
+    val confFileMap = Map("testConf.1" -> "test123456", "testConf.2" -> "test123456")
+    val sparkConf = new SparkConf(loadDefaults = false)
+      .set(Config.CONFIG_MAP_MAXSIZE.key, "10")
+    val ex = intercept[IllegalArgumentException] {
+      KubernetesClientUtils.validateConfigMapSize(confFileMap, sparkConf)
+    }
+    assert(ex.getMessage.contains("exceeds the maximum config map size"))
+  }
+
+  test("SPARK-54694: validateConfigMapSize allows config map data within maxSize") {
+    val confFileMap = Map("testConf.1" -> "test123456", "testConf.2" -> "test123456")
+    val exactSize = confFileMap.map { case (k, v) => k.length + v.length }.sum
+    val sparkConf = new SparkConf(loadDefaults = false)
+      .set(Config.CONFIG_MAP_MAXSIZE.key, exactSize.toString)
+    // Should not throw: data size exactly at the limit is allowed.
+    KubernetesClientUtils.validateConfigMapSize(confFileMap, sparkConf)
+  }
+
+  test("SPARK-54694: validateConfigMapSize accounts for the resolved spark.properties size") {
+    // Reproduces the second defect described in SPARK-54694: the size of the
+    // resolved spark.properties file was not previously included when checking
+    // the config map size limit, since that check only ran over the raw conf
+    // dir files before spark.properties was merged in.
+    val configMapName = s"configmap-name-${UUID.randomUUID.toString}"
+    val sparkConf = testSetup(Map.empty)
+    val resolvedProperties = Map("spark.testConf" -> ("v" * 1000))
+    val confFileMap = KubernetesClientUtils.buildSparkConfDirFilesMap(
+      configMapName, sparkConf, resolvedProperties)
+    assert(confFileMap.contains(Constants.SPARK_CONF_FILE_NAME))
+    val ex = intercept[IllegalArgumentException] {
+      KubernetesClientUtils.validateConfigMapSize(
+        confFileMap, sparkConf.set(Config.CONFIG_MAP_MAXSIZE.key, "10"))
+    }
+    assert(ex.getMessage.contains("exceeds the maximum config map size"))
   }
 
   test("verify that configmap built as expected") {
