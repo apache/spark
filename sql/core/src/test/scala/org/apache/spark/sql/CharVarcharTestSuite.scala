@@ -2640,6 +2640,13 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(
         sql("""SELECT from_json(CAST('{"a":1}' AS CHAR(12)), 'a INT')"""),
         sql("""SELECT from_json('{"a":1}     ', 'a INT')"""))
+      // XML ignores trailing whitespace, so a padded CHAR document still parses.
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  CAST('<ROW><a>1</a></ROW>' AS CHAR(30)),
+            |  'a INT')""".stripMargin),
+        Row(Row(1)))
       // With a space delimiter, CHAR padding tokenizes into extra empty fields.
       checkAnswer(
         sql(
@@ -2797,11 +2804,26 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         sql("""SELECT length(CAST('{"a":1}' AS CHAR(20)))"""),
         Row(20))
       checkAnswer(
+        sql("""SELECT schema_of_json(CAST('{"a":1}' AS CHAR(20)))"""),
+        Row("STRUCT<a: BIGINT>"))
+      checkAnswer(
         sql("SELECT length(CAST('1' AS CHAR(3)))"),
         Row(3))
       checkAnswer(
         sql("SELECT length(CAST('<ROW><a>1</a></ROW>' AS CHAR(30)))"),
         Row(30))
+      checkAnswer(
+        sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS CHAR(30)))"),
+        Row("STRUCT<a: BIGINT>"))
+      Seq(
+        "schema_of_json(CAST('{\"a\":1}' AS CHAR(20) COLLATE SR_AI))" ->
+          "STRUCT<a: BIGINT>",
+        "schema_of_csv(CAST('1' AS CHAR(3) COLLATE SR_AI), map('delimiter', ' '))" ->
+          "STRUCT<_c0: INT, _c1: STRING, _c2: STRING>",
+        "schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS CHAR(30) COLLATE SR_AI))" ->
+          "STRUCT<a: BIGINT>").foreach { case (expression, expected) =>
+        checkAnswer(sql(s"SELECT $expression"), Row(expected))
+      }
     }
   }
 
