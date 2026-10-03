@@ -435,9 +435,10 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     sql("INSERT INTO testcat.ns.ident VALUES " + (94 to 100).map(i => s"($i)").mkString(", "))
     createTable("neg", Array(Column.create("id", LongType)), Array(identity("id")))
     sql("INSERT INTO testcat.ns.neg VALUES " + (0 to 6).map(i => s"(${-i})").mkString(", "))
-    createTable("plain", Array(Column.create("b", LongType), Column.create("c", LongType)),
-      Array.empty)
-    sql("INSERT INTO testcat.ns.plain VALUES " + (0 to 6).map(b => s"($b, 94)").mkString(", "))
+    createTable("plain", Array(Column.create("b", LongType), Column.create("c", LongType),
+      Column.create("s", new StructType().add("a", LongType))), Array.empty)
+    sql("INSERT INTO testcat.ns.plain VALUES " +
+      (0 to 6).map(b => s"($b, 94, named_struct('a', ${94 + b}L))").mkString(", "))
     createTable("ident2", Array(Column.create("x", LongType), Column.create("y", LongType)),
       Array(identity("x"), identity("y")))
     sql("INSERT INTO testcat.ns.ident2 VALUES (94, 1), (94, 2), (95, 1)")
@@ -445,32 +446,46 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       Array.empty)
     sql("INSERT INTO testcat.ns.plain2 VALUES (6, 1), (6, 2), (5, 1)")
 
-    // An inner broadcast join reports `i`'s layout over `p`'s join key too, e.g. `100 - b`. With
-    // only the join's `p` side in the output, that is the partitioning the ORDER BY sees, and it is
-    // served by sorting the partition values, with no shuffle.
+    // The join lays `p` out on `i`'s keys and reports the join key, e.g. `100 - b`, as `p`'s
+    // partition expression. A one-side shuffle does that under the shuffle conf. An inner
+    // broadcast join does it too, by reporting `i`'s layout over `p`'s join key. Over the broadcast
+    // join's layout, the ORDER BY is served by sorting the partition values, with no range
+    // shuffle. On this branch a one-side shuffle is followed by a range shuffle for the ORDER BY.
     case class Query(left: String, right: String, on: String, order: String, select: String,
         expected: Seq[Row])
-    val queries = Seq(
+    val ids = (94 to 100).map(i => Row(i.toLong))
+    val singleColumnKeys = Seq(
       Query("neg", "plain", "i.id = -p.b", "-p.b", "p.b", (6 to 0 by -1).map(b => Row(b.toLong))),
       Query("neg", "plain", "i.id = -p.b", "-p.b DESC", "p.b", (0 to 6).map(b => Row(b.toLong))),
       Query("ident", "plain", "i.id = 100 - p.b", "100 - p.b", "p.b",
         (6 to 0 by -1).map(b => Row(b.toLong))),
       Query("ident", "plain", "i.id = 100 - p.b", "100 - p.b DESC", "p.b",
         (0 to 6).map(b => Row(b.toLong))),
+      Query("ident", "plain", "i.id = p.s.a", "p.s.a", "i.id", ids),
       Query("ident2", "plain2", "i.x = 100 - p.b AND i.y = p.c", "100 - p.b, p.c DESC", "p.b, p.c",
         Seq(Row(6L, 2L), Row(6L, 1L), Row(5L, 1L))))
+    // As on master, `b + c` runs with AQE off only.
+    val twoColumnKey = Query("ident", "plain", "i.id = p.b + p.c", "p.b + p.c", "i.id", ids)
 
-    for (query <- queries; aqe <- Seq(true, false)) {
+    for {
+      (query, aqe) <-
+        singleColumnKeys.flatMap(q => Seq(q -> true, q -> false)) :+ (twoColumnKey -> false)
+      broadcast <- Seq(false, true)
+    } {
       withSQLConf(
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> (!broadcast).toString,
           SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
+        val hint = if (broadcast) "/*+ BROADCAST(p) */ " else ""
         val df = sql(
-          s"""SELECT /*+ BROADCAST(p) */ ${query.select} FROM testcat.ns.${query.left} i
+          s"""SELECT $hint${query.select} FROM testcat.ns.${query.left} i
              |JOIN testcat.ns.${query.right} p ON ${query.on} ORDER BY ${query.order}
              |""".stripMargin)
+        val clue = s"${query.order}, aqe = $aqe, broadcast = $broadcast"
         checkAnswer(df, query.expected)
-        assert(collectAllShuffles(df.queryExecution.executedPlan).isEmpty,
-          s"${query.order}, aqe = $aqe")
+        // A one-side shuffle and the range shuffle after it, and none for a broadcast join.
+        assert(collectAllShuffles(df.queryExecution.executedPlan).size == (if (broadcast) 0 else 2),
+          clue)
       }
     }
   }
