@@ -40,6 +40,7 @@ from pyspark.pandas.internal import (
     InternalField,
     InternalFrame,
 )
+from pyspark.pandas.typedef.typehints import is_pyarrow_backed_dtype
 from pyspark.pandas.utils import (
     is_name_like_tuple,
     is_name_like_value,
@@ -803,6 +804,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                         new_field = InternalField.from_struct_field(
                             self._internal.spark_frame.select(new_scol).schema[0],
                             use_extension_dtypes=new_field.is_extension_dtype,
+                            use_arrow_dtypes=is_pyarrow_backed_dtype(new_field.dtype),
                         )
                         break
                 new_data_spark_columns.append(new_scol)
