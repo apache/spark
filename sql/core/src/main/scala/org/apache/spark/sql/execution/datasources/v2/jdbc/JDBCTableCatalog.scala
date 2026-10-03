@@ -153,8 +153,9 @@ class JDBCTableCatalog extends TableCatalog
 
   override def loadTable(ident: Identifier): Table = {
     JdbcUtils.withConnection(options) { conn =>
-      val optionsWithTableName = new JDBCOptions(
-        options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
+      val tableOptions = new JDBCOptions(
+        JdbcUtils.withPlanTimeOptions(
+          options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident))))
       JdbcUtils.classifyException(
         condition = "FAILED_JDBC.LOAD_TABLE",
         messageParameters = Map(
@@ -167,9 +168,9 @@ class JDBCTableCatalog extends TableCatalog
         val remoteSchemaFetchMetric = JdbcUtils
           .createSchemaFetchMetric(SparkSession.active.sparkContext)
         val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
-          JDBCRDD.resolveTable(optionsWithTableName, conn, Some(ident), Some(name()))
+          JDBCRDD.resolveTable(tableOptions, conn, Some(ident), Some(name()))
         }
-        JDBCTable(ident, schema, optionsWithTableName,
+        JDBCTable(ident, schema, tableOptions,
           Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric))
       }
     }
@@ -214,7 +215,7 @@ class JDBCTableCatalog extends TableCatalog
       tableOptions = tableOptions + (JDBCOptions.JDBC_CREATE_TABLE_OPTIONS -> tableProperties)
     }
 
-    val writeOptions = new JdbcOptionsInWrite(tableOptions)
+    val writeOptions = new JdbcOptionsInWrite(JdbcUtils.withPlanTimeOptions(tableOptions))
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
     val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     JdbcUtils.withConnection(options) { conn =>

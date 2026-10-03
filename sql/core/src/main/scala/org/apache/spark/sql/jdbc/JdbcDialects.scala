@@ -218,6 +218,13 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
+   * Options a dialect pins at plan time so a later conf change can't alter an already-planned read
+   * or write when its options are rebuilt. Merged into the options at each planning entry point.
+   */
+  @Since("4.4.0")
+  def planTimeOptions: Map[String, String] = Map.empty
+
+  /**
    * Returns a factory for creating connections to the given JDBC URL.
    * In general, creating a connection has nothing to do with JDBC partition id.
    * But sometimes it is needed, such as a database with multiple shard nodes.
@@ -953,15 +960,6 @@ abstract class JdbcDialect extends Serializable with Logging {
       rsmd: ResultSetMetaData,
       columnIdx: Int,
       metadata: MetadataBuilder): Unit = {}
-
-  /**
-   * Set extra column metadata for the given column on the write path.
-   *
-   * @param dt The Catalyst type of the column being written.
-   * @param metadata The metadata builder to store the extra column information.
-   */
-  @Since("4.4.0")
-  def updateExtraColumnMetaForWrite(dt: DataType, metadata: MetadataBuilder): Unit = {}
 }
 
 /**

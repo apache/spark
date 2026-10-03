@@ -32,7 +32,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    val jdbcOptions = new JDBCOptions(parameters)
+    val jdbcOptions = new JDBCOptions(JdbcUtils.withPlanTimeOptions(parameters))
     val sparkSession = sqlContext.sparkSession
     val resolver = sparkSession.sessionState.conf.resolver
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
@@ -54,7 +54,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
       mode: SaveMode,
       parameters: Map[String, String],
       df: DataFrame): BaseRelation = {
-    val options = new JdbcOptionsInWrite(parameters)
+    val options = new JdbcOptionsInWrite(JdbcUtils.withPlanTimeOptions(parameters))
     val isCaseSensitive = sqlContext.sparkSession.sessionState.conf.caseSensitiveAnalysis
     val dialect = JdbcDialects.get(options.url)
     val conn = dialect.createConnectionFactory(options)(-1)
