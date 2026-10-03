@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.ResolvePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -76,5 +78,32 @@ trait CommandSuiteBase extends SharedSparkSession {
     val catalogPlugin = spark.sessionState.catalogManager.catalog(catalog)
     catalogPlugin.asTableCatalog.loadTable(Identifier.of(Array(schema), table))
       .asInstanceOf[InMemoryTable]
+  }
+
+  def createTableWithDisplayProperties(
+      namespace: String,
+      table: String,
+      external: Boolean = false,
+      withLocation: Boolean = false): Unit = {
+    val location = if (withLocation) "LOCATION 'file:/tmp/display-properties' " else ""
+    sql(s"CREATE TABLE $catalog.$namespace.$table (id bigint) $defaultUsing " +
+      s"COMMENT 'table comment' $location" +
+      "TBLPROPERTIES ('persisted' = 'stored')")
+    setDisplayProperties(loadTable(catalog, namespace, table), external)
+  }
+
+  /**
+   * Sets display-only test metadata. When external is true, also marks the stored table external.
+   */
+  def setDisplayProperties(table: InMemoryTable, external: Boolean = false): Unit = {
+    if (external) {
+      table.properties.put(TableCatalog.PROP_EXTERNAL, "true")
+    }
+    val reserved = CatalogV2Util.TABLE_RESERVED_PROPERTIES.map(key => key -> s"display-$key")
+    table.setDisplayProperties((reserved.toMap ++ Map(
+      "catalog-label" -> "catalog-value",
+      "password" -> "display-password",
+      "persisted" -> "display-value",
+      TableCatalog.PROP_EXTERNAL -> (!external).toString)).asJava)
   }
 }

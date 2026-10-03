@@ -118,7 +118,7 @@ class InMemoryRowLevelOperationTable private (
       }
     }
     copied.commits ++= commits.map(_.copy())
-    copied.setVersionAndValidatedVersionFrom(this)
+    copied.copyTableStateFrom(this)
     copied.replacedPartitions = replacedPartitions
     copied.lastWriteInfo = lastWriteInfo
     copied.lastWriteLog = lastWriteLog

@@ -99,7 +99,7 @@ class InMemoryRowLevelOperationTableCatalog
       constraints = constraints,
       tableId = table.id)
     newTable.alterTableWithData(table.data, schema)
-    newTable.setVersionAndValidatedVersionFrom(table)
+    newTable.copyTableStateFrom(table)
 
     tables.put(ident, newTable)
 
@@ -141,7 +141,7 @@ class PartialSchemaEvolutionCatalog extends InMemoryRowLevelOperationTableCatalo
       properties = properties,
       constraints = table.constraints)
     newTable.alterTableWithData(table.data, table.schema)
-    newTable.setVersionAndValidatedVersionFrom(table)
+    newTable.copyTableStateFrom(table)
     tables.put(ident, newTable)
     newTable
   }

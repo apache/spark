@@ -33,6 +33,21 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
 
   override def fullName: String = s"$catalog.$ns.$table"
 
+  test("show create table excludes display-only properties") {
+    withNamespaceAndTable(ns, table) { t =>
+      createTableWithDisplayProperties(ns, table, withLocation = true)
+
+      assert(getShowCreateDDL(t, false) === Array(
+        s"CREATE TABLE $t (",
+        "id BIGINT)",
+        defaultUsing,
+        "COMMENT 'table comment'",
+        "LOCATION 'file:/tmp/display-properties'",
+        "TBLPROPERTIES (",
+        "'persisted' = 'stored')"))
+    }
+  }
+
   test("SPARK-33898: show create table as serde") {
     withNamespaceAndTable(ns, table) { t =>
       spark.sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")

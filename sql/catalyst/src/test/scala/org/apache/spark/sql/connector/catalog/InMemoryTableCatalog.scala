@@ -260,7 +260,6 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     }
 
     table.increaseVersion()
-    val currentVersion = table.version()
     val columnsWithIds = InMemoryBaseTable.assignMissingIds(
       CatalogV2Util.structTypeToV2Columns(schema))
     val reconstructedId = Option(table.id()).getOrElse(util.UUID.randomUUID().toString)
@@ -275,7 +274,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
         throw new UnsupportedOperationException(
           s"Unsupported InMemoryBaseTable subclass: ${other.getClass.getName}")
     }
-    newTable.setVersion(currentVersion)
+    newTable.copyTableStateFrom(table)
     changes.foreach {
       case a: TableChange.AddConstraint =>
         newTable.setValidatedVersion(a.validatedTableVersion())
