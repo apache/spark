@@ -250,6 +250,34 @@ Security options for the Spark History Server are covered more detail in the
     <td>1.0.0</td>
   </tr>
   <tr>
+    <td>spark.history.ui.accessLog.enabled</td>
+    <td>false</td>
+    <td>
+      Whether the History Server should log HTTP access records for its web UI and REST API.
+      When enabled, each non-excluded request is logged at <code>INFO</code> level through
+      the History Server process logs after the request completes by the
+      <code>org.apache.spark.deploy.history.HistoryServerAccessLogFilter</code> logger.
+      Access records include the request
+      method, URI, redacted query string, status code, duration, remote address, remote user
+      if available, user agent, referer, and request failure class if the request chain throws
+      an exception. Query string values are redacted using
+      <code>spark.redaction.regex</code>. Requests rejected by user-installed UI filters before
+      Spark's internal access log filter may not be recorded.
+    </td>
+    <td>4.3.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.ui.accessLog.excludePaths</td>
+    <td>/static,/favicon.ico</td>
+    <td>
+      Comma-separated list of request path prefixes to exclude from History Server HTTP
+      access logs. The default excludes static resources and browser favicon requests to
+      reduce low-value log volume. Set this to an empty value to log all History Server
+      requests when <code>spark.history.ui.accessLog.enabled</code> is enabled.
+    </td>
+    <td>4.3.0</td>
+  </tr>
+  <tr>
     <td>spark.history.kerberos.enabled</td>
     <td>false</td>
     <td>
