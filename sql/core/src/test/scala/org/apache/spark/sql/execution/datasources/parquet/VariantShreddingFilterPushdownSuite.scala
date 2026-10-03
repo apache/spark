@@ -36,12 +36,11 @@ import org.apache.spark.util.AccumulatorContext
  * the physical leaf and guards it so a row group is skipped only when the leaf cannot match AND
  * every value for the path is provably in the leaf (see `makeShreddedFilter`).
  *
- * Scope: the optimization fires on the DSv1 read path only. DSv2 does rewrite variant extractions
- * into `v.`0`` struct accesses, but only after filter pushdown has run, so the filters offered to
- * the Parquet scan builder are still `variant_get(v, ...)` predicates and cannot be pushed for
- * row-group skipping (see the comment in ParquetScanBuilder). DSv2 reads remain correct -- the
- * variant filter is applied post-scan -- they just do not skip row groups. These tests therefore
- * assert skipping only on DSv1, and assert correctness on both DSv1 and DSv2.
+ * Scope: the optimization fires on both DSv1 and DSv2 read paths. DSv2 performs the regular filter
+ * pushdown before variant extraction pushdown, so after variant extraction rewrites predicates into
+ * `v.`0`` struct accesses it runs a second Parquet-only predicate pushdown for those rewritten
+ * variant predicates. These tests assert skipping when the vectorized reader exposes the row-group
+ * count, and assert correctness on both vectorized and non-vectorized readers.
  *
  * The central correctness concern is soundness under fallback: shredding is per-row and per-file
  * best-effort, so values that don't fit the shredded type (overflow / type mismatch) or that are
@@ -102,7 +101,6 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
   }
 
   // Run `block` with pushdown enabled, across the {DSv1, DSv2} x {vectorized, non-vectorized} grid.
-  // `dsv1` is passed so a test can assert row-group skipping only on the DSv1 path.
   private def forEachReader(block: (Boolean, Boolean) => Unit): Unit = {
     Seq("parquet" -> true, "" -> false).foreach { case (useV1, dsv1) =>
       Seq(true, false).foreach { vectorized =>
@@ -145,11 +143,11 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
       val expected = baseline(read)
       assert(expected == Seq(Row(1500L)), s"baseline should return the fallback row, got $expected")
 
-      forEachReader { (dsv1, vectorized) =>
+      forEachReader { (_, vectorized) =>
         // The row group's only match is in the residual with a NULL leaf, so the guard must keep
         // it: results include the fallback row and the row group is not skipped.
         checkAnswer(read, expected)
-        if (dsv1 && vectorized) {
+        if (vectorized) {
           val all = spark.read.parquet(dir.getAbsolutePath)
             .selectExpr("try_variant_get(v, '$.a', 'bigint') AS a")
           assert(countRowGroupsRead(read) == countRowGroupsRead(all),
@@ -233,7 +231,7 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
     }
   }
 
-  test("residual-null happy path: a row group is skipped (DSv1) and results are correct") {
+  test("residual-null happy path: a row group is skipped and results are correct") {
     withTempDir { dir =>
       // Homogeneous typed data across two row groups. All values shred cleanly (residuals all
       // NULL), so the optimization fires and one row group is skipped on DSv1.
@@ -241,14 +239,14 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
       // Small block size -> at least two row groups: [0,999] and [1000,1999].
       writeShredded(dir, "a bigint", jsonExpr, numRows = 2000, blockSize = 512)
 
-      forEachReader { (dsv1, vectorized) =>
+      forEachReader { (_, vectorized) =>
         val filtered = spark.read.parquet(dir.getAbsolutePath)
           .selectExpr("variant_get(v, '$.a', 'bigint') AS a")
           .where("a > 999")
         val all = spark.read.parquet(dir.getAbsolutePath)
           .selectExpr("variant_get(v, '$.a', 'bigint') AS a")
         checkAnswer(filtered.orderBy("a"), (1000L to 1999L).map(Row(_)))
-        if (dsv1 && vectorized) {
+        if (vectorized) {
           assert(countRowGroupsRead(filtered) < countRowGroupsRead(all),
             "Expected at least one row group to be skipped by the shredded leaf statistics")
         }
@@ -266,13 +264,13 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
       val jsonExpr = "'{\"a\":' || id || ', \"z\":\"outside\"}'"
       writeShredded(dir, "a bigint", jsonExpr, numRows = 2000, blockSize = 512)
 
-      forEachReader { (dsv1, vectorized) =>
+      forEachReader { (_, vectorized) =>
         val filtered = spark.read.parquet(dir.getAbsolutePath)
           .selectExpr("variant_get(v, '$.a', 'bigint') AS a").where("a > 999")
         val all = spark.read.parquet(dir.getAbsolutePath)
           .selectExpr("variant_get(v, '$.a', 'bigint') AS a")
         checkAnswer(filtered.orderBy("a"), (1000L to 1999L).map(Row(_)))
-        if (dsv1 && vectorized) {
+        if (vectorized) {
           assert(countRowGroupsRead(filtered) < countRowGroupsRead(all),
             "Expected skipping despite a non-null top-level residual (partial object)")
         }
@@ -280,21 +278,21 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
     }
   }
 
-  test("multi-level $.a.b: skip fires on DSv1 and results are correct") {
+  test("multi-level $.a.b: skip fires and results are correct") {
     withTempDir { dir =>
       // `a` shredded as struct<b bigint>. Homogeneous nested typed data across two row groups so
       // the skip fires on the nested leaf `v.typed_value.a.typed_value.b.typed_value`.
       val typedJson = "'{\"a\":{\"b\":' || id || '}}'"
       writeShredded(dir, "a struct<b bigint>", typedJson, numRows = 2000, blockSize = 512)
 
-      forEachReader { (dsv1, vectorized) =>
+      forEachReader { (_, vectorized) =>
         val filtered = spark.read.parquet(dir.getAbsolutePath)
           .selectExpr("variant_get(v, '$.a.b', 'bigint') AS b")
           .where("b > 999")
         val all = spark.read.parquet(dir.getAbsolutePath)
           .selectExpr("variant_get(v, '$.a.b', 'bigint') AS b")
         checkAnswer(filtered.orderBy("b"), (1000L to 1999L).map(Row(_)))
-        if (dsv1 && vectorized) {
+        if (vectorized) {
           assert(countRowGroupsRead(filtered) < countRowGroupsRead(all),
             "Expected a row group to be skipped by the nested shredded leaf statistics")
         }
@@ -319,9 +317,9 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
         .where("b > 999")
       assert(baseline(read) == Seq(Row(1500L)), "baseline should return the nested fallback row")
 
-      forEachReader { (dsv1, vectorized) =>
+      forEachReader { (_, vectorized) =>
         checkAnswer(read, Seq(Row(1500L)))
-        if (dsv1 && vectorized) {
+        if (vectorized) {
           val all = spark.read.parquet(dir.getAbsolutePath)
             .selectExpr("try_variant_get(v, '$.a.b', 'bigint') AS b")
           assert(countRowGroupsRead(read) == countRowGroupsRead(all),
@@ -338,13 +336,13 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
     withTempDir { dir =>
       writeShredded(dir, "a bigint", "'{\"a\":' || id || '}'", numRows = 2000, blockSize = 512,
         annotate = false)
-      forEachReader { (dsv1, vectorized) =>
+      forEachReader { (_, vectorized) =>
         val filtered = spark.read.parquet(dir.getAbsolutePath)
           .selectExpr("variant_get(v, '$.a', 'bigint') AS a").where("a > 999")
         val all = spark.read.parquet(dir.getAbsolutePath)
           .selectExpr("variant_get(v, '$.a', 'bigint') AS a")
         checkAnswer(filtered.orderBy("a"), (1000L to 1999L).map(Row(_)))
-        if (dsv1 && vectorized) {
+        if (vectorized) {
           assert(countRowGroupsRead(filtered) < countRowGroupsRead(all),
             "Expected a row group to be skipped on the unannotated layout")
         }

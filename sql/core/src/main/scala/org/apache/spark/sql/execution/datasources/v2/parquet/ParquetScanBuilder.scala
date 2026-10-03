@@ -25,8 +25,10 @@ import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{SupportsPushDownAggregates, SupportsPushDownVariantExtractions, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
-import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
-import org.apache.spark.sql.internal.LegacyBehaviorPolicy
+import org.apache.spark.sql.execution.datasources.v2.{
+  FileScanBuilder,
+  SupportsPushDownVariantPredicateFilters}
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -40,7 +42,8 @@ case class ParquetScanBuilder(
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema)
     with SupportsPushDownAggregates
-    with SupportsPushDownVariantExtractions {
+    with SupportsPushDownVariantExtractions
+    with SupportsPushDownVariantPredicateFilters {
   lazy val hadoopConf = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
@@ -52,6 +55,8 @@ case class ParquetScanBuilder(
   private var pushedAggregations = Option.empty[Aggregation]
 
   private var pushedVariantExtractions = Array.empty[VariantExtraction]
+
+  private var pushedVariantPredicateFilters = Array.empty[Filter]
 
   override protected val supportsNestedSchemaPruning: Boolean = true
 
@@ -66,15 +71,6 @@ case class ParquetScanBuilder(
       val isCaseSensitive = sqlConf.caseSensitiveAnalysis
       val parquetSchema =
         new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readDataSchema())
-      // Shredded-variant predicate pushdown (SPARK-55817) is not wired here: it applies to the
-      // DSv1 path only. DSv2 does rewrite variant extractions into `v.`0`` struct accesses, but
-      // only in `V2ScanRelationPushDown.buildScanWithPushedVariants`, which runs *after*
-      // `pushDownFilters`. So the filters reaching this method are still `variant_get(v, ...)`
-      // predicates, which do not translate to a source `Filter` at all -- there is no
-      // shredded-variant logical name for ParquetFilters to resolve here, and nothing would be
-      // reported convertible even with a variantExtractionSchema. DSv2 reads remain correct (the
-      // variant filter is applied post-scan); they just do not get row-group skipping on shredded
-      // columns.
       val parquetFilters = new ParquetFilters(
         parquetSchema,
         pushDownDate,
@@ -121,6 +117,18 @@ case class ParquetScanBuilder(
     Array.fill(extractions.length)(true)
   }
 
+  override def pushVariantPredicateFilters(filters: Array[Filter]): Array[Filter] = {
+    val sqlConf = sparkSession.sessionState.conf
+    pushedVariantPredicateFilters =
+      if (sqlConf.parquetFilterPushDown &&
+          sqlConf.getConf(SQLConf.VARIANT_SHREDDED_PREDICATE_PUSHDOWN_ENABLED)) {
+        filters
+      } else {
+        Array.empty[Filter]
+      }
+    pushedVariantPredicateFilters
+  }
+
   override def build(): ParquetScan = {
     // the `finalSchema` is either pruned in pushAggregation (if aggregates are
     // pushed down), or pruned in readDataSchema() (in regular column pruning). These
@@ -130,6 +138,6 @@ case class ParquetScanBuilder(
     }
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, finalSchema,
       readPartitionSchema(), pushedDataFilters, options, pushedAggregations,
-      partitionFilters, dataFilters, pushedVariantExtractions)
+      partitionFilters, dataFilters, pushedVariantExtractions, pushedVariantPredicateFilters)
   }
 }
