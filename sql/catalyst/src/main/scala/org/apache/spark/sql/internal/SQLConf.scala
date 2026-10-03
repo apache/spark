@@ -48,6 +48,7 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStatsEstimator
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.PathElement.PathRef
@@ -4760,6 +4761,21 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val STATS_ESTIMATOR_CLASS =
+    buildConf("spark.sql.statistics.estimatorClass")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .internal()
+      .doc("The class used to estimate logical plan statistics. The class must implement " +
+        "org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStatsEstimator " +
+        "and have a no-arg constructor.")
+      .version("4.4.0")
+      .stringConf
+      .checkValue(Utils.classIsLoadableAndAssignableFrom(_, classOf[LogicalPlanStatsEstimator]),
+        s"Class must be loadable and subclass of ${classOf[LogicalPlanStatsEstimator].getName}")
+      .createWithDefault(
+        "org.apache.spark.sql.catalyst.plans.logical.statsEstimation." +
+          "DefaultLogicalPlanStatsEstimator")
 
   val CBO_ENABLED =
     buildConf("spark.sql.cbo.enabled")
@@ -9568,6 +9584,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def updatePartStatsInAnalyzeTableEnabled: Boolean =
     getConf(SQLConf.UPDATE_PART_STATS_IN_ANALYZE_TABLE_ENABLED)
+
+  def statsEstimatorClass: String = getConf(SQLConf.STATS_ESTIMATOR_CLASS)
 
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
