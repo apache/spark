@@ -1406,7 +1406,7 @@ case class Cast(
       b => try {
         changePrecision(Decimal(fractional.toDouble(b)), target)
       } catch {
-        case _: NumberFormatException => null
+        case _: NumberFormatException => errorOrNull(b, from, target)
       }
     case x: DayTimeIntervalType =>
       buildCast[Long](_, dt =>
@@ -1943,15 +1943,24 @@ case class Cast(
           """
       case x: FractionalType =>
         // All other numeric types can be represented precisely as Doubles
-        (c, evPrim, evNull) =>
+        (c, evPrim, evNull) => {
+          val overflow = if (ansiEnabled) {
+            val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
+            val toDt = ctx.addReferenceObj("to", target, target.getClass.getName)
+            code"""throw QueryExecutionErrors.castingCauseOverflowError(
+              $c, $fromDt, $toDt);"""
+          } else {
+            code"$evNull = true;"
+          }
           code"""
             try {
               Decimal $tmp = Decimal.apply(scala.math.BigDecimal.valueOf((double) $c));
               ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
             } catch (java.lang.NumberFormatException e) {
-              $evNull = true;
+              $overflow
             }
           """
+        }
       case x: DayTimeIntervalType =>
         (c, evPrim, evNull) =>
           val u = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")

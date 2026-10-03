@@ -84,10 +84,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (0,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (0,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -116,10 +116,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (0,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (0,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -404,10 +404,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (1,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (1,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -436,10 +436,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (1,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (1,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -724,10 +724,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (2,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (2,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -756,10 +756,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (2,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (2,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -1044,10 +1044,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (3,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (3,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -1076,10 +1076,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (3,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (3,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -1364,10 +1364,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (4,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (4,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -1396,10 +1396,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (4,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (4,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -1684,10 +1684,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (5,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (5,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -1716,10 +1716,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (5,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (5,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -2004,10 +2004,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (6,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (6,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -2036,10 +2036,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (6,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (6,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -2324,10 +2324,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (7,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (7,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -2356,10 +2356,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (7,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (7,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -2644,10 +2644,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (8,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (8,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -2676,10 +2676,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (8,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (8,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -2964,10 +2964,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (9,0,double('NaN'))
+INSERT INTO num_exp_div VALUES (9,0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -2996,10 +2996,10 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_div VALUES (9,1,double('NaN'))
+INSERT INTO num_exp_div VALUES (9,1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_div, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_div], Append, `spark_catalog`.`default`.`num_exp_div`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_div), [id1, id2, expected]
-+- Project [col1#x AS id1#x, col2#x AS id2#x, cast(col3#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x, col3#x AS expected#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -3340,18 +3340,18 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_ln VALUES (0,double('NaN'))
+INSERT INTO num_exp_ln VALUES (0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_ln, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_ln], Append, `spark_catalog`.`default`.`num_exp_ln`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_ln), [id, expected]
-+- Project [col1#x AS id#x, cast(col2#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id#x, col2#x AS expected#x]
    +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
-INSERT INTO num_exp_ln VALUES (1,double('NaN'))
+INSERT INTO num_exp_ln VALUES (1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_ln, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_ln], Append, `spark_catalog`.`default`.`num_exp_ln`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_ln), [id, expected]
-+- Project [col1#x AS id#x, cast(col2#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id#x, col2#x AS expected#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -3420,18 +3420,18 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_log10 VALUES (0,double('NaN'))
+INSERT INTO num_exp_log10 VALUES (0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_log10, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_log10], Append, `spark_catalog`.`default`.`num_exp_log10`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_log10), [id, expected]
-+- Project [col1#x AS id#x, cast(col2#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id#x, col2#x AS expected#x]
    +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
-INSERT INTO num_exp_log10 VALUES (1,double('NaN'))
+INSERT INTO num_exp_log10 VALUES (1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_log10, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_log10], Append, `spark_catalog`.`default`.`num_exp_log10`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_log10), [id, expected]
-+- Project [col1#x AS id#x, cast(col2#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id#x, col2#x AS expected#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -3500,18 +3500,18 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-INSERT INTO num_exp_power_10_ln VALUES (0,double('NaN'))
+INSERT INTO num_exp_power_10_ln VALUES (0,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_power_10_ln, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_power_10_ln], Append, `spark_catalog`.`default`.`num_exp_power_10_ln`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_power_10_ln), [id, expected]
-+- Project [col1#x AS id#x, cast(col2#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id#x, col2#x AS expected#x]
    +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
-INSERT INTO num_exp_power_10_ln VALUES (1,double('NaN'))
+INSERT INTO num_exp_power_10_ln VALUES (1,try_cast(double('NaN') AS decimal(38,10)))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_exp_power_10_ln, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_exp_power_10_ln], Append, `spark_catalog`.`default`.`num_exp_power_10_ln`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_exp_power_10_ln), [id, expected]
-+- Project [col1#x AS id#x, cast(col2#x as decimal(38,10)) AS expected#x]
++- Project [col1#x AS id#x, col2#x AS expected#x]
    +- LocalRelation [col1#x, col2#x]
 
 
