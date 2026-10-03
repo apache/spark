@@ -2152,12 +2152,405 @@ object CollapseWindow extends Rule[LogicalPlan] {
 }
 
 /**
- * Transpose Adjacent Window Expressions.
- * - If the partition spec of the parent Window expression is compatible with the partition spec
- *   of the child window expression, transpose them.
+ * Reorder a stack of `Window` operators so that the fewest possible exchanges are inserted
+ * for it. Window operators only append their output columns and each of them
+ * (re-)partitions/(re-)sorts its input independently of its position in the stack, so two
+ * windows can be swapped freely as long as neither references the other's output. Physically,
+ * a window rides the exchange created for the nearest window below it iff that exchange's key
+ * set is a subset of the window's partition spec (`HashPartitioning` satisfying
+ * `ClusteredDistribution`), and `EnsureRequirements` only creates exchanges keyed on exactly
+ * some window's partition spec. The minimum exchange count for a stack therefore equals the
+ * number of its minimal partition specs (under semantic subset), and it is achieved by
+ * grouping the windows by the minimal partition spec their own partition spec contains,
+ * smaller specs first within a group. This subsumes the previous adjacent-pair transposition.
+ * Under `requireAllClusterKeysForDistribution`, a partitioning only satisfies a window's
+ * `ClusteredDistribution` with the exact same keys in the same order, so the subset relation
+ * degenerates to exact spec equality: the minimum equals the number of distinct exact
+ * partition specs, achieved by grouping identical specs adjacently.
+ *
+ * The matched stack is a maximal run of `Window` operators connected by transparent links,
+ * where a transparent link is a deterministic `Project` made only of plain attributes and
+ * aliases. Besides pass-through, rename or drop, an alias may also compute a derived,
+ * deterministic expression (e.g. `Alias(a + b, "s")`). Hoisting such a link above the
+ * windows only changes where its expression is computed, not the values it computes on
+ * (windows never rewrite their input), so the one unsafe case is a window above the link
+ * referencing its aliased output, which `reorderable` excludes. The links are stripped and
+ * re-applied above the reordered windows, and a chain-top `Project` restores the original
+ * output attribute order when needed.
+ *
+ * If the stack is directly topped by a rank filter (e.g. `rn <= 1`, the pattern that
+ * `InferWindowGroupLimit` rewrites later, in a `Once` batch), the top window is pinned in
+ * place and only the windows below it are reordered, with the order-restoring `Project`
+ * placed below the pinned window, so that the strict `Filter`-over-`Window` match survives.
+ *
+ * The stack reordering is gated by `spark.sql.optimizer.windowReorder.enabled` (default
+ * false); when disabled, the rule falls back to transposing only adjacent window pairs whose
+ * upper partition spec is a proper subset of the lower one (see `transposeAdjacentPairs`).
  */
 object TransposeWindow extends Rule[LogicalPlan] {
-  private def compatiblePartitions(ps1 : Seq[Expression], ps2: Seq[Expression]): Boolean = {
+
+  /**
+   * A `Project` is a transparent link of a window chain if it only passes through, renames
+   * or drops attributes, or adds deterministic aliases (which may compute derived
+   * expressions), and is itself deterministic.
+   */
+  private def isTransparentLink(plan: LogicalPlan): Boolean = plan match {
+    case p: Project =>
+      p.projectList.forall(e => e.isInstanceOf[Attribute] || e.isInstanceOf[Alias]) &&
+        p.expressions.forall(_.deterministic)
+    case _ => false
+  }
+
+  /**
+   * A maximal run of adjacent `Window` operators connected by transparent links.
+   *
+   * @param windows the windows of the chain, bottom-to-top
+   * @param betweenLinks `betweenLinks(i)` holds the transparent links between `windows(i)`
+   *                     and `windows(i + 1)`, bottom-to-top; it has one element less than
+   *                     `windows`
+   * @param topLinks the transparent links above the top window, bottom-to-top
+   * @param bottomChild the child of the bottom window
+   * @param topWindowChildOutput the output of the child of the top window, in the original
+   *                             plan
+   * @param originalOutput the output of the whole chain, in the original plan
+   */
+  private case class WindowChain(
+      windows: Seq[Window],
+      betweenLinks: Seq[Seq[Project]],
+      topLinks: Seq[Project],
+      bottomChild: LogicalPlan,
+      topWindowChildOutput: Seq[Attribute],
+      originalOutput: Seq[Attribute])
+
+  /** Collect the maximal window chain topped by `plan`, if `plan` tops at least 2 windows. */
+  private def collectChain(plan: LogicalPlan): Option[WindowChain] = {
+    // Collect the chain top-down: `windows` is filled from the top window down,
+    // `betweenLinks(i)` holds the transparent links accumulated right above `windows(i)`,
+    // and `pending` the links found since the last window. The buffers are reversed into
+    // the bottom-to-top order of `WindowChain` at the end.
+    val windows = mutable.ArrayBuffer.empty[Window]
+    val betweenLinks = mutable.ArrayBuffer.empty[Seq[Project]]
+    var pending = Vector.empty[Project]
+    var cur = plan
+    var collecting = true
+    while (collecting) {
+      cur match {
+        case p: Project if isTransparentLink(p) =>
+          pending = pending :+ p
+          cur = p.child
+        case w: Window =>
+          betweenLinks += pending
+          windows += w
+          pending = Vector.empty
+          cur = w.child
+        case _ =>
+          collecting = false
+      }
+    }
+
+    if (windows.length < 2) {
+      None
+    } else {
+      val n = windows.length
+      Some(WindowChain(
+        windows = windows.reverse.toSeq,
+        betweenLinks = (0 until n - 1).map(i => betweenLinks(n - 1 - i).reverse),
+        topLinks = betweenLinks.head.reverse,
+        bottomChild = windows.last.child,
+        topWindowChildOutput = windows.head.child.output,
+        originalOutput = plan.output))
+    }
+  }
+
+  /**
+   * Whether a window with partition spec `requiredKeys` can ride an exchange keyed on
+   * `exchangeKeys`: by default (subset semantics) a partitioning satisfies a
+   * `ClusteredDistribution` if its keys are a subset of the required clustering keys, so
+   * `exchangeKeys` being a subset of `requiredKeys` suffices; under
+   * `requireAllClusterKeysForDistribution` the partitioning must match the required keys
+   * exactly and in order, so only identical specs ride each other's exchange.
+   */
+  private def canRideExchange(
+      exchangeKeys: Seq[Expression],
+      requiredKeys: Seq[Expression]): Boolean =
+    if (conf.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION)) {
+      exchangeKeys.length == requiredKeys.length &&
+        exchangeKeys.zip(requiredKeys).forall { case (e1, e2) => e1.semanticEquals(e2) }
+    } else {
+      exchangeKeys.forall(e1 => requiredKeys.exists(e1.semanticEquals))
+    }
+
+  /** Semantic equivalence of two partition specs, i.e. mutual subset. */
+  private def equivalent(spec1: Seq[Expression], spec2: Seq[Expression]): Boolean =
+    canRideExchange(spec1, spec2) && canRideExchange(spec2, spec1)
+
+  /** Semantic equality of two order specs, i.e. element-wise `semanticEquals`. */
+  private def sameOrderSpec(orderSpec1: Seq[SortOrder], orderSpec2: Seq[SortOrder]): Boolean =
+    orderSpec1.length == orderSpec2.length &&
+      orderSpec1.zip(orderSpec2).forall { case (o1, o2) => o1.semanticEquals(o2) }
+
+  /**
+   * The chain is reorderable if all windows are deterministic and have a non-empty partition
+   * spec (an empty one requires `AllTuples` and must not move), every window with an empty
+   * order spec is order-safe (see `orderSafeWithEmptyOrder`), no window references another
+   * window's output, and no window references the aliased output of a link below it (such a
+   * link could not be re-applied above that window). The aliased output may be any
+   * deterministic expression; hoisting it above the windows only changes where it is
+   * computed, never the values it sees, so this check is the real safety property regardless
+   * of whether a link's alias is a bare rename or a derived expression.
+   */
+  private def reorderable(chain: WindowChain): Boolean = {
+    val windows = chain.windows
+    windows.forall(_.expressions.forall(_.deterministic)) &&
+    windows.forall(_.partitionSpec.nonEmpty) &&
+    // An empty-order window with a relative frame (e.g. `ROWS ... CURRENT ROW`) is
+    // order-sensitive: moving it, or any window below it, changes results -- skip the chain.
+    windows.forall { w =>
+      w.orderSpec.nonEmpty || w.windowExpressions.forall(orderSafeWithEmptyOrder)
+    } &&
+    windows.indices.forall { i =>
+      windows.indices.forall { j =>
+        i == j || windows(i).references.intersect(windows(j).windowOutputSet).isEmpty
+      }
+    } &&
+    chain.betweenLinks.zipWithIndex.forall { case (links, i) =>
+      val aliasedOutputs = AttributeSet(links.flatMap(_.projectList).collect {
+        case a: Alias => a.toAttribute
+      })
+      // The windows above these links are `windows(i + 1)` and up.
+      aliasedOutputs.isEmpty ||
+        (i + 1 until windows.length).forall { k =>
+          windows(k).references.intersect(aliasedOutputs).isEmpty
+        }
+    }
+  }
+
+  /**
+   * Returns the exchange-minimal window order as indices into `windows` (bottom-to-top):
+   * the plan needs one exchange per distinct minimal partition spec, and windows with
+   * equal order specs are made adjacent to share sorts.
+   */
+  private def optimalOrder(windows: Seq[Window]): Seq[Int] = {
+    val specs = windows.map(_.partitionSpec)
+    // A spec is minimal if no other spec in the stack is a strict subset of it, i.e. no
+    // other window already keys an exchange that this window could ride.
+    val minimal = specs.indices.map { i =>
+      !specs.indices.exists { j =>
+        j != i && canRideExchange(specs(j), specs(i)) && !equivalent(specs(j), specs(i))
+      }
+    }
+    // The distinct minimal specs, ranked by first appearance, bottom-to-top.
+    val minimalSpecs = mutable.ArrayBuffer.empty[Seq[Expression]]
+    specs.indices.filter(minimal).foreach { i =>
+      if (!minimalSpecs.exists(equivalent(_, specs(i)))) {
+        minimalSpecs += specs(i)
+      }
+    }
+    // Every window rides the exchange of the first minimal spec its partition spec
+    // contains, so all windows of the same class share that exchange.
+    val classOf = specs.indices.map { i =>
+      minimalSpecs.indices.filter(j => canRideExchange(minimalSpecs(j), specs(i))).min
+    }
+    // Each group's leader is the first member whose partition spec is the group's minimal
+    // spec; it must come first within the group, so that its exchange is keyed on the
+    // minimal spec.
+    val leaders = minimalSpecs.indices.map { g =>
+      specs.indices.find(i => classOf(i) == g && equivalent(specs(i), minimalSpecs(g))).get
+    }
+    // The order-spec classes of the windows that are not ranked -1, in first-appearance
+    // order among those windows. Windows whose order spec equals their group leader's get
+    // the special rank -1: they belong right after the leader, where they ride its sort
+    // as well as its exchange (or merge with it). Ranking them by first appearance like
+    // the other classes would not be stable: the leader is forced to the front, which
+    // changes its class's first appearance, so re-applying the rule would compute a
+    // different order. With the special rank the first application is a fixed point.
+    val orderClass = Array.fill(windows.length)(-1)
+    val rankedOrders = mutable.ArrayBuffer.empty[Seq[SortOrder]]
+    windows.indices.foreach { i =>
+      val leader = leaders(classOf(i))
+      if (i != leader && !sameOrderSpec(windows(leader).orderSpec, windows(i).orderSpec)) {
+        val spec = windows(i).orderSpec
+        val rank = rankedOrders.indexWhere(sameOrderSpec(_, spec))
+        if (rank < 0) {
+          rankedOrders += spec
+          orderClass(i) = rankedOrders.length - 1
+        } else {
+          orderClass(i) = rank
+        }
+      }
+    }
+    // The other members ride the leader's exchange in any order, so they are ordered by
+    // orderClass (then by partition spec length, for stability): windows with equal order
+    // specs become adjacent and share the sort inserted for the first of them, without
+    // affecting the exchange count.
+    minimalSpecs.indices.flatMap { g =>
+      val members = specs.indices.filter(classOf(_) == g)
+      val leader = leaders(g)
+      leader +: members.filterNot(_ == leader).sortBy(i => (orderClass(i), specs(i).length))
+    }
+  }
+
+  /**
+   * Whether the expression is safe in a window with an empty order spec, i.e. contains no
+   * window expression whose frame has bounds relative to the current row: only the
+   * whole-partition frame covers the same rows under any row order (the same distinction
+   * `CollapseWindow` draws). A bare aggregate without an explicit frame also evaluates
+   * over the whole partition, so it is safe.
+   */
+  private def orderSafeWithEmptyOrder(windowExpression: NamedExpression): Boolean =
+    !windowExpression.exists {
+      case WindowExpression(_, WindowSpecDefinition(_, _, frame: SpecifiedWindowFrame)) =>
+        !(frame.lower == UnboundedPreceding && frame.upper == UnboundedFollowing)
+      case _ => false
+    }
+
+  /**
+   * Whether `filter` above the chain top is a rank filter on the chain's top window that
+   * `InferWindowGroupLimit` would rewrite later (e.g. `rn <= 1` under
+   * `windowGroupLimitThreshold`). The condition is looked through the chain's top links, as
+   * the predicate pushdown rules may not have moved the filter below them yet.
+   */
+  private def isRankFilterOnTopWindow(filter: Filter, chain: WindowChain): Boolean = {
+    val topWindow = chain.windows.last
+    if (topWindow.orderSpec.isEmpty ||
+      !topWindow.windowExpressions.forall(InferWindowGroupLimit.isExpandingWindow)) {
+      return false
+    }
+
+    // There might be Project(s) between Filter and Window now. Here we peel off the
+    // aliases added by these Projects, so we can check whether Filter contains conditions
+    // that is checking rank function result produced by the windows.
+    val condition = chain.topLinks.reverse.foldLeft(filter.condition) { (cond, link) =>
+      val aliasMap = link.projectList.collect { case a: Alias => a.toAttribute -> a.child }.toMap
+      if (aliasMap.isEmpty) {
+        cond
+      } else {
+        cond.transform { case a: Attribute if aliasMap.contains(a) => aliasMap(a) }
+      }
+    }
+
+    // Pin only when the group-limit rule would actually select a rank candidate for the
+    // remapped condition, so that reordering is not constrained by an optimization that
+    // would never fire (over the threshold, outcompeted by another rank predicate, or
+    // unnecessary given the known child cardinality). `chain.bottomChild` has the same
+    // `maxRows` as the pinned Window's child would have: the reorder is
+    // cardinality-preserving.
+    InferWindowGroupLimit
+      .selectRankCandidate(condition, topWindow.windowExpressions, chain.bottomChild)
+      .isDefined
+  }
+
+  /**
+   * Reorder `chain` into the exchange-minimal order and rebuild it, keeping the top window in
+   * place if `pinTopWindow` (see `isRankFilterOnTopWindow`): only the windows below it are
+   * reordered then and the order-restoring `Project` is placed below the pinned window, so
+   * that the strict `Filter`-over-`Window` match of `InferWindowGroupLimit` survives. The
+   * stripped links are re-applied above the reordered windows (below the pinned window if
+   * pinned), each additionally passing through the attributes that anything above it still
+   * references. Returns `None` if the chain is already in an optimal order.
+   */
+  private def reorderChain(chain: WindowChain, pinTopWindow: Boolean): Option[LogicalPlan] = {
+    val windows = chain.windows
+    val toPermute = if (pinTopWindow) windows.dropRight(1) else windows
+    val order = optimalOrder(toPermute)
+    if (order == toPermute.indices) {
+      return None
+    }
+
+    val baseAttrs = chain.bottomChild.output ++
+      windows.flatMap(_.windowExpressions.map(_.toAttribute))
+    val hoistedLinks =
+      if (pinTopWindow) chain.betweenLinks.flatten
+      else chain.betweenLinks.flatten ++ chain.topLinks
+    val boundaryOutput =
+      if (pinTopWindow) chain.topWindowChildOutput else chain.originalOutput
+    val boundaryIds = boundaryOutput.map(_.exprId).toSet
+
+    // refsAbove(i): the attribute ids referenced by the links above hoistedLinks(i).
+    val refsAbove = new Array[Set[ExprId]](hoistedLinks.length)
+    var acc = Set.empty[ExprId]
+    hoistedLinks.indices.reverse.foreach { i =>
+      refsAbove(i) = acc
+      acc = acc ++ hoistedLinks(i).references.map(_.exprId)
+    }
+
+    var cur: LogicalPlan = chain.bottomChild
+    order.foreach(i => cur = toPermute(i).withNewChildren(Seq(cur)))
+
+    var available = baseAttrs.map(_.exprId).toSet
+    hoistedLinks.indices.foreach { i =>
+      val link = hoistedLinks(i)
+      val required = boundaryIds ++ refsAbove(i)
+      val missing = baseAttrs.filter(a =>
+        required.contains(a.exprId) && available.contains(a.exprId) &&
+          !link.output.exists(_.exprId == a.exprId))
+      cur = if (missing.isEmpty) {
+        link.withNewChildren(Seq(cur))
+      } else {
+        link.copy(projectList = link.projectList ++ missing, child = cur)
+      }
+      available = cur.output.map(_.exprId).toSet
+    }
+
+    if (pinTopWindow) {
+      if (cur.output.map(_.exprId) != chain.topWindowChildOutput.map(_.exprId)) {
+        cur = Project(chain.topWindowChildOutput, cur)
+      }
+      cur = windows.last.withNewChildren(Seq(cur))
+      chain.topLinks.foreach(link => cur = link.withNewChildren(Seq(cur)))
+    } else if (cur.output.map(_.exprId) != chain.originalOutput.map(_.exprId)) {
+      cur = Project(chain.originalOutput, cur)
+    }
+    Some(cur)
+  }
+
+  /** Reorder the window chain topped by `plan`, if any, given the plan's parent. */
+  private def reorderIfChainTop(
+      plan: LogicalPlan, parent: Option[LogicalPlan]): Option[LogicalPlan] = {
+    val chain = collectChain(plan).getOrElse(return None)
+    if (!reorderable(chain)) {
+      return None
+    }
+
+    val pinTopWindow = parent.exists {
+      case filter: Filter => isRankFilterOnTopWindow(filter, chain)
+      case _ => false
+    }
+
+    reorderChain(chain, pinTopWindow)
+  }
+
+  /**
+   * Reorder whole window chains so that the fewest possible exchanges are inserted. Each
+   * chain is rewritten at its top boundary: the nearest ancestor that is not a window or a
+   * transparent link, so that the whole chain is visible and a rank `Filter` parent (the
+   * `InferWindowGroupLimit` pattern) can pin the top window.
+   */
+  private def reorderWindowStacks(plan: LogicalPlan): LogicalPlan = {
+    val rewritten = plan.transformUpWithPruning(_.containsPattern(WINDOW), ruleId) {
+      case parent if !parent.isInstanceOf[Window] && !isTransparentLink(parent) =>
+        var changed = false
+        val newChildren = parent.children.map { child =>
+          reorderIfChainTop(child, Some(parent)) match {
+            case Some(newChild) =>
+              changed = true
+              newChild
+            case None => child
+          }
+        }
+        if (changed) parent.withNewChildren(newChildren) else parent
+    }
+    // The chain may reach the root of the plan, in which case no parent triggered above.
+    reorderIfChainTop(rewritten, None).getOrElse(rewritten)
+  }
+
+  /**
+   * The original adjacent-pair transposition: swap a window with the window directly below
+   * it when the upper window's partition spec is a proper subset of the lower one's and
+   * neither window references the other's output. Kept as the fallback behind
+   * `spark.sql.optimizer.windowReorder.enabled`.
+   */
+  private def compatiblePartitions(ps1: Seq[Expression], ps2: Seq[Expression]): Boolean = {
     ps1.length < ps2.length && ps1.forall { expr1 =>
       ps2.exists(expr1.semanticEquals)
     }
@@ -2170,17 +2563,25 @@ object TransposeWindow extends Rule[LogicalPlan] {
       compatiblePartitions(w1.partitionSpec, w2.partitionSpec)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsPattern(WINDOW), ruleId) {
-    case w1 @ Window(_, _, _, w2 @ Window(_, _, _, grandChild, _), _)
-      if windowsCompatible(w1, w2) =>
-      Project(w1.output, w2.copy(child = w1.copy(child = grandChild)))
+  private def transposeAdjacentPairs(plan: LogicalPlan): LogicalPlan =
+    plan.transformUpWithPruning(_.containsPattern(WINDOW), ruleId) {
+      case w1 @ Window(_, _, _, w2 @ Window(_, _, _, grandChild, _), _)
+          if windowsCompatible(w1, w2) =>
+        Project(w1.output, w2.copy(child = w1.copy(child = grandChild)))
 
-    case w1 @ Window(_, _, _, Project(pl, w2 @ Window(_, _, _, grandChild, _)), _)
-      if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
-      Project(
-        pl ++ w1.windowOutputSet,
-        w2.copy(child = w1.copy(child = grandChild)))
+      case w1 @ Window(_, _, _, Project(pl, w2 @ Window(_, _, _, grandChild, _)), _)
+          if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
+        Project(
+          pl ++ w1.windowOutputSet,
+          w2.copy(child = w1.copy(child = grandChild)))
+    }
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (conf.getConf(SQLConf.WINDOW_REORDER_ENABLED)) {
+      reorderWindowStacks(plan)
+    } else {
+      transposeAdjacentPairs(plan)
+    }
   }
 }
 
