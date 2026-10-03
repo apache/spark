@@ -303,7 +303,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     boolean ascii = true;
     int i = 0;
     while (i < numBytes) {
-      byte b = getByte(i);
+      byte b = getByteUnchecked(i);
       ascii &= b >= 0;
       i += numBytesForFirstByte(b);
       len += 1;
@@ -393,7 +393,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int byteIndex = 0, byteIndexValid = 0;
     while (byteIndex < numBytes) {
       // Read the first byte.
-      byte firstByte = getByte(byteIndex);
+      byte firstByte = getByteUnchecked(byteIndex);
       int expectedLen = bytesOfCodePointInUTF8[firstByte & 0xFF];
       int codePointLen = Math.min(expectedLen, numBytes - byteIndex);
       // 0B UTF-8 sequence (invalid first byte).
@@ -416,7 +416,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         continue;
       }
       // Read the second byte.
-      byte secondByte = getByte(byteIndex + 1);
+      byte secondByte = getByteUnchecked(byteIndex + 1);
       if (!isValidSecondByte(secondByte, firstByte)) {
         insertReplacementCharacter(bytes, byteIndexValid);
         byteIndexValid += UNICODE_REPLACEMENT_CHARACTER.length;
@@ -426,7 +426,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       // Read remaining continuation bytes.
       int continuationBytes = 2;
       for (; continuationBytes < codePointLen; ++continuationBytes) {
-        byte nextByte = getByte(byteIndex + continuationBytes);
+        byte nextByte = getByteUnchecked(byteIndex + continuationBytes);
         if (!isValidContinuationByte(nextByte)) {
           break;
         }
@@ -440,7 +440,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
       // Valid UTF-8 sequence.
       for (int i = 0; i < codePointLen; ++i) {
-        bytes[byteIndexValid++] = getByte(byteIndex + i);
+        bytes[byteIndexValid++] = getByteUnchecked(byteIndex + i);
       }
       byteIndex += codePointLen;
     }
@@ -471,7 +471,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int byteIndex = 0, byteCount = 0;
     while (byteIndex < numBytes) {
       // Read the first byte.
-      byte firstByte = getByte(byteIndex);
+      byte firstByte = getByteUnchecked(byteIndex);
       int expectedLen = bytesOfCodePointInUTF8[firstByte & 0xFF];
       int codePointLen = Math.min(expectedLen, numBytes - byteIndex);
       // 0B UTF-8 sequence (invalid first byte).
@@ -494,7 +494,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         continue;
       }
       // Read the second byte.
-      byte secondByte = getByte(byteIndex + 1);
+      byte secondByte = getByteUnchecked(byteIndex + 1);
       if (!isValidSecondByte(secondByte, firstByte)) {
         byteCount += UNICODE_REPLACEMENT_CHARACTER.length;
         isValid = false;
@@ -504,7 +504,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       // Read remaining continuation bytes.
       int continuationBytes = 2;
       for (; continuationBytes < codePointLen; ++continuationBytes) {
-        byte nextByte = getByte(byteIndex + continuationBytes);
+        byte nextByte = getByteUnchecked(byteIndex + continuationBytes);
         if (!isValidContinuationByte(nextByte)) {
           break;
         }
@@ -592,7 +592,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         throw new IndexOutOfBoundsException();
       }
       int codePoint = codePointFrom(byteIndex);
-      byteIndex += numBytesForFirstByte(getByte(byteIndex));
+      byteIndex += numBytesForFirstByte(getByteUnchecked(byteIndex));
       return codePoint;
     }
   }
@@ -626,7 +626,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       if (!hasNext()) {
         throw new IndexOutOfBoundsException();
       }
-      while (byteIndex > 0 && isContinuationByte(getByte(byteIndex))) {
+      while (byteIndex > 0 && isContinuationByte(getByteUnchecked(byteIndex))) {
         --byteIndex;
       }
       return codePointFrom(byteIndex--);
@@ -658,7 +658,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       i = 0;
       int c = 0;
       while (i < numBytes && c < start) {
-        i += numBytesForFirstByte(getByte(i));
+        i += numBytesForFirstByte(getByteUnchecked(i));
         c += 1;
       }
       j = i;
@@ -666,7 +666,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         i = numBytes;
       } else {
         while (i < numBytes && c < until) {
-          i += numBytesForFirstByte(getByte(i));
+          i += numBytesForFirstByte(getByteUnchecked(i));
           c += 1;
         }
       }
@@ -726,6 +726,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (byteIndex < 0 || byteIndex >= numBytes) {
       return 0;
     }
+    return getByteUnchecked(byteIndex);
+  }
+
+  /**
+   * Returns the byte at (byte) position `byteIndex`, which must be in [0, numBytes). Unlike
+   * `getByte`, this does not check the index, so callers must guarantee it is in range; an
+   * out-of-range index reads outside the string's bytes.
+   */
+  private byte getByteUnchecked(int byteIndex) {
     return Platform.getByte(base, offset + byteIndex);
   }
 
@@ -755,7 +764,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public int codePointFrom(int byteIndex) {
     Objects.checkIndex(byteIndex, numBytes);
-    byte b = getByte(byteIndex);
+    byte b = getByteUnchecked(byteIndex);
     int numBytes = numBytesForFirstByte(b);
     return switch (numBytes) {
       case 1 ->
@@ -780,7 +789,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * past the end of the backing memory.
    */
   private int continuationByte(int byteIndex) {
-    return byteIndex < numBytes ? getByte(byteIndex) & 0x3F : 0;
+    return byteIndex < numBytes ? getByteUnchecked(byteIndex) & 0x3F : 0;
   }
 
   public boolean matchAt(final UTF8String s, int pos) {
@@ -805,7 +814,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private UTF8String convertAscii(Function<Character, Character> charConverter) {
     byte[] bytes = new byte[numBytes];
     for (int i = 0; i < numBytes; i++) {
-        bytes[i] = (byte) charConverter.apply((char) getByte(i)).charValue();
+        bytes[i] = (byte) charConverter.apply((char) getByteUnchecked(i)).charValue();
     }
     return fromBytes(bytes);
   }
@@ -849,7 +858,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private IsFullAscii getIsFullAscii() {
     for (var i = 0; i < numBytes; i++) {
-      if (getByte(i) < 0) {
+      if (getByteUnchecked(i) < 0) {
         return IsFullAscii.NOT_ASCII;
       }
     }
@@ -895,7 +904,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     byte[] bytes = new byte[numBytes];
     byte prev = ' ', curr;
     for (int i = 0; i < numBytes; i++) {
-      curr = getByte(i);
+      curr = getByteUnchecked(i);
       if (prev == ' ') {
         bytes[i] = (byte) Character.toTitleCase(curr);
       } else {
@@ -954,7 +963,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     int n = 1, lastComma = -1;
     for (int i = 0; i < numBytes; i++) {
-      if (getByte(i) == (byte) ',') {
+      if (getByteUnchecked(i) == (byte) ',') {
         if (i - (lastComma + 1) == match.numBytes &&
           ByteArrayMethods.arrayEquals(base, offset + (lastComma + 1), match.base, match.offset,
             match.numBytes)) {
@@ -996,14 +1005,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trim() {
     int s = 0;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) == ' ') s++;
+    while (s < this.numBytes && getByteUnchecked(s) == ' ') s++;
     if (s == this.numBytes) {
       // Everything trimmed
       return EMPTY_UTF8;
     }
     // skip all of the space (0x20) in the right side
     int e = this.numBytes - 1;
-    while (e > s && getByte(e) == ' ') e--;
+    while (e > s && getByteUnchecked(e) == ' ') e--;
     if (s == 0 && e == numBytes - 1) {
       // Nothing trimmed
       return this;
@@ -1024,14 +1033,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimAll() {
     int s = 0;
     // skip all of the whitespaces in the left side
-    while (s < this.numBytes && isWhitespaceOrISOControl(getByte(s))) s++;
+    while (s < this.numBytes && isWhitespaceOrISOControl(getByteUnchecked(s))) s++;
     if (s == this.numBytes) {
       // Everything trimmed
       return EMPTY_UTF8;
     }
     // skip all of the whitespaces in the right side
     int e = this.numBytes - 1;
-    while (e > s && isWhitespaceOrISOControl(getByte(e))) e--;
+    while (e > s && isWhitespaceOrISOControl(getByteUnchecked(e))) e--;
     if (s == 0 && e == numBytes - 1) {
       // Nothing trimmed
       return this;
@@ -1062,7 +1071,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimLeft() {
     int s = 0;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) == 0x20) s++;
+    while (s < this.numBytes && getByteUnchecked(s) == 0x20) s++;
     if (s == 0) {
       // Nothing trimmed
       return this;
@@ -1089,7 +1098,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int trimIdx = 0;
 
     while (searchIdx < numBytes) {
-      byte leadByte = this.getByte(searchIdx);
+      byte leadByte = this.getByteUnchecked(searchIdx);
       // Clamp to the remaining bytes so a truncated trailing leader is handled as copyUTF8String
       // would have been.
       int searchCharBytes = Math.min(numBytesForFirstByte(leadByte), numBytes - searchIdx);
@@ -1121,7 +1130,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimRight() {
     int e = numBytes - 1;
     // skip all of the space (0x20) in the right side
-    while (e >= 0 && getByte(e) == 0x20) e--;
+    while (e >= 0 && getByteUnchecked(e) == 0x20) e--;
     if (e == numBytes - 1) {
       // Nothing trimmed
       return this;
@@ -1163,7 +1172,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // build the position and length array
     while (charIdx < numBytes) {
       stringCharPos[numChars] = charIdx;
-      stringCharLen[numChars] = numBytesForFirstByte(getByte(charIdx));
+      stringCharLen[numChars] = numBytesForFirstByte(getByteUnchecked(charIdx));
       charIdx += stringCharLen[numChars];
       numChars ++;
     }
@@ -1200,7 +1209,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     int i = 0; // position in byte
     while (i < numBytes) {
-      int len = Math.min(numBytesForFirstByte(getByte(i)), numBytes - i);
+      int len = Math.min(numBytesForFirstByte(getByteUnchecked(i)), numBytes - i);
       int targetOffset = Math.max(result.length - i - len, 0);
       copyMemory(this.base, this.offset + i, result,
         BYTE_ARRAY_OFFSET + targetOffset, len);
@@ -1282,7 +1291,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int i = 0; // position in byte
     int c = 0; // position in character
     while (i < numBytes && c < start) {
-      i += numBytesForFirstByte(getByte(i));
+      i += numBytesForFirstByte(getByteUnchecked(i));
       c += 1;
     }
 
@@ -1293,7 +1302,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       if (ByteArrayMethods.arrayEquals(base, offset + i, v.base, v.offset, v.numBytes)) {
         return c;
       }
-      i += numBytesForFirstByte(getByte(i));
+      i += numBytesForFirstByte(getByteUnchecked(i));
       c += 1;
     } while (i < numBytes);
 
@@ -1334,7 +1343,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       byteIdx = 0; // position in byte
       charsToSkip = start - 1; // skip character count
       while (byteIdx < numBytes && charCount < charsToSkip) {
-        byteIdx += numBytesForFirstByte(getByte(byteIdx));
+        byteIdx += numBytesForFirstByte(getByteUnchecked(byteIdx));
         charCount += 1;
       }
     } else {
@@ -1368,7 +1377,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
                   pattern.base, pattern.offset, pattern.numBytes)) {
             break;
           }
-          byteIdx += numBytesForFirstByte(getByte(byteIdx));
+          byteIdx += numBytesForFirstByte(getByteUnchecked(byteIdx));
           charCount += 1;
         }
 
@@ -1422,7 +1431,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int i = 0;
     int c = 0;
     while (i < numBytes && c < charPos) {
-      i += numBytesForFirstByte(getByte(i));
+      i += numBytesForFirstByte(getByteUnchecked(i));
       c += 1;
     }
     return i;
@@ -1436,7 +1445,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int i = 0;
     int c = 0;
     while (i < numBytes && i < bytePos) {
-      i += numBytesForFirstByte(getByte(i));
+      i += numBytesForFirstByte(getByteUnchecked(i));
       c += 1;
     }
     return c;
@@ -1824,13 +1833,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean toLong(LongWrapper toLongResult, boolean allowDecimal) {
     int offset = 0;
-    while (offset < this.numBytes && isWhitespaceOrISOControl(getByte(offset))) offset++;
+    while (offset < this.numBytes && isWhitespaceOrISOControl(getByteUnchecked(offset))) offset++;
     if (offset == this.numBytes) return false;
 
     int end = this.numBytes - 1;
-    while (end > offset && isWhitespaceOrISOControl(getByte(end))) end--;
+    while (end > offset && isWhitespaceOrISOControl(getByteUnchecked(end))) end--;
 
-    byte b = getByte(offset);
+    byte b = getByteUnchecked(offset);
     final boolean negative = b == '-';
     if (negative || b == '+') {
       if (end - offset == 0) {
@@ -1845,7 +1854,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     long result = 0;
 
     while (offset <= end) {
-      b = getByte(offset);
+      b = getByteUnchecked(offset);
       offset++;
       if (b == separator && allowDecimal) {
         // We allow decimals and will return a truncated integral in that case.
@@ -1880,7 +1889,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // part will not change the number, but we will verify that the fractional part
     // is well formed.
     while (offset <= end) {
-      byte currentByte = getByte(offset);
+      byte currentByte = getByteUnchecked(offset);
       if (currentByte < '0' || currentByte > '9') {
         return false;
       }
@@ -1921,13 +1930,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean toInt(IntWrapper intWrapper, boolean allowDecimal) {
     int offset = 0;
-    while (offset < this.numBytes && isWhitespaceOrISOControl(getByte(offset))) offset++;
+    while (offset < this.numBytes && isWhitespaceOrISOControl(getByteUnchecked(offset))) offset++;
     if (offset == this.numBytes) return false;
 
     int end = this.numBytes - 1;
-    while (end > offset && isWhitespaceOrISOControl(getByte(end))) end--;
+    while (end > offset && isWhitespaceOrISOControl(getByteUnchecked(end))) end--;
 
-    byte b = getByte(offset);
+    byte b = getByteUnchecked(offset);
     final boolean negative = b == '-';
     if (negative || b == '+') {
       if (end - offset == 0) {
@@ -1942,7 +1951,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int result = 0;
 
     while (offset <= end) {
-      b = getByte(offset);
+      b = getByteUnchecked(offset);
       offset++;
       if (b == separator && allowDecimal) {
         // We allow decimals and will return a truncated integral in that case.
@@ -1977,7 +1986,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // part will not change the number, but we will verify that the fractional part
     // is well formed.
     while (offset <= end) {
-      byte currentByte = getByte(offset);
+      byte currentByte = getByteUnchecked(offset);
       if (currentByte < '0' || currentByte > '9') {
         return false;
       }
@@ -2336,7 +2345,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
 
-    byte b = getByte(0);
+    byte b = getByteUnchecked(0);
     if ('a' <= b && b <= 'z') {
       b -= 32;
     } else if (b < 'A' || 'Z' < b) {
@@ -2350,7 +2359,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     byte lastCode = US_ENGLISH_MAPPING[idx];
 
     for (int i = 1; i < numBytes; i++) {
-      b = getByte(i);
+      b = getByteUnchecked(i);
       if ('a' <= b && b <= 'z') {
         b -= 32;
       } else if (b < 'A' || 'Z' < b) {
