@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableS
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, WriteFiles, WriteFilesExec}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2ScanRelation}
-import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, LOCAL_SHUFFLE_FOR_CTE, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
@@ -1195,6 +1195,34 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.CoGroupExec(
           f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, lOrder, rOrder, oAttr,
           planLater(left), planLater(right)) :: Nil
+
+      case r: logical.CTEReuseRelation =>
+        // Plan the shared subplan eagerly rather than using planLater, because
+        // CTEReuseExchange is a LeafExecNode whose subplan is not visible via
+        // children. QueryPlanner.collectPlaceholders would never find a PlanLater
+        // inside the subplan, leaving it unresolved.
+        //
+        // sharedSubplan is a RepartitionByExpression wrapping the CTE body. Planning it produces a
+        // plain ShuffleExchangeExec; we re-stamp its origin as LOCAL_SHUFFLE_FOR_CTE(cteId) so the
+        // shuffle is recognized as a reuse boundary (`isCreatedForSubplanReuse`) by
+        // EnsureRequirements, the AQE-off unwrap path, and VerifyCTEReuse. We use this shuffle
+        // directly instead of adding a separate exchange -- the Repartition serves as the logical
+        // plan for the inner AQE, enabling correct re-optimization (broadcast stages are findable
+        // as descendants, and re-planning preserves the root exchange).
+        val physicalSubplan = SparkStrategies.this.plan(r.sharedSubplan).next()
+        val shuffle = physicalSubplan match {
+          case s: ShuffleExchangeExec => s.copy(shuffleOrigin = LOCAL_SHUFFLE_FOR_CTE(r.cteId))
+          case other =>
+            throw SparkException.internalError(
+              s"Planning CTEReuseRelation(cteId=${r.cteId}) sharedSubplan was expected to " +
+                s"produce a ShuffleExchangeExec, but got ${other.getClass.getSimpleName}:\n" +
+                other.treeString)
+        }
+        // Set the logical link explicitly because the shuffle is stored inside
+        // CTEReuseExchange.subplan (metadata, not a child), so setLogicalLink
+        // propagation from the parent won't reach it.
+        shuffle.setLogicalLink(r.sharedSubplan)
+        CTEReuseExchange(r.cteId, shuffle) :: Nil
 
       case r @ logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
