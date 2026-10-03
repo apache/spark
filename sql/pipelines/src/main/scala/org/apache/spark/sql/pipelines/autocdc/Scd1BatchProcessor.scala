@@ -215,6 +215,7 @@ case class Scd1BatchProcessor(
 object Scd1BatchProcessor {
   private[pipelines] val cdcDeleteSequenceFieldName: String = "deleteSequence"
   private[pipelines] val cdcUpsertSequenceFieldName: String = "upsertSequence"
+  private[pipelines] val versionMapFieldName: String = "__VERSION_MAP"
 
   /** Project the delete sequence out of the CDC metadata column. */
   private[autocdc] def deleteSequenceOf(cdcMetadataCol: Column): Column =
@@ -233,7 +234,15 @@ object Scd1BatchProcessor {
         // The sequencing of the event if it represents a delete, null otherwise.
         StructField(cdcDeleteSequenceFieldName, sequencingType, nullable = true),
         // The sequencing of the event if it represents an upsert, null otherwise.
-        StructField(cdcUpsertSequenceFieldName, sequencingType, nullable = true)
+        StructField(cdcUpsertSequenceFieldName, sequencingType, nullable = true),
+        // On target rows, a null version map indicates row-level reconciliation; a non-null map
+        // indicates per-leaf reconciliation. Auxiliary-table tombstones always use a null map
+        // because they do not author user data.
+        StructField(
+          versionMapFieldName,
+          Scd1VersionMap.mapType(sequencingType),
+          nullable = true
+        )
       )
     )
 
@@ -244,11 +253,13 @@ object Scd1BatchProcessor {
   private[pipelines] def constructCdcMetadataCol(
       deleteSequence: Column,
       upsertSequence: Column,
+      versionMap: Column,
       sequencingType: DataType): Column = {
     val cdcMetadataFieldsInOrder = cdcMetadataColSchema(sequencingType).fields.map { field =>
       val value = field.name match {
         case `cdcDeleteSequenceFieldName` => deleteSequence
         case `cdcUpsertSequenceFieldName` => upsertSequence
+        case `versionMapFieldName` => versionMap
         case other =>
           throw SparkException.internalError(
             s"Unable to construct SCD1 CDC metadata column due to unknown `${other}` field."
