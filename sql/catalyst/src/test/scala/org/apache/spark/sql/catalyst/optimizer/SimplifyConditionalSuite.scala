@@ -86,6 +86,56 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
       CaseWhen(normalBranch :: Nil, None))
   }
 
+  test("SPARK-34122: remove repeated CASE conditions and preserve the first match") {
+    val first = ($"a" > 0, Literal(1))
+    val second = ($"b" > 0, Literal(2))
+    val repeated = (Literal(0) < $"a", Literal(3))
+    for (elseValue <- Seq(None, Some(Literal(4)))) {
+      assertEquivalent(
+        CaseWhen(Seq(first, first, second, repeated), elseValue),
+        CaseWhen(Seq(first, second), elseValue))
+    }
+  }
+
+  test("SPARK-34122: repeated nullable CASE conditions preserve evaluation") {
+    val first = BoundReference(0, BooleanType, nullable = true)
+    val second = BoundReference(1, BooleanType, nullable = true)
+    for (elseValue <- Seq(None, Some(Literal(4)))) {
+      val original = CaseWhen(Seq(first -> Literal(1), second -> Literal(2),
+        first -> Literal(3)), elseValue)
+      val expected = CaseWhen(Seq(first -> Literal(1), second -> Literal(2)), elseValue)
+      assertEquivalent(original, expected)
+      for (a <- Seq(true, false, null); b <- Seq(true, false, null)) {
+        val row = create_row(a, b)
+        checkEvaluation(expected, original.eval(row), row)
+      }
+    }
+  }
+
+  test("SPARK-34122: keep non-deterministic CASE conditions in order") {
+    val random = GreaterThan(Rand(0), Literal(0.5))
+    val first = ($"a" > 0, Literal(1))
+    val randomBranch = (random, Literal(2))
+    val anotherRandomBranch = (random, Literal(3))
+    assertEquivalent(
+      CaseWhen(Seq(first, randomBranch, first, anotherRandomBranch), Some(Literal(4))),
+      CaseWhen(Seq(first, randomBranch, anotherRandomBranch), Some(Literal(4))))
+
+    // Equal output values must not prevent removing a repeated deterministic condition.
+    val sameValueBranches = Seq(($"a" > 0, Literal(1)), ($"a" > 0, Literal(1)),
+      (random, Literal(1)))
+    assertEquivalent(
+      CaseWhen(sameValueBranches, Some(Literal(1))),
+      CaseWhen(Seq(sameValueBranches.head, sameValueBranches.last), Some(Literal(1))))
+  }
+
+  test("SPARK-34122: retain the first CASE value even when it is non-deterministic") {
+    val first = ($"a" > 0, Rand(0))
+    assertEquivalent(
+      CaseWhen(Seq(first, ($"a" > 0, Rand(1))), Some(Literal(0.0))),
+      CaseWhen(Seq(first), Some(Literal(0.0))))
+  }
+
   test("remove entire CaseWhen if only the else branch is reachable") {
     assertEquivalent(
       CaseWhen(unreachableBranch :: unreachableBranch :: nullBranch :: Nil, Some(Literal(30))),

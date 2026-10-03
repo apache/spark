@@ -28,7 +28,7 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.UpdateFieldsBenchmark._
-import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression, With}
+import org.apache.spark.sql.catalyst.expressions.{CaseWhen, InSet, Literal, NamedExpression, With}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
@@ -851,6 +851,21 @@ class ColumnExpressionSuite extends SharedSparkSession {
     intercept[IllegalArgumentException] { $"key".when($"key" === 1, -1) }
     intercept[IllegalArgumentException] { $"key".otherwise(-1) }
     intercept[IllegalArgumentException] { when($"key" === 1, -1).otherwise(-1).otherwise(-1) }
+  }
+
+  test("SPARK-34122: remove repeated CASE conditions with and without code generation") {
+    onEachEvalPath {
+      val input = spark.range(4)
+        .selectExpr("IF(id = 0, CAST(NULL AS BIGINT), id) AS a", "id AS b")
+      val result = input.selectExpr(
+        "CASE WHEN a > 1 THEN a WHEN a > 0 THEN -1 WHEN a > 1 THEN b ELSE 0 END",
+        "CASE WHEN a > 1 THEN a WHEN a > 1 THEN b END")
+      val branchCounts = result.queryExecution.optimizedPlan.flatMap { plan =>
+        plan.expressions.flatMap(_.collect { case c: CaseWhen => c.branches.length })
+      }
+      assert(branchCounts == Seq(2, 1))
+      checkAnswer(result, Seq(Row(0L, null), Row(-1L, null), Row(2L, 2L), Row(3L, 3L)))
+    }
   }
 
   test("sqrt") {
