@@ -32,6 +32,7 @@ import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.page.*;
 import org.apache.parquet.column.values.RequiresPreviousReader;
 import org.apache.parquet.column.values.ValuesReader;
+import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
@@ -362,7 +363,7 @@ public class VectorizedColumnReader {
 
     try {
       dataColumn.initFromPage(pageValueCount, in);
-    } catch (IOException e) {
+    } catch (IOException | ParquetDecodingException e) {
       throw new IOException("could not read page in col " + descriptor, e);
     }
     // for PARQUET-246 (See VectorizedDeltaByteArrayReader.setPreviousValues)
@@ -432,7 +433,7 @@ public class VectorizedColumnReader {
       defColumn.initFromPage(pageValueCount, in);
       initDataReader(pageValueCount, page.getValueEncoding(), in);
       return pageValueCount;
-    } catch (IOException e) {
+    } catch (IOException | ParquetDecodingException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
     }
   }

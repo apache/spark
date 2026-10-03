@@ -17,17 +17,24 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.nio.ByteBuffer
+import java.nio.{ByteBuffer, ByteOrder}
 import java.util.PrimitiveIterator
 
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import org.apache.parquet.bytes.ByteBufferInputStream
+import org.apache.parquet.column.ColumnDescriptor
+import org.apache.parquet.io.ParquetDecodingException
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
+import org.apache.parquet.schema.Type.Repetition
+import org.apache.parquet.schema.Types
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.datasources.parquet.VectorizedRleValuesReaderTestUtils._
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 /**
  * Focused correctness tests for `VectorizedRleValuesReader.readBatch` PACKED-mode decoding,
@@ -37,6 +44,17 @@ import org.apache.spark.sql.types.IntegerType
 class VectorizedRleValuesReaderSuite extends SparkFunSuite {
 
   import VectorizedRleValuesReaderSuite._
+
+  /** Runs `f` in another thread, so that a reader that never returns fails the test. */
+  private def interceptCorrupted(f: => Any): Unit = {
+    // scalastyle:off awaitresult
+    // Await.result, unlike ThreadUtils.awaitResult, rethrows the exception unwrapped.
+    val e = intercept[ParquetDecodingException] {
+      Await.result(Future(f)(ExecutionContext.global), 30.seconds)
+    }
+    // scalastyle:on awaitresult
+    assert(e.getMessage.contains("Corrupted RLE data"), e.getMessage)
+  }
 
   test("PACKED: alternating null/non-null (many single-element runs)") {
     val n = 1024
@@ -185,9 +203,236 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
       produced += toRead
     }
   }
+
+  test("SPARK-59832: truncated dictionary ids fail instead of being partially read") {
+    // A dictionary id page with 10 ids, read as if it had 20.
+    streams(dictIdPage(Array.fill(10)(3), bitWidth = 4)).foreach { in =>
+      val reader = new VectorizedRleValuesReader()
+      reader.initFromPage(20, in())
+      val c = new OnHeapColumnVector(20, IntegerType)
+      interceptCorrupted(reader.readIntegers(20, c, 0))
+    }
+    streams(dictIdPage(Array.fill(10)(3), bitWidth = 4)).foreach { in =>
+      val reader = new VectorizedRleValuesReader()
+      reader.initFromPage(20, in())
+      interceptCorrupted(reader.skipIntegers(20))
+    }
+    streams(dictIdPage(Array.fill(10)(3), bitWidth = 4)).foreach { in =>
+      val reader = new VectorizedRleValuesReader()
+      reader.initFromPage(20, in())
+      (0 until 10).foreach(_ => assert(reader.readInteger() == 3))
+      interceptCorrupted(reader.readInteger())
+    }
+  }
+
+  test("SPARK-59832: truncated booleans fail instead of looping forever") {
+    val encoded = encodeRle(Array.fill(10)(1), 1)
+    streams(intLE(encoded.length) ++ encoded).foreach { in =>
+      val reader = new VectorizedRleValuesReader(1)
+      reader.initFromPage(20, in())
+      val c = new OnHeapColumnVector(20, BooleanType)
+      interceptCorrupted(reader.readBooleans(20, c, 0))
+    }
+  }
+
+  test("SPARK-59832: truncated definition levels fail in readBatch") {
+    // The page declares 100 values but its definition levels only encode 64. Before the fix
+    // readBatch returned without progress, so VectorizedColumnReader.readBatch spun forever.
+    val n = 100
+    val encoded = encodeRle(Array.fill(64)(1), 1)
+    val plainBytes = plainIntBytes(n)(valueAt)
+    def run(withDefLevels: Boolean, rowIndexes: PrimitiveIterator.OfLong): Unit = {
+      val reader = new VectorizedRleValuesReader(1, false)
+      reader.initFromPage(n, ByteBufferInputStream.wrap(ByteBuffer.wrap(encoded)))
+      val valueReader = new VectorizedPlainValuesReader
+      valueReader.initFromPage(n, ByteBufferInputStream.wrap(ByteBuffer.wrap(plainBytes)))
+      val state = ParquetTestAccess.newState(intColumnDescriptor(1), false, rowIndexes)
+      ParquetTestAccess.resetForNewPage(state, n, 0L)
+      ParquetTestAccess.resetForNewBatch(state, n)
+      val values = new OnHeapColumnVector(n, IntegerType)
+      val defLevels = if (withDefLevels) new OnHeapColumnVector(n, IntegerType) else null
+      interceptCorrupted {
+        ParquetTestAccess.readBatch(reader, state, values, defLevels, valueReader, integerUpdater)
+      }
+    }
+    run(withDefLevels = false, rowIndexes = null)
+    run(withDefLevels = true, rowIndexes = null)
+    // Skips the truncated levels to reach rows 80 to 90.
+    run(withDefLevels = false, rowIndexes = longIterator((80 to 90).toArray))
+  }
+
+  test("SPARK-59832: truncated repetition levels fail in readBatchRepeated") {
+    // Every row is a top-level row (repetition level 0), but only 64 of 100 are encoded.
+    readRepeated(repLevels = Array.fill(64)(0), defLevels = Array.fill(100)(1), n = 100)
+  }
+
+  test("SPARK-59832: truncated definition levels fail in readBatchRepeated") {
+    // The repetition levels are complete, but only 64 of 100 definition levels are encoded.
+    // Before the fix the missing definition levels were silently left as 0.
+    readRepeated(repLevels = Array.fill(100)(0), defLevels = Array.fill(64)(1), n = 100)
+    // Skips the truncated levels to reach rows 80 to 90.
+    readRepeated(repLevels = Array.fill(100)(0), defLevels = Array.fill(64)(1), n = 100,
+      rowIndexes = longIterator((80 to 90).toArray))
+  }
+
+  private def readRepeated(
+      repLevels: Array[Int],
+      defLevels: Array[Int],
+      n: Int,
+      rowIndexes: PrimitiveIterator.OfLong = null): Unit = {
+    val prim = Types.primitive(PrimitiveTypeName.INT32, Repetition.REPEATED).named("col")
+    val descriptor = new ColumnDescriptor(Array("col"), prim, 1, 1)
+    val repReader = new VectorizedRleValuesReader(1, false)
+    repReader.initFromPage(
+      n, ByteBufferInputStream.wrap(ByteBuffer.wrap(encodeRle(repLevels, 1))))
+    val defReader = new VectorizedRleValuesReader(1, false)
+    defReader.initFromPage(
+      n, ByteBufferInputStream.wrap(ByteBuffer.wrap(encodeRle(defLevels, 1))))
+    val valueReader = new VectorizedPlainValuesReader
+    valueReader.initFromPage(
+      n, ByteBufferInputStream.wrap(ByteBuffer.wrap(plainIntBytes(n)(valueAt))))
+    val state = ParquetTestAccess.newState(descriptor, false, rowIndexes)
+    ParquetTestAccess.resetForNewPage(state, n, 0L)
+    ParquetTestAccess.resetForNewBatch(state, n)
+    val repLevelsVec = new OnHeapColumnVector(n, IntegerType)
+    val defLevelsVec = new OnHeapColumnVector(n, IntegerType)
+    val values = new OnHeapColumnVector(n, IntegerType)
+    interceptCorrupted {
+      ParquetTestAccess.readBatchRepeated(repReader, state, repLevelsVec, defReader,
+        defLevelsVec, values, valueReader, integerUpdater)
+    }
+  }
+
+  test("SPARK-59832: reading past a page with bit width 0 fails") {
+    // With bit width 0 the page is one implicit run of `valueCount` zeros; the bytes that
+    // follow belong to the next section of the page and must not be decoded as levels.
+    val trailing = varint(((1L << 27) << 1) | 1) ++ Array[Byte](1, 2, 3)
+    val reader = new VectorizedRleValuesReader(0)
+    reader.initFromPage(5, ByteBufferInputStream.wrap(ByteBuffer.wrap(trailing)))
+    val c = new OnHeapColumnVector(6, IntegerType)
+    c.putInts(0, 6, -1)
+    reader.readIntegers(5, c, 0)
+    assert((0 until 5).forall(c.getInt(_) == 0))
+    interceptCorrupted(reader.readIntegers(1, c, 5))
+  }
+
+  test("SPARK-59832: invalid level length is rejected") {
+    val payload = Array[Byte](10, 20, 30, 40)
+    Seq(-1, -4, -5, payload.length + 1, Int.MaxValue).foreach { length =>
+      streams(intLE(length) ++ payload).foreach { in =>
+        val reader = new VectorizedRleValuesReader(1)
+        val e = intercept[ParquetDecodingException](reader.initFromPage(8, in()))
+        assert(e.getMessage.contains(s"Corrupted RLE data: invalid length $length"),
+          e.getMessage)
+      }
+    }
+  }
+
+  test("SPARK-59832: bit-packed run longer than the remaining bytes is rejected") {
+    def check(bitWidth: Int, numGroups: Long, data: Array[Byte]): Unit = {
+      val page = Array(bitWidth.toByte) ++ varint((numGroups << 1) | 1) ++ data
+      streams(page).foreach { in =>
+        val reader = new VectorizedRleValuesReader()
+        reader.initFromPage(10, in())
+        val c = new OnHeapColumnVector(10, IntegerType)
+        interceptCorrupted(reader.readIntegers(10, c, 0))
+      }
+    }
+    // Truncated last group. This was already rejected before (by `in.slice`), even when the
+    // bytes cover every value read. parquet-java and Arrow accept it, for compatibility with
+    // writers that do not pad the last group.
+    check(bitWidth = 4, numGroups = 2, data = Array.fill[Byte](5)(0x11))
+    // numGroups * 8 and numGroups * bitWidth overflow to 0.
+    check(bitWidth = 8, numGroups = 1L << 29, data = encodeRle(Array.fill(10)(3), 8))
+    // numGroups * 8 and numGroups * bitWidth overflow to negative values.
+    check(bitWidth = 2, numGroups = Int.MaxValue, data = Array.fill[Byte](16)(0))
+    // Would allocate an int[2^30] buffer before noticing that only 3 bytes are left.
+    check(bitWidth = 1, numGroups = 1L << 27, data = Array[Byte](1, 2, 3))
+  }
+
+  test("SPARK-59832: dictionary ids of an empty page are not decoded as 0") {
+    val reader = new VectorizedRleValuesReader()
+    reader.initFromPage(5, ByteBufferInputStream.wrap(ByteBuffer.wrap(Array.emptyByteArray)))
+    // An all-null page reads no ids.
+    val c = new OnHeapColumnVector(5, IntegerType)
+    reader.readIntegers(0, c, 0)
+    reader.skipIntegers(0)
+    interceptCorrupted(reader.readIntegers(5, c, 0))
+  }
+
+  test("SPARK-59832: runs of length 0 are skipped") {
+    // [bit width 4][RLE run of 0 x 7][bit-packed run of 0 groups][RLE run of 5 x 3]
+    val page = Array[Byte](4, 0, 7, 1, 10, 3)
+    val r1 = new VectorizedRleValuesReader()
+    r1.initFromPage(5, ByteBufferInputStream.wrap(ByteBuffer.wrap(page)))
+    assert((0 until 5).map(_ => r1.readInteger()) == Seq.fill(5)(3))
+    val r2 = new VectorizedRleValuesReader()
+    r2.initFromPage(5, ByteBufferInputStream.wrap(ByteBuffer.wrap(page)))
+    val c = new OnHeapColumnVector(5, IntegerType)
+    r2.readIntegers(5, c, 0)
+    assert((0 until 5).map(c.getInt) == Seq.fill(5)(3))
+  }
+
+  test("SPARK-59832: reads that end exactly at the end of the encoded values succeed") {
+    // A run of 20 identical ids (RLE) followed by 17 mixed ids (bit-packed, padded to 24).
+    val ids = Array.tabulate(37)(i => if (i < 20) 5 else i % 7)
+    streams(dictIdPage(ids, bitWidth = 3)).foreach { in =>
+      val reader = new VectorizedRleValuesReader()
+      reader.initFromPage(ids.length, in())
+      val c = new OnHeapColumnVector(ids.length, IntegerType)
+      reader.readIntegers(ids.length, c, 0)
+      assert((0 until ids.length).map(c.getInt) == ids.toSeq)
+    }
+    streams(dictIdPage(ids, bitWidth = 3)).foreach { in =>
+      val reader = new VectorizedRleValuesReader()
+      reader.initFromPage(ids.length, in())
+      reader.skipIntegers(30)
+      assert((30 until ids.length).map(_ => reader.readInteger()) == ids.drop(30).toSeq)
+    }
+
+    val booleans = Array.tabulate(37)(i => if (i < 20) 1 else i % 2)
+    val encoded = encodeRle(booleans, 1)
+    // The level length covers exactly the rest of the page.
+    streams(intLE(encoded.length) ++ encoded).foreach { in =>
+      val reader = new VectorizedRleValuesReader(1)
+      reader.initFromPage(booleans.length, in())
+      val c = new OnHeapColumnVector(booleans.length, BooleanType)
+      reader.readBooleans(booleans.length, c, 0)
+      assert((0 until booleans.length).map(c.getBoolean) == booleans.map(_ == 1).toSeq)
+    }
+  }
 }
 
 private object VectorizedRleValuesReaderSuite {
+
+  /**
+   * The page as a single buffer and split into 1-byte buffers. The split keeps any part of the
+   * page longer than 1 byte, including a slice of it, on a `MultiBufferInputStream`.
+   */
+  private def streams(bytes: Array[Byte]): Seq[() => ByteBufferInputStream] = {
+    assert(bytes.length > 1, "the page must span multiple buffers")
+    Seq(
+      () => ByteBufferInputStream.wrap(ByteBuffer.wrap(bytes)),
+      () => ByteBufferInputStream.wrap(bytes.grouped(1).map(ByteBuffer.wrap).toList.asJava))
+  }
+
+  /** A dictionary id section: the bit width followed by the RLE/bit-packed ids. */
+  private def dictIdPage(ids: Array[Int], bitWidth: Int): Array[Byte] =
+    Array(bitWidth.toByte) ++ encodeRle(ids, bitWidth)
+
+  private def intLE(i: Int): Array[Byte] =
+    ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(i).array()
+
+  private def varint(value: Long): Array[Byte] = {
+    val out = Array.newBuilder[Byte]
+    var v = value
+    while ((v & ~0x7FL) != 0) {
+      out += ((v & 0x7F) | 0x80).toByte
+      v >>>= 7
+    }
+    out += v.toByte
+    out.result()
+  }
 
   /**
    * Runs readBatch end-to-end and asserts null-bits, non-null values, and def levels.
