@@ -1,0 +1,282 @@
+================================================================================================
+Storage filter pushdown, 34 row groups, value pages of about 4 rows
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.1% of the keys clustered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         330            388          35          0.2        6609.2       1.0X
+Storage filter pushdown on                          142            163          12          0.4        2832.7       2.3X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.1% of the keys clustered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         155            165           5          0.3        3099.4       1.0X
+Storage filter pushdown on                           32             39           5          1.6         642.2       4.8X
+
+Rows out of the fact scan: 50000 with pushdown off, 50 with it on
+Row groups skipped whole: 33, bytes not read: 102966996
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.5% of the keys clustered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         229            246          12          0.2        4575.0       1.0X
+Storage filter pushdown on                          102            119          14          0.5        2042.4       2.2X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.5% of the keys clustered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         148            154           5          0.3        2953.4       1.0X
+Storage filter pushdown on                           27             30           3          1.8         546.4       5.4X
+
+Rows out of the fact scan: 50000 with pushdown off, 250 with it on
+Row groups skipped whole: 33, bytes not read: 102554698
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+1% of the keys clustered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         214            226           8          0.2        4270.0       1.0X
+Storage filter pushdown on                           96            105           8          0.5        1923.9       2.2X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+1% of the keys clustered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         143            150           6          0.3        2868.1       1.0X
+Storage filter pushdown on                           26             29           4          1.9         514.7       5.6X
+
+Rows out of the fact scan: 50000 with pushdown off, 500 with it on
+Row groups skipped whole: 33, bytes not read: 102043450
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+5% of the keys clustered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         222            237          12          0.2        4443.8       1.0X
+Storage filter pushdown on                          107            120          14          0.5        2142.9       2.1X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+5% of the keys clustered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         151            155           3          0.3        3014.4       1.0X
+Storage filter pushdown on                           33             37           4          1.5         657.0       4.6X
+
+Rows out of the fact scan: 50000 with pushdown off, 2502 with it on
+Row groups skipped whole: 29, bytes not read: 97903989
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.1% of the keys scattered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         200            221          15          0.2        4007.1       1.0X
+Storage filter pushdown on                           84            100          11          0.6        1681.1       2.4X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.1% of the keys scattered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         142            147           6          0.4        2847.5       1.0X
+Storage filter pushdown on                           29             32           3          1.7         572.9       5.0X
+
+Rows out of the fact scan: 50000 with pushdown off, 50 with it on
+Row groups skipped whole: 10, bytes not read: 102661895
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.5% of the keys scattered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         200            209           6          0.3        3992.8       1.0X
+Storage filter pushdown on                           85             94           7          0.6        1704.9       2.3X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.5% of the keys scattered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         144            146           2          0.3        2870.4       1.0X
+Storage filter pushdown on                           35             38           4          1.4         691.0       4.2X
+
+Rows out of the fact scan: 50000 with pushdown off, 242 with it on
+Row groups skipped whole: 0, bytes not read: 101095162
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+1% of the keys scattered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         198            202           3          0.3        3957.1       1.0X
+Storage filter pushdown on                           91             98           8          0.5        1820.4       2.2X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+1% of the keys scattered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         141            144           2          0.4        2812.4       1.0X
+Storage filter pushdown on                           38             41           4          1.3         756.8       3.7X
+
+Rows out of the fact scan: 50000 with pushdown off, 516 with it on
+Row groups skipped whole: 0, bytes not read: 98893499
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+5% of the keys scattered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         215            222           6          0.2        4291.1       1.0X
+Storage filter pushdown on                          127            135           7          0.4        2544.2       1.7X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+5% of the keys scattered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         145            151           4          0.3        2903.6       1.0X
+Storage filter pushdown on                           65             69           5          0.8        1297.8       2.2X
+
+Rows out of the fact scan: 50000 with pushdown off, 2592 with it on
+Row groups skipped whole: 0, bytes not read: 83325173
+
+
+================================================================================================
+Storage filter pushdown, 34 row groups, value pages of about 375 rows
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.1% of the keys clustered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         122            128           6          0.4        2434.0       1.0X
+Storage filter pushdown on                           67             73           6          0.7        1349.9       1.8X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.1% of the keys clustered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                          73             79           4          0.7        1458.9       1.0X
+Storage filter pushdown on                           21             24           3          2.4         425.4       3.4X
+
+Rows out of the fact scan: 50000 with pushdown off, 50 with it on
+Row groups skipped whole: 33, bytes not read: 101618678
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.5% of the keys clustered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         123            131           8          0.4        2467.3       1.0X
+Storage filter pushdown on                           67             70           5          0.8        1332.6       1.9X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.5% of the keys clustered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                          73             79           5          0.7        1469.4       1.0X
+Storage filter pushdown on                           21             23           2          2.4         422.3       3.5X
+
+Rows out of the fact scan: 50000 with pushdown off, 250 with it on
+Row groups skipped whole: 33, bytes not read: 101618678
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+1% of the keys clustered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         121            129           5          0.4        2417.3       1.0X
+Storage filter pushdown on                           70             75           6          0.7        1404.6       1.7X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+1% of the keys clustered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                          74             77           2          0.7        1472.7       1.0X
+Storage filter pushdown on                           22             24           2          2.2         444.7       3.3X
+
+Rows out of the fact scan: 50000 with pushdown off, 500 with it on
+Row groups skipped whole: 33, bytes not read: 101565287
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+5% of the keys clustered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         136            144           6          0.4        2713.8       1.0X
+Storage filter pushdown on                           87             91           5          0.6        1738.1       1.6X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+5% of the keys clustered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                          75             81           4          0.7        1507.8       1.0X
+Storage filter pushdown on                           28             30           3          1.8         557.6       2.7X
+
+Rows out of the fact scan: 50000 with pushdown off, 2502 with it on
+Row groups skipped whole: 29, bytes not read: 95462086
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.1% of the keys scattered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         120            127           6          0.4        2390.8       1.0X
+Storage filter pushdown on                           84             89           6          0.6        1680.5       1.4X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.1% of the keys scattered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                          73             80           6          0.7        1456.7       1.0X
+Storage filter pushdown on                           40             42           2          1.2         806.7       1.8X
+
+Rows out of the fact scan: 50000 with pushdown off, 50 with it on
+Row groups skipped whole: 10, bytes not read: 65284922
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.5% of the keys scattered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         124            132           5          0.4        2471.4       1.0X
+Storage filter pushdown on                          118            129          10          0.4        2357.4       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+0.5% of the keys scattered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                          79             84           3          0.6        1588.8       1.0X
+Storage filter pushdown on                           71             75           4          0.7        1423.9       1.1X
+
+Rows out of the fact scan: 50000 with pushdown off, 242 with it on
+Row groups skipped whole: 0, bytes not read: 8644835
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+1% of the keys scattered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         128            135           5          0.4        2565.4       1.0X
+Storage filter pushdown on                          125            130           4          0.4        2494.1       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+1% of the keys scattered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                          77             80           3          0.7        1531.3       1.0X
+Storage filter pushdown on                           73             77           3          0.7        1457.4       1.1X
+
+Rows out of the fact scan: 50000 with pushdown off, 516 with it on
+Row groups skipped whole: 0, bytes not read: 1601730
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+5% of the keys scattered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         139            147           5          0.4        2789.6       1.0X
+Storage filter pushdown on                          139            146           6          0.4        2785.5       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+5% of the keys scattered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                          77             84           3          0.7        1533.9       1.0X
+Storage filter pushdown on                           76             79           3          0.7        1519.4       1.0X
+
+Rows out of the fact scan: 50000 with pushdown off, 2592 with it on
+Row groups skipped whole: 0, bytes not read: 320346
+
+

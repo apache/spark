@@ -1,0 +1,282 @@
+================================================================================================
+Storage filter pushdown, 34 row groups, value pages of about 4 rows
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.1% of the keys clustered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         300            327          17          0.2        6000.0       1.0X
+Storage filter pushdown on                           99            136          36          0.5        1984.1       3.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.1% of the keys clustered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         194            201           4          0.3        3874.6       1.0X
+Storage filter pushdown on                           22             26           4          2.3         436.1       8.9X
+
+Rows out of the fact scan: 50000 with pushdown off, 50 with it on
+Row groups skipped whole: 33, bytes not read: 102966996
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.5% of the keys clustered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         256            268          20          0.2        5121.8       1.0X
+Storage filter pushdown on                           76             90          12          0.7        1513.4       3.4X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.5% of the keys clustered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         186            195           6          0.3        3722.8       1.0X
+Storage filter pushdown on                           21             24           3          2.4         420.2       8.9X
+
+Rows out of the fact scan: 50000 with pushdown off, 250 with it on
+Row groups skipped whole: 33, bytes not read: 102554698
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+1% of the keys clustered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         266            286          17          0.2        5326.5       1.0X
+Storage filter pushdown on                           71             83          10          0.7        1413.9       3.8X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+1% of the keys clustered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         190            193           3          0.3        3795.9       1.0X
+Storage filter pushdown on                           21             24           4          2.4         422.1       9.0X
+
+Rows out of the fact scan: 50000 with pushdown off, 500 with it on
+Row groups skipped whole: 33, bytes not read: 102043450
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+5% of the keys clustered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         251            269          12          0.2        5027.4       1.0X
+Storage filter pushdown on                           94            112          15          0.5        1879.5       2.7X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+5% of the keys clustered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         185            187           2          0.3        3702.8       1.0X
+Storage filter pushdown on                           31             35           4          1.6         613.0       6.0X
+
+Rows out of the fact scan: 50000 with pushdown off, 2502 with it on
+Row groups skipped whole: 29, bytes not read: 97903989
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.1% of the keys scattered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         243            251           7          0.2        4866.0       1.0X
+Storage filter pushdown on                           66             77           8          0.8        1316.2       3.7X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.1% of the keys scattered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         183            188           2          0.3        3657.5       1.0X
+Storage filter pushdown on                           23             26           3          2.1         465.1       7.9X
+
+Rows out of the fact scan: 50000 with pushdown off, 50 with it on
+Row groups skipped whole: 10, bytes not read: 102661895
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.5% of the keys scattered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         245            250           6          0.2        4890.2       1.0X
+Storage filter pushdown on                           70             79           5          0.7        1401.9       3.5X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.5% of the keys scattered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         187            190           2          0.3        3732.3       1.0X
+Storage filter pushdown on                           29             32           3          1.7         584.6       6.4X
+
+Rows out of the fact scan: 50000 with pushdown off, 242 with it on
+Row groups skipped whole: 0, bytes not read: 101095162
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+1% of the keys scattered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         235            240           3          0.2        4700.8       1.0X
+Storage filter pushdown on                           74             84           7          0.7        1472.0       3.2X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+1% of the keys scattered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         188            194           3          0.3        3763.9       1.0X
+Storage filter pushdown on                           34             36           2          1.5         689.4       5.5X
+
+Rows out of the fact scan: 50000 with pushdown off, 516 with it on
+Row groups skipped whole: 0, bytes not read: 98893499
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+5% of the keys scattered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         265            269           4          0.2        5292.7       1.0X
+Storage filter pushdown on                          118            128           5          0.4        2367.2       2.2X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+5% of the keys scattered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         185            190           4          0.3        3692.1       1.0X
+Storage filter pushdown on                           67             69           2          0.7        1342.9       2.7X
+
+Rows out of the fact scan: 50000 with pushdown off, 2592 with it on
+Row groups skipped whole: 0, bytes not read: 83325173
+
+
+================================================================================================
+Storage filter pushdown, 34 row groups, value pages of about 375 rows
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.1% of the keys clustered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         149            157           7          0.3        2986.3       1.0X
+Storage filter pushdown on                           52             61           6          1.0        1044.3       2.9X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.1% of the keys clustered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         102            107           3          0.5        2046.1       1.0X
+Storage filter pushdown on                           17             19           3          2.9         339.4       6.0X
+
+Rows out of the fact scan: 50000 with pushdown off, 50 with it on
+Row groups skipped whole: 33, bytes not read: 101618678
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.5% of the keys clustered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         138            150          17          0.4        2751.0       1.0X
+Storage filter pushdown on                           54             59           6          0.9        1080.9       2.5X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.5% of the keys clustered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                          98            104           3          0.5        1957.0       1.0X
+Storage filter pushdown on                           17             19           3          2.9         339.5       5.8X
+
+Rows out of the fact scan: 50000 with pushdown off, 250 with it on
+Row groups skipped whole: 33, bytes not read: 101618678
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+1% of the keys clustered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         145            152           6          0.3        2898.9       1.0X
+Storage filter pushdown on                           54             63           5          0.9        1088.5       2.7X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+1% of the keys clustered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         103            107           3          0.5        2052.1       1.0X
+Storage filter pushdown on                           18             19           3          2.8         356.0       5.8X
+
+Rows out of the fact scan: 50000 with pushdown off, 500 with it on
+Row groups skipped whole: 33, bytes not read: 101565287
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+5% of the keys clustered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         150            160           6          0.3        3004.8       1.0X
+Storage filter pushdown on                           73             84          13          0.7        1468.1       2.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+5% of the keys clustered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         101            112          10          0.5        2017.7       1.0X
+Storage filter pushdown on                           24             28           3          2.1         472.5       4.3X
+
+Rows out of the fact scan: 50000 with pushdown off, 2502 with it on
+Row groups skipped whole: 29, bytes not read: 95462086
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.1% of the keys scattered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         152            155           2          0.3        3039.2       1.0X
+Storage filter pushdown on                           81             91           4          0.6        1610.2       1.9X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.1% of the keys scattered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         104            107           3          0.5        2072.5       1.0X
+Storage filter pushdown on                           43             45           2          1.2         858.1       2.4X
+
+Rows out of the fact scan: 50000 with pushdown off, 50 with it on
+Row groups skipped whole: 10, bytes not read: 65284922
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.5% of the keys scattered, join:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         147            155           5          0.3        2941.5       1.0X
+Storage filter pushdown on                          129            137           3          0.4        2585.0       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+0.5% of the keys scattered, scan only:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         101            105           2          0.5        2013.9       1.0X
+Storage filter pushdown on                           89             93           3          0.6        1773.1       1.1X
+
+Rows out of the fact scan: 50000 with pushdown off, 242 with it on
+Row groups skipped whole: 0, bytes not read: 8644835
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+1% of the keys scattered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         143            154           7          0.3        2859.0       1.0X
+Storage filter pushdown on                          136            149           5          0.4        2728.2       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+1% of the keys scattered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         101            107           2          0.5        2020.4       1.0X
+Storage filter pushdown on                           94             99           2          0.5        1881.2       1.1X
+
+Rows out of the fact scan: 50000 with pushdown off, 516 with it on
+Row groups skipped whole: 0, bytes not read: 1601730
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+5% of the keys scattered, join:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         162            174           7          0.3        3246.2       1.0X
+Storage filter pushdown on                          159            164           4          0.3        3172.4       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+5% of the keys scattered, scan only:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Storage filter pushdown off                         101            106           3          0.5        2022.1       1.0X
+Storage filter pushdown on                          102            107           9          0.5        2034.1       1.0X
+
+Rows out of the fact scan: 50000 with pushdown off, 2592 with it on
+Row groups skipped whole: 0, bytes not read: 320346
+
+
