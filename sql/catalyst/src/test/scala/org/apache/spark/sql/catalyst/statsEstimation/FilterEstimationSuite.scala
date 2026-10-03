@@ -579,6 +579,117 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 10)
   }
 
+  test("cstring startsWith 'A' - bounded by the non-null fraction") {
+    // Only non-null rows can match, so selectivity <= 1 - nullPercent = 0.5.
+    val colStatNullableString = colStatString.copy(nullCount = Some(5))
+    validateEstimatedStats(
+      Filter(StartsWith(attrString, Literal("A")),
+        childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+          attributeMap = AttributeMap(Seq(attrString -> colStatNullableString)))),
+      Seq(attrString -> colStatString.copy(distinctCount = Some(5))),
+      expectedRowCount = 5)
+  }
+
+  test("cstring endsWith / contains 'A' - bounded by the non-null fraction") {
+    val colStatNullableString = colStatString.copy(nullCount = Some(5))
+    Seq(EndsWith(attrString, Literal("A")), Contains(attrString, Literal("A"))).foreach { cond =>
+      validateEstimatedStats(
+        Filter(cond,
+          childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+            attributeMap = AttributeMap(Seq(attrString -> colStatNullableString)))),
+        Seq(attrString -> colStatString.copy(distinctCount = Some(5))),
+        expectedRowCount = 5)
+    }
+  }
+
+  test("cstring startsWith operand longer than maxLen matches nothing") {
+    // colStatString.maxLen is 2, so a 3-character prefix cannot match any value.
+    validateEstimatedStats(
+      Filter(StartsWith(attrString, Literal("abc")), childStatsTestPlan(Seq(attrString), 10L)),
+      Seq(attrString -> colStatString),
+      expectedRowCount = 0)
+  }
+
+  test("cstring startsWith on an all-null column matches nothing") {
+    val colStatAllNull = colStatString.copy(nullCount = Some(10))
+    validateEstimatedStats(
+      Filter(StartsWith(attrString, Literal("A")),
+        childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+          attributeMap = AttributeMap(Seq(attrString -> colStatAllNull)))),
+      Seq(attrString -> colStatAllNull),
+      expectedRowCount = 0)
+  }
+
+  test("cstring startsWith on a non-null column is unchanged (selectivity 1.0)") {
+    validateEstimatedStats(
+      Filter(StartsWith(attrString, Literal("A")), childStatsTestPlan(Seq(attrString), 10L)),
+      Seq(attrString -> colStatString),
+      expectedRowCount = 10)
+  }
+
+  test("Not(cstring startsWith / endsWith / contains) falls back to the default") {
+    // The positive estimate is only an upper bound, so it must not be complemented: on a
+    // non-null column the bound is 1.0 and its complement would estimate no rows.
+    val colStatNullableString = colStatString.copy(nullCount = Some(5))
+    Seq(colStatString, colStatNullableString).foreach { colStat =>
+      Seq(StartsWith(attrString, Literal("A")), EndsWith(attrString, Literal("A")),
+          Contains(attrString, Literal("A")), StartsWith(attrString, Literal("abc"))).foreach {
+        cond =>
+          validateEstimatedStats(
+            Filter(Not(cond), childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+              attributeMap = AttributeMap(Seq(attrString -> colStat)))),
+            Seq(attrString -> colStat),
+            expectedRowCount = 10)
+      }
+    }
+    // Not-operator pushdown reaches the same case: Not(A AND B) => Not(A) OR Not(B).
+    validateEstimatedStats(
+      Filter(Not(And(StartsWith(attrString, Literal("A")), EqualTo(attrInt, Literal(3)))),
+        childStatsTestPlan(Seq(attrInt, attrString), 10L)),
+      Seq(attrInt -> colStatInt, attrString -> colStatString),
+      expectedRowCount = 10)
+  }
+
+  test("cstring IS NULL AND startsWith / endsWith / contains matches nothing in either order") {
+    // A null input never matches these predicates. IsNull leaves no non-null value
+    // (distinctCount = 0) without updating nullCount, so that state must be honored too.
+    val colStatNullableString = colStatString.copy(nullCount = Some(5))
+    Seq(StartsWith(attrString, Literal("A")), EndsWith(attrString, Literal("A")),
+        Contains(attrString, Literal("A"))).foreach { cond =>
+      Seq(And(IsNull(attrString), cond), And(cond, IsNull(attrString))).foreach { condition =>
+        validateEstimatedStats(
+          Filter(condition, childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+            attributeMap = AttributeMap(Seq(attrString -> colStatNullableString)))),
+          Nil,
+          expectedRowCount = 0)
+      }
+    }
+  }
+
+  test("string predicates are estimated only under binary-equality collations") {
+    // CHAR/VARCHAR use binary equality, so the maxLen bound applies to an operand typed like the
+    // column (as LikeSimplification creates it).
+    Seq(attrChar -> colStatChar, attrVarchar -> colStatVarchar).foreach { case (attr, colStat) =>
+      validateEstimatedStats(
+        Filter(StartsWith(attr, Literal.create("abc", attr.dataType)),
+          childStatsTestPlan(Seq(attr), 10L)),
+        Nil,
+        expectedRowCount = 0)
+    }
+    // Under other collations a value can match a longer operand (e.g. RTRIM ignores the operand's
+    // trailing spaces, and case mapping can change the length), so these fall back even when the
+    // operand is longer than maxLen.
+    Seq("UTF8_LCASE", "UTF8_BINARY_RTRIM", "UNICODE_CI").foreach { collation =>
+      val attr = AttributeReference("cstring_collated", StringType(collation))()
+      validateEstimatedStats(
+        Filter(StartsWith(attr, Literal.create("A  ", attr.dataType)),
+          childStatsTestPlan(Seq(attr), tableRowCount = 10L,
+            attributeMap = AttributeMap(Seq(attr -> colStatString)))),
+        Seq(attr -> colStatString),
+        expectedRowCount = 10)
+    }
+  }
+
   test("SPARK-59273: CHAR/VARCHAR equality, IN, and range fall back like STRING") {
     Seq(attrChar -> colStatChar, attrVarchar -> colStatVarchar).foreach {
       case (attr, colStat) =>
@@ -642,6 +753,38 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
         // column stats don't change
         Seq(attrInt -> colStatInt, attrIntLargerRange -> colStatIntLargerRange),
         expectedRowCount = 30)
+    }
+  }
+
+  // Same limitation as above: string predicates only use `nullCount` if the child is a leaf node.
+  test("don't estimate string predicates from nullCount if the child is a non-leaf node") {
+    val colStatNullableString = colStatString.copy(distinctCount = Some(2), nullCount = Some(5))
+    val leafChild = StatsTestPlan(
+      outputList = Seq(attrInt, attrString),
+      rowCount = 10,
+      attributeStats = AttributeMap(Seq(attrInt -> colStatInt,
+        attrString -> colStatNullableString)))
+    // An Aggregate keeps its child's nullCount (5) while its row count drops to the number of
+    // groups (2 distinct values plus null = 3), so nullCount exceeds the row count.
+    val aggregate = Aggregate(Seq(attrString), Seq(attrString), leafChild)
+    val leftOuterJoin = Join(leafChild, childStatsTestPlan(Seq(attrInt2), 10L), LeftOuter,
+      Some(EqualTo(attrInt, attrInt2)), JoinHint.NONE)
+
+    Seq(aggregate, leftOuterJoin).foreach { nonLeafChild =>
+      val nonLeafChildStats = nonLeafChild.stats
+      Seq(StartsWith(attrString, Literal("A")), EndsWith(attrString, Literal("A")),
+          Contains(attrString, Literal("A"))).foreach { predicate =>
+        validateEstimatedStats(
+          Filter(predicate, nonLeafChild),
+          // column stats don't change
+          nonLeafChildStats.attributeStats.toSeq,
+          expectedRowCount = nonLeafChildStats.rowCount.get.toInt)
+      }
+      // The maxLen bound does not depend on nullCount, so it still applies.
+      validateEstimatedStats(
+        Filter(StartsWith(attrString, Literal("abc")), nonLeafChild),
+        Nil,
+        expectedRowCount = 0)
     }
   }
 
