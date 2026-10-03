@@ -20,11 +20,15 @@ package org.apache.spark.sql.execution
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.Duration
 
+import scala.util.{Failure, Try}
+
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
-import org.apache.spark.sql.{Dataset, Row, SaveMode}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, With}
-import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
+import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodegenContext, CodeGenerator, WholeStageSplit}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -1797,6 +1801,680 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val emitted = marker.toString.r.findAllMatchIn(source).size
       assert(emitted == 4, s"the innermost definition was emitted $emitted times")
       checkAnswer(query, (0 until 10).map(i => Row(i + marker)))
+    }
+  }
+
+  /** `CASE WHEN c = 1 THEN c * 1 WHEN c = 2 THEN c * 2 ... ELSE 0 END` with `n` branches. */
+  private def largeCaseWhen(c: String, n: Int): String =
+    (1 to n).map(k => s"WHEN $c = $k THEN $c * $k").mkString("CASE ", " ", " ELSE 0 END")
+
+  /** The largest method of `df`'s stages, compiled. */
+  private def maxStageMethodSize(df: DataFrame): Int =
+    genCode(df).map(c => CodeGenerator.compile(c)._2.maxMethodCodeSize).max
+
+  /**
+   * Whether a CASE WHEN of one of `df`'s stages was split into methods, whose names carry the
+   * prefix of the operator they were generated for, such as `project_caseWhen_0_0`.
+   */
+  private def splitsCaseWhen(df: DataFrame): Boolean =
+    genCode(df).exists(c => "private byte \\w*caseWhen_\\d".r.findFirstIn(c.body).nonEmpty)
+
+  /** Whether a split method of a CASE WHEN of `df`'s stages takes a row. */
+  private def splitCaseWhenTakesRow(df: DataFrame): Boolean = genCode(df).exists(c =>
+    "private byte \\w*caseWhen_\\d\\w*\\([^)]*InternalRow ".r.findFirstIn(c.body).nonEmpty)
+
+  /** The parameters of each split method of a CASE WHEN of `df`'s stages. */
+  private def splitCaseWhenParameters(df: DataFrame): Seq[Seq[String]] = genCode(df).flatMap { c =>
+    "private byte \\w*caseWhen_\\d\\w*\\(([^)]*)\\)".r.findAllMatchIn(c.body).map { m =>
+      m.group(1).split(",").map(_.trim).filter(_.nonEmpty).toSeq
+    }
+  }
+
+  /**
+   * Runs `body` with every splittable expression of a stage split: the tests of what a split
+   * method looks like use shapes small enough for the stage to keep its code unsplit otherwise
+   * (`spark.sql.codegen.wholeStage.splitExpressions.methodLimit`).
+   */
+  private def withSplitAlways[T](body: => T): T =
+    withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS_METHOD_LIMIT.key -> "0")(body)
+
+  /** The splits recorded in generating `df`'s stages with them recorded, as the gate first does. */
+  private def recordedSplits(df: DataFrame): Int = df.queryExecution.executedPlan.collect {
+    case w: WholeStageCodegenExec => w.generate(WholeStageSplit.Record)._1.wholeStageSplitsRecorded
+      .length
+  }.sum
+
+  /** `CASE WHEN v = 0 THEN v * 0 ... ELSE end END AS r FROM t`, `n` branches. */
+  private def caseWhenOverT(n: Int, end: Int): String = (0 until n)
+    .map(i => s"WHEN v = $i THEN v * $i")
+    .mkString("SELECT CASE ", " ", s" ELSE $end END AS r FROM t")
+
+  /** The rows of `query` computed without whole stage codegen, which each test checks against. */
+  private def withoutWholeStage(query: => DataFrame): Seq[Row] =
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      query.collect().toSeq
+    }
+
+  test("SPARK-33301: a CASE WHEN too large for one method is split under whole stage codegen") {
+    // Inside a stage the inputs are local variables of the stage's method, and the branches were
+    // not split into methods at all: at 3000 branches the method went past the JVM's 64KB limit,
+    // failed to compile, and the stage fell back to running without whole stage codegen (under
+    // testing, the compile error is thrown). Split, with the calls to the split methods grouped
+    // in turn, every method of the stage is small enough for HotSpot to compile.
+    val df = spark.range(10).selectExpr(s"${largeCaseWhen("id", 3000)} AS v")
+    assert(df.queryExecution.executedPlan.exists {
+      case w: WholeStageCodegenExec => w.child.isInstanceOf[ProjectExec]
+      case _ => false
+    })
+    assert(splitsCaseWhen(df))
+    assert(maxStageMethodSize(df) <= CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT)
+    checkAnswer(df, (0L until 10L).map(i => Row(i * i)))
+  }
+
+  test("SPARK-33301: the split keeps a stage's method JIT-compilable, and can be turned off") {
+    // Below the 64KB limit the unsplit method still goes past HotSpot's 8000 bytes, and is then
+    // never JIT-compiled.
+    def query: DataFrame = spark.range(10).selectExpr(s"${largeCaseWhen("id", 300)} AS v")
+    assert(maxStageMethodSize(query) <= CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT)
+    withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
+      assert(!splitsCaseWhen(query))
+      assert(maxStageMethodSize(query) > CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT)
+      checkAnswer(query, (0L until 10L).map(i => Row(i * i)))
+    }
+  }
+
+  test("SPARK-33301: several large CASE WHENs in one projection keep its method small") {
+    // A projection evaluates all its outputs in one method, so the calls every CASE WHEN leaves
+    // there add up: under whole stage codegen the calls are grouped until at most
+    // `SPLIT_CALLS_PER_GROUP` are left per CASE WHEN, which keeps that method JIT-compilable
+    // however many there are. Fourteen of 64 branches and four of 300.
+    for ((count, branches) <- Seq((14, 64), (4, 300))) {
+      def df: DataFrame = spark.range(100)
+        .selectExpr((1 to count).map(i => s"id + $i AS c$i"): _*)
+        .selectExpr((1 to count).map(i => s"${largeCaseWhen(s"c$i", branches)} AS v$i"): _*)
+      assert(splitsCaseWhen(df))
+      assert(maxStageMethodSize(df) <= CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT,
+        s"$count CASE WHENs of $branches branches")
+      checkAnswer(df, withoutWholeStage(df))
+    }
+  }
+
+  test("SPARK-33301: a stage the JIT compiles whole keeps the code it had without the split") {
+    // A CASE WHEN of 64 branches leaves the stage's method under 8000 bytes, so the stage keeps
+    // its unsplit code, the code with the conf off, and splits only when told to always split.
+    withTempView("t") {
+      spark.range(100).selectExpr("id AS v").createOrReplaceTempView("t")
+      val query = () => sql((0 until 64).map(i => s"WHEN v = $i THEN v * $i")
+        .mkString("SELECT CASE ", " ", " ELSE -1 END AS r FROM t"))
+      val gated = genCode(query()).map(_.body)
+      val off = withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
+        genCode(query()).map(_.body)
+      }
+      assert(gated === off)
+      assert(!splitsCaseWhen(query()))
+      assert(withSplitAlways(splitsCaseWhen(query())))
+      checkAnswer(query(), withoutWholeStage(query()))
+      // So does a stage with no CASE WHEN whose common subexpressions take the split pass of
+      // subexpression elimination, whose discarded first pass keeps the helpers it added, as
+      // with the conf off.
+      val common = () => sql((0 until 8).map { i =>
+        s"concat(cast(array(v, v + $i, v * 2) AS STRING), cast(array(v, v + $i, v * 2) AS " +
+          s"STRING)) AS c$i"
+      }.mkString("SELECT ", ", ", " FROM t"))
+      assert(genCode(common()).map(_.body) ===
+        withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
+          genCode(common()).map(_.body)
+        })
+    }
+  }
+
+  test("SPARK-33301: a stage splits only the CASE WHENs in its methods past the limit") {
+    // The filter's CASE WHEN is generated into `processNext`, which stays under the limit; the
+    // projection's into a method of its own, past it. Only the projection's is split: the
+    // filter's would only be slowed down by the calls, in a method the JIT compiles whole.
+    withTempView("t") {
+      spark.range(100).selectExpr("id AS v").createOrReplaceTempView("t")
+      def caseWhen(n: Int, base: Int): String =
+        (0 until n).map(i => s"WHEN v = $i THEN v * ${base + i}").mkString("CASE ", " ", " END")
+      val query = () => sql(s"SELECT ${caseWhen(300, 9000)} AS r FROM t " +
+        s"WHERE ${caseWhen(64, 7000)} > 5")
+      val Seq(code) = genCode(query())
+      def methodsWith(literal: String): Set[String] = CodeGenerator.wholeStageSplitMarkersByMethod(
+        code.body.replace(literal, CodeGenerator.wholeStageSplitMarker(0))).getOrElse(0, Set.empty)
+      assert(methodsWith("9001L").nonEmpty && methodsWith("9001L").forall(_.contains("caseWhen")),
+        "the projection's CASE WHEN is split")
+      assert(methodsWith("7001L").nonEmpty && !methodsWith("7001L").exists(_.contains("caseWhen")),
+        "the filter's CASE WHEN stays where it was")
+      checkAnswer(query(), withoutWholeStage(query()))
+    }
+  }
+
+  test("SPARK-33301: the group calls of a split outside a stage are not held to its audit") {
+    // Under testing every call a whole stage split leaves in a subexpression's method is checked
+    // against that method's parameters. A struct hash split by `splitExpressions` passes its own
+    // locals to its group functions, which is right, and is not checked.
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      val struct = (0 until 200).map(i => s"'f$i', id + $i").mkString("named_struct(", ", ", ")")
+      val df = sql(s"SELECT hash($struct) + 1 AS a, hash($struct) + 2 AS b FROM range(10)")
+      checkAnswer(df, withoutWholeStage(df))
+    }
+  }
+
+  test("SPARK-33301: the trial compile of a stage past the limit reports nothing") {
+    // The unsplit code of 300 branches has a method past the JIT limit; it is compiled only to
+    // decide to split, so the once-per-JVM warning about such a method is not spent on it. The
+    // JDK backend compiles and reports on a thread of its own, which the trial goes to as well.
+    withTempView("t") {
+      spark.range(100).selectExpr("id AS v").createOrReplaceTempView("t")
+      val query = caseWhenOverT(300, end = -1)
+      for (backend <- Seq("janino", "jdk")) {
+        withSQLConf(SQLConf.CODEGEN_COMPILER.key -> backend) {
+          // The warning is once per JVM and INFO after it, so the test reads every level, of the
+          // logger the compilers report under.
+          val logs = new LogAppender("the trial compile's reports")
+          withLogAppender(logs,
+              loggerNames = Seq(classOf[CodeGenerator[_, _]].getName),
+              level = Some(Level.DEBUG)) {
+            assert(splitsCaseWhen(sql(query)))
+            sql(query).collect()
+          }
+          assert(!logs.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+            "too long to be JIT compiled")), backend)
+        }
+      }
+    }
+  }
+
+  test("SPARK-33301: the code a stage keeps unsplit reports its method past the JIT limit") {
+    // The trial compile holds its reports back for the code kept. Here the default limit keeps
+    // the split of 300 branches, whose code in one piece was compiled in a trial and is not kept.
+    // That code then leaves the compile cache, so a later compile of it reports its method past
+    // the JIT limit, as for any compiled code: with the split turned off, and with the limit
+    // raised past HotSpot's 8000 bytes, where the stage keeps the code in one piece although the
+    // JIT leaves its method interpreted.
+    withTempView("t") {
+      spark.range(100).selectExpr("id AS v").createOrReplaceTempView("t")
+      val query = caseWhenOverT(300, end = -7)
+      def reports(confs: (String, String)*): Boolean = {
+        val logs = new LogAppender("the kept code's reports")
+        withLogAppender(logs,
+            loggerNames = Seq(classOf[CodeGenerator[_, _]].getName),
+            level = Some(Level.DEBUG)) {
+          // Compiled here rather than by running the query, which compiles with the session's
+          // class loader, and so with Janino whatever the backend (`CodeCompiler.active`).
+          withSQLConf(confs: _*)(genCode(sql(query)).foreach(CodeGenerator.compile))
+        }
+        logs.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+          "too long to be JIT compiled"))
+      }
+      for (backend <- Seq("janino", "jdk")) {
+        withSQLConf(SQLConf.CODEGEN_COMPILER.key -> backend) {
+          assert(splitsCaseWhen(sql(query)))
+          assert(reports(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false"), backend)
+          assert(reports(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS_METHOD_LIMIT.key -> "65535"), backend)
+          withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS_METHOD_LIMIT.key -> "65535") {
+            assert(!splitsCaseWhen(sql(query)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-33301: which code a stage keeps, from its trial compiles") {
+    // `chooseCode`'s decisions, with the compile replaced, so that a method can be as large as a
+    // decision needs and a split can fail to compile.
+    withTempView("t") {
+      spark.range(100).selectExpr("id AS v").createOrReplaceTempView("t")
+      val stage = sql(caseWhenOverT(300, end = -1)).queryExecution.executedPlan.collectFirst {
+        case w: WholeStageCodegenExec => w
+      }.get
+      val recorded = stage.generate(WholeStageSplit.Record)
+      val ctx = recorded._1
+      assert(ctx.wholeStageSplitsRecorded.length === 1)
+      // The method the CASE WHEN's code lands in.
+      val Seq(method) = CodeGenerator.wholeStageSplitMarkersByMethod(ctx.wholeStageSplitSource)
+        .get(0).toSeq.flatten
+      val failure = new IllegalStateException("does not compile")
+      // Each case its own copy of the code, since a decision is remembered by the code.
+      var copies = 0
+      def fresh(): (CodegenContext, CodeAndComment) = {
+        copies += 1
+        (ctx, new CodeAndComment(recorded._2.body + s"\n/* copy $copies */", recorded._2.comment))
+      }
+      class Run(whole: Map[String, Int], split: Option[Map[String, Int]]) {
+        val code = fresh()
+        val splitCode = (ctx, new CodeAndComment(code._2.body + "\n/* split */", code._2.comment))
+        var splitAsked = Seq.empty[Option[Set[Seq[Seq[Expression]]]]]
+        var compiles = 0
+        var invalidated = Seq.empty[CodeAndComment]
+        def choose(throwSplitFailure: Boolean = false): CodeAndComment = stage.chooseCode(code,
+          only => { splitAsked :+= only; splitCode },
+          (c, _) => {
+            compiles += 1
+            WholeStageCodegenExec.TrialResult(
+              Try(if (c eq code._2) whole else split.getOrElse(throw failure)), () => ())
+          },
+          c => invalidated :+= c, throwSplitFailure)._2
+      }
+      val recordedOnly = Some(Set(ctx.wholeStageSplitsRecorded.head))
+      // The split is kept where it lowers the bytes past the limit, and the code in one piece
+      // leaves the compile cache.
+      val kept = new Run(Map(method -> 20000), Some(Map(method -> 3000)))
+      assert(kept.choose() eq kept.splitCode._2)
+      assert(kept.splitAsked === Seq(recordedOnly) && kept.invalidated === Seq(kept.code._2))
+      // A larger method that holds nothing marked does not stop the split of the one that does.
+      val beside = new Run(Map(method -> 9000, "other" -> 12000),
+        Some(Map(method -> 1500, "other" -> 12000)))
+      assert(beside.choose() eq beside.splitCode._2)
+      // A method past the limit that holds nothing marked, or a method run once, is left alone,
+      // with no split generated.
+      for (whole <- Seq(Map(method -> 1000, "other" -> 20000), Map(method -> 1000,
+          "init" -> 20000))) {
+        val left = new Run(whole, None)
+        assert(left.choose() eq left.code._2)
+        assert(left.splitAsked.isEmpty && left.compiles === 1)
+      }
+      // A split that leaves the bytes past the limit as they were is not kept, and leaves the
+      // compile cache itself.
+      val same = new Run(Map(method -> 20000), Some(Map(method -> 20000)))
+      assert(same.choose() eq same.code._2)
+      assert(same.invalidated === Seq(same.splitCode._2))
+      // A split that fails to compile leaves the code in one piece, which compiled, and is not
+      // tried again; under testing the failure is thrown.
+      val fails = new Run(Map(method -> 20000), None)
+      assert(fails.choose() eq fails.code._2)
+      assert(fails.choose() eq fails.code._2)
+      assert(fails.compiles === 2)
+      val thrown = new Run(Map(method -> 20000), None)
+      assert(intercept[IllegalStateException](thrown.choose(throwSplitFailure = true)) eq failure)
+      // Code in one piece that fails to compile has every expression split, and the decision is
+      // remembered: the next generation asks for the same split with no trial.
+      val broken = new Run(Map.empty, Some(Map.empty)) {
+        override def choose(throwSplitFailure: Boolean): CodeAndComment = stage.chooseCode(code,
+          only => { splitAsked :+= only; splitCode },
+          (_, _) => {
+            compiles += 1
+            WholeStageCodegenExec.TrialResult(Failure(failure), () => ())
+          },
+          _ => (), throwSplitFailure)._2
+      }
+      assert(broken.choose() eq broken.splitCode._2)
+      assert(broken.choose() eq broken.splitCode._2)
+      assert(broken.splitAsked === Seq(None, None) && broken.compiles === 1)
+    }
+  }
+
+  test("SPARK-33301: the split methods take nullable, string and subexpression inputs") {
+    withSplitAlways {
+      // Read from a file, so the inputs are columns. `upper(s)` is in every condition, so
+      // subexpression elimination computes it once into local variables, which the split methods
+      // take as parameters beside the columns.
+      withTempPath { path =>
+        spark.range(200)
+          .selectExpr(
+            "if(id % 7 = 0, null, concat('v', cast(id % 50 as string))) AS s",
+            "if(id % 11 = 0, null, id) AS k")
+          .write.parquet(path.getCanonicalPath)
+        val branches = (0 until 50).map { i =>
+          s"WHEN upper(s) = 'V$i' THEN concat(s, cast(k + $i as string))"
+        }.mkString(" ")
+        def df: DataFrame =
+          spark.read.parquet(path.getCanonicalPath).selectExpr(s"CASE $branches ELSE upper(s) END")
+        assert(splitsCaseWhen(df))
+        checkAnswer(df, withoutWholeStage(df))
+      }
+    }
+  }
+
+  test("SPARK-33301: each split method takes only what its own branches read") {
+    withSplitAlways {
+      // Every branch reads its own nullable `bigint` column, three parameter slots each, so the
+      // union over all branches is past the 255 slots a method can take, while each method takes
+      // the columns of the branches it holds, and the methods grouping the calls the union of what
+      // their calls take. Each column is read twice, so the projection evaluates it before the
+      // CASE WHEN.
+      withTempPath { path =>
+        val columns = 90
+        spark.range(100)
+          .selectExpr((1 to columns).map(i => s"if(id % $i = 0, null, id + $i) AS c$i"): _*)
+          .write.parquet(path.getCanonicalPath)
+        val branches = (1 to columns).map(i => s"WHEN c$i > 150 THEN c$i").mkString(" ")
+        def df: DataFrame =
+          spark.read.parquet(path.getCanonicalPath).selectExpr(s"CASE $branches ELSE -1 END AS v")
+        assert(splitsCaseWhen(df))
+        checkAnswer(df, withoutWholeStage(df))
+      }
+    }
+  }
+
+  test("SPARK-33301: a block whose method would take too many parameters stays inline") {
+    withSplitAlways {
+      // Every branch reads all three `bigint` columns, and no expression repeats, so that
+      // subexpression elimination, which the same limit governs, has nothing to split. Under the
+      // default limit the branches are split into methods taking the columns; under a limit of four
+      // parameter slots, a method taking them and their nullness would need ten, `this` included,
+      // so the blocks of branches stay inline and only what fits the limit is split.
+      withTempPath { path =>
+        spark.range(50).selectExpr("id AS a", "id + 1 AS b", "id + 2 AS c")
+          .write.parquet(path.getCanonicalPath)
+        val branches = (1 to 100).map(k => s"WHEN a + $k = b THEN c * $k").mkString(" ")
+        def df: DataFrame =
+          spark.read.parquet(path.getCanonicalPath).selectExpr(s"CASE $branches ELSE 0 END AS v")
+        assert(splitCaseWhenParameters(df).exists(_.count(_.startsWith("long ")) == 3))
+        withSQLConf("spark.sql.CodeGenerator.validParamLength" -> "4") {
+          val slots = splitCaseWhenParameters(df).map { parameters =>
+            1 + parameters.map(p => if (p.startsWith("long ")) 2 else 1).sum
+          }
+          assert(slots.forall(_ <= 4), slots)
+          checkAnswer(df, withoutWholeStage(df))
+        }
+      }
+    }
+  }
+
+  test("SPARK-33301: a block reading an input not evaluated yet stays inline between the calls") {
+    withSplitAlways {
+      // `code` is read in every branch, so the projection evaluates it before the CASE WHEN; `name`
+      // is read once, in the ELSE, so the projection leaves its reading to where it is used, and
+      // that code names locals of the scan that no method could take. The ELSE stays inline after
+      // the calls to the methods holding the other branches.
+      withTempPath { path =>
+        spark.range(500)
+          .selectExpr("CAST(id % 250 AS INT) AS code", "concat('n', cast(id AS string)) AS name")
+          .write.parquet(path.getCanonicalPath)
+        val branches = (1 to 200).map(k => s"WHEN $k THEN 'c$k'").mkString(" ")
+        def df: DataFrame = spark.read.parquet(path.getCanonicalPath)
+          .selectExpr(s"CASE code $branches ELSE name END AS v")
+        assert(splitsCaseWhen(df))
+        checkAnswer(df, withoutWholeStage(df))
+      }
+    }
+  }
+
+  test("SPARK-33301: a CASE WHEN whose every block reads an input not evaluated yet stays whole") {
+    withSplitAlways {
+      // Each `c<i>` is read once, the ELSE's `c0` too, so every block's code reads the scan's
+      // locals and no block can be split. Read twice, the columns are evaluated before the CASE
+      // WHEN, and it splits.
+      withTempPath { path =>
+        spark.range(10).selectExpr("id % 40 AS k" +: (0 to 40).map(i => s"id + $i AS c$i"): _*)
+          .write.parquet(path.getCanonicalPath)
+        val once = (1 to 40).map(i => s"WHEN k = $i THEN c$i * 2").mkString(" ")
+        def df: DataFrame = spark.read.parquet(path.getCanonicalPath)
+          .selectExpr(s"CASE $once ELSE c0 END AS v")
+        assert(!splitsCaseWhen(df))
+        checkAnswer(df, withoutWholeStage(df))
+        val twice = (1 to 40).map(i => s"WHEN k = $i THEN c$i * 2 + c$i").mkString(" ")
+        def evaluated: DataFrame = spark.read.parquet(path.getCanonicalPath)
+          .selectExpr(s"CASE $twice ELSE c0 + c0 END AS v")
+        assert(splitsCaseWhen(evaluated))
+        checkAnswer(evaluated, withoutWholeStage(evaluated))
+        // A split no block can take is not recorded, so the gate compiles no trial for it.
+        assert(recordedSplits(df) === 0)
+        assert(recordedSplits(evaluated) > 0)
+      }
+    }
+  }
+
+  test("SPARK-33301: a CASE WHEN under a keyed aggregate takes its input, not the buffer row") {
+    withSplitAlways {
+      // The aggregate's update code reads the buffer from `INPUT_ROW` and the input from local
+      // variables. The CASE WHEN reads only the input, so its split methods take that and not the
+      // buffer row, which is passed only to code that reads it.
+      withTempView("t") {
+        spark.range(1000).selectExpr("id % 13 AS k", "id % 300 AS v").createOrReplaceTempView("t")
+        val query = s"SELECT k, sum(${largeCaseWhen("v", 300)}) AS s FROM t GROUP BY k"
+        val df = sql(query)
+        assert(df.queryExecution.executedPlan.exists {
+          case w: WholeStageCodegenExec => w.child.isInstanceOf[HashAggregateExec]
+          case _ => false
+        })
+        assert(splitsCaseWhen(df))
+        assert(!splitCaseWhenTakesRow(df))
+        checkAnswer(df, withoutWholeStage(sql(query)))
+      }
+    }
+  }
+
+  test("SPARK-33301: a common expression in a branch under a keyed aggregate takes the buffer") {
+    withSplitAlways {
+      // `nullif` is a `With`, which stays in the plan in a branch other than the first, and whose
+      // definition, made a method, is called with `INPUT_ROW`: the aggregate's buffer, which the
+      // split method holding that branch therefore takes.
+      withTempView("t") {
+        spark.range(1000).selectExpr("id % 7 AS k", "CAST(id % 400 AS INT) AS v")
+          .createOrReplaceTempView("t")
+        val branches = "WHEN v = 0 THEN 0 WHEN v = 1 THEN nullif(nullif(v * 3, 1), 2) " +
+          (2 to 300).map(k => s"WHEN v = $k THEN v * $k").mkString(" ")
+        val query = s"SELECT k, sum(CASE $branches ELSE 0 END) AS s FROM t GROUP BY k"
+        val df = sql(query)
+        assert(splitsCaseWhen(df))
+        assert(splitCaseWhenTakesRow(df))
+        checkAnswer(df, withoutWholeStage(sql(query)))
+      }
+    }
+  }
+
+  test("SPARK-33301: max_by under a keyed aggregate, whose update reads the buffer") {
+    withSplitAlways {
+      // `max_by` updates and merges its buffer with CASE WHENs of three branches that read the
+      // buffer through `INPUT_ROW`, so their split methods take the row. The value is a number: a
+      // string one is not updatable in place, and Spark plans a sort aggregate outside the stage.
+      withTempView("t") {
+        spark.range(1000).selectExpr("id % 7 AS k", "id % 97 AS o").createOrReplaceTempView("t")
+        val query = "SELECT k, max_by(o * 3, o), min_by(o * 3, o) FROM t GROUP BY k"
+        assert(splitsCaseWhen(sql(query)))
+        assert(splitCaseWhenTakesRow(sql(query)))
+        checkAnswer(sql(query), withoutWholeStage(sql(query)))
+      }
+    }
+  }
+
+  test("SPARK-33301: a large CASE WHEN in a join condition compiles") {
+    withSplitAlways {
+      // A join generates its condition inside the loop over the matches, where `INPUT_ROW` names
+      // the row of the build side; the split methods take it only if the code reads it.
+      withTempView("l", "r") {
+        spark.range(200).selectExpr("id % 20 AS k", "id % 300 AS v").createOrReplaceTempView("l")
+        spark.range(100).selectExpr("id % 20 AS k", "id % 7 AS w").createOrReplaceTempView("r")
+        val condition = s"${largeCaseWhen("l.v", 300)} + r.w > 50"
+        Seq(
+          s"SELECT /*+ MERGE(r) */ l.k, l.v, r.w FROM l JOIN r ON l.k = r.k AND $condition",
+          s"SELECT /*+ BROADCAST(r) */ l.k, l.v, r.w FROM l JOIN r ON l.k = r.k AND $condition",
+          s"SELECT /*+ MERGE(r) */ l.k, l.v, r.w FROM l LEFT JOIN r " +
+            s"ON l.k = r.k AND ${largeCaseWhen("l.v", 300)} > 50"
+        ).foreach { query =>
+          val df = sql(query)
+          assert(splitsCaseWhen(df), query)
+          checkAnswer(df, withoutWholeStage(sql(query)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-33301: a common expression in a join condition's CASE WHEN") {
+    withSplitAlways {
+      // `RewriteWithExpression` keeps the `With` of a `nullif` in a branch other than the first, in
+      // a join condition too. Its definition is short, so it is inlined rather than made a method,
+      // and the split methods read what it reads without taking the build side's row.
+      withTempView("l", "r") {
+        spark.range(200).selectExpr("id % 20 AS k", "id % 300 AS v").createOrReplaceTempView("l")
+        spark.range(100).selectExpr("id % 20 AS k", "id % 7 AS w").createOrReplaceTempView("r")
+        val branches = "WHEN l.v = 0 THEN 0 WHEN l.v = 1 THEN nullif(l.v * 3 + r.w, 1) " +
+          (2 to 300).map(k => s"WHEN l.v = $k THEN l.v * $k").mkString(" ")
+        Seq("MERGE", "BROADCAST").foreach { hint =>
+          val query = s"SELECT /*+ $hint(r) */ l.k, l.v, r.w FROM l JOIN r " +
+            s"ON l.k = r.k AND CASE $branches ELSE 0 END > 50"
+          val df = sql(query)
+          assert(splitsCaseWhen(df), query)
+          assert(!splitCaseWhenTakesRow(df), query)
+          checkAnswer(df, withoutWholeStage(sql(query)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-33301: a CASE WHEN inside a CASE WHEN's branch, whose common expression takes " +
+      "the build side's row, leaves the outer split its calls, which pass the row on") {
+    // The inner CASE WHEN is split first, and its methods take the row because the `With` of
+    // its `nullif` became a method that takes it; the outer CASE WHEN's block then holds the
+    // calls to the inner's methods, which pass the row, so the outer's method must take it too
+    // although the outer's own expressions read it nowhere. Found by the differential fuzz.
+    withSplitAlways {
+      withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+        withTempView("l", "r") {
+          spark.range(200).selectExpr("id % 20 AS k", "id % 300 AS v").createOrReplaceTempView("l")
+          spark.range(100).selectExpr("id % 20 AS k", "id % 7 AS w", "id % 11 AS a")
+            .createOrReplaceTempView("r")
+          val inner = "CASE WHEN r.w = 0 THEN nullif(r.a * 3 + l.v, 1) " +
+            (1 to 5).map(k => s"WHEN r.w = $k THEN r.a + $k").mkString(" ") + " ELSE r.w END"
+          val outer = s"CASE WHEN l.v = 0 THEN 0 WHEN l.v = 1 THEN $inner " +
+            (2 to 40).map(k => s"WHEN l.v = $k THEN l.v * $k").mkString(" ") + " ELSE 0 END"
+          Seq("MERGE", "BROADCAST").foreach { hint =>
+            val query = s"SELECT /*+ $hint(r) */ l.k, l.v, r.w FROM l JOIN r " +
+              s"ON l.k = r.k AND $outer > 5"
+            val df = sql(query)
+            assert(splitsCaseWhen(df), query)
+            assert(splitCaseWhenTakesRow(df), query)
+            checkAnswer(df, withoutWholeStage(sql(query)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-33301: a CASE WHEN stays out of the streamed-only condition of an outer join") {
+    withSplitAlways {
+      // With `splitStreamedSideJoinCondition`, an outer join evaluates the part of its condition
+      // that reads only the streamed side before its loop over the matches, where `INPUT_ROW`
+      // names a row declared later. A CASE WHEN never qualifies for that part, so it is split in
+      // the rest of the condition, inside the loop.
+      withSQLConf("spark.sql.join.splitStreamedSideJoinCondition" -> "true") {
+        withTempView("l", "r") {
+          spark.range(200).selectExpr("id % 20 AS k", "id % 300 AS v").createOrReplaceTempView("l")
+          spark.range(100).selectExpr("id % 20 AS k", "id % 7 AS w").createOrReplaceTempView("r")
+          Seq("MERGE", "BROADCAST").foreach { hint =>
+            val query = s"SELECT /*+ $hint(r) */ l.k, l.v, r.w FROM l LEFT JOIN r " +
+              s"ON l.k = r.k AND ${largeCaseWhen("l.v", 300)} > 50 AND l.v > 3"
+            val df = sql(query)
+            assert(splitsCaseWhen(df), query)
+            checkAnswer(df, withoutWholeStage(sql(query)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-33301: a CASE WHEN in an aggregate over a ROLLUP") {
+    withSplitAlways {
+      // The aggregate reads the rows `ExpandExec` produces, through the parameters of its own
+      // consume method.
+      withTempView("t") {
+        spark.range(300)
+          .selectExpr("id % 300 AS v", "concat('g', cast(id % 3 AS string)) AS g")
+          .createOrReplaceTempView("t")
+        val query =
+          s"SELECT g, sum(${largeCaseWhen("v", 300)}) AS s FROM t GROUP BY ROLLUP(g, v % 2)"
+        val df = sql(query)
+        assert(splitsCaseWhen(df))
+        checkAnswer(df, withoutWholeStage(sql(query)))
+      }
+    }
+  }
+
+  test("SPARK-33301: a CASE WHEN that is itself a split common subexpression") {
+    withSplitAlways {
+      // The same CASE WHEN twice is one subexpression, split into a method of its own; the CASE
+      // WHEN's split methods are called from inside it.
+      val caseWhen = largeCaseWhen("id", 300)
+      val df = spark.range(10).selectExpr(s"($caseWhen) + 1 AS a", s"($caseWhen) + 2 AS b")
+      assert(splitsCaseWhen(df))
+      checkAnswer(df, (0L until 10L).map(i => Row(i * i + 1, i * i + 2)))
+    }
+  }
+
+  test("SPARK-33301: a split common subexpression under a keyed aggregate takes the buffer") {
+    withSplitAlways {
+      // The same expression in two aggregates is one subexpression; holding two large CASE
+      // WHENs, whose grouped calls are past the split threshold, it is split into a `subExpr`
+      // method of its own. A `nullif` branch makes a split method of the first CASE WHEN take
+      // the aggregate's buffer, so the `subExpr` method, which calls it, must take it too.
+      withTempView("t") {
+        spark.range(1000).selectExpr("id % 7 AS k", "CAST(id % 400 AS INT) AS v")
+          .createOrReplaceTempView("t")
+        val branches = "WHEN v = 0 THEN 0 WHEN v = 1 THEN nullif(nullif(v * 3, 1), 2) " +
+          (2 to 300).map(k => s"WHEN v = $k THEN v * $k").mkString(" ")
+        val caseWhen = s"(CASE $branches ELSE 0 END) + (${largeCaseWhen("v", 300)})"
+        val query = s"SELECT k, sum($caseWhen), max($caseWhen) FROM t GROUP BY k"
+        val df = sql(query)
+        assert(splitCaseWhenTakesRow(df))
+        val subExpr = "(?s)private void \\w*subExpr_\\d+\\([^)]*InternalRow [^{]*\\{" +
+          "(?:(?!\\nprivate ).)*caseWhen_\\d"
+        assert(genCode(df).exists(c => subExpr.r.findFirstIn(c.body).nonEmpty))
+        checkAnswer(df, withoutWholeStage(sql(query)))
+      }
+    }
+  }
+
+  /**
+   * The CASE WHEN, `With` and group methods declared in `df`'s stages that nothing in the stage
+   * calls.
+   */
+  private def uncalledSplitMethods(df: DataFrame): Seq[String] = genCode(df).flatMap { c =>
+    val declared = "private \\w+ (\\w*(?:caseWhen|computeCommonExpr)\\w*)\\(".r
+      .findAllMatchIn(c.body).map(_.group(1)).toSeq
+    declared.filter(name => s"(?<![\\w$$])$name\\(".r.findAllIn(c.body).length == 1)
+  }
+
+  test("SPARK-33301: functions added in a discarded pass of subexpression elimination go") {
+    withSplitAlways {
+      // Subexpression elimination generates its subexpressions once without splitting and, when
+      // that code is too large, again split, discarding the first; the methods the first pass
+      // added go with it, `computeCommonExpr` methods of a `nullif` included, whose calls to the
+      // first pass's CASE WHEN methods would otherwise name methods no longer declared. Every
+      // method left is called.
+      val caseWhen = largeCaseWhen("id", 300)
+      val second = (1 to 300).map(k => s"WHEN id = $k THEN id + $k")
+        .mkString("CASE ", " ", " ELSE 0 END")
+      def df: DataFrame = spark.range(10).selectExpr(s"($caseWhen) + 1 AS a",
+        s"($caseWhen) + 2 AS b", s"IF(id < 0, 0, nullif($second, 0)) AS c",
+        s"IF(id < 0, 0, nullif($second, 0)) AS d")
+      assert(splitsCaseWhen(df))
+      assert(uncalledSplitMethods(df).isEmpty, uncalledSplitMethods(df))
+      checkAnswer(df, withoutWholeStage(df))
+      // With the split off, the class keeps what the first pass added, as before the split: here
+      // the `computeCommonExpr` method of the first generation of the `nullif`.
+      withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
+        assert(!splitsCaseWhen(df))
+        assert(uncalledSplitMethods(df).exists(_.contains("computeCommonExpr")))
+        checkAnswer(df, withoutWholeStage(df))
+      }
+    }
+  }
+
+  test("SPARK-33301: a split method reads a slot of a compacted mutable state array as a field") {
+    withSplitAlways {
+      // `ExpandExec` holds an output of a type that is not primitive in a slot of a compacted
+      // mutable state array, such as `expand_mutableStateArray_0[0]`: a field, though not a name.
+      // An UNPIVOT of string columns gives such an output, which the projection above reads
+      // directly when the operators' consume functions are not split into methods of their own.
+      // Every block reads it, the ELSE too, and each reads it as the field it is, taking no
+      // argument for it.
+      withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
+        withTempView("t") {
+          spark.range(100).selectExpr("id", "concat('a', CAST(id % 50 AS STRING)) AS a",
+            "concat('a', CAST(id % 30 AS STRING)) AS b").createOrReplaceTempView("t")
+          val branches = (0 until 50).map(k => s"WHEN value = 'a$k' THEN id + $k").mkString(" ")
+          def df: DataFrame = sql(s"SELECT id, CASE $branches ELSE length(value) END AS v " +
+            "FROM t UNPIVOT (value FOR name IN (a, b))")
+          assert(splitsCaseWhen(df))
+          val readsSlot = "(?s)private byte \\w*caseWhen_\\d\\w*\\(([^)]*)\\) \\{" +
+            "(?:(?!\\nprivate ).)*mutableStateArray"
+          assert(genCode(df).exists(c => readsSlot.r.findFirstIn(c.body).nonEmpty))
+          assert(splitCaseWhenParameters(df).flatten.forall(!_.contains("mutableStateArray")))
+          checkAnswer(df, withoutWholeStage(df))
+        }
+      }
     }
   }
 }
