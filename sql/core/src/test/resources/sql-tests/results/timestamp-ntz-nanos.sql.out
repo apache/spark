@@ -1759,3 +1759,53 @@ SELECT timestampadd(NANOSECOND, 50, '2020-01-01 00:00:00.0000001' :: timestamp_n
 struct<timestampadd(NANOSECOND, 50, CAST(2020-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ(7))):timestamp_ntz(7)>
 -- !query output
 2020-01-01 00:00:00.0000001
+
+
+-- !query
+SELECT timestampdiff(NANOSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900')
+-- !query schema
+struct<timestampdiff(NANOSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900'):bigint>
+-- !query output
+800
+
+
+-- !query
+SELECT timestampdiff(SECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900', TIMESTAMP_NTZ '2020-01-01 00:00:01.000000100')
+-- !query schema
+struct<timestampdiff(SECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900', TIMESTAMP_NTZ '2020-01-01 00:00:01.000000100'):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT timestampdiff(MICROSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900', TIMESTAMP_NTZ '2020-01-01 00:00:00.000002100')
+-- !query schema
+struct<timestampdiff(MICROSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900', TIMESTAMP_NTZ '2020-01-01 00:00:00.000002100'):bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT timestampdiff(HOUR, '2020-01-01 10:00:00' :: timestamp_ntz(9),
+    '2020-01-01 19:00:00 UTC' :: timestamp_ltz(9))
+-- !query schema
+struct<timestampdiff(HOUR, CAST(2020-01-01 10:00:00 AS TIMESTAMP_NTZ(9)), CAST(2020-01-01 19:00:00 UTC AS TIMESTAMP_LTZ(9))):bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT timestampdiff(HOUR, '2020-01-01 10:00:00' :: timestamp_ntz(9),
+    TIMESTAMP_LTZ '2020-01-01 19:00:00 UTC')
+-- !query schema
+struct<timestampdiff(HOUR, CAST(2020-01-01 10:00:00 AS TIMESTAMP_NTZ(9)), TIMESTAMP '2020-01-01 11:00:00'):bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT timestampdiff(HOUR, DATE '2020-01-01', '2020-01-01 05:00:00' :: timestamp_ntz(9))
+-- !query schema
+struct<timestampdiff(HOUR, DATE '2020-01-01', CAST(2020-01-01 05:00:00 AS TIMESTAMP_NTZ(9))):bigint>
+-- !query output
+5

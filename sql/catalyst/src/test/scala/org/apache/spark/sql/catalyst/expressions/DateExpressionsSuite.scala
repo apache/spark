@@ -3011,6 +3011,76 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57833: timestampdiff over nanosecond-precision timestamps") {
+    val sec = 1000000L // microseconds per second
+    def ntz(micros: Long, frac: Int, p: Int = 9): Literal =
+      Literal(TimestampNanosVal.fromParts(micros, frac.toShort), TimestampNTZNanosType(p))
+    def ltz(micros: Long, frac: Int, p: Int = 9): Literal =
+      Literal(TimestampNanosVal.fromParts(micros, frac.toShort), TimestampLTZNanosType(p))
+
+    // NANOSECOND unit reports the exact sub-microsecond difference (within a microsecond, across
+    // microseconds, and negative).
+    checkEvaluation(TimestampDiff("NANOSECOND", ntz(0, 100), ntz(0, 900)), 800L)
+    checkEvaluation(TimestampDiff("NANOSECOND", ntz(0, 900), ntz(2, 100)), 1200L)
+    checkEvaluation(TimestampDiff("NANOSECOND", ntz(2, 100), ntz(0, 900)), -1200L)
+
+    // The sub-microsecond fraction participates in the truncated count for coarser units too: a
+    // start fraction larger than the end fraction means a whole second/microsecond has NOT elapsed.
+    // SECOND: 1s + 100ns - 900ns = 0.9999992s -> 0 (the micros-only count would wrongly be 1).
+    checkEvaluation(TimestampDiff("SECOND", ntz(0, 900), ntz(sec, 100)), 0L)
+    // 1s + 900ns - 100ns = 1.0000008s -> 1.
+    checkEvaluation(TimestampDiff("SECOND", ntz(0, 100), ntz(sec, 900)), 1L)
+    // MICROSECOND: 2100ns - 900ns = 1200ns -> 1 (the micros-only count would wrongly be 2).
+    checkEvaluation(TimestampDiff("MICROSECOND", ntz(0, 900), ntz(2, 100)), 1L)
+
+    // Precision 7 (100ns step) and 8 (10ns step) fractions.
+    checkEvaluation(TimestampDiff("NANOSECOND", ntz(0, 100, 7), ntz(0, 300, 7)), 200L)
+    checkEvaluation(TimestampDiff("NANOSECOND", ntz(0, 110, 8), ntz(0, 200, 8)), 90L)
+
+    // LTZ (zone-aware), exact whole minute with equal fractions.
+    checkEvaluation(
+      TimestampDiff("MINUTE", ltz(0, 500), ltz(60 * sec, 500), Some("UTC")), 1L)
+
+    // Mixed operands: a microsecond TIMESTAMP_LTZ start (zero fraction) and a nanosecond LTZ end.
+    checkEvaluation(
+      TimestampDiff("SECOND", Literal(0L, TimestampType), ltz(sec, 500), Some("UTC")), 1L)
+
+    // Mixed zone families: an NTZ operand's local fields are read in UTC, an LTZ operand's in the
+    // session zone, so each operand needs its own zone. NTZ wall clock 10:00 (read in UTC) and the
+    // LTZ instant 19:00Z = 11:00 in LA are one hour apart; applying a single shared zone to both
+    // would instead report 9 (or -9 in the reversed form).
+    val hour = 3600 * sec
+    val la = Some("America/Los_Angeles")
+    checkEvaluation(TimestampDiff("HOUR", ntz(10 * hour, 0), ltz(19 * hour, 0), la), 1L)
+    checkEvaluation(
+      TimestampDiff("HOUR", ntz(10 * hour, 0), Literal(19 * hour, TimestampType), la), 1L)
+    checkEvaluation(TimestampDiff("HOUR", ltz(19 * hour, 0), ntz(10 * hour, 0), la), -1L)
+
+    // NANOSECOND between two microsecond timestamps is well-defined (fractions are zero): the
+    // difference is a whole number of microseconds times 1000.
+    checkEvaluation(
+      TimestampDiff("NANOSECOND", Literal(0L, TimestampType), Literal(1L, TimestampType)), 1000L)
+
+    // Null propagation on either operand.
+    checkEvaluation(
+      TimestampDiff("SECOND", Literal.create(null, TimestampNTZNanosType(9)), ntz(sec, 0)), null)
+    checkEvaluation(
+      TimestampDiff("NANOSECOND", ntz(0, 1), Literal.create(null, TimestampNTZNanosType(9))), null)
+
+    // A NANOSECOND difference wider than ~292 years overflows a 64-bit nanosecond count. It is
+    // surfaced as DATETIME_OVERFLOW (matching the timestampadd side) rather than a raw
+    // ArithmeticException, on both the microsecond and the nanosecond-carrier code paths.
+    checkErrorInExpression[SparkArithmeticException](
+      TimestampDiff("NANOSECOND",
+        Literal(-5000000000000000L, TimestampType), Literal(5000000000000000L, TimestampType)),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" -> "get the number of NANOSECOND between the two timestamps"))
+    checkErrorInExpression[SparkArithmeticException](
+      TimestampDiff("NANOSECOND", ntz(-5000000000000000L, 0), ntz(5000000000000000L, 0)),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" -> "get the number of NANOSECOND between the two timestamps"))
+  }
+
   /**
    * Helper method to create a DATE literal from a string in date format.
    */

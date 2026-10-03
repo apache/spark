@@ -1047,6 +1047,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   private val timestampDiffMap = Map[String, (Temporal, Temporal) => Long](
+    "NANOSECOND" -> ChronoUnit.NANOS.between,
     "MICROSECOND" -> ChronoUnit.MICROS.between,
     "MILLISECOND" -> ChronoUnit.MILLIS.between,
     "SECOND" -> ChronoUnit.SECONDS.between,
@@ -1074,9 +1075,65 @@ object DateTimeUtils extends SparkDateTimeUtils {
     if (timestampDiffMap.contains(unitInUpperCase)) {
       val startLocalTs = getLocalDateTime(startTs, zoneId)
       val endLocalTs = getLocalDateTime(endTs, zoneId)
-      timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
+      try {
+        timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
+      } catch {
+        // NANOSECOND is the only unit whose count overflows a 64-bit long in the supported
+        // ~292-year range; surface DATETIME_OVERFLOW instead of a raw ArithmeticException.
+        case _: ArithmeticException =>
+          throw QueryExecutionErrors.timestampDiffOverflowError(unit)
+      }
     } else {
       throw QueryExecutionErrors.invalidDatetimeUnitError("TIMESTAMPDIFF", unit)
+    }
+  }
+
+  /**
+   * Gets the difference between two nanosecond-precision timestamps, expressed in whole `unit`s
+   * (truncated toward zero), honoring the sub-microsecond fraction of each operand.
+   *
+   * Each operand is given as its `epochMicros` plus a `nanosWithinMicro` fraction in [0, 999]. The
+   * fraction is folded into a nanosecond-precision `LocalDateTime` before the difference is taken,
+   * so a fraction of up to a microsecond can move the truncated result across a unit boundary for
+   * every unit (not only NANOSECOND). A microsecond operand simply passes a zero fraction. The
+   * `NANOSECOND` unit is added to the shared unit map, so it is accepted here and by the
+   * microsecond-only [[timestampDiff]] (where both fractions are zero).
+   *
+   * @param unit The unit in which to express the difference.
+   * @param startMicros `epochMicros` of the timestamp subtracted from `end`.
+   * @param startFraction `nanosWithinMicro` in [0, 999] of the start timestamp.
+   * @param endMicros `epochMicros` of the timestamp from which `start` is subtracted.
+   * @param endFraction `nanosWithinMicro` in [0, 999] of the end timestamp.
+   * @param startZoneId The time zone ID in which the start timestamp's local fields are read.
+   * @param endZoneId The time zone ID in which the end timestamp's local fields are read. This is
+   *                  separate from `startZoneId` because the operands may belong to different zone
+   *                  families (an NTZ operand is read in UTC, an LTZ operand in the session zone).
+   * @return The truncated difference in the requested unit.
+   */
+  def timestampDiffNanos(
+      unit: String,
+      startMicros: Long,
+      startFraction: Int,
+      endMicros: Long,
+      endFraction: Int,
+      startZoneId: ZoneId,
+      endZoneId: ZoneId): Long = {
+    val unitInUpperCase = unit.toUpperCase(Locale.ROOT)
+    timestampDiffMap.get(unitInUpperCase) match {
+      case Some(diff) =>
+        val startLocalTs =
+          getLocalDateTime(startMicros, startZoneId).plusNanos(startFraction.toLong)
+        val endLocalTs =
+          getLocalDateTime(endMicros, endZoneId).plusNanos(endFraction.toLong)
+        try {
+          diff(startLocalTs, endLocalTs)
+        } catch {
+          // The NANOSECOND count can overflow a 64-bit long past ~292 years.
+          case _: ArithmeticException =>
+            throw QueryExecutionErrors.timestampDiffOverflowError(unit)
+        }
+      case None =>
+        throw QueryExecutionErrors.invalidDatetimeUnitError("TIMESTAMPDIFF", unit)
     }
   }
 
