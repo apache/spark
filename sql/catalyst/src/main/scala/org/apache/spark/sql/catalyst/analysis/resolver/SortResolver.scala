@@ -40,6 +40,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   Project,
   Sort
 }
+import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
+
 /**
  * Resolves a [[Sort]] by resolving its child and order expressions.
  */
@@ -178,7 +180,16 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
       val resolvedChildWithMissingAttributes =
         insertMissingExpressions(resolvedChild, filteredMissingExpressions)
 
-      val isChildChangedByMissingExpressions = !resolvedChildWithMissingAttributes.eq(resolvedChild)
+      val isChildChangedByMissingExpressions =
+        !resolvedChildWithMissingAttributes.eq(resolvedChild)
+      val hasAlreadyMaterializedRetainedMissingAttribute = missingAttributes.exists { attribute =>
+        attribute.qualifiedAccessOnly &&
+        attribute.pipeSetRetained &&
+        filteredMissingExpressions.exists(_.exprId == attribute.exprId) &&
+        resolvedChild.outputSet.contains(attribute)
+      }
+      val shouldRetainOriginalOutput =
+        isChildChangedByMissingExpressions || hasAlreadyMaterializedRetainedMissingAttribute
 
       val (finalChild, finalOrderExpressions) = resolvedChildWithMissingAttributes match {
         case project: Project if scopes.current.baseAggregate.isDefined =>
@@ -197,7 +208,7 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
         order = finalOrderExpressions
       )
 
-      if (isChildChangedByMissingExpressions) {
+      if (shouldRetainOriginalOutput) {
         retainOriginalOutput(
           operator = resolvedSort,
           missingExpressions = missingExpressions,

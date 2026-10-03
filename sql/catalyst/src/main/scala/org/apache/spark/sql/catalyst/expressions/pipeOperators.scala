@@ -18,9 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{PIPE_EXPRESSION, PIPE_OPERATOR, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{
+  PIPE_EXPRESSION,
+  PIPE_OPERATOR,
+  PLAN_EXPRESSION,
+  TreePattern
+}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 
@@ -53,11 +59,72 @@ case class PipeOperator(child: LogicalPlan) extends UnaryNode {
   override def withNewChildInternal(newChild: LogicalPlan): PipeOperator = copy(child = newChild)
 }
 
-/** This rule removes all PipeOperator nodes from a logical plan at the end of analysis. */
+/**
+ * Preserves the qualified input row of a SQL pipe SET assignment as metadata output.
+ *
+ * The SET projection replaces assigned columns in its visible output. Keeping the original row as
+ * qualified-access-only metadata lets a later `t.a` or `t.*` continue to refer to the input row
+ * without changing the SET output schema or unqualified star expansion.
+ */
+case class PipeSetInput(child: LogicalPlan) extends UnaryNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(PIPE_OPERATOR)
+
+  override def output: Seq[Attribute] = child.output
+  override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+
+  override def metadataOutput: Seq[Attribute] = {
+    val childMetadataOutput = child.metadataOutput
+    val retainedQualifiedOutput = AttributeSeq
+      .mergeHiddenAndVisibleOutput(
+        childMetadataOutput.filter(_.qualifiedAccessOnly), child.output)
+      .filter(_.qualifier.nonEmpty)
+      .map(_.markAsQualifiedAccessOnly().markAsPipeSetRetained())
+    val retainedQualifiedOutputIds = retainedQualifiedOutput.iterator.map(_.exprId).toSet
+    retainedQualifiedOutput ++ childMetadataOutput.filterNot { attribute =>
+      attribute.qualifiedAccessOnly || retainedQualifiedOutputIds.contains(attribute.exprId)
+    }
+  }
+
+  override def withNewChildInternal(newChild: LogicalPlan): PipeSetInput = copy(child = newChild)
+}
+
+/**
+ * Removes resolved [[PipeSetInput]] nodes before analyzed plans cross a Dataset boundary.
+ *
+ * Qualified source attributes referenced later in the same pipe query have already been
+ * materialized by this point. Removing the marker and any retained attributes copied to hidden
+ * output prevents them from being resolved by a subsequent Dataset operation.
+ */
+object EliminateResolvedPipeSetInputs extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    val planWithCleanedHiddenOutput =
+      plan.transformDownWithSubqueriesAndReferenceEquality {
+        case project: Project =>
+          project.getTagValue(Project.hiddenOutputTag) match {
+            case Some(hiddenOutput) if hiddenOutput.exists(_.pipeSetRetained) =>
+              val cleanedHiddenOutput = hiddenOutput.filterNot(_.pipeSetRetained)
+              val cleanedProject = project.copy()
+              cleanedProject.copyTagsFrom(project)
+              cleanedProject.setTagValue(Project.hiddenOutputTag, cleanedHiddenOutput)
+              cleanedProject
+            case _ => project
+          }
+      }
+
+    planWithCleanedHiddenOutput.resolveOperatorsUpWithSubqueriesAndPruning(
+      _.containsAnyPattern(PIPE_OPERATOR, PLAN_EXPRESSION), ruleId) {
+      case pipeSetInput: PipeSetInput if pipeSetInput.resolved => pipeSetInput.child
+    }
+  }
+}
+
+/** This rule removes transparent pipe-operator nodes from a logical plan after analysis. */
 object EliminatePipeOperators extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(PIPE_OPERATOR), ruleId) {
     case PipeOperator(child) => child
+    case PipeSetInput(child) => child
   }
 }
 
