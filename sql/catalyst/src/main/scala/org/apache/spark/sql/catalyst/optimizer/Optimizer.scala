@@ -1435,7 +1435,12 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
    */
   private def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
     val result = e transform {
-      case a: Attribute => rewrites(a)
+      case a: Attribute => rewrites.getOrElse(a, a)
+      case pe: PlanExpression[LogicalPlan @unchecked]
+          if pe.plan.containsPattern(OUTER_REFERENCE) =>
+        pe.withNewPlan(pe.plan.transformAllExpressionsWithSubqueries {
+          case OuterReference(a: Attribute) => OuterReference(rewrites.getOrElse(a, a))
+        })
     } match {
       // Make sure exprId is unique in each child of Union.
       case Alias(child, alias) => Alias(child, alias)()
