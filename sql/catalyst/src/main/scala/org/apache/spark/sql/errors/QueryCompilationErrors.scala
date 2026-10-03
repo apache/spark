@@ -1402,7 +1402,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotRetrieveTableOrViewNotInSameDatabaseError(
       qualifiedTableNames: Seq[QualifiedTableName]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1072",
+      errorClass = "TABLES_OR_VIEWS_NOT_IN_SAME_DATABASE",
       messageParameters = Map("qualifiedTableNames" -> qualifiedTableNames.toString()))
   }
 
