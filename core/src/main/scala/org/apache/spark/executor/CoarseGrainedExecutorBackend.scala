@@ -485,6 +485,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       driverConf.set(EXECUTOR_ID, arguments.executorId)
       cfg.logLevel.foreach(logLevel => Utils.setLogLevelIfNeeded(logLevel))
+      Utils.setLoggerLevels(driverConf)
 
       // Set executor memory related config here according to resource profile
       if (cfg.resourceProfile.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) {

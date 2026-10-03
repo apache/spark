@@ -32,6 +32,7 @@ import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.apache.logging.log4j.{Level, LogManager}
+import org.apache.logging.log4j.core.config.Configurator
 import org.json4s.{DefaultFormats, Extraction}
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, verify, when}
@@ -645,6 +646,30 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       .set(SPARK_LOG_LEVEL, "TRACE"))
     assert(LogManager.getRootLogger().getLevel === Level.TRACE)
     sc.stop()
+  }
+
+  test("SPARK-59059: conf to override log level of a specific logger") {
+    val logger = "org.apache.spark.SparkContextSuite.testLogger"
+    val rootLevel = LogManager.getRootLogger().getLevel
+
+    try {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
+        .set(SPARK_LOG_LEVEL, "ERROR")
+        .set(SPARK_LOG_LEVEL_PREFIX + logger, "DEBUG"))
+      assert(LogManager.getLogger(logger).getLevel === Level.DEBUG)
+      assert(LogManager.getRootLogger().getLevel === Level.ERROR)
+    } finally {
+      Configurator.setLevel(logger, rootLevel)
+      Utils.setLogLevel(rootLevel)
+    }
+  }
+
+  test("SPARK-59059: invalid per-logger log level is rejected") {
+    val e = intercept[IllegalArgumentException] {
+      Utils.setLoggerLevels(
+        new SparkConf().set(SPARK_LOG_LEVEL_PREFIX + "org.apache.spark", "NOT_A_LEVEL"))
+    }
+    assert(e.getMessage.contains("spark.log.level.org.apache.spark"))
   }
 
   test("register and deregister Spark listener from SparkContext") {
