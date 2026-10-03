@@ -504,6 +504,14 @@ object ArrowSerializer {
           o => getter.invoke(o)
         }
 
+      case (JavaRecordEncoder(tag, fields), StructVectors(struct, vectors)) =>
+        structSerializerFor(fields, struct, vectors) { (field, _) =>
+          // Unreflect the accessor rather than looking it up by the component's encoder type: a
+          // generic component's accessor returns the erased type, not the bound type argument.
+          val accessor = methodLookup.unreflect(tag.runtimeClass.getMethod(field.readMethod.get))
+          o => accessor.invoke(o)
+        }
+
       case (TransformingEncoder(_, encoder, provider, _), v) =>
         new Serializer {
           private[this] val codec = provider().asInstanceOf[Codec[Any, Any]]

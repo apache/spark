@@ -83,6 +83,8 @@ public class JavaSparkSQLExample {
       this.age = age;
     }
   }
+
+  public record Employee(String name, long salary) {}
   // $example off:create_ds$
 
   public static void main(String[] args) throws AnalysisException {
@@ -223,6 +225,19 @@ public class JavaSparkSQLExample {
     // +---+----+
     // | 32|Andy|
     // +---+----+
+
+    // Encoders are created for Java records. Columns follow the record component order
+    Encoder<Employee> employeeEncoder = Encoders.record(Employee.class);
+    Dataset<Employee> recordDS = spark.createDataset(
+      Collections.singletonList(new Employee("Andy", 4000L)),
+      employeeEncoder
+    );
+    recordDS.show();
+    // +----+------+
+    // |name|salary|
+    // +----+------+
+    // |Andy|  4000|
+    // +----+------+
 
     // Encoders for most common types are provided in class Encoders
     Encoder<Long> longEncoder = Encoders.LONG();

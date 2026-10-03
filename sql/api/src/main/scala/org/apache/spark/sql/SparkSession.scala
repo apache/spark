@@ -238,10 +238,11 @@ abstract class SparkSession extends Serializable with Closeable {
   def createDataFrame(rows: util.List[Row], schema: StructType): DataFrame
 
   /**
-   * Applies a schema to a List of Java Beans.
+   * Applies a schema to a List of Java Beans or Java records.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean, SELECT * queries
-   * will return the columns in an undefined order.
+   * will return the columns in an undefined order. For Java records, the columns follow the
+   * record component order.
    *
    * @since 1.6.0
    */
@@ -308,10 +309,11 @@ abstract class SparkSession extends Serializable with Closeable {
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame
 
   /**
-   * Applies a schema to an RDD of Java Beans.
+   * Applies a schema to an RDD of Java Beans or Java records.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean, SELECT * queries
-   * will return the columns in an undefined order.
+   * will return the columns in an undefined order. For Java records, the columns follow the
+   * record component order.
    *
    * @note
    *   this is only supported in Classic.
@@ -321,10 +323,11 @@ abstract class SparkSession extends Serializable with Closeable {
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame
 
   /**
-   * Applies a schema to an RDD of Java Beans.
+   * Applies a schema to an RDD of Java Beans or Java records.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean, SELECT * queries
-   * will return the columns in an undefined order.
+   * will return the columns in an undefined order. For Java records, the columns follow the
+   * record component order.
    *
    * @note
    *   this is only supported in Classic.
