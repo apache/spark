@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.scalatest.Tag
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.streaming.checkpointing.{
@@ -51,7 +51,7 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     assert(metadata.conf.get(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key).contains("false"))
   }
 
-  test("v1 and v2 metadata persist rebound stateful shuffle partitions") {
+  test("[SPARK-59919] v1 and v2 metadata persist rebound stateful shuffle partitions") {
     withSQLConf(
       SQLConf.SHUFFLE_PARTITIONS.key -> "10",
       SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL.key -> "3") {
@@ -308,26 +308,35 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     }
   }
 
-  test("VERSION_2 preserves state-store partitions across a session restart") {
+  private def startStatefulQuery(
+      aggregated: DataFrame,
+      checkpointDir: File,
+      shufflePartitions: Int,
+      queryName: String,
+      checkUnfinishedRepartition: Boolean = true): StreamingQueryWrapper = {
+    withSQLConf(
+      SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2",
+      SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitions.toString,
+      SQLConf.STREAMING_CHECK_UNFINISHED_REPARTITION_ON_RESTART.key ->
+        checkUnfinishedRepartition.toString) {
+      aggregated.writeStream
+        .format("memory")
+        .queryName(queryName)
+        .outputMode("complete")
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .start()
+        .asInstanceOf[StreamingQueryWrapper]
+    }
+  }
+
+  test("[SPARK-59919] VERSION_2 preserves state-store partitions across a session restart") {
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[(Int, Int)]
       val aggregated = inputData.toDS().groupBy("_1").count()
 
-      def startQuery(shufflePartitions: Int): StreamingQueryWrapper = {
-        withSQLConf(
-          SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2",
-          SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitions.toString) {
-          aggregated.writeStream
-            .format("memory")
-            .queryName("offsetlog_v2_stateful_restart_test")
-            .outputMode("complete")
-            .option("checkpointLocation", checkpointDir.getAbsolutePath)
-            .start()
-            .asInstanceOf[StreamingQueryWrapper]
-        }
-      }
-
-      val query1 = startQuery(shufflePartitions = 5)
+      val query1 = startStatefulQuery(
+        aggregated, checkpointDir, shufflePartitions = 5,
+        queryName = "offsetlog_v2_stateful_restart_test")
       try {
         inputData.addData((1, 0), (2, 0))
         query1.processAllAvailable()
@@ -341,7 +350,9 @@ class OffsetSeqLogSuite extends SharedSparkSession {
       assert(metadata.version === OffsetSeqLog.VERSION_2)
       assert(metadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).contains("5"))
 
-      val query2 = startQuery(shufflePartitions = 10)
+      val query2 = startStatefulQuery(
+        aggregated, checkpointDir, shufflePartitions = 10,
+        queryName = "offsetlog_v2_stateful_restart_test")
       try {
         inputData.addData((2, 0), (3, 0))
         query2.processAllAvailable()
@@ -352,26 +363,14 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     }
   }
 
-  test("VERSION_2 recovers state-store partitions when the offset conf is missing") {
+  test("[SPARK-59919] VERSION_2 recovers state-store partitions after a failed legacy restart") {
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[(Int, Int)]
       val aggregated = inputData.toDS().groupBy("_1").count()
 
-      def startQuery(shufflePartitions: Int): StreamingQueryWrapper = {
-        withSQLConf(
-          SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2",
-          SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitions.toString) {
-          aggregated.writeStream
-            .format("memory")
-            .queryName("offsetlog_v2_stateful_recovery_test")
-            .outputMode("complete")
-            .option("checkpointLocation", checkpointDir.getAbsolutePath)
-            .start()
-            .asInstanceOf[StreamingQueryWrapper]
-        }
-      }
-
-      val query1 = startQuery(shufflePartitions = 5)
+      val query1 = startStatefulQuery(
+        aggregated, checkpointDir, shufflePartitions = 5,
+        queryName = "offsetlog_v2_stateful_recovery_test")
       try {
         inputData.addData((1, 0), (2, 0))
         query1.processAllAvailable()
@@ -397,13 +396,40 @@ class OffsetSeqLogSuite extends SharedSparkSession {
       assert(!offsetLog.get(latestBatchId).get.metadataOpt.get.conf
         .contains(SQLConf.SHUFFLE_PARTITIONS.key))
 
-      val query2 = startQuery(shufflePartitions = 10)
+      // Simulate an affected restart that wrote the session partition count before failing to
+      // load the state checkpoint. The offset is left uncommitted with a stale partition count.
+      val poisonedEndOffset = inputData.addData((2, 0), (3, 0))
+      val poisonedOffset = offsetWithoutShufflePartitions.copy(
+        offsetsMap = offsetWithoutShufflePartitions.offsetsMap.map {
+          case (sourceId, _) => sourceId -> Some(poisonedEndOffset)
+        },
+        metadata = offsetWithoutShufflePartitions.metadata.copy(
+          conf = offsetWithoutShufflePartitions.metadata.conf.updated(
+            SQLConf.SHUFFLE_PARTITIONS.key, "10")))
+      assert(offsetLog.add(latestBatchId + 1, poisonedOffset))
+
+      val query2 = startStatefulQuery(
+        aggregated, checkpointDir, shufflePartitions = 10,
+        queryName = "offsetlog_v2_stateful_recovery_test",
+        checkUnfinishedRepartition = false)
       try {
-        inputData.addData((2, 0), (3, 0))
         query2.processAllAvailable()
         assert(query2.streamingQuery.lastExecution.numStateStores === 5)
       } finally {
         query2.stop()
+      }
+
+      // Re-executing the uncommitted batch commits its existing offset without rewriting it.
+      // Recovery must still repair the stale partition count on the next restart.
+      val query3 = startStatefulQuery(
+        aggregated, checkpointDir, shufflePartitions = 10,
+        queryName = "offsetlog_v2_stateful_recovery_test")
+      try {
+        inputData.addData((3, 0), (4, 0))
+        query3.processAllAvailable()
+        assert(query3.streamingQuery.lastExecution.numStateStores === 5)
+      } finally {
+        query3.stop()
       }
 
       assert(offsetLog.getLatest().get._2.metadataOpt.get.conf
@@ -411,7 +437,65 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     }
   }
 
-  test("state metadata partition recovery returns empty without state metadata") {
+  test("[SPARK-59919] VERSION_2 fails when state metadata is corrupt during partition recovery") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[(Int, Int)]
+      val aggregated = inputData.toDS().groupBy("_1").count()
+
+      val query1 = startStatefulQuery(
+        aggregated, checkpointDir, shufflePartitions = 5,
+        queryName = "offsetlog_v2_stateful_corrupt_metadata_test")
+      try {
+        inputData.addData((1, 0), (2, 0))
+        query1.processAllAvailable()
+        assert(query1.streamingQuery.lastExecution.numStateStores === 5)
+      } finally {
+        query1.stop()
+      }
+
+      val offsetLog = new OffsetSeqLog(spark, s"${checkpointDir.getAbsolutePath}/offsets")
+      val latestBatchId = offsetLog.getLatestBatchId().get
+      val offsetMap = offsetLog.get(latestBatchId).get match {
+        case offset: OffsetMap => offset
+        case offset => fail(s"Expected a v2 offset, but found ${offset.getClass.getSimpleName}")
+      }
+      val offsetsPath = s"${checkpointDir.getAbsolutePath}/offsets"
+      val offsetWithoutShufflePartitions = offsetMap.copy(metadata =
+        offsetMap.metadata.copy(conf =
+          offsetMap.metadata.conf - SQLConf.SHUFFLE_PARTITIONS.key))
+
+      val batchFile = new Path(offsetsPath, latestBatchId.toString)
+      batchFile.getFileSystem(spark.sessionState.newHadoopConf()).delete(batchFile, false)
+      assert(offsetLog.add(latestBatchId, offsetWithoutShufflePartitions))
+      assert(!offsetLog.get(latestBatchId).get.metadataOpt.get.conf
+        .contains(SQLConf.SHUFFLE_PARTITIONS.key))
+
+      val stateMetadataFile = new File(
+        checkpointDir,
+        "state/0/_metadata/metadata")
+      assert(stateMetadataFile.isFile, s"Missing state metadata file: $stateMetadataFile")
+      stringToFile(stateMetadataFile, "v1\ncorrupt state metadata")
+
+      val query2 = startStatefulQuery(
+        aggregated, checkpointDir, shufflePartitions = 10,
+        queryName = "offsetlog_v2_stateful_corrupt_metadata_test")
+      try {
+        val exception = intercept[StreamingQueryException] {
+          query2.processAllAvailable()
+        }
+        assert(exception.getCause.getMessage.contains(
+          "Failed to recover the state-store partition count from checkpoint metadata"))
+        assert(exception.getCause.getMessage.contains(
+          "Delete the checkpoint and restart the query"))
+        assert(offsetLog.getLatest().get._2.metadataOpt.get.conf
+          .get(SQLConf.SHUFFLE_PARTITIONS.key).isEmpty)
+      } finally {
+        query2.stop()
+      }
+    }
+  }
+
+  test("[SPARK-59919] state metadata partition recovery returns empty without state metadata") {
     withTempDir { checkpointDir =>
       val reader = new StateMetadataPartitionReader(
         checkpointDir.getAbsolutePath,

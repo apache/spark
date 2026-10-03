@@ -828,7 +828,7 @@ class MicroBatchExecution(
         nextOffsets.metadataOpt.foreach { metadata =>
           val committedBatchId = commitLog.getLatestBatchId().getOrElse(-1L)
           val metadataWithRecoveredPartitions = recoverStatefulShufflePartitions(
-            metadata, sparkSessionToRunBatches, committedBatchId)
+            metadata, sparkSessionToRunBatches, latestBatchId, committedBatchId)
           OffsetSeqMetadata.setSessionConf(
             metadataWithRecoveredPartitions, sparkSessionToRunBatches.sessionState.conf)
           execCtx.offsetSeqMetadata = OffsetSeqMetadata(
@@ -909,35 +909,52 @@ class MicroBatchExecution(
   private def recoverStatefulShufflePartitions(
       metadata: OffsetSeqMetadataBase,
       sparkSessionToRunBatches: SparkSession,
+      latestBatchId: Long,
       committedBatchId: Long): OffsetSeqMetadataBase = {
-    if (metadata.version != OffsetSeqLog.VERSION_2 ||
-        OffsetSeqMetadata.readValueOpt(
-          metadata, SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL).isDefined ||
-        committedBatchId < 0) {
+    if (metadata.version != OffsetSeqLog.VERSION_2 || committedBatchId < 0) {
       metadata
     } else {
-      metadata match {
-        case v2: OffsetSeqMetadataV2 =>
-          try {
-            val stateMetadataReader = new StateMetadataPartitionReader(
-              new Path(checkpointFile("state")).getParent.toString,
-              new SerializableConfiguration(sparkSessionToRunBatches.sessionState.newHadoopConf()),
-              committedBatchId)
-            stateMetadataReader.stateStoreNumPartitions.map { numPartitions =>
-              logWarning(log"Recovered state-store partition count " +
-                log"${MDC(CONFIG, SQLConf.SHUFFLE_PARTITIONS.key)}=" +
-                log"${MDC(NUM_PARTITIONS, numPartitions)} " +
-                log"from checkpoint state metadata because it was missing from the offset log")
-              OffsetSeqMetadata.withStatefulShufflePartitions(v2, numPartitions)
-            }.getOrElse(metadata)
-          } catch {
-            case NonFatal(e) =>
-              logWarning(log"Failed to recover state-store partition count from checkpoint " +
-                log"${MDC(ERROR, e.getMessage)}")
-              metadata
-          }
-        case _ =>
-          metadata
+      val hasStatefulShufflePartitions = OffsetSeqMetadata.readValueOpt(
+        metadata, SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL).isDefined
+      // In old checkpoints, this config may first appear in an offset written by a failed restart.
+      // Re-execution commits that offset without rewriting it, so a missing value in the previous
+      // offset also triggers recovery on the following restart
+      val previousOffsetMissingStatefulShufflePartitions = latestBatchId > 0 &&
+        offsetLog.get(latestBatchId - 1).flatMap(_.metadataOpt)
+          .exists(previous => !previous.conf.contains(SQLConf.SHUFFLE_PARTITIONS.key))
+
+      if (hasStatefulShufflePartitions && !previousOffsetMissingStatefulShufflePartitions) {
+        metadata
+      } else {
+        metadata match {
+          case v2: OffsetSeqMetadataV2 =>
+            val stateCheckpointLocation = new Path(checkpointFile("state")).getParent
+            try {
+              val stateMetadataReader = new StateMetadataPartitionReader(
+                stateCheckpointLocation.toString,
+                new SerializableConfiguration(
+                  sparkSessionToRunBatches.sessionState.newHadoopConf()),
+                committedBatchId)
+              stateMetadataReader.stateStoreNumPartitions.map { numPartitions =>
+                logWarning(log"Recovered state-store partition count " +
+                  log"${MDC(CONFIG, SQLConf.SHUFFLE_PARTITIONS.key)}=" +
+                  log"${MDC(NUM_PARTITIONS, numPartitions)} " +
+                  log"from checkpoint state metadata")
+                OffsetSeqMetadata.withStatefulShufflePartitions(v2, numPartitions)
+              }.getOrElse(metadata)
+            } catch {
+              case NonFatal(e) =>
+                throw new SparkException(
+                  s"Failed to recover the state-store partition count from checkpoint " +
+                    s"metadata at $stateCheckpointLocation. This can happen if the checkpoint " +
+                    "was created using offset log format V2 in an unpatched Spark distribution " +
+                    "and state metadata was subsequently corrupted. Delete the checkpoint and " +
+                    "restart the query to recover.",
+                  e)
+            }
+          case _ =>
+            metadata
+        }
       }
     }
   }
