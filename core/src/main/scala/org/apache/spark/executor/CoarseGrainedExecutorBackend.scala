@@ -104,7 +104,8 @@ private[spark] class CoarseGrainedExecutorBackend(
       driver = Some(ref)
       env.executorBackend = Option(this)
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
-        extractAttributes, _resources, resourceProfile.id))
+        extractAttributes + (DRIVER_INSTANCE_ID.key -> env.conf.get(DRIVER_INSTANCE_ID)),
+        _resources, resourceProfile.id))
     }(ThreadUtils.sameThread).onComplete {
       case Success(_) =>
         self.send(RegisteredExecutor)
@@ -460,7 +461,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         }
       }
 
-      val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(arguments.resourceProfileId))
+      val cfg = driver.askSync[SparkAppConfig](
+        RetrieveSparkAppConfigWithIdentity(arguments.resourceProfileId,
+          executorConf.get(DRIVER_INSTANCE_ID)))
       val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", arguments.appId))
       fetcher.shutdown()
 

@@ -130,6 +130,26 @@ class DeploymentAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(driverPodResource, never()).waitUntilReady(any(), any())
   }
 
+  test("SPARK-58322: driver instance ID reaches deployment executor template") {
+    val driverConf = conf.clone()
+      .set(CONTAINER_IMAGE, "executor-image")
+      .set("spark.driver.instanceId", "58322000-0000-4000-8000-000000000001")
+    val podsAllocator = new DeploymentPodsAllocator(
+      driverConf, secMgr, new KubernetesExecutorBuilder(), kubernetesClient,
+      snapshotsStore, snapshotsStore.clock)
+    podsAllocator.start(TEST_SPARK_APP_ID, schedulerBackend)
+    podsAllocator.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+
+    val captor = ArgumentCaptor.forClass(classOf[Deployment])
+    verify(deploymentsNamespaced).resource(captor.capture())
+    val javaOpts = captor.getValue.getSpec.getTemplate.getSpec.getContainers.asScala
+      .flatMap(_.getEnv.asScala)
+      .filter(_.getName.startsWith("SPARK_JAVA_OPT_"))
+      .map(_.getValue)
+    assert(javaOpts.contains(
+      "-Dspark.driver.instanceId=58322000-0000-4000-8000-000000000001"))
+  }
+
   test("creates deployments per resource profile and seeds deletion cost annotation") {
     val rpBuilder = new ResourceProfileBuilder()
     val secondProfile = rpBuilder.build()

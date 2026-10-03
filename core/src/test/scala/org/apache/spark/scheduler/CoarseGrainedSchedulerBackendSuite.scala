@@ -52,6 +52,11 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
   private val executorUpTimeout = 1.minute
 
+  // Read the receiving backend's identity after each test creates its SparkContext.
+  private def driverInstanceIdAttr: Map[String, String] =
+    Map(DRIVER_INSTANCE_ID.key ->
+      sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend].driverInstanceId)
+
   test("serialized task larger than max RPC message size") {
     val conf = new SparkConf
     conf.set(RPC_MESSAGE_MAX_SIZE, 1)
@@ -250,7 +255,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       "CLUSTER_ID" -> "cl1",
       "USER" -> "dummy",
       "CONTAINER_ID" -> "container1",
-      "LOG_FILES" -> "stdout,stderr")
+      "LOG_FILES" -> "stdout,stderr") ++ driverInstanceIdAttr
     val baseUrl = s"http://newhost:9999/logs/clusters/${attributes("CLUSTER_ID")}" +
       s"/users/${attributes("USER")}/containers/${attributes("CONTAINER_ID")}"
 
@@ -326,14 +331,14 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     sc.addSparkListener(listener)
 
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
-        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty,
+        driverInstanceIdAttr, resources, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
-        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, Map.empty,
+        driverInstanceIdAttr, resources, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
-        rp.id))
+      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty,
+        driverInstanceIdAttr, resources, rp.id))
 
     val frameSize = RpcUtils.maxMessageSizeBytes(sc.conf)
     val bytebuffer = java.nio.ByteBuffer.allocate(frameSize - 100)
@@ -433,14 +438,14 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     sc.addSparkListener(listener)
 
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
-        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty,
+        driverInstanceIdAttr, resources, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
-        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, Map.empty,
+        driverInstanceIdAttr, resources, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
-        rp.id))
+      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty,
+        driverInstanceIdAttr, resources, rp.id))
 
     val frameSize = RpcUtils.maxMessageSizeBytes(sc.conf)
     val bytebuffer = java.nio.ByteBuffer.allocate(frameSize - 100)
@@ -532,8 +537,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(Seq.empty)
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("1", mockEndpointRef, mockAddress.host, execCores, Map.empty, Map.empty,
-        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, execCores, Map.empty,
+        driverInstanceIdAttr, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.send(LaunchedExecutor("1"))
     eventually(timeout(5 seconds)) {
       assert(backend.getExecutorAvailableCpus("1").contains(3))
@@ -747,7 +752,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(!mockEndpointRef.decommissionReceived)
 
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map(), Map(),
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map(), driverInstanceIdAttr,
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
 
     sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
@@ -785,7 +790,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     Seq("1", "2").foreach { id =>
       backend.driverEndpoint.askSync[Boolean](
         RegisterExecutor(id, new MockExecutorRpcEndpointRef(conf), mockAddress.host, 1,
-          Map(), Map(), Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+          Map(), driverInstanceIdAttr, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     }
     sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
     assert(infos.size === 2)
@@ -805,7 +810,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     backend.setExecutorsHeld(true)
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map(), Map(),
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map(), driverInstanceIdAttr,
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
 
     sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
@@ -897,10 +902,10 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val mockAddress = mock[RpcAddress]
 
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("1", mockEndpointRef1, mockAddress.host, 1, Map(), Map(),
+      RegisterExecutor("1", mockEndpointRef1, mockAddress.host, 1, Map(), driverInstanceIdAttr,
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("2", mockEndpointRef2, mockAddress.host, 1, Map(), Map(),
+      RegisterExecutor("2", mockEndpointRef2, mockAddress.host, 1, Map(), driverInstanceIdAttr,
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
 
     sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
@@ -945,11 +950,13 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     // Now retrieve SparkAppConfig as a late-registering executor would
     val appConfig = backend.driverEndpoint.askSync[SparkAppConfig](
-      RetrieveSparkAppConfig(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      RetrieveSparkAppConfigWithIdentity(
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, backend.driverInstanceId))
 
     // Verify that userCredentials is present in the response
     assert(appConfig.userCredentials.isDefined,
       "SparkAppConfig should include user credentials for late-registering executors")
+    assert(appConfig.userCredentials.get._1 === 1L)
     assert(appConfig.userCredentials.get._2 === testCredentials)
   }
 
@@ -976,8 +983,12 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     // Flush the DriverEndpoint mailbox by sending a synchronous request.
     // Since DriverEndpoint is single-threaded, when this returns, v1 has been processed.
-    backend.driverEndpoint.askSync[SparkAppConfig](
-      RetrieveSparkAppConfig(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+    val appConfig = backend.driverEndpoint.askSync[SparkAppConfig](
+      RetrieveSparkAppConfigWithIdentity(
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, backend.driverInstanceId))
+    assert(appConfig.userCredentials.isDefined)
+    assert(appConfig.userCredentials.get._1 === 3L)
+    assert(appConfig.userCredentials.get._2 === credsV3)
 
     // Store should still hold v3 (stale v1 was rejected by version guard)
     assert(SparkEnv.get.userCredentials.get().version === 3L,
@@ -1038,7 +1049,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       : DecommissionTestExecutorRpcEndpointRef = {
     val executor = new DecommissionTestExecutorRpcEndpointRef(sc.conf, executorId)
     assert(backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor(executorId, executor, "localhost", cores, Map.empty, Map.empty,
+      RegisterExecutor(executorId, executor, "localhost", cores, Map.empty,
+        Map(DRIVER_INSTANCE_ID.key -> backend.driverInstanceId),
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)))
     backend.driverEndpoint.send(LaunchedExecutor(executorId))
     flushDecommissionBackend(backend)
@@ -1071,6 +1083,74 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     thread.setDaemon(true)
     thread.start()
     (thread, request)
+  }
+
+  test("SPARK-58322: reject stale executors after same-app-ID driver address reuse") {
+    sc = new SparkContext(new SparkConf().setMaster("local").setAppName("identity-swap"))
+    val scheduler = mock[TaskSchedulerImpl]
+    when(scheduler.sc).thenReturn(sc)
+    when(scheduler.excludedNodes()).thenReturn(Set.empty[String])
+    when(scheduler.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean]))
+      .thenReturn(Seq.empty)
+    val resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    var port = 0
+    var originalId = ""
+    for (attempt <- 0 until 2) {
+      val conf = new SparkConf().set("spark.port.maxRetries", "0")
+      val rpcEnv = RpcEnv.create("identity-driver", "localhost", port, conf,
+        new SecurityManager(conf))
+      val backend = new CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
+        override def applicationId(): String = "same-application-id"
+      }
+      val executorRpcEnv = RpcEnv.create("identity-executor", "localhost", 0, conf,
+        new SecurityManager(conf), clientMode = true)
+      try {
+        backend.start()
+        val driver = executorRpcEnv.setupEndpointRef(rpcEnv.address,
+          CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+        assert(backend.applicationId() == "same-application-id")
+        val instanceId = backend.driverInstanceId
+        assert(sc.conf.get(DRIVER_INSTANCE_ID) == instanceId)
+        val config = driver.askSync[SparkAppConfig](
+          RetrieveSparkAppConfigWithIdentity(resourceProfileId, instanceId))
+        assert(config.sparkProperties.contains(DRIVER_INSTANCE_ID.key -> instanceId))
+        if (attempt == 0) {
+          port = rpcEnv.address.port
+          originalId = instanceId
+        } else {
+          assert(rpcEnv.address.port == port)
+          assert(instanceId != originalId)
+          val bootstrapError = intercept[SparkException] {
+            driver.askSync[SparkAppConfig](
+              RetrieveSparkAppConfigWithIdentity(resourceProfileId, originalId))
+          }
+          assert(bootstrapError.getCause.getMessage.contains("does not match"))
+          val registrationError = intercept[SparkException] {
+            driver.askSync[Boolean](RegisterExecutor(
+              "stale-executor", null, "localhost", 1, Map.empty,
+              Map(DRIVER_INSTANCE_ID.key -> originalId), Map.empty, resourceProfileId))
+          }
+          assert(registrationError.getCause.getMessage.contains("does not match"))
+          val missingIdError = intercept[SparkException] {
+            driver.askSync[Boolean](RegisterExecutor(
+              "missing-id", null, "localhost", 1, Map.empty, Map.empty, Map.empty,
+              resourceProfileId))
+          }
+          assert(missingIdError.getCause.getMessage.contains("did not supply"))
+          val legacyError = intercept[SparkException] {
+            driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(resourceProfileId))
+          }
+          assert(legacyError.getCause.getMessage.contains("RetrieveSparkAppConfigWithIdentity"))
+          assert(backend.getExecutorIds().isEmpty)
+        }
+      } finally {
+        executorRpcEnv.shutdown()
+        executorRpcEnv.awaitTermination()
+        backend.stop()
+        rpcEnv.shutdown()
+        rpcEnv.awaitTermination()
+      }
+    }
   }
 
   private def testSubmitJob(sc: SparkContext, rdd: RDD[Int]): Unit = {
