@@ -575,6 +575,24 @@ class Analyzer(
     }
   }
 
+  /**
+   * Like [[execute]], but also returns the temporary variables recorded via IDENTIFIER clauses
+   * during this analysis (`AnalysisContext.referredTempVariableNamesUnderIdentifier`).
+   *
+   * SQL function creation analyzes the body, inspects it, and only then runs `checkAnalysis`, so
+   * it cannot go through [[executeAndCheckReferredTempVariablesUnderIdentifier]]. It still needs
+   * the recorded variables, which [[execute]] discards with its analysis context: a persistent
+   * function must reject them and a temporary one stores them in its metadata.
+   */
+  def executeWithReferredTempVariablesUnderIdentifier(
+      plan: LogicalPlan): (LogicalPlan, Seq[Seq[String]]) = {
+    AnalysisContext.withNewAnalysisContext {
+      val analyzed = executeSameContext(plan)
+      // Read the accumulator before the context is restored on exit.
+      (analyzed, AnalysisContext.get.referredTempVariableNamesUnderIdentifier.toSeq)
+    }
+  }
+
   def resolver: Resolver = conf.resolver
 
   /**

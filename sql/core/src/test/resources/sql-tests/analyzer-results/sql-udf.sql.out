@@ -3960,6 +3960,94 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+DECLARE OR REPLACE VARIABLE foo3_5_col STRING DEFAULT 'a'
+-- !query analysis
+CreateVariable default(cast(a as string), sql=''a''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.foo3_5_col
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT RETURN x + length(foo3_5_col)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`foo3_5_col`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`foo3_5_col`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (a INT)
+RETURN SELECT IDENTIFIER(foo3_5_col) AS a FROM VALUES (1) AS T(a)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`foo3_5_col`"
+  }
+}
+
+
+-- !query
+CREATE TEMPORARY FUNCTION foo3_5e(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a))
+-- !query analysis
+CreateSQLFunctionCommand foo3_5e, x INT, INT, (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a)), false, true, false, false
+
+
+-- !query
+SELECT foo3_5e(0)
+-- !query analysis
+Project [foo3_5e(x#x) AS foo3_5e(0)#x]
+:  +- Project [a#x]
+:     +- SubqueryAlias T
+:        +- LocalRelation [a#x]
++- Project [cast(0 as int) AS x#x]
+   +- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY FUNCTION foo3_5e
+-- !query analysis
+DropFunctionCommand foo3_5e, false, true
+
+
+-- !query
+DROP TEMPORARY VARIABLE foo3_5_col
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.foo3_5_col
+
+
+-- !query
 CREATE FUNCTION foo3_12a(x INT) RETURNS INT CONTAINS SQL RETURN x
 -- !query analysis
 CreateSQLFunctionCommand spark_catalog.default.foo3_12a, x INT, INT, x, true, false, false, false, false
