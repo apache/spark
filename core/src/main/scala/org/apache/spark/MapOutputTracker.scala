@@ -801,6 +801,35 @@ private[spark] class MapOutputTrackerMaster(
     private[spark] val isLocal: Boolean)
   extends MapOutputTracker(conf) with ShuffleOutputTrackerMaster {
 
+  // Last access time per shuffle, for the shuffle TTL. Overwriting a "close" timestamp is fine, but
+  // the map-output dispatcher, the DAGScheduler and the TTL cleaner all write it, so it has to be
+  // a concurrent map.
+  private[spark] val shuffleAccessTime = new ConcurrentHashMap[Int, Long]
+
+  // Reclaims a shuffle's on-disk blocks via the normal ShuffleDriverComponents.removeShuffle path.
+  // Wired by SparkContext, which owns those components; this tracker is built earlier, in SparkEnv.
+  // None until then, and the cleaner refuses to reap while it is None: reaping would drop the
+  // driver's shuffle state while reclaiming no executor disk at all, leaking those files for the
+  // life of the application. Mirrors how `rddReapable` defaults to refusing everything.
+  @volatile private[spark] var shuffleFileRemover: Option[Int => Unit] = None
+
+  // Tells the ContextCleaner's listeners a shuffle is gone, so shuffle-tracking dynamic allocation
+  // can release an executor that only held it. Separate from `shuffleFileRemover` so the reap can
+  // run it after `unregisterShuffle` rather than before; best-effort, so it does not gate a reap.
+  @volatile private[spark] var shuffleCleanedNotifier: Option[Int => Unit] = None
+
+  // Read once: updateShuffleAtime is on the hot path of serving map output requests. The config is
+  // in seconds; the cleaner works in millis, like the access times it compares against.
+  private val shuffleTtl: Option[Long] =
+    conf.get(CLEANER_TTL_SHUFFLE).map(TimeUnit.SECONDS.toMillis)
+
+  /** Records that a shuffle was used, for the shuffle TTL. A no-op when that TTL is unset. */
+  private def updateShuffleAtime(shuffleId: Int): Unit = {
+    if (shuffleTtl.isDefined) {
+      shuffleAccessTime.put(shuffleId, System.currentTimeMillis())
+    }
+  }
+
   // The size at which we use Broadcast to send the map output statuses to the executors
   private val minSizeForBroadcast = conf.get(SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST).toInt
 
@@ -865,6 +894,45 @@ private[spark] class MapOutputTrackerMaster(
     throw new IllegalArgumentException(logEntry.message)
   }
 
+  // Started at the end of construction, after the fail-fast check above, so a failed construction
+  // can't orphan the thread.
+  //
+  // A registered shuffle that has produced no output yet (e.g. a map stage waiting on parents) has
+  // nothing to reclaim, so it stays tracked. Anything else is reaped, including an id with no
+  // ShuffleStatus at all -- otherwise its atime would be vetoed forever and never dropped. Nothing
+  // is reaped at all until SparkContext wires `shuffleFileRemover`; see there.
+  private[spark] val ttlCleaner: Option[BlockTTLCleaner] = shuffleTtl.map { ttl =>
+    new BlockTTLCleaner(
+      name = "shuffle",
+      idKey = SHUFFLE_ID,
+      ttlMillis = ttl,
+      accessTimes = shuffleAccessTime,
+      shouldReap = shuffleId =>
+        shuffleFileRemover.isDefined &&
+          !shuffleStatuses.get(shuffleId).exists(_.numAvailableMapOutputs == 0),
+      reap = shuffleId => {
+        // Bump the epoch before deleting anything. This does not protect a reduce task that is
+        // already running -- an executor only picks up a new epoch when its next task is launched
+        // (Executor.updateEpoch), so a task holding cached statuses still fetches the deleted files
+        // and fails. It does keep tasks launched from here on from being handed locations that are
+        // about to disappear. `docs/configuration.md` spells out the job-failure tail.
+        if (shuffleStatuses.contains(shuffleId)) {
+          incrementEpoch()
+        }
+        // Delete before dropping the map output, not after: removeShuffle reads the live
+        // MapStatuses and push-merger locations to find what the external shuffle service must
+        // delete. Same ordering, same reason, as ContextCleaner.doCleanupShuffle.
+        shuffleFileRemover.foreach(_(shuffleId))
+        // Drops the whole ShuffleStatus. The async RemoveShuffle broadcast would too; doing it here
+        // makes the outcome independent of when that lands.
+        unregisterShuffle(shuffleId)
+        // Last, so a CleanerListener never observes shuffleCleaned while the shuffle is still
+        // registered -- the order doCleanupShuffle establishes.
+        shuffleCleanedNotifier.foreach(_(shuffleId))
+      })
+  }
+  ttlCleaner.foreach(_.start())
+
   def post(message: MapOutputTrackerMasterMessage): Unit = {
     mapOutputTrackerMasterMessages.offer(message)
   }
@@ -879,6 +947,7 @@ private[spark] class MapOutputTrackerMaster(
       val shuffleStatus = shuffleStatuses.get(shuffleId).head
       logDebug(s"Handling request to send ${if (needMergeOutput) "map/merge" else "map"}" +
         s" output locations for shuffle $shuffleId to $hostPort")
+      updateShuffleAtime(shuffleId)
       if (needMergeOutput) {
         context.reply(
           shuffleStatus.
@@ -930,6 +999,7 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int): Unit = {
+    updateShuffleAtime(shuffleId)
     if (pushBasedShuffleEnabled) {
       if (shuffleStatuses.put(shuffleId,
         new ShuffleStatus(numMaps, numReduces, bufferRacingMigrations)).isDefined) {
@@ -950,6 +1020,10 @@ private[spark] class MapOutputTrackerMaster(
   def updateMapOutput(shuffleId: Int, mapId: Long, bmAddress: BlockManagerId): Unit = {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
+        // A migration can restore output that unregisterAllMapAndMergeOutput had moved into
+        // mapStatusesDeleted, and that path dropped the atime. Without re-stamping here the shuffle
+        // would have live outputs and files but no atime, so the TTL would never reclaim it.
+        updateShuffleAtime(shuffleId)
         shuffleStatus.updateMapOutput(mapId, bmAddress)
       case None if shuffleMigrationEnabled =>
         logWarning(log"Asked to update map output for unknown shuffle " +
@@ -967,6 +1041,9 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   def registerMapOutput(shuffleId: Int, mapIndex: Int, status: MapStatus): Boolean = {
+    // Producing output counts as a use, so a map stage running longer than the TTL is not reaped
+    // mid-production (registerShuffle only stamps the atime once, at stage submission).
+    updateShuffleAtime(shuffleId)
     getShuffleStatusOrError(shuffleId, "registerMapOutput").addMapOutput(mapIndex, status)
   }
 
@@ -978,6 +1055,7 @@ private[spark] class MapOutputTrackerMaster(
 
   /** Unregister all map and merge output information of the given shuffle. */
   def unregisterAllMapAndMergeOutput(shuffleId: Int): Unit = {
+    shuffleAccessTime.remove(shuffleId)
     val shuffleStatus = getShuffleStatusOrError(shuffleId, "unregisterAllMapAndMergeOutput")
     shuffleStatus.removeOutputsByFilter(x => true)
     shuffleStatus.removeMergeResultsByFilter(x => true)
@@ -1035,6 +1113,9 @@ private[spark] class MapOutputTrackerMaster(
 
   /** Unregister shuffle data */
   override def unregisterShuffle(shuffleId: Int): Unit = {
+    // Stop tracking, so the cleaner can't later reap a shuffle the ContextCleaner already collected
+    // (which would throw ShuffleStatusNotFoundException).
+    shuffleAccessTime.remove(shuffleId)
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
       shuffleStatus.invalidateSerializedMapOutputStatusCache()
       shuffleStatus.invalidateSerializedMergeOutputStatusCache()
@@ -1346,6 +1427,9 @@ private[spark] class MapOutputTrackerMaster(
       startPartition: Int,
       endPartition: Int): MapSizesByExecutorId = {
     logDebug(s"Fetching outputs for shuffle $shuffleId")
+    // The local-mode read path: no RPC round trip, so this is the only place a local-mode reduce
+    // task's use of the shuffle can be seen (handleStatusMessage covers the RPC one).
+    updateShuffleAtime(shuffleId)
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         shuffleStatus.withMapStatuses { statuses =>
@@ -1377,9 +1461,26 @@ private[spark] class MapOutputTrackerMaster(
     Seq.empty.iterator
   }
 
-  // This method is only called in local-mode.
+  // Called in local-mode, and by BlockManagerMaster.removeShuffle to snapshot the merger locations
+  // for a shuffle it is about to remove. No atime update, because of that second caller: stamping
+  // here would resurrect the atime of a shuffle that is going away.
   override def getShufflePushMergerLocations(shuffleId: Int): Seq[BlockManagerId] = {
     shuffleStatuses.get(shuffleId).map(_.getShufflePushMergerLocations).getOrElse(Seq.empty)
+  }
+
+  /**
+   * The location and map id of every available map output of a shuffle. Used by the shuffle removal
+   * path to work out which blocks an external shuffle service still holds on behalf of executors
+   * that have since gone away. Reading this takes the shuffle's `ShuffleStatus` lock, so it is
+   * snapshotted on the caller's thread -- see `BlockManagerMaster.removeShuffle`. No atime update,
+   * for the same reason as `getShufflePushMergerLocations` above.
+   */
+  private[spark] def getMapOutputLocations(shuffleId: Int): Seq[(BlockManagerId, Long)] = {
+    shuffleStatuses.get(shuffleId).map { shuffleStatus =>
+      shuffleStatus.withMapStatuses { statuses =>
+        statuses.filter(_ != null).map(status => (status.location, status.mapId)).toSeq
+      }
+    }.getOrElse(Seq.empty)
   }
 
   override def getStaleMapIndexes(shuffleId: Int): Set[Int] = {
@@ -1389,6 +1490,7 @@ private[spark] class MapOutputTrackerMaster(
   override def stop(): Unit = {
     mapOutputTrackerMasterMessages.offer(PoisonPill)
     threadpool.shutdown()
+    ttlCleaner.foreach(_.stop())
     try {
       sendTracker(StopMapOutputTracker)
     } catch {
