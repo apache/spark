@@ -270,7 +270,9 @@ class QueryExecutionErrorsSuite
     val e2 = intercept[SparkRuntimeException] {
       trainingSales
         .groupBy($"sales.year")
-        .pivot(struct(lower(trainingSales("sales.course")), trainingSales("training")))
+        .pivot(
+          struct(lower(trainingSales("sales.course")), trainingSales("training")),
+          Seq(Row("dotnet", "Dummies")))
         .agg(sum($"sales.earnings"))
         .collect()
     }
