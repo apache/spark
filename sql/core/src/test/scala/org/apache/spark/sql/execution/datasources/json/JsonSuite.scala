@@ -4267,13 +4267,12 @@ abstract class JsonSuite
 
       withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
         val df = spark.read.schema(schema).json(path.getAbsolutePath)
-        // Although the keys match the string type and some values match the integer type, because
-        // some of the values do not match the type, we mark the entire map as null.
+        // Failed entries are omitted; later keys and successfully converted siblings are kept.
         checkAnswer(
           df,
           Seq(
-            Row("AAA", null, "id1"),
-            Row("BBB", null, "id2")
+            Row("AAA", Map.empty[String, Int], "id1"),
+            Row("BBB", Map("f1" -> 12), "id2")
           )
         )
       }

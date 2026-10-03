@@ -3052,7 +3052,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
             withClue(s"$valueType partial=$partial") {
               if (partial) {
-                checkAnswer(sql(fromJson), Row(Row(null, 1)))
+                checkAnswer(sql(fromJson), Row(Row(Map.empty[String, String], 1)))
               } else {
                 checkAnswer(sql(fromJson), Row(Row(null, null)))
               }
@@ -3067,7 +3067,9 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                 val fileSchema = schema
                 val permissive = spark.read.schema(fileSchema).json(path.getCanonicalPath)
                 if (partial) {
-                  checkAnswer(permissive, Seq(Row(null, 1), Row(Map("k" -> "ab"), 2)))
+                  checkAnswer(
+                    permissive,
+                    Seq(Row(Map.empty[String, String], 1), Row(Map("k" -> "ab"), 2)))
                 } else {
                   checkAnswer(permissive, Seq(Row(null, null), Row(Map("k" -> "ab"), 2)))
                 }
