@@ -58,8 +58,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.status.{AppStatusStore, ElementTrackingStore}
+import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
 import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator, MetricUtils, SerializableConfiguration, Utils}
-import org.apache.spark.util.kvstore.InMemoryStore
+import org.apache.spark.util.kvstore.{CompactInMemoryStore, InMemoryStore}
 
 
 abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
@@ -1031,6 +1032,20 @@ class SQLAppStatusListenerWithInMemoryStoreSuite extends SQLAppStatusListenerSui
   override protected def createStatusStore(): SQLAppStatusStore = {
     val conf = sparkContext.conf
     kvstore = new ElementTrackingStore(new InMemoryStore, conf)
+    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
+    new SQLAppStatusStore(kvstore, Some(listener))
+  }
+}
+
+class SQLAppStatusListenerWithCompactStoreSuite extends SQLAppStatusListenerSuite {
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf.set(COMPACT_UI_STORE_ENABLED, true)
+  }
+
+  override protected def createStatusStore(): SQLAppStatusStore = {
+    val conf = sparkContext.conf
+    kvstore = new ElementTrackingStore(
+      new CompactInMemoryStore(new KVStoreProtobufSerializer), conf)
     val listener = new SQLAppStatusListener(conf, kvstore, live = true)
     new SQLAppStatusStore(kvstore, Some(listener))
   }

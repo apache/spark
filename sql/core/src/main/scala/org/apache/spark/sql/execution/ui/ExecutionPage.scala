@@ -48,8 +48,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     val content = sqlStore.execution(executionId).map { executionUIData =>
       val isSubExec = executionUIData.rootExecutionId != executionId
       val subExecutions = if (groupSubExecutionEnabled) {
-        sqlStore.executionsList()
-          .filter(e => e.rootExecutionId == executionId && e.executionId != executionId)
+        sqlStore.subExecutionSummaries(executionId)
       } else {
         Seq.empty
       }
