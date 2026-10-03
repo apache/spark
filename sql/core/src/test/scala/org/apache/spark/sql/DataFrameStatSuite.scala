@@ -17,17 +17,20 @@
 
 package org.apache.spark.sql
 
+import java.nio.charset.StandardCharsets
 import java.util.Random
 
 import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.stat.StatFunctions
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, GenericInternalRow}
+import org.apache.spark.sql.execution.stat.{CollectFrequentItems, StatFunctions}
 import org.apache.spark.sql.functions.{col, lit, struct, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, DoubleType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class DataFrameStatSuite extends SharedSparkSession {
   import testImplicits._
@@ -424,6 +427,22 @@ class DataFrameStatSuite extends SharedSparkSession {
     val items = results.collect().head.getSeq[String](0)
     assert(items.contains("3"))
     assert(items.length === 1)
+  }
+
+  test("collect_frequent_items stores a copy of a value that points into a reused buffer") {
+    val agg = new CollectFrequentItems(BoundReference(0, StringType, nullable = true), 10)
+    val bytes = "aa".getBytes(StandardCharsets.UTF_8)
+    val row = new GenericInternalRow(Array[Any](UTF8String.fromBytes(bytes)))
+    val buffer = agg.createAggregationBuffer()
+    agg.update(buffer, row) // inserts "aa"
+    agg.update(buffer, row) // increments "aa"
+    // The input buffer is reused for the next row, "bb". The stored "aa" must be unaffected.
+    bytes(0) = 'b'
+    bytes(1) = 'b'
+    agg.update(buffer, row) // inserts "bb"
+    agg.update(buffer, new GenericInternalRow(Array[Any](null)))
+    assert(buffer === Map(UTF8String.fromString("aa") -> 2L, UTF8String.fromString("bb") -> 1L,
+      (null: Any) -> 1L))
   }
 
   test("SPARK-15709: Prevent `UnsupportedOperationException: empty.min` in `freqItems`") {
