@@ -197,21 +197,19 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       // AND expects predicate
       val l = generateExpression(and.left, true)
       val r = generateExpression(and.right, true)
-      if (l.isDefined && r.isDefined) {
-        assert(l.get.isInstanceOf[V2Predicate] && r.get.isInstanceOf[V2Predicate])
-        Some(new V2And(l.get.asInstanceOf[V2Predicate], r.get.asInstanceOf[V2Predicate]))
-      } else {
-        None
+      (l, r) match {
+        case (Some(left: V2Predicate), Some(right: V2Predicate)) =>
+          Some(new V2And(left, right))
+        case _ => None
       }
     case or: Or =>
       // OR expects predicate
       val l = generateExpression(or.left, true)
       val r = generateExpression(or.right, true)
-      if (l.isDefined && r.isDefined) {
-        assert(l.get.isInstanceOf[V2Predicate] && r.get.isInstanceOf[V2Predicate])
-        Some(new V2Or(l.get.asInstanceOf[V2Predicate], r.get.asInstanceOf[V2Predicate]))
-      } else {
-        None
+      (l, r) match {
+        case (Some(left: V2Predicate), Some(right: V2Predicate)) =>
+          Some(new V2Or(left, right))
+        case _ => None
       }
     case b: BinaryOperator if canTranslate(b) =>
       val l = generateExpression(b.left)
@@ -239,10 +237,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
         None
       }
     case Not(child) => generateExpression(child, true) // NOT expects predicate
-      .map { v =>
-        assert(v.isInstanceOf[V2Predicate])
-        new V2Not(v.asInstanceOf[V2Predicate])
-      }
+      .collect { case v: V2Predicate => new V2Not(v) }
     case UnaryMinus(_, true) => generateExpressionWithName("-", expr, isPredicate)
     case _: BitwiseNot => generateExpressionWithName("~", expr, isPredicate)
     case caseWhen @ CaseWhen(branches, elseValue) =>
