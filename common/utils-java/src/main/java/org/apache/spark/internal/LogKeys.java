@@ -844,6 +844,7 @@ public enum LogKeys implements LogKey {
   TEMP_PATH,
   TEST_SIZE,
   THREAD,
+  THREAD_DUMP,
   THREAD_ID,
   THREAD_NAME,
   THREAD_POOL_KEEPALIVE_TIME,
