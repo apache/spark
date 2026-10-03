@@ -2955,10 +2955,10 @@ class TypesTestsMixin:
             ("-int4", "-69633", -69633),
             ("int8", "4295033089", 4295033089),
             ("-int8", "-4294967297", -4294967297),
-            ("float4", "3.402e+38", 3.402e38),
-            ("-float4", "-3.402e+38", -3.402e38),
-            ("float8", "1.79769e+308", 1.79769e308),
-            ("-float8", "-1.79769e+308", -1.79769e308),
+            ("float4", "3.402E38", 3.402e38),
+            ("-float4", "-3.402E38", -3.402e38),
+            ("float8", "1.79769E308", 1.79769e308),
+            ("-float8", "-1.79769E308", -1.79769e308),
             ("dec4", "123.456", Decimal("123.456")),
             ("-dec4", "-321.654", Decimal("-321.654")),
             ("dec8", "429.4967297", Decimal("429.4967297")),
@@ -3037,16 +3037,16 @@ class TypesTestsMixin:
         self.assertEqual(str(variants[6]), "5.5")
         self.assertEqual(str(variants[7]), "-5.5")
         self.assertEqual(str(variants[8]), '"Mk+mng=="')
-        self.assertEqual(str(variants[9]), '"1940-01-01 12:33:01.123000"')
+        self.assertEqual(str(variants[9]), '"1940-01-01 12:33:01.123"')
         self.assertEqual(str(variants[10]), '"2522-12-31 05:57:13"')
         self.assertEqual(str(variants[11]), '"0001-07-15 17:43:26"')
-        self.assertEqual(str(variants[12]), '"1940-01-01 05:05:13.123000+00:00"')
+        self.assertEqual(str(variants[12]), '"1940-01-01 05:05:13.123+00:00"')
         self.assertEqual(str(variants[13]), '"2522-12-31 05:23:00+00:00"')
         self.assertEqual(str(variants[14]), '"0001-12-30 17:01:01+00:00"')
 
         # Check to_json on timestamps with custom timezones
         self.assertEqual(
-            variants[12].toJson("America/Los_Angeles"), '"1939-12-31 21:05:13.123000-08:00"'
+            variants[12].toJson("America/Los_Angeles"), '"1939-12-31 21:05:13.123-08:00"'
         )
 
         # check toPython
@@ -3863,6 +3863,70 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
     def test_struct_field_type_name(self):
         struct_field = StructField("a", IntegerType())
         self.assertRaises(TypeError, struct_field.typeName)
+
+    def test_variant_to_json_matches_jvm_format(self):
+        import decimal
+        import struct
+
+        def variant(type_info, payload):
+            return VariantVal(bytes([type_info << 2]) + payload, bytes([1, 0, 0]))
+
+        def double(x):
+            return variant(7, struct.pack("<d", x))
+
+        def float32(x):
+            return variant(14, struct.pack("<f", x))
+
+        def decimal4(unscaled, scale):
+            return variant(8, bytes([scale]) + struct.pack("<i", unscaled))
+
+        def timestamp(micros, ntz):
+            return variant(13 if ntz else 12, struct.pack("<q", micros))
+
+        # The expected values are what the JVM `to_json` returns for the same variants on JDK 19+.
+        # On older JDKs, `to_json` can print longer digit strings for some doubles and floats,
+        # e.g. the powers of two below.
+        for v, expected in [
+            (double(float("nan")), '"NaN"'),
+            (double(float("inf")), '"Infinity"'),
+            (double(float("-inf")), '"-Infinity"'),
+            (double(0.0), "0.0"),
+            (double(-0.0), "-0.0"),
+            (double(123.0), "123.0"),
+            (double(123456.789), "123456.789"),
+            (double(0.001), "0.001"),
+            (double(1e7), "1.0E7"),
+            (double(1.5e-5), "1.5E-5"),
+            (double(-1e20), "-1.0E20"),
+            (double(5e-324), "4.9E-324"),
+            # Powers of two whose shortest decimal is not the closest one of that length.
+            (double(2.0**-24), "5.960464477539063E-8"),
+            (double(-(2.0**-24)), "-5.960464477539063E-8"),
+            (double(2.0**-44), "5.684341886080802E-14"),
+            (float32(2.0**-96), "1.2621775E-29"),
+            (float32(-(2.0**-96)), "-1.2621775E-29"),
+            (float32(float("nan")), '"NaN"'),
+            (float32(1.1), "1.1"),
+            (float32(1e10), "1.0E10"),
+            (float32(3.4028234663852886e38), "3.4028235E38"),
+            (decimal4(100, 2), "1"),
+            (decimal4(0, 2), "0"),
+            (decimal4(-1, 9), "-0.000000001"),
+            (timestamp(1_500_000, ntz=True), '"1970-01-01 00:00:01.5"'),
+            (timestamp(1, ntz=False), '"1970-01-01 00:00:00.000001+00:00"'),
+        ]:
+            with self.subTest(expected=expected):
+                self.assertEqual(v.toJson(), expected)
+                # The output must always be valid JSON.
+                json.loads(v.toJson())
+                # The output must not depend on the caller's decimal context.
+                with decimal.localcontext() as ctx:
+                    ctx.prec = 5
+                    self.assertEqual(v.toJson(), expected)
+
+        self.assertEqual(
+            timestamp(0, ntz=False).toJson("Asia/Kolkata"), '"1970-01-01 05:30:00+05:30"'
+        )
 
     def test_invalid_create_row(self):
         row_class = Row("c1", "c2")
