@@ -187,6 +187,9 @@ public abstract class BlockStoreClient implements Closeable {
       });
     } catch (IOException | InterruptedException e) {
       hostLocalDirsCompletable.completeExceptionally(e);
+      if (e instanceof InterruptedException) {
+        Thread.currentThread().interrupt();
+      }
     }
   }
 
