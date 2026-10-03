@@ -21,4 +21,5 @@ import org.apache.spark.sql.catalyst.ProjectingInternalRow
 
 case class ReplaceDataProjections(
     rowProjection: ProjectingInternalRow,
+    updateRowProjection: Option[ProjectingInternalRow],
     metadataProjection: Option[ProjectingInternalRow])

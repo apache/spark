@@ -23,6 +23,68 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
 
   override protected def deltaUpdate: Boolean = true
 
+  test("updatedColumns: single non-identity assignment") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
+
+    checkLastUpdatedColumns("id")
+  }
+
+  test("updatedColumns: multiple non-identity assignments") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = -1, dep = 'eng' WHERE pk = 1")
+
+    checkLastUpdatedColumns("id", "dep")
+  }
+
+  test("updatedColumns: identity assignments are excluded") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = -1, dep = dep WHERE pk = 1")
+
+    checkLastUpdatedColumns("id")
+  }
+
+  test("updatedColumns: empty when all assignments are identity") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = id, dep = dep WHERE pk = 1")
+
+    checkLastUpdatedColumns() // expects empty
+  }
+
+  test("updatedColumns: no WHERE clause still reports assigned columns") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET dep = 'eng'")
+
+    checkLastUpdatedColumns("dep")
+  }
+
+  test("updatedColumns: cross-column assignment is not treated as identity") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |""".stripMargin)
+
+    // SET id = dep assigns a different column's value -- not identity
+    sql(s"UPDATE $tableNameAsString SET id = 0, dep = dep WHERE pk = 1")
+
+    checkLastUpdatedColumns("id")
+  }
+
   test("nullable row ID attrs") {
     createAndInitTable("pk INT, salary INT, dep STRING",
       """{ "pk": 1, "salary": 300, "dep": 'hr' }
