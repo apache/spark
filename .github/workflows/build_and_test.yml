@@ -634,7 +634,12 @@ jobs:
       # Each generated example runs two full Spark jobs (transpiled vs. interpreted
       # differential), so the local default of 1000 blows past PYSPARK_TEST_TIMEOUT.
       # Cap CI fuzz volume; the explicit @example edge seeds still always run.
-      RUN_HYPOTHESIS_MAX_EXAMPLES: 50
+      # At 50 examples the suite blew past PYSPARK_TEST_TIMEOUT (450s); 25 still
+      # ran ~650s locally. 10 keeps the whole module comfortably under budget
+      # while the multi-row differentials (one collect per side over a batch of
+      # _BATCH rows) still fuzz _BATCH times as many values per test as the old
+      # one-row-per-example path did.
+      RUN_HYPOTHESIS_MAX_EXAMPLES: 10
     steps:
     - name: Bootstrap composite actions
       uses: actions/checkout@v7
