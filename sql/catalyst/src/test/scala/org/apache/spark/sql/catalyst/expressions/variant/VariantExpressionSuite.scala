@@ -1701,6 +1701,12 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         "path" -> """$['a.\\nb'].c""",
         "failedAt" -> """$['a.\\nb']""",
         "functionName" -> "`variant_insert`"))
+    checkInsertRecoverableError("""{"a.\nb": 5}""", """$['a.\nb'].c""", Literal(2),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map(
+        "path" -> """$['a.\nb'].c""",
+        "failedAt" -> """$['a.\nb']""",
+        "functionName" -> "`variant_insert`"))
 
     // Structs and maps are rejected at analysis.
     Seq(
