@@ -89,29 +89,37 @@ object MathUtils {
 
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
-  // Positive modulo (`pmod`): the remainder `a % n` adjusted to share the sign of `n`.
-  // Unlike `floorMod`, this matches the `pmod` SQL function / `HashPartitioning` semantics.
-  // Shared by `Pmod`'s eval and codegen paths so the two never diverge.
+  // Positive modulo (`pmod`): for `n > 0` the result lies in `[0, n)` (for the float/double
+  // overloads, when both inputs are finite); for `n < 0` it takes the sign of the dividend `a`
+  // (unlike `floorMod`, which takes the sign of `n`). Matches the `pmod` SQL function and
+  // `HashPartitioning`, and is shared by `Pmod`'s eval and codegen so the two never diverge.
+  //
+  // Integral `n > 0` uses `Math.floorMod`. The `n < 0` path can silently wrap for `Int`/`Long`
+  // when `r + n` overflows (large-magnitude negative `n`), e.g. `pmod(-1, Int.MinValue)` returns
+  // `Int.MaxValue`; tracked by SPARK-59934. `Byte`/`Short` delegate to `Int`; the float/double
+  // overloads keep `% n` because `r + n` can round up to exactly `n`.
 
   def pmod(a: Int, n: Int): Int = {
-    val r = a % n
-    if (r < 0) (r + n) % n else r
+    if (n > 0) {
+      Math.floorMod(a, n)
+    } else {
+      val r = a % n
+      if (r >= 0) r else (r + n) % n
+    }
   }
 
   def pmod(a: Long, n: Long): Long = {
-    val r = a % n
-    if (r < 0) (r + n) % n else r
+    if (n > 0) {
+      Math.floorMod(a, n)
+    } else {
+      val r = a % n
+      if (r >= 0) r else (r + n) % n
+    }
   }
 
-  def pmod(a: Byte, n: Byte): Byte = {
-    val r = a % n
-    if (r < 0) ((r + n) % n).toByte else r.toByte
-  }
+  def pmod(a: Byte, n: Byte): Byte = pmod(a.toInt, n.toInt).toByte
 
-  def pmod(a: Short, n: Short): Short = {
-    val r = a % n
-    if (r < 0) ((r + n) % n).toShort else r.toShort
-  }
+  def pmod(a: Short, n: Short): Short = pmod(a.toInt, n.toInt).toShort
 
   def pmod(a: Float, n: Float): Float = {
     val r = a % n
