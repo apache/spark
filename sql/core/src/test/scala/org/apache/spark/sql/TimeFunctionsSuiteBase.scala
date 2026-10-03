@@ -783,6 +783,78 @@ abstract class TimeFunctionsSuiteBase extends SharedSparkSession {
     checkAnswer(result1, expected)
     checkAnswer(result2, expected)
   }
+
+  test("SPARK-57561: datetime functions reject TIME inputs") {
+    val unexpectedInputType = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"
+    val timeType = Some("\"TIME(6)\"")
+    val cases = Seq(
+      ("date_add(TIME'12:34:56', 1)", unexpectedInputType, timeType),
+      ("date_sub(TIME'12:34:56', 1)", unexpectedInputType, timeType),
+      ("datediff(TIME'12:34:56', DATE'2025-01-01')", unexpectedInputType, timeType),
+      ("add_months(TIME'12:34:56', 1)", unexpectedInputType, timeType),
+      ("months_between(TIME'12:34:56', TIMESTAMP'2025-01-01 00:00:00')",
+        unexpectedInputType, timeType),
+      ("last_day(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("next_day(TIME'12:34:56', 'MON')", unexpectedInputType, timeType),
+      ("year(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("quarter(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("month(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("day(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("dayofmonth(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("dayofyear(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("dayofweek(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("weekday(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("weekofyear(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("monthname(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("dayname(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("extract(YEAR FROM TIME'12:34:56')", "INVALID_EXTRACT_FIELD", None),
+      ("extract(DAY FROM TIME'12:34:56')", "INVALID_EXTRACT_FIELD", None),
+      ("date_part('YEAR', TIME'12:34:56')", "INVALID_EXTRACT_FIELD", None),
+      ("date_part('DAY', TIME'12:34:56')", "INVALID_EXTRACT_FIELD", None),
+      ("to_date(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("try_to_date(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("make_date(TIME'12:34:56', 1, 1)", unexpectedInputType, timeType),
+      ("trunc(TIME'12:34:56', 'YEAR')", unexpectedInputType, timeType),
+      ("unix_timestamp(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("to_unix_timestamp(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("from_unixtime(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("timestamp_seconds(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("timestamp_millis(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("timestamp_micros(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("unix_seconds(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("unix_millis(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("unix_micros(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("unix_date(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("date_from_unix_date(TIME'12:34:56')", unexpectedInputType, timeType),
+      ("from_utc_timestamp(TIME'12:34:56', 'UTC')", unexpectedInputType, timeType),
+      ("to_utc_timestamp(TIME'12:34:56', 'UTC')", unexpectedInputType, timeType),
+      ("convert_timezone('UTC', 'Europe/Paris', TIME'12:34:56')",
+        unexpectedInputType, timeType),
+      ("window(TIME'12:34:56', '5 minutes')", unexpectedInputType, timeType),
+      ("session_window(TIME'12:34:56', '5 minutes')", unexpectedInputType, timeType),
+      ("window_time(named_struct('start', TIME'12:00:00', 'end', TIME'12:05:00'))",
+        unexpectedInputType,
+        Some("\"STRUCT<start: TIME(6) NOT NULL, end: TIME(6) NOT NULL>\""))
+    )
+
+    cases.foreach { case (expr, expectedCondition, expectedInputType) =>
+      withClue(s"$expr: ") {
+        val e = intercept[AnalysisException] {
+          spark.sql(s"SELECT $expr").queryExecution.analyzed
+        }
+        assert(e.getCondition === expectedCondition)
+        expectedInputType.foreach { inputType =>
+          assert(e.getMessageParameters.get("inputType") === inputType)
+        }
+      }
+    }
+
+    Seq("to_date", "try_to_date").foreach { func =>
+      checkAnswer(
+        spark.sql(s"SELECT $func(CAST(TIME'12:34:56' AS TIMESTAMP)) = current_date()"),
+        Row(true))
+    }
+  }
 }
 
 // This class is used to run the same tests with ANSI mode enabled explicitly.
