@@ -1019,6 +1019,15 @@ class BlockManagerMasterEndpoint(
       blockId: BlockId,
       requesterHost: String): Option[BlockLocationsAndStatus] = {
     val allLocations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
+    val statusesByLocation = allLocations.map { bmId =>
+      val status = if (externalShuffleServiceRddFetchEnabled && blockId.isRDD &&
+          bmId.port == externalShuffleServicePort) {
+        blockStatusByShuffleService.get(bmId).flatMap(_.get(blockId))
+      } else {
+        blockManagerInfo.get(bmId).flatMap(_.getStatus(blockId))
+      }
+      bmId -> status
+    }.toMap
     val blockStatusWithBlockManagerId: Option[(BlockStatus, BlockManagerId)] =
       (if (externalShuffleServiceRddFetchEnabled && blockId.isRDD) {
         // If fetching disk persisted RDD from the external shuffle service is enabled then first
@@ -1030,16 +1039,14 @@ class BlockManagerMasterEndpoint(
         val location = hostLocalLocations
           .orElse(allLocations.find(_.port == externalShuffleServicePort))
         location
-          .flatMap(blockStatusByShuffleService.get(_).flatMap(_.get(blockId)))
+          .flatMap(statusesByLocation.get(_).flatten)
           .zip(location)
       } else {
         // trying to find it in the executors running on the same host and persisted on the disk
         // Implementation detail: using flatMap on iterators makes the transformation lazy.
         allLocations.filter(_.host == requesterHost).iterator
           .flatMap { bmId =>
-            blockManagerInfo.get(bmId).flatMap { blockInfo =>
-              blockInfo.getStatus(blockId).map((_, bmId))
-            }
+            statusesByLocation.get(bmId).flatten.map((_, bmId))
           }
           .find(_._1.storageLevel.useDisk)
       })
@@ -1047,19 +1054,21 @@ class BlockManagerMasterEndpoint(
         // if the block cannot be found in the same host as a disk stored block then extend the
         // search to all active (not killed) executors and to all storage levels
         val location = allLocations.headOption
-        location.flatMap(blockManagerInfo.get(_)).flatMap(_.getStatus(blockId)).zip(location)
+        location.flatMap(statusesByLocation.get(_).flatten).zip(location)
       }
     logDebug(s"Identified block: $blockStatusWithBlockManagerId")
     blockStatusWithBlockManagerId
       .map { case (blockStatus: BlockStatus, bmId: BlockManagerId) =>
-        if (bmId.host == requesterHost && blockStatus.storageLevel.useDisk) {
-          BlockLocationsAndStatus(
-            allLocations,
-            blockStatus,
-            Option(executorIdToLocalDirs.getIfPresent(bmId.executorId)))
-        } else {
-          BlockLocationsAndStatus(allLocations, blockStatus, None)
+        val locations = allLocations.map { location =>
+          val localDirs = if (location == bmId && location.host == requesterHost &&
+              blockStatus.storageLevel.useDisk) {
+            Option(executorIdToLocalDirs.getIfPresent(location.executorId))
+          } else {
+            None
+          }
+          BlockLocationAndStatus(location, statusesByLocation(location), localDirs)
         }
+        BlockLocationsAndStatus(locations, blockStatus.diskSize.max(blockStatus.memSize))
       }
       .orElse(None)
   }

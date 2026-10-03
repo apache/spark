@@ -99,6 +99,18 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
   def rdd(rddId: Int, splitId: Int): RDDBlockId = RDDBlockId(rddId, splitId)
 
+  private def blockLocationsAndStatus(
+      locations: Seq[BlockManagerId],
+      statuses: Map[BlockManagerId, BlockStatus]): BlockLocationsAndStatus = {
+    val blockSize = statuses.valuesIterator
+      .map(status => status.diskSize.max(status.memSize))
+      .maxOption
+      .getOrElse(0L)
+    BlockLocationsAndStatus(
+      locations.map(location => BlockLocationAndStatus(location, statuses.get(location), None)),
+      blockSize)
+  }
+
   private def init(sparkConf: SparkConf): Unit = {
     sparkConf
       .set("spark.app.id", "test")
@@ -496,6 +508,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     store1.putSingle(broadcastId, value, StorageLevel.MEMORY_ONLY, tellMaster = true)
     store2.putSingle(broadcastId, value, StorageLevel.MEMORY_ONLY, tellMaster = true)
     store3.putSingle(broadcastId, value, StorageLevel.DISK_ONLY, tellMaster = true)
+    val locationsAndStatus =
+      master.getLocationsAndStatus(broadcastId, store4.blockManagerId.host).get
+    val statusByLocation = locationsAndStatus.locations.map { locationAndStatus =>
+      locationAndStatus.blockManagerId -> locationAndStatus.status
+    }.toMap
+    assert(statusByLocation(store1.blockManagerId).exists(_.storageLevel == StorageLevel.MEMORY_ONLY))
+    assert(statusByLocation(store2.blockManagerId).exists(_.storageLevel == StorageLevel.MEMORY_ONLY))
+    assert(statusByLocation(store3.blockManagerId).exists(_.storageLevel == StorageLevel.DISK_ONLY))
     store4.getRemoteBytes(broadcastId) match {
       case Some(block) =>
         assert(block.size > 0, "The block size must be greater than 0 for a nonempty block!")
@@ -1832,7 +1852,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val blockManagerIds = (0 to maxFailuresBeforeLocationRefresh)
       .map { i => BlockManagerId(s"id-$i", s"host-$i", i + 1) }
     when(mockBlockManagerMaster.getLocationsAndStatus(mc.any[BlockId], mc.any[String])).thenReturn(
-      Option(BlockLocationsAndStatus(blockManagerIds, BlockStatus.empty, None)))
+      Option(blockLocationsAndStatus(
+        blockManagerIds, blockManagerIds.map(_ -> BlockStatus.empty).toMap)),
+      None)
     when(mockBlockManagerMaster.getLocations(mc.any[BlockId])).thenReturn(
       blockManagerIds)
 
@@ -1841,7 +1863,125 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val block = store.getRemoteBytes("item")
       .asInstanceOf[Option[ByteBuffer]]
     assert(block.isDefined)
-    verify(mockBlockManagerMaster, times(1))
+    verify(mockBlockManagerMaster, times(2))
+      .getLocationsAndStatus("item", "MockBlockTransferServiceHost")
+    verify(mockBlockManagerMaster, times(1)).getLocations("item")
+  }
+
+  test("refresh status when fetching an empty deserialized memory block") {
+    conf.set(BLOCK_FAILURES_BEFORE_LOCATION_REFRESH.key, "1")
+    val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
+    val staleExecutors = Seq(
+      BlockManagerId("stale-1", "host-1", 1),
+      BlockManagerId("stale-2", "host-2", 2))
+    val healthyExecutor = BlockManagerId("healthy", "host-3", 3)
+    val initialStatus = BlockStatus(StorageLevel.DISK_ONLY, memSize = 0L, diskSize = 1L)
+    val refreshedStatus = BlockStatus(StorageLevel.MEMORY_ONLY, memSize = 1L, diskSize = 0L)
+    when(mockBlockManagerMaster.getLocationsAndStatus(
+      mc.any[BlockId], mc.any[String])).thenReturn(
+      Option(blockLocationsAndStatus(staleExecutors, staleExecutors.map(_ -> initialStatus).toMap)),
+      Option(blockLocationsAndStatus(Seq(healthyExecutor), Map(healthyExecutor -> refreshedStatus))))
+    when(mockBlockManagerMaster.getLocations(mc.any[BlockId])).thenReturn(Seq(healthyExecutor))
+    val blockFetcher = new MockBlockTransferService(0) {
+      override def fetchBlockSync(
+          host: String,
+          port: Int,
+          execId: String,
+          blockId: String,
+          tempFileManager: DownloadFileManager): ManagedBuffer = {
+        if (execId == healthyExecutor.executorId) {
+          new NioManagedBuffer(ByteBuffer.allocate(0))
+        } else {
+          throw new RuntimeException("simulated stale executor fetch failure")
+        }
+      }
+    }
+    val store = makeBlockManager(
+      8000,
+      "executor",
+      mockBlockManagerMaster,
+      transferService = Some(blockFetcher))
+
+    assert(store.getRemoteBytes("item").isDefined)
+    verify(mockBlockManagerMaster, times(2))
+      .getLocationsAndStatus("item", "MockBlockTransferServiceHost")
+    verify(mockBlockManagerMaster, never()).getLocations("item")
+  }
+
+  test("use refreshed block size when validating an empty response") {
+    conf.set(BLOCK_FAILURES_BEFORE_LOCATION_REFRESH.key, "1")
+    val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
+    val staleExecutors = Seq(
+      BlockManagerId("stale-1", "host-1", 1),
+      BlockManagerId("stale-2", "host-2", 2))
+    val refreshedExecutor = BlockManagerId("refreshed", "host-3", 3)
+    val refreshedStatus = BlockStatus(StorageLevel.DISK_ONLY, memSize = 0L, diskSize = 1L)
+    when(mockBlockManagerMaster.getLocationsAndStatus(
+      mc.any[BlockId], mc.any[String])).thenReturn(
+      Option(blockLocationsAndStatus(
+        staleExecutors, staleExecutors.map(_ -> BlockStatus.empty).toMap)),
+      Option(blockLocationsAndStatus(
+        Seq(refreshedExecutor), Map(refreshedExecutor -> refreshedStatus))))
+    val blockFetcher = new MockBlockTransferService(0) {
+      override def fetchBlockSync(
+          host: String,
+          port: Int,
+          execId: String,
+          blockId: String,
+          tempFileManager: DownloadFileManager): ManagedBuffer = {
+        if (execId == refreshedExecutor.executorId) {
+          new NioManagedBuffer(ByteBuffer.allocate(0))
+        } else {
+          throw new RuntimeException("simulated stale executor fetch failure")
+        }
+      }
+    }
+    val store = makeBlockManager(
+      8000,
+      "executor",
+      mockBlockManagerMaster,
+      transferService = Some(blockFetcher))
+
+    assert(store.getRemoteBytes("item").isEmpty)
+  }
+
+  test("reject empty response when refreshed block status is unavailable") {
+    conf.set(BLOCK_FAILURES_BEFORE_LOCATION_REFRESH.key, "1")
+    val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
+    val statusExecutor = BlockManagerId("status", "host-1", 1)
+    val staleExecutor = BlockManagerId("stale", "host-2", 2)
+    val deserializedMemoryStatus =
+      BlockStatus(StorageLevel.MEMORY_ONLY, memSize = 1L, diskSize = 0L)
+    when(mockBlockManagerMaster.getLocationsAndStatus(
+      mc.any[BlockId], mc.any[String])).thenReturn(
+      Option(blockLocationsAndStatus(
+        Seq(statusExecutor, staleExecutor), Map(statusExecutor -> deserializedMemoryStatus))),
+      None)
+    when(mockBlockManagerMaster.getLocations(mc.any[BlockId])).thenReturn(Seq(statusExecutor))
+    val blockFetcher = new MockBlockTransferService(0) {
+      private var attempts = 0
+
+      override def fetchBlockSync(
+          host: String,
+          port: Int,
+          execId: String,
+          blockId: String,
+          tempFileManager: DownloadFileManager): ManagedBuffer = {
+        attempts += 1
+        if (attempts == 1) {
+          throw new RuntimeException("simulated stale executor fetch failure")
+        }
+        new NioManagedBuffer(ByteBuffer.allocate(0))
+      }
+    }
+    val store = makeBlockManager(
+      8000,
+      "executor",
+      mockBlockManagerMaster,
+      transferService = Some(blockFetcher))
+
+    assert(store.getRemoteBytes("item").isEmpty)
+    verify(mockBlockManagerMaster, times(2))
       .getLocationsAndStatus("item", "MockBlockTransferServiceHost")
     verify(mockBlockManagerMaster, times(1)).getLocations("item")
   }
@@ -1903,6 +2043,174 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     store.putSingle("item", "value", StorageLevel.DISK_ONLY, tellMaster = true)
     assert(master.getLocations("item").nonEmpty)
     assert(store2.getRemoteBytes("item").isEmpty)
+  }
+
+  test("allow empty executor response for deserialized memory block") {
+    val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
+    val executor = BlockManagerId("executor1", "localhost", 8000)
+    val deserializedMemoryStatus =
+      BlockStatus(StorageLevel.MEMORY_ONLY, memSize = 1L, diskSize = 0L)
+    when(mockBlockManagerMaster.getLocationsAndStatus(
+      mc.any[BlockId], mc.any[String])).thenReturn(
+      Option(blockLocationsAndStatus(Seq(executor), Map(executor -> deserializedMemoryStatus))))
+    val blockFetcher = new MockBlockTransferService(0) {
+      override def fetchBlockSync(
+          host: String,
+          port: Int,
+          execId: String,
+          blockId: String,
+          tempFileManager: DownloadFileManager): ManagedBuffer = {
+        new NioManagedBuffer(ByteBuffer.allocate(0))
+      }
+    }
+    val store = makeBlockManager(
+      8000,
+      "executor2",
+      mockBlockManagerMaster,
+      transferService = Some(blockFetcher))
+
+    val remoteBytes = store.getRemoteBytes(rdd(0, 0))
+    assert(remoteBytes.isDefined)
+    assert(remoteBytes.get.size === 0)
+  }
+
+  test("allow empty executor response when its port matches a disabled shuffle service") {
+    conf.set(SHUFFLE_SERVICE_ENABLED.key, "false")
+    val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
+    val externalShuffleServicePort = StorageUtils.externalShuffleServicePort(conf)
+    val executor = BlockManagerId("executor1", "localhost", externalShuffleServicePort)
+    val deserializedMemoryStatus =
+      BlockStatus(StorageLevel.MEMORY_ONLY, memSize = 1L, diskSize = 0L)
+    when(mockBlockManagerMaster.getLocationsAndStatus(
+      mc.any[BlockId], mc.any[String])).thenReturn(
+      Option(blockLocationsAndStatus(Seq(executor), Map(executor -> deserializedMemoryStatus))))
+    val blockFetcher = new MockBlockTransferService(0) {
+      override def fetchBlockSync(
+          host: String,
+          port: Int,
+          execId: String,
+          blockId: String,
+          tempFileManager: DownloadFileManager): ManagedBuffer = {
+        new NioManagedBuffer(ByteBuffer.allocate(0))
+      }
+    }
+    val store = makeBlockManager(
+      8000,
+      "executor2",
+      mockBlockManagerMaster,
+      transferService = Some(blockFetcher))
+
+    assert(store.getRemoteBytes(rdd(0, 0)).isDefined)
+  }
+
+  test("reject empty shuffle-service response when its status includes memory") {
+    val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
+    val externalShuffleServicePort = StorageUtils.externalShuffleServicePort(conf)
+    val executor = BlockManagerId("executor1", "localhost", 8000)
+    val shuffleService = BlockManagerId("executor2", "localhost", externalShuffleServicePort)
+    // The external shuffle service records the block's storage level, which can include memory,
+    // but its status has no in-memory bytes because it only serves on-disk data.
+    val shuffleServiceStatus =
+      BlockStatus(StorageLevel.MEMORY_AND_DISK, memSize = 0L, diskSize = 1L)
+    when(mockBlockManagerMaster.getLocationsAndStatus(
+      mc.any[BlockId], mc.any[String])).thenReturn(
+      Option(blockLocationsAndStatus(
+        Seq(executor, shuffleService), Map(shuffleService -> shuffleServiceStatus))))
+    val blockFetcher = new MockBlockTransferService(0) {
+      override def fetchBlockSync(
+          host: String,
+          port: Int,
+          execId: String,
+          blockId: String,
+          tempFileManager: DownloadFileManager): ManagedBuffer = {
+        if (port == externalShuffleServicePort) {
+          new NioManagedBuffer(ByteBuffer.allocate(0))
+        } else {
+          throw new RuntimeException("simulated executor fetch failure")
+        }
+      }
+    }
+    val store = makeBlockManager(
+      8000,
+      "executor3",
+      mockBlockManagerMaster,
+      transferService = Some(blockFetcher))
+
+    assert(store.getRemoteBytes("item").isEmpty)
+  }
+
+  test("allow empty response from another deserialized memory replica") {
+    val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
+    val deserializedMemoryExecutor =
+      BlockManagerId("executor1", "MockBlockTransferServiceHost", 8000)
+    val statusExecutor = BlockManagerId("executor2", "other-host", 8000)
+    val deserializedMemoryStatus =
+      BlockStatus(StorageLevel.MEMORY_ONLY, memSize = 1L, diskSize = 0L)
+    when(mockBlockManagerMaster.getLocationsAndStatus(
+      mc.any[BlockId], mc.any[String])).thenReturn(
+      Option(blockLocationsAndStatus(
+        Seq(deserializedMemoryExecutor, statusExecutor),
+        Map(
+          deserializedMemoryExecutor -> deserializedMemoryStatus,
+          statusExecutor -> deserializedMemoryStatus))))
+    val blockFetcher = new MockBlockTransferService(0) {
+      override def fetchBlockSync(
+          host: String,
+          port: Int,
+          execId: String,
+          blockId: String,
+          tempFileManager: DownloadFileManager): ManagedBuffer = {
+        if (execId == deserializedMemoryExecutor.executorId) {
+          new NioManagedBuffer(ByteBuffer.allocate(0))
+        } else {
+          throw new RuntimeException("simulated status executor fetch failure")
+        }
+      }
+    }
+    val store = makeBlockManager(
+      8000,
+      "executor3",
+      mockBlockManagerMaster,
+      transferService = Some(blockFetcher))
+
+    assert(store.getRemoteBytes("item").isDefined)
+  }
+
+  test("reject empty response from a disk replica when another replica is deserialized memory") {
+    val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
+    val diskExecutor = BlockManagerId("executor1", "MockBlockTransferServiceHost", 8000)
+    val deserializedMemoryExecutor = BlockManagerId("executor2", "other-host", 8000)
+    val diskStatus = BlockStatus(StorageLevel.DISK_ONLY, memSize = 0L, diskSize = 1L)
+    val deserializedMemoryStatus =
+      BlockStatus(StorageLevel.MEMORY_ONLY, memSize = 1L, diskSize = 0L)
+    when(mockBlockManagerMaster.getLocationsAndStatus(
+      mc.any[BlockId], mc.any[String])).thenReturn(
+      Option(blockLocationsAndStatus(
+        Seq(diskExecutor, deserializedMemoryExecutor),
+        Map(
+          diskExecutor -> diskStatus,
+          deserializedMemoryExecutor -> deserializedMemoryStatus))))
+    val blockFetcher = new MockBlockTransferService(0) {
+      override def fetchBlockSync(
+          host: String,
+          port: Int,
+          execId: String,
+          blockId: String,
+          tempFileManager: DownloadFileManager): ManagedBuffer = {
+        if (execId == diskExecutor.executorId) {
+          new NioManagedBuffer(ByteBuffer.allocate(0))
+        } else {
+          throw new RuntimeException("simulated deserialized-memory executor fetch failure")
+        }
+      }
+    }
+    val store = makeBlockManager(
+      8000,
+      "executor3",
+      mockBlockManagerMaster,
+      transferService = Some(blockFetcher))
+
+    assert(store.getRemoteBytes("item").isEmpty)
   }
 
   test("test sorting of block locations") {
@@ -2022,7 +2330,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val blockStatus = BlockStatus(StorageLevel.DISK_ONLY, 0L, 2000L)
 
     when(mockBlockManagerMaster.getLocationsAndStatus(mc.any[BlockId], mc.any[String])).thenReturn(
-      Option(BlockLocationsAndStatus(blockLocations, blockStatus, None)))
+      Option(blockLocationsAndStatus(blockLocations, Map(blockLocations.head -> blockStatus))))
     when(mockBlockManagerMaster.getLocations(mc.any[BlockId])).thenReturn(blockLocations)
 
     val store = makeBlockManager(8000, "executor1", mockBlockManagerMaster,

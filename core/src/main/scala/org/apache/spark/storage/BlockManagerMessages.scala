@@ -131,16 +131,25 @@ private[spark] object BlockManagerMessages {
     extends ToBlockManagerMaster
 
   /**
+   * A block location and its status.
+   *
+   * @param localDirs if the block is persisted to disk on the same host as the requester executor,
+   *                  the cached data will be in a file in one of these directories.
+   */
+  case class BlockLocationAndStatus(
+      blockManagerId: BlockManagerId,
+      status: Option[BlockStatus],
+      localDirs: Option[Array[String]])
+
+  /**
    * The response message of `GetLocationsAndStatus` request.
    *
-   * @param localDirs if it is persisted-to-disk on the same host as the requester executor is
-   *                  running on then localDirs will be Some and the cached data will be in a file
-   *                  in one of those dirs, otherwise it is None.
+   * @param blockSize the size of a representative block replica, used to decide whether to spill
+   *                  a remote fetch to disk.
    */
   case class BlockLocationsAndStatus(
-      locations: Seq[BlockManagerId],
-      status: BlockStatus,
-      localDirs: Option[Array[String]]) {
+      locations: Seq[BlockLocationAndStatus],
+      blockSize: Long) {
     assert(locations.nonEmpty)
   }
 
