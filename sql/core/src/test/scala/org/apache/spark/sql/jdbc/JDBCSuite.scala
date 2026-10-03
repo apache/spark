@@ -1471,9 +1471,8 @@ class JDBCSuite extends SharedSparkSession {
 
     // MySQL treats backslash as an escape character inside string literals, so every backslash is
     // doubled again: the ESCAPE clause uses `\\` and a literal backslash in the value becomes four
-    // backslashes (escapeSpecialCharsForLikePattern doubles it, then
-    // escapeStringLiteralForLikePattern doubles each of those). The wildcard escaping for
-    // `%`/`_` is unchanged from the default.
+    // backslashes (escapeSpecialCharsForLikePattern doubles it, then escapeSql doubles each of
+    // those). The wildcard escaping for `%`/`_` is unchanged from the default.
     val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     def mySQLSQL(f: Filter): String = mySQLDialect.compileExpression(f.toV2).getOrElse("")
     // `c` LIKE 'ab\\\\%' ESCAPE '\\'
@@ -1487,6 +1486,54 @@ class JDBCSuite extends SharedSparkSession {
     // wildcards) before the LIKE engine, matching the default dialect's semantics.
     // `c` LIKE 'a\\%b\\_%' ESCAPE '\\'
     assert(mySQLSQL(StringStartsWith("c", "a%b_")) === """`c` LIKE 'a\\%b\\_%' ESCAPE '\\'""")
+  }
+
+  test("SPARK-57500: escape backslash in pushed-down string literals for comparison/IN") {
+    val defaultDialect = JdbcDialects.get("jdbc:")
+    val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    def d(f: Filter): String = defaultDialect.compileExpression(f.toV2).getOrElse("")
+    def m(f: Filter): String = mySQLDialect.compileExpression(f.toV2).getOrElse("")
+
+    assert(d(EqualTo("c", "a\\b")) === """"c" = 'a\b'""")
+    assert(m(EqualTo("c", "a\\b")) === """`c` = 'a\\b'""")
+    assert(d(LessThan("c", "a\\b")) === """"c" < 'a\b'""")
+    assert(m(LessThan("c", "a\\b")) === """`c` < 'a\\b'""")
+    assert(d(In("c", Array[Any]("a\\b", "x\\y"))) === """"c" IN ('a\b', 'x\y')""")
+    assert(m(In("c", Array[Any]("a\\b", "x\\y"))) === """`c` IN ('a\\b', 'x\\y')""")
+    assert(m(EqualTo("c", "a'\\b")) === """`c` = 'a''\\b'""")
+
+    assert(d(StringStartsWith("c", "a\\b")) === """"c" LIKE 'a\\b%' ESCAPE '\'""")
+    assert(m(StringStartsWith("c", "a\\b")) === """`c` LIKE 'a\\\\b%' ESCAPE '\\'""")
+    assert(d(StringContains("c", "a\\b")) === """"c" LIKE '%a\\b%' ESCAPE '\'""")
+    assert(m(StringContains("c", "a\\b")) === """`c` LIKE '%a\\\\b%' ESCAPE '\\'""")
+
+    assert(defaultDialect.getTableCommentQuery("t", "a\\b") === """COMMENT ON TABLE t IS 'a\b'""")
+    assert(mySQLDialect.getTableCommentQuery("t", "a\\b") === """ALTER TABLE t COMMENT = 'a\\b'""")
+  }
+
+  test("SPARK-57500: decline LIKE pushdown when the pattern is not a string literal") {
+    import org.apache.spark.unsafe.types.UTF8String
+    val defaultDialect = JdbcDialects.get("jdbc:")
+    val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val c = FieldReference("c")
+    val patterns = Seq(
+      FieldReference("d"),
+      LiteralValue(null, StringType),
+      LiteralValue(1, IntegerType))
+
+    for (name <- Seq("STARTS_WITH", "ENDS_WITH", "CONTAINS"); pattern <- patterns) {
+      val p = new Predicate(name, Array[V2Expression](c, pattern))
+      assert(defaultDialect.compileExpression(p).isEmpty)
+      assert(mySQLDialect.compileExpression(p).isEmpty)
+    }
+
+    val strLit = LiteralValue(UTF8String.fromString("a"), StringType)
+    for (name <- Seq("STARTS_WITH", "ENDS_WITH", "CONTAINS");
+         children <- Seq(Array[V2Expression](c), Array[V2Expression](c, strLit, strLit))) {
+      val p = new Predicate(name, children)
+      assert(defaultDialect.compileExpression(p).isEmpty)
+      assert(mySQLDialect.compileExpression(p).isEmpty)
+    }
   }
 
   test("SPARK-57446: escape single quotes in JDBC comment queries") {
