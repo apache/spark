@@ -1727,6 +1727,28 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(!sc.zeroExecutorRequirementAndDrain(failing))
     verify(failing).decommissionExecutors(any(), meq(false), meq(false))
   }
+
+  test("SPARK-59807: holdExecutors is refused while an unreliably-stored shuffle is active") {
+    val conf = new SparkConf().setAppName("test").setMaster("local-cluster[1,1,1024]")
+      .set(SHUFFLE_IO_PLUGIN_CLASS, classOf[TestShuffleDataIOWithReliableStorage].getName)
+      .set(DECOMMISSION_ENABLED, true)
+    sc = new SparkContext(conf)
+    TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
+    // Qualifies via reliable ShuffleDataIO storage, not the external shuffle service.
+    assert(sc.executorHoldSupported)
+    val tracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+
+    // An active shuffle whose output is not reliably stored blocks the hold: draining would
+    // drop its only copy. Register directly so the reliability bit is controlled precisely.
+    tracker.registerShuffle(1000, numMaps = 1, numReduces = 1, jobId = 0, isReliablyStored = false)
+    assert(!sc.holdExecutors())
+    assert(!sc.executorsHeld)
+
+    // Once it is unregistered (only reliably-stored shuffles remain), the hold proceeds.
+    tracker.unregisterShuffle(1000)
+    assert(sc.holdExecutors())
+    assert(sc.executorsHeld)
+  }
 }
 
 object SparkContextSuite {

@@ -2168,6 +2168,10 @@ class SparkContext(config: SparkConf) extends Logging {
    * streaming receiver, continuous processing) are outside the scope too: their tasks never
    * finish, so the drain cannot complete.
    *
+   * A hold is also rejected, on the same best-effort basis, while a shuffle whose output is not
+   * reliably stored off the executors is active: draining would drop the only copy of that output.
+   * Reliably-stored shuffles (a remote shuffle service, a distributed filesystem) do not block it.
+   *
    * @throws IllegalArgumentException when the decommission or shuffle-storage precondition is
    *         not met; an unsupported scheduler backend instead returns false with a warning.
    * @return whether the lowered executor requirement was acknowledged by the cluster manager.
@@ -2190,6 +2194,15 @@ class SparkContext(config: SparkConf) extends Logging {
           // its executors: a partially launched group would deadlock the drain, and a
           // force-killed member aborts the whole group.
           logWarning(log"Cannot hold the executors while a pipelined job is running.")
+          false
+        } else if (!conf.get(SHUFFLE_SERVICE_ENABLED) &&
+            _env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster].hasUnreliablyStoredShuffle) {
+          // Best-effort, like the pipelined check. With the external shuffle service off, the hold
+          // qualifies via reliable ShuffleDataIO storage, but draining would still drop the only
+          // copy of an active shuffle's output that is not reliably stored (a local-disk fallback
+          // in a mixed setup). The service, when on, keeps all output off-executor regardless.
+          logWarning(log"Cannot hold the executors while a shuffle whose output is not reliably " +
+            log"stored is active.")
           false
         } else synchronized {
           if (_executorsHeld) {
