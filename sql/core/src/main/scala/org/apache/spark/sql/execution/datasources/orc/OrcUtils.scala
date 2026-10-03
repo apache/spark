@@ -41,7 +41,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
@@ -585,7 +585,9 @@ object OrcUtils extends Logging {
       partitionSchema: StructType,
       aggregation: Aggregation,
       aggSchema: StructType,
-      partitionValues: InternalRow): InternalRow = {
+      partitionValues: InternalRow,
+      isCaseSensitive: Boolean,
+      conf: Configuration): InternalRow = {
     var columnsStatistics: OrcColumnStatistics = null
     try {
       columnsStatistics = OrcFooterReader.readStatistics(reader)
@@ -595,10 +597,23 @@ object OrcUtils extends Logging {
         s"ORC aggregate push down by setting 'spark.sql.orc.aggregatePushdown' to false.", e)
     }
 
-    // Get column statistics with column name.
-    def getColumnStatistics(columnName: String): ColumnStatistics = {
-      val columnIndex = dataSchema.getFieldIndex(columnName).getOrElse(-1)
-      columnsStatistics.get(columnIndex).getStatistics
+    // Resolve to the file's own ordinal, mirroring `requestedColumnIds`; -1 if absent.
+    val orcFieldNames = reader.getSchema.getFieldNames.asScala
+    val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
+    def fileColumnIndex(columnName: String): Int = {
+      if (forcePositionalEvolution || orcFieldNames.forall(_.startsWith("_col"))) {
+        val index = dataSchema.getFieldIndex(columnName).getOrElse(-1)
+        if (index >= 0 && index < orcFieldNames.length) index else -1
+      } else if (isCaseSensitive) {
+        orcFieldNames.indexWhere(caseSensitiveResolution(_, columnName))
+      } else {
+        orcFieldNames.indexWhere(caseInsensitiveResolution(_, columnName))
+      }
+    }
+
+    def getColumnStatistics(columnName: String): Option[ColumnStatistics] = {
+      val columnIndex = fileColumnIndex(columnName)
+      if (columnIndex >= 0) Some(columnsStatistics.get(columnIndex).getStatistics) else None
     }
 
     // Get Min/Max statistics and store as ORC `WritableComparable` format.
@@ -657,14 +672,14 @@ object OrcUtils extends Logging {
       aggregation.aggregateExpressions.zipWithIndex.map {
         case (max: Max, index) if V2ColumnUtils.extractV2Column(max.column).isDefined =>
           val columnName = V2ColumnUtils.extractV2Column(max.column).get
-          val statistics = getColumnStatistics(columnName)
           val dataType = schemaWithoutGroupBy(index).dataType
-          getMinMaxFromColumnStatistics(statistics, dataType, isMax = true)
+          getColumnStatistics(columnName)
+            .map(getMinMaxFromColumnStatistics(_, dataType, isMax = true)).orNull
         case (min: Min, index) if V2ColumnUtils.extractV2Column(min.column).isDefined =>
           val columnName = V2ColumnUtils.extractV2Column(min.column).get
-          val statistics = getColumnStatistics(columnName)
           val dataType = schemaWithoutGroupBy.apply(index).dataType
-          getMinMaxFromColumnStatistics(statistics, dataType, isMax = false)
+          getColumnStatistics(columnName)
+            .map(getMinMaxFromColumnStatistics(_, dataType, isMax = false)).orNull
         case (count: Count, _) if V2ColumnUtils.extractV2Column(count.column).isDefined =>
           val columnName = V2ColumnUtils.extractV2Column(count.column).get
           val isPartitionColumn = partitionSchema.fields.map(_.name).contains(columnName)
@@ -675,7 +690,7 @@ object OrcUtils extends Logging {
           val nonNullRowsCount = if (isPartitionColumn) {
             columnsStatistics.getStatistics.getNumberOfValues
           } else {
-            getColumnStatistics(columnName).getNumberOfValues
+            getColumnStatistics(columnName).map(_.getNumberOfValues).getOrElse(0L)
           }
           new LongWritable(nonNullRowsCount)
         case (_: CountStar, _) =>
