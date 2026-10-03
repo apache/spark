@@ -46,13 +46,14 @@ if _have_arrow_cdi:
     from pyarrow.cffi import ffi
 
     from pyspark.inprocess.runtime import (
-        _binary_layout,
         _canonical_type,
         _has_offsets_buffers,
         _inprocess_invoke,
         _inprocess_register,
         _inprocess_release,
+        _Registration,
         _results,
+        _strings_as_binary,
         _udfs,
         _validate_result,
     )
@@ -127,13 +128,11 @@ class InProcessRuntimeTests(unittest.TestCase):
         result = MagicMock(spec=pa.Array)
         result.type = pa.string()
         result.__len__.return_value = 2
-        view = result.view.return_value
-        view.validate.side_effect = pa.ArrowInvalid("invalid result offsets")
+        result.validate.side_effect = pa.ArrowInvalid("invalid result buffers")
         with patch("pyspark.inprocess.runtime._with_schema") as normalize:
-            with self.assertRaisesRegex(pa.ArrowInvalid, "invalid result offsets"):
+            with self.assertRaisesRegex(pa.ArrowInvalid, "invalid result buffers"):
                 _validate_result(result, 2, pa.string())
-            result.view.assert_called_once_with(pa.binary())
-            view.validate.assert_called_once_with(full=True)
+            result.validate.assert_called_once_with()
             normalize.assert_not_called()
             result.buffers.assert_not_called()
 
@@ -152,9 +151,27 @@ class InProcessRuntimeTests(unittest.TestCase):
             with self.subTest(type=value.type):
                 result = _validate_result(value, len(value), value.type)
                 self.assertEqual(
-                    result.view(_binary_layout(result.type)),
-                    value.view(_binary_layout(value.type)),
+                    _strings_as_binary(result).to_pylist(),
+                    _strings_as_binary(value).to_pylist(),
                 )
+
+    def test_full_validation_ignores_nullability_and_null_type_lengths(self):
+        # Spark's StructWriter writes a null child under each null struct row.
+        fields = [pa.field("a", pa.int32(), nullable=False), pa.field("s", pa.string())]
+        hidden = pa.StructArray.from_arrays(
+            [pa.array([1, None], pa.int32()), pa.array(["x", None])],
+            fields=fields,
+            mask=pa.array([False, True]),
+        )
+        nulls = pa.array([[("k", None)], None], pa.map_(pa.string(), pa.null()))
+        nested = pa.array(
+            [{"l": [None, None], "s": "x"}],
+            pa.struct([("l", pa.list_(pa.null())), ("s", pa.string())]),
+        )
+        for value in [hidden, nulls, nested]:
+            with self.subTest(type=value.type):
+                result = _validate_result(value, len(value), value.type)
+                self.assertEqual(result.to_pylist(), value.to_pylist())
 
     def test_full_validation_rejects_invalid_interior_string_offsets(self):
         offsets = pa.array([0, 5, 2], pa.int32()).buffers()[1]
@@ -201,8 +218,8 @@ class InProcessRuntimeTests(unittest.TestCase):
         self.assertEqual(len(_validate_result(value, 2, value.type, full_validation=False)), 2)
         self.register("full", cloudpickle.dumps(lambda x: x))
         self.register("constant", cloudpickle.dumps(lambda x: x), full_validation=False)
-        self.assertTrue(_udfs["full"][6])
-        self.assertFalse(_udfs["constant"][6])
+        self.assertTrue(_udfs["full"].full_validation)
+        self.assertFalse(_udfs["constant"].full_validation)
 
     def test_sorted_map_metadata_is_normalized_including_nested_maps(self):
         sorted_type = pa.map_(pa.string(), pa.int64(), keys_sorted=True)
@@ -303,7 +320,9 @@ class InProcessRuntimeTests(unittest.TestCase):
             weakref.finalize(array, lambda: finalized.append(threading.get_ident()))
             return pa.array(array)
 
-        _udfs["owned"] = (produce, pa.int64(), lambda array: None, False, False, False, True)
+        _udfs["owned"] = _Registration(
+            produce, pa.int64(), lambda array: None, False, False, False, True
+        )
         for batch in range(2):
             array = ffi.new("struct ArrowArray*")
             schema = ffi.new("struct ArrowSchema*")
@@ -494,9 +513,9 @@ class InProcessRuntimeTests(unittest.TestCase):
         command = cloudpickle.dumps(remember)
         for handle in ("first", "second"):
             self.register(handle, command)
-        self.assertEqual(_udfs["first"][0](1), 1)
-        self.assertEqual(_udfs["first"][0](2), 2)
-        self.assertEqual(_udfs["second"][0](3), 1)
+        self.assertEqual(_udfs["first"].func(1), 1)
+        self.assertEqual(_udfs["first"].func(2), 2)
+        self.assertEqual(_udfs["second"].func(3), 1)
         _inprocess_release(["first", "second", "unregistered"])
         self.assertFalse(_udfs)
 
@@ -702,9 +721,9 @@ class InProcessRuntimeTests(unittest.TestCase):
             ),
         )
         self.register("schema", cloudpickle.dumps(lambda x: x), expected)
-        self.assertTrue(_udfs["schema"][1].equals(expected.type, check_metadata=True))
+        self.assertTrue(_udfs["schema"].expected_type.equals(expected.type, check_metadata=True))
         with self.assertRaisesRegex(ValueError, "non-nullable"):
-            _udfs["schema"][2](pa.array([{"payload": None}], type=expected.type))
+            _udfs["schema"].checker(pa.array([{"payload": None}], type=expected.type))
 
     def test_duplicate_return_fields_fail_before_serialization(self):
         duplicate = StructType([StructField("x", LongType()), StructField("x", LongType())])

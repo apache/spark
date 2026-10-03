@@ -24,7 +24,7 @@ pass only a handle and CDI addresses, so large closures are not copied per batch
 
 import re
 import sys
-from typing import Any, Callable, Iterable, Optional, Sequence
+from typing import Any, Callable, Iterable, NamedTuple, Optional, Sequence
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -36,7 +36,19 @@ from pyspark.util import _format_exception
 
 _UDF_TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
 NullChecker = Callable[[pa.Array], None]
-_udfs: dict[str, tuple[Callable[..., pa.Array], pa.DataType, NullChecker, bool, bool, bool]] = {}
+
+
+class _Registration(NamedTuple):
+    func: Callable[..., pa.Array]
+    expected_type: pa.DataType
+    checker: NullChecker
+    hide_traceback: bool
+    simplified_traceback: bool
+    traceback_with_locals: bool
+    full_validation: bool
+
+
+_udfs: dict[str, _Registration] = {}
 # Pin exported buffers until the task has released its CDI references. This keeps Python
 # finalizers on the interpreter thread, including for NumPy-backed results.
 _results: dict[str, pa.Array] = {}
@@ -80,7 +92,7 @@ def _inprocess_register(
         # The JVM is the single source of truth for Arrow layout and logical metadata.
         expected_type = pa.Field._import_from_c(schema_ptr).type
         checker = _null_checker(expected_type) or (lambda array: None)
-        _udfs[handle] = (
+        _udfs[handle] = _Registration(
             func,
             expected_type,
             checker,
@@ -254,38 +266,50 @@ def _nullable_fields(data_type: pa.DataType) -> pa.DataType:
     return data_type
 
 
-def _binary_layout(data_type: pa.DataType) -> pa.DataType:
-    # Same physical layout with string types replaced by binary, so full validation checks
-    # offsets without UTF-8. Spark strings may hold invalid UTF-8, which workers accept too.
-    if pa.types.is_string(data_type):
-        return pa.binary()
-    if pa.types.is_large_string(data_type):
-        return pa.large_binary()
+def _strings_as_binary(array: pa.Array) -> Optional[pa.Array]:
+    """Rebind each string level as binary over the same buffers, or return None if none.
+
+    Full validation then checks every offset, but not UTF-8: Spark strings may hold invalid
+    UTF-8, which workers accept too. Unlike ``Array.view``, the rebound levels are nullable,
+    so null children under null parents of non-nullable fields pass, as Spark writes them,
+    and each level keeps its own length. Maps are rebound as the equivalent lists of
+    entries; ``Array.validate`` already rejects null keys.
+    """
+    data_type = array.type
+    if pa.types.is_string(data_type) or pa.types.is_large_string(data_type):
+        binary = pa.binary() if pa.types.is_string(data_type) else pa.large_binary()
+        return pa.Array.from_buffers(
+            binary, len(array), array.buffers()[:3], array.null_count, array.offset
+        )
     if pa.types.is_string_view(data_type):
-        return pa.binary_view()
-    if pa.types.is_dictionary(data_type):
-        return pa.dictionary(
-            data_type.index_type, _binary_layout(data_type.value_type), data_type.ordered
+        return pa.Array.from_buffers(
+            pa.binary_view(), len(array), array.buffers(), array.null_count, array.offset
         )
-    if pa.types.is_fixed_size_list(data_type):
-        field = data_type.value_field
-        return pa.list_(field.with_type(_binary_layout(field.type)), data_type.list_size)
+    children = _child_arrays(array)
+    rebound = [_strings_as_binary(child) for child in children]
+    if all(child is None for child in rebound):
+        return None
+    children = [child if new is None else new for child, new in zip(children, rebound)]
     if pa.types.is_struct(data_type):
-        return pa.struct([f.with_type(_binary_layout(f.type)) for f in data_type])
-    if pa.types.is_list(data_type):
-        field = data_type.value_field
-        return pa.list_(field.with_type(_binary_layout(field.type)))
-    if pa.types.is_large_list(data_type):
-        field = data_type.value_field
-        return pa.large_list(field.with_type(_binary_layout(field.type)))
-    if pa.types.is_map(data_type):
-        field = data_type.item_field
-        return pa.map_(
-            _binary_layout(data_type.key_type),
-            field.with_type(_binary_layout(field.type)),
-            keys_sorted=data_type.keys_sorted,
-        )
-    return data_type
+        mask = array.is_null() if array.null_count else None
+        return pa.StructArray.from_arrays(children, names=[f.name for f in data_type], mask=mask)
+    if pa.types.is_dictionary(data_type):
+        return pa.DictionaryArray.from_arrays(array.indices, children[0])
+    child = pa.field("item", children[0].type)
+    if pa.types.is_fixed_size_list(data_type):
+        rebound_type = pa.list_(child, data_type.list_size)
+    elif pa.types.is_large_list(data_type):
+        rebound_type = pa.large_list(child)
+    else:
+        rebound_type = pa.list_(child)
+    return pa.Array.from_buffers(
+        rebound_type,
+        len(array),
+        array.buffers()[: data_type.num_buffers],
+        array.null_count,
+        array.offset,
+        children=children,
+    )
 
 
 # The predicate is deliberately conservative: hidden nulls may request a check, but a
@@ -435,12 +459,11 @@ def _validate_result(
     convert = _nullable_type(result.type) != expected_key
     if convert and _nullable_type(_canonical_type(result.type)) != expected_key:
         raise TypeError(f"In-process UDF returned {result.type}; expected {expected_type}")
+    result.validate()
     if full_validation:
         # Validate every offset before conversion, null checks, normalization or JVM access.
-        layout = _binary_layout(result.type)
-        (result if layout == result.type else result.view(layout)).validate(full=True)
-    else:
-        result.validate()
+        binary = _strings_as_binary(result)
+        (result if binary is None else binary).validate(full=True)
     repaired = _repair_offsets(result)
     if repaired is not None:
         result = repaired
