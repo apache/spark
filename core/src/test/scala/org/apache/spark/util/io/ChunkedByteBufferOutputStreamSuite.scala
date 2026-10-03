@@ -32,6 +32,37 @@ class ChunkedByteBufferOutputStreamSuite extends SparkFunSuite {
     assert(o.toChunkedByteBuffer.size === 0)
   }
 
+  test("dispose releases unfinished output without allocating another chunk") {
+    var allowAllocation = true
+    val o = new ChunkedByteBufferOutputStream(10, size => {
+      assert(allowAllocation, "disposal must not allocate a replacement chunk")
+      ByteBuffer.allocateDirect(size)
+    })
+    try {
+      o.write(new Array[Byte](26))
+      allowAllocation = false
+      o.dispose()
+      o.dispose()
+      intercept[IllegalArgumentException] { o.write(1) }
+      val error = intercept[IllegalArgumentException] { o.toChunkedByteBuffer }
+      assert(error.getMessage === "requirement failed: cannot call " +
+        "toChunkedByteBuffer() after dispose()")
+    } finally {
+      o.dispose()
+    }
+  }
+
+  test("dispose does not release transferred chunks") {
+    val o = new ChunkedByteBufferOutputStream(10, ByteBuffer.allocate)
+    o.write(99)
+    o.close()
+    val buffer = o.toChunkedByteBuffer
+    o.dispose()
+    assert(buffer.getChunks().head.get(0) === 99.toByte)
+    val error = intercept[IllegalArgumentException] { o.toChunkedByteBuffer }
+    assert(error.getMessage === "requirement failed: toChunkedByteBuffer() can only be called once")
+  }
+
   test("write a single byte") {
     val o = new ChunkedByteBufferOutputStream(1024, ByteBuffer.allocate)
     o.write(10)

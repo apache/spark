@@ -88,8 +88,11 @@ private[spark] class MemoryStore(
     blockEvictionHandler: BlockEvictionHandler)
   extends Logging {
 
-  // Note: all changes to memory allocations, notably putting blocks, evicting blocks, and
-  // acquiring or releasing unroll memory, must be synchronized on `memoryManager`!
+  // Establish the admission marker before entering the memory manager's monitor. Use
+  // withStorageMemoryReclamation for unroll admission and withMemoryReclamation for
+  // transfers, removal and clearing. Eviction inherits its allocating caller's marker.
+  // Reclaimer callbacks must run outside the monitor; unroll maps and memory accounting
+  // remain synchronized on the memory manager.
 
   private val entries = new LinkedHashMap[BlockId, MemoryEntry[_]](32, 0.75f, true)
 
@@ -211,9 +214,21 @@ private[spark] class MemoryStore(
     // Keep track of unroll memory used by this particular block / putIterator() operation
     var unrollMemoryUsedByThisBlock = 0L
 
+    def reserveUnrollMemory(memory: Long): Boolean = {
+      try {
+        reserveUnrollMemoryForThisTask(blockId, memory, memoryMode)
+      } catch {
+        case error: Throwable =>
+          // On a failed put, the caller still owns the values consumed by this iterator.
+          Utils.tryWithSafeFinally { throw error } {
+            releaseUnrollMemoryForThisTask(memoryMode, unrollMemoryUsedByThisBlock)
+            discardUnstoredValues(valuesHolder)
+          }
+      }
+    }
+
     // Request enough memory to begin unrolling
-    keepUnrolling =
-      reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold, memoryMode)
+    keepUnrolling = reserveUnrollMemory(initialMemoryThreshold)
 
     if (!keepUnrolling) {
       logWarning(log"Failed to reserve initial memory threshold of " +
@@ -236,8 +251,7 @@ private[spark] class MemoryStore(
         // If our vector's size has exceeded the threshold, request more memory
         if (currentSize >= memoryThreshold) {
           val amountToRequest = (currentSize * memoryGrowthFactor - memoryThreshold).toLong
-          keepUnrolling =
-            reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
+          keepUnrolling = reserveUnrollMemory(amountToRequest)
           if (keepUnrolling) {
             unrollMemoryUsedByThisBlock += amountToRequest
           }
@@ -262,7 +276,7 @@ private[spark] class MemoryStore(
       val size = entryBuilder.preciseSize
       if (size > unrollMemoryUsedByThisBlock) {
         val amountToRequest = size - unrollMemoryUsedByThisBlock
-        keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
+        keepUnrolling = reserveUnrollMemory(amountToRequest)
         if (keepUnrolling) {
           unrollMemoryUsedByThisBlock += amountToRequest
         }
@@ -270,11 +284,23 @@ private[spark] class MemoryStore(
 
       if (keepUnrolling) {
         val entry = entryBuilder.build()
-        // Synchronize so that transfer is atomic
-        memoryManager.synchronized {
-          releaseUnrollMemoryForThisTask(memoryMode, unrollMemoryUsedByThisBlock)
-          val success = memoryManager.acquireStorageMemory(blockId, entry.size, memoryMode)
-          assert(success, "transferring unroll memory to storage memory failed")
+        try {
+          // Synchronize so that transfer is atomic
+          memoryManager.withMemoryReclamation {
+            memoryManager.synchronized {
+              releaseUnrollMemoryForThisTask(memoryMode, unrollMemoryUsedByThisBlock)
+              unrollMemoryUsedByThisBlock = 0L
+              val success = memoryManager.acquireStorageMemory(blockId, entry.size, memoryMode)
+              assert(success, "transferring unroll memory to storage memory failed")
+            }
+          }
+        } catch {
+          case error: Throwable =>
+            // The entry is not yet visible to BlockManager's failed-put cleanup.
+            Utils.tryWithSafeFinally { throw error } {
+              releaseUnrollMemoryForThisTask(memoryMode, unrollMemoryUsedByThisBlock)
+              disposeUnstoredEntry(entry)
+            }
         }
 
         entries.synchronized {
@@ -414,20 +440,52 @@ private[spark] class MemoryStore(
   def freeMemoryEntry[T <: MemoryEntry[_]](entry: T): Unit = {
     entry match {
       case SerializedMemoryEntry(buffer, _, _) => buffer.dispose()
-      case e: DeserializedMemoryEntry[_] => e.value.foreach {
-        case o: AutoCloseable =>
-          try {
-            o.close()
-          } catch {
-            case NonFatal(e) =>
-              logWarning("Fail to close a memory entry", e)
-          }
-        case _ =>
-      }
+      case e: DeserializedMemoryEntry[_] => freeValues(e.value.iterator)
     }
   }
 
-  def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
+  private def disposeUnstoredEntry(entry: MemoryEntry[_]): Unit = entry match {
+    case SerializedMemoryEntry(buffer, _, _) => buffer.dispose()
+    // Deserialized values still belong to the caller until published in the store.
+    case _: DeserializedMemoryEntry[_] => ()
+  }
+
+  private def freeValues(values: Iterator[_]): Unit = values.foreach {
+    case o: AutoCloseable =>
+      try {
+        o.close()
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Fail to close a memory entry", e)
+      }
+    case _ =>
+  }
+
+  /** Dispose Spark's temporary serialized buffers after a failed unroll. */
+  private def discardUnstoredValues(valuesHolder: ValuesHolder[_]): Unit = valuesHolder match {
+    // Deserialized values remain caller-owned when a put fails.
+    case _: DeserializedValuesHolder[_] => ()
+    case holder: SerializedValuesHolder[_] =>
+      Utils.tryWithSafeFinally {
+        // As in PartiallySerializedBlock.discard, closing must not allocate or flush more data.
+        holder.redirectableStream.setOutputStream(OutputStream.nullOutputStream())
+        holder.serializationStream.close()
+      } {
+        holder.bbos.dispose()
+      }
+  }
+
+  /**
+   * Remove a block under the admission marker before closing its stored values.
+   */
+  def remove(blockId: BlockId): Boolean = {
+    memoryManager.withMemoryReclamation {
+      removeInternal(blockId)
+    }
+  }
+
+  /** Remove under the caller's marker, preserving atomic accounting and the not-found result. */
+  private def removeInternal(blockId: BlockId): Boolean = memoryManager.synchronized {
     val entry = entries.synchronized {
       entries.remove(blockId)
     }
@@ -442,15 +500,20 @@ private[spark] class MemoryStore(
     }
   }
 
-  def clear(): Unit = memoryManager.synchronized {
-    entries.synchronized {
-      entries.values.asScala.foreach(freeMemoryEntry)
-      entries.clear()
+  /** Close every stored entry and reset storage accounting under the admission marker. */
+  def clear(): Unit = {
+    memoryManager.withMemoryReclamation {
+      memoryManager.synchronized {
+        entries.synchronized {
+          entries.values.asScala.foreach(freeMemoryEntry)
+          entries.clear()
+        }
+        onHeapUnrollMemoryMap.clear()
+        offHeapUnrollMemoryMap.clear()
+        memoryManager.releaseAllStorageMemory()
+        logInfo("MemoryStore cleared")
+      }
     }
-    onHeapUnrollMemoryMap.clear()
-    offHeapUnrollMemoryMap.clear()
-    memoryManager.releaseAllStorageMemory()
-    logInfo("MemoryStore cleared")
   }
 
   /**
@@ -472,6 +535,20 @@ private[spark] class MemoryStore(
    * @return the amount of memory (in bytes) freed by eviction
    */
   private[spark] def evictBlocksToFreeSpace(
+      blockId: Option[BlockId],
+      space: Long,
+      memoryMode: MemoryMode): Long = {
+    memoryManager.withMemoryReclamation {
+      evictBlocksToFreeSpaceInternal(blockId, space, memoryMode)
+    }
+  }
+
+  /**
+   * Run block eviction while the caller holds the memory manager's long-operation marker.
+   * Keeps the existing eviction result, failures, and block-lock cleanup unchanged; optional
+   * admission declines while this method can hold the manager monitor during block writes.
+   */
+  private def evictBlocksToFreeSpaceInternal(
       blockId: Option[BlockId],
       space: Long,
       memoryMode: MemoryMode): Long = {
@@ -589,17 +666,30 @@ private[spark] class MemoryStore(
       blockId: BlockId,
       memory: Long,
       memoryMode: MemoryMode): Boolean = {
-    memoryManager.synchronized {
-      val success = memoryManager.acquireUnrollMemory(blockId, memory, memoryMode)
-      if (success) {
-        val taskAttemptId = currentTaskAttemptId()
-        val unrollMemoryMap = memoryMode match {
-          case MemoryMode.ON_HEAP => onHeapUnrollMemoryMap
-          case MemoryMode.OFF_HEAP => offHeapUnrollMemoryMap
-        }
-        unrollMemoryMap(taskAttemptId) = unrollMemoryMap.getOrElse(taskAttemptId, 0L) + memory
+    if (memoryManager.isStorageMemoryRequestTooLarge(memory, memoryMode)) {
+      val maxMemoryForMode = memoryMode match {
+        case MemoryMode.ON_HEAP => memoryManager.maxOnHeapStorageMemory
+        case MemoryMode.OFF_HEAP => memoryManager.maxOffHeapStorageMemory
       }
-      success
+      logInfo(log"Will not store ${MDC(BLOCK_ID, blockId)} as the required space " +
+        log"(${MDC(NUM_BYTES, memory)} bytes) exceeds our memory limit " +
+        log"(${MDC(NUM_BYTES_MAX, maxMemoryForMode)} bytes)")
+      return false
+    }
+    // Reclaim only useful same-mode optional bytes before locking the manager for accounting.
+    memoryManager.withStorageMemoryReclamation(memory, memoryMode) {
+      memoryManager.synchronized {
+        val success = memoryManager.acquireUnrollMemory(blockId, memory, memoryMode)
+        if (success) {
+          val taskAttemptId = currentTaskAttemptId()
+          val unrollMemoryMap = memoryMode match {
+            case MemoryMode.ON_HEAP => onHeapUnrollMemoryMap
+            case MemoryMode.OFF_HEAP => offHeapUnrollMemoryMap
+          }
+          unrollMemoryMap(taskAttemptId) = unrollMemoryMap.getOrElse(taskAttemptId, 0L) + memory
+        }
+        success
+      }
     }
   }
 
@@ -681,7 +771,7 @@ private trait MemoryEntryBuilder[T] {
   def build(): MemoryEntry[T]
 }
 
-private trait ValuesHolder[T] {
+private sealed trait ValuesHolder[T] {
   def storeValue(value: T): Unit
   def estimatedSize(): Long
 

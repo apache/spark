@@ -22,6 +22,11 @@ import java.io.InterruptedIOException;
 import java.io.IOException;
 import java.nio.channels.ClosedByInterruptException;
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -29,6 +34,7 @@ import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.Utils;
@@ -118,6 +124,86 @@ public class TaskMemoryManager {
   @GuardedBy("this")
   private final HashSet<MemoryConsumer> consumers;
 
+  private final ReentrantLock optionalAdmissionLock = new ReentrantLock();
+
+  @GuardedBy("optionalAdmissionLock")
+  private boolean optionalAdmissionClosed;
+
+  @GuardedBy("optionalAdmissionLock")
+  private final Map<MemoryConsumer, OptionalMemoryReclaimerRegistration> optionalReclaimers =
+    new IdentityHashMap<>();
+
+  // Diagnostics and typed releases cannot acquire the admission lock. A closed registration is
+  // removed only after all of its owner's optional bytes have been released.
+  private final CopyOnWriteArrayList<OptionalMemoryReclaimerRegistration> optionalRegistrations =
+    new CopyOnWriteArrayList<>();
+
+  /**
+   * A task-owned registration. Closing first drains its owner, then removes the shared callback.
+   * A callback already captured by another allocator can run after close and must be idempotent.
+   */
+  private final class OptionalMemoryReclaimerRegistration implements AutoCloseable {
+    private final MemoryConsumer consumer;
+    private final Runnable reclaimer;
+    private final Runnable unregister;
+    private final AtomicLong optionalBytes = new AtomicLong();
+    private final AtomicBoolean admissionInProgress = new AtomicBoolean();
+    private final AtomicReference<Runnable> unregisterAfterReclaim = new AtomicReference<>();
+
+    @GuardedBy("optionalAdmissionLock")
+    private boolean admissionClosed;
+
+    @GuardedBy("optionalAdmissionLock")
+    private boolean closed;
+
+    private OptionalMemoryReclaimerRegistration(MemoryConsumer consumer, Runnable reclaimer) {
+      this.consumer = consumer;
+      this.reclaimer = reclaimer;
+      // The shared callback cannot capture this registration or take the admission lock.
+      AtomicReference<Runnable> afterReclaim = unregisterAfterReclaim;
+      AtomicBoolean admitting = admissionInProgress;
+      AtomicLong credits = optionalBytes;
+      this.unregister = memoryManager.registerOptionalMemoryReclaimer(
+        taskAttemptId, consumer.getMode(), () -> {
+          // Read the flag first: a grant may precede credit publication, and clearing the flag
+          // after publication makes the subsequent credit read see the completed grant.
+          if (admitting.get() || credits.get() > 0L) {
+            reclaimer.run();
+          }
+          Runnable retire = afterReclaim.get();
+          if (retire != null && !admitting.get() && credits.get() == 0L) retire.run();
+        });
+    }
+
+    @Override
+    public void close() {
+      optionalAdmissionLock.lock();
+      try {
+        if (!closed) {
+          admissionClosed = true;
+          // A failed or incomplete drain remains registered and charged for a later retry.
+          reclaimer.run();
+          synchronized (this) {
+            long remaining = optionalBytes.get();
+            if (remaining != 0L) {
+              // Invariants must propagate even when JVM assertions are disabled.
+              // checkstyle.off: RegexpSinglelineJava
+              throw new AssertionError(
+                "optional memory reclaimer retained " + remaining + " bytes for " + consumer);
+              // checkstyle.on: RegexpSinglelineJava
+            }
+            unregister.run();
+            optionalReclaimers.remove(consumer);
+            optionalRegistrations.remove(this);
+            closed = true;
+          }
+        }
+      } finally {
+        optionalAdmissionLock.unlock();
+      }
+    }
+  }
+
   /**
    * The amount of memory that is acquired but not used.
    */
@@ -182,6 +268,111 @@ public class TaskMemoryManager {
     this.tungstenMemoryAllocator = tungstenMemoryAllocator;
     this.taskAttemptId = taskAttemptId;
     this.consumers = new HashSet<>();
+  }
+
+  /**
+   * Register a release-only callback before admitting optional memory for this consumer.
+   *
+   * The owner must serialize admission, its own byte accounting, and publication of a
+   * disposable buffer with reclamation. A callback may run before admission returns, repeatedly,
+   * or after unregistering. It must synchronously release each optional reservation exactly once,
+   * without acquiring task memory, waiting for I/O, or closing the whole reader. Do not hold a
+   * lock needed by a callback while requesting ordinary memory.
+   *
+   * @return a drain-and-unregister handle, or null when admission is disabled or the task closed
+   */
+  public AutoCloseable registerOptionalMemoryReclaimer(
+      MemoryConsumer consumer, Runnable reclaimer) {
+    if (consumer == null || reclaimer == null) {
+      throw new IllegalArgumentException("consumer and reclaimer must not be null");
+    }
+    if (consumer.taskMemoryManager != this) {
+      throw new IllegalArgumentException("consumer must belong to this task memory manager");
+    }
+    if (!memoryManager.optionalMemoryEnabled()) {
+      return null;
+    }
+    optionalAdmissionLock.lock();
+    try {
+      if (optionalAdmissionClosed) {
+        return null;
+      }
+      if (optionalReclaimers.containsKey(consumer)) {
+        throw new IllegalStateException("consumer already has an optional memory reclaimer");
+      }
+      OptionalMemoryReclaimerRegistration registration =
+        new OptionalMemoryReclaimerRegistration(consumer, reclaimer);
+      optionalReclaimers.put(consumer, registration);
+      optionalRegistrations.add(registration);
+      return registration;
+    } finally {
+      optionalAdmissionLock.unlock();
+    }
+  }
+
+  /**
+   * Reserve the entire request from free execution memory, or return zero. This never spills,
+   * evicts storage, or waits for capacity. The caller owns its consumer byte counter; only the
+   * registered consumer may acquire, and successful bytes require typed optional release.
+   * Cleanup closes admission before draining owners, including calls from native worker threads.
+   */
+  public long tryAcquireOptionalExecutionMemory(long required, MemoryConsumer requestingConsumer) {
+    if (required < 0) {
+      throw new IllegalArgumentException("required must be non-negative");
+    }
+    if (requestingConsumer == null) {
+      throw new IllegalArgumentException("requestingConsumer must not be null");
+    }
+    if (required == 0 || !memoryManager.optionalMemoryEnabled()) {
+      return 0L;
+    }
+    if (!optionalAdmissionLock.tryLock()) {
+      return 0L;
+    }
+    try {
+      OptionalMemoryReclaimerRegistration registration =
+        optionalReclaimers.get(requestingConsumer);
+      if (optionalAdmissionClosed || registration == null || registration.admissionClosed) {
+        return 0L;
+      }
+      MemoryMode mode = requestingConsumer.getMode();
+      registration.admissionInProgress.set(true);
+      try {
+        long got = memoryManager.tryAcquireExecutionMemory(required, taskAttemptId, mode);
+        if (got != 0L && got != required) {
+          memoryManager.releaseOptionalExecutionMemory(got, taskAttemptId, mode);
+          // Invariants must propagate even when JVM assertions are disabled.
+          // checkstyle.off: RegexpSinglelineJava
+          throw new AssertionError("optional memory admission returned a partial grant");
+          // checkstyle.on: RegexpSinglelineJava
+        }
+        if (got != 0L) {
+          synchronized (registration) {
+            registration.optionalBytes.addAndGet(got);
+            updateExecutionMemoryUsage(got, mode);
+          }
+        }
+        return got;
+      } finally {
+        registration.admissionInProgress.set(false);
+      }
+    } finally {
+      optionalAdmissionLock.unlock();
+    }
+  }
+
+  private void updateExecutionMemoryUsage(long acquired, MemoryMode mode) {
+    if (mode == MemoryMode.OFF_HEAP) {
+      synchronized (offHeapMemoryLock) {
+        currentOffHeapMemory += acquired;
+        peakOffHeapMemory = Math.max(peakOffHeapMemory, currentOffHeapMemory);
+      }
+    } else {
+      synchronized (onHeapMemoryLock) {
+        currentOnHeapMemory += acquired;
+        peakOnHeapMemory = Math.max(peakOnHeapMemory, currentOnHeapMemory);
+      }
+    }
   }
 
   /**
@@ -255,17 +446,7 @@ public class TaskMemoryManager {
           requestingConsumer);
       }
 
-      if (mode == MemoryMode.OFF_HEAP) {
-        synchronized (offHeapMemoryLock) {
-          currentOffHeapMemory += got;
-          peakOffHeapMemory = Math.max(peakOffHeapMemory, currentOffHeapMemory);
-        }
-      } else {
-        synchronized (onHeapMemoryLock) {
-          currentOnHeapMemory += got;
-          peakOnHeapMemory = Math.max(peakOnHeapMemory, currentOnHeapMemory);
-        }
-      }
+      updateExecutionMemoryUsage(got, mode);
 
       return got;
     }
@@ -449,6 +630,60 @@ public class TaskMemoryManager {
   }
 
   /**
+   * Release bytes previously admitted as optional work. Ordinary releases must use
+   * {@link #releaseExecutionMemory}. This path never takes the admission lock or invokes a
+   * callback.
+   * The caller remains responsible for updating its consumer's used-byte counter exactly once.
+   */
+  public void releaseOptionalExecutionMemory(long size, MemoryConsumer consumer) {
+    if (size < 0) {
+      throw new IllegalArgumentException("size must be non-negative");
+    }
+    if (consumer == null || consumer.taskMemoryManager != this) {
+      throw new IllegalArgumentException("consumer must belong to this task memory manager");
+    }
+    if (size == 0) {
+      return;
+    }
+    OptionalMemoryReclaimerRegistration registration = null;
+    for (OptionalMemoryReclaimerRegistration candidate : optionalRegistrations) {
+      if (candidate.consumer == consumer) {
+        registration = candidate;
+        break;
+      }
+    }
+    if (registration == null) {
+      // Invariants must propagate even when JVM assertions are disabled.
+      // checkstyle.off: RegexpSinglelineJava
+      throw new AssertionError("optional release from an unregistered consumer: " + consumer);
+      // checkstyle.on: RegexpSinglelineJava
+    }
+    // Do not take the task or admission lock: the callback can run while cleanup holds the
+    // admission lock. Hold this owner's lock through shared release to exclude close races.
+    synchronized (registration) {
+      long remaining = registration.optionalBytes.get();
+      if (size > remaining) {
+        // Invariants must propagate even when JVM assertions are disabled.
+        // checkstyle.off: RegexpSinglelineJava
+        throw new AssertionError("optional release of " + size + " bytes from " + consumer +
+          " holding " + remaining + " optional bytes");
+        // checkstyle.on: RegexpSinglelineJava
+      }
+      memoryManager.releaseOptionalExecutionMemory(size, taskAttemptId, consumer.getMode());
+      registration.optionalBytes.addAndGet(-size);
+      if (consumer.getMode() == MemoryMode.OFF_HEAP) {
+        synchronized (offHeapMemoryLock) {
+          currentOffHeapMemory -= size;
+        }
+      } else {
+        synchronized (onHeapMemoryLock) {
+          currentOnHeapMemory -= size;
+        }
+      }
+    }
+  }
+
+  /**
    * A point-in-time snapshot of this task's execution-memory usage: each consumer that is holding
    * memory (largest first) paired with its used bytes, plus the bytes not attributable to any
    * specific consumer. Rendering the executor-log dump and the error-message breakdown from a
@@ -485,6 +720,16 @@ public class TaskMemoryManager {
         if (totalMemUsage > 0) {
           memoryAccountedForByConsumers += totalMemUsage;
           consumerUsages.add(new AbstractMap.SimpleEntry<>(c, totalMemUsage));
+        }
+      }
+      for (OptionalMemoryReclaimerRegistration registration : optionalRegistrations) {
+        MemoryConsumer c = registration.consumer;
+        if (!consumers.contains(c)) {
+          long totalMemUsage = c.getUsed();
+          if (totalMemUsage > 0) {
+            memoryAccountedForByConsumers += totalMemUsage;
+            consumerUsages.add(new AbstractMap.SimpleEntry<>(c, totalMemUsage));
+          }
         }
       }
       memoryNotAccountedFor =
@@ -895,10 +1140,73 @@ public class TaskMemoryManager {
   }
 
   /**
-   * Clean up all allocated memory and pages. Returns the number of bytes freed. A non-zero return
-   * value can be used to detect memory leaks.
+   * Drain optional owners before returning task memory credits. A non-zero result is an ordinary
+   * task memory leak. Cleanup closes admission permanently so native workers cannot race it.
    */
   public long cleanUpAllAllocatedMemory() {
+    if (!memoryManager.optionalMemoryEnabled()) {
+      return cleanUpAllAllocatedMemoryInternal(true);
+    }
+    optionalAdmissionLock.lock();
+    try {
+      optionalAdmissionClosed = true;
+      try {
+        closeOptionalMemoryReclaimers();
+      } catch (Throwable failure) {
+        try {
+          // A failing owner still holds its optional bytes. Release only ordinary credits.
+          cleanUpAllAllocatedMemoryInternal(false);
+        } catch (Throwable cleanupFailure) {
+          boolean cleanupIsCritical =
+            Utils.isFatalError(cleanupFailure) || cleanupFailure instanceof AssertionError;
+          boolean failureIsCritical =
+            Utils.isFatalError(failure) || failure instanceof AssertionError;
+          if (cleanupIsCritical && !failureIsCritical) {
+            cleanupFailure.addSuppressed(failure);
+            failure = cleanupFailure;
+          } else if (failure != cleanupFailure) {
+            failure.addSuppressed(cleanupFailure);
+          }
+        }
+        Platform.throwException(failure);
+      }
+      return cleanUpAllAllocatedMemoryInternal(true);
+    } finally {
+      optionalAdmissionLock.unlock();
+    }
+  }
+
+  /** Retire each owner after draining it; a failed owner stays registered for a later retry. */
+  private void closeOptionalMemoryReclaimers() {
+    if (optionalReclaimers.isEmpty()) {
+      return;
+    }
+    // A later ordinary acquisition can retire a failed owner even after task admission closes.
+    for (OptionalMemoryReclaimerRegistration registration : optionalReclaimers.values()) {
+      registration.unregisterAfterReclaim.set(registration.unregister);
+    }
+    Throwable failure = null;
+    for (OptionalMemoryReclaimerRegistration registration :
+        new ArrayList<>(optionalReclaimers.values())) {
+      try {
+        registration.close();
+      } catch (Throwable error) {
+        if (Utils.isFatalError(error) || error instanceof AssertionError) {
+          Platform.throwException(error);
+        }
+        if (failure == null) {
+          failure = error;
+        } else if (failure != error) {
+          failure.addSuppressed(error);
+        }
+      }
+    }
+    if (failure != null) {
+      Platform.throwException(failure);
+    }
+  }
+
+  private long cleanUpAllAllocatedMemoryInternal(boolean releaseOptionalMemory) {
     final long acquiredButNotUsedToRelease;
     synchronized (this) {
       for (MemoryConsumer c: consumers) {
@@ -927,11 +1235,13 @@ public class TaskMemoryManager {
       acquiredButNotUsed = 0L;
     }
 
-    // release the memory that is not used by any consumer (acquired for pages in tungsten mode).
+    // Release acquired-but-unused ordinary page memory, then the remaining task credits.
     memoryManager.releaseExecutionMemory(
       acquiredButNotUsedToRelease, taskAttemptId, tungstenMemoryMode);
 
-    return memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId);
+    return releaseOptionalMemory ?
+      memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId) :
+      memoryManager.releaseAllOrdinaryExecutionMemoryForTask(taskAttemptId);
   }
 
   /**

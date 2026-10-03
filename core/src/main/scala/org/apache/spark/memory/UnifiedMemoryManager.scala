@@ -122,6 +122,69 @@ private[spark] class UnifiedMemoryManager(
     maxOffHeapMemory - offHeapExecutionMemoryPool.memoryUsed
   }
 
+  override private[spark] def isStorageMemoryRequestTooLarge(
+      numBytes: Long,
+      memoryMode: MemoryMode): Boolean = memoryMode match {
+    case MemoryMode.ON_HEAP => numBytes > maxHeapMemory
+    case MemoryMode.OFF_HEAP => numBytes > maxOffHeapMemory
+  }
+
+  /** Pool selection and the fairness ceiling are shared by optional and ordinary admission. */
+  private def poolsFor(memoryMode: MemoryMode):
+      (ExecutionMemoryPool, StorageMemoryPool, Long, Long) = memoryMode match {
+    case MemoryMode.ON_HEAP =>
+      (onHeapExecutionMemoryPool, onHeapStorageMemoryPool, onHeapStorageRegionSize, maxHeapMemory)
+    case MemoryMode.OFF_HEAP =>
+      (offHeapExecutionMemoryPool, offHeapStorageMemoryPool, offHeapStorageMemory, maxOffHeapMemory)
+  }
+
+  private def maxExecutionMemory(memoryMode: MemoryMode, unmanagedMemory: Long): Long = {
+    val (_, storagePool, regionSize, maxMemory) = poolsFor(memoryMode)
+    maxExecutionMemory(storagePool, regionSize, maxMemory, unmanagedMemory)
+  }
+
+  private def maxExecutionMemory(
+      storagePool: StorageMemoryPool,
+      regionSize: Long,
+      maxMemory: Long,
+      unmanagedMemory: Long): Long = {
+    math.max(0L, maxMemory - math.min(storagePool.memoryUsed, regionSize) - unmanagedMemory)
+  }
+
+  /**
+   * Reserve all requested bytes from existing free execution memory for optional task work.
+   *
+   * Unlike ordinary admission, this does not borrow storage memory, evict blocks, or wait for
+   * capacity. The fair-share ceiling is the same as ordinary admission, including storage that
+   * ordinary execution could reclaim. Denial leaves both pools and task registration unchanged.
+   * Rejects admission if an ordinary operation could hold the monitor during eviction or a
+   * capacity wait. Other short bookkeeping operations can still contend on the monitor.
+   */
+  override private[memory] def tryAcquireExecutionMemory(
+      numBytes: Long,
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Long = {
+    require(numBytes >= 0, s"invalid number of bytes requested: $numBytes")
+    if (!optionalMemoryEnabled || numBytes == 0L) return 0L
+    val gate = optionalAdmissionGate.writeLock()
+    if (!gate.tryLock()) {
+      return 0L
+    }
+    try {
+      synchronized {
+        assertInvariants()
+        val (executionPool, storagePool, _, maxMemory) = poolsFor(memoryMode)
+        val unmanaged = getUnmanagedMemoryUsed(memoryMode)
+        val maxExecutionPoolSize = maxExecutionMemory(memoryMode, unmanaged)
+        val available = math.max(0L,
+          maxMemory - storagePool.memoryUsed - executionPool.memoryUsed - unmanaged)
+        executionPool.tryAcquireMemory(numBytes, taskAttemptId, maxExecutionPoolSize, available)
+      }
+    } finally {
+      gate.unlock()
+    }
+  }
+
   /**
    * Try to acquire up to `numBytes` of execution memory for the current task and return the
    * number of bytes obtained, or 0 if none can be allocated.
@@ -134,21 +197,129 @@ private[spark] class UnifiedMemoryManager(
   override private[memory] def acquireExecutionMemory(
       numBytes: Long,
       taskAttemptId: Long,
-      memoryMode: MemoryMode): Long = synchronized {
+      memoryMode: MemoryMode): Long = {
+    if (!optionalMemoryEnabled) {
+      return synchronized {
+        acquireExecutionMemoryInternal(numBytes, taskAttemptId, memoryMode)
+      }
+    }
+    require(!Thread.holdsLock(this),
+      "ordinary execution admission cannot start under the memory-manager monitor")
+    withReclamation(memoryMode) {
+      tryAcquireExecutionMemoryWithoutReclamation(numBytes, taskAttemptId, memoryMode)
+    } {
+      acquireExecutionMemoryInternal(numBytes, taskAttemptId, memoryMode)
+    }
+  }
+
+  /**
+   * Share the gate, atomic preflight, outside-monitor drain and retry for both allocation paths.
+   * Nested storage calls reuse an outer boundary. Release-only markers never trigger a drain.
+   */
+  private def withReclamation[T](memoryMode: MemoryMode)(
+      tryWithoutReclamation: => Option[T])(allocate: => T): T = {
+    if (!optionalMemoryEnabled) return synchronized { allocate }
+    val gate = acquireOptionalAdmissionReadLock()
+    try {
+      if (Thread.holdsLock(this)) return allocate
+      synchronized {
+        if (!hasOptionalExecutionMemory(memoryMode)) return allocate
+        val immediate = tryWithoutReclamation
+        if (immediate.isDefined) return immediate.get
+      }
+      var result: Option[T] = None
+      reclaimOptionalMemory(memoryMode, () => synchronized {
+        result = tryWithoutReclamation
+        result.isDefined
+      })
+      result.getOrElse(synchronized { allocate })
+    } finally {
+      gate.unlock()
+    }
+  }
+
+  /** Grant immediately when reclamation cannot improve the result, preserving optional buffers. */
+  private def tryAcquireExecutionMemoryWithoutReclamation(
+      numBytes: Long,
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Option[Long] = {
+    assert(Thread.holdsLock(this))
+    val unmanaged = getUnmanagedMemoryUsed(memoryMode)
+    if (canAcquireExecutionMemory(numBytes, taskAttemptId, memoryMode, unmanaged)) {
+      return Some(acquireExecutionMemoryInternal(
+        numBytes, taskAttemptId, memoryMode, Some(unmanaged)))
+    }
+    val (executionPool, storagePool, regionSize, maxMemory) = poolsFor(memoryMode)
+    val storageProtected = storagePool.memoryUsed <= regionSize
+    // Whole-block eviction can raise the share ceiling. Only bypass it when releasing optional
+    // bytes would make the original request fit without eviction, or storage is protected.
+    val needsEviction = !storageProtected &&
+      numBytes > maxMemory - storagePool.memoryUsed - executionPool.ordinaryMemoryUsed
+    val maxExecution = if (needsEviction) math.max(0L, maxMemory - unmanaged)
+      else maxExecutionMemory(memoryMode, unmanaged)
+    val headroom = executionPool.absoluteMemoryHeadroom(taskAttemptId, maxExecution)
+    val available = availableExecutionMemory(memoryMode, unmanaged, borrowStorage = true)
+    val poolAfterGrowth = executionPool.poolSize +
+      math.min(math.max(0L, numBytes - executionPool.memoryFree), storagePool.memoryFree)
+    if (headroom >= 0L && headroom < numBytes && headroom <= available && !needsEviction &&
+        executionPool.canGrantWithoutWaiting(
+          taskAttemptId, numBytes, headroom, poolAfterGrowth)) {
+      // Keep normal protected-storage growth. With borrowed storage, avoid evicting a block
+      // for bytes that cannot be granted even after every optional owner has released.
+      val request = if (storageProtected) numBytes else headroom
+      if (request == 0L) Some(0L) else Some(acquireExecutionMemoryInternal(
+        request, taskAttemptId, memoryMode, Some(unmanaged)))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Test full ordinary admission against current free capacity and the prospective task share.
+   * Called under this monitor before any task registration, pool growth, eviction, or wait.
+   * Free storage can be borrowed without a drain; occupied storage is not optimistically evicted.
+   */
+  private def canAcquireExecutionMemory(
+      numBytes: Long,
+      taskAttemptId: Long,
+      memoryMode: MemoryMode,
+      unmanagedMemory: Long): Boolean = {
+    assert(Thread.holdsLock(this))
+    val executionPool = executionPoolFor(memoryMode)
+    executionPool.canAcquireMemory(numBytes, taskAttemptId,
+      maxExecutionMemory(memoryMode, unmanagedMemory),
+      availableExecutionMemory(memoryMode, unmanagedMemory, borrowStorage = true))
+  }
+
+  /**
+   * Optional bytes count against physical capacity after unmanaged usage, independently of the
+   * ordinary share ceiling. Without optional credit, preserve the existing allocator's policy.
+   */
+  private def availableExecutionMemory(
+      memoryMode: MemoryMode,
+      unmanaged: Long,
+      borrowStorage: Boolean): Long = {
+    val (executionPool, storagePool, _, maxMemory) = poolsFor(memoryMode)
+    val free = executionPool.memoryFree + (if (borrowStorage) storagePool.memoryFree else 0L)
+    if (executionPool.optionalMemoryUsed == 0L) free else {
+      math.min(free, math.max(0L,
+        maxMemory - storagePool.memoryUsed - executionPool.memoryUsed - unmanaged))
+    }
+  }
+
+  /**
+   * Perform ordinary execution admission while holding the shared long-operation marker.
+   * All capacity, eviction, fairness and wait behavior is unchanged; the marker only makes
+   * optional admission decline rather than queue behind this operation's monitor ownership.
+   */
+  private def acquireExecutionMemoryInternal(
+      numBytes: Long,
+      taskAttemptId: Long,
+      memoryMode: MemoryMode,
+      unmanagedMemorySnapshot: Option[Long] = None): Long = {
     assertInvariants()
     assert(numBytes >= 0)
-    val (executionPool, storagePool, storageRegionSize, maxMemory) = memoryMode match {
-      case MemoryMode.ON_HEAP => (
-        onHeapExecutionMemoryPool,
-        onHeapStorageMemoryPool,
-        onHeapStorageRegionSize,
-        maxHeapMemory)
-      case MemoryMode.OFF_HEAP => (
-        offHeapExecutionMemoryPool,
-        offHeapStorageMemoryPool,
-        offHeapStorageMemory,
-        maxOffHeapMemory)
-    }
+    val (executionPool, storagePool, storageRegionSize, maxMemory) = poolsFor(memoryMode)
 
     /**
      * Grow the execution pool by evicting cached blocks, thereby shrinking the storage pool.
@@ -193,20 +364,98 @@ private[spark] class UnifiedMemoryManager(
      * when unmanaged components are consuming significant memory.
      */
     def computeMaxExecutionPoolSize(): Long = {
-      val unmanagedMemory = getUnmanagedMemoryUsed(memoryMode)
-      val availableMemory = maxMemory - math.min(storagePool.memoryUsed, storageRegionSize)
-      // Reduce available memory by unmanaged memory usage to prevent over-allocation
-      math.max(0L, availableMemory - unmanagedMemory)
+      val unmanagedMemory = unmanagedMemorySnapshot.getOrElse(getUnmanagedMemoryUsed(memoryMode))
+      maxExecutionMemory(storagePool, storageRegionSize, maxMemory, unmanagedMemory)
     }
 
+    // The gate prevents new optional grants, including while acquireMemory waits. Avoid creating
+    // a capacity callback when no optional credit can compete with this ordinary allocation.
+    val optionalCapacity = if (!optionalMemoryEnabled ||
+        executionPool.optionalMemoryUsed == 0L) {
+      null
+    } else {
+      () => {
+        val unmanaged = unmanagedMemorySnapshot.getOrElse(getUnmanagedMemoryUsed(memoryMode))
+        availableExecutionMemory(memoryMode, unmanaged, borrowStorage = false)
+      }
+    }
     executionPool.acquireMemory(
-      numBytes, taskAttemptId, maybeGrowExecutionPool, () => computeMaxExecutionPoolSize())
+      numBytes, taskAttemptId, maybeGrowExecutionPool, () => computeMaxExecutionPoolSize(),
+      optionalCapacity)
   }
 
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      memoryMode: MemoryMode): Boolean = synchronized {
+      memoryMode: MemoryMode): Boolean = {
+    if (!optionalMemoryEnabled || isStorageMemoryRequestTooLarge(numBytes, memoryMode)) {
+      return synchronized { acquireStorageMemoryInternal(blockId, numBytes, memoryMode) }
+    }
+    withReclamation(memoryMode) {
+      val unmanaged = getUnmanagedMemoryUsed(memoryMode)
+      if (canAcquireStorageMemory(numBytes, memoryMode, unmanaged)) {
+        Some(acquireStorageMemoryInternal(blockId, numBytes, memoryMode, Some(unmanaged)))
+      } else if (numBytes > maxStorageMemoryAfterReclamation(memoryMode, unmanaged)) {
+        Some(acquireStorageMemoryInternal(blockId, numBytes, memoryMode, Some(unmanaged)))
+      } else {
+        None
+      }
+    } {
+      acquireStorageMemoryInternal(blockId, numBytes, memoryMode)
+    }
+  }
+
+  private def maxStorageMemoryAfterReclamation(
+      memoryMode: MemoryMode,
+      unmanaged: Long): Long = {
+    val (executionPool, _, _, maxMemory) = poolsFor(memoryMode)
+    math.max(0L, maxMemory - executionPool.ordinaryMemoryUsed - unmanaged)
+  }
+
+  override private[spark] def withStorageMemoryReclamation[T](
+      numBytes: Long,
+      memoryMode: MemoryMode)(body: => T): T = {
+    require(numBytes >= 0L)
+    if (!optionalMemoryEnabled) return synchronized { body }
+    withReclamation(memoryMode) {
+      val unmanaged = getUnmanagedMemoryUsed(memoryMode)
+      if (canAcquireStorageMemory(numBytes, memoryMode, unmanaged) ||
+          numBytes > maxStorageMemoryAfterReclamation(memoryMode, unmanaged)) {
+        Some(body)
+      } else {
+        None
+      }
+    } {
+      body
+    }
+  }
+
+  /** Check storage capacity under the monitor without moving pool boundaries or evicting blocks. */
+  private def canAcquireStorageMemory(
+      numBytes: Long,
+      memoryMode: MemoryMode,
+      unmanagedMemory: Long): Boolean = {
+    assert(Thread.holdsLock(this))
+    val (executionPool, storagePool, maxMemory) = memoryMode match {
+      case MemoryMode.ON_HEAP =>
+        (onHeapExecutionMemoryPool, onHeapStorageMemoryPool, maxOnHeapStorageMemory)
+      case MemoryMode.OFF_HEAP =>
+        (offHeapExecutionMemoryPool, offHeapStorageMemoryPool, maxOffHeapStorageMemory)
+    }
+    numBytes <= math.max(0L, maxMemory - unmanagedMemory) &&
+      numBytes <= storagePool.memoryFree + executionPool.memoryFree
+  }
+
+  /**
+   * Perform ordinary storage admission under the shared long-operation marker.
+   * The caller acquires the marker before this monitor and releases it after any eviction;
+   * existing pool resizing, block eviction, and the success/failure result remain unchanged.
+   */
+  private def acquireStorageMemoryInternal(
+      blockId: BlockId,
+      numBytes: Long,
+      memoryMode: MemoryMode,
+      unmanagedMemorySnapshot: Option[Long] = None): Boolean = {
     assertInvariants()
     assert(numBytes >= 0)
     val (executionPool, storagePool, maxMemory) = memoryMode match {
@@ -221,7 +470,7 @@ private[spark] class UnifiedMemoryManager(
     }
 
     // Factor in unmanaged memory usage for the specific memory mode
-    val unmanagedMemory = getUnmanagedMemoryUsed(memoryMode)
+    val unmanagedMemory = unmanagedMemorySnapshot.getOrElse(getUnmanagedMemoryUsed(memoryMode))
     val effectiveMaxMemory = math.max(0L, maxMemory - unmanagedMemory)
 
     if (numBytes > effectiveMaxMemory) {
@@ -247,10 +496,14 @@ private[spark] class UnifiedMemoryManager(
     storagePool.acquireMemory(blockId, numBytes)
   }
 
+  /**
+   * Delegate unroll admission to storage admission, which acquires the reclamation marker before
+   * this manager's monitor. Taking the monitor here would invert that order for direct callers.
+   */
   override def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
-      memoryMode: MemoryMode): Boolean = synchronized {
+      memoryMode: MemoryMode): Boolean = {
     acquireStorageMemory(blockId, numBytes, memoryMode)
   }
 }
