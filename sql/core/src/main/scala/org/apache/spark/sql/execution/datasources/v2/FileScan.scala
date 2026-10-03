@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Locale, OptionalLong}
+import java.util.concurrent.atomic.AtomicReference
 
 import org.apache.hadoop.fs.Path
 
@@ -185,13 +186,24 @@ trait FileScan extends Scan
     FilePartition.getFilePartitions(sparkSession, splitFiles, maxSplitBytes)
   }
 
+  @transient private lazy val plannedPartitionsRef = new AtomicReference[Seq[FilePartition]]()
+
   /**
-   * The partitions `partitions` planned, computed once per scan instance. Both the plain read path
+   * The partitions `partitions` planned, stored once per scan instance. Both the plain read path
    * and the runtime-filter path go through this, so a scan node that gets runtime filters lists the
    * files once and filters that listing, rather than reading the index twice and risking two
    * snapshots. A subclass still customizes `partitions`.
+   *
+   * `partitions` runs outside the scan's monitor, which a `lazy val` would hold while it runs. Two
+   * threads asking first at once may both list; both get the result that was stored.
    */
-  @transient private lazy val plannedPartitions: Seq[FilePartition] = partitions
+  private def plannedPartitions: Seq[FilePartition] = {
+    val ref = plannedPartitionsRef
+    Option(ref.get()).getOrElse {
+      ref.compareAndSet(null, partitions)
+      ref.get()
+    }
+  }
 
   override def planInputPartitions(): Array[InputPartition] = {
     plannedPartitions.toArray

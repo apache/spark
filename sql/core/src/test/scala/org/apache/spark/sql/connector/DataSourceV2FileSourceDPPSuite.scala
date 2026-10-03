@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector
 
 import java.io.File
 
+import scala.collection.mutable
+
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DynamicPruningExpression, DynamicPruningSubquery, EqualTo, Expression, Literal}
@@ -343,6 +345,38 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
         // All four calls above shared one listing, which is what keeps the plan and the execution
         // on one snapshot of the file index.
         assert(partitionsCalls === 1, s"expected one listing, got $partitionsCalls")
+      }
+    }
+  }
+
+  test("partitions runs without holding the scan's monitor") {
+    // An override of `partitions` may hand work to another thread and wait for it. If the memo
+    // held the scan's monitor meanwhile, that thread would block when it tried to initialize one
+    // of the scan's lazy vals.
+    withDppV2Conf {
+      withTempDir { dir =>
+        writeFactAndDim(dir)
+        val df = sql("SELECT f.id, f.part FROM fact f")
+        df.collect()
+        val scan = fileScanOf(df).asInstanceOf[ParquetScan]
+        val partAttr = AttributeReference("part", IntegerType)()
+        Seq[ParquetScan => Array[InputPartition]](
+          _.planInputPartitions(),
+          _.planInputPartitionsWithRuntimeFilters(Array(EqualTo(partAttr, Literal(3))))
+        ).foreach { firstCall =>
+          val heldLock = mutable.ArrayBuffer.empty[Boolean]
+          val probe = new ParquetScan(scan.sparkSession, scan.hadoopConf, scan.fileIndex,
+            scan.dataSchema, scan.readDataSchema, scan.readPartitionSchema, scan.pushedFilters,
+            scan.options, scan.pushedAggregate, scan.partitionFilters, scan.dataFilters,
+            scan.pushedVariantExtractions) {
+            override protected def partitions: Seq[FilePartition] = {
+              heldLock += Thread.holdsLock(this)
+              super.partitions
+            }
+          }
+          firstCall(probe)
+          assert(heldLock.toSeq === Seq(false))
+        }
       }
     }
   }
