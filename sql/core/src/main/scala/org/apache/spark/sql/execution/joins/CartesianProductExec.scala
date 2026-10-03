@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreWriter
 import org.apache.spark.util.CompletionIterator
 
 /**
@@ -37,8 +38,10 @@ class UnsafeCartesianRDD(
     right : RDD[UnsafeRow],
     inMemoryBufferThreshold: Int,
     spillThreshold: Int,
-    sizeInBytesSpillThreshold: Long)
-  extends CartesianRDD[UnsafeRow, UnsafeRow](left.sparkContext, left, right) {
+    sizeInBytesSpillThreshold: Long,
+    preferLeftLocations: Boolean)
+  extends CartesianRDD[UnsafeRow, UnsafeRow](
+    left.sparkContext, left, right, preferLeftLocations) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[(UnsafeRow, UnsafeRow)] = {
     val rowArray = new ExternalAppendOnlyUnsafeRowArray(
@@ -89,7 +92,9 @@ case class CartesianProductExec(
       rightResults,
       conf.cartesianProductExecBufferInMemoryThreshold,
       conf.cartesianProductExecBufferSpillThreshold,
-      conf.cartesianProductExecBufferSizeSpillThreshold)
+      conf.cartesianProductExecBufferSizeSpillThreshold,
+      // Prefer the left RDD's locations when its plan contains a state store writer.
+      preferLeftLocations = left.exists(_.isInstanceOf[StateStoreWriter]))
     pair.mapPartitionsWithIndexInternal { (index, iter) =>
       val joiner = GenerateUnsafeRowJoiner.create(left.schema, right.schema)
       val filtered = if (condition.isDefined) {
