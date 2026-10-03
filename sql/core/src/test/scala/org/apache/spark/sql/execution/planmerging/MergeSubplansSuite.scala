@@ -1863,10 +1863,7 @@ class MergeSubplansSuite extends PlanTest {
     }
   }
 
-  test("SPARK-56677: Do not merge subqueries when both join children have independent filters") {
-    // np has filters on BOTH left and right join children simultaneously. The guard in the
-    // Join case prevents this merge because combining two independent filter attributes would
-    // require ANDing them into a new alias, which is not yet supported.
+  test("SPARK-56677: Merge subqueries when both join children have independent filters") {
     val subquery1 = ScalarSubquery(
       testRelation.join(testRelation2, Inner, Some($"a" === $"d"))
         .groupBy()(sum($"a").as("sum_a")))
@@ -1875,8 +1872,136 @@ class MergeSubplansSuite extends PlanTest {
         .groupBy()(max($"a").as("max_a")))
     val originalQuery = testRelation.select(subquery1, subquery2)
 
+    val leftFilterAlias = Alias($"a" > 1, "propagatedFilter_0")()
+    val leftFilter = leftFilterAlias.toAttribute
+    val rightFilterAlias = Alias($"d" > 1, "propagatedFilter_1")()
+    val rightFilter = rightFilterAlias.toAttribute
+    val joined = testRelation
+      .select(testRelation.output ++ Seq(leftFilterAlias): _*)
+      .join(
+        testRelation2.select(testRelation2.output ++ Seq(rightFilterAlias): _*),
+        Inner,
+        Some($"a" === $"d"))
+    val combinedFilterAlias =
+      Alias(And(leftFilter, rightFilter), "propagatedFilter_2")()
+    val combinedFilter = combinedFilterAlias.toAttribute
+    val mergedSubquery = joined
+      .select(joined.output ++ Seq(combinedFilterAlias): _*)
+      .groupBy()(
+        sum($"a").as("sum_a"),
+        max($"a", Some(combinedFilter)).as("max_a"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_a"), $"sum_a",
+        Literal("max_a"), $"max_a"
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
     withSQLConf(SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true") {
-      comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
+  test("SPARK-56677: Merge cached subquery with filters on both join children") {
+    val subquery1 = ScalarSubquery(
+      testRelation.where($"a" > 1).join(testRelation2.where($"d" > 1), Inner,
+        Some($"a" === $"d"))
+        .groupBy()(sum($"a").as("sum_a")))
+    val subquery2 = ScalarSubquery(
+      testRelation.join(testRelation2, Inner, Some($"a" === $"d"))
+        .groupBy()(max($"a").as("max_a")))
+    val originalQuery = testRelation.select(subquery1, subquery2)
+
+    val leftFilterAlias = Alias($"a" > 1, "propagatedFilter_0")()
+    val leftFilter = leftFilterAlias.toAttribute
+    val rightFilterAlias = Alias($"d" > 1, "propagatedFilter_1")()
+    val rightFilter = rightFilterAlias.toAttribute
+    val joined = testRelation
+      .select(testRelation.output ++ Seq(leftFilterAlias): _*)
+      .join(
+        testRelation2.select(testRelation2.output ++ Seq(rightFilterAlias): _*),
+        Inner,
+        Some($"a" === $"d"))
+    val combinedFilterAlias =
+      Alias(And(leftFilter, rightFilter), "propagatedFilter_2")()
+    val combinedFilter = combinedFilterAlias.toAttribute
+    val mergedSubquery = joined
+      .select(joined.output ++ Seq(combinedFilterAlias): _*)
+      .groupBy()(
+        sum($"a", Some(combinedFilter)).as("sum_a"),
+        max($"a").as("max_a"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_a"), $"sum_a",
+        Literal("max_a"), $"max_a"
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    withSQLConf(SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
+  test("SPARK-56677: Merge symmetric filters from both join children") {
+    val subquery1 = ScalarSubquery(
+      testRelation.where($"a" > 1).join(testRelation2.where($"d" > 1), Inner,
+        Some($"a" === $"d"))
+        .groupBy()(sum($"a").as("sum_a")))
+    val subquery2 = ScalarSubquery(
+      testRelation.where($"a" < 5).join(testRelation2.where($"d" < 5), Inner,
+        Some($"a" === $"d"))
+        .groupBy()(max($"a").as("max_a")))
+    val originalQuery = testRelation.select(subquery1, subquery2)
+
+    val leftNPAlias = Alias($"a" < 5, "propagatedFilter_0")()
+    val leftNPFilter = leftNPAlias.toAttribute
+    val leftCPAlias = Alias($"a" > 1, "propagatedFilter_1")()
+    val leftCPFilter = leftCPAlias.toAttribute
+    val left = testRelation
+      .select(testRelation.output ++ Seq(leftNPAlias, leftCPAlias): _*)
+      .where(Or(leftNPFilter, leftCPFilter))
+    val rightNPAlias = Alias($"d" < 5, "propagatedFilter_2")()
+    val rightNPFilter = rightNPAlias.toAttribute
+    val rightCPAlias = Alias($"d" > 1, "propagatedFilter_3")()
+    val rightCPFilter = rightCPAlias.toAttribute
+    val right = testRelation2
+      .select(testRelation2.output ++ Seq(rightNPAlias, rightCPAlias): _*)
+      .where(Or(rightNPFilter, rightCPFilter))
+    val joined = left.join(right, Inner, Some($"a" === $"d"))
+    val combinedNPAlias =
+      Alias(And(leftNPFilter, rightNPFilter), "propagatedFilter_4")()
+    val combinedNPFilter = combinedNPAlias.toAttribute
+    val combinedCPAlias =
+      Alias(And(leftCPFilter, rightCPFilter), "propagatedFilter_5")()
+    val combinedCPFilter = combinedCPAlias.toAttribute
+    val mergedSubquery = joined
+      .select(joined.output ++ Seq(combinedNPAlias, combinedCPAlias): _*)
+      .groupBy()(
+        sum($"a", Some(combinedCPFilter)).as("sum_a"),
+        max($"a", Some(combinedNPFilter)).as("max_a"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_a"), $"sum_a",
+        Literal("max_a"), $"max_a"
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
     }
   }
 

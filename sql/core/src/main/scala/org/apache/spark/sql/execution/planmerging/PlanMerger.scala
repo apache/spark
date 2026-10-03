@@ -115,9 +115,7 @@ object PlanMerger {
  * result of expressions like `coalesce(col, default)` in the aggregate: an originally unmatched row
  * would have contributed `default` via `coalesce(NULL, default)`, but in the merged plan it is
  * matched, its real column value fails the filter, and `FILTER (WHERE false)` discards it entirely.
- * Propagation is also skipped when both the left and right children simultaneously produce filter
- * attributes, as combining them would require an additional AND alias above the join (not yet
- * supported).
+ * Filters from both join children are combined with AND above the join.
  *
  * {{{
  *   // Input plans
@@ -676,11 +674,7 @@ class PlanMerger(
               tryMergePlans(np.right, cp.right, context.copy(filterAboveScan = false)).flatMap {
                 case TryMergeResult(mergedRight, rightNPMapping, rightNPFilter, rightCPFilter, _,
                     rightDsv2Merged)
-                    // If both children independently propagate filter attributes we would need to
-                    // AND them into a new alias above the join, which is not yet supported.
-                    if !(leftNPFilter.isDefined && rightNPFilter.isDefined) &&
-                       !(leftCPFilter.isDefined && rightCPFilter.isDefined) &&
-                       // Gate join-crossing filter propagation behind its own config flag.
+                    if // Gate join-crossing filter propagation behind its own config flag.
                        // When no filter attributes are in play the merge is unconditionally safe.
                        (leftNPFilter.isEmpty && leftCPFilter.isEmpty &&
                            rightNPFilter.isEmpty && rightCPFilter.isEmpty ||
@@ -690,7 +684,7 @@ class PlanMerger(
                        // rows are NULL-padded so f=NULL, causing FILTER (WHERE f) to incorrectly
                        // exclude rows that should contribute to the aggregate. Right-side
                        // attributes are also absent from semi/anti join output.
-                       (leftNPFilter.isEmpty && leftCPFilter.isEmpty  ||
+                       (leftNPFilter.isEmpty && leftCPFilter.isEmpty ||
                            filterSafeForJoin(fromLeft = true, cp.joinType)) &&
                        (rightNPFilter.isEmpty && rightCPFilter.isEmpty ||
                            filterSafeForJoin(fromLeft = false, cp.joinType)) =>
@@ -698,11 +692,35 @@ class PlanMerger(
                   val mappedNPCondition = np.condition.map(mapAttributes(_, npMapping))
                   // Comparing the canonicalized form is required to ignore different forms of the
                   // same expression and `AttributeReference.qualifier`s in `cp.condition`.
-                  if (mappedNPCondition.map(_.canonicalized) == cp.condition.map(_.canonicalized)) {
-                    val npFilter = leftNPFilter.orElse(rightNPFilter)
-                    val cpFilter = leftCPFilter.orElse(rightCPFilter)
-                    Some(TryMergeResult(cp.withNewChildren(Seq(mergedLeft, mergedRight)), npMapping,
-                      npFilter, cpFilter, dsv2Merged = leftDsv2Merged || rightDsv2Merged))
+                  if (mappedNPCondition.map(_.canonicalized) ==
+                      cp.condition.map(_.canonicalized)) {
+                    val mergedJoin = cp.withNewChildren(Seq(mergedLeft, mergedRight))
+                    val (npFilter, npAlias) = (leftNPFilter, rightNPFilter) match {
+                      case (Some((left, _)), Some((right, _))) =>
+                        val alias = Alias(
+                          And(left, right), s"propagatedFilter_${PlanMerger.newId}")()
+                        (Some((alias.toAttribute, true)), Some(alias))
+                      case (filter @ Some(_), None) => (filter, None)
+                      case (None, filter @ Some(_)) => (filter, None)
+                      case _ => (None, None)
+                    }
+                    val (cpFilter, cpAlias) = (leftCPFilter, rightCPFilter) match {
+                      case (Some(left), Some(right)) =>
+                        val alias = Alias(
+                          And(left, right), s"propagatedFilter_${PlanMerger.newId}")()
+                        (Some(alias.toAttribute), Some(alias))
+                      case (filter @ Some(_), None) => (filter, None)
+                      case (None, filter @ Some(_)) => (filter, None)
+                      case _ => (None, None)
+                    }
+                    val aliases = Seq(npAlias, cpAlias).flatten
+                    val mergedPlan = if (aliases.nonEmpty) {
+                      Project(mergedJoin.output.toList ++ aliases, mergedJoin)
+                    } else {
+                      mergedJoin
+                    }
+                    Some(TryMergeResult(mergedPlan, npMapping, npFilter, cpFilter,
+                      dsv2Merged = leftDsv2Merged || rightDsv2Merged))
                   } else {
                     None
                   }
