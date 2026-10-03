@@ -20,6 +20,7 @@ package org.apache.spark.mllib.stat.distribution
 import breeze.linalg.{diag, eigSym, max, DenseMatrix => DBM, DenseVector => DBV, Vector => BV}
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.linalg.LAPACKInitializer
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils
 
@@ -117,8 +118,9 @@ class MultivariateGaussian @Since("1.3.0") (
    * pseudo-determinant and the pseudo-inverse (Moore-Penrose).  Singular values are considered
    * to be non-zero only if they exceed a tolerance based on machine precision, matrix size, and
    * relation to the maximum singular value (same tolerance used by, e.g., Octave).
-   */
+  */
   private def calculateCovarianceConstants: (DBM[Double], Double) = {
+    LAPACKInitializer.initialize()
     val eigSym.EigSym(d, u) = eigSym(sigma.asBreeze.toDenseMatrix) // sigma = u * diag(d) * u.t
 
     // For numerical stability, values are considered to be non-zero only if they exceed tol.

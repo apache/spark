@@ -108,8 +108,9 @@ class MultivariateGaussian @Since("2.0.0") (
    * pseudo-determinant and the pseudo-inverse (Moore-Penrose).  Singular values are considered
    * to be non-zero only if they exceed a tolerance based on machine precision, matrix size, and
    * relation to the maximum singular value (same tolerance used by, e.g., Octave).
-   */
+  */
   private def calculateCovarianceConstants: (BDM[Double], Double) = {
+    LAPACKInitializer.initialize()
     val eigSym.EigSym(d, u) = eigSym(cov.asBreeze.toDenseMatrix) // sigma = u * diag(d) * u.t
 
     // For numerical stability, values are considered to be non-zero only if they exceed tol.
