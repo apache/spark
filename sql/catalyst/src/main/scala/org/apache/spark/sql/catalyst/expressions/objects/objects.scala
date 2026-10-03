@@ -182,7 +182,8 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
     var i = 0
     val len = arguments.length
     var resultNull = false
-    while (i < len) {
+    // Short-circuit after a result-determining null to match prepareArguments.
+    while (i < len && !resultNull) {
       val result = arguments(i).eval(input).asInstanceOf[Object]
       evaluatedArgs(i) = result
       resultNull = resultNull || (result == null && needNullCheckForIndex(i))
@@ -654,7 +655,8 @@ case class NewInstance(
     var i = 0
     val len = arguments.length
     var resultNull = false
-    while (i < len) {
+    // Short-circuit after a result-determining null to match prepareArguments.
+    while (i < len && !resultNull) {
       val result = arguments(i).eval(input).asInstanceOf[Object]
       evaluatedArgs(i) = result
       resultNull = resultNull || (result == null && needNullCheckForIndex(i))

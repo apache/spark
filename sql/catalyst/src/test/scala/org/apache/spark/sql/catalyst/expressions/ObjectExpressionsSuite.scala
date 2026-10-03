@@ -53,6 +53,8 @@ class InvokeTargetSubClass extends InvokeTargetClass {
 }
 
 // Tests for NewInstance
+class NewInstanceTarget(val first: Int, val second: Int) extends Serializable
+
 class Outer extends Serializable {
   class Inner(val value: Int) {
     override def hashCode(): Int = super.hashCode()
@@ -199,6 +201,35 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkObjectExprEvaluation(StaticInvoke(cls, dataType, methodName,
         Seq(BoundReference(0, argType, true))), expected, InternalRow.fromSeq(Seq(arg)))
     }
+  }
+
+  test("InvokeLike should short-circuit interpreted arguments after a null") {
+    val nullArgument = NonFoldableLiteral.create(null, IntegerType)
+    // Keep the throwing argument non-foldable so constant folding does not evaluate it early.
+    val throwingArgument = StaticInvoke(
+      classOf[Math],
+      IntegerType,
+      "addExact",
+      Seq(NonFoldableLiteral.create(Int.MaxValue, IntegerType), Literal(1)),
+      returnNullable = false)
+    val expression = StaticInvoke(
+      classOf[java.lang.Integer],
+      IntegerType,
+      "compare",
+      Seq(nullArgument, throwingArgument),
+      returnNullable = false)
+
+    checkEvaluationWithoutCodegen(expression, null)
+    checkEvaluationWithMutableProjection(expression, null)
+
+    val newInstance = NewInstance(
+      cls = classOf[NewInstanceTarget],
+      arguments = Seq(nullArgument, throwingArgument),
+      inputTypes = Nil,
+      propagateNull = true,
+      dataType = ObjectType(classOf[NewInstanceTarget]),
+      outerPointer = None)
+    checkObjectExprEvaluation(newInstance, null)
   }
 
   test("SPARK-23583: Invoke should support interpreted execution") {
