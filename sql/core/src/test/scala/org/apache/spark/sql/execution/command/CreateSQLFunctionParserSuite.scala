@@ -18,10 +18,8 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.catalog.LanguageSQL
-import org.apache.spark.sql.catalyst.plans.logical.CreateUserDefinedFunction
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, FakeSystemCatalog, ResolvedIdentifier, UnresolvedIdentifier}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.execution.SparkSqlParser
 
 class CreateSQLFunctionParserSuite extends AnalysisTest {
@@ -49,9 +47,9 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       containsSQL: Option[Boolean] = None,
       isTableFunc: Boolean = false,
       ignoreIfExists: Boolean = false,
-      replace: Boolean = false): CreateUserDefinedFunction = {
+      replace: Boolean = false): CreateSQLFunctionCommand = {
     // scalastyle:on argcount
-    CreateUserDefinedFunction(
+    CreateSQLFunctionCommand(
       UnresolvedIdentifier(nameParts),
       inputParamText = inputParamText,
       returnTypeText = returnTypeText,
@@ -61,8 +59,8 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       collation = None,
       isDeterministic = isDeterministic,
       containsSQL = containsSQL,
-      language = LanguageSQL,
       isTableFunc = isTableFunc,
+      isTemp = false,
       ignoreIfExists = ignoreIfExists,
       replace = replace)
   }
@@ -81,8 +79,11 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       ignoreIfExists: Boolean = false,
       replace: Boolean = false): CreateSQLFunctionCommand = {
     // scalastyle:on argcount
+    val tempIdent = ResolvedIdentifier(
+      FakeSystemCatalog,
+      Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), name))
     CreateSQLFunctionCommand(
-      FunctionIdentifier(name),
+      tempIdent,
       inputParamText = inputParamText,
       returnTypeText = returnTypeText,
       exprText = exprText,

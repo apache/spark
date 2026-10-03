@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{withPosition, Analyzer, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{withPosition, Analyzer, ResolvedIdentifier, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedIdentifier, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunction, UserDefinedFunctionErrors}
 import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, WindowExpression}
@@ -51,7 +51,7 @@ import org.apache.spark.sql.types.{DataType, MetadataBuilder, StructField, Struc
  * }}}
  */
 case class CreateSQLFunctionCommand(
-    name: FunctionIdentifier,
+    child: LogicalPlan,
     inputParamText: Option[String],
     returnTypeText: String,
     exprText: Option[String],
@@ -67,6 +67,36 @@ case class CreateSQLFunctionCommand(
     extends CreateUserDefinedFunctionCommand {
 
   import SQLFunction._
+
+  lazy val name: FunctionIdentifier = {
+    val rawIdent = child match {
+      case ResolvedIdentifier(c, ident) =>
+        FunctionIdentifier(ident.name(), ident.namespace().headOption, Some(c.name()))
+      case u: UnresolvedIdentifier =>
+        val parts = u.nameParts
+        if (parts.length >= 3) {
+          FunctionIdentifier(parts.last, Some(parts(parts.length - 2)), Some(parts.head))
+        } else if (parts.length == 2) {
+          FunctionIdentifier(parts.last, Some(parts.head), None)
+        } else {
+          FunctionIdentifier(parts.last, None, None)
+        }
+      case _ =>
+        throw SparkException.internalError(
+          s"Unexpected child plan in CreateSQLFunctionCommand: $child")
+    }
+    if (isTemp) {
+      FunctionIdentifier(rawIdent.funcName, None, None)
+    } else {
+      rawIdent
+    }
+  }
+
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): CreateSQLFunctionCommand = copy(child = newChild)
+
+  override def withCollation(newCollation: Option[String]): LogicalPlan =
+    copy(collation = newCollation)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val parser = sparkSession.sessionState.sqlParser
