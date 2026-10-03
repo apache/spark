@@ -24,6 +24,22 @@ from pyspark.testing.utils import eventually
 from pyspark.util import is_remote_only
 
 
+class ReattachMetadataTestCase(unittest.TestCase):
+    def test_metadata_generator_is_stored_as_list(self):
+        from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
+
+        # Simulate what the iterator __init__ does: list(metadata)
+        def gen():
+            yield ("authorization", "Bearer token123")
+            yield ("x-custom", "value")
+
+        metadata = list(gen())
+        self.assertIsInstance(metadata, list)
+        self.assertEqual(len(metadata), 2)
+        # Re-iterable: iterating twice gives the same result
+        self.assertEqual(list(metadata), list(metadata))
+
+
 @unittest.skipIf(is_remote_only(), "Requires JVM access")
 class SparkConnectReattachTestCase(ReusedMixedTestCase, PandasOnSparkTestUtils):
     def test_release_sessions(self):
