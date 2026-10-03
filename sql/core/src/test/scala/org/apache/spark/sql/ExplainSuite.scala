@@ -655,7 +655,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         """
           |(2) Filter [codegen id : 2]
           |Input [1]: [id#xL]
-          |Condition : ((id#xL > Subquery subquery#x, [id=#x]) AND isnotnull((id#xL % 10)))
+          |Condition : (id#xL > Subquery subquery#x, [id=#x])
           |""".stripMargin,
         """
           |(6) BroadcastQueryStage
@@ -971,7 +971,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         checkKeywordsExistsInExplain(
           df = df,
           mode = ExplainMode.fromString("FORMATTED"),
-          keywords = "AQEShuffleRead (6), coalesced", "AQEShuffleRead (13), coalesced and skewed")
+          keywords = "AQEShuffleRead (5), coalesced", "AQEShuffleRead (11), coalesced and skewed")
       }
     }
   }
