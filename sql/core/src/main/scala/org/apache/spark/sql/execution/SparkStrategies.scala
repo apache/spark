@@ -619,7 +619,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             // A Real-Time Mode batch runs until its duration elapses rather than until its input
             // is exhausted, so an aggregation that only emits once the batch ends would hold every
             // result back for the whole batch. Plan the streamline operator instead, which merges
-            // each input row against state and emits immediately.
+            // each input row against state; Update mode can emit an intermediate result per
+            // input.
             if (isRealTimeMode(child) ||
               conf.getConf(SQLConf.STREAMING_USE_STREAMLINE_AGGREGATOR)) {
               AggUtils.planStreamlineStreamingAggregation(
