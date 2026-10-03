@@ -197,7 +197,10 @@ abstract class FileTable(
    * @return
    */
   protected def mergedOptions(options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
-    val finalOptions = this.options.asCaseSensitiveMap().asScala ++
+    // Keep original key casing for Hadoop configurations, but match overrides case-insensitively.
+    val tableOptions = this.options.asCaseSensitiveMap().asScala
+      .filterNot { case (key, _) => options.containsKey(key) }
+    val finalOptions = tableOptions ++
       options.asCaseSensitiveMap().asScala
     new CaseInsensitiveStringMap(finalOptions.asJava)
   }
