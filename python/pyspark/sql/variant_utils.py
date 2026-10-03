@@ -427,14 +427,19 @@ class VariantUtils:
                 return '"' + str(value) + '"'
             return str(value)
 
-    # The helpers below format scalars the same way as the JVM `Variant.toJson`, so that
-    # `VariantVal.toJson` and the `to_json` SQL function produce the same output.
+    # The helpers below format scalars the same way as the JVM `Variant.toJson` on JDK 19+, so
+    # that `VariantVal.toJson` and the `to_json` SQL function produce the same output. On older
+    # JDKs, `to_json` can print a longer, still round-tripping digit string for some doubles and
+    # floats (see `_float_to_json`).
 
     @classmethod
     def _float_to_json(cls, f: float, is_float32: bool) -> str:
         """
-        Formats a double or float like Java's `Double.toString` and `Float.toString`. Non-finite
-        values are quoted because they are not valid JSON numbers.
+        Formats a double or float like Java's `Double.toString` and `Float.toString` on JDK 19+,
+        which print the shortest digits (JDK-4511638). Older JDKs can print a longer, still
+        round-tripping digit string for some values, e.g. 2^-24 as 5.9604644775390625E-8 instead
+        of 5.960464477539063E-8. Non-finite values are quoted because they are not valid JSON
+        numbers.
         """
         if math.isnan(f):
             return '"NaN"'

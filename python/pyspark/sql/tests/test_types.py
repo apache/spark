@@ -3883,7 +3883,9 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         def timestamp(micros, ntz):
             return variant(13 if ntz else 12, struct.pack("<q", micros))
 
-        # The expected values are what the JVM `to_json` returns for the same variants.
+        # The expected values are what the JVM `to_json` returns for the same variants on JDK 19+.
+        # On older JDKs, `to_json` can print longer digit strings for some doubles and floats,
+        # e.g. the powers of two below.
         for v, expected in [
             (double(float("nan")), '"NaN"'),
             (double(float("inf")), '"Infinity"'),
