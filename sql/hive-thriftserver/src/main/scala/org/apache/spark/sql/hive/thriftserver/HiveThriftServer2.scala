@@ -23,12 +23,15 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.hadoop.hive.common.ServerUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hive.service.auth.HiveAuthFactory.AuthTypes
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.HiveServer2
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.internal.LogEntry
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2}
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.hive.HiveUtils
@@ -105,6 +108,48 @@ object HiveThriftServer2 extends Logging {
     }
   }
 
+  // Sessions are impersonated on the driver (metastore calls, driver-side file system access),
+  // but executor-side data access runs as the service identity (SPARK-5159), so storage ACLs
+  // are checked against the wrong principal. NONE/NOSASL are exempt: they establish no verified
+  // identity (the client picks any username it likes, and doAs then impersonates that
+  // unverified name for metastore calls), so there is no security boundary to warn about --
+  // and Hive's out-of-the-box config (auth NONE, doAs true) must stay quiet. Unrecognized auth
+  // types are left alone too: HiveAuthFactory rejects them with its own "Unsupported
+  // authentication type" error, which points at the actual problem.
+  private[thriftserver] def ineffectiveDoAsWarning(
+      hiveConf: HiveConf,
+      allowIneffectiveDoAs: Boolean): Option[LogEntry] = {
+    val authType = hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
+    val verifyingAuthTypes =
+      AuthTypes.values().filterNot(Set(AuthTypes.NONE, AuthTypes.NOSASL)).map(_.getAuthName)
+    // getVar returns the default (NONE) when unset and "" when set empty, never null.
+    val authVerifiesUser = verifyingAuthTypes.exists(_.equalsIgnoreCase(authType))
+    if (authVerifiesUser && hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
+        !allowIneffectiveDoAs) {
+      Some(log"${MDC(CONFIG, ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname)} is set to true, " +
+        log"but the Spark Thrift Server impersonates the connecting user only on the driver, " +
+        log"for Hive metastore calls and driver-side file system access: executor-side data " +
+        log"access still runs as the server's own service identity, so storage permissions " +
+        log"are checked against the service principal rather than the connecting user " +
+        log"(SPARK-5159). That can expose data the connecting user is not authorized to " +
+        log"read. Setting it to false silences this, but note that it stops impersonating " +
+        log"metastore calls too, so it is not a no-op (and unsetting it does not help -- " +
+        log"Hive's own default is true). To acknowledge the limitation and silence this " +
+        log"instead, set " +
+        log"${MDC(CONFIG2, StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS.key)} to " +
+        log"true; it is a static conf, so it must be set before the SparkSession is created. " +
+        log"Spark 5.0 is expected to refuse to start on this configuration unless it is set.")
+    } else {
+      None
+    }
+  }
+
+  private[thriftserver] def warnIfIneffectiveDoAs(
+      hiveConf: HiveConf,
+      allowIneffectiveDoAs: Boolean): Unit = {
+    ineffectiveDoAsWarning(hiveConf, allowIneffectiveDoAs).foreach(logWarning(_))
+  }
+
   def main(args: Array[String]): Unit = {
     // If the arguments contains "-h" or "--help", print out the usage and exit.
     if (args.contains("-h") || args.contains("--help")) {
@@ -154,6 +199,8 @@ private[hive] class HiveThriftServer2(sparkSession: SparkSession)
   private val started = new AtomicBoolean(false)
 
   override def init(hiveConf: HiveConf): Unit = {
+    HiveThriftServer2.warnIfIneffectiveDoAs(
+      hiveConf, sparkSession.conf.get(StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS))
     val sparkSqlCliService = new SparkSQLCLIService(this, sparkSession)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
