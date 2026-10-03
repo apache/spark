@@ -101,4 +101,14 @@ public class SSLFactorySuite {
       factory.createSSLEngine(true, ByteBufAllocator.DEFAULT);
     });
   }
+
+  @Test
+  public void testBuildWithoutTrustStoreUsesSystemDefault() throws Exception {
+    // Should not throw exception and should not use credulous managers
+    SSLFactory factory = new SSLFactory.Builder()
+      .requestedProtocol("TLSv1.3")
+      .keyStore(new File(SslSampleConfigs.keyStorePath), "password")
+      .build();
+    assertNotNull(factory.createSSLEngine(true, ByteBufAllocator.DEFAULT));
+  }
 }
