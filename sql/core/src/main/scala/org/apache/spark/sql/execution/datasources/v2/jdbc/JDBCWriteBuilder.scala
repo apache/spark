@@ -40,7 +40,11 @@ case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite) ext
       if (isTruncate) {
         val dialect = JdbcDialects.get(options.url)
         val conn = dialect.createConnectionFactory(options)(-1)
-        JdbcUtils.truncateTable(conn, options)
+        try {
+          JdbcUtils.truncateTable(conn, options)
+        } finally {
+          conn.close()
+        }
       }
       JdbcUtils.saveTable(data, Some(schema), SQLConf.get.caseSensitiveAnalysis, options)
     }
