@@ -31,9 +31,10 @@ import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
- * Similar to [[ArrowPythonRunner]], but for [[PythonUDTF]]s.
+ * Base class of the Python runners for Arrow-optimized Python UDTFs, parameterized by the type of
+ * its input.
  */
-class ArrowPythonUDTFRunner(
+abstract class BaseArrowPythonUDTFRunner[IN](
     udtf: PythonUDTF,
     evalType: Int,
     argMetas: Array[ArgumentMetadata],
@@ -44,10 +45,10 @@ class ArrowPythonUDTFRunner(
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
+  extends BasePythonRunner[IN, ColumnarBatch](
       Seq(ChainedPythonFunctions(Seq(udtf.func))), evalType, Array(argMetas.map(_.offset)),
       jobArtifactUUID, pythonMetrics)
-  with BatchedPythonArrowInput
+  with PythonArrowInput[IN]
   with BasicPythonArrowOutput {
   ArrowUtils.failDuplicatedFieldNames(schema)
 
@@ -104,3 +105,44 @@ class ArrowPythonUDTFRunner(
     "Pandas execution requires more than 4 bytes. Please set higher buffer. " +
       s"Please change '${SQLConf.PANDAS_UDF_BUFFER_SIZE.key}'.")
 }
+
+/**
+ * Similar to [[ArrowPythonRunner]], but for [[PythonUDTF]]s.
+ */
+class ArrowPythonUDTFRunner(
+    udtf: PythonUDTF,
+    evalType: Int,
+    argMetas: Array[ArgumentMetadata],
+    schema: StructType,
+    timeZoneId: String,
+    largeVarTypes: Boolean,
+    pythonRunnerConf: Map[String, String],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String])
+  extends BaseArrowPythonUDTFRunner[Iterator[InternalRow]](
+      udtf, evalType, argMetas, schema, timeZoneId, largeVarTypes, pythonRunnerConf,
+      pythonMetrics, jobArtifactUUID, sessionUUID)
+  with BatchedPythonArrowInput
+
+/**
+ * Similar to [[ArrowPythonUDTFRunner]], but the input is [[ColumnarBatch]]es, and the UDTF
+ * arguments are the columns at `inputColumnIndices`. Arrow-backed columns are serialized to the
+ * Python worker directly, see [[ColumnarArrowPythonInput]].
+ */
+private[python] class ColumnarArrowPythonUDTFRunner(
+    udtf: PythonUDTF,
+    evalType: Int,
+    argMetas: Array[ArgumentMetadata],
+    schema: StructType,
+    timeZoneId: String,
+    largeVarTypes: Boolean,
+    pythonRunnerConf: Map[String, String],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String],
+    override protected val inputColumnIndices: Array[Int])
+  extends BaseArrowPythonUDTFRunner[ColumnarBatch](
+      udtf, evalType, argMetas, schema, timeZoneId, largeVarTypes, pythonRunnerConf,
+      pythonMetrics, jobArtifactUUID, sessionUUID)
+  with ColumnarArrowPythonInput
