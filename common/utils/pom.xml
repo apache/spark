@@ -73,6 +73,11 @@
       <artifactId>ivy</artifactId>
     </dependency>
     <dependency>
+      <!-- Required by Ivy's cancellable HttpClientHandler. -->
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+    </dependency>
+    <dependency>
       <groupId>oro</groupId>
       <!-- oro is needed by ivy, but only listed as an optional dependency, so we include it. -->
       <artifactId>oro</artifactId>
