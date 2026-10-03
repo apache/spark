@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.nio.file.Files
 import java.util.Properties
 
 import scala.collection.mutable
@@ -35,6 +34,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.{OutputMode, ResultsCollector, StreamingQuery, StreamRealTimeModeE2ESuiteBase, StreamRealTimeModeSuiteBase}
 import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 class KafkaRealTimeModeE2ESuite extends KafkaSourceTest with StreamRealTimeModeE2ESuiteBase {
 
@@ -228,7 +228,7 @@ class KafkaRealTimeIntegrationSuite
         .format("kafka")
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
         .option("topic", outputTopic)
-        .option("checkpointLocation", Files.createTempDirectory("some-prefix").toFile.getName)
+        .option("checkpointLocation", Utils.createTempDir().getCanonicalPath)
         .option("kafka.max.block.ms", "100")
         .trigger(RealTimeTrigger.apply("5 minutes"))
         .outputMode(OutputMode.Update())
