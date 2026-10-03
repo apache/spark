@@ -706,17 +706,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns whether this contains `substring` or not.
    */
   public boolean contains(final UTF8String substring) {
-    if (substring.numBytes == 0) {
-      return true;
-    }
-
-    byte first = substring.getByte(0);
-    for (int i = 0; i <= numBytes - substring.numBytes; i++) {
-      if (getByte(i) == first && matchAt(substring, i)) {
-        return true;
-      }
-    }
-    return false;
+    return ByteArrayMethods.contains(
+      base, offset, numBytes, substring.base, substring.offset, substring.numBytes);
   }
 
   /**
