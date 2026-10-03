@@ -55,7 +55,8 @@ class ContinuousDataSourceRDD(
     private val inputPartitions: Seq[InputPartition],
     schema: StructType,
     partitionReaderFactory: ContinuousPartitionReaderFactory,
-    customMetrics: Map[String, SQLMetric])
+    customMetrics: Map[String, SQLMetric],
+    private val ignoreDataLocality: Boolean)
   extends RDD[InternalRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
@@ -114,6 +115,10 @@ class ContinuousDataSourceRDD(
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    castPartition(split).inputPartition.preferredLocations().toImmutableArraySeq
+    if (ignoreDataLocality) {
+      Nil
+    } else {
+      castPartition(split).inputPartition.preferredLocations().toImmutableArraySeq
+    }
   }
 }

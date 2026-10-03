@@ -64,7 +64,8 @@ case class ContinuousScanExec(
       partitions.map(_.get),
       schema,
       readerFactory,
-      customMetrics)
+      customMetrics,
+      conf.ignoreDataLocality)
     postDriverMetrics(scan.reportDriverMetrics())
     inputRDD
   }

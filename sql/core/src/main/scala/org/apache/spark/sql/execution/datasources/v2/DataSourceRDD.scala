@@ -139,13 +139,15 @@ private class TaskState(customMetrics: Map[String, SQLMetric]) {
  * @param partitionReaderFactory Factory for creating partition readers
  * @param columnarReads Whether to use columnar reads
  * @param customMetrics Custom metrics defined by the data source
+ * @param ignoreDataLocality When true, report no preferred locations
  */
 class DataSourceRDD(
     sc: SparkContext,
     @transient private val inputPartitions: Seq[Option[InputPartition]],
     partitionReaderFactory: PartitionReaderFactory,
     columnarReads: Boolean,
-    customMetrics: Map[String, SQLMetric])
+    customMetrics: Map[String, SQLMetric],
+    private val ignoreDataLocality: Boolean)
   extends RDD[InternalRow](sc, Nil) {
 
   // One TaskState per task attempt.
@@ -205,7 +207,11 @@ class DataSourceRDD(
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    castPartition(split).inputPartition.toSeq.flatMap(_.preferredLocations())
+    if (ignoreDataLocality) {
+      Nil
+    } else {
+      castPartition(split).inputPartition.toSeq.flatMap(_.preferredLocations())
+    }
   }
 }
 
