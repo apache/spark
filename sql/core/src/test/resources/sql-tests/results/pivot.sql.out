@@ -593,3 +593,183 @@ struct<year:int,dotNET:bigint,s:int>
 -- !query output
 2012	15000	1
 2013	48000	2
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query schema
+struct<year:int,dotNET:bigint,Java:bigint,Scala:bigint>
+-- !query output
+2012	2	1	0
+2013	1	1	0
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course FROM courseSales
+)
+PIVOT (
+  count(*)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query schema
+struct<year:int,dotNET:bigint,Java:bigint,Scala:bigint>
+-- !query output
+2012	2	1	0
+2013	1	1	0
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(earnings), sum(earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query schema
+struct<year:int,dotNET_count(earnings):bigint,dotNET_sum(earnings):bigint,Java_count(earnings):bigint,Java_sum(earnings):bigint,Scala_count(earnings):bigint,Scala_sum(earnings):bigint>
+-- !query output
+2012	2	15000	1	20000	0	NULL
+2013	1	48000	1	30000	0	NULL
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings), avg(earnings), min(earnings), max(earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query schema
+struct<year:int,dotNET_sum(earnings):bigint,dotNET_avg(earnings):double,dotNET_min(earnings):int,dotNET_max(earnings):int,Java_sum(earnings):bigint,Java_avg(earnings):double,Java_min(earnings):int,Java_max(earnings):int,Scala_sum(earnings):bigint,Scala_avg(earnings):double,Scala_min(earnings):int,Scala_max(earnings):int>
+-- !query output
+2012	15000	7500.0	5000	10000	20000	20000.0	20000	20000	NULL	NULL	NULL	NULL
+2013	48000	48000.0	48000	48000	30000	30000.0	30000	30000	NULL	NULL	NULL	NULL
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  approx_count_distinct(earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query schema
+struct<year:int,dotNET:bigint,Java:bigint,Scala:bigint>
+-- !query output
+2012	2	1	0
+2013	1	1	0
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(DISTINCT earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query schema
+struct<year:int,dotNET:bigint,Java:bigint,Scala:bigint>
+-- !query output
+2012	2	1	0
+2013	1	1	0
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  CAST(count(earnings) AS DOUBLE), count(earnings) + 1
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query schema
+struct<year:int,dotNET_CAST(count(earnings) AS DOUBLE):double,dotNET_(count(earnings) + 1):bigint,Java_CAST(count(earnings) AS DOUBLE):double,Java_(count(earnings) + 1):bigint,Scala_CAST(count(earnings) AS DOUBLE):double,Scala_(count(earnings) + 1):bigint>
+-- !query output
+2012	2.0	3	1.0	2	0.0	1
+2013	1.0	2	1.0	2	0.0	1
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings) + 1
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query schema
+struct<year:int,dotNET:bigint,Java:bigint,Scala:bigint>
+-- !query output
+2012	15001	20001	NULL
+2013	48001	30001	NULL
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(earnings) + count(year)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query schema
+struct<dotNET:bigint,Java:bigint,Scala:bigint>
+-- !query output
+6	4	0
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(CASE WHEN earnings > 15000 THEN earnings END)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query schema
+struct<year:int,dotNET:bigint,Java:bigint,Scala:bigint>
+-- !query output
+2012	0	1	0
+2013	1	1	0
+
+
+-- !query
+SET spark.sql.pivot.emptyBucketReturnsAggregateDefault=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.pivot.emptyBucketReturnsAggregateDefault	false
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query schema
+struct<year:int,dotNET:bigint,Java:bigint,Scala:bigint>
+-- !query output
+2012	2	1	NULL
+2013	1	1	NULL
+
+
+-- !query
+SET spark.sql.pivot.emptyBucketReturnsAggregateDefault=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.pivot.emptyBucketReturnsAggregateDefault	true
