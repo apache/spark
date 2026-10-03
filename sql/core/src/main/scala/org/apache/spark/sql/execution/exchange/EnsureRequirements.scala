@@ -206,7 +206,11 @@ case class EnsureRequirements(
       val shouldConsiderMinParallelism = specs.forall(p =>
         !p._2.canCreatePartitioning || children(p._1).isInstanceOf[ShuffleExchangeLike]
       )
-      // Choose all the specs that can be used to shuffle other children
+      // Choose all the specs that can be used to shuffle other children. For a collection only the
+      // members that can serve as the layout count, here and below. Any other member would build a
+      // partitioning its own child is not laid out on.
+      def servingMembers(spec: ShuffleSpec): Seq[ShuffleSpec] =
+        flattenSpec(spec).filter(_.canCreatePartitioning)
       val candidateSpecs = specs.filter { case (index, spec) =>
         spec.canCreatePartitioning &&
           (!shouldConsiderMinParallelism ||
@@ -228,8 +232,9 @@ case class EnsureRequirements(
         } else {
           candidateSpecs
         }
-        // Pick the spec with the best parallelism
-        Some(finalCandidateSpecs.values.maxBy(_.numPartitions))
+        // Pick the spec with the best parallelism. A collection counts with its first member that
+        // can serve as the layout, which is its first member unless that one cannot.
+        Some(finalCandidateSpecs.values.maxBy(servingMembers(_).head.numPartitions))
       }
 
       // Check if the following conditions are satisfied:
@@ -263,14 +268,14 @@ case class EnsureRequirements(
       // child does not even have. Pick that member once, preferring the finest when several
       // qualify. Only the branch that shuffles a child reads these, hence `lazy`.
       lazy val matchedIndexes = bestSpecOpt.toSeq.flatMap { best =>
-        childrenIndexes.filter(i => best.isCompatibleWith(specs(i)))
+        childrenIndexes.filter(i => servingMembers(best).exists(_.isCompatibleWith(specs(i))))
       }
       lazy val bestMemberOpt = bestSpecOpt.flatMap { best =>
         val matchedMembers = matchedIndexes.map(i => flattenSpec(specs(i)))
         // No member serving every matched child means there is no layout to align them on, so they
         // all take the ordinary shuffle. That needs three or more clustered children, since with
         // two the member that reported the match serves both, and no operator has three today.
-        flattenSpec(best)
+        servingMembers(best)
           .filter(m => matchedMembers.forall(_.exists(m.isCompatibleWith)))
           .maxByOption(_.numPartitions)
       }
@@ -929,15 +934,17 @@ case class EnsureRequirements(
       partitioning: Partitioning,
       distribution: ClusteredDistribution): Option[KeyedShuffleSpec] = {
     def tryCreate(partitioning: KeyedPartitioning): Option[KeyedShuffleSpec] = {
-      // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
-      // attribute per partition expression.
       val attributes = partitioning.expressions.flatMap(_.references)
       val clustering = distribution.clustering
 
       val satisfies = if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {
-        attributes.length == clustering.length && attributes.zip(clustering).forall {
-          case (l, r) => l.semanticEquals(r)
-        }
+        // Only an expression over a single column covers that column. One over several, e.g.
+        // `b + c`, maps to no position (`KeyedShuffleSpec.keyPositions`). The spec turns it away
+        // or projects it away, so a layout with one does not cover the cluster keys.
+        partitioning.expressions.forall(_.references.size == 1) &&
+          attributes.length == clustering.length && attributes.zip(clustering).forall {
+            case (l, r) => l.semanticEquals(r)
+          }
       } else {
         partitioning.satisfies(distribution)
       }

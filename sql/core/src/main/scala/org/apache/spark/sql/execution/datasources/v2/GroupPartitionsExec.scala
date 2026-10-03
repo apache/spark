@@ -76,8 +76,8 @@ case class GroupPartitionsExec(
         // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
         // can only differ in `expressions`. Their `partitionKeys` reference and `isCollapsed` flag
         // are shared (enforced by `PartitioningCollection`), so the grouping is computed once.
-        // When reducers are applied, the stored reduced expressions are re-targeted at each
-        // `KeyedPartitioning`'s own key attribute and reported instead of the original ones. Their
+        // When reducers are applied, the stored reduced expressions are rebuilt over each
+        // `KeyedPartitioning`'s own argument and reported instead of the original ones. Their
         // data types match the reduced partition keys for the identity-vs-transform and
         // single-side-transform reducers; for the both-sides-reduce shape no single transform
         // describes the keys (see `KeyedShuffleSpec.reducersBothWays`).
@@ -107,9 +107,16 @@ case class GroupPartitionsExec(
                 projectedExpressions.zip(exprs).map {
                   case (expr, Some(KeyReducer(_, reduced))) =>
                     // `reduced` was stored from the single spec that `createKeyedShuffleSpec`
-                    // picked (`collectFirst`); re-target it at this `KeyedPartitioning`'s own key
-                    // attribute so that every `KeyedPartitioning` in a collection keeps its own.
-                    reduced.withReference(expr.references.head)
+                    // picked (`collectFirst`). The keys are reduced once, from the shared key rows,
+                    // so `reduced` describes them whichever member this is. Only its function says
+                    // that, so the member's own argument takes the place of `reduced`'s. A side
+                    // shuffled onto this layout reports `bucket(8, b + 1)` next to `bucket(8, id)`,
+                    // or `b + 1` next to an identity `id`.
+                    val argument = expr match {
+                      case t: TransformExpression => t.children
+                      case e => Seq(e)
+                    }
+                    reduced.copy(children = argument)
                   case (expr, None) => expr
                 }
               case None => projectedExpressions

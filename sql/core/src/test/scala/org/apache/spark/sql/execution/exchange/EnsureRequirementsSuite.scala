@@ -1429,6 +1429,70 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59887: a collection ranks by its first member that can serve as the layout") {
+    val id = AttributeReference("id", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val m = AttributeReference("m", IntegerType)()
+    val n = AttributeReference("n", IntegerType)()
+    // Clustered on (id, y), the first member `[id, y + 1]` keeps its five partitions but cannot
+    // serve as the layout, since `y + 1` is not a column. The second member `[id, c]` projects to
+    // `[id]`, two partitions, and can. The other side keeps three partitions and can serve too. So
+    // the other side wins, as it does when the collection cannot serve at all. Ranking the
+    // collection by its first member would let it win with five, and shuffle the other side onto
+    // the two partitions of the member that can serve.
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(1, 3), InternalRow(2, 4),
+      InternalRow(2, 5))
+    val collection = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning = PartitioningCollection.fromPartitionings(Seq(
+        KeyedPartitioning(Seq(id, Add(y, Literal(1))), keys),
+        KeyedPartitioning(Seq(id, c), keys))))
+    val other = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning = KeyedPartitioning(Seq(m), Seq(InternalRow(1), InternalRow(2),
+        InternalRow(3))))
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+      val smj = SortMergeJoinExec(Seq(id, y), Seq(m, n), Inner, None, collection, other)
+      val planned = EnsureRequirements.apply(smj).asInstanceOf[SortMergeJoinExec]
+      assert(planned.right.collect { case s: ShuffleExchangeExec => s }.isEmpty,
+        "the other side is the layout")
+      assert(planned.left.collect { case s: ShuffleExchangeExec => s }
+        .map(_.outputPartitioning.numPartitions) === Seq(3))
+    }
+  }
+
+  test("SPARK-59887: a child matched only through a member that cannot serve is shuffled") {
+    val id = AttributeReference("id", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val z = AttributeReference("z", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+    // Clustered on (id, b), the first child reports `bucket(4, id)`, which can serve as the
+    // layout, and `bucket(4, b + 1)`, which cannot. The second child reports `bucket(4, c + 1)`
+    // over (z, c), which pairs with the second member only. Matching it through that member would
+    // leave no member that serves every matched child, and both sides would be shuffled. It is
+    // shuffled onto `bucket(4, id)` instead, and the first child stays as it is. Without this
+    // change both children stay as they are, paired through `bucket(4, b + 1)`. That plan is
+    // correct, and giving it up is a cost the description lists.
+    val keys = (0 until 4).map(InternalRow(_))
+    val collection = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning = PartitioningCollection.fromPartitionings(Seq(
+        KeyedPartitioning(Seq(bucket(4, id)), keys),
+        KeyedPartitioning(Seq(bucket(4, Add(b, Literal(1)))), keys))))
+    val other = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning = KeyedPartitioning(Seq(bucket(4, Add(c, Literal(1)))), keys))
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val smj = SortMergeJoinExec(Seq(id, b), Seq(z, c), Inner, None, collection, other)
+      val planned = EnsureRequirements.apply(smj).asInstanceOf[SortMergeJoinExec]
+      assert(planned.left.collect { case s: ShuffleExchangeExec => s }.isEmpty,
+        "the first child is the layout")
+      assert(planned.right.collect { case s: ShuffleExchangeExec => s }.size === 1)
+    }
+  }
+
   private class DummySparkPlanWithBatchScanChild(outputPartitioning: Partitioning)
     extends DummySparkPlan(
       children = Seq(BatchScanExec(Seq.empty, null, Seq.empty, table = null)),

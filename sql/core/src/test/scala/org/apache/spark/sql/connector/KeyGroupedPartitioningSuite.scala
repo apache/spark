@@ -44,7 +44,7 @@ import org.apache.spark.sql.execution.{
   UnionExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
-import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
@@ -326,6 +326,33 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
   /** Creates a `bucket<n>` table for each of the given bucket counts. */
   private def createBucketedIdTables(bucketCounts: Int*): Unit =
     bucketCounts.foreach(n => createBucketedIdTable(s"bucket$n", n))
+
+  /** Creates `ident`, identity-partitioned on `id`, holding `ids`. */
+  private def createIdentityIdTable(ids: Seq[Long] = 0L until 8L): Unit = {
+    createTable("ident", Array(Column.create("id", LongType)), Array(identity("id")))
+    sql("INSERT INTO testcat.ns.ident VALUES " + ids.map(i => s"($i)").mkString(", "))
+  }
+
+  /** Creates `name`, unpartitioned, with a column `b` holding `bs`. */
+  private def createPlainTable(bs: Seq[Long] = 0L until 8L, name: String = "plain"): Unit = {
+    createTable(name, Array(Column.create("b", LongType)), Array.empty)
+    sql(s"INSERT INTO testcat.ns.$name VALUES " + bs.map(b => s"($b)").mkString(", "))
+  }
+
+  /** Creates `plain2`, unpartitioned, with columns `b` and `c`, where `b + c` runs from 1 to 3. */
+  private def createPlain2Table(): Unit = {
+    createTable("plain2", Array(Column.create("b", LongType), Column.create("c", LongType)),
+      Array.empty)
+    sql("INSERT INTO testcat.ns.plain2 VALUES (0, 1), (0, 2), (1, 1), (1, 2)")
+  }
+
+  /** Creates `ps` with a struct column `s` of 8 rows, `(a = i, b = 7 - i)`. */
+  private def createStructTable(): Unit = {
+    createTable("ps", Array(Column.create("s", new StructType().add("a", LongType)
+      .add("b", LongType))), Array.empty)
+    sql("INSERT INTO testcat.ns.ps VALUES " +
+      (0 until 8).map(i => s"(named_struct('a', ${i}L, 'b', ${7 - i}L))").mkString(", "))
+  }
 
   /** Joins `bucket12`, `bucket8` and `bucket<third>` on `id`, in that order. */
   private def threeWayBucketJoinDF(third: Int): DataFrame =
@@ -943,6 +970,409 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
         case kp: physical.KeyedPartitioning => kp.expressionsDescribeKeys
         case _ => true
       }))
+    }
+  }
+
+  // Each key is a function of `b` other than `b` itself. A check on the leaves of the key would
+  // reject `b + 1` for its literal, but not `-b`, so both are tested.
+  Seq("p.b + 1" -> ((b: Long) => b + 1), "-p.b" -> ((b: Long) => -b)).foreach {
+    case (key, keyOf) =>
+      // `plain` holds `b` in 0..7, and `keys`, bucketed on `id`, holds the key of each `b`.
+      def createKeyTables(): Unit = {
+        createPlainTable()
+        createTable("keys", Array(Column.create("id", LongType)), Array(bucket(4, "id")))
+        sql("INSERT INTO testcat.ns.keys VALUES " +
+          (0 until 8).map(b => s"(${keyOf(b)})").mkString(", "))
+      }
+
+      test("SPARK-59887: a side shuffled onto a transform of an expression is not paired as it " +
+          s"is ($key)") {
+        createKeyTables()
+        Seq(4, 8).foreach(n => createBucketedIdTable(s"bucket$n", n, numIds = 8))
+
+        // The first join shuffles `plain` onto the bucket of its key. That is a function of `b`,
+        // but not the same function of it as the third table's `bucket(n, id)` is of `id`. The
+        // second join clusters `plain` on `b`. Pairing the two there, as they stand or after
+        // reducing `bucket(8, id)` onto 4 buckets, puts a row with `b = id` on a different
+        // partition on each side.
+        Seq(4 -> "false", 8 -> "true").foreach { case (third, allowCompatibleTransforms) =>
+          withSQLConf(
+            SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> allowCompatibleTransforms) {
+            val df = sql(
+              s"""SELECT k.id, p.b, t.id FROM testcat.ns.keys k
+                 |JOIN testcat.ns.plain p ON k.id = $key
+                 |JOIN testcat.ns.bucket$third t ON p.b = t.id""".stripMargin)
+            checkAnswer(df, (0 until 8).map(b => Row(keyOf(b), b.toLong, b.toLong)))
+            // One shuffle per join: `plain` for the first, the first join's output for the
+            // second, and none for the third table. The second join does not shuffle onto the
+            // bucket of the key, since that would move both of its sides.
+            assert(collectShuffles(stripAQEPlan(df.queryExecution.executedPlan)).size == 2)
+          }
+        }
+      }
+
+      test(s"SPARK-59887: a side is not shuffled onto a transform of an expression ($key)") {
+        createKeyTables()
+        createTable("xy", Array(Column.create("x", LongType), Column.create("y", LongType)),
+          Array.empty)
+        sql("INSERT INTO testcat.ns.xy VALUES " +
+          (0 until 8).map(b => s"(${keyOf(b)}, $b)").mkString(", "))
+
+        // The first join shuffles `plain` onto the bucket of its key, so its output offers that
+        // layout next to `bucket(4, id)`. The second join must not shuffle `xy` onto the first
+        // one. That builds `bucket(4, y)` for `xy`, not the bucket of the same function of `y`. A
+        // row with `b = y` then lands in a different bucket on each side. The join order decides
+        // which of the two layouts comes first, so both orders run.
+        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+          Seq(
+            s"testcat.ns.plain p JOIN testcat.ns.keys k ON $key = k.id",
+            s"testcat.ns.keys k JOIN testcat.ns.plain p ON k.id = $key").foreach { firstJoin =>
+            val df = sql(
+              s"""SELECT k.id, p.b, q.x FROM $firstJoin
+                 |JOIN testcat.ns.xy q ON k.id = q.x AND p.b = q.y""".stripMargin)
+            checkAnswer(df, (0 until 8).map(b => Row(keyOf(b), b.toLong, keyOf(b))))
+            // `xy` is shuffled onto the usable layout, `bucket(4, x)`, and never onto a bucket of
+            // `y`. So `plain` and `xy` are the only sides that move.
+            val shuffles = collectShuffles(stripAQEPlan(df.queryExecution.executedPlan))
+            assert(shuffles.size == 2)
+            assert(!keyedPartitioningsOf(shuffles).exists(_.references.exists(_.name == "y")))
+          }
+        }
+      }
+
+      test("SPARK-59887: a broadcast join's layout over a join key is not paired as it is " +
+          s"($key)") {
+        createKeyTables()
+        createBucketedIdTable("bucket4", 4, numIds = 8)
+
+        // An inner broadcast join reports the streamed side's layout over the build side's join
+        // key too, so the first join also offers the bucket of `plain`'s key. That needs no conf
+        // beyond the defaults. The second join clusters `plain` on `b`, so pairing that layout with
+        // `bucket(4, id)` as it stands puts a row with `b = id` on a different partition on each
+        // side.
+        val df = sql(
+          s"""SELECT /*+ BROADCAST(p) */ k.id, p.b, t.id FROM testcat.ns.keys k
+             |JOIN testcat.ns.plain p ON k.id = $key
+             |JOIN testcat.ns.bucket4 t ON p.b = t.id""".stripMargin)
+        checkAnswer(df, (0 until 8).map(b => Row(keyOf(b), b.toLong, b.toLong)))
+        assert(collect(df.queryExecution.executedPlan) { case j: BroadcastHashJoinExec => j }
+          .nonEmpty, "the first join is a broadcast join")
+      }
+  }
+
+  test("SPARK-59887: a layout over a transform of a struct field is not paired nor shuffled onto") {
+    createBucketedIdTable("bucket4", 4, numIds = 8)
+    createStructTable()
+    // `l` shuffles `ps` onto `bucket(4, s.a)`, and `r` shuffles it onto `bucket(4, s.b)`.
+    val l = "SELECT x.id, ps.s FROM testcat.ns.bucket4 x JOIN testcat.ns.ps ps ON x.id = ps.s.a"
+    val r = "SELECT y.id, qs.s FROM testcat.ns.bucket4 y JOIN testcat.ns.ps qs ON y.id = qs.s.b"
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      // Both layouts are functions of `s`, but not the same one, so the join on `s` must not pair
+      // them as they stand. A row lands in bucket `a % 4` on one side and `b % 4` on the other.
+      checkAnswer(
+        sql(s"SELECT l.id, r.id FROM ($l) l JOIN ($r) r ON l.s = r.s"),
+        (0 until 8).map(i => Row(i.toLong, (7 - i).toLong)))
+      // Nor may a join shuffle a plain `ps` onto `l`'s layout. That builds `bucket(4, s)` for it,
+      // which drops the `.a` and hands the whole struct to a bucket function over a long.
+      checkAnswer(
+        sql(s"SELECT l.id FROM ($l) l JOIN testcat.ns.ps r ON l.s = r.s"),
+        (0 until 8).map(i => Row(i.toLong)))
+    }
+  }
+
+  test("SPARK-59887: a reduce keeps what each member's keys are computed from") {
+    Seq(4, 2).foreach(n => createBucketedIdTable(s"bucket$n", n, numIds = 8))
+    createIdentityIdTable()
+    createPlainTable()
+    createStructTable()
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      // The first join shuffles `plain` onto `bucket(4, b + 1)`, or onto `b + 1` for the
+      // identity-partitioned `ident`. The second join reduces the first one's output onto
+      // `bucket(2)`, `plain`'s member included. That member is still over `b + 1`. So the third
+      // join, on the bare `b`, must neither pair it with `bucket(2, id)` nor shuffle a plain
+      // side onto it.
+      for {
+        first <- Seq("bucket4", "ident")
+        (third, thirdKey) <- Seq("bucket2" -> "id", "plain" -> "b")
+      } {
+        val df = sql(
+          s"""SELECT f.id, p.b, t2.id, t3.$thirdKey FROM testcat.ns.$first f
+             |JOIN testcat.ns.plain p ON f.id = p.b + 1
+             |JOIN testcat.ns.bucket2 t2 ON f.id = t2.id
+             |JOIN testcat.ns.$third t3 ON p.b = t3.$thirdKey""".stripMargin)
+        checkAnswer(df, (0 until 7).map(b => Row(b + 1L, b.toLong, b + 1L, b.toLong)))
+      }
+
+      // The same for a struct field. `ps`'s member is still over `s.a` after the reduce, so the
+      // third join must not shuffle a plain `ps` onto it, which would build `bucket(2, s)`.
+      val df = sql(
+        """SELECT x.id FROM testcat.ns.bucket4 x
+          |JOIN testcat.ns.ps ps ON x.id = ps.s.a
+          |JOIN testcat.ns.bucket2 t2 ON x.id = t2.id
+          |JOIN testcat.ns.ps r ON ps.s = r.s""".stripMargin)
+      checkAnswer(df, (0 until 8).map(i => Row(i.toLong)))
+    }
+  }
+
+  // `ident` also holds an id that the key's function overflows on under ANSI.
+  Seq(
+    ("p.b + 1", 0L until 8L, Long.MaxValue, (b: Long) => b + 1),
+    ("-p.b", -7L to 0L, Long.MinValue, (b: Long) => -b)
+  ).foreach { case (key, bs, overflowingId, keyOf) =>
+    test(s"SPARK-59887: an identity side is not reduced onto a transform of an expression ($key)") {
+      createBucketedIdTable("bucket4", 4, numIds = 8)
+      createPlainTable(bs)
+      createIdentityIdTable(bs :+ overflowingId)
+
+      // The first join shuffles `plain` onto the bucket of its key. Reducing `ident` onto it would
+      // evaluate the key's function on `ident`'s partition keys while planning, which overflows for
+      // that id. The query itself never computes it, since no `b` matches that id.
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val df = sql(
+          s"""SELECT k.id, p.b, i.id FROM testcat.ns.bucket4 k
+             |JOIN testcat.ns.plain p ON k.id = $key
+             |JOIN testcat.ns.ident i ON p.b = i.id""".stripMargin)
+        checkAnswer(df,
+          bs.filter(b => (0L until 8L).contains(keyOf(b))).map(b => Row(keyOf(b), b, b)))
+      }
+    }
+  }
+
+  test("SPARK-59887: a reduce keeps a member over two columns") {
+    createIdentityIdTable()
+    createBucketedIdTable("bucket2", 2, numIds = 8)
+    createPlain2Table()
+
+    // The broadcast join reports `ident`'s layout over `p.b + p.c` too, and the second join reduces
+    // it onto `bucket(2)`. That member has to stay over `p.b + p.c`. Reported over `p.b`, it would
+    // serve the `GROUP BY p.b` as it stands, while the rows of one `b` sit in two buckets.
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      checkAnswer(
+        sql("""SELECT /*+ BROADCAST(p) */ p.b, max(p.c) FROM testcat.ns.ident i
+              |JOIN testcat.ns.plain2 p ON i.id = p.b + p.c
+              |JOIN testcat.ns.bucket2 t2 ON i.id = t2.id
+              |GROUP BY p.b""".stripMargin),
+        Seq(Row(0L, 2L), Row(1L, 2L)))
+    }
+  }
+
+  test("SPARK-59887: two layouts over the same shape of a join key pair as two columns do") {
+    Seq("orders", "returns").foreach(createBucketedIdTable(_, 16, numIds = 16))
+    createTable("customers", Array(Column.create("id", IntegerType)), Array.empty)
+    sql("INSERT INTO testcat.ns.customers VALUES " + (0 until 16).map(i => s"($i)").mkString(", "))
+
+    // Each broadcast join reports its fact table's layout over the dimension's key too, widened to
+    // the fact key's type, `bucket(16, cast(c.id as bigint))`. That needs no conf beyond the
+    // defaults. The join on `c1.id = c2.id` pairs the two as they stand, since they are the same
+    // function of their columns.
+    val dimensions = sql(
+      """SELECT a.id FROM
+        |  (SELECT /*+ BROADCAST(c1) */ c1.id FROM testcat.ns.orders o
+        |   JOIN testcat.ns.customers c1 ON o.id = c1.id) a
+        |JOIN
+        |  (SELECT /*+ BROADCAST(c2) */ c2.id FROM testcat.ns.returns r
+        |   JOIN testcat.ns.customers c2 ON r.id = c2.id) b
+        |ON a.id = b.id""".stripMargin)
+    checkAnswer(dimensions, (0 until 16).map(Row(_)))
+    assert(collectAllShuffles(dimensions.queryExecution.executedPlan).isEmpty)
+
+    // The same for two one-side shuffles onto `bucket(n, p.b + 1)` and `bucket(4, q.b + 1)`,
+    // joined on `p.b = q.b`. With `bucket(4)` on both sides they pair as they stand. With
+    // `bucket(8)` on one side, `allowCompatibleTransforms` reduces it onto `bucket(4)`. Either way
+    // only the two one-side shuffles are left.
+    Seq(4, 8).foreach(n => createBucketedIdTable(s"bucket$n", n, numIds = 8))
+    createPlainTable()
+    // A second unpartitioned table, so that the two one-side shuffles are not one reused exchange.
+    createPlainTable(name = "plainq")
+    Seq(4, 8).foreach { n =>
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val legs = sql(
+          s"""SELECT l.b FROM
+             |  (SELECT p.b FROM testcat.ns.bucket$n t1
+             |   JOIN testcat.ns.plain p ON t1.id = p.b + 1) l
+             |JOIN
+             |  (SELECT q.b FROM testcat.ns.bucket4 t2
+             |   JOIN testcat.ns.plainq q ON t2.id = q.b + 1) r
+             |ON l.b = r.b""".stripMargin)
+        checkAnswer(legs, (0 until 7).map(b => Row(b.toLong)))
+        assert(collectAllShuffles(legs.queryExecution.executedPlan).size == 2, s"bucket$n")
+      }
+    }
+  }
+
+  test("SPARK-59887: the same shape reduced together pairs only through the same pairing") {
+    Seq(12, 8, 18).foreach(n => createBucketedIdTable(s"bucket$n", n, numIds = 24))
+    createPlainTable(0L until 24L)
+    // A second unpartitioned table, so that the two one-side shuffles are not one reused exchange.
+    createPlainTable(0L until 24L, name = "plainq")
+
+    // Each leg shuffles its plain table onto `bucket(12, b + 1)`. The first leg then reduces
+    // `bucket(12)` with `bucket(8)`, so its `b + 1` member holds buckets of 4. The second leg
+    // reduces with `bucket(8)` too, with `bucket(18)`, or not at all. Only with `bucket(8)` does
+    // it hold buckets of 4 as well, and only then does the final join pair the two as they stand.
+    // Otherwise it holds buckets of 6 or of 12, and the final join shuffles both sides.
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      Seq(Some(8) -> 2, Some(18) -> 4, None -> 4).foreach { case (other, shuffles) =>
+        val reduce = other.fold("")(n => s"JOIN testcat.ns.bucket$n u ON t.id = u.id")
+        val df = sql(
+          s"""SELECT l.b FROM
+             |  (SELECT p.b FROM testcat.ns.bucket12 t JOIN testcat.ns.plain p ON t.id = p.b + 1
+             |   JOIN testcat.ns.bucket8 u ON t.id = u.id) l
+             |JOIN
+             |  (SELECT q.b FROM testcat.ns.bucket12 t JOIN testcat.ns.plainq q ON t.id = q.b + 1
+             |   $reduce) r
+             |ON l.b = r.b""".stripMargin)
+        checkAnswer(df, (0 until 23).map(b => Row(b.toLong)))
+        assert(collectAllShuffles(df.queryExecution.executedPlan).size == shuffles, s"$other")
+      }
+    }
+  }
+
+  test("SPARK-59887: a member that cannot serve does not rank its collection") {
+    createTable("t1", Array(Column.create("a", LongType), Column.create("c", LongType)),
+      Array(identity("a"), identity("c")))
+    sql("INSERT INTO testcat.ns.t1 VALUES (1, 1), (1, 2), (1, 3), (2, 4), (2, 5)")
+    createTable("p", Array(Column.create("y", LongType)), Array.empty)
+    sql("INSERT INTO testcat.ns.p VALUES (0), (1), (2), (3), (4)")
+    createTable("q", Array(Column.create("m", LongType), Column.create("n", LongType)),
+      Array(identity("m")))
+    sql("INSERT INTO testcat.ns.q VALUES (1, 0), (2, 3), (3, 9)")
+
+    // The broadcast join reports `[a, c]` and `[a, y + 1]`. The first projects to `[a]`, 2
+    // partitions, and can serve as the layout. The second keeps 5 partitions and cannot. So `q`,
+    // with 3 partitions and no exchange, ranks first, and the other side is shuffled onto it.
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = sql(
+        """SELECT /*+ BROADCAST(p) */ * FROM testcat.ns.t1
+          |JOIN testcat.ns.p ON t1.c = p.y + 1
+          |JOIN testcat.ns.q ON t1.a = q.m AND p.y = q.n""".stripMargin)
+      checkAnswer(df, Seq(Row(1L, 1L, 0L, 1L, 0L), Row(2L, 4L, 3L, 2L, 3L)))
+      assert(collectAllShuffles(df.queryExecution.executedPlan)
+        .map(_.outputPartitioning.numPartitions) == Seq(3))
+    }
+  }
+
+  test("SPARK-59901: a join key over two columns is not paired through one of them") {
+    createIdentityIdTable()
+    createBucketedIdTable("bucket4", 4, numIds = 8)
+    createPlain2Table()
+    val expected = Seq(Row(1L, 0L, 1L), Row(2L, 0L, 2L), Row(2L, 1L, 1L), Row(3L, 1L, 2L))
+
+    // A one-side shuffle builds its partition expression over the other side's join key. That is
+    // `b + c` here, or `bucket(4, b + c)` over a bucketed side. No single cluster key stands for
+    // either, so a spec over one pairs with nothing and is no layout to shuffle onto. On master,
+    // AQE validates the first plan and fails there, but not on this branch. The second join of
+    // the second query asks what to shuffle onto.
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      checkAnswer(
+        sql("""SELECT i.id, p.b, p.c FROM testcat.ns.ident i
+              |JOIN testcat.ns.plain2 p ON i.id = p.b + p.c""".stripMargin),
+        expected)
+      checkAnswer(
+        sql("""SELECT b4.id, q.b, q.c FROM testcat.ns.bucket4 b4
+              |JOIN testcat.ns.plain2 p ON b4.id = p.b + p.c
+              |JOIN testcat.ns.plain2 q ON p.b = q.b AND p.c = q.c""".stripMargin),
+        expected)
+    }
+  }
+
+  test("SPARK-59901: a join key over two columns does not cover its columns") {
+    Seq("ident2a", "ident2b").foreach { name =>
+      createTable(name, Array(Column.create("x", LongType), Column.create("d", LongType)),
+        Array(identity("x"), identity("d")))
+      sql(s"INSERT INTO testcat.ns.$name VALUES (1, 1), (2, 1), (3, 2), (4, 2)")
+    }
+    Seq("pa", "pb").foreach { name =>
+      createTable(name, Array(Column.create("b", LongType), Column.create("c", LongType),
+        Column.create("d", LongType)), Array.empty)
+      sql(s"INSERT INTO testcat.ns.$name VALUES (0, 1, 1), (1, 1, 1), (1, 2, 2), (2, 2, 2)")
+    }
+
+    // Each broadcast join reports its identity side's layout over `[b + c, d]` too. A projection
+    // to the join keys drops `b + c`, which maps to no position, so it does not cover `b` and `c`
+    // for `spark.sql.requireAllClusterKeysForCoPartition`. Otherwise the join on `(b, c, d)` would
+    // be paired on `d` alone.
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = sql(
+        """SELECT l.b, l.c, l.d FROM
+          |  (SELECT /*+ BROADCAST(p) */ p.b, p.c, p.d FROM testcat.ns.ident2a i
+          |   JOIN testcat.ns.pa p ON i.x = p.b + p.c AND i.d = p.d) l
+          |JOIN
+          |  (SELECT /*+ BROADCAST(q) */ q.b, q.c, q.d FROM testcat.ns.ident2b j
+          |   JOIN testcat.ns.pb q ON j.x = q.b + q.c AND j.d = q.d) r
+          |ON l.b = r.b AND l.c = r.c AND l.d = r.d""".stripMargin)
+      checkAnswer(df, Seq(Row(0L, 1L, 1L), Row(1L, 1L, 1L), Row(1L, 2L, 2L), Row(2L, 2L, 2L)))
+      assert(collectAllGroupPartitions(df.queryExecution.executedPlan).isEmpty)
+
+      // With the identity side's columns kept, a sibling layout such as `[x, d]` satisfies the
+      // join's distribution, so no leg is shuffled first. Then only the coverage check keeps
+      // `[b + c, d]` from pairing on `d` alone.
+      val kept = sql(
+        """SELECT l.b, l.c, l.d, l.x, l.id, r.x, r.id FROM
+          |  (SELECT /*+ BROADCAST(p) */ p.b, p.c, p.d, i.x, i.d AS id FROM testcat.ns.ident2a i
+          |   JOIN testcat.ns.pa p ON i.x = p.b + p.c AND i.d = p.d) l
+          |JOIN
+          |  (SELECT /*+ BROADCAST(q) */ q.b, q.c, q.d, j.x, j.d AS id FROM testcat.ns.ident2b j
+          |   JOIN testcat.ns.pb q ON j.x = q.b + q.c AND j.d = q.d) r
+          |ON l.b = r.b AND l.c = r.c AND l.d = r.d""".stripMargin)
+      checkAnswer(kept, Seq(Row(0L, 1L, 1L, 1L, 1L, 1L, 1L), Row(1L, 1L, 1L, 2L, 1L, 2L, 1L),
+        Row(1L, 2L, 2L, 3L, 2L, 3L, 2L), Row(2L, 2L, 2L, 4L, 2L, 4L, 2L)))
+      assert(collectAllGroupPartitions(kept.queryExecution.executedPlan).isEmpty)
+    }
+  }
+
+  test("SPARK-59901: a join keyed on a join-key expression does not run in one partition") {
+    createTable("i1", Array(Column.create("id", LongType)), Array(identity("id")))
+    sql("INSERT INTO testcat.ns.i1 VALUES (1), (2), (3), (4)")
+    createTable("pa", Array(Column.create("b", LongType), Column.create("c", LongType)),
+      Array.empty)
+    sql("INSERT INTO testcat.ns.pa VALUES (0, 1), (1, 1), (1, 2), (2, 2)")
+    createTable("rk", Array(Column.create("k", LongType)), Array.empty)
+    sql("INSERT INTO testcat.ns.rk VALUES (1), (2), (3), (4)")
+
+    // The broadcast join reports `i1`'s layout over its join key, e.g. `[b + c]`. The second join
+    // is keyed on that expression itself, so under `requireAllClusterKeysForDistribution` the
+    // layout satisfies it, but no position maps to a cluster key. Projecting onto the positions
+    // that map would run the join in one partition. `b + 1` is the same with one column.
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      Seq(
+        ("p.b + 1", "l.b + 1", Seq(Row(0L, 1L, 1L), Row(1L, 1L, 2L), Row(1L, 2L, 2L),
+          Row(2L, 2L, 3L))),
+        ("p.b + p.c", "l.b + l.c", Seq(Row(0L, 1L, 1L), Row(1L, 1L, 2L), Row(1L, 2L, 3L),
+          Row(2L, 2L, 4L)))).foreach { case (innerKey, outerKey, expected) =>
+        val df = sql(
+          s"""SELECT l.b, l.c, r.k FROM
+             |  (SELECT /*+ BROADCAST(p) */ p.b, p.c FROM testcat.ns.i1 i
+             |   JOIN testcat.ns.pa p ON i.id = $innerKey) l
+             |JOIN testcat.ns.rk r ON $outerKey = r.k""".stripMargin)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        assert(collectAllGroupPartitions(plan).isEmpty, innerKey)
+        assert(collectShuffles(plan).size == 2, innerKey)
+      }
     }
   }
 
@@ -4581,21 +5011,19 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     case class Query(left: String, right: String, on: String, order: String, select: String,
         expected: Seq[Row], sortingNodes: Int)
     val ids = (94 to 100).map(i => Row(i.toLong))
-    val singleColumnKeys = Seq(
+    val queries = Seq(
       Query("ident", "plain", "i.id = 100 - p.b", "100 - p.b", "p.b",
         (6 to 0 by -1).map(b => Row(b.toLong)), 0),
       Query("ident", "plain", "i.id = 100 - p.b", "100 - p.b DESC", "p.b",
         (0 to 6).map(b => Row(b.toLong)), 1),
       Query("ident", "plain", "i.id = p.s.a", "p.s.a", "i.id", ids, 0),
       Query("ident2", "plain2", "i.x = 100 - p.b AND i.y = p.c", "100 - p.b, p.c DESC", "p.b, p.c",
-        Seq(Row(6L, 2L), Row(6L, 1L), Row(5L, 1L)), 1))
-    // AQE's plan validation fails on `b + c` until SPARK-59901 is fixed, so it runs with AQE off.
-    val twoColumnKey =
-      Query("ident", "plain", "i.id = p.b + p.c", "p.b + p.c", "i.id", ids, 0)
+        Seq(Row(6L, 2L), Row(6L, 1L), Row(5L, 1L)), 1),
+      Query("ident", "plain", "i.id = p.b + p.c", "p.b + p.c", "i.id", ids, 0))
 
     for {
-      (query, aqe) <-
-        singleColumnKeys.flatMap(q => Seq(q -> true, q -> false)) :+ (twoColumnKey -> false)
+      query <- queries
+      aqe <- Seq(true, false)
       broadcast <- Seq(false, true)
     } {
       withSQLConf(
