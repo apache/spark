@@ -173,6 +173,29 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-59672: injected parser binds SQL parameters") {
+    val extension = create { extensions =>
+      extensions.injectParser(MyParser)
+    }
+    withSession(extension) { session =>
+      assert(session.sql("SELECT ? AS col", Array[Any](42)).collect() === Array(Row(42)))
+      assert(session.sql("SELECT :p AS col", Map("p" -> 42)).collect() === Array(Row(42)))
+      // Markers with no value supplied are still rejected.
+      val e = intercept[AnalysisException](session.sql("SELECT ? AS col").collect())
+      assert(e.getCondition === "UNBOUND_SQL_PARAMETER")
+
+      // In legacy mode the markers are bound during analysis instead.
+      val legacyKey = SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key
+      session.conf.set(legacyKey, "true")
+      try {
+        assert(session.sql("SELECT ? AS col", Array[Any](42)).collect() === Array(Row(42)))
+        assert(session.sql("SELECT :p AS col", Map("p" -> 42)).collect() === Array(Row(42)))
+      } finally {
+        session.conf.unset(legacyKey)
+      }
+    }
+  }
+
   test("inject function") {
     val extensions = create { extensions =>
       extensions.injectFunction(MyExtensions.myFunction)
