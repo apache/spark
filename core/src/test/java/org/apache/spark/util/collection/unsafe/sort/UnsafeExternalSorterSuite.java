@@ -173,7 +173,8 @@ public class UnsafeExternalSorterSuite {
       spillElementsThreshold,
       spillSizeThreshold,
       /* spillMergeFactor */ -1,
-      shouldUseRadixSort());
+      shouldUseRadixSort(),
+      /* keyNullable */ false);
   }
 
   @Test
@@ -195,6 +196,42 @@ public class UnsafeExternalSorterSuite {
       assertEquals(4, iter.getRecordLength());
       assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
     }
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testSortingWithDuplicatePrefixesAcrossSpills() throws Exception {
+    // The LONG prefix comparator makes the 8-byte prefix a total order for the key, so equal
+    // prefixes are equal keys. Insert many records with duplicated prefixes spread across several
+    // spill files to exercise the spill-merge tie-break on equal prefixes -- the path where a
+    // total-order prefix lets the merge skip the record comparator. Output must stay in
+    // non-decreasing prefix order with every record preserved, with or without radix sort.
+    final UnsafeExternalSorter sorter = newSorter();
+    final int numDistinct = 8;
+    final int copiesPerBatch = 48;
+    final int numBatches = 6;
+    for (int batch = 0; batch < numBatches; batch++) {
+      for (int i = 0; i < copiesPerBatch; i++) {
+        insertNumber(sorter, i % numDistinct);
+      }
+      sorter.spill();
+    }
+
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    long previousPrefix = Long.MIN_VALUE;
+    int count = 0;
+    while (iter.hasNext()) {
+      iter.loadNext();
+      final long prefix = iter.getKeyPrefix();
+      assertTrue(prefix >= previousPrefix, "prefixes must be non-decreasing");
+      // insertNumber writes the value as both the prefix and the 4-byte payload.
+      assertEquals(prefix, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+      previousPrefix = prefix;
+      count++;
+    }
+    assertEquals(numBatches * copiesPerBatch, count);
 
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
@@ -465,7 +502,8 @@ public class UnsafeExternalSorterSuite {
       spillElementsThreshold,
       spillSizeThreshold,
       /* spillMergeFactor */ -1,
-      shouldUseRadixSort());
+      shouldUseRadixSort(),
+      /* keyNullable */ false);
     long[] record = new long[100];
     int recordSize = record.length * 8;
     int n = (int) pageSizeBytes / recordSize * 3;
@@ -529,7 +567,8 @@ public class UnsafeExternalSorterSuite {
       spillElementsThreshold,
       spillSizeThreshold,
       /* spillMergeFactor */ -1,
-      shouldUseRadixSort());
+      shouldUseRadixSort(),
+      /* keyNullable */ false);
 
     // Peak memory should be monotonically increasing. More specifically, every time
     // we allocate a new page it should increase by exactly the size of the page.

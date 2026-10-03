@@ -166,7 +166,8 @@ class ExternalAppendOnlyUnsafeRowArray(
           numRowsSpillThreshold,
           sizeInBytesSpillThreshold,
           -1, // bounded merge not applicable — this class does not sort
-          false)
+          false,
+          false) // canUseRadixSort / keyNullable: unused, this class does not sort
 
         // populate with existing in-memory buffered rows
         if (inMemoryBuffer != null) {
