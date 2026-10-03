@@ -133,6 +133,24 @@ object KubernetesVolumeUtils {
           options(pathKey),
           options(serverKey))
 
+      case KUBERNETES_VOLUMES_CSI_TYPE =>
+        val driverKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_DRIVER_KEY"
+        verifyOptionKey(options, driverKey, KUBERNETES_VOLUMES_CSI_TYPE)
+        val fsTypeKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_FS_TYPE_KEY"
+        val secretNameKey =
+          s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_NODE_PUBLISH_SECRET_NAME_KEY"
+        val attributesPrefix =
+          s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_VOLUME_ATTRIBUTES_KEY"
+        val attributes = options.collect {
+          case (k, v) if k.startsWith(attributesPrefix) =>
+            k.substring(attributesPrefix.length) -> v
+        }
+        KubernetesCSIVolumeConf(
+          driverName = options(driverKey),
+          attributes = attributes,
+          fsType = options.get(fsTypeKey),
+          nodePublishSecretName = options.get(secretNameKey))
+
       case _ =>
         throw new IllegalArgumentException(s"Kubernetes Volume type `$volumeType` is not supported")
     }
