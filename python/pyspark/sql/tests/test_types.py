@@ -19,6 +19,7 @@ import array
 import ctypes
 import datetime
 import json
+import math
 import os
 import pickle
 import re
@@ -3037,16 +3038,16 @@ class TypesTestsMixin:
         self.assertEqual(str(variants[6]), "5.5")
         self.assertEqual(str(variants[7]), "-5.5")
         self.assertEqual(str(variants[8]), '"Mk+mng=="')
-        self.assertEqual(str(variants[9]), '"1940-01-01 12:33:01.123000"')
+        self.assertEqual(str(variants[9]), '"1940-01-01 12:33:01.123"')
         self.assertEqual(str(variants[10]), '"2522-12-31 05:57:13"')
         self.assertEqual(str(variants[11]), '"0001-07-15 17:43:26"')
-        self.assertEqual(str(variants[12]), '"1940-01-01 05:05:13.123000+00:00"')
+        self.assertEqual(str(variants[12]), '"1940-01-01 05:05:13.123+00:00"')
         self.assertEqual(str(variants[13]), '"2522-12-31 05:23:00+00:00"')
         self.assertEqual(str(variants[14]), '"0001-12-30 17:01:01+00:00"')
 
         # Check to_json on timestamps with custom timezones
         self.assertEqual(
-            variants[12].toJson("America/Los_Angeles"), '"1939-12-31 21:05:13.123000-08:00"'
+            variants[12].toJson("America/Los_Angeles"), '"1939-12-31 21:05:13.123-08:00"'
         )
 
         # check toPython
@@ -3159,6 +3160,57 @@ class TypesTestsMixin:
         # Rows in createDataFrame cannot be of type VariantVal
         with self.assertRaises(PySparkValueError, msg="Rows cannot be of type VariantVal"):
             self.spark.createDataFrame([VariantVal.parseJson("2")], "v variant")
+
+    def test_variant_to_json_matches_jvm(self):
+        # VariantVal.toJson must format scalars like the `to_json` SQL function.
+        exprs = [
+            "double('NaN')",
+            "double('Infinity')",
+            "double('-Infinity')",
+            "float('NaN')",
+            "float('Infinity')",
+            "float('-Infinity')",
+            "float(1.1)",
+            "float(-5.5)",
+            "float(0.1)",
+            "double(1.1)",
+            "cast(1.00 as decimal(5, 2))",
+            "cast(-120.50 as decimal(10, 2))",
+            "cast(0 as decimal(10, 3))",
+            "cast(0.000000001 as decimal(10, 9))",
+            "cast(100 as decimal(5, 0))",
+            "timestamp_ntz'1970-01-01 00:00:01.5'",
+            "timestamp_ntz'1970-01-01 00:00:01'",
+            "timestamp_ntz'1970-01-01 00:00:00.000001'",
+            "timestamp'1970-01-01 00:00:01.5'",
+            "timestamp'1940-01-01 12:35:13.120'",
+            # An offset with seconds: local mean time before the zone adopted standard time.
+            "timestamp'1800-06-01 00:00:00.5'",
+            "array(double('NaN'), float(1.1), cast(2.50 as decimal(3, 2)))",
+        ]
+        for zone_id in ["UTC", "America/Los_Angeles", "Asia/Kolkata"]:
+            with self.sql_conf({"spark.sql.session.timeZone": zone_id}):
+                for expr in exprs:
+                    with self.subTest(zone_id=zone_id, expr=expr):
+                        variant_expr = "cast(%s as variant)" % expr
+                        row = self.spark.sql(
+                            "select %s as v, to_json(%s) as j" % (variant_expr, variant_expr)
+                        ).first()
+                        self.assertEqual(row.v.toJson(zone_id), row.j)
+                        json.loads(row.v.toJson(zone_id))
+
+        # The largest FLOAT. Only the exponent notation differs from the JVM (3.4028235E38).
+        row = self.spark.sql("select cast(float(3.4028235e38) as variant) as v").first()
+        self.assertEqual(row.v.toJson(), "3.4028235e+38")
+
+        # toPython is unchanged.
+        row = self.spark.sql(
+            "select cast(double('NaN') as variant) as n, cast(float(1.1) as variant) as f, "
+            "cast(cast(1.00 as decimal(5, 2)) as variant) as d"
+        ).first()
+        self.assertTrue(math.isnan(row.n.toPython()))
+        self.assertEqual(row.f.toPython(), 1.100000023841858)
+        self.assertEqual(str(row.d.toPython()), "1.00")
 
     def test_variant_to_pandas(self):
         import json
