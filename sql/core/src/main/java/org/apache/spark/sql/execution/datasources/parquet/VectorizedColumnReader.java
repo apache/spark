@@ -103,7 +103,11 @@ public class VectorizedColumnReader {
   private final String datetimeRebaseMode;
   private final ParsedVersion writerVersion;
 
-  /** A reader of the rows the store names, as {@code rowRanges = null} below. */
+  /**
+   * A reader of the rows the store names, as {@code rowRanges = null} below. Nothing in Spark
+   * calls it. It is kept for code outside Spark that builds a column reader with the constructor
+   * that predates the ranges.
+   */
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
       boolean isRequired,

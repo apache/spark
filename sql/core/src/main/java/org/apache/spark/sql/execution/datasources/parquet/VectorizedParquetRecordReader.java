@@ -185,7 +185,9 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   /**
    * Implementation of RecordReader API. Super's delegates to the overload below, which runs
-   * {@link #initializeInternal()}, so this does not run it a second time.
+   * {@link #initializeInternal()}, so this does not run it a second time. Kept although it only
+   * calls super, because removing it fails MiMa with a {@code DirectAbstractMethodProblem} on
+   * {@code org.apache.hadoop.mapreduce.RecordReader.initialize}.
    */
   @Override
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
@@ -518,6 +520,24 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       }
     }
     totalCountLoadedSoFar += pages.getRowCount();
+  }
+
+  /**
+   * Drops the column readers of the row group installed last, and the row-index iterator, both of
+   * which hold the row ranges that row group was read over. For a subclass that does work of its
+   * own between two row groups, so that work does not run with the previous ranges still held.
+   * Call it only from {@link #loadNextRowGroup}, once the row group is fully emitted. A batch read
+   * after it needs another row group installed first.
+   */
+  protected final void releaseRowGroupReaders() {
+    for (ParquetColumnVector vector : columnVectors) {
+      for (ParquetColumnVector leaf : vector.getLeaves()) {
+        leaf.setColumnReader(null);
+      }
+    }
+    if (rowIndexGenerator != null) {
+      rowIndexGenerator.release();
+    }
   }
 
   /**

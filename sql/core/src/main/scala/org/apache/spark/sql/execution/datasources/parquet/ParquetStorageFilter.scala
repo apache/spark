@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.Executor
 import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
@@ -137,12 +139,14 @@ class ParquetStorageFilter private (
     }
     val created = Predicate.create(boundExpression)
     // A prepared bloom reaches the executor as a binary Literal inside this expression, up to
-    // `spark.sql.optimizer.runtime.bloomFilter.maxNumBits` of it, while `created` holds the
-    // deserialized filter instead. Dropping the expression lets a columnar scan's task reclaim
-    // those bytes for the rest of its life. A row-based scan keeps them anyway, since its closure
-    // captures the scan node, whose storage filters hold the same bytes. Safe because every task
-    // attempt deserializes its own copy from the driver's bytes, and this lazy val is the only
-    // reader of the field.
+    // `spark.sql.optimizer.runtime.bloomFilter.maxNumBits` of it, while a code-generated `created`
+    // holds the deserialized filter instead. Dropping the expression lets a columnar scan's task
+    // reclaim those bytes for the rest of its life. An interpreted `created`, the fallback when
+    // codegen fails or is off, keeps the expression itself, so the bytes stay. A row-based scan
+    // keeps them anyway, since its closure captures the scan node, whose storage filters hold the
+    // same bytes.
+    // Safe because every task attempt deserializes its own copy from the driver's bytes, and this
+    // lazy val is the only reader of the field.
     //
     // It does mean the filter must only ever be evaluated on an executor. Were the driver's copy
     // to run this, it is the copy serialized to every attempt, and it would go out with nothing
@@ -241,48 +245,45 @@ object ParquetStorageFilter {
   }
 
   /**
-   * Rethrows an error the reader met while evaluating a storage filter, if it must not fall back
-   * on it by giving the filter up. The checks run in the executor's own order:
+   * Rethrows an error the reader met while applying a storage filter, if it must not fall back on
+   * it by giving the filter up. `fromRead` says the error came from decoding the key pages rather
+   * than from evaluating the filter. The checks run in the executor's own order:
    *  - a fatal error goes out as it is, kill or no kill.
-   *  - a pending task kill goes out wrapped, see [[throwIfKilled]]. The error may be the kill's
-   *    interrupt surfacing through a UDF that wrapped it. `PythonRunner` reads a kill off the task
-   *    context in the same way.
+   *  - a pending task kill goes out wrapped when the error is one the executor's kill case takes,
+   *    see [[throwIfKilled]]. The error may be the kill's interrupt surfacing through a UDF that
+   *    wrapped it. `PythonRunner` reads a kill off the task context in the same way.
    *  - a fatal error deeper in the cause chain, found by `Executor.isFatalError` as deep as the
-   *    executor would look had the post-scan Filter raised `e`, which it raises as it is, goes out
-   *    as itself, so the executor finds it at the top whatever wraps it on the way.
+   *    executor would look had a plain plan raised `e`, goes out as itself, so the executor finds
+   *    it at the top whatever wraps it on the way.
    *
-   * An `InternalError` among those goes out in a checked wrapper. `FileScanRDD` would take a bare
-   * one for a corrupt file under `ignoreCorruptFiles`, where a plain plan raises it from the
-   * post-scan Filter, outside that catch. The executor finds it under the wrapper and the
-   * FAILED_READ_FILE around that at a `spark.executor.killOnFatalError.depth` of 3 or more, the
-   * default being 5.
+   * An `InternalError` among those goes out in an `UnknownError`, a fatal error of another type.
+   * `FileScanRDD` would take a bare `InternalError` from a reader for a corrupt file under
+   * `ignoreCorruptFiles`. A `NonFatal` wrapper does not work either. With a kill pending, the
+   * executor reports one as killed and keeps running. A plain plan raises it from the post-scan
+   * Filter, where neither happens, and the executor stops. It stops on the `UnknownError` too, at
+   * any `spark.executor.killOnFatalError.depth` of 1 or more, since that is at the top.
    *
-   * Anything else is the filter's own error, which the post-scan Filter raises again for a row it
-   * does evaluate, so the reader falls back on it.
-   */
-  def rethrowIfMustPropagate(e: Throwable): Unit = rethrowIfMustPropagate(e, fromRead = false)
-
-  /**
-   * As [[rethrowIfMustPropagate]], for an error decoding the key pages, with three differences:
-   *  - a plain read raises that from the reader, where `FileScanRDD` wraps it in FAILED_READ_FILE
-   *    before the executor looks, so a fatal error deeper in the chain has to sit one level
-   *    shallower to count.
+   * An error from decoding differs in three ways:
+   *  - a plain read raises it from the reader, where `FileScanRDD` wraps a `NonFatal` one in
+   *    FAILED_READ_FILE before the executor looks, so a fatal error deeper in the chain has to sit
+   *    one level shallower to count. Under `ignoreCorruptFiles` a plain read may skip the rest of
+   *    the file on it instead.
    *  - an `InternalError` is corrupt data, as `DataSourceUtils.shouldIgnoreCorruptFileException`
    *    takes it.
    *  - a key vector that cannot grow (see [[isVectorGrowthFailure]]) is phase 1's own, since
    *    phase 1 decodes into vectors only this reader allocates. Giving the extra work up is the
    *    answer to that.
-   * The reader falls back on those, and the plain read of the same pages meets the corrupt data
-   * again, or allocates what a plain read allocates.
+   *
+   * Anything else falls back. An evaluation error is the filter's own, which the post-scan Filter
+   * raises again for a row it does evaluate. A decoding error is met again by the plain read of
+   * the same pages.
    */
-  def rethrowIfMustPropagateFromRead(e: Throwable): Unit =
-    rethrowIfMustPropagate(e, fromRead = true)
-
-  private def rethrowIfMustPropagate(e: Throwable, fromRead: Boolean): Unit = {
+  def rethrowIfMustPropagate(e: Throwable, fromRead: Boolean): Unit = {
     def corrupt(t: Throwable): Boolean = fromRead && t.isInstanceOf[InternalError]
     def out(fatal: Throwable): Throwable = fatal match {
       case internal: InternalError =>
-        new SparkException("A storage filter met a fatal error it must not absorb", internal)
+        new UnknownError("A storage filter met a fatal error it must not absorb")
+          .initCause(internal)
       case other => other
     }
     if (Executor.isFatalError(e, 1) && !corrupt(e)) throw out(e)
@@ -296,13 +297,13 @@ object ParquetStorageFilter {
   }
 
   /**
-   * Whether `e` is how `WritableColumnVector.reserve` reports a vector that cannot grow: a plain
-   * `RuntimeException`, caused by an `OutOfMemoryError` or by nothing, for a capacity past what a
-   * vector can hold.
+   * Whether `e` is how `WritableColumnVector.reserve` reports a vector that ran out of memory to
+   * grow, a plain `RuntimeException` caused by an `OutOfMemoryError`. The one it raises with no
+   * cause, for a capacity past what a vector can hold, has no fatal error to find, so the reader
+   * falls back on it anyway.
    */
   private def isVectorGrowthFailure(e: Throwable): Boolean =
-    e.getClass == classOf[RuntimeException] &&
-      (e.getCause == null || e.getCause.isInstanceOf[OutOfMemoryError])
+    e.getClass == classOf[RuntimeException] && e.getCause.isInstanceOf[OutOfMemoryError]
 
   /**
    * Throws a pending task kill, for the reader's loops that can run long without returning to
@@ -315,29 +316,35 @@ object ParquetStorageFilter {
    * error the kill surfaced as, if any. Under `ignoreCorruptFiles`, `FileScanRDD` would log any
    * `RuntimeException` or `IOException` from a reader as a corrupt file and go on to open the
    * split's remaining files, since it checks for a kill only between batches. The executor reports
-   * the task as killed either way.
+   * the task as killed either way. This covers the kills this reader sees at its own checks and
+   * catches. One that surfaces as an `IOException` from `readFilteredRowGroup` or from phase 2's
+   * decoding reaches that catch as it does for a plain read.
+   *
+   * The executor reports a task as killed only for an `InterruptedException` or a `NonFatal`
+   * error. So a `surfaced` error of any other type goes out as it is, the way a plain read raises
+   * it where it meets the same error. For example a codec's `InternalError` while decoding, or a
+   * `LinkageError` from a UDF.
    */
   private def throwIfKilled(surfaced: Throwable): Unit = {
     val context = TaskContext.get()
     if (context != null && context.isInterrupted()) {
-      val cause =
-        if (surfaced != null) surfaced else new TaskKilledException(context.getKillReason().get)
+      val cause = surfaced match {
+        case null => new TaskKilledException(context.getKillReason().get)
+        case _: InterruptedException | NonFatal(_) => surfaced
+        case other => throw other
+      }
       throw new SparkException("A storage filter met a task kill it must not absorb", cause)
     }
   }
 
   /**
-   * Throws `SparkException.internalError(message, cause)`, for a broken invariant of this reader.
+   * Throws `SparkException.internalError(message)`, for a broken invariant of this reader.
    * The exception is checked, so `FileScanRDD` cannot read it as a corrupt file under
    * `ignoreCorruptFiles` and skip the rest of the file silently. Typed as returning a
    * `RuntimeException` only so that Java code can write `throw internalError(...)` without
    * declaring a checked exception. It never returns.
    */
-  def internalError(message: String, cause: Throwable): RuntimeException =
-    throw SparkException.internalError(message, cause)
-
-  /** [[internalError]] with no cause. */
-  def internalError(message: String): RuntimeException = internalError(message, null)
+  def internalError(message: String): RuntimeException = throw SparkException.internalError(message)
 
   // Read the way `SparkUncaughtExceptionHandler` reads it, since there may be no SparkEnv.
   private def fatalErrorDepth: Int = Option(SparkEnv.get).map(_.conf.get(KILL_ON_FATAL_ERROR_DEPTH))

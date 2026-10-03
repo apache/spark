@@ -210,8 +210,9 @@ class ParquetFileFormat
 
   /**
    * Whether this is `ParquetFileFormat` itself rather than a subclass, which both storage-filter
-   * entry points ask. Private, so a subclass cannot opt in by overriding one of them and still be
-   * declined by the other.
+   * entry points ask. Private, so overriding one entry point does not opt a subclass in. A subclass
+   * that overrides only `supportsStorageFilterPushdown` is still declined by
+   * `buildReaderWithStorageFilters`, and its scan reads plainly.
    */
   private def isExactlyParquetFileFormat: Boolean = getClass == classOf[ParquetFileFormat]
 

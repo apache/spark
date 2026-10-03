@@ -21,6 +21,8 @@ import java.lang.reflect.{InvocationTargetException, Method}
 import java.time.ZoneId
 import java.util.PrimitiveIterator
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.parquet.column.ColumnDescriptor
 import org.apache.parquet.filter2.columnindex.RowRanges
 import org.apache.parquet.schema.LogicalTypeAnnotation
@@ -30,10 +32,11 @@ import org.apache.spark.util.SparkClassUtils
 
 /**
  * Reflective bridge to package-private classes in
- * `org.apache.spark.sql.execution.datasources.parquet`. Under `spark-submit --jars`, test
- * and main classes load from different classloaders, blocking package-private access despite
- * the matching package name. Reflection with `setAccessible(true)` sidesteps the check
- * without widening production visibility.
+ * `org.apache.spark.sql.execution.datasources.parquet`, and to private state of its readers.
+ * Under `spark-submit --jars`, test and main classes load from different classloaders, blocking
+ * package-private access despite the matching package name. Reflection with
+ * `setAccessible(true)` sidesteps the check without widening production visibility. So a
+ * package-private class is looked up by name here, never named in a `classOf` or a cast.
  *
  * Currently bridges:
  *   - `ParquetReadState` (its factory + `resetForNewBatch` + `resetForNewPage`)
@@ -41,6 +44,9 @@ import org.apache.spark.util.SparkClassUtils
  *   - `ParquetVectorUpdaterFactory` (constructor)
  *   - `VectorizedDeltaByteArrayReader` (no-arg constructor)
  *   - `VectorizedDeltaLengthByteArrayReader` (no-arg constructor)
+ *   - `LateMaterializationParquetRecordReader`'s scratch vectors, the column readers and row
+ *     indexes a reader still holds, and a vector's byte-child capacity (private state a test
+ *     checks the reader's memory by)
  */
 object ParquetTestAccess {
 
@@ -180,6 +186,69 @@ object ParquetTestAccess {
   def newDeltaLengthByteArrayReader(): VectorizedDeltaLengthByteArrayReader =
     try { deltaLengthByteArrayCtor.newInstance() }
     catch { case e: ReflectiveOperationException => throw rethrow(e) }
+
+  // -------- LateMaterializationParquetRecordReader --------
+
+  private val keyScratchVectorsField = {
+    val f = classOf[LateMaterializationParquetRecordReader].getDeclaredField("keyScratchVectors")
+    f.setAccessible(true)
+    f
+  }
+
+  /** The vectors phase 1 decodes key pages into. */
+  def keyScratchVectors(reader: LateMaterializationParquetRecordReader): Seq[WritableColumnVector] =
+    keyScratchVectorsField.get(reader).asInstanceOf[Array[WritableColumnVector]].toSeq
+
+  private val columnVectorsField = {
+    val f = classOf[VectorizedParquetRecordReader].getDeclaredField("columnVectors")
+    f.setAccessible(true)
+    f
+  }
+
+  private val columnVectorCls = SparkClassUtils.classForName[Any](
+    "org.apache.spark.sql.execution.datasources.parquet.ParquetColumnVector")
+
+  private val getLeavesMethod = {
+    val m = columnVectorCls.getDeclaredMethod("getLeaves")
+    m.setAccessible(true)
+    m
+  }
+
+  private val getColumnReaderMethod = {
+    val m = columnVectorCls.getDeclaredMethod("getColumnReader")
+    m.setAccessible(true)
+    m
+  }
+
+  /** How many leaf columns of the reader's batch still hold a column reader. */
+  def columnReadersHeld(reader: VectorizedParquetRecordReader): Int =
+    columnVectorsField.get(reader).asInstanceOf[Array[AnyRef]].iterator
+      .flatMap(v => getLeavesMethod.invoke(v).asInstanceOf[java.util.List[AnyRef]].asScala)
+      .count(leaf => getColumnReaderMethod.invoke(leaf) != null)
+
+  private val rowIndexGeneratorField = {
+    val f = classOf[VectorizedParquetRecordReader].getDeclaredField("rowIndexGenerator")
+    f.setAccessible(true)
+    f
+  }
+
+  /** Whether the reader's row-index generator still holds the row indexes of a row group. */
+  def rowIndexesHeld(reader: VectorizedParquetRecordReader): Boolean = {
+    val generator = rowIndexGeneratorField.get(reader)
+      .asInstanceOf[ParquetRowIndexUtil.RowIndexGenerator]
+    require(generator != null, "the reader must generate row indexes")
+    generator.rowIndexIterator != null
+  }
+
+  private val capacityField = {
+    val f = classOf[WritableColumnVector].getDeclaredField("capacity")
+    f.setAccessible(true)
+    f
+  }
+
+  /** How many bytes a variable-length vector's byte child holds before it has to grow. */
+  def byteChildCapacity(vector: WritableColumnVector): Int =
+    capacityField.getInt(vector.arrayData())
 
   // -------- shared helper --------
 
