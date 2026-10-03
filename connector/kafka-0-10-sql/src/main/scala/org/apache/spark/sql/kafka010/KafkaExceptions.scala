@@ -251,6 +251,28 @@ object KafkaExceptions {
         "partition" -> topicPartition.partition.toString))
   }
 
+  def invalidBatchOffset(
+      offsetName: String,
+      offsetValue: String): KafkaIllegalArgumentException = {
+    new KafkaIllegalArgumentException(
+      errorClass = "KAFKA_INVALID_BATCH_OFFSET.GLOBAL",
+      messageParameters = Map(
+        "offsetName" -> offsetName,
+        "offsetValue" -> offsetValue))
+  }
+
+  def invalidBatchOffsetForTopicOrPartition(
+      offsetName: String,
+      offsetValue: String,
+      topicOrPartition: String): KafkaIllegalArgumentException = {
+    new KafkaIllegalArgumentException(
+      errorClass = "KAFKA_INVALID_BATCH_OFFSET.TOPIC_OR_PARTITION",
+      messageParameters = Map(
+        "offsetName" -> offsetName,
+        "offsetValue" -> offsetValue,
+        "topicOrPartition" -> topicOrPartition))
+  }
+
   def resolvedStartOffsetGreaterThanEndOffset(
       startOffset: Long,
       endOffset: Long,
