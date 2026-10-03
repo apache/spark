@@ -36,8 +36,10 @@ import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import org.apache.spark.HashPartitioner;
 import org.apache.spark.Partitioner;
 import org.apache.spark.SparkConf;
+import org.apache.spark.SparkException;
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
 import scala.Tuple2;
@@ -1529,6 +1531,98 @@ public class JavaAPISuite implements Serializable {
     assertEquals(2, cachedRddsMap.size());
     assertEquals("RDD1", cachedRddsMap.get(0).name());
     assertEquals("RDD2", cachedRddsMap.get(1).name());
+  }
+
+  @Test
+  public void testArrayKeyUnderHashPartitionerFails() {
+    List<Tuple2<byte[], Integer>> pairs = Arrays.asList(
+      new Tuple2<>(new byte[]{1}, 1),
+      new Tuple2<>(new byte[]{2}, 2)
+    );
+    JavaPairRDD<byte[], Integer> pairRDD = sc.parallelizePairs(pairs);
+
+    // Homogeneous byte[] keys and values still collect successfully
+    List<byte[]> collectedKeys = pairRDD.keys().collect();
+    assertEquals(2, collectedKeys.size());
+    assertArrayEquals(new byte[]{1}, collectedKeys.get(0));
+    assertArrayEquals(new byte[]{2}, collectedKeys.get(1));
+    List<Integer> collectedValues = pairRDD.values().collect();
+    assertEquals(Arrays.asList(1, 2), collectedValues);
+
+    SparkException ex1 = assertThrows(SparkException.class,
+      () -> pairRDD.partitionBy(new HashPartitioner(2)));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex1.getCondition());
+
+    SparkException ex2 = assertThrows(SparkException.class,
+      () -> pairRDD.join(pairRDD));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex2.getCondition());
+
+    SparkException ex3 = assertThrows(SparkException.class,
+      () -> pairRDD.cogroup(pairRDD));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex3.getCondition());
+
+    SparkException ex4 = assertThrows(SparkException.class,
+      () -> pairRDD.subtractByKey(pairRDD));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex4.getCondition());
+
+    // Array key is not the first element in the collection
+    List<Tuple2<Object, Integer>> mixedKeyPairs = Arrays.asList(
+      new Tuple2<>("nonArrayKey", 1),
+      new Tuple2<>(new byte[]{2}, 2)
+    );
+    JavaPairRDD<Object, Integer> mixedKeyRDD = sc.parallelizePairs(mixedKeyPairs);
+    SparkException exMixed = assertThrows(SparkException.class,
+      () -> mixedKeyRDD.partitionBy(new HashPartitioner(2)));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", exMixed.getCondition());
+
+    List<Tuple2<byte[], Integer>> nullKeyFirstPairs = Arrays.asList(
+      new Tuple2<>(null, 1),
+      new Tuple2<>(new byte[]{2}, 2)
+    );
+    JavaPairRDD<byte[], Integer> nullKeyFirstRDD = sc.parallelizePairs(nullKeyFirstPairs);
+    SparkException exNullFirst = assertThrows(SparkException.class,
+      () -> nullKeyFirstRDD.partitionBy(new HashPartitioner(2)));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", exNullFirst.getCondition());
+
+    // Also test JavaPairRDD.fromJavaRDD with explicit key class
+    JavaRDD<Tuple2<byte[], Integer>> rdd = sc.parallelize(pairs);
+    JavaPairRDD<byte[], Integer> fromJava = JavaPairRDD.fromJavaRDD(rdd, byte[].class);
+
+    SparkException ex5 = assertThrows(SparkException.class,
+      () -> fromJava.partitionBy(new HashPartitioner(2)));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex5.getCondition());
+
+    SparkException ex6 = assertThrows(SparkException.class,
+      () -> fromJava.join(fromJava));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex6.getCondition());
+
+    SparkException ex7 = assertThrows(SparkException.class,
+      () -> fromJava.cogroup(fromJava));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex7.getCondition());
+
+    SparkException ex8 = assertThrows(SparkException.class,
+      () -> fromJava.subtractByKey(fromJava));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex8.getCondition());
+  }
+
+  @Test
+  public void testHeterogeneousKeysAndValuesDoNotThrowArrayStoreException() {
+    List<Tuple2<Number, Object>> pairs = Arrays.asList(
+      new Tuple2<>(1, "stringVal"),
+      new Tuple2<>(2.0, 100)
+    );
+    JavaPairRDD<Number, Object> pairRDD = sc.parallelizePairs(pairs);
+
+    List<Number> keys = pairRDD.keys().collect();
+    assertEquals(Arrays.asList(1, 2.0), keys);
+
+    List<Object> values = pairRDD.values().collect();
+    assertEquals(Arrays.asList("stringVal", 100), values);
+
+    // Ensure HashPartitioner does not produce a false positive on non-array heterogeneous keys
+    JavaPairRDD<Number, Object> partitioned = pairRDD.partitionBy(new HashPartitioner(2));
+    assertEquals(2, partitioned.partitions().size());
+    assertEquals(2, partitioned.collect().size());
   }
 
 }

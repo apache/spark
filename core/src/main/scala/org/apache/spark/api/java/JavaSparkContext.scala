@@ -152,9 +152,14 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /** Distribute a local Scala collection to form an RDD. */
   def parallelizePairs[K, V](list: java.util.List[Tuple2[K, V]], numSlices: Int)
   : JavaPairRDD[K, V] = {
-    implicit val ctagK: ClassTag[K] = fakeClassTag
+    val seq = list.asScala.toSeq
+    implicit val ctagK: ClassTag[K] =
+      seq.iterator.collectFirst {
+        case t if t != null && t._1 != null && t._1.getClass.isArray =>
+          ClassTag(t._1.getClass).asInstanceOf[ClassTag[K]]
+      }.getOrElse(fakeClassTag[K])
     implicit val ctagV: ClassTag[V] = fakeClassTag
-    JavaPairRDD.fromRDD(sc.parallelize(list.asScala.toSeq, numSlices))
+    JavaPairRDD.fromRDD(sc.parallelize(seq, numSlices))
   }
 
   /** Distribute a local Scala collection to form an RDD. */
