@@ -1734,6 +1734,40 @@ class WholeStageCodegenSuite extends SharedSparkSession
       "sinh(v) should be evaluated only once per input row without function splitting")
   }
 
+  test("SPARK-59589: Expand hands a compacted mutable state slot to the consumer as a global") {
+    // A varying output column of an Expand lives in a mutable state, and for a type
+    // `addMutableState` cannot inline it is a slot in a compacted array (`mutableStateArray_0[3]`)
+    // rather than a field name. A consumer that collects the local variables of its input to pass
+    // them into a split function -- `CodeGenerator.getLocalInputVariableValues` -- must not take
+    // that slot for a local variable, since a slot expression cannot be a parameter name.
+    // This asserts the invariant on the shape that comes closest to reaching it: the child of a
+    // regular aggregate under a distinct rewrite is a varying `string` column, the buffers stay
+    // fixed width so the plan is a `HashAggregateExec`, aggregate function splitting is forced, and
+    // the consume function per operator is turned off so that the aggregate sees the Expand's own
+    // expressions rather than fresh parameters of a `doConsume` function.
+    withSQLConf(
+      SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false",
+      SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "true",
+      SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      val df = spark.range(0, 4, 1, 1).selectExpr(
+        "cast(id as string) as a", "cast(id % 2 as string) as b", "cast(id as string) as c")
+      // `RewriteDistinctAggregates` puts each distinct group in its own Expand branch and nulls the
+      // other groups' columns, so the child of the regular `count` varies across branches.
+      val query = df.agg(countDistinct("a"), countDistinct("b"), count("c"))
+      val plan = query.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[ExpandExec]), "Expand is expected")
+      assert(plan.exists(_.isInstanceOf[HashAggregateExec]), "HashAggregate is expected")
+      val code = codegenStringSeq(plan).map(_._2).mkString("\n")
+      // The slot is read inside generated methods and passed as an argument, which is legal; being
+      // a parameter name is not.
+      assert(code.contains("mutableStateArray"), "the varying column should be a compacted slot")
+      val slotParams = """private void [a-zA-Z0-9_]+\([^)]*mutableStateArray""".r
+        .findAllIn(code).toList
+      assert(slotParams.isEmpty, s"a compacted slot was used as a parameter name: $slotParams")
+      checkAnswer(query, Row(4L, 2L, 4L))
+    }
+  }
+
   test("SPARK-59295: a nested With in a branch is emitted once per scope under whole-stage") {
     // A whole-stage `Project` passes its input as local variables, which is where
     // `CommonExprSlots.fill` could not put a definition in a method before. Both `nullif`s survive
