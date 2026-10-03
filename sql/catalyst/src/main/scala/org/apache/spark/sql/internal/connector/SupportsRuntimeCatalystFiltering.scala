@@ -43,11 +43,11 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * for any of these attributes. Each reference must resolve against the scan relation output
    * when Spark builds it. Attributes pruned out of [[Scan.readSchema]] fail to resolve.
    *
-   * A dynamic partition pruning filter has no post-scan evaluator at all: Spark removes it from
-   * the post-scan filters whether or not the attribute is also in [[fullyPushedFilterAttributes]],
-   * because the join it was derived from already implies it. So an attribute exposed here must be
-   * one this scan can filter on exactly, not approximately. [[fullyPushedFilterAttributes]]
-   * changes what Spark does only for a filter it derived from a scalar subquery.
+   * The scan may prune conservatively and return rows that fail a runtime filter: the join a
+   * dynamic partition pruning filter was derived from drops them, a row-level operation evaluates
+   * its own condition on each row it reads, and the `FilterExec` above the scan drops them unless
+   * the filter is fully pushed (see [[fullyPushedFilterAttributes]]). It must never drop a row
+   * that satisfies the filter.
    */
   def filterAttributes(): Array[NamedReference]
 
@@ -93,7 +93,11 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * assume it is the only one used. One scan instance can back several scan nodes (e.g. the two
    * branches of a group-based UPDATE), each with its own runtime filters, so an implementation
    * must derive its result from the given expressions alone and must not carry state over from a
-   * previous call.
+   * previous call. A group-based scan whose write replaces the groups that were read has to record
+   * what each call returned for that write, and count a scan node that read through
+   * `planInputPartitions()` as having read every group that method returns. Spark may also call
+   * that method while planning a scan node, so such a call alone does not show that the node read
+   * through it.
    *
    * Spark currently tracks runtime-filter eligibility by root attribute. If [[filterAttributes]]
    * returns a nested reference, an expression may access another nested field under the same root.

@@ -23,10 +23,11 @@ import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DynamicPruningExpression, DynamicPruningSubquery, EqualTo, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
+import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.datasources.FilePartition
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan}
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -230,8 +231,8 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
   test("a DPP filter a union branch cannot apply is dropped instead of failing the query") {
     // PartitionPruning resolves a union key through the first branch only, and the filter it
     // inserts is then pushed positionally into every branch. So the unpartitioned branch's scan
-    // is handed a filter over a column it never declared filterable. Dropping it costs pruning
-    // on that branch and nothing else, since the join re-applies it; letting it through means an
+    // is offered a filter over a column it never declared filterable. Dropping it costs nothing,
+    // since that branch cannot prune on it and the join re-applies it; letting it through means an
     // INTERNAL_ERROR from a query that runs today.
     withDppV2Conf {
       withTempDir { dir =>
@@ -247,20 +248,22 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
             |) u JOIN dim d ON u.part = d.dim_id WHERE d.dim_val = 7""".stripMargin)
         val expected = (0 until 10).map(i => Row(i * 10 + 7))
         checkAnswer(df, expected ++ expected)
-        // The filter did reach the branch that cannot use it: that is what makes this a regression
-        // test rather than a query that happens to work. Both the unpartitioned branch and `dim`
-        // are scans with no partition column, so ask for the one that was handed a live DPP filter.
-        val unusable = collect(df.queryExecution.executedPlan) {
-          case b: BatchScanExec if b.scan.isInstanceOf[FileScan] &&
-            b.scan.asInstanceOf[FileScan].readPartitionSchema.isEmpty &&
-            b.runtimeFilters.exists {
-              case DynamicPruningExpression(child) => !child.isInstanceOf[Literal]
-              case _ => false
-            } => b
+        // The filter did reach the branch that cannot use it in the optimized plan, which is what
+        // makes this a regression test rather than a query that happens to work.
+        val optimizedBranchFilters = df.queryExecution.optimizedPlan.collect {
+          case f: Filter if f.condition.exists(_.isInstanceOf[DynamicPruningSubquery]) &&
+            f.child.output.exists(_.name == "other") => f
         }
-        assert(unusable.size == 1,
-          "expected the DPP filter to reach exactly the branch that cannot apply it, got " +
-            unusable.map(_.scan.description()).mkString("\n"))
+        assert(optimizedBranchFilters.size == 1,
+          "expected the DPP filter over the branch that cannot apply it, got plan:\n" +
+            df.queryExecution.optimizedPlan.treeString)
+        // The strategy dropped it at planning, so the scan of that branch has no runtime filter.
+        val otherScans = collect(df.queryExecution.executedPlan) {
+          case b: BatchScanExec if b.output.exists(_.name == "other") => b
+        }
+        assert(otherScans.size == 1, s"expected one scan of fact_other, got $otherScans")
+        assert(otherScans.head.runtimeFilters.isEmpty,
+          s"expected no runtime filter on fact_other, got ${otherScans.head.runtimeFilters}")
         // And the branch that can use it still pruned.
         val numOutputRows = factScanOf(df).metrics("numOutputRows").value
         assert(numOutputRows == 10,
@@ -300,17 +303,17 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
   }
 
   test("a subclass that narrows the file set in partitions keeps it under a runtime filter") {
-    // The runtime-filter path filters what `partitions` returned, so an override of it is honored.
-    // Listing the files again instead would hand the excluded ones back as soon as a filter fired,
-    // and with the filter declared fully pushed nothing above the scan would remove them.
+    // The runtime-filter path filters the files `partitions` returned, so a file an override of it
+    // drops stays dropped. Listing the files again instead would hand it back as soon as a filter
+    // fired, and with the filter declared fully pushed nothing above the scan would remove it.
     withDppV2Conf {
       withTempDir { dir =>
         writeFactAndDim(dir)
         val df = sql("SELECT f.id, f.part FROM fact f")
         df.collect()
         val scan = fileScanOf(df).asInstanceOf[ParquetScan]
-        // Keeps the files of one partition directory, which the second filter below does not
-        // select, and counts how often the scan asks for its partitions.
+        // Keeps only partition directory 3's files and counts how often the scan asks for its
+        // partitions.
         var partitionsCalls = 0
         val narrowed = new ParquetScan(scan.sparkSession, scan.hadoopConf, scan.fileIndex,
           scan.dataSchema, scan.readDataSchema, scan.readPartitionSchema, scan.pushedFilters,
@@ -323,16 +326,22 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
             }.filter(_.files.nonEmpty)
           }
         }
+        def partValues(parts: Array[InputPartition]): Seq[Int] =
+          parts.flatMap(_.asInstanceOf[FilePartition].files.map(_.partitionValues.getInt(0)))
+            .distinct.toSeq
         val partAttr = AttributeReference("part", IntegerType)()
-        val kept = narrowed.planInputPartitionsWithRuntimeFilters(
-          Array(EqualTo(partAttr, Literal(3))))
-        assert(kept.flatMap(_.asInstanceOf[FilePartition].files.map(_.partitionValues.getInt(0)))
-          .distinct.toSeq === Seq(3))
-        // And a filter selecting a directory the override dropped comes back with nothing.
+        // The plain read path first, as planning does through `supportsColumnar`.
+        assert(partValues(narrowed.planInputPartitions()) === Seq(3))
+        // A filter selecting a directory the override dropped comes back with nothing, and the
+        // calls after it, plain and filtered, still find the directory it kept: no call narrows
+        // what the next one starts from.
         assert(narrowed.planInputPartitionsWithRuntimeFilters(
           Array(EqualTo(partAttr, Literal(7)))).isEmpty)
-        // Both calls filtered one listing, which is what keeps the plan and the execution on one
-        // snapshot of the file index.
+        assert(partValues(narrowed.planInputPartitions()) === Seq(3))
+        assert(partValues(narrowed.planInputPartitionsWithRuntimeFilters(
+          Array(EqualTo(partAttr, Literal(3))))) === Seq(3))
+        // All four calls above shared one listing, which is what keeps the plan and the execution
+        // on one snapshot of the file index.
         assert(partitionsCalls === 1, s"expected one listing, got $partitionsCalls")
       }
     }
@@ -460,7 +469,7 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
   test("runtime partition pruning survives a mixed-case partition column reference") {
     // `f.PART` is resolved to the schema's `part` before it ever becomes a runtime filter, so this
     // pins the end-to-end path rather than any name matching: what the scan receives is identical
-    // to the lower-case query's. The test below is the one that pins matching by exact name.
+    // to the lower-case query's. The test below pins how the scan matches the name.
     withDppV2Conf {
       withTempDir { dir =>
         writeFactAndDim(dir)
@@ -627,6 +636,91 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
           val numOutputRows = factScan.metrics("numOutputRows").value
           assert(numOutputRows == 100,
             s"expected the fact scan to read all 100 rows, got $numOutputRows")
+        }
+      }
+    }
+  }
+
+  test("a runtime filter binds to the read partition columns when only some of them are read") {
+    // `partitions` projects each file's partition values down to `readPartitionSchema` when the
+    // query reads a strict subset of the partition columns, so a filter on `p2` has to read slot 0
+    // of those values. Binding by the table's partition schema would read slot 1, which in the
+    // projected values holds `p3`: rows that satisfy the filter are lost, and with the filter
+    // fully pushed, rows that do not are returned.
+    withDppV2Conf {
+      withTempDir { dir =>
+        val tPath = new File(dir, "t").getCanonicalPath
+        spark.range(100).selectExpr("id", "id % 2 AS p1", "id % 5 AS p2", "id % 3 AS p3")
+          .write.format("parquet").partitionBy("p1", "p2", "p3").save(tPath)
+        spark.read.format("parquet").schema("id long, p1 int, p2 int, p3 int").load(tPath)
+          .createOrReplaceTempView("t")
+        writeFactAndDim(dir)
+        val expected = (0 until 100).filter(_ % 5 == 2).map(i => Row(i.toLong, i % 3))
+        Seq(
+          """SELECT id, p3 FROM t
+            |WHERE p2 = (SELECT max(dim_id) FROM dim WHERE dim_val = 2)""".stripMargin,
+          """SELECT t.id, t.p3 FROM t JOIN dim d
+            |ON t.p2 = d.dim_id WHERE d.dim_val = 2""".stripMargin).foreach { query =>
+          val df = sql(query)
+          checkAnswer(df, expected)
+          val scan = factScanOf(df)
+          assert(scan.scan.asInstanceOf[FileScan].readPartitionSchema.fieldNames.toSeq ===
+            Seq("p2", "p3"), "the scan must read a strict subset of the partition columns")
+          val numOutputRows = scan.metrics("numOutputRows").value
+          assert(numOutputRows == expected.size,
+            s"expected the scan to read ${expected.size} rows, got $numOutputRows")
+        }
+      }
+    }
+  }
+
+  test("SPARK-38148: no DPP over a partition column a static equality already fixes") {
+    // `FileScanBuilder` pushes the static partition filter fully into the scan, so no `Filter`
+    // above the scan carries it; the cleanup has to read it from the scan relation's pushed
+    // filters, as it reads it from the `Filter` over a V1 relation. V1 is the reference.
+    withDppV2Conf {
+      withTempDir { dir =>
+        writeFactAndDim(dir)
+        // An int join key, so the pruning key is `part` itself rather than a cast of it.
+        val dimIntPath = new File(dir, "dim_int").getCanonicalPath
+        spark.range(10).selectExpr("CAST(id AS INT) AS dim_id", "CAST(id AS INT) AS dim_val")
+          .write.format("parquet").save(dimIntPath)
+        // (condition, the partitions it keeps, whether DPP stays, whether V1 is checked). The first
+        // six are the SPARK-38148 cases. The last two do not fix the key, so V2 keeps the DPP; they
+        // are checked under V2 only, because V1 reads an equality anywhere in its filter and drops
+        // the DPP.
+        Seq[(String, Int => Boolean, Boolean, Boolean)](
+          ("f.part = 3", _ == 3, false, true),
+          ("3 = f.part", _ == 3, false, true),
+          ("f.part <=> 3", _ == 3, false, true),
+          ("3 <=> f.part", _ == 3, false, true),
+          ("f.part > 3", _ > 3, true, true),
+          ("5 > f.part", _ < 5, true, true),
+          ("f.part <> 3", _ != 3, true, false),
+          ("(f.part = 3 OR f.part = 4)", p => p == 3 || p == 4, true, false)
+        ).foreach { case (condition, keeps, hasDpp, checkV1) =>
+          val query =
+            s"""SELECT /*+ broadcast(d) */ f.id FROM fact f JOIN dim_int d
+               |ON f.part = d.dim_id WHERE $condition AND d.dim_val > 2""".stripMargin
+          val expected = (0 until 100).filter { i =>
+            val part = i % 10
+            part > 2 && keeps(part)
+          }.map(i => Row(i.toLong))
+          (if (checkV1) Seq("parquet", "") else Seq("")).foreach { v1Sources =>
+            withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> v1Sources) {
+              // A temp view keeps the relation it was created with, so create both under this conf.
+              spark.read.format("parquet").schema("id long, part int")
+                .load(new File(dir, "fact").getCanonicalPath).createOrReplaceTempView("fact")
+              spark.read.format("parquet").load(dimIntPath).createOrReplaceTempView("dim_int")
+              val df = sql(query)
+              val optimized = df.queryExecution.optimizedPlan
+              assert(optimized.exists(_.isInstanceOf[DataSourceV2ScanRelation]) ===
+                v1Sources.isEmpty, s"wrong source version for '$v1Sources':\n$optimized")
+              assert(collectDppFilters(optimized).nonEmpty === hasDpp,
+                s"`$condition` with v1 sources '$v1Sources': expected DPP $hasDpp, got\n$optimized")
+              checkAnswer(df, expected)
+            }
+          }
         }
       }
     }

@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.catalog.{
   TableCatalog}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Batch, HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, Scan, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.execution.{FilterExec, ScalarSubquery => ExecScalarSubquery}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, DataSourceV2Strategy, PushDownUtils}
@@ -494,6 +494,28 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
+  test("Catalyst scan handed to pushRuntimeFilters with a pushable filter -> rejected") {
+    // DataSourceV2Strategy has already dropped the FilterExec of a fully pushed filter, so a
+    // caller that pushes through this method and then reads `planInputPartitions()` would read
+    // unfiltered partitions with nothing left to filter the rows.
+    val tbl = s"$catalogName.tbl_push_catalyst"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
+      val scanRelation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
+        case r: DataSourceV2ScanRelation => r
+      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
+      val partAttr = scanRelation.output.find(_.name == "part").get
+
+      def push(filters: Seq[Expression]): Boolean = PushDownUtils.pushRuntimeFilters(
+        scanRelation.scan, filters, scanRelation.relation.table, scanRelation.output)
+
+      val e = intercept[SparkException](push(Seq(EqualTo(partAttr, Literal(1)))))
+      assert(e.getCondition === "INTERNAL_ERROR")
+      assert(e.getMessage.contains("replanWithRuntimeFilters"), e.getMessage)
+      assert(!push(Seq.empty))
+    }
+  }
+
   test("fully pushed attribute outside filterAttributes -> rejected") {
     val tbl = s"$catalogName.tbl4"
     withTable(tbl) {
@@ -681,7 +703,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       .withLayout(_.copy(isGrouped = false))
 
     def replanAfterFiltering(afterFilter: Seq[InputPartition]): Unit = {
-      val scan = new PartitioningBreakingScan(Seq(KeyedInputPartition(1)), afterFilter)
+      val scan = new PartitioningBreakingScan(afterFilter)
       PushDownUtils.replanWithRuntimeFilters(scan, Seq(EqualTo(partAttr, Literal(1))), table,
         Seq(partAttr), Some(partitioning), originalPartitions = Seq.empty)
     }
@@ -875,22 +897,13 @@ private case class KeyedInputPartition(key: Int) extends InputPartition with Has
 }
 
 /**
- * A scan reporting one set of partitions before filtering and another after, so it can break the
- * requirement to preserve the partitioning it originally reported.
+ * A scan returning the given partitions under any runtime filter, so it can break the requirement
+ * to preserve the partitioning it originally reported.
  */
-private class PartitioningBreakingScan(
-    initialPartitions: Seq[InputPartition],
-    afterFilter: Seq[InputPartition])
-  extends Scan with Batch with SupportsRuntimeCatalystFiltering {
+private class PartitioningBreakingScan(afterFilter: Seq[InputPartition])
+  extends SupportsRuntimeCatalystFiltering {
 
   override def readSchema(): StructType = new StructType().add("part", IntegerType)
-
-  override def toBatch: Batch = this
-
-  override def planInputPartitions(): Array[InputPartition] = initialPartitions.toArray
-
-  override def createReaderFactory(): PartitionReaderFactory =
-    throw new UnsupportedOperationException()
 
   override def filterAttributes(): Array[NamedReference] = Array(FieldReference("part"))
 

@@ -172,10 +172,12 @@ object PushDownUtils extends Logging {
    * `FilterExec` above the scan, so pushing a non-deterministic one would evaluate it twice with
    * different results.
    *
-   * A scan implementing [[SupportsRuntimeCatalystFiltering]] does not go through this method: it
-   * receives the runtime filters as Catalyst expressions when Spark re-plans its input partitions
-   * (see [[replanWithRuntimeFilters]] and [[catalystRuntimeFilters]]). The two paths are mutually
-   * exclusive, and a scan implementing both interfaces is rejected here.
+   * A scan implementing [[SupportsRuntimeCatalystFiltering]] receives its runtime filters as
+   * Catalyst expressions when Spark re-plans its input partitions instead (see
+   * [[replanWithRuntimeFilters]] and [[catalystRuntimeFilters]]). This method rejects such a scan
+   * when it has a filter to push, since `DataSourceV2Strategy` may already have dropped the
+   * filter's `FilterExec` and `planInputPartitions()` would then return rows nothing filters. A
+   * scan implementing both interfaces is rejected here as well.
    *
    * @return true if any filters were pushed to the data source
    */
@@ -231,6 +233,11 @@ object PushDownUtils extends Logging {
 
         translatedFiltersPushed || partPredicatesPushed
 
+      case _: SupportsRuntimeCatalystFiltering if pushableFilters.nonEmpty =>
+        throw SparkException.internalError(
+          s"${scan.getClass.getName} implements SupportsRuntimeCatalystFiltering, so its runtime " +
+          "filters must go through PushDownUtils.replanWithRuntimeFilters, not pushRuntimeFilters.")
+
       case _ =>
         false
     }
@@ -242,13 +249,11 @@ object PushDownUtils extends Logging {
    * here: what a scan can apply is the scan's own business.
    *
    * Only filters over attributes the scan declared filterable are kept. `DataSourceV2Strategy`
-   * routes a dynamic pruning filter without checking that declaration, and the key of a filter
-   * inserted over one union branch is pushed positionally into the others, so a scan can be handed
-   * a filter over a column it never declared. Dropping it costs pruning and not correctness: its
-   * rows are filtered anyway, by the join a DPP filter was derived from, and by the rewrite
-   * re-applying its own condition for a row-level operation's group filter. For a filter derived
-   * from a scalar subquery this drops nothing: the strategy already required its references to be a
-   * subset of the same declaration.
+   * already drops the others at planning, including the filter inserted over one union branch and
+   * pushed positionally into the others; this check stays for a `BatchScanExec` built outside the
+   * strategy. The scan could not apply such a filter, and its rows are filtered anyway: by the
+   * join a DPP filter was derived from, and by a row-level operation, which evaluates its own
+   * condition on each row it reads.
    *
    * The determinism screen is the other half. A scalar subquery filter is evaluated twice, by the
    * source and by the FilterExec above the scan, so pushing a non-deterministic one would let the
