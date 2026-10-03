@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -34,9 +35,18 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.DefaultCatalogManager
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DateType, IntegerType, StringType, TimestampNTZType, TimestampType, TimeType}
+import org.apache.spark.sql.types.{DataType, DateType, IntegerType, StringType, TimestampNTZType, TimestampType, TimeType}
 
 class RewriteWithExpressionSuite extends PlanTest {
+
+  /** A foldable expression whose evaluation must not be duplicated. */
+  private case class ImpureFoldable(child: Expression)
+      extends UnaryExpression with NonSQLExpression with CodegenFallback {
+    override def dataType: DataType = child.dataType
+    override def eval(input: InternalRow): Any = child.eval(input)
+    override protected def withNewChildInternal(newChild: Expression): ImpureFoldable =
+      copy(child = newChild)
+  }
 
   object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Rewrite With expression", FixedPoint(5),
@@ -128,13 +138,8 @@ class RewriteWithExpressionSuite extends PlanTest {
   }
 
   test("applyForExpression rejects an impure foldable definition referenced more than once") {
-    // aes_encrypt becomes a foldable StaticInvoke that draws a fresh random IV on every eval, so
-    // two inlined copies would encrypt to different values.
-    val aes = ReplaceExpressions.replace(
-      new AesEncrypt(Literal("abc".getBytes), Literal("1234567890123456".getBytes)))
-    assert(aes.foldable, "the AES rewrite is only interesting while it stays foldable")
-    val expr = With(aes) { case Seq(ref) =>
-      EqualTo(ref, ref)
+    val expr = With(ImpureFoldable(Literal(1))) { case Seq(ref) =>
+      ref + ref
     }
     intercept[SparkException] {
       RewriteWithExpression.applyForExpression(expr)
