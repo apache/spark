@@ -667,15 +667,17 @@ object OrcUtils extends Logging {
           getMinMaxFromColumnStatistics(statistics, dataType, isMax = false)
         case (count: Count, _) if V2ColumnUtils.extractV2Column(count.column).isDefined =>
           val columnName = V2ColumnUtils.extractV2Column(count.column).get
-          val isPartitionColumn = partitionSchema.fields.map(_.name).contains(columnName)
+          val partitionColIndex = partitionSchema.getFieldIndex(columnName)
           // NOTE: Count(columnName) doesn't include null values.
           // org.apache.orc.ColumnStatistics.getNumberOfValues() returns number of non-null values
           // for ColumnStatistics of individual column. In addition to this, ORC also stores number
           // of all values (null and non-null) separately.
-          val nonNullRowsCount = if (isPartitionColumn) {
-            columnsStatistics.getStatistics.getNumberOfValues
-          } else {
-            getColumnStatistics(columnName).getNumberOfValues
+          val nonNullRowsCount = partitionColIndex match {
+            // A null partition value (the __HIVE_DEFAULT_PARTITION__ directory) is SQL
+            // NULL and is not counted by Count(columnName), so this file contributes 0.
+            case Some(index) if partitionValues.isNullAt(index) => 0L
+            case Some(_) => columnsStatistics.getStatistics.getNumberOfValues
+            case None => getColumnStatistics(columnName).getNumberOfValues
           }
           new LongWritable(nonNullRowsCount)
         case (_: CountStar, _) =>
