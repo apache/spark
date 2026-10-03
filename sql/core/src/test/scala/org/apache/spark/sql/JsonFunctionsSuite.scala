@@ -1587,7 +1587,7 @@ class JsonFunctionsSuite extends SharedSparkSession {
     }
 
     val df4 = Seq("""{"c2": [19]}""").toDF("c0")
-    checkAnswer(df4.select(from_json($"c0", MapType(StringType, st))), Row(null))
+    checkAnswer(df4.select(from_json($"c0", MapType(StringType, st))), Row(Map.empty))
   }
 
   test("SPARK-40646: return partial results for JSON arrays with objects") {
@@ -1624,7 +1624,7 @@ class JsonFunctionsSuite extends SharedSparkSession {
     withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
       checkAnswer(
         df.select(from_json($"c0", st)),
-        Row(Row(null, "abc"))
+        Row(Row(Map("k1" -> 1, "k3" -> 3), "abc"))
       )
     }
 
