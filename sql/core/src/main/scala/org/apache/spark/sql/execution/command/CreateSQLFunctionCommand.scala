@@ -150,7 +150,9 @@ case class CreateSQLFunctionCommand(
       }
 
       // Build the function body and check if the function body can be analyzed successfully.
-      val (unresolvedPlan, analyzedPlan, inferredReturnType) = if (!isTableFunc) {
+      // The last element is the temporary variables the body reads only inside IDENTIFIER
+      // clauses. They are absent from the analyzed plan, so they are captured during analysis.
+      val (unresolvedPlan, analyzedPlan, inferredReturnType, identifierVars) = if (!isTableFunc) {
         // Build SQL scalar function plan.
         val outputExpr = if (query.isDefined) ScalarSubquery(query.get) else expression.get
         val plan: LogicalPlan = returnType.map { t =>
@@ -171,7 +173,8 @@ case class CreateSQLFunctionCommand(
         checkCyclicFunctionReference(catalog, name, plan)
 
         // Check the function body can be analyzed correctly.
-        val analyzed = analyzer.execute(plan)
+        val (analyzed, referredTempVarsUnderIdentifier) =
+          analyzer.executeWithReferredTempVariablesUnderIdentifier(plan)
         val (resolved, resolvedReturnType) = analyzed match {
           case p @ Project(expr :: Nil, _) if expr.resolved =>
             (p, Left(resolveReturnType(expr.dataType, collation)))
@@ -186,7 +189,7 @@ case class CreateSQLFunctionCommand(
         // Check if the SQL function body can be analyzed.
         checkFunctionBodyAnalysis(analyzer, function, resolved)
 
-        (plan, resolved, resolvedReturnType)
+        (plan, resolved, resolvedReturnType, referredTempVarsUnderIdentifier)
       } else {
         // Build SQL table function plan.
         if (query.isEmpty) {
@@ -197,7 +200,8 @@ case class CreateSQLFunctionCommand(
 
         // Construct a lateral join to analyze the function body.
         val plan = LateralJoin(inputPlan, LateralSubquery(query.get), Inner, None)
-        val analyzed = analyzer.execute(plan)
+        val (analyzed, referredTempVarsUnderIdentifier) =
+          analyzer.executeWithReferredTempVariablesUnderIdentifier(plan)
         val newPlan = analyzed match {
           case Project(_, j: LateralJoin) => j
           case j: LateralJoin => j
@@ -250,15 +254,17 @@ case class CreateSQLFunctionCommand(
           )
         }
 
-        (plan, analyzed, Right(returnParam))
+        (plan, analyzed, Right(returnParam), referredTempVarsUnderIdentifier)
       }
 
       // A permanent function is not allowed to reference temporary objects.
       // This should be called after `qe.assertAnalyzed()` (i.e., `plan` can be resolved)
-      verifyTemporaryObjectsNotExists(catalog, isTemp, name, unresolvedPlan, analyzedPlan)
+      verifyTemporaryObjectsNotExists(
+        catalog, isTemp, name, unresolvedPlan, analyzedPlan, identifierVars)
 
       // Generate function properties.
-      val properties = generateFunctionProperties(sparkSession, unresolvedPlan, analyzedPlan)
+      val properties =
+        generateFunctionProperties(sparkSession, unresolvedPlan, analyzedPlan, identifierVars)
 
       // Derive determinism of the SQL function.
       val deterministic = analyzedPlan.deterministic
@@ -367,13 +373,18 @@ case class CreateSQLFunctionCommand(
   /**
    * Permanent functions are not allowed to reference temp objects, including temp functions
    * and temp views.
+   *
+   * @param referredTempVarsUnderIdentifier temporary variables the body reads only inside
+   *                                        IDENTIFIER clauses, recorded during analysis because
+   *                                        the analyzed plan no longer mentions them.
    */
   private def verifyTemporaryObjectsNotExists(
       catalog: SessionCatalog,
       isTemporary: Boolean,
       name: FunctionIdentifier,
       child: LogicalPlan,
-      analyzed: LogicalPlan): Unit = {
+      analyzed: LogicalPlan,
+      referredTempVarsUnderIdentifier: Seq[Seq[String]]): Unit = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     if (!isTemporary) {
       val (tempViews, tempFunctions) = collectTemporaryObjectsInUnresolvedPlan(catalog, child)
@@ -385,7 +396,8 @@ case class CreateSQLFunctionCommand(
         throw UserDefinedFunctionErrors.invalidTempFuncReference(
           routineName = name.asMultipart, tempFuncName = funcName)
       }
-      val tempVars = ViewHelper.collectTemporaryVariables(analyzed)
+      val tempVars =
+        (ViewHelper.collectTemporaryVariables(analyzed) ++ referredTempVarsUnderIdentifier).distinct
       tempVars.foreach { varName =>
         throw UserDefinedFunctionErrors.invalidTempVarReference(
           routineName = name.asMultipart, varName = varName)
@@ -508,11 +520,16 @@ case class CreateSQLFunctionCommand(
    * 2. the catalog and database name when creating the function. This will be used to provide
    *    context during nested function resolution.
    * 3. referred temporary object names if the function is a temp function.
+   *
+   * @param referredTempVarsUnderIdentifier temporary variables the body reads only inside
+   *                                        IDENTIFIER clauses, see
+   *                                        `verifyTemporaryObjectsNotExists`.
    */
   private def generateFunctionProperties(
       session: SparkSession,
       plan: LogicalPlan,
-      analyzed: LogicalPlan): Map[String, String] = {
+      analyzed: LogicalPlan,
+      referredTempVarsUnderIdentifier: Seq[Seq[String]]): Map[String, String] = {
     val catalog = session.sessionState.catalog
     val conf = session.sessionState.conf
     val manager = session.sessionState.catalogManager
@@ -523,7 +540,8 @@ case class CreateSQLFunctionCommand(
     } else {
       (Nil, Nil)
     }
-    val tempVars = ViewHelper.collectTemporaryVariables(analyzed)
+    val tempVars =
+      (ViewHelper.collectTemporaryVariables(analyzed) ++ referredTempVarsUnderIdentifier).distinct
 
     // Capture the effective resolution path at function creation time so the function
     // body resolves with the same path regardless of the caller's session path later.
