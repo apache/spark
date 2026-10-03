@@ -524,6 +524,20 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSessi
     }
   }
 
+  test("variant_explode - recursive") {
+    val nested = parse_json(lit("""{"a": [1, {"b": 2}]}"""))
+    val actual = spark.tvf.variant_explode(nested, recursive = true)
+    val expected =
+      spark.sql("""SELECT * FROM variant_explode(parse_json('{"a": [1, {"b": 2}]}'), true)""")
+    checkAnswer(actual, expected)
+  }
+
+  test("variant_explode_outer - recursive") {
+    val actual = spark.tvf.variant_explode_outer(parse_json(lit("[]")), recursive = true)
+    val expected = spark.sql("SELECT * FROM variant_explode_outer(parse_json('[]'), true)")
+    checkAnswer(actual, expected)
+  }
+
   test("explode with udf") {
     Seq("NO_CODEGEN", "CODEGEN_ONLY").foreach { codegenMode =>
       withSQLConf("spark.sql.codegen.factoryMode" -> codegenMode) {
