@@ -350,6 +350,29 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     assert(V2ExpressionUtils.toCatalyst(unknownPred).isEmpty)
   }
 
+  Seq(true, false).foreach { ansiEnabled =>
+    test(s"boolean operators skip V2 pushdown for boolean casts with ANSI $ansiEnabled") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val intCol = AttributeReference("c", IntegerType)()
+        val boolCast = Cast(intCol, BooleanType)
+        val predicate = GreaterThan(intCol, Literal(0))
+        assert(new V2ExpressionBuilder(boolCast).build().isDefined == ansiEnabled)
+        val conditions = Seq[Expression](
+          Not(boolCast),
+          And(boolCast, predicate),
+          Or(predicate, boolCast))
+        conditions.foreach { condition =>
+          assert(new V2ExpressionBuilder(condition, isPredicate = true).buildPredicate().isEmpty)
+          val caseWhen = CaseWhen(Seq(condition -> Literal(true)), Some(Literal(false)))
+          val filter = EqualTo(caseWhen, Literal(false))
+          assert(new V2ExpressionBuilder(filter, isPredicate = true).buildPredicate().isEmpty)
+        }
+        assert(new V2ExpressionBuilder(Not(predicate), isPredicate = true)
+          .buildPredicate().isDefined)
+      }
+    }
+  }
+
   test("round trip conversion of CASE_WHEN expression") {
     val intCol = $"cint".int
     val intColRef = FieldReference("cint")
