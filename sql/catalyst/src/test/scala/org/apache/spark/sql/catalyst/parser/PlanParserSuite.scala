@@ -1362,6 +1362,39 @@ class PlanParserSuite extends AnalysisTest {
     }
   }
 
+  test("asof join - missing match condition rejected") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      // ASOF is non-reserved, so before SPARK-59628 an ASOF join without MATCH_CONDITION and
+      // without an alias on the left relation parsed as `t AS asof` joined to `u`, a plain inner
+      // join that silently returned every matching pair instead of the nearest row.
+      Seq(
+        ("select * from t asof join u on t.a = u.a", "asof join u on t.a = u.a", 16, 39),
+        ("select * from t x asof join u on t.a = u.a", "asof join u on t.a = u.a", 18, 41),
+        ("select * from t asof join u using (a)", "asof join u using (a)", 16, 36),
+        ("select * from t left asof join u", "left asof join u", 16, 31),
+        ("select * from t asof join u", "asof join u", 16, 26)
+      ).foreach { case (query, fragment, start, stop) =>
+        checkError(
+          exception = parseException(query),
+          condition = "ASOF_JOIN_MATCH_CONDITION_MISSING",
+          sqlState = Some("42601"),
+          parameters = Map.empty[String, String],
+          queryContext = Array(ExpectedContext(fragment = fragment, start = start, stop = stop)))
+      }
+    }
+  }
+
+  test("asof join - an alias named asof is still allowed when written with AS") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      // Only an implicit alias directly before JOIN is refused, so a relation can still be
+      // aliased `asof` by spelling out AS.
+      assertEqual(
+        "select * from t as asof join u on t.a = u.a",
+        table("t").as("asof").join(table("u"), Inner, Some($"t.a" === $"u.a")).select(star()))
+      assertEqual("select * from t asof", table("t").as("asof").select(star()))
+    }
+  }
+
   test("asof join disabled by default") {
     withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "false") {
       checkError(

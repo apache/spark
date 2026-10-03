@@ -368,13 +368,66 @@ SELECT * FROM trades t ASOF JOIN quotes q ON t.symbol = q.symbol
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_MISSING",
   "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'ON'",
-    "hint" : ""
-  }
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 64,
+    "fragment" : "ASOF JOIN quotes q ON t.symbol = q.symbol"
+  } ]
 }
+
+
+-- !query
+SELECT * FROM trades ASOF JOIN quotes ON trades.symbol = quotes.symbol
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_MISSING",
+  "sqlState" : "42601",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 70,
+    "fragment" : "ASOF JOIN quotes ON trades.symbol = quotes.symbol"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM trades ASOF JOIN quotes
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_MISSING",
+  "sqlState" : "42601",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 37,
+    "fragment" : "ASOF JOIN quotes"
+  } ]
+}
+
+
+-- !query
+SELECT asof.symbol FROM trades AS asof JOIN quotes ON asof.symbol = quotes.symbol
+-- !query analysis
+Project [symbol#x]
++- Join Inner, (symbol#x = symbol#x)
+   :- SubqueryAlias asof
+   :  +- SubqueryAlias trades
+   :     +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
+   :        +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
+   :           +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias quotes
+      +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
+         +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+            +- LocalRelation [col1#x, col2#x, col3#x]
 
 
 -- !query

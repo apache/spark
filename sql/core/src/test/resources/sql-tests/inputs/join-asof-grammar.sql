@@ -128,6 +128,16 @@ SELECT * FROM trades t LEFT SEMI ASOF JOIN quotes q
 -- FVT-ASOF-1-017: missing MATCH_CONDITION
 SELECT * FROM trades t ASOF JOIN quotes q ON t.symbol = q.symbol;
 
+-- FVT-ASOF-1-017a: missing MATCH_CONDITION, left relation without an alias. ASOF is
+-- non-reserved, so this used to parse as `trades AS asof` joined to quotes, a plain inner join.
+SELECT * FROM trades ASOF JOIN quotes ON trades.symbol = quotes.symbol;
+
+-- FVT-ASOF-1-017b: missing MATCH_CONDITION with no join condition at all.
+SELECT * FROM trades ASOF JOIN quotes;
+
+-- FVT-ASOF-1-017c: an explicit AS still aliases a relation `asof`.
+SELECT asof.symbol FROM trades AS asof JOIN quotes ON asof.symbol = quotes.symbol;
+
 -- FVT-ASOF-1-018: multiple comparisons in MATCH_CONDITION
 SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (t.trade_time >= q.quote_time AND t.symbol = q.symbol)
