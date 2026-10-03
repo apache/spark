@@ -46,15 +46,22 @@ import org.apache.spark.util.ArrayImplicits._
 object V2ExpressionUtils extends SQLConfHelper with Logging {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
+  /**
+   * Variant of `resolveRef` that returns `None` if no attribute matches the reference. It still
+   * throws for a nested-field extraction error, such as a missing nested field, or an ambiguous
+   * reference.
+   */
+  private[sql] def resolveRefOpt(
+      ref: NamedReference, plan: LogicalPlan): Option[NamedExpression] = {
+    plan.resolve(ref.fieldNames.toImmutableArraySeq, conf.resolver)
+  }
+
   def resolveRef[T <: NamedExpression](ref: NamedReference, plan: LogicalPlan): T = {
-    plan.resolve(ref.fieldNames.toImmutableArraySeq, conf.resolver) match {
-      case Some(namedExpr) =>
-        namedExpr.asInstanceOf[T]
-      case None =>
-        val name = ref.fieldNames.toImmutableArraySeq.quoted
-        val outputString = plan.output.map(_.name).mkString(",")
-        throw QueryCompilationErrors.cannotResolveAttributeError(name, outputString)
-    }
+    resolveRefOpt(ref, plan).getOrElse {
+      val name = ref.fieldNames.toImmutableArraySeq.quoted
+      val outputString = plan.output.map(_.name).mkString(",")
+      throw QueryCompilationErrors.cannotResolveAttributeError(name, outputString)
+    }.asInstanceOf[T]
   }
 
   def resolveRefs[T <: NamedExpression](refs: Seq[NamedReference], plan: LogicalPlan): Seq[T] = {
