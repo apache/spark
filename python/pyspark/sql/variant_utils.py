@@ -449,6 +449,10 @@ class VariantUtils:
             except OverflowError:
                 return False
 
+        # Use an explicit context so that the result does not depend on the caller's decimal
+        # context, e.g. a lowered `decimal.getcontext().prec`.
+        context = decimal.Context(prec=VariantUtils.MAX_DECIMAL16_PRECISION)
+
         # Like Java, pick the shortest decimal that round-trips, using at least 2 significant
         # digits (e.g. Double.MIN_VALUE is "4.9E-324", not "5.0E-324"), and the one closest to
         # `f` among those of that length.
@@ -463,11 +467,14 @@ class VariantUtils:
             closest = decimal.Decimal(s)
             exponent = closest.as_tuple().exponent
             assert isinstance(exponent, int)
-            last_digit = decimal.Decimal(1).scaleb(exponent)
-            s = str(closest + last_digit if f > 0 else closest - last_digit)
+            last_digit = decimal.Decimal(1).scaleb(exponent, context)
+            if f > 0:
+                s = str(context.add(closest, last_digit))
+            else:
+                s = str(context.subtract(closest, last_digit))
             if round_trips(s):
                 break
-        d = decimal.Decimal(s).normalize()
+        d = decimal.Decimal(s).normalize(context)
         if d.is_zero() or 1e-3 <= abs(f) < 1e7:
             plain = format(d, "f")
             return plain if "." in plain else plain + ".0"

@@ -3865,6 +3865,7 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         self.assertRaises(TypeError, struct_field.typeName)
 
     def test_variant_to_json_matches_jvm_format(self):
+        import decimal
         import struct
 
         def variant(type_info, payload):
@@ -3890,6 +3891,7 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
             (double(0.0), "0.0"),
             (double(-0.0), "-0.0"),
             (double(123.0), "123.0"),
+            (double(123456.789), "123456.789"),
             (double(0.001), "0.001"),
             (double(1e7), "1.0E7"),
             (double(1.5e-5), "1.5E-5"),
@@ -3913,6 +3915,10 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
                 self.assertEqual(v.toJson(), expected)
                 # The output must always be valid JSON.
                 json.loads(v.toJson())
+                # The output must not depend on the caller's decimal context.
+                with decimal.localcontext() as ctx:
+                    ctx.prec = 5
+                    self.assertEqual(v.toJson(), expected)
 
         self.assertEqual(
             timestamp(0, ntz=False).toJson("Asia/Kolkata"), '"1970-01-01 05:30:00+05:30"'
