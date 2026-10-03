@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.StatisticsCollectionTestBase
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryOperator, Expression, IsNotNull, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryOperator, Expression, In, IsNotNull, Literal}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
@@ -58,7 +58,7 @@ abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase {
             "((p = '1') || (p = '3'))")
           assertPrunedPartitions(
             "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '2' OR p = '3')", 3,
-            "((p = '1') || ((p = '2') || (p = '3')))")
+            "((p = '1') || p IN ('2','3'))")
           assertPrunedPartitions(
             "SELECT * FROM t", 4,
             "")
@@ -84,6 +84,9 @@ abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase {
     case e: BinaryOperator =>
       s"(${getCleanStringRepresentation(e.left)} ${e.symbol} " +
         s"${getCleanStringRepresentation(e.right)})"
+    case in: In =>
+      s"${getCleanStringRepresentation(in.value)} IN " +
+        s"(${in.list.map(getCleanStringRepresentation).mkString(",")})"
   }
 
   protected def assertPrunedPartitions(
