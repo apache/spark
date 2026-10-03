@@ -57,6 +57,11 @@ private[spark] object Python {
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
+  // Defined before the config entry, whose validator captures it.
+  private[spark] val IN_PROCESS_PATH_RULE = "In-process Python site-packages paths cannot " +
+    "contain single quotes, newlines, NUL, surrogate characters (including supplementary " +
+    "Unicode characters) or the platform path separator"
+
   val IN_PROCESS_SITE_PACKAGES = ConfigBuilder("spark.inprocess.python.sitePackages")
     .doc("Comma-separated executor directories containing packages for in-process Python UDFs. " +
       "These directories are processed with site.addsitedir after Spark distribution paths " +
@@ -68,7 +73,7 @@ private[spark] object Python {
     .version("4.4.0")
     .stringConf
     .toSequence
-    .checkValue(_.forall(isValidInProcessPath), "Invalid in-process Python site-packages path")
+    .checkValue(_.forall(isValidInProcessPath), IN_PROCESS_PATH_RULE)
     .createWithDefault(Nil)
 
   private[spark] def isValidInProcessPath(path: String): Boolean = {

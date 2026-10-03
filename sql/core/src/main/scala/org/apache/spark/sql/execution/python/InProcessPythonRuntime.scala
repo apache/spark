@@ -62,10 +62,7 @@ private[python] object InProcessPythonRuntime extends Logging {
     }
 
     def interpreterConfig(sitePackages: Seq[String]): JepConfig = {
-      require(sitePackages.forall(Python.isValidInProcessPath),
-        s"Invalid ${Python.IN_PROCESS_SITE_PACKAGES.key}: paths cannot contain single quotes, " +
-          "newlines, NUL, surrogate characters (including supplementary Unicode characters) " +
-          "or the platform path separator")
+      require(sitePackages.forall(Python.isValidInProcessPath), Python.IN_PROCESS_PATH_RULE)
       val config = new JepConfig().setClassEnquirer(new NamingConventionClassEnquirer(false))
       // Calling addIncludePaths with no arguments adds the working directory in JEP.
       if (sitePackages.nonEmpty) config.addIncludePaths(sitePackages: _*)
@@ -115,7 +112,9 @@ private[python] object InProcessPythonRuntime extends Logging {
   }
 
   def currentSession: InterpreterSession = synchronized {
-    checkState(active != null && active.isRunning)
+    checkState(active != null)
+    // `shutdown` keeps the stopped session, so a session that is not running was stopped.
+    checkState(active.isRunning, StoppedMessage)
     active
   }
 
@@ -127,6 +126,9 @@ private[python] object InProcessPythonRuntime extends Logging {
   private def checkState(running: Boolean): Unit = {
     checkState(running, "In-process Python is not running; initialize the executor plugin first")
   }
+
+  private val StoppedMessage =
+    "In-process Python has been stopped (executor or SparkContext shutdown)"
 
   private def checkState(running: Boolean, message: String): Unit = {
     if (!running) throw new IllegalStateException(message)
@@ -261,8 +263,7 @@ private[python] object InProcessPythonRuntime extends Logging {
 
     // Tasks can only see a session that the plugin initialized, so a stopped one was shut down.
     private def checkRunning(): Unit = {
-      checkState(running,
-        "In-process Python has been stopped (executor or SparkContext shutdown)")
+      checkState(running, StoppedMessage)
     }
 
     /** Enqueue cleanup after outstanding calls without creating an executor or waiting. */

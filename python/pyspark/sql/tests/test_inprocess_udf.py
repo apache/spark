@@ -27,6 +27,7 @@ Otherwise, the suite runs when JEP, PyArrow and the CDI JAR are available.
 import os
 import shutil
 import tempfile
+import time
 import unittest
 import zipfile
 from importlib.util import find_spec
@@ -861,6 +862,15 @@ class BootstrapFailureProbe {
         arrow_utils = self.spark.sparkContext._jvm.org.apache.spark.sql.util.ArrowUtils
         allocator = arrow_utils.rootAllocator()
         before = allocator.getAllocatedMemory()
+
+        def assert_released_after_failure():
+            # A failed job does not wait for its other tasks, which release their memory as
+            # they finish, and the interpreter thread releases Python's references later.
+            deadline = time.monotonic() + 30
+            while allocator.getAllocatedMemory() != before and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertEqual(allocator.getAllocatedMemory(), before)
+
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "2"}):
             df = self.spark.range(9, numPartitions=3)
             for _ in range(3):
@@ -870,12 +880,12 @@ class BootstrapFailureProbe {
             self.assertEqual(allocator.getAllocatedMemory(), before)
             with self.assertRaisesRegex(Exception, "second UDF failed"):
                 df.select(identity(df.id), fail(df.id)).collect()
-            self.assertEqual(allocator.getAllocatedMemory(), before)
+            assert_released_after_failure()
             # Deserialization fails before Python imports any input CDI structures.
             identity._serialized = b"invalid pickle"
             with self.assertRaisesRegex(Exception, "UnpicklingError"):
                 df.select(identity(df.id)).collect()
-            self.assertEqual(allocator.getAllocatedMemory(), before)
+            assert_released_after_failure()
 
     def test_double_long(self):
         """@inprocess_udf with LongType input/output doubles each value."""
@@ -1375,7 +1385,7 @@ class BootstrapFailureProbe {
         runtime = self.spark.sparkContext._jvm.org.apache.spark.sql.execution.python
         runtime.InProcessPythonRuntime.shutdown()
         try:
-            with self.assertRaisesRegex(Exception, "not running"):
+            with self.assertRaisesRegex(Exception, "has been stopped"):
                 df.select(identity(df.id)).collect()
             changed = self.spark.sparkContext._jvm.java.util.ArrayList()
             changed.add(self.site_packages)
@@ -1603,6 +1613,10 @@ class BootstrapFailureProbe {
                 for _ in range(5):
                     rows = df.select("k", plus_one(double("id"))).limit(1).collect()
                     self.assertEqual(len(rows), 1)
+                    # A coalesced parent evaluates the in-process node on the writer thread.
+                    coalesced = df.select(double("id").alias("a"), "k").coalesce(1)
+                    rows = coalesced.select(plus_one("a"), "k").limit(10).collect()
+                    self.assertEqual(len(rows), 10)
                 # Later tasks in the same executor still run correctly.
                 total = df.select(plus_one(double("id")).alias("v")).groupBy().sum("v")
                 self.assertEqual(total.first()[0], sum(2 * i + 1 for i in range(100000)))

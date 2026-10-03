@@ -44,9 +44,10 @@ abstract class EvalPythonEvaluatorFactory(
       context: TaskContext): Iterator[InternalRow]
 
   /**
-   * Evaluates the UDFs over the input rows and returns, for each input row, its columns
-   * followed by its results. Returns None to let the evaluator buffer the input rows and join
-   * them with the results of `evaluate`, which receives only the projected arguments.
+   * Evaluates the UDFs over the input rows and returns the output rows: each input row's
+   * columns followed by its results, as unsafe rows that remain valid after the next call.
+   * Returns None to let the evaluator buffer the input rows and join them with the results of
+   * `evaluate`, which receives only the projected arguments.
    *
    * @param inputs the UDF arguments, which `argMetas` and `schema` refer to by position
    */
@@ -107,9 +108,8 @@ abstract class EvalPythonEvaluatorFactory(
         StructField(s"_$i", dt)
       }.toArray)
 
-      val resultProj = UnsafeProjection.create(output, output)
       val joinedRows = evaluateJoined(pyFuncs, argMetas, iter, allInputs.toSeq, schema, context)
-      if (joinedRows.isDefined) return joinedRows.get.map(resultProj)
+      if (joinedRows.isDefined) return joinedRows.get
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
@@ -139,6 +139,7 @@ abstract class EvalPythonEvaluatorFactory(
         evaluate(pyFuncs, argMetas, projectedRowIter, schema, context)
 
       val joined = new JoinedRow
+      val resultProj = UnsafeProjection.create(output, output)
 
       outputRowIterator.map { outputRow =>
         resultProj(joined(queue.remove(), outputRow))

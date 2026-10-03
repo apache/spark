@@ -68,22 +68,24 @@ offsets, because the JVM reads result buffers without bounds checks: a malformed
 such as one built from raw buffers, could otherwise produce wrong values or crash the
 executor. It does not validate UTF-8 in string results, because Spark strings may contain
 invalid UTF-8 (for example, `CAST(X'FF' AS STRING)`). Worker-based Arrow UDFs do not
-validate their results. To skip the full validation and perform only constant-time
-checks, set `spark.sql.execution.pythonUDF.inProcess.fullValidation.enabled` to `false`.
+validate their results. To skip the full validation, set
+`spark.sql.execution.pythonUDF.inProcess.fullValidation.enabled` to `false`; Arrow's
+constant-time validation and the conversions above still apply.
 
 The API produces a regular `PythonUDF` expression with an in-process evaluation
 type. Spark's existing `ArrowEvalPython` planning rules handle aggregation,
 nested calls, nondeterminism, and filter/limit pushdown. A dedicated
-`InProcessArrowEvalPythonExec` extends `EvalPythonExec`, reusing its projection,
-row queue, result join, and partition-evaluator path. Ordinary Python UDFs continue
-to use Python workers.
+`InProcessArrowEvalPythonExec` extends `EvalPythonExec`, reusing its argument extraction
+and partition-evaluator path, while its evaluator buffers and joins input rows itself.
+Ordinary Python UDFs continue to use Python workers.
 
 `maxRecordsPerBatch <= 0` means no row-count limit. The independent
 `spark.sql.execution.arrow.maxBytesPerBatch` limit still applies when positive.
 Only UDF arguments are converted to Arrow. Other columns stay in Spark rows,
 buffered in a spillable queue until the results are joined back. When every input
-column is a UDF argument and its type reads back from Arrow unchanged, the output
-reads those columns from the Arrow input vectors instead of buffering the rows.
+column is a UDF argument and its type, other than an array or a map, reads back from Arrow
+unchanged, the output reads those columns from the Arrow input vectors instead of buffering
+the rows.
 Duplicate nested field names in UDF arguments or declared results are rejected before
 Arrow Java reads their buffers.
 
@@ -94,11 +96,12 @@ vectors are released on task completion, early termination and failure. The runt
 each exported result until the next invocation for that task or task cleanup, after the JVM
 has released its references. The runtime drops its Python references on the interpreter
 thread, so releasing JVM results does not trigger Python finalizers on Spark task threads.
-Cleanup can remain queued behind another task's invocation. When a consumer on another
-thread, such as a pipelined Python worker's writer, pulls result rows, task completion stops
-it from pulling further input, and releases the operator's Arrow vectors and buffered rows
-only after an active iterator call finishes. Each row is copied before it is returned to such
-a consumer, so it remains valid after the task releases them.
+Cleanup can remain queued behind another task's invocation. The rows can also be consumed
+on another thread, such as a pipelined Python worker's writer. Task completion then waits
+for that consumer to finish reading input, buffered rows or Arrow vectors, but not for
+Python: it stops further input and releases the buffered rows at once, and releases the
+Arrow vectors when Python returns. Each row is copied before it is returned, so it remains
+valid after the task releases them.
 
 UDF deserialization uses PySpark's bundled cloudpickle. Each task registers its
 own function instance once and passes a small handle for subsequent batches.
