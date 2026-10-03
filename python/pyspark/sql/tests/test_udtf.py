@@ -30,6 +30,7 @@ from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
     PySparkAttributeError,
+    PySparkNotImplementedError,
     PySparkPicklingError,
     PySparkTypeError,
     PythonException,
@@ -53,6 +54,7 @@ from pyspark.sql.functions import (
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
+    CharType,
     DataType,
     IntegerType,
     LongType,
@@ -84,6 +86,23 @@ class BaseUDTFTestsMixin:
 
         func = udtf(TestUDTF, returnType="c1: string, c2: string")
         assertDataFrameEqual(func(), [Row(c1="hello", c2="world")])
+
+    def test_udtf_char_varchar_return_type(self):
+        class TestUDTF:
+            def eval(self):
+                yield ("a",)
+
+        schema = StructType([StructField("c", CharType(3))])
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            udtf(TestUDTF, returnType=schema)()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={
+                "feature": "Python UDTF return types",
+                "data_type": schema.simpleString(),
+            },
+        )
 
     def test_udtf_yield_single_row_col(self):
         class TestUDTF:

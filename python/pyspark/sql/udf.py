@@ -32,6 +32,7 @@ from pyspark.sql.types import (
     DataType,
     StringType,
     StructType,
+    _check_no_char_varchar,
     _parse_datatype_string,
 )
 from pyspark.sql.utils import get_active_spark_context
@@ -213,12 +214,16 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
+        if isinstance(returnType, DataType):
+            UserDefinedFunction._check_return_type(returnType, evalType)
         # Schema of the intermediate aggregation buffer, set only for an incremental Python
         # aggregator (see :class:`pyspark.sql.aggregator.Aggregator`); ``None`` otherwise. It is a
         # first-class field so it survives reconstruction paths such as ``_wrapped()``,
         # ``asNondeterministic()`` and ``spark.udf.register``, and is threaded to the JVM in
         # ``_create_judf`` so ``PythonAggregate`` can plan the two-stage aggregation.
         self.bufferSchema = bufferSchema
+        if bufferSchema is not None:
+            _check_no_char_varchar(bufferSchema, "Python UDAF buffer schemas")
         # Extract Python UDF details if transpilation is enabled.
         self.transpiled: list = []
         self._transpiled_param_names: list[str] = []
@@ -321,6 +326,7 @@ class UserDefinedFunction:
 
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
+        _check_no_char_varchar(returnType, "Python UDF return types")
         if evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF:
             try:
                 to_arrow_type(returnType, timezone="UTC")

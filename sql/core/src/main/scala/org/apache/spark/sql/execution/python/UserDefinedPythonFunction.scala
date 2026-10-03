@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonAggregate, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, TranspiledPythonUDF, TranspiledUDFParameter, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.ColumnConversions
@@ -63,6 +64,11 @@ case class UserDefinedPythonFunction(
     bufferType: DataType = null) {
 
   def builder(e: Seq[Expression]): Expression = {
+    if (CharVarcharUtils.hasCharVarchar(dataType) ||
+        (bufferType != null && CharVarcharUtils.hasCharVarchar(bufferType))) {
+      throw QueryCompilationErrors.charVarcharNotSupportedInPython(
+        "Python UDF return types", dataType.catalogString)
+    }
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
         || pythonEvalType ==PythonEvalType.SQL_ARROW_BATCHED_UDF
         || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
@@ -235,6 +241,13 @@ case class UserDefinedPythonTableFunction(
      * - don't contain positional arguments after named arguments
      */
     NamedParametersSupport.splitAndCheckNamedArguments(exprs, name, SQLConf.get.resolver)
+
+    returnType.foreach { rt =>
+      if (CharVarcharUtils.hasCharVarchar(rt)) {
+        throw QueryCompilationErrors.charVarcharNotSupportedInPython(
+          "Python UDTF return types", rt.catalogString)
+      }
+    }
 
     // Check which argument is a table argument here since it will be replaced with
     // `UnresolvedAttribute` to construct lateral join.

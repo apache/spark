@@ -276,9 +276,10 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_IMPLEMENTED",
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
             messageParameters={
-                "feature": "Invalid return type with Arrow-optimized Python UDF: VarcharType(10)"
+                "feature": "Python UDF return types",
+                "data_type": "varchar(10)",
             },
         )
 

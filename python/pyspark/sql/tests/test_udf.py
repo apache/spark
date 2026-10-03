@@ -27,7 +27,12 @@ import time
 import unittest
 from contextlib import redirect_stdout
 
-from pyspark.errors import AnalysisException, PySparkTypeError, PythonException
+from pyspark.errors import (
+    AnalysisException,
+    PySparkNotImplementedError,
+    PySparkTypeError,
+    PythonException,
+)
 from pyspark.logger import PySparkLogger
 from pyspark.sql import Column, Row, SparkSession
 from pyspark.sql.functions import assert_true, col, lit, rand, udf
@@ -46,6 +51,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     VariantType,
     VariantVal,
+    _parse_datatype_string,
 )
 from pyspark.sql.udf import UserDefinedFunction
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
@@ -1483,17 +1489,24 @@ class BaseUDFTestsMixin:
         ]
 
         for return_type, return_value in pairs:
-            with self.assertRaisesRegex(
-                Exception,
-                "(Please use a different output data type for your UDF or DataFrame|"
-                "Invalid return type with Arrow-optimized Python UDF)",
-            ):
+            with self.subTest(return_type=return_type):
+                with self.assertRaises(PySparkNotImplementedError) as pe:
 
-                @udf(return_type)
-                def my_udf():
-                    return return_value
+                    @udf(return_type)
+                    def my_udf():
+                        return return_value
 
-                self.spark.range(1).select(my_udf().alias("result")).show()
+                    self.spark.range(1).select(my_udf().alias("result"))
+
+                parsed = _parse_datatype_string(return_type)
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+                    messageParameters={
+                        "feature": "Python UDF return types",
+                        "data_type": parsed.simpleString(),
+                    },
+                )
 
     def test_udf_binary_type(self):
         def get_binary_type(x):
