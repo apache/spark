@@ -82,9 +82,12 @@ To run locally::
 
 Set ``RUN_HYPOTHESIS_MAX_EXAMPLES`` to override the per-test example count
 (default 1000). Each generated example runs two full Spark jobs (a
-transpiled-vs-interpreted differential), so CI caps this at 50 via
+transpiled-vs-interpreted differential), so CI caps this at 10 via
 ``build_and_test.yml`` to stay under ``PYSPARK_TEST_TIMEOUT``; the explicit
 ``@example`` edge seeds always run on top of the generated ones regardless.
+The non-raising single-argument tests pack ``_BATCH`` rows into one
+multi-row DataFrame per example, so one collect per side checks ``_BATCH``
+inputs at the cost of two jobs instead of two per row.
 """
 
 import math
@@ -433,6 +436,25 @@ if _have_hypothesis:
         def wrapper(method):
             for v0, v1 in reversed(pairs):
                 method = example(**{keys[0]: v0, keys[1]: v1})(method)
+            return method
+
+        return wrapper
+
+    # Rows packed into one multi-row DataFrame per ``@given`` example. Each
+    # example then costs two Spark jobs (transpiled + interpreted) instead of
+    # two per row, so the same wall-clock budget fuzzes far more values. Only
+    # safe for UDFs that return a value for every strategy element -- a UDF
+    # that raises on any row aborts the whole batch comparison, so the
+    # raising UDFs stay on the one-row-per-example path.
+    _BATCH = 10
+
+    def _seed_list_examples(values, key="values"):
+        """Like ``_seed_examples`` but each scalar seed is wrapped in a
+        one-element list, for multi-row tests that take ``values=[...]``."""
+
+        def wrapper(method):
+            for v in reversed(values):
+                method = example(**{key: [v]})(method)
             return method
 
         return wrapper
@@ -1160,6 +1182,13 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         schema = StructType([StructField("a", dtype, nullable=True)])
         return self.spark.createDataFrame([Row(a=value)], schema=schema)
 
+    def _multi_row_single_arg_df(self, values, dtype):
+        """One DataFrame with many rows, so a UDF that never raises can be
+        checked across ``len(values)`` inputs in a single ``collect`` per side
+        (two Spark jobs total) rather than one job per value."""
+        schema = StructType([StructField("a", dtype, nullable=True)])
+        return self.spark.createDataFrame([Row(a=v) for v in values], schema=schema)
+
     def _two_long_arg_df(self, x, y):
         schema = StructType(
             [
@@ -1332,12 +1361,12 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
     if _have_hypothesis:
 
         @_hyp_settings
-        @given(value=_long_arith_strategy)
-        @_seed_examples(_LONG_ARITH_EDGES)
-        def test_plus_four_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(plus_four, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"plus_four mismatch on {value!r}")
+        @given(values=st.lists(_long_arith_strategy, min_size=_BATCH, max_size=_BATCH))
+        @_seed_list_examples(_LONG_ARITH_EDGES)
+        def test_plus_four_matches_python(self, values):
+            df = self._multi_row_single_arg_df(values, LongType())
+            transpiled, interpreted = self._run(plus_four, LongType(), df, "a", all_rows=True)
+            self.assertSameValue(transpiled, interpreted, f"plus_four mismatch on {values!r}")
 
         @_hyp_settings
         @given(value=_long_arith_strategy)
@@ -1348,59 +1377,67 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             self.assertEqual(transpiled, interpreted, f"plus_four mismatch on {value!r}")
 
         @_hyp_settings
-        @given(value=_long_arith_strategy)
-        @_seed_examples(_LONG_ARITH_EDGES)
-        def test_plus_four_with_else_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(plus_four_with_else, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"plus_four_with_else mismatch on {value!r}")
+        @given(values=st.lists(_long_arith_strategy, min_size=_BATCH, max_size=_BATCH))
+        @_seed_list_examples(_LONG_ARITH_EDGES)
+        def test_plus_four_with_else_matches_python(self, values):
+            df = self._multi_row_single_arg_df(values, LongType())
+            transpiled, interpreted = self._run(
+                plus_four_with_else, LongType(), df, "a", all_rows=True
+            )
+            self.assertSameValue(
+                transpiled, interpreted, f"plus_four_with_else mismatch on {values!r}"
+            )
 
         @_hyp_settings
-        @given(value=_long_strategy)
-        @_seed_examples(_LONG_EDGES)
-        def test_is_none_branch_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(is_none_branch, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"is_none_branch mismatch on {value!r}")
+        @given(values=st.lists(_long_strategy, min_size=_BATCH, max_size=_BATCH))
+        @_seed_list_examples(_LONG_EDGES)
+        def test_is_none_branch_matches_python(self, values):
+            df = self._multi_row_single_arg_df(values, LongType())
+            transpiled, interpreted = self._run(is_none_branch, LongType(), df, "a", all_rows=True)
+            self.assertSameValue(transpiled, interpreted, f"is_none_branch mismatch on {values!r}")
 
         @_hyp_settings
-        @given(value=_bool_strategy)
-        @_seed_examples(_BOOL_EDGES)
-        def test_truthy_bool_branch_matches_python(self, value):
+        @given(values=st.lists(_bool_strategy, min_size=_BATCH, max_size=_BATCH))
+        @_seed_list_examples(_BOOL_EDGES)
+        def test_truthy_bool_branch_matches_python(self, values):
             # bare ``if x:`` on a bool-annotated parameter transpiles correctly.
             # NULL is treated as falsy (coalesce(x, False)), matching Python's
             # ``None is falsy`` semantics.
-            df = self._single_arg_df(value, BooleanType())
-            transpiled, interpreted = self._run(truthy_bool_branch, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"truthy_bool_branch mismatch on {value!r}")
+            df = self._multi_row_single_arg_df(values, BooleanType())
+            transpiled, interpreted = self._run(
+                truthy_bool_branch, LongType(), df, "a", all_rows=True
+            )
+            self.assertSameValue(
+                transpiled, interpreted, f"truthy_bool_branch mismatch on {values!r}"
+            )
 
         @_hyp_settings
-        @given(value=_long_arith_strategy)
+        @given(values=st.lists(_long_arith_strategy, min_size=_BATCH, max_size=_BATCH))
         # add_then_mod is the case that surfaced the Python-vs-SQL mod
         # sign mismatch; the seed values cover the four sign combinations
         # of `(x + 7) % 5` so we always re-prove the pmod fix on every
         # run regardless of the random seed.
-        @_seed_examples((*_LONG_ARITH_EDGES, -2, -8, 8, 100, -100))
-        def test_add_then_mod_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(add_then_mod, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"add_then_mod mismatch on {value!r}")
+        @_seed_list_examples((*_LONG_ARITH_EDGES, -2, -8, 8, 100, -100))
+        def test_add_then_mod_matches_python(self, values):
+            df = self._multi_row_single_arg_df(values, LongType())
+            transpiled, interpreted = self._run(add_then_mod, LongType(), df, "a", all_rows=True)
+            self.assertSameValue(transpiled, interpreted, f"add_then_mod mismatch on {values!r}")
 
         @_hyp_settings
-        @given(value=_long_arith_strategy)
-        @_seed_examples(_LONG_ARITH_EDGES)
-        def test_minus_two_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(minus_two, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"minus_two mismatch on {value!r}")
+        @given(values=st.lists(_long_arith_strategy, min_size=_BATCH, max_size=_BATCH))
+        @_seed_list_examples(_LONG_ARITH_EDGES)
+        def test_minus_two_matches_python(self, values):
+            df = self._multi_row_single_arg_df(values, LongType())
+            transpiled, interpreted = self._run(minus_two, LongType(), df, "a", all_rows=True)
+            self.assertSameValue(transpiled, interpreted, f"minus_two mismatch on {values!r}")
 
         @_hyp_settings
-        @given(value=_long_arith_strategy)
-        @_seed_examples(_LONG_ARITH_EDGES)
-        def test_times_three_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(times_three, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"times_three mismatch on {value!r}")
+        @given(values=st.lists(_long_arith_strategy, min_size=_BATCH, max_size=_BATCH))
+        @_seed_list_examples(_LONG_ARITH_EDGES)
+        def test_times_three_matches_python(self, values):
+            df = self._multi_row_single_arg_df(values, LongType())
+            transpiled, interpreted = self._run(times_three, LongType(), df, "a", all_rows=True)
+            self.assertSameValue(transpiled, interpreted, f"times_three mismatch on {values!r}")
 
         @_hyp_settings
         @given(value=_bool_strategy)
