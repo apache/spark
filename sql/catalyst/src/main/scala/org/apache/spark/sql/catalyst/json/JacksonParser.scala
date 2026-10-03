@@ -192,7 +192,8 @@ class JacksonParser(
   private def makeMapRootConverter(mt: MapType): JsonParser => Iterable[InternalRow] = {
     val fieldConverter = makeConverter(mt.valueType)
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, mt) {
-      case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter)))
+      case START_OBJECT =>
+        Some(InternalRow(convertMap(parser, fieldConverter, mt.keyType, mt.valueType)))
     }
   }
 
@@ -485,7 +486,8 @@ class JacksonParser(
     case mt: MapType =>
       val valueConverter = makeConverter(mt.valueType)
       (parser: JsonParser) => parseJsonToken[MapData](parser, dataType) {
-        case START_OBJECT => convertMap(parser, valueConverter)
+        case START_OBJECT =>
+          convertMap(parser, valueConverter, mt.keyType, mt.valueType)
       }
 
     case udt: UserDefinedType[_] =>
@@ -594,6 +596,7 @@ class JacksonParser(
             bitmask(index) = false
           } catch {
             case e: SparkUpgradeException => throw e
+            case DuplicateMapKeyUtils(e) => throw e
             case err: PartialValueException if enablePartialResults =>
               badRecordException = badRecordException.orElse(Some(err.cause))
               row.update(index, err.partialResult)
@@ -618,26 +621,85 @@ class JacksonParser(
   }
 
   /**
+   * Finish a JSON value that failed conversion. `skipChildren` only works at
+   * START_OBJECT / START_ARRAY; if the converter already consumed tokens inside a nested
+   * object, leftover FIELD_NAMEs would otherwise leak as keys of the enclosing map.
+   *
+   * The `_` branch is for a converter that stopped on a scalar inside a nested
+   * value. The loop advances until Jackson's nesting depth returns to this map,
+   * which is the nested value's END_OBJECT / END_ARRAY (or EOF if truncated).
+   * A null parsing context is treated as "keep draining" so leftover tokens
+   * cannot be misread as the next map key.
+   */
+  private def skipRemainingValue(parser: JsonParser, mapDepth: Int): Unit = {
+    parser.getCurrentToken match {
+      case START_OBJECT | START_ARRAY =>
+        parser.skipChildren()
+      case END_OBJECT | END_ARRAY | null =>
+        // The value converter already consumed through its boundary.
+      case _ =>
+        var token = parser.getCurrentToken
+        while (token != null &&
+            (parser.getParsingContext == null ||
+              parser.getParsingContext.getNestingDepth > mapDepth)) {
+          token = parser.nextToken()
+        }
+    }
+  }
+
+  /**
    * Parse an object as a Map, preserving all fields.
    */
   private def convertMap(
       parser: JsonParser,
-      fieldConverter: ValueConverter): MapData = {
+      fieldConverter: ValueConverter,
+      keyType: DataType,
+      valueType: DataType): MapData = {
+    val constrainedKeys =
+      keyType.isInstanceOf[CharType] || keyType.isInstanceOf[VarcharType]
+    // CHAR/VARCHAR maps always drain to END_OBJECT, even when
+    // jsonEnablePartialResults is false. Dedup and length checks need the
+    // full object; aborting at the first bad value would leak inner FIELD_NAMEs
+    // as outer keys and skip mapKeyDedupPolicy. STRING maps still abort at the
+    // first NonFatal unless partial results are enabled.
+    val drainErrors = constrainedKeys || enablePartialResults
+    val mapDepth = parser.getParsingContext.getNestingDepth
+
+    if (constrainedKeys) {
+      convertConstrainedMap(parser, fieldConverter, keyType, valueType, mapDepth)
+    } else {
+      convertOrdinaryMap(parser, fieldConverter, drainErrors, mapDepth)
+    }
+  }
+
+  /**
+   * Ordinary STRING JSON maps keep every parsed pair, including exact duplicate names.
+   */
+  private def convertOrdinaryMap(
+      parser: JsonParser,
+      fieldConverter: ValueConverter,
+      drainErrors: Boolean,
+      mapDepth: Int): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
 
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      keys += UTF8String.fromString(parser.currentName)
+      val name = UTF8String.fromString(parser.currentName)
       try {
         values += fieldConverter.apply(parser)
+        keys += name
       } catch {
         case err: PartialValueException if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(err.cause))
           values += err.partialResult
-        case NonFatal(e) if enablePartialResults =>
+          keys += name
+        case NonFatal(e) if drainErrors =>
+          // Omit the failed pair so remaining keys stay in the partial map.
+          // skipRemainingValue drains leftover nested tokens that skipChildren
+          // would miss after a converter stopped inside an array or object.
           badRecordException = badRecordException.orElse(Some(e))
-          parser.skipChildren()
+          skipRemainingValue(parser, mapDepth)
       }
     }
 
@@ -656,6 +718,63 @@ class JacksonParser(
       mapData
     } else {
       throw PartialMapDataResultException(mapData, badRecordException.get)
+    }
+  }
+
+  /**
+   * CHAR/VARCHAR JSON maps apply assignment to object names, then
+   * `spark.sql.mapKeyDedupPolicy` to collisions created by that normalization.
+   * Exact repeated names stay historical last-wins.
+   */
+  private def convertConstrainedMap(
+      parser: JsonParser,
+      fieldConverter: ValueConverter,
+      keyType: DataType,
+      valueType: DataType,
+      mapDepth: Int): MapData = {
+    val lastEntries =
+      mutable.LinkedHashMap.empty[UTF8String, (UTF8String, Option[Any])]
+    var partialResultException: Option[Throwable] = None
+    var badMapException: Option[Throwable] = None
+
+    while (nextUntil(parser, JsonToken.END_OBJECT)) {
+      val rawKey = UTF8String.fromString(parser.currentName)
+      val value = try {
+        Some(fieldConverter.apply(parser))
+      } catch {
+        case err: PartialValueException if enablePartialResults =>
+          partialResultException = partialResultException.orElse(Some(err.cause))
+          Some(err.partialResult)
+        case DuplicateMapKeyUtils(e) => throw e
+        case NonFatal(e) =>
+          badMapException = badMapException.orElse(Some(e))
+          skipRemainingValue(parser, mapDepth)
+          None
+      }
+      try {
+        val key = CharVarcharUtils.applyTextParseSemantics(rawKey, keyType)
+        // Re-insert so LAST_WIN follows the latest occurrence of this raw name,
+        // matching StaxXmlParser.convertConstrainedMap.
+        lastEntries.remove(rawKey)
+        lastEntries.update(rawKey, (key, value))
+      } catch {
+        case NonFatal(e) =>
+          badMapException = badMapException.orElse(Some(e))
+      }
+    }
+
+    // Dedup runs on the drained object before any stored conversion failure is
+    // rethrown. A normalization collision therefore surfaces as DUPLICATED_MAP_KEY
+    // in preference to EXCEED_LIMIT_LENGTH (oversize key) or a value-conversion
+    // error. LAST_WIN resolves the collision and then reports the stored failure
+    // (PERMISSIVE keeps the partial map via PartialMapDataResultException).
+    val mapData = DuplicateMapKeyUtils.buildConstrainedMap(
+      lastEntries, keyType, valueType)
+    val firstError = badMapException.orElse(partialResultException)
+    if (firstError.isEmpty) {
+      mapData
+    } else {
+      throw PartialMapDataResultException(mapData, firstError.get)
     }
   }
 
@@ -757,6 +876,7 @@ class JacksonParser(
       }
     } catch {
       case e: SparkUpgradeException => throw e
+      case DuplicateMapKeyUtils(e) => throw e
       case e: CharConversionException if options.encoding.isEmpty =>
         throw badRecord(e, () => recordLiteral(record))
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
@@ -776,6 +896,7 @@ class JacksonParser(
       createParser(factory, record)
     } catch {
       case e: SparkUpgradeException => throw e
+      case DuplicateMapKeyUtils(e) => throw e
       case e: CharConversionException if options.encoding.isEmpty =>
         throw badRecord(e, () => recordLiteral(record))
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
@@ -811,6 +932,9 @@ class JacksonParser(
     def handleFailure[R](elementStart: Option[JsonToken])(operation: => R): R = {
       try operation catch {
         case e: SparkUpgradeException => fail(e)
+        case DuplicateMapKeyUtils(e) =>
+          closeParser()
+          throw e
         case e: CharConversionException if options.encoding.isEmpty => fail(e)
         case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
             _: PartialResultException | _: PartialResultArrayException |

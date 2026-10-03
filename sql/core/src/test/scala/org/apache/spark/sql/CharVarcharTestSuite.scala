@@ -1040,6 +1040,20 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       parameters = Map("limit" -> expectedLimit))
   }
 
+  private def assertMalformedJsonRecord(query: String): Unit = {
+    val error = intercept[SparkException] { sql(query).collect() }
+    val malformed = Iterator.iterate[Throwable](error)(_.getCause)
+      .takeWhile(_ != null)
+      .collectFirst {
+        case e: SparkException
+            if e.getCondition == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION" => e
+      }
+      .getOrElse(fail(
+        "expected MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION, got: " + error,
+        error))
+    assert(malformed.getCondition === "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+  }
+
   private def assertDuplicateMapKey(query: String, expectedKey: String = "a "): Unit = {
     assertDuplicateMapKeyError(sql(query).collect(), expectedKey)
   }
@@ -2505,6 +2519,10 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
              |  map('mode', 'FAILFAST'))""".stripMargin)
       }
 
+      checkAnswer(
+        sql("""SELECT from_json('{"ab": 1}', 'MAP<CHAR(4), INT>')"""),
+        Row(Map("ab  " -> 1)))
+
       checkAnswer(sql("SELECT from_csv('str', 'a CHAR(5)')"), Row(Row("str  ")))
       Seq("CHAR(5)", "VARCHAR(5)").foreach { dataType =>
         checkAnswer(sql(s"SELECT from_csv('abcdef', 'a $dataType')"), Row(Row(null)))
@@ -2751,6 +2769,212 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59722: normalized JSON CHAR map keys honor the dedup policy") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      val jsonQuery =
+        """SELECT from_json('{"a":1,"a ":2}', 'MAP<CHAR(2), INT>')"""
+      val jsonFailfastQuery =
+        """SELECT from_json(
+          |  '{"a":1,"a ":2}',
+          |  'MAP<CHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin
+      val varcharJsonQuery =
+        """SELECT from_json('{"ab":1,"ab ":2}', 'MAP<VARCHAR(2), INT>')"""
+      val exactCharJsonQuery =
+        """SELECT from_json('{"a":1,"a":2}', 'MAP<CHAR(2), INT>')"""
+      val exactVarcharJsonQuery =
+        """SELECT from_json('{"ab":1,"ab":2}', 'MAP<VARCHAR(2), INT>')"""
+      val interleavedCharJsonQuery =
+        """SELECT map_entries(from_json(
+          |  '{"a":1,"b":2,"a":3}',
+          |  'MAP<CHAR(2), INT>'))""".stripMargin
+      val exactRepeatAfterCollisionQuery =
+        """SELECT from_json('{"a":1,"a ":2,"a":3}', 'MAP<CHAR(2), INT>')"""
+      val varcharOverflowQuery =
+        """SELECT from_json('{"abc":1}', 'MAP<VARCHAR(2), INT>')"""
+      val varcharOverflowFailfastQuery =
+        """SELECT from_json(
+          |  '{"abc":1}',
+          |  'MAP<VARCHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin
+      val overflowAfterCollisionQuery =
+        """SELECT from_json(
+          |  '{"a":1,"a ":2,"abc":0}',
+          |  'MAP<CHAR(2), INT>')""".stripMargin
+      val nestedJsonQuery =
+        """SELECT from_json(
+          |  '{"outer":{"a":1,"a ":2}}',
+          |  'MAP<STRING, MAP<CHAR(2), INT>>')""".stripMargin
+      val badFieldBeforeDuplicateQuery =
+        """SELECT from_json(
+          |  '{"bad":"not-an-int","m":{"a":1,"a ":2}}',
+          |  'bad INT, m MAP<CHAR(2), INT>')""".stripMargin
+      val badKeyThenSiblingQuery =
+        """SELECT from_json(
+          |  '{"m":{"abc":1},"tail":2}',
+          |  'm MAP<CHAR(2), INT>, tail INT').tail""".stripMargin
+      val badValueBeforeDuplicateQuery =
+        """SELECT from_json('{"bad":"not-an-int","a":1,"a ":2}', 'MAP<CHAR(2), INT>')"""
+      val malformedValueBeforeDuplicateQuery =
+        """SELECT from_json('{"a":"bad","a ":2}', 'MAP<CHAR(2), INT>')"""
+      val badJsonKeyBeforeDuplicateQuery =
+        """SELECT from_json(
+          |  '{"abc":0,"a":1,"a ":2}',
+          |  'MAP<CHAR(2), INT>')""".stripMargin
+
+      assertDuplicateMapKey(jsonQuery)
+      assertDuplicateMapKey(jsonFailfastQuery)
+      assertDuplicateMapKey(varcharJsonQuery, expectedKey = "ab")
+      checkAnswer(sql(varcharOverflowQuery), Row(Map.empty[String, Int]))
+      assertParseExceedLimit(varcharOverflowFailfastQuery, expectedLimit = "2")
+      assertDuplicateMapKey(overflowAfterCollisionQuery)
+      assertDuplicateMapKey(nestedJsonQuery)
+      assertDuplicateMapKey(badFieldBeforeDuplicateQuery)
+      assertDuplicateMapKey(badValueBeforeDuplicateQuery)
+      assertDuplicateMapKey(malformedValueBeforeDuplicateQuery)
+      checkAnswer(sql(exactCharJsonQuery), Row(Map("a " -> 2)))
+      checkAnswer(sql(exactVarcharJsonQuery), Row(Map("ab" -> 2)))
+      checkAnswer(sql(interleavedCharJsonQuery), Row(Seq(Row("b ", 2), Row("a ", 3))))
+      assertDuplicateMapKey(exactRepeatAfterCollisionQuery)
+      assertDuplicateMapKey(badJsonKeyBeforeDuplicateQuery)
+      checkAnswer(sql(badKeyThenSiblingQuery), Row(2))
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+        assertDuplicateMapKey(jsonQuery)
+        assertDuplicateMapKey(overflowAfterCollisionQuery)
+        assertDuplicateMapKey(badJsonKeyBeforeDuplicateQuery)
+        checkAnswer(sql(varcharOverflowQuery), Row(Map.empty[String, Int]))
+        assertParseExceedLimit(varcharOverflowFailfastQuery, expectedLimit = "2")
+      }
+
+      withTempPath { path =>
+        Seq("""{"m":{"a":1,"a ":2}}""").toDS().write.text(path.getCanonicalPath)
+        def readJsonMap(): DataFrame = spark.read
+          .schema("m MAP<CHAR(2), INT>")
+          .json(path.getCanonicalPath)
+
+        assertDuplicateMapKeyError(readJsonMap().collect())
+
+        withSQLConf(
+            SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+          checkAnswer(readJsonMap(), Row(Map("a " -> 2)))
+        }
+      }
+
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+        checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(jsonFailfastQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(varcharJsonQuery), Row(Map("ab" -> 2)))
+        checkAnswer(sql(varcharOverflowQuery), Row(Map.empty[String, Int]))
+        assertParseExceedLimit(varcharOverflowFailfastQuery, expectedLimit = "2")
+        checkAnswer(sql(overflowAfterCollisionQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(exactCharJsonQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(exactVarcharJsonQuery), Row(Map("ab" -> 2)))
+        checkAnswer(sql(nestedJsonQuery), Row(Map("outer" -> Map("a " -> 2))))
+        checkAnswer(sql(badValueBeforeDuplicateQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(malformedValueBeforeDuplicateQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(interleavedCharJsonQuery), Row(Seq(Row("b ", 2), Row("a ", 3))))
+        checkAnswer(sql(exactRepeatAfterCollisionQuery), Row(Map("a " -> 3)))
+        checkAnswer(sql(badJsonKeyBeforeDuplicateQuery), Row(Map("a " -> 2)))
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+          checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
+          checkAnswer(sql(overflowAfterCollisionQuery), Row(Map("a " -> 2)))
+          checkAnswer(sql(badJsonKeyBeforeDuplicateQuery), Row(Map("a " -> 2)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-59722: pretty-printed JSON map failures preserve parser position") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val overflowQueries = Seq("CHAR(5)", "VARCHAR(5)").map { valueType =>
+        s"""SELECT from_json(
+           |  '{
+           |    "m": {
+           |      "b": "abcdef",
+           |      "a": "x",
+           |      "a ": "y"
+           |    },
+           |    "tail": 9
+           |  }',
+           |  'm MAP<CHAR(2), $valueType>, tail INT')""".stripMargin
+      }
+      val nestedFailureQuery =
+        """SELECT from_json(
+          |  '{
+          |    "m": {
+          |      "b": {"x": "bad"},
+          |      "a": {"x": 1},
+          |      "a ": {"x": 2}
+          |    },
+          |    "tail": 9
+          |  }',
+          |  'm MAP<CHAR(2), MAP<CHAR(2), INT>>, tail INT')""".stripMargin
+
+      (overflowQueries :+ nestedFailureQuery).foreach { query =>
+        withClue(s"$query: ") {
+          assertDuplicateMapKey(query)
+        }
+      }
+
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+        overflowQueries.foreach { query =>
+          val valueType = if (query.contains("VARCHAR(5)")) "VARCHAR" else "CHAR"
+          val expectedValue = if (valueType == "VARCHAR") "y" else "y    "
+          withClue(s"$valueType: ") {
+            checkAnswer(sql(query), Row(Row(Map("a " -> expectedValue), 9)))
+          }
+        }
+        checkAnswer(
+          sql(nestedFailureQuery),
+          Row(Row(Map("b " -> Map.empty[String, Int], "a " -> Map("x " -> 2)), 9)))
+      }
+    }
+  }
+
+  test("SPARK-59722: JSON CHAR map value failures preserve parser position and error class") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val valueFailFast =
+        """SELECT from_json(
+          |  '{"a":"not-an-int","b":2}',
+          |  'MAP<CHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin
+      val nestedArrayLeakQuery =
+        """SELECT map_keys(from_json(
+          |  '{"a":[1,"bad",99],"b":[3]}',
+          |  'MAP<CHAR(2), ARRAY<INT>>'))""".stripMargin
+      val nestedArrayMapQuery =
+        """SELECT from_json(
+          |  '{"a":[1,"bad",99],"b":[3]}',
+          |  'MAP<CHAR(2), ARRAY<INT>>')""".stripMargin
+      val stringNestedArrayLeakQuery =
+        """SELECT map_keys(from_json(
+          |  '{"a":[1,"bad",99],"b":[3]}',
+          |  'MAP<STRING, ARRAY<INT>>'))""".stripMargin
+      val stringNestedArrayMapQuery =
+        """SELECT from_json(
+          |  '{"a":[1,"bad",99],"b":[3]}',
+          |  'MAP<STRING, ARRAY<INT>>')""".stripMargin
+
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          withClue(s"partial=$partial") {
+            assertMalformedJsonRecord(valueFailFast)
+            checkAnswer(sql(nestedArrayLeakQuery), Row(Seq("b ")))
+            checkAnswer(sql(nestedArrayMapQuery), Row(Map("b " -> Seq(3))))
+          }
+        }
+      }
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+        checkAnswer(sql(stringNestedArrayLeakQuery), Row(Seq("b")))
+        checkAnswer(sql(stringNestedArrayMapQuery), Row(Map("b" -> Seq(3))))
+      }
+    }
+  }
+
   test("SPARK-59274: pretty-printed XML map failures preserve parser position") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       val overflowQueries = Seq("CHAR(5)", "VARCHAR(5)").map { valueType =>
@@ -2828,7 +3052,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
             withClue(s"$valueType partial=$partial") {
               if (partial) {
-                checkAnswer(sql(fromJson), Row(Row(null, 1)))
+                checkAnswer(sql(fromJson), Row(Row(Map.empty[String, String], 1)))
               } else {
                 checkAnswer(sql(fromJson), Row(Row(null, null)))
               }
@@ -2843,7 +3067,9 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                 val fileSchema = schema
                 val permissive = spark.read.schema(fileSchema).json(path.getCanonicalPath)
                 if (partial) {
-                  checkAnswer(permissive, Seq(Row(null, 1), Row(Map("k" -> "ab"), 2)))
+                  checkAnswer(
+                    permissive,
+                    Seq(Row(Map.empty[String, String], 1), Row(Map("k" -> "ab"), 2)))
                 } else {
                   checkAnswer(permissive, Seq(Row(null, null), Row(Map("k" -> "ab"), 2)))
                 }
@@ -2943,21 +3169,31 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     withSQLConf(
         SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
         SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+      val jsonQuery =
+        """SELECT from_json('{"a":1,"A":2}', 'MAP<CHAR(2) COLLATE UTF8_LCASE, INT>')"""
       val xmlQuery =
         """SELECT from_xml(
           |  '<ROW><m><a>1</a><A>2</A></m></ROW>',
           |  'm MAP<CHAR(2) COLLATE UTF8_LCASE, INT>').m""".stripMargin
+      val varcharJsonQuery =
+        """SELECT from_json(
+          |  '{"ab":1,"AB":2}',
+          |  'MAP<VARCHAR(2) COLLATE UTF8_LCASE, INT>')""".stripMargin
       val varcharXmlQuery =
         """SELECT from_xml(
           |  '<ROW><m><ab>1</ab><AB>2</AB></m></ROW>',
           |  'm MAP<VARCHAR(2) COLLATE UTF8_LCASE, INT>').m""".stripMargin
 
+      assertDuplicateMapKey(jsonQuery, expectedKey = "A ")
       assertDuplicateMapKey(xmlQuery, expectedKey = "A ")
+      assertDuplicateMapKey(varcharJsonQuery, expectedKey = "AB")
       assertDuplicateMapKey(varcharXmlQuery, expectedKey = "AB")
 
       withSQLConf(
           SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+        checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(xmlQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(varcharJsonQuery), Row(Map("ab" -> 2)))
         checkAnswer(sql(varcharXmlQuery), Row(Map("ab" -> 2)))
       }
     }
