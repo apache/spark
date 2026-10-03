@@ -565,7 +565,7 @@ are also available to connect MySQL, may have different mapping rules.
     <tr>
       <td>DECIMAL(p,s) [UNSIGNED]</td>
       <td>DecimalType(min(38, p),(min(18,s)))</td>
-      <td>The column type is bounded to DecimalType(38, 18), if 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION error</td>
+      <td>The column type is bounded to DecimalType(38, 18), if 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITH_ROUND_ATTEMPT error</td>
     </tr>
     <tr>
       <td>DATE</td>
@@ -866,7 +866,7 @@ as the activated JDBC Driver. Note that, different JDBC drivers, or different ve
     <tr>
       <td>numeric, decimal</td>
       <td>DecimalType</td>
-      <td><ul><li>Since PostgreSQL 15, 's' can be negative. If 's<0' it'll be adjusted to DecimalType(min(p-s, 38), 0); Otherwise, DecimalType(p, s)</li><li>If 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION error.</li><li>Special numeric values, 'NaN', 'infinity' and '-infinity' is not supported</li></ul></td>
+      <td><ul><li>Since PostgreSQL 15, 's' can be negative. If 's<0' it'll be adjusted to DecimalType(min(p-s, 38), 0); Otherwise, DecimalType(p, s)</li><li>If 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITH_ROUND_ATTEMPT error.</li><li>Special numeric values, 'NaN', 'infinity' and '-infinity' is not supported</li></ul></td>
     </tr>
     <tr>
       <td>character varying(n), varchar(n)</td>
@@ -1237,7 +1237,7 @@ as the activated JDBC Driver.
     <tr>
       <td>NUMBER[(p[,s])]</td>
       <td>DecimalType(p,s)</td>
-      <td>'s' can be negative in Oracle. If 's<0' it'll be adjusted to DecimalType(min(p-s, 38), 0); Otherwise, DecimalType(p, s), and if 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION error</td>
+      <td>'s' can be negative in Oracle. If 's<0' it'll be adjusted to DecimalType(min(p-s, 38), 0); Otherwise, DecimalType(p, s), and if 'p>38', the fraction part will be truncated if exceeded. And if any value of this column have an actual precision greater 38 will fail with NUMERIC_VALUE_OUT_OF_RANGE.WITH_ROUND_ATTEMPT error</td>
     </tr>
     <tr>
       <td>FLOAT[(p)]</td>
