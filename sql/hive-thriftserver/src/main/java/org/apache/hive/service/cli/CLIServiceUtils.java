@@ -36,10 +36,14 @@ public class CLIServiceUtils {
   /**
    * Convert a SQL search pattern into an equivalent Java Regex.
    *
+   * Per JDBC spec, only '%' (match any substring) and '_' (match any single character) are
+   * wildcard characters. All other characters — including regex metacharacters like '*', '.',
+   * '(', '[', '+', '?', '^', '$', '{', '|' — are treated as literals.
+   *
    * @param pattern input which may contain '%' or '_' wildcard characters, or
    * these characters escaped using {@code getSearchStringEscape()}.
-   * @return replace %/_ with regex search characters, also handle escaped
-   * characters.
+   * @return replace %/_ with regex search characters, escape all other regex-special characters,
+   * and handle escaped characters.
    */
   public static String patternToRegex(String pattern) {
     if (pattern == null) {
@@ -54,7 +58,7 @@ public class CLIServiceUtils {
           if (c != SEARCH_STRING_ESCAPE) {
             escaped = false;
           }
-          result.append(c);
+          appendLiteralChar(result, Character.toLowerCase(c));
         } else {
           if (c == SEARCH_STRING_ESCAPE) {
             escaped = true;
@@ -64,12 +68,25 @@ public class CLIServiceUtils {
           } else if (c == '_') {
             result.append('.');
           } else {
-            result.append(Character.toLowerCase(c));
+            appendLiteralChar(result, Character.toLowerCase(c));
           }
         }
       }
       return result.toString();
     }
+  }
+
+  // Regex metacharacters that must be escaped with a backslash to be treated as literals.
+  private static final String REGEX_METACHARACTERS = "\\.[]{}()*+?^$|";
+
+  /**
+   * Append a character to the result, escaping it if it is a regex metacharacter.
+   */
+  private static void appendLiteralChar(StringBuilder sb, char c) {
+    if (REGEX_METACHARACTERS.indexOf(c) >= 0) {
+      sb.append('\\');
+    }
+    sb.append(c);
   }
 
 }
