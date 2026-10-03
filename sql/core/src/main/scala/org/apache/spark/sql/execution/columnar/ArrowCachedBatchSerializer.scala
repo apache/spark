@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.SQLOrderingUtil
 import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatchSerializer}
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.execution.arrow.ArrowWriter
@@ -810,24 +811,20 @@ private object ArrowCachedBatchSerializer {
   def calculateMinMaxFloat(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int): (Any, Any) = {
-    var min = Float.MaxValue
-    var max = Float.MinValue
+    var min = 0.0f
+    var max = 0.0f
     var hasValue = false
 
     (0 until rowCount).foreach { i =>
       if (!vector.isNull(i)) {
         val value = vector.asInstanceOf[org.apache.arrow.vector.Float4Vector].get(i)
-        // Skip NaN: IEEE 754 comparisons with NaN are always false, so NaN never
-        // updates min/max in the row-based path (FloatColumnStats.gatherValueStats).
-        if (!value.isNaN) {
-          if (!hasValue) {
-            min = value
-            max = value
-            hasValue = true
-          } else {
-            if (value < min) min = value
-            if (value > max) max = value
-          }
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (SQLOrderingUtil.compareFloats(value, min) < 0) min = value
+          if (SQLOrderingUtil.compareFloats(value, max) > 0) max = value
         }
       }
     }
@@ -838,23 +835,20 @@ private object ArrowCachedBatchSerializer {
   def calculateMinMaxDouble(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int): (Any, Any) = {
-    var min = Double.MaxValue
-    var max = Double.MinValue
+    var min = 0.0d
+    var max = 0.0d
     var hasValue = false
 
     (0 until rowCount).foreach { i =>
       if (!vector.isNull(i)) {
         val value = vector.asInstanceOf[org.apache.arrow.vector.Float8Vector].get(i)
-        // Skip NaN to match DoubleColumnStats.gatherValueStats.
-        if (!value.isNaN) {
-          if (!hasValue) {
-            min = value
-            max = value
-            hasValue = true
-          } else {
-            if (value < min) min = value
-            if (value > max) max = value
-          }
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (SQLOrderingUtil.compareDoubles(value, min) < 0) min = value
+          if (SQLOrderingUtil.compareDoubles(value, max) > 0) max = value
         }
       }
     }
