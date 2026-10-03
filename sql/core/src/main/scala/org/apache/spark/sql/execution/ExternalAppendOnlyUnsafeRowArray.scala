@@ -253,7 +253,7 @@ class ExternalAppendOnlyUnsafeRowArray(
   private[this] class SpillableArrayIterator(
       iterator: UnsafeSorterIterator,
       numFieldPerRow: Int)
-    extends ExternalAppendOnlyUnsafeRowArrayIterator {
+    extends ExternalAppendOnlyUnsafeRowArrayIterator with Closeable {
 
     private val currentRow = new UnsafeRow(numFieldPerRow)
 
@@ -266,7 +266,9 @@ class ExternalAppendOnlyUnsafeRowArray(
       currentRow
     }
 
-    override protected def closeIfNeeded(): Unit = iterator match {
+    override protected def closeIfNeeded(): Unit = close()
+
+    override def close(): Unit = iterator match {
       case c: Closeable => c.close()
       case _ => // do nothing
     }
