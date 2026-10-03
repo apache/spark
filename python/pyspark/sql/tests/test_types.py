@@ -3899,8 +3899,10 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
             (double(5e-324), "4.9E-324"),
             # Powers of two whose shortest decimal is not the closest one of that length.
             (double(2.0**-24), "5.960464477539063E-8"),
+            (double(-(2.0**-24)), "-5.960464477539063E-8"),
             (double(2.0**-44), "5.684341886080802E-14"),
             (float32(2.0**-96), "1.2621775E-29"),
+            (float32(-(2.0**-96)), "-1.2621775E-29"),
             (float32(float("nan")), '"NaN"'),
             (float32(1.1), "1.1"),
             (float32(1e10), "1.0E10"),
