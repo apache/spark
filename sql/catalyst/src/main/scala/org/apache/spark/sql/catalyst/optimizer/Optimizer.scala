@@ -3351,8 +3351,12 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
         } else {
           // Keep track of the generated aliases to avoid generating multiple aliases
           // for the same attribute (in case the attribute is duplicated)
-          generatedAliasesMap.getOrElseUpdate(attr,
-            Alias(new First(attr).toAggregateExpression(), attr.name)())
+          generatedAliasesMap.getOrElseUpdate(attr, {
+            val first = new First(attr).toAggregateExpression()
+            // This is a grouping aggregate, so each output group has at least one input row.
+            val result = if (attr.nullable) first else KnownNotNull(first)
+            Alias(result, attr.name)()
+          })
         }
       }
       // SPARK-22951: Physical aggregate operators distinguishes global aggregation and grouping

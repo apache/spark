@@ -1189,6 +1189,21 @@ class DataFrameAggregateSuite extends SharedSparkSession
     assert(spark.emptyDataFrame.dropDuplicates().count() == 0)
   }
 
+  testWithWholeStageCodegenOnAndOff("SPARK-44517: deduplication preserves nullability") { _ =>
+    val input = spark.range(3).selectExpr("id", "id + 10 AS value", "cast(null as int) AS n")
+    for (keys <- Seq(Seq("id"), Seq.empty[String])) {
+      val deduplicated = input.dropDuplicates(keys)
+      assert(deduplicated.queryExecution.optimizedPlan.schema == input.schema)
+      assert(deduplicated.count() == (if (keys.isEmpty) 1 else 3))
+
+      val empty = input.filter("id < 0").dropDuplicates(keys)
+      assert(empty.queryExecution.optimizedPlan.schema == input.schema)
+      checkAnswer(empty, Seq.empty)
+    }
+    checkAnswer(input.filter("id < 0").agg(first("value")), Row(null))
+    checkAnswer(input.groupBy().agg(first("n", ignoreNulls = true)), Row(null))
+  }
+
   test("SPARK-21896: Window functions inside aggregate functions") {
     def checkWindowError(df: => DataFrame): Unit = {
       val thrownException = the [AnalysisException] thrownBy {
