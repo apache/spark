@@ -630,11 +630,22 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   private lazy val legacySplitTruncate =
     SQLConf.get.getConf(SQLConf.LEGACY_TRUNCATE_FOR_EMPTY_REGEX_SPLIT)
 
+  // last regex in string, we will update the pattern iff regex value changed.
+  @transient private var lastRegex: UTF8String = _
+  // last regex pattern, we cache it for performance concern
+  @transient private var pattern: Pattern = _
+  override def stateful: Boolean = true
+
   def this(exp: Expression, regex: Expression) = this(exp, regex, Literal(-1))
 
   override def nullSafeEval(string: Any, regex: Any, limit: Any): Any = {
-    val pattern = CollationSupport.collationAwareRegex(
-      regex.asInstanceOf[UTF8String], collationId, legacySplitTruncate)
+    if (!regex.equals(lastRegex)) {
+      // regex value changed
+      val r = regex.asInstanceOf[UTF8String].clone()
+      pattern = Pattern.compile(
+        CollationSupport.collationAwareRegex(r, collationId, legacySplitTruncate).toString)
+      lastRegex = r
+    }
     val strings = if (legacySplitTruncate) {
       string.asInstanceOf[UTF8String].splitLegacyTruncate(pattern, limit.asInstanceOf[Int])
     } else {
@@ -645,14 +656,21 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
-    val pattern = ctx.freshName("pattern")
+    val patternClass = classOf[Pattern].getCanonicalName
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(patternClass, "pattern")
     nullSafeCodeGen(ctx, ev, (str, regex, limit) => {
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
       s"""
-         |UTF8String $pattern =
-         |  CollationSupport.collationAwareRegex($regex, $collationId, $legacySplitTruncate);
+         |if (!$regex.equals($termLastRegex)) {
+         |  // regex value changed
+         |  UTF8String r = $regex.clone();
+         |  $termPattern = $patternClass.compile(CollationSupport.collationAwareRegex(
+         |    r, $collationId, $legacySplitTruncate).toString());
+         |  $termLastRegex = r;
+         |}
          |${ev.value} = new $arrayClass($legacySplitTruncate ?
-         |  $str.splitLegacyTruncate($pattern, $limit) : $str.split($pattern, $limit));
+         |  $str.splitLegacyTruncate($termPattern, $limit) : $str.split($termPattern, $limit));
          |""".stripMargin
     })
   }
