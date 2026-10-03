@@ -202,6 +202,16 @@ class SizeEstimatorSuite
     assert(estimatedSize <= 4200, "Estimated size " + estimatedSize + " should be less than 4200")
   }
 
+  test("sampled object arrays are extrapolated to their full length") {
+    // Arrays longer than 400 elements are estimated from two samples of 100 elements. Each
+    // expected value is 16 (header) + 4-byte pointers rounded up to 8 + 24 bytes per
+    // DummyClass3, so lengths that are not a multiple of 100 must not lose elements.
+    assertResult(11248)(SizeEstimator.estimate(Array.fill(401)(new DummyClass3)))
+    assertResult(12616)(SizeEstimator.estimate(Array.fill(450)(new DummyClass3)))
+    assertResult(13992)(SizeEstimator.estimate(Array.fill(499)(new DummyClass3)))
+    assertResult(30792)(SizeEstimator.estimate(Array.fill(1099)(new DummyClass3)))
+  }
+
   test("32-bit arch") {
     reinitializeSizeEstimator("x86", "true", "false")
     assertResult(40)(SizeEstimator.estimate(DummyString("")))
