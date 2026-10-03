@@ -17,15 +17,28 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.text.ParsePosition
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
 import org.apache.spark.unsafe.types.UTF8String
 
 sealed trait TimeFormatter extends Serializable {
   def parse(s: String): Long // returns nanoseconds since midnight
+
+  // A non-throwing variant of `parse`, returning None instead of throwing when the input cannot be
+  // parsed. Used by schema inference to probe the time type without paying an exception per
+  // non-time value; subclasses override it with a more efficient, exception-free implementation.
+  def parseOptional(s: String): Option[Long] =
+    try {
+      Some(parse(s))
+    } catch {
+      case _: Exception => None
+    }
 
   def format(localTime: LocalTime): String
   // Converts nanoseconds since the midnight to time string
@@ -48,6 +61,20 @@ class Iso8601TimeFormatter(pattern: String, locale: Locale, isParsing: Boolean)
   override def parse(s: String): Long = {
     val localTime = toLocalTime(formatter.parse(s))
     localTimeToNanos(localTime)
+  }
+
+  override def parseOptional(s: String): Option[Long] = {
+    try {
+      val parsePosition = new ParsePosition(0)
+      val parsed = formatter.parseUnresolved(s, parsePosition)
+      if (parsed != null && s.length == parsePosition.getIndex) {
+        Some(localTimeToNanos(toLocalTime(parsed)))
+      } else {
+        None
+      }
+    } catch {
+      case NonFatal(_) => None
+    }
   }
 
   override def format(localTime: LocalTime): String = {
@@ -99,6 +126,9 @@ class DefaultTimeFormatter(locale: Locale, isParsing: Boolean)
   override def parse(s: String): Long = {
     SparkDateTimeUtils.stringToTimeAnsi(UTF8String.fromString(s))
   }
+
+  override def parseOptional(s: String): Option[Long] =
+    SparkDateTimeUtils.stringToTime(UTF8String.fromString(s))
 }
 
 object TimeFormatter {
