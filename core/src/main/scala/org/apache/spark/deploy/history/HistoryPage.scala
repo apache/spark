@@ -113,8 +113,12 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             }
           }
         </a>
-        <p><a href={UIUtils.prependBaseUri(request, "/logPage/?self&logType=out")}>
-          Show server log</a></p>
+        {
+          if (parent.historyServerLogEnabled) {
+            <p><a href={UIUtils.prependBaseUri(request, "/logPage/?self&logType=out")}>
+              Show server log</a></p>
+          } else Seq.empty
+        }
       </div>
     val content =
       <script type="module" src={UIUtils.prependBaseUri(
