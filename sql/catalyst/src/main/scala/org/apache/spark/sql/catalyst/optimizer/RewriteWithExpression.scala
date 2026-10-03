@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, PlanHelper, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CreateVariable, LogicalPlan, PlanHelper, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, CURRENT_LIKE, WITH_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
@@ -67,6 +67,16 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         // changed anything: `mapExpressions` and `withNewChildren` preserve reference equality when
         // they rewrite nothing, which is what makes this detectable.
         if ((rewrittenAgg eq agg) && (rewrittenProj eq proj)) p else rewrittenProj
+      // The children of a `CreateVariable` are the `ResolvedIdentifier`s naming the variables, not
+      // rows to evaluate the default over, and `V2CommandStrategy` plans the command only while
+      // they stay so. `CreateVariableExec` evaluates the default once, so a `With` in it is left in
+      // place to memoize its definition, as one in a conditional branch is.
+      case c: CreateVariable if c.defaultExpr.containsPattern(WITH_EXPRESSION) =>
+        val default = c.defaultExpr.child
+        val rewritten = default.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+          case w: With => inlineDefsThatGainNothing(w)
+        }
+        if (rewritten eq default) c else c.copy(defaultExpr = c.defaultExpr.copy(child = rewritten))
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         applyInternal(p)
     }
