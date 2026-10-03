@@ -534,13 +534,12 @@ case class DateAdd(startDate: Expression, days: Expression)
   override def dataType: DataType = DateType
 
   override def nullSafeEval(start: Any, d: Any): Any = {
-    start.asInstanceOf[Int] + d.asInstanceOf[Number].intValue()
+    DateTimeUtils.dateAddDays(start.asInstanceOf[Int], d.asInstanceOf[Number].intValue())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (sd, d) => {
-      s"""${ev.value} = $sd + $d;"""
-    })
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (sd, d) => s"$dtu.dateAddDays($sd, $d)")
   }
 
   override def prettyName: String = "date_add"
@@ -581,13 +580,12 @@ case class DateSub(startDate: Expression, days: Expression)
   override def dataType: DataType = DateType
 
   override def nullSafeEval(start: Any, d: Any): Any = {
-    start.asInstanceOf[Int] - d.asInstanceOf[Number].intValue()
+    DateTimeUtils.dateSubtractDays(start.asInstanceOf[Int], d.asInstanceOf[Number].intValue())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (sd, d) => {
-      s"""${ev.value} = $sd - $d;"""
-    })
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (sd, d) => s"$dtu.dateSubtractDays($sd, $d)")
   }
 
   override def prettyName: String = "date_sub"
