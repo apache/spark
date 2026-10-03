@@ -395,10 +395,13 @@ message Finish {}
 // Worker -> Engine completion message. Carries per-execution summary metrics.
 //
 // Metrics design:
-//   - [[FinishResponse.metrics]] / [[CancelResponse.metrics]]: per-execution
-//     metrics accumulated up to the point of stream termination (e.g. rows
-//     processed, time per phase). Emitted once per [[Execute]] stream,
+//   - [[FinishResponse.execution_metrics]] /
+//     [[CancelResponse.execution_metrics]]: per-execution metrics with
+//     defined semantics (see [[ExecutionMetrics]]), accumulated up to the
+//     point of stream termination. Emitted once per [[Execute]] stream,
 //     regardless of whether the stream ended cleanly or was cancelled.
+//   - [[FinishResponse.metrics]] / [[CancelResponse.metrics]]: free-form,
+//     worker-defined per-execution metrics, sent alongside them.
 //   - [[HeartbeatResponse.metrics]]: worker-global metrics aggregated across
 //     all sessions (e.g. total rows processed, memory usage). Emitted
 //     periodically via the [[Manage]] RPC.
@@ -426,6 +429,11 @@ message FinishResponse {
     // data processing, the terminator is [[CancelResponse]], not
     // [[FinishResponse]]. The engine SHOULD surface this as an exception.
     optional ExecutionError error = 3;
+
+    // (Optional) Final metrics accumulated over this Execute stream, in
+    // the typed fields the engine reads. Measurements that have no field
+    // there belong in [[metrics]].
+    optional ExecutionMetrics execution_metrics = 4;
 }
 
 // Engine -> Worker explicit cancel. Distinct from a gRPC stream error
@@ -480,6 +488,74 @@ message CancelResponse {
     // alongside any prior [[ExecutionError]] (e.g. as a suppressed
     // exception).
     optional ExecutionError error = 2;
+
+    // (Optional) Partial metrics accumulated over this Execute stream up
+    // to cancellation. See [[FinishResponse.execution_metrics]].
+    optional ExecutionMetrics execution_metrics = 3;
+}
+
+// Per-execution metrics accumulated by one Execute stream, as measured by the
+// worker. Each field is cumulative for the stream. Absence means unavailable;
+// zero means measured zero. "In" counts data the worker received from the
+// engine and "out" counts data it returned. Byte counts are data payload
+// bytes and exclude gRPC, HTTP/2, and TLS framing. Timing values are
+// nanoseconds; the wait times [[receive_wall_nanos]] and [[send_wall_nanos]]
+// are not transfer times and MUST NOT be used as rate denominators. Spark
+// reads each field as a signed 64-bit value and ignores values above
+// 2^63 - 1.
+//
+// [[init_wall_nanos]], [[processing_wall_nanos]], and [[finish_wall_nanos]]
+// are consecutive windows of the stream. [[receive_wall_nanos]],
+// [[send_wall_nanos]], [[work_wall_nanos]], and [[work_cpu_nanos]] are
+// totals, summed across the worker's threads. They can overlap and do not
+// add up to any window; [[work_wall_nanos]] can exceed
+// [[processing_wall_nanos]].
+message ExecutionMetrics {
+    // Bytes of [[DataRequest.data]] payload received.
+    optional uint64 bytes_in = 1;
+
+    // Bytes of [[DataResponse.data]] payload returned.
+    optional uint64 bytes_out = 2;
+
+    // Rows in the received data payloads. Absent unless the rows of every
+    // received payload could be counted.
+    optional uint64 rows_in = 3;
+
+    // Rows in the returned data payloads. Absent unless the rows of every
+    // returned payload could be counted.
+    optional uint64 rows_out = 4;
+
+    // Number of [[DataRequest]] messages received.
+    optional uint64 batches_in = 5;
+
+    // Number of [[DataResponse]] messages returned.
+    optional uint64 batches_out = 6;
+
+    // Wall time spent handling [[Init]] before sending [[InitResponse]].
+    optional uint64 init_wall_nanos = 7;
+
+    // Wall time from sending [[InitResponse]] until data processing ends,
+    // when the worker has received [[Finish]] and sent all of its output.
+    // Cancellation or an execution error also ends it.
+    optional uint64 processing_wall_nanos = 8;
+
+    // Wall time spent waiting for the next request from the engine.
+    optional uint64 receive_wall_nanos = 9;
+
+    // Wall time spent blocked sending responses to the engine.
+    optional uint64 send_wall_nanos = 10;
+
+    // Wall time spent executing received data: decoding input, running the
+    // UDF, and encoding output. Excludes the wait times.
+    optional uint64 work_wall_nanos = 11;
+
+    // CPU time consumed executing received data.
+    optional uint64 work_cpu_nanos = 12;
+
+    // Wall time from the end of data processing until sending
+    // [[FinishResponse]] or [[CancelResponse]], such as running the finish
+    // callback. Absent if cancellation or an error ended data processing.
+    optional uint64 finish_wall_nanos = 13;
 }
 
 // Worker -> Engine application-level error raised during the
