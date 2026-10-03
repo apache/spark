@@ -132,3 +132,10 @@ SELECT * FROM trades t ASOF JOIN quotes q ON t.symbol = q.symbol;
 SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (t.trade_time >= q.quote_time AND t.symbol = q.symbol)
   ON t.symbol = q.symbol;
+
+-- Missing MATCH_CONDITION after an explicit join type
+SELECT * FROM trades t LEFT ASOF JOIN quotes q ON t.symbol = q.symbol;
+
+-- LATERAL ASOF JOIN rejected
+SELECT * FROM trades t ASOF JOIN LATERAL (SELECT * FROM quotes) q
+  MATCH_CONDITION (t.trade_time >= q.quote_time);
