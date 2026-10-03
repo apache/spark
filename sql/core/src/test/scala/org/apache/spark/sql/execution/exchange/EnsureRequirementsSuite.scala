@@ -1439,6 +1439,72 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       requiredChildOrdering = Seq(Seq.empty)
     )
 
+  test("SPARK-59887: a collection ranks by its first member that can serve as the layout") {
+    val a = AttributeReference("a", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val m = AttributeReference("m", IntegerType)()
+    val n = AttributeReference("n", IntegerType)()
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(1, 3), InternalRow(2, 4),
+      InternalRow(2, 5))
+    // Clustered on `(a, y)`, `[a, -y]` keeps its 5 partitions and cannot serve as the layout,
+    // since `-y` is no column. `[a, c]` projects to `[a]`, 2 partitions, and can. The first member
+    // is the one that cannot, so ranking the collection by its first member would rank it at 5.
+    val keyed = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning = PartitioningCollection(Seq(
+        KeyedPartitioning(Seq(a, UnaryMinus(y)), keys),
+        KeyedPartitioning(Seq(a, c), keys))))
+    val other = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning = KeyedPartitioning(Seq(m), Seq(InternalRow(1), InternalRow(2),
+        InternalRow(3))))
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val smj = SortMergeJoinExec(Seq(a, y), Seq(m, n), Inner, None, keyed, other)
+      val planned = EnsureRequirements.apply(smj).asInstanceOf[SortMergeJoinExec]
+
+      // The collection ranks at 2, its serving member, so the other side wins with 3, and the
+      // collection's side is shuffled onto it.
+      val shuffles = planned.left.collect { case s: ShuffleExchangeExec => s }
+      assert(shuffles.map(_.outputPartitioning.numPartitions) === Seq(3))
+      assert(planned.right.collect { case s: ShuffleExchangeExec => s }.isEmpty)
+    }
+  }
+
+  test("SPARK-59887: a child matched only through a member that cannot serve is shuffled") {
+    val a = AttributeReference("a", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val m = AttributeReference("m", IntegerType)()
+    val n = AttributeReference("n", IntegerType)()
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(1, 3), InternalRow(2, 0),
+      InternalRow(2, 1))
+    // Clustered on `(a, y)`, `[a, c]` projects to `[a]`, 2 partitions, and serves as the layout.
+    // `[a, bucket(4, -y)]` cannot, since its argument is no column. The other side pairs with that
+    // second member only. So it is shuffled onto `[a]`, and the keyed side keeps its layout.
+    // Without this change both sides stay as they are, paired through `[a, bucket(4, -y)]`. That
+    // plan is correct, and giving it up is a cost the description lists.
+    val keyed = DummySparkPlan(
+      outputPartitioning = PartitioningCollection(Seq(
+        KeyedPartitioning(Seq(a, c), keys),
+        KeyedPartitioning(Seq(a, bucket(4, UnaryMinus(y))), keys))))
+    val other = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(m, bucket(4, UnaryMinus(n))), keys))
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+      val smj = SortMergeJoinExec(Seq(a, y), Seq(m, n), Inner, None, keyed, other)
+      val planned = EnsureRequirements.apply(smj).asInstanceOf[SortMergeJoinExec]
+
+      assert(planned.left.collect { case s: ShuffleExchangeExec => s }.isEmpty)
+      val shuffles = planned.right.collect { case s: ShuffleExchangeExec => s }
+      assert(shuffles.map(_.outputPartitioning.numPartitions) === Seq(2))
+    }
+  }
+
   test("SPARK-59080: pushed-down positions index into the child's own partition expressions") {
     val nL = AttributeReference("nL", IntegerType)()
     val iL = AttributeReference("iL", IntegerType)()
