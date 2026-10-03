@@ -36,32 +36,138 @@ all_modules = []
 # - `.gitignore`-style patterns would be ideal but don't have support in the
 #   standard library.
 ignored_file_patterns = (
-    ".asf.yaml",
-    ".gitignore",
+    # Contributor docs.
     "AGENTS.md",
+    "CLAUDE.md",
     "CONTRIBUTING.md",
+    "PULL_REQUEST_TEMPLATE",
     "README.md",
+    "SECURITY.md",
+    # License and NOTICE files, including bundled third-party licenses.
     "/LICENSE-binary",
+    "/LICENSE",
+    "/licenses-binary/",
+    "/licenses/",
     "/NOTICE-binary",
-    "/scalastyle-config.xml",
-    "/SECURITY.md",
+    "/NOTICE",
+    # Git and ASF metadata.
+    ".asf.yaml",
+    ".gitattributes",
+    ".gitignore",
+    # Build and test workflow wrappers or schedulers.
+    "/.github/workflows/benchmark.yml",
+    "/.github/workflows/branch*_scheduler.yml",
+    "/.github/workflows/build_codegen_jdk.yml",
+    "/.github/workflows/build_coverage.yml",
+    "/.github/workflows/build_java*.yml",
+    "/.github/workflows/build_main.yml",
+    "/.github/workflows/build_maven*.yml",
+    "/.github/workflows/build_non_ansi.yml",
+    "/.github/workflows/build_python_3*.yml",
+    "/.github/workflows/build_python_connect*.yml",
+    "/.github/workflows/build_python_minimum.yml",
+    "/.github/workflows/build_python_pypy3.10.yml",
+    "/.github/workflows/build_rockdb_as_ui_backend.yml",
+    "/.github/workflows/build_scala213.yml",
+    "/.github/workflows/build_sparkr_window.yml",
+    "/.github/workflows/build_uds.yml",
+    "/.github/workflows/maven_test.yml",
+    "/.github/workflows/python_hosted_runner_test.yml",
+    # GitHub Pages.
+    ".nojekyll",
+    "/.github/workflows/pages.yml",
+    # Release and publishing.
+    "/.github/workflows/publish_snapshot.yml",
+    "/.github/workflows/release.yml",
+    # GitHub housekeeping and repo automation.
+    "/.github/workflows/build_infra_images_cache.yml",
+    "/.github/workflows/images/",
+    "/.github/workflows/notify_test_workflow.yml",
+    "/.github/workflows/stale.yml",
+    "/.github/workflows/test_report.yml",
+    "/.github/workflows/update_build_status.yml",
+    # Linters, formatters, and their configs. These are typically triggered by
+    # the `precondition` job regardless of modifications to these files.
+    #   precondition job: https://github.com/apache/spark/blob/065397779ce409996abed999e1d6b46ee98a6c34/.github/workflows/build_and_test.yml#L106-L199
+    #   lint job: https://github.com/apache/spark/blob/065397779ce409996abed999e1d6b46ee98a6c34/.github/workflows/build_and_test.yml#L932-L935
+    #   buf job: https://github.com/apache/spark/blob/065397779ce409996abed999e1d6b46ee98a6c34/.github/workflows/build_and_test.yml#L895-L898
+    ".pre-commit-config.yaml",
+    "/dev/.rat-excludes",
+    "/dev/.scalafmt.conf",
+    "/dev/check_pyspark_custom_errors.py",
+    "/dev/check-license",
+    "/dev/check-protos.py",
     "/dev/checkstyle-suppressions.xml",
     "/dev/checkstyle.xml",
+    "/dev/connect-jvm-client-mima-check",
+    "/dev/eslint.js",
+    "/dev/java-file-header",
+    "/dev/lint-java",
+    "/dev/lint-js",
+    "/dev/lint-python",
+    "/dev/lint-r*",
+    "/dev/lint-scala",
+    "/dev/mima",
+    "/dev/package-lock.json",
+    "/dev/package.json",
+    "/dev/reformat-python",
+    "/dev/sbt-checkstyle",
+    "/dev/scalafmt",
+    "/dev/scalastyle",
+    "/dev/spark-test-image/lint/",
+    "/dev/structured_logging_style.py",
+    "/scalastyle-config.xml",
+    # Maintainer tools.
+    "/dev/*gen-protos.sh",
+    "/dev/change-scala-version.sh",
     "/dev/create_jira_and_branch.py",
     "/dev/create_spark_jira.py",
     "/dev/create-release/",
-    "/dev/lint-python",
-    "/dev/lint-scala",
+    "/dev/free_disk_space_container",
+    "/dev/free_disk_space",
+    "/dev/generate_srs_registry.py",
     "/dev/make-distribution.sh",
     "/dev/merge_spark_pr.py",
+    "/dev/next_version_candidates.py",
     "/dev/pr_merge_status.py",
-    "/dev/reformat-python",
-    "/dev/requirements.txt",
+    "/dev/protobuf-breaking-changes-check.sh",
+    "/dev/py-cleanup",
+    "/dev/requirements.txt",  # legacy, replaced in CI by pyproject.toml
+    "/dev/spark_jira_utils.py",
     "/dev/spark_merge_footer.py",
-    "/dev/spark-test-image/lint/Dockerfile",
-    "/dev/structured_logging_style.py",
-    "/ui-test/package-lock.json",
-    "/ui-test/package.json",
+    "/dev/spark-test-image/connect-gen-protos/",
+    "/sql/create-docs.sh",
+    # Cluster admin scripts, CLI wrappers, and other user executables.
+    # These scripts are currently not covered by any existing test suite
+    # invoked from here.
+    "/bin/beeline*",
+    "/bin/docker-image-tool.sh",
+    "/bin/run-example*",
+    "/bin/spark-connect-shell",
+    "/bin/spark-pipelines",
+    "/bin/sparkR*",
+    "/sbin/decommission-worker.sh",
+    "/sbin/spark-daemons.sh",
+    "/sbin/start-all.sh",
+    "/sbin/start-history-server.sh",
+    "/sbin/start-master.sh",
+    "/sbin/start-worker*",
+    "/sbin/stop-all.sh",
+    "/sbin/stop-connect-server.sh",
+    "/sbin/stop-history-server.sh",
+    "/sbin/stop-master.sh",
+    "/sbin/stop-worker*",
+    "/sbin/workers.sh",
+    # Default config templates. Suites write temp conf dirs rather than
+    # executing these files.
+    "/conf/",
+    # Binder infra. CI does not test this.
+    "/binder/",
+    # UI tests. These are typically triggered by the `precondition` job
+    # regardless of modifications to these files.
+    #   precondition job: https://github.com/apache/spark/blob/065397779ce409996abed999e1d6b46ee98a6c34/.github/workflows/build_and_test.yml#L106-L199
+    #   ui job: https://github.com/apache/spark/blob/065397779ce409996abed999e1d6b46ee98a6c34/.github/workflows/build_and_test.yml#L1450-L1453
+    "/ui-test/",
 )
 
 
@@ -75,9 +181,9 @@ def is_ignored_file(filename: str) -> bool:
     True
 
     Leading slashes anchor at the repository root:
-    >>> is_ignored_file("SECURITY.md")
+    >>> is_ignored_file("LICENSE")
     True
-    >>> is_ignored_file("docs/SECURITY.md")
+    >>> is_ignored_file("docs/LICENSE")
     False
 
     A trailing slash ignores a directory subtree:
