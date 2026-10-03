@@ -449,10 +449,22 @@ class VariantUtils:
             except OverflowError:
                 return False
 
-        # Like Java, pick the shortest correctly rounded decimal that round-trips, using at least
-        # 2 significant digits (e.g. Double.MIN_VALUE is "4.9E-324", not "5.0E-324").
+        # Like Java, pick the shortest decimal that round-trips, using at least 2 significant
+        # digits (e.g. Double.MIN_VALUE is "4.9E-324", not "5.0E-324"), and the one closest to
+        # `f` among those of that length.
         for precision in range(2, 18):
             s = "%.*e" % (precision - 1, f)
+            if round_trips(s):
+                break
+            # When `f` is a power of two, the values that round to it extend only half as far
+            # toward zero as away from it. So the closest decimal of this length can fail to
+            # round-trip while the next one away from zero still does (e.g. 2^-24 is
+            # "5.960464477539063E-8", not "5.9604644775390625E-8").
+            closest = decimal.Decimal(s)
+            exponent = closest.as_tuple().exponent
+            assert isinstance(exponent, int)
+            last_digit = decimal.Decimal(1).scaleb(exponent)
+            s = str(closest + last_digit if f > 0 else closest - last_digit)
             if round_trips(s):
                 break
         d = decimal.Decimal(s).normalize()
