@@ -216,7 +216,8 @@ class KubernetesExecutorConf(
     val executorId: String,
     val driverPod: Option[Pod],
     val resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID,
-    customAuthSecret: Option[String] = None)
+    customAuthSecret: Option[String] = None,
+    val sslRpcPasswordEnvs: Map[String, String] = Map.empty)
   extends KubernetesConf(sparkConf) with Logging {
 
   /**
@@ -356,9 +357,11 @@ private[spark] object KubernetesConf {
       appId: String,
       driverPod: Option[Pod],
       resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID,
-      authSecret: Option[String] = None): KubernetesExecutorConf = {
+      authSecret: Option[String] = None,
+      sslRpcPasswordEnvs: Map[String, String] = Map.empty): KubernetesExecutorConf = {
     new KubernetesExecutorConf(
-      sparkConf.clone(), appId, executorId, driverPod, resourceProfileId, authSecret)
+      sparkConf.clone(), appId, executorId, driverPod, resourceProfileId, authSecret,
+      sslRpcPasswordEnvs)
   }
 
   def getKubernetesAppId(): String =
