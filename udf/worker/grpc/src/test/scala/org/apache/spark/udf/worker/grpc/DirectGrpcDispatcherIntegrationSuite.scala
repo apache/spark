@@ -20,6 +20,8 @@ import java.io.File
 import java.nio.file.Paths
 import java.util.concurrent.{Callable, TimeUnit}
 
+import scala.jdk.CollectionConverters._
+
 import com.google.protobuf.ByteString
 import org.scalatest.BeforeAndAfterEach
 // scalastyle:off funsuite
@@ -31,7 +33,7 @@ import org.apache.spark.udf.worker.{Cancel, DataRequest, DirectWorker, Finish, I
   WorkerConnectionSpec}
 import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerSession}
 import org.apache.spark.udf.worker.core.direct.{DirectWorkerProcess, DirectWorkerTimeoutException}
-import org.apache.spark.udf.worker.grpc.testing.EchoGrpcWorkerMain
+import org.apache.spark.udf.worker.grpc.testing.{EchoGrpcWorkerMain, ForwardingWorkerMain}
 
 /**
  * End-to-end coverage for the integration points unique to [[DirectGrpcDispatcher]]:
@@ -158,6 +160,41 @@ class DirectGrpcDispatcherIntegrationSuite
     dispatcher.close()
     dispatcher = null
     assert(!socketDir.exists(), "dispatcher close should remove its socket directory")
+  }
+
+  test("a launcher command that forwards the connection serves sessions") {
+    val launcher = ProcessCallable.newBuilder()
+      .addCommand(javaExecutable)
+      .addCommand("-cp")
+      .addCommand(javaClasspath)
+      .addCommand(classOf[ForwardingWorkerMain.type].getName.stripSuffix("$"))
+      .addAllCommand(echoRunner.getCommandList)
+      .build()
+    dispatcher = new DirectGrpcDispatcher(workerSpec(launcher))
+    val sessions = Seq.fill(2)(dispatcher.createSession(None))
+    val processes = sessions.map(workerProcess)
+    val workers = processes.flatMap(_.process.descendants().iterator().asScala)
+    val payloads = Seq(
+      ByteString.copyFrom(Array.fill[Byte](5 * 1024 * 1024)(3)),
+      ByteString.copyFromUtf8("small"))
+
+    try {
+      assert(workers.size == 2, s"each launcher should start one worker, got $workers")
+      sessions.zip(payloads).foreach { case (session, payload) =>
+        session.init(basicInit)
+        val input = DataRequest.newBuilder().setData(payload).build()
+        assert(session.process(Iterator.single(input), emptyFinish).map(_.getData).toList ==
+          List(payload))
+      }
+    } finally {
+      sessions.foreach(_.close(emptyCancel))
+    }
+
+    assert(processes.forall(!_.process.isAlive), "session close should terminate the launcher")
+    workers.foreach { worker =>
+      worker.onExit().get(10, TimeUnit.SECONDS)
+      assert(!worker.isAlive, s"session close should stop the launched worker ${worker.pid}")
+    }
   }
 
   test("the channel overrides the authority derived from the socket path") {
