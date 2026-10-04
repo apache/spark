@@ -2749,6 +2749,38 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertGreater(self._eval_python_count(projected), 0)
             self.assertEqual([r[0] for r in projected.collect()], [2])
 
+    def test_udf_transpile_map_and_array_equality_falls_back(self):
+        # `==`/`!=` on two map/array params must NOT lower to Spark's `=`, which
+        # requires orderable operands and rejects MapType/ArrayType at analysis
+        # (SPARK-55219). The transpiler refuses the equality lowering so the UDF
+        # falls back to interpreted Python (Python's `==` on dicts/lists is value
+        # equality) and returns the right answer instead of failing the query.
+        def map_eq(a: dict, b: dict):
+            return a == b
+
+        def array_eq(a: list, b: list):
+            return a == b
+
+        with self.sql_conf(_TRANSPILE_ON):
+            for func, schema, rows in (
+                (
+                    map_eq,
+                    "a map<string,string>, b map<string,string>",
+                    [({"k": "v"}, {"k": "v"}), ({"k": "v"}, {"k": "x"})],
+                ),
+                (array_eq, "a array<string>, b array<string>", [(["x"], ["x"]), (["x"], ["y"])]),
+            ):
+                u = UserDefinedFunction(func, BooleanType())
+                self.assertEqual([], u.transpiled, f"{func} must not transpile")
+                df = self.spark.createDataFrame(rows, schema)
+                projected = df.select(u("a", "b"))
+                self.assertGreater(self._eval_python_count(projected), 0, str(func))
+                self.assertEqual(
+                    [r[0] for r in projected.collect()],
+                    [True, False],
+                    str(func),
+                )
+
 
 if __name__ == "__main__":
     from pyspark.testing import main

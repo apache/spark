@@ -385,6 +385,16 @@ class CatalystTranspiler(AbstractTranspiler):
                 "Python compares across types as unequal while Spark would coerce "
                 "or fail analysis, so the transpiler falls back to interpreted Python"
             )
+        if lc is not None and rc is not None and lc == rc and lc in ("map", "array"):
+            # Spark's `=` requires orderable operands; MapType/ArrayType are not
+            # orderable, so a lowered `=` would fail analysis instead of falling
+            # back. Refuse so the UDF runs interpreted (Python's `==` on
+            # dicts/lists is value equality) (SPARK-55219).
+            raise UnsupportedOperationException(
+                f"`==`/`!=` operands are both `{lc}`; Spark's `=` does not "
+                "support ordering on MapType/ArrayType, so the transpiler falls "
+                "back to interpreted Python"
+            )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
         left_null = left_col.isNull()
@@ -440,6 +450,16 @@ class CatalystTranspiler(AbstractTranspiler):
                 f"`{op_repr}` compares operands of different categories "
                 f"({lc} vs {rc}); Python would raise TypeError, so the "
                 "transpiler falls back to interpreted Python"
+            )
+        if lc == rc and lc in ("map", "array"):
+            # Spark's ordering operators require orderable operands; MapType/ArrayType
+            # are not orderable, so a lowered `<`/`>` would fail analysis. Refuse so
+            # the UDF runs interpreted (Python raises TypeError here too, matching
+            # the source semantics) (SPARK-55219).
+            raise UnsupportedOperationException(
+                f"`{op_repr}` operands are both `{lc}`; Spark's ordering operators "
+                "do not support ordering on MapType/ArrayType, so the transpiler "
+                "falls back to interpreted Python"
             )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
