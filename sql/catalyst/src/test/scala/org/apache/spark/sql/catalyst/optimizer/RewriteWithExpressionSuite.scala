@@ -22,17 +22,17 @@ import java.time.Instant
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, EmptyTableFunctionRegistry, FakeV2SessionCatalog, TempResolvedColumn}
+import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, EmptyTableFunctionRegistry, FakeSystemCatalog, FakeV2SessionCatalog, ResolvedIdentifier, TempResolvedColumn}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DeleteFromTable, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.catalog.{DefaultCatalogManager, Identifier}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.DefaultCatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DateType, IntegerType, StringType, TimestampNTZType, TimestampType, TimeType}
 
@@ -510,6 +510,22 @@ class RewriteWithExpressionSuite extends PlanTest {
       ref < 10 && ref > 0
     })
     assert(Optimizer.execute(delete) == delete)
+  }
+
+  test("SPARK-59962: a definition in a DECLARE VARIABLE default is not inlined like a command's") {
+    // The default is evaluated rather than stored, so a definition there that is worth memoizing
+    // must not be substituted at each of its references the way a command's is. Until SPARK-59954
+    // keeps it in the default, the generic case pre-evaluates it under the variable names instead;
+    // either way there is at most one copy.
+    val ident = ResolvedIdentifier(FakeSystemCatalog, Identifier.of(Array("session"), "v"))
+    // Deterministic but not cheap: the command case would inline it.
+    val plusOne = ScalaUDF((i: Int) => i + 1, IntegerType, Seq(Literal(1)), udfName = Some("f"))
+    val declare = CreateVariable(
+      Seq(ident), DefaultValueExpression(With(plusOne) { case Seq(ref) => ref * ref }, "v"),
+      replace = true)
+    val copies = Optimizer.execute(declare).expressions
+      .map(_.collect { case u: ScalaUDF => u }.size).sum
+    assert(copies <= 1, s"the definition was substituted at $copies references")
   }
 
   test("SPARK-58902: a With left in a conditional branch of an aggregate still converges") {
