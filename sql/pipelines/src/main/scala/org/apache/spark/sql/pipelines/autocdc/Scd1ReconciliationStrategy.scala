@@ -211,15 +211,33 @@ private[pipelines] object Scd1RowLevelReconciliation extends Scd1ReconciliationS
   }
 }
 
-/** Leaf-level SCD1 reconciliation. */
+/**
+ * Leaf-level SCD1 reconciliation.
+ *
+ * Each key's user-data fields are reconciled independently. Each field passes through the
+ * following states in order, and each state is derived only from the one before it:
+ *
+ *  1. Field to reconcile: a leaf of a column selected for ignore-null, or a whole column outside
+ *     the selection. The set of fields depends only on the schema and the ignore-null selection.
+ *  2. Authorship candidates: each of the key's microbatch events either authors the field, with a
+ *     value and the event's sequence, or leaves it unauthored. A delete authors null. An upsert
+ *     authors a whole column always, and a selected leaf only when it provides the leaf.
+ *  3. Latest microbatch authorship: the candidate with the greatest sequence, or none if no event
+ *     authored the field. This is the field's reconciled value.
+ *  4. Output: the reconciled fields are reassembled into the key's columns, where a selected
+ *     struct is null when every leaf beneath it is null. Each field also records its authoring
+ *     sequence for every leaf it covers in the key's version map.
+ */
 private[pipelines] object Scd1LeafLevelReconciliation {
 
-  private val aggregatedLeafValueFieldName: String = "value"
-  private val aggregatedLeafSequenceFieldName: String = "sequence"
+  private val aggregatedValueFieldName: String = "value"
+  private val aggregatedSequenceFieldName: String = "sequence"
   private val aggregatedDeleteSequenceColName: String =
     s"${AutoCdcReservedNames.prefix}aggregated_delete_sequence"
   private val aggregatedUpsertSequenceColName: String =
     s"${AutoCdcReservedNames.prefix}aggregated_upsert_sequence"
+  private def latestAuthorshipColName(index: Int): String =
+    s"${AutoCdcReservedNames.prefix}aggregated_field_$index"
 
   /**
    * Aligns microbatch rows with the persisted target schema without adding target rows.
@@ -294,11 +312,14 @@ private[pipelines] object Scd1LeafLevelReconciliation {
    * For every key, combines all rows into a synthetic row representing that key's winning leaf
    * authorships from the microbatch.
    *
-   * Upsert events refer to their version map to determine which leaves they author; a null
-   * version map means every leaf is authored by the upsert. Delete events always author null
-   * values for every leaf. Selection between events with equal sequencing values is undefined.
+   * Columns selected for ignore-null are reconciled leaf by leaf: upsert events refer to their
+   * version map to determine which leaves they author, and a null version map means every leaf is
+   * authored by the upsert. Every other column is reconciled as a whole value, which every upsert
+   * authors. Delete events always author null values for every leaf. Selection between events
+   * with equal sequencing values is undefined.
    *
-   * @param changeArgs The CDC configuration providing the key columns.
+   * @param changeArgs The CDC configuration providing the key columns and the ignore-null
+   *                   selection.
    * @param resolvedSequencingType The resolved type of CDC sequencing values.
    * @param microbatchDf Microbatch rows whose CDC metadata and version maps have already been
    *                     populated. Version-map keys must match the DataFrame's column names.
@@ -324,35 +345,40 @@ private[pipelines] object Scd1LeafLevelReconciliation {
     val deleteSequence = Scd1BatchProcessor.deleteSequenceOf(cdcMetadata)
     val upsertSequence = Scd1BatchProcessor.upsertSequenceOf(cdcMetadata)
 
-    val leafAuthorshipContexts =
-      AutoCdcSchemaUtils.flattenStructFieldPaths(userDataSchema).zipWithIndex.map {
-        case (path, index) =>
-          LeafAuthorshipContext(
-            path = path,
-            index = index,
-            microbatchDf = microbatchDf,
-            field = userDataSchema.findNestedField(path).get._2
-          )
-      }
+    val fieldsToReconcile = Scd1FieldToReconcile.fromSchema(
+      schema = userDataSchema,
+      ignoreNullSelection = changeArgs.ignoreNullSelection,
+      resolver = resolver
+    )
+    val latestAuthorshipColNames = fieldsToReconcile.indices.map(latestAuthorshipColName)
 
     // Per AutoCDC key, track the largest row-wide upsert and delete sequences. Additionally, per
-    // leaf per key, track the last sequence to author that specific leaf within this
-    // microbatch along with the column value it authored.
+    // reconciled field per key, track the last sequence to author that specific field within this
+    // microbatch along with the value it authored.
     val aggregateColumns = Seq(
       F.max(deleteSequence).as(aggregatedDeleteSequenceColName),
       F.max(upsertSequence).as(aggregatedUpsertSequenceColName)
-    ) ++ leafAuthorshipContexts.map(_.namedLatestAuthorshipCol)
+    ) ++ fieldsToReconcile.zip(latestAuthorshipColNames).map {
+      case (fieldToReconcile, authorshipColName) =>
+        latestMicrobatchAuthorship(fieldToReconcile, microbatchDf).as(authorshipColName)
+    }
 
     // One row per key with the maximum row-wide sequences and a
-    // {latest authored value, authoring sequence} struct pair for every leaf.
+    // {latest authored value, authoring sequence} struct pair for every reconciled field.
     val aggregatedPerKeyDf = microbatchDf
       .groupBy(changeArgs.keys.map(key => F.col(key.quoted)): _*)
       .agg(aggregateColumns.head, aggregateColumns.tail: _*)
 
-    // Per leaf, wrap aggregation result in an accessor class to abstract away retrieval for when
-    // the leaf was last authored, and with what value.
-    val aggregatedLeaves =
-      leafAuthorshipContexts.map(LeafAuthorshipResult(_, aggregatedPerKeyDf))
+    // Per field, read the latest microbatch authorship from the key's aggregated row.
+    val collapsedFields = fieldsToReconcile.zip(latestAuthorshipColNames).map {
+      case (fieldToReconcile, authorshipColName) =>
+        CollapsedField(
+          fieldToReconcile = fieldToReconcile,
+          microbatchAuthorship =
+            aggregatedPerKeyDf.col(QuotingUtils.quoteIdentifier(authorshipColName))
+        )
+    }
+    val collapsedFieldsByTopLevelName = collapsedFields.groupBy(_.path.head)
 
     // Whether each collapsed row represents the key's net delete rather than its net upsert.
     val aggregatedDeleteSequence = F.col(aggregatedDeleteSequenceColName)
@@ -381,7 +407,7 @@ private[pipelines] object Scd1LeafLevelReconciliation {
             upsertSequence = F.when(!collapsedRowRepresentsDelete, aggregatedUpsertSequence),
             versionMap = F.when(
               !collapsedRowRepresentsDelete,
-              versionMapFrom(aggregatedLeaves, resolvedSequencingType)
+              versionMapFrom(collapsedFields, resolvedSequencingType)
             ),
             sequencingType = resolvedSequencingType
           ).as(field.name, field.metadata)
@@ -390,225 +416,169 @@ private[pipelines] object Scd1LeafLevelReconciliation {
           F.col(QuotingUtils.quoteIdentifier(field.name)).as(field.name, field.metadata)
         } else {
           // Every other column is a top-level user data column; construct the last-authored value
-          // per column per key. If the top level column is a struct, recursively reconstruct it,
-          // respecting last-authored value per leaf.
-          aggregatedLeaves
-            .groupBy(_.path.head)
-            .get(field.name)
-            .map(reconstructColumnFromLeaves(Seq(field.name), field, _))
-            .getOrElse(throwMissingAggregatedLeaves(Seq(field.name)))
+          // per column per key. A struct column selected for ignore-null is recursively
+          // reconstructed from the last-authored value per leaf.
+          reconstructColumn(
+            path = Seq(field.name),
+            field = field,
+            fieldsBeneath = collapsedFieldsByTopLevelName.getOrElse(field.name, Seq.empty)
+          )
         }
       }: _*
     )
   }
 
   /**
-   * Rebuilds a column from the aggregated authorship results for the leaves beneath it.
+   * Builds the aggregate expression for a field's latest authorship among a key's microbatch
+   * events.
    *
-   * @param path The field's name parts.
-   * @param field The field to construct, including its data type, nullability, and metadata.
-   * @param leavesBeneath The authorship results at or below `path`. Must not be empty.
-   * @return A column named and typed according to `field`.
+   * `microbatchDf` must contain the column at `fieldToReconcile.path`, canonical CDC metadata
+   * with upsert/delete sequences, and version maps for leaf-level upserts.
+   *
+   * @param fieldToReconcile The field whose authorship to aggregate. Its schema field types the
+   *                         null that deletes author.
+   * @param microbatchDf The DataFrame against which the aggregate expression is resolved.
+   * @return An unaliased aggregate expression producing a struct with fields `value` (the latest
+   *         authored value, typed to match the field) and `sequence` (the sequence it was
+   *         authored at). The struct is null when no event authored the field.
    */
-  private def reconstructColumnFromLeaves(
+  private def latestMicrobatchAuthorship(
+      fieldToReconcile: Scd1FieldToReconcile,
+      microbatchDf: DataFrame): Column = {
+    val currentValue = microbatchDf.col(QuotingUtils.quoteNameParts(fieldToReconcile.path))
+    val cdcMetadata =
+      microbatchDf.col(AutoCdcReservedNames.cdcMetadataColName)
+    val deleteSequence = Scd1BatchProcessor.deleteSequenceOf(cdcMetadata)
+    val upsertSequence = Scd1BatchProcessor.upsertSequenceOf(cdcMetadata)
+    val versionMap = cdcMetadata.getField(Scd1BatchProcessor.versionMapFieldName)
+
+    // Column expression for the upsert sequence a row authors this field's value at, null if
+    // the row isn't an upsert or doesn't author the field.
+    val upsertAuthorshipSequence =
+      fieldToReconcile.upsertAuthorshipSequence(upsertSequence, versionMap)
+
+    // Column expression for the sequence that a row authors this field, across both delete and
+    // upsert events - delete events always "author" nulls. Null if this row does not author the
+    // field.
+    val effectiveAuthorshipSequence =
+      F.when(deleteSequence.isNotNull, deleteSequence).otherwise(upsertAuthorshipSequence)
+
+    // The effective value this field would author, if it is indeed authoring the field.
+    val effectiveAuthoredValue =
+      F.when(deleteSequence.isNotNull, F.lit(null).cast(fieldToReconcile.field.dataType))
+        .otherwise(currentValue)
+
+    // Aggregate the (last authored value, sequence authored at) per field.
+    F.max_by(
+      F.struct(
+        effectiveAuthoredValue.as(aggregatedValueFieldName),
+        effectiveAuthorshipSequence.as(aggregatedSequenceFieldName)
+      ),
+      effectiveAuthorshipSequence
+    )
+  }
+
+  /**
+   * Reconstructs `field` from the collapsed fields beneath it, or returns its reconciled value if
+   * it was reconciled as a whole.
+   *
+   * A nullable struct reconstructed from leaves is null iff every reconciled leaf beneath it is
+   * null. Only columns selected for ignore-null are reconciled leaf by leaf, and for them this is
+   * exactly leaf-level authorship: an upsert authors only the non-null leaves it provides, so a
+   * reconciled leaf is non-null iff an upsert authored it, and that upsert necessarily provided
+   * every struct enclosing the leaf. An upsert that provided a struct whose leaves are all null
+   * authored none of them, so it has no claim on the struct. This relies on the ignore-null
+   * selection accepting only top-level columns, so every leaf beneath such a struct is selected.
+   */
+  private def reconstructColumn(
       path: Seq[String],
       field: StructField,
-      leavesBeneath: Seq[LeafAuthorshipResult]): Column = {
-    if (leavesBeneath.isEmpty) {
-      throwMissingAggregatedLeaves(path)
+      fieldsBeneath: Seq[CollapsedField]): Column = {
+    if (fieldsBeneath.isEmpty) {
+      throwMissingFields(path)
     }
 
-    val aggregated = field.dataType match {
-      case struct: StructType =>
-        val leavesByChildName = leavesBeneath.groupBy(_.path(path.length))
-        val rebuilt = F.struct(
-          struct.fields.toImmutableArraySeq.map { childField =>
-            val childPath = path :+ childField.name
-            leavesByChildName
-              .get(childField.name)
-              .map(reconstructColumnFromLeaves(childPath, childField, _))
-              .getOrElse(throwMissingAggregatedLeaves(childPath))
-              .as(childField.name, childField.metadata)
-          }: _*
-        )
+    val reconstructed = field.dataType match {
+      case struct: StructType if !fieldsBeneath.exists(_.path == path) =>
+        val fieldsByChildName = fieldsBeneath.groupBy(_.path(path.length))
+        val rebuilt = F.struct(struct.fields.toImmutableArraySeq.map { childField =>
+          val childPath = path :+ childField.name
+          fieldsByChildName
+            .get(childField.name)
+            .map(reconstructColumn(childPath, childField, _))
+            .getOrElse(throwMissingFields(childPath))
+            .as(childField.name, childField.metadata)
+        }: _*)
 
-        // If this [maybe-nested] struct is defined as nullable but none of its children are
-        // authoring, the entire struct should be nulled to represent no authorship.
-        // If the struct is defined as non-nullable, then regardless of whether its children are
-        // authoring, we still need to create the struct and continue recursing its children.
         if (field.nullable) {
-          val anyChildLeafAuthors =
-            leavesBeneath.map(_.valueAuthoredAtSequence.isNotNull).reduce(_ || _)
-
-          F.when(anyChildLeafAuthors, rebuilt).otherwise(F.lit(null).cast(field.dataType))
+          val anyLeafIsNotNull = fieldsBeneath.map(_.reconciledValue.isNotNull).reduce(_ || _)
+          F.when(anyLeafIsNotNull, rebuilt).otherwise(F.lit(null).cast(field.dataType))
         } else {
           rebuilt
         }
       case _ =>
-        leavesBeneath.head.authoredValue
+        fieldsBeneath.head.reconciledValue
     }
 
     val nullabilityChecked =
       if (field.nullable) {
-        aggregated
+        reconstructed
       } else {
         ExpressionUtils.column(
-          AssertNotNull(ExpressionUtils.expression(aggregated), path))
+          AssertNotNull(ExpressionUtils.expression(reconstructed), path))
       }
     nullabilityChecked.cast(field.dataType).as(field.name, field.metadata)
   }
 
-  /**
-   * Builds a version map containing one entry for every aggregated leaf.
-   *
-   * @param aggregatedLeaves The leaf authorship results whose keys and authored-at sequences become
-   *                         version-map entries.
-   * @param sequencingType The data type of each authorship sequence in the version map.
-   */
+  /** Builds a version map containing one entry for every user-data leaf. */
   private def versionMapFrom(
-      aggregatedLeaves: Seq[LeafAuthorshipResult],
+      collapsedFields: Seq[CollapsedField],
       sequencingType: DataType): Column = {
-    val entries = aggregatedLeaves.flatMap { leaf =>
-      Seq(F.lit(leaf.versionMapKey), leaf.valueAuthoredAtSequence)
+    val entries = collapsedFields.flatMap { collapsedField =>
+      collapsedField.leafPaths.flatMap { leafPath =>
+        Seq(F.lit(Scd1VersionMap.serializeKey(leafPath)), collapsedField.valueAuthoredAtSequence)
+      }
     }
     F.map(entries: _*).cast(Scd1VersionMap.mapType(sequencingType))
   }
 
   /**
-   * Wraps the aggregate column expression used to determine a leaf's net authorship across a
-   * microbatch, and the canonical name under which the expression should be projected.
+   * One field of a key's row collapsed by [[collapseMicrobatchRowsPerKey]], holding the
+   * microbatch's latest authorship of the field.
    *
-   * @param path The leaf's name parts within the target-aligned row.
-   * @param index An integer temporarily and uniquely identifying this leaf, for this
-   *              reconciliation pass.
-   * @param latestAuthorshipCol An unaliased aggregate expression that produces a struct with
-   *                            fields `value` (the last authored leaf value, typed to match the
-   *                            leaf) and `sequence` (the sequencing clock of the authoring event).
-   */
-  private case class LeafAuthorshipContext(
-      path: Seq[String],
-      index: Int,
-      latestAuthorshipCol: Column) {
-    if (latestAuthorshipCol == null) throwNullAuthorshipColumn(path)
-
-    val namedLatestAuthorshipCol: Column =
-      latestAuthorshipCol.as(LeafAuthorshipContext.latestAuthorshipColName(index))
-  }
-
-  private object LeafAuthorshipContext {
-
-    /**
-     * Builds the per-leaf aggregate expression from `microbatchDf`.
-     *
-     * `microbatchDf` must contain the leaf column at `path`, canonical CDC metadata with
-     * upsert/delete sequences, and version maps for leaf-level upserts.
-     *
-     * @param path The leaf's name parts.
-     * @param index An integer uniquely identifying this leaf within the aggregation.
-     * @param microbatchDf The DataFrame against which the aggregate expression is resolved.
-     * @param field The leaf's schema field, used to type null values for deletes.
-     */
-    def apply(
-        path: Seq[String],
-        index: Int,
-        microbatchDf: DataFrame,
-        field: StructField): LeafAuthorshipContext = {
-      val versionMapKey = Scd1VersionMap.serializeKey(path)
-      val currentValue = microbatchDf.col(versionMapKey)
-      val cdcMetadata =
-        microbatchDf.col(AutoCdcReservedNames.cdcMetadataColName)
-      val deleteSequence = Scd1BatchProcessor.deleteSequenceOf(cdcMetadata)
-      val upsertSequence = Scd1BatchProcessor.upsertSequenceOf(cdcMetadata)
-      val versionMap = cdcMetadata.getField(Scd1BatchProcessor.versionMapFieldName)
-
-      // Column expression for the upsert sequence a row authors this leaf value, null if the row
-      // isn't an upsert or doesn't author the leaf. If the version map is null for a row, it is
-      // using row-wide authorship.
-      val upsertAuthorshipSequence = F.when(versionMap.isNull, upsertSequence)
-        .otherwise(versionMap(versionMapKey))
-
-      // Column expression for the sequence that a row authors this leaf, across both delete and
-      // upsert events - delete events always "author" nulls. Null if this row does not author the
-      // leaf.
-      val effectiveAuthorshipSequence =
-        F.when(deleteSequence.isNotNull, deleteSequence).otherwise(upsertAuthorshipSequence)
-
-      // The effective value this leaf would author, if it is indeed authoring the leaf.
-      val effectiveAuthoredValue =
-        F.when(deleteSequence.isNotNull, F.lit(null).cast(field.dataType))
-          .otherwise(currentValue)
-
-      // Aggregate the (last authored value, sequence authored at) per leaf.
-      val latestAuthorshipCol = F.max_by(
-        F.struct(
-          effectiveAuthoredValue.as(aggregatedLeafValueFieldName),
-          effectiveAuthorshipSequence.as(aggregatedLeafSequenceFieldName)
-        ),
-        effectiveAuthorshipSequence
-      )
-
-      LeafAuthorshipContext(path, index, latestAuthorshipCol)
-    }
-
-    def latestAuthorshipColName(index: Int): String =
-      s"${AutoCdcReservedNames.prefix}aggregated_leaf_$index"
-  }
-
-  /**
-   * Accessor for the authorship result of one leaf column in an aggregated DataFrame.
+   * The reconciled value may be null, since deletes and upserts can both author null. A non-null
+   * [[reconciledValue]] has a non-null [[valueAuthoredAtSequence]], and an unauthored field, whose
+   * sequence is null, has a null value.
    *
-   * @param path The leaf's name parts.
-   * @param latestAuthorshipCol A struct column with fields `value` (the authored leaf value) and
-   *                            `sequence` (the sequencing clock of the authoring event). The
-   *                            struct may not be null, but its values can be.
+   * @param fieldToReconcile The field this reconciles.
+   * @param microbatchAuthorship A struct column with fields `value` (the latest value the
+   *                             microbatch authored) and `sequence` (the sequence it was authored
+   *                             at). The struct is null when no event authored the field, which
+   *                             reads the same as a null value and a null sequence.
    */
-  private case class LeafAuthorshipResult(
-      path: Seq[String],
-      private val latestAuthorshipCol: Column) {
-    if (latestAuthorshipCol == null) throwNullAuthorshipColumn(path)
+  private case class CollapsedField(
+      private val fieldToReconcile: Scd1FieldToReconcile,
+      private val microbatchAuthorship: Column) {
 
-    val versionMapKey: String = Scd1VersionMap.serializeKey(path)
-
-    /**
-     * The latest value authored for this leaf. It is meaningful only when
-     * [[valueAuthoredAtSequence]] is non-null, and may itself be null when the latest authoring
-     * event explicitly authored null.
-     */
-    def authoredValue: Column =
-      latestAuthorshipCol.getField(aggregatedLeafValueFieldName)
+    /** The field's name parts within the user-data schema, where [[reconciledValue]] belongs. */
+    def path: Seq[String] = fieldToReconcile.path
 
     /**
-     * The sequence at which [[authoredValue]] was authored. A null sequence means no row in the
-     * aggregation authored this leaf, so [[authoredValue]] must be disregarded.
+     * The name parts of every user-data leaf at or beneath [[path]]. The version map records each
+     * of them as authored at [[valueAuthoredAtSequence]].
      */
-    def valueAuthoredAtSequence: Column =
-      latestAuthorshipCol.getField(aggregatedLeafSequenceFieldName)
+    def leafPaths: Seq[Seq[String]] = fieldToReconcile.leafPaths
+
+    /** The reconciled value selected for this field. */
+    val reconciledValue: Column = microbatchAuthorship.getField(aggregatedValueFieldName)
+
+    /** The sequence at which [[reconciledValue]] was authored, or null if it remains unauthored. */
+    val valueAuthoredAtSequence: Column =
+      microbatchAuthorship.getField(aggregatedSequenceFieldName)
   }
 
-  private object LeafAuthorshipResult {
-
-    /**
-     * Constructs the [[LeafAuthorshipResult]] accessor that retrieves the authorship result for a
-     * leaf from an aggregated DataFrame.
-     *
-     * @param context The leaf whose authorship result to access.
-     * @param aggregatedDf A DataFrame containing `context.latestAuthorshipCol` evaluated under
-     *                     the name [[LeafAuthorshipContext.latestAuthorshipColName]].
-     */
-    def apply(context: LeafAuthorshipContext, aggregatedDf: DataFrame): LeafAuthorshipResult =
-      LeafAuthorshipResult(
-        context.path,
-        aggregatedDf.col(QuotingUtils.quoteIdentifier(
-          LeafAuthorshipContext.latestAuthorshipColName(context.index)))
-      )
-  }
-
-  private def throwMissingAggregatedLeaves(path: Seq[String]): Nothing =
+  private def throwMissingFields(path: Seq[String]): Nothing =
     throw SparkException.internalError(
-      s"Cannot construct aggregated column ${QuotingUtils.quoteNameParts(path)} because it has " +
-        "no aggregated leaves.")
-
-  private def throwNullAuthorshipColumn(path: Seq[String]): Nothing =
-    throw SparkException.internalError(
-      s"Aggregated leaf ${QuotingUtils.quoteNameParts(path)} has a null authorship column.")
+      s"Cannot construct column ${QuotingUtils.quoteNameParts(path)} because it has no " +
+        "reconciled fields.")
 }
