@@ -1823,7 +1823,8 @@ class CodegenContext extends Logging {
 
   /**
    * Under testing, the names every split function's calls pass, by the function's name, for
-   * `assertSplitCallsWithin`. A function `removeFunctionsSince` removes leaves it too.
+   * `assertSplitCallsWithin`. `removeFunctionsSince` removes a function's entry here along with
+   * the function.
    */
   private val splitCallArguments = mutable.HashMap.empty[String, Seq[String]]
 
@@ -2423,7 +2424,7 @@ object CodeGenerator extends Logging {
           i = end + 1
         case '{' =>
           val header = source.substring(start, i).trim
-          val isClass = "\\b(class|interface|enum)\\b".r.findFirstIn(header).isDefined
+          val isClass = TypeKeyword.findFirstIn(header).isDefined
           val name = if (!isClass && scopes.top._1) {
             MethodHeader.findFirstMatchIn(header).map(_.group(1))
           } else {
@@ -2444,6 +2445,8 @@ object CodeGenerator extends Logging {
   }
 
   /** A method's header up to its body: its name, a parameter list and any `throws` clause. */
+  // A brace whose header names a type opens a class body, not a method.
+  private val TypeKeyword = "\\b(class|interface|enum)\\b".r
   private val MethodHeader =
     """([A-Za-z_$][\w$]*)\s*\([^()]*\)\s*(?:throws\s+[\w$.,\s]+)?$""".r.unanchored
 
@@ -2562,12 +2565,6 @@ object CodeGenerator extends Logging {
       (new HashableWeakReference(Utils.getContextOrSparkClassLoader), CodeCompiler.active(code),
         code))
   }
-
-  /** Whether `code`'s class is in the compile cache, for tests. */
-  private[sql] def isCompiled(code: CodeAndComment): Boolean =
-    cache.getIfPresent(
-      (new HashableWeakReference(Utils.getContextOrSparkClassLoader), CodeCompiler.active(code),
-        code)) != null
 
   /**
    * A cache of generated classes.

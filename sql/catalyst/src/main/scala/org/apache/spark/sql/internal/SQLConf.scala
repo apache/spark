@@ -3091,7 +3091,8 @@ object SQLConf {
         "spark.sql.codegen.wholeStage.splitExpressions is true. The stage's code is first " +
         "generated with no expression split and compiled; only when that fails or a method " +
         "is past this size is it generated again with the expressions split, and the split " +
-        "code is kept when it makes the stage's largest method smaller. The default is " +
+        "code is kept when it compiles and lowers the total bytecode of the methods past this " +
+        "size. The default is " +
         "HotSpot's limit for JIT-compiling a method, so a stage the JIT compiles whole keeps " +
         "the code it had without the split; 0 always splits.")
       .version("4.4.0")
