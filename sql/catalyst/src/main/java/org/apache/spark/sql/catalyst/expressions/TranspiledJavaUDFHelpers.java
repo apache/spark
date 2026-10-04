@@ -225,6 +225,10 @@ public final class TranspiledJavaUDFHelpers {
   public static UTF8String repeat(UTF8String a, Long times) {
     if (a == null || times == null) return null;
     if (times <= 0L) return UTF8String.EMPTY_UTF8;
+    // CPython returns '' for `'' * n` regardless of how large `n` is -- there's no product
+    // to overflow -- so this has to be checked before the `times` bound below would otherwise
+    // throw ARITHMETIC_OVERFLOW for an empty `a` with an out-of-int `times`.
+    if (a.numBytes() == 0) return UTF8String.EMPTY_UTF8;
     // Bound `times` first: a count no int can hold (e.g. `"ab" * (1L << 62)`) must throw
     // the error class, not wrap the product to a non-positive long and fall through to
     // `repeat(0)` returning the empty string where CPython raises OverflowError.
