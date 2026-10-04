@@ -52,9 +52,11 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
   private def collapseMicrobatchRowsPerKey(
       input: DataFrame,
       sequencingType: DataType = LongType,
-      keys: Seq[UnqualifiedColumnName] = Seq(UnqualifiedColumnName("id"))): DataFrame =
+      keys: Seq[UnqualifiedColumnName] = Seq(UnqualifiedColumnName("id")),
+      ignoreNullSelection: Option[ColumnSelection] =
+        Some(ColumnSelection.ExcludeColumns(Seq.empty))): DataFrame =
     Scd1LeafLevelReconciliation.collapseMicrobatchRowsPerKey(
-      changeArgs = changeArgs(ignoreNullSelection = None, keys = keys),
+      changeArgs = changeArgs(ignoreNullSelection = ignoreNullSelection, keys = keys),
       resolvedSequencingType = sequencingType,
       microbatchDf = input
     )
@@ -326,6 +328,117 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
         Row(2, null, Row(null, 1L, Map(city -> null, zip -> null)))
       )
     )
+  }
+
+  test("collapseMicrobatchRowsPerKey nulls structs whose reconciled leaves are all null") {
+    val locationType = new StructType()
+      .add("city", StringType)
+      .add("zip", StringType)
+    val profileType = new StructType()
+      .add("location", locationType)
+      .add("name", StringType)
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("profile", profileType)
+      .add(metadataColName, metadataSchema)
+    val city = encodedPath("profile", "location", "city")
+    val zip = encodedPath("profile", "location", "zip")
+    val name = encodedPath("profile", "name")
+    val unauthored = Map[String, Any](city -> null, zip -> null, name -> null)
+    val input = dataFrameOf(schema)(
+      // Structs provided with only null leaves author nothing, at any depth.
+      Row(1, Row(Row(null, null), null), Row(null, 1L, unauthored)),
+      // A non-null leaf materializes its enclosing structs, but not a sibling struct of nulls.
+      Row(2, Row(Row(null, null), "Ada"), Row(null, 1L, unauthored + (name -> 1L))),
+      Row(3, Row(Row(null, "94107"), null), Row(null, 1L, unauthored + (zip -> 1L))),
+      // A microbatch delete authors null for every leaf.
+      Row(4, Row(Row("SF", null), null), Row(null, 1L, unauthored + (city -> 1L))),
+      Row(4, null, Row(2L, null, null)),
+      Row(4, Row(Row(null, null), "Ada"), Row(null, 3L, unauthored + (name -> 3L)))
+    )
+
+    val result = collapseMicrobatchRowsPerKey(input)
+
+    checkAnswer(
+      result.orderBy(F.col("id")),
+      Seq(
+        Row(1, null, Row(null, 1L, unauthored)),
+        Row(2, Row(null, "Ada"), Row(null, 1L, unauthored + (name -> 1L))),
+        Row(3, Row(Row(null, "94107"), null), Row(null, 1L, unauthored + (zip -> 1L))),
+        Row(4, Row(null, "Ada"), Row(null, 3L, Map(city -> 2L, zip -> 2L, name -> 3L))))
+    )
+  }
+
+  test("collapseMicrobatchRowsPerKey reconciles columns outside the ignore-null selection whole") {
+    val locationType = new StructType()
+      .add("city", StringType)
+      .add("zip", StringType)
+    val profileType = new StructType()
+      .add("location", locationType)
+      .add("name", StringType)
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("profile", profileType)
+      .add("nickname", StringType)
+      .add(metadataColName, metadataSchema)
+    val city = encodedPath("profile", "location", "city")
+    val zip = encodedPath("profile", "location", "zip")
+    val name = encodedPath("profile", "name")
+    val nickname = encodedPath("nickname")
+    // Every upsert authors the unselected profile leaves, but only a non-null nickname.
+    def versionMap(sequence: Long, nicknameAuthoredAt: Any): Map[String, Any] =
+      Map(city -> sequence, zip -> sequence, name -> sequence, nickname -> nicknameAuthoredAt)
+    val input = dataFrameOf(schema)(
+      // The winning upsert's profile is kept whole, including structs of nulls.
+      Row(1, Row(Row(null, null), null), "Al", Row(null, 1L, versionMap(1L, 1L))),
+      // A later null profile replaces an earlier non-null one.
+      Row(2, Row(Row("SF", "94107"), "Ada"), "Bo", Row(null, 1L, versionMap(1L, 1L))),
+      Row(2, null, null, Row(null, 2L, versionMap(2L, null))),
+      Row(3, null, null, Row(null, 1L, versionMap(1L, null))),
+      Row(3, Row(Row(null, "94107"), null), null, Row(null, 2L, versionMap(2L, null))),
+      // An upsert after a delete authors the whole profile, but not its null nickname.
+      Row(4, Row(Row("SF", null), "Ada"), null, Row(null, 1L, versionMap(1L, null))),
+      Row(4, null, null, Row(2L, null, null)),
+      Row(4, Row(null, null), null, Row(null, 3L, versionMap(3L, null)))
+    )
+
+    val result = collapseMicrobatchRowsPerKey(
+      input,
+      ignoreNullSelection =
+        Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("nickname")))))
+
+    checkAnswer(
+      result.orderBy(F.col("id")),
+      Seq(
+        Row(1, Row(Row(null, null), null), "Al", Row(null, 1L, versionMap(1L, 1L))),
+        Row(2, null, "Bo", Row(null, 2L, versionMap(2L, 1L))),
+        Row(3, Row(Row(null, "94107"), null), null, Row(null, 2L, versionMap(2L, null))),
+        Row(4, Row(null, null), null, Row(null, 3L, versionMap(3L, 2L))))
+    )
+  }
+
+  test("collapseMicrobatchRowsPerKey reconciles every column whole when ignore-null is disabled") {
+    val profileType = new StructType()
+      .add("city", StringType)
+      .add("zip", StringType)
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("profile", profileType)
+      .add("nickname", StringType)
+      .add(metadataColName, metadataSchema)
+    // Without ignore-null, version maps are null and every upsert authors every column.
+    val input = dataFrameOf(schema)(
+      Row(1, Row("SF", null), "Al", Row(null, 1L, null)),
+      Row(1, Row(null, null), null, Row(null, 2L, null))
+    )
+
+    val result = collapseMicrobatchRowsPerKey(input, ignoreNullSelection = None)
+
+    val expectedVersionMap = Map(
+      encodedPath("profile", "city") -> 2L,
+      encodedPath("profile", "zip") -> 2L,
+      encodedPath("nickname") -> 2L)
+    checkAnswer(result, Row(1, Row(null, null), null, Row(null, 2L, expectedVersionMap)))
   }
 
   test("collapseMicrobatchRowsPerKey materializes version-map entries for row-level input") {
