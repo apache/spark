@@ -1400,7 +1400,15 @@ def _transpile_func(
         # Maybe multiple transpilers (think CUDA, etc.).
         transpilers = _get_transpilers(session)
         for transpiler in transpilers:
-            for combo in transpiler._param_category_combos(function_ast, public_params):
+            try:
+                combos = transpiler._param_category_combos(function_ast, public_params)
+            except Exception as e:
+                # Isolate like the per-combo failures below: one transpiler's bug computing
+                # its own combos must not discard results another transpiler already produced
+                # in an earlier iteration of this loop.
+                errors.append(str(e))
+                continue
+            for combo in combos:
                 try:
                     transpiled_column = transpiler._transpile_from_ast(
                         src, ast_info, function_ast, public_params, returnType, combo
