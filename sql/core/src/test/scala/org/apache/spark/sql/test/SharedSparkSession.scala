@@ -31,9 +31,11 @@ trait SharedSparkSession extends QueryTest with classic.SparkSessionBinder {
   def runAndWaitForExecution(func: => Unit): Long = {
     val statusStore = spark.sharedState.statusStore
     // The listener updates the status store asynchronously, so the latest execution in the store
-    // may still be one from before func. Execution ids only grow, so wait for an execution with a
-    // larger id than any existing one. Execution counts cannot be used for this, as old
+    // may still be one from before func. Drain the listener bus first so that every execution
+    // started before func is in the store. Execution ids only grow, so then wait for an execution
+    // with a larger id than any of them. Execution counts cannot be used for this, as old
     // executions are evicted once spark.sql.ui.retainedExecutions is reached.
+    spark.sparkContext.listenerBus.waitUntilEmpty()
     val lastExecId = statusStore.executionsList().lastOption.map(_.executionId).getOrElse(-1L)
 
     func
