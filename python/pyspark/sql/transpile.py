@@ -175,11 +175,10 @@ class AbstractTranspiler(object):
         do not move. Without this, every new type a variety supports is another
         entry in a fixed category enum matched against the caller's guess.
 
-        A tuple whose ``Column`` is ``None`` (``(None, categories)``) is treated
-        exactly like a plain ``None`` decline: no option is produced. Any other
-        malformed return (a non-Column, a wrong-length categories list) is refused
-        so the UDF falls back to interpreted Python rather than breaking at call
-        time.
+        To decline, return ``None`` (plain, not inside a tuple). Any malformed
+        return -- a non-Column, a wrong-length categories list, a tuple whose
+        Column is ``None`` -- is refused so the UDF falls back to interpreted
+        Python rather than breaking at call time.
         """
         pass
 
@@ -1410,13 +1409,17 @@ def _transpile_func(
                         # type it supports is not another entry in a fixed enum.
                         if isinstance(result, tuple):
                             transpiled_column, categories = result
-                            # A variety that declines inside a tuple (built no
-                            # option) is treated like a plain-``None`` decline:
-                            # appending a ``None`` Column would surface a raw JVM
-                            # NPE at call time, breaking the "a transpile failure
-                            # must never break a working UDF" invariant. Skip it.
-                            if transpiled_column is None:
-                                continue
+                            # A tuple whose Column is missing (``(None, ...)``) is
+                            # a malformed decline: appending a ``None`` Column
+                            # would surface a raw JVM NPE at call time. To decline,
+                            # return plain ``None``. Refuse anything that is not a
+                            # Column so the UDF falls back cleanly.
+                            if not isinstance(transpiled_column, Column):
+                                raise UnsupportedOperationException(
+                                    "transpiler returned a (Column, list[str]) tuple "
+                                    "whose first element is not a Column; return None to "
+                                    "decline"
+                                )
                             # The JVM matches options to bound column types by
                             # index and drops the WHOLE option set if any one
                             # list's length differs from the param count, so a
