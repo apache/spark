@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+"""Run a direct external UDF worker inside a Docker Sandbox.
+
+Spark does not call this program. Put it in the worker spec command. Spark
+appends ``--id`` and ``--connection``:
+
+    bin/sbx-udf-worker --sandbox NAME -- GUEST_COMMAND ...
+
+The guest worker binds its own socket. A socket file on a shared mount is not
+a listening socket in the host kernel, so this process binds the host path
+from ``--connection`` and copies bytes through ``sbx exec -i``.
+"""
+
+import argparse
+import os
+import signal
+import socket
+import subprocess
+import sys
+import threading
+import time
+
+BRIDGE = r"""
+import os, socket, sys, threading, time
+path = sys.argv[1]
+deadline = time.monotonic() + 30
+while True:
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        s.connect(path)
+        break
+    except OSError:
+        s.close()
+        if time.monotonic() > deadline:
+            raise
+        time.sleep(0.05)
+def pump_in():
+    while True:
+        data = os.read(0, 65536)
+        if not data:
+            s.shutdown(socket.SHUT_WR)
+            return
+        s.sendall(data)
+threading.Thread(target=pump_in, daemon=True).start()
+while True:
+    data = s.recv(65536)
+    if not data:
+        break
+    os.write(1, data)
+"""
+
+
+def parse(argv):
+    if "--" not in argv:
+        sys.exit("sbx-udf-worker: expected -- before the guest command")
+    split = argv.index("--")
+    parser = argparse.ArgumentParser(prog="sbx-udf-worker")
+    parser.add_argument("--sandbox", required=True)
+    parser.add_argument("--sbx", default="sbx")
+    parser.add_argument("--guest-dir", default="/tmp/sbx-udf-workers")
+    parser.add_argument("--ready-timeout", type=float, default=60.0)
+    parser.add_argument("--log")
+    opts = parser.parse_args(argv[:split])
+    guest = argv[split + 1:]
+    worker_id = None
+    host_socket = None
+    command = []
+    i = 0
+    while i < len(guest):
+        if guest[i] == "--id" and i + 1 < len(guest):
+            worker_id = guest[i + 1]
+            command += guest[i:i + 2]
+            i += 2
+        elif guest[i] == "--connection" and i + 1 < len(guest):
+            host_socket = guest[i + 1]
+            i += 2
+        else:
+            command.append(guest[i])
+            i += 1
+    if not command or worker_id is None or host_socket is None:
+        sys.exit("sbx-udf-worker: guest command, --id, and --connection are required")
+    return opts, command, worker_id, host_socket
+
+
+def main():
+    opts, command, worker_id, host_socket = parse(sys.argv[1:])
+    sbx = [opts.sbx, "exec"]
+    guest_socket = f"{opts.guest_dir}/{worker_id}.sock"
+    pid_file = f"{opts.guest_dir}/{worker_id}.pid"
+    stopping = threading.Event()
+    bridges = []
+    log = open(opts.log, "a", buffering=1) if opts.log else sys.stderr
+
+    def trace(message):
+        print(f"[sbx-udf-worker {worker_id}] {message}", file=log, flush=True)
+
+    trace(f"host={host_socket} guest={opts.sandbox}:{guest_socket}")
+    worker = subprocess.Popen(
+        sbx + [opts.sandbox, "sh", "-c",
+               'mkdir -p "$1" && echo $$ > "$2" && uname -sm >&2 && shift 2 && exec "$@"',
+               "sh", opts.guest_dir, pid_file] + command + ["--connection", guest_socket],
+        stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+    )
+
+    def stop(*_):
+        if stopping.is_set():
+            return
+        stopping.set()
+        trace("stopping")
+        subprocess.run(
+            sbx + [opts.sandbox, "sh", "-c",
+                   'kill -TERM "$(cat "$1")" 2>/dev/null; rm -f "$1"', "sh", pid_file],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            worker.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            worker.kill()
+        for bridge in bridges:
+            bridge.kill()
+        try:
+            os.unlink(host_socket)
+        except FileNotFoundError:
+            pass
+        os._exit(0)
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+
+    deadline = time.monotonic() + opts.ready_timeout
+    while subprocess.run(sbx + [opts.sandbox, "test", "-S", guest_socket]).returncode != 0:
+        if worker.poll() is not None:
+            sys.exit(f"sbx-udf-worker: guest worker exited with {worker.returncode}")
+        if time.monotonic() > deadline:
+            stop()
+        time.sleep(0.1)
+
+    try:
+        os.unlink(host_socket)
+    except FileNotFoundError:
+        pass
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(host_socket)
+    server.listen(16)
+    trace("ready")
+
+    def relay(client):
+        trace("connection")
+        bridge = subprocess.Popen(
+            sbx + ["-i", opts.sandbox, "python3", "-u", "-c", BRIDGE, guest_socket],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        bridges.append(bridge)
+
+        def to_guest():
+            while True:
+                data = client.recv(65536)
+                if not data:
+                    bridge.stdin.close()
+                    return
+                bridge.stdin.write(data)
+                bridge.stdin.flush()
+
+        threading.Thread(target=to_guest, daemon=True).start()
+        fd = bridge.stdout.fileno()
+        try:
+            while True:
+                data = os.read(fd, 65536)
+                if not data:
+                    break
+                client.sendall(data)
+        except OSError:
+            pass
+        client.close()
+
+    def watch_worker():
+        code = worker.wait()
+        if not stopping.is_set():
+            os._exit(code)
+
+    threading.Thread(target=watch_worker, daemon=True).start()
+    while True:
+        client, _ = server.accept()
+        threading.Thread(target=relay, args=(client,), daemon=True).start()
+
+
+if __name__ == "__main__":
+    main()
