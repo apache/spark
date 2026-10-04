@@ -396,6 +396,17 @@ class JavaTranspileLoweringTests(unittest.TestCase):
         for combo in combos:
             self.assertEqual("string", combo[0])
 
+    def test_category_combos_counts_positional_only_parameters(self):
+        from pyspark.sql.transpile_java import JavaTranspiler
+
+        # `function_ast.args.args` alone omits positional-only params, which would have
+        # undercounted `public_params` here and raised IndexError (or, with a mix of
+        # positional-only and regular params, silently paired categories with the wrong
+        # names) rather than returning one combo per annotated category.
+        fn = ast.parse("def f(a: int, b: float, /, c: str): return a").body[0]
+        combos = JavaTranspiler()._param_category_combos(fn, ["a", "b", "c"])
+        self.assertEqual([{0: "integral", 1: "fractional", 2: "string"}], combos)
+
     def test_a_none_valued_conditional_keeps_its_condition(self):
         # `_coerce` used to replace a "none"-category value with a bare `null`, discarding the code
         # that produced it -- so this body lowered to `return ((Long) null);` and the divide
