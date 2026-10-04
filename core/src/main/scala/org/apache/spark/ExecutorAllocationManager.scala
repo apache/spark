@@ -792,6 +792,9 @@ private[spark] class ExecutorAllocationManager(
     // Should be 0 when no stages are active.
     private val stageAttemptToNumRunningTask = new mutable.HashMap[StageAttempt, Int]
     private val stageAttemptToTaskIndices = new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
+    // Successful speculative task indexes whose regular copies may still be running.
+    private val stageAttemptToSuccessfulSpeculativeTaskIndices =
+      new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
     // Map from each stageAttempt to a set of running speculative task indexes
     // TODO(SPARK-41192): We simply need an Int for this.
     private val stageAttemptToSpeculativeTaskIndices =
@@ -825,6 +828,7 @@ private[spark] class ExecutorAllocationManager(
       val numTasks = stageSubmitted.stageInfo.numTasks
       allocationManager.synchronized {
         stageAttemptToNumTasks(stageAttempt) = numTasks
+        stageAttemptToSuccessfulSpeculativeTaskIndices(stageAttempt) = new mutable.HashSet[Int]
         allocationManager.onSchedulerBacklogged()
         // need to keep stage task requirements to ask for the right containers
         val profId = stageSubmitted.stageInfo.resourceProfileId
@@ -878,6 +882,7 @@ private[spark] class ExecutorAllocationManager(
         stageAttemptToNumTasks -= stageAttempt
         stageAttemptToPendingSpeculativeTasks -= stageAttempt
         stageAttemptToTaskIndices -= stageAttempt
+        stageAttemptToSuccessfulSpeculativeTaskIndices -= stageAttempt
         stageAttemptToSpeculativeTaskIndices -= stageAttempt
         stageAttemptToExecutorPlacementHints -= stageAttempt
         removeStageFromResourceProfileIfUnused(stageAttempt)
@@ -938,10 +943,23 @@ private[spark] class ExecutorAllocationManager(
 
         taskEnd.reason match {
           case Success =>
+            if (taskEnd.taskInfo.speculative) {
+              stageAttemptToSuccessfulSpeculativeTaskIndices.get(stageAttempt)
+                .foreach(_ += taskIndex)
+            }
             // Remove pending speculative task in case the normal task
             // is finished before starting the speculative task
             stageAttemptToPendingSpeculativeTasks.get(stageAttempt).foreach(_.remove(taskIndex))
           case _: TaskKilled =>
+            if (stageAttemptToNumTasks.contains(stageAttempt) &&
+                !taskEnd.taskInfo.speculative &&
+                !stageAttemptToSuccessfulSpeculativeTaskIndices(stageAttempt).contains(taskIndex) &&
+                stageAttemptToTaskIndices.get(stageAttempt).exists(_.contains(taskIndex))) {
+              if (!hasPendingTasks) {
+                allocationManager.onSchedulerBacklogged()
+              }
+              stageAttemptToTaskIndices(stageAttempt).remove(taskIndex)
+            }
           case _ =>
             if (!hasPendingTasks) {
               // If the task failed (not intentionally killed), we expect it to be resubmitted
@@ -950,12 +968,10 @@ private[spark] class ExecutorAllocationManager(
               // (SPARK-8366)
               allocationManager.onSchedulerBacklogged()
             }
-            if (!taskEnd.taskInfo.speculative) {
-              // If a non-speculative task is intentionally killed, it means the speculative task
-              // has succeeded, and no further task of this task index will be resubmitted. In this
-              // case, the task index is completed and we shouldn't remove it from
-              // stageAttemptToTaskIndices. Otherwise, we will have a pending non-speculative task
-              // for the task index (SPARK-30511)
+            if (!taskEnd.taskInfo.speculative &&
+                !stageAttemptToSuccessfulSpeculativeTaskIndices.get(stageAttempt)
+                  .exists(_.contains(taskIndex))) {
+              // An unsuccessful regular task remains pending until another attempt starts.
               stageAttemptToTaskIndices.get(stageAttempt).foreach {_.remove(taskIndex)}
             }
         }
