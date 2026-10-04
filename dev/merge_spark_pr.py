@@ -855,7 +855,7 @@ class SkipCherryPick(Exception):
     """
 
 
-def continue_maybe(prompt, cherry=False):
+def continue_maybe(prompt: str, cherry: bool = False) -> None:
     """Prompt to continue; on "no" either skip this cherry-pick (`cherry`) or exit the script.
 
     `cherry` is the decline semantics, not a statement that a cherry-pick is mid-flight: the
@@ -901,7 +901,7 @@ def continue_maybe(prompt, cherry=False):
         fail("Okay, exiting")
 
 
-def _cherry_pick_in_progress():
+def _cherry_pick_in_progress() -> bool:
     """True if the repo is mid-cherry-pick. With --quiet, exit 1 is git's "no such ref" answer,
     i.e. no pick in progress. Any other trouble answers "yes", so the caller still attempts
     the abort and keeps the pre-change behaviour."""
@@ -926,7 +926,7 @@ def clean_up():
             git.run("git branch -D %s" % branch)
 
 
-def maybe_compile_check(ref_name, cherry=False):
+def maybe_compile_check(ref_name: str, cherry: bool = False) -> None:
     """Offer to run a clean SBT compile of main and test sources before pushing `ref_name`.
 
     `ref_name` is checked out, so the working tree is the merge (or cherry-pick) about to be
@@ -1104,7 +1104,7 @@ def maybe_compile_check(ref_name, cherry=False):
     )
 
 
-def _is_pre_binding_policy_branch(ref):
+def _is_pre_binding_policy_branch(ref: str) -> bool:
     """True if `ref` is a Spark branch that predates the ConfigBindingPolicy API (4.2+).
 
     master and branch-M.x (M >= 4) carry the API; branch-4.0/branch-4.1 and any branch-3.x
@@ -1140,7 +1140,7 @@ def _is_pre_binding_policy_branch(ref):
     return rank != (-1, -1) and rank < (4, 2)
 
 
-def _added_binding_policy_tokens(diff):
+def _added_binding_policy_tokens(diff: str) -> list[str]:
     """Return the sorted subset of BINDING_POLICY_PATTERNS matched on added (``+``) lines.
 
     Only scans lines the diff added (a leading ``+`` that is not the ``+++ `` file header --
@@ -1176,7 +1176,7 @@ def _added_binding_policy_tokens(diff):
     return sorted(found)
 
 
-def maybe_binding_policy_warning(ref, base_head, cherry=False):
+def maybe_binding_policy_warning(ref: str, base_head: str, cherry: bool = False) -> None:
     """Warn before pushing to a pre-4.2 `ref` a change that adds ConfigBindingPolicy.
 
     A merge or cherry-pick onto branch-4.1/4.0/3.x that introduces ``.withBindingPolicy(...)``
