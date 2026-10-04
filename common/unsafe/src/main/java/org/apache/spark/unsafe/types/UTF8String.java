@@ -1635,6 +1635,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String[] split(UTF8String pattern, int limit) {
+    return split(null, pattern, limit);
+  }
+
+  public UTF8String[] split(Pattern compiledPattern, UTF8String pattern, int limit) {
     // For the empty `pattern` a `split` function ignores trailing empty strings unless original
     // string is empty.
     if (numBytes() != 0 && pattern.numBytes() == 0) {
@@ -1650,10 +1654,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       result[newLimit - 1] = UTF8String.fromBytes(input, byteIndex, numBytes() - byteIndex);
       return result;
     }
-    return split(pattern.toString(), limit);
+    return compiledPattern != null
+      ? split(compiledPattern, limit) : split(pattern.toString(), limit);
   }
 
   public UTF8String[] splitLegacyTruncate(UTF8String pattern, int limit) {
+    return splitLegacyTruncate(null, pattern, limit);
+  }
+
+  public UTF8String[] splitLegacyTruncate(Pattern compiledPattern, UTF8String pattern, int limit) {
     // For the empty `pattern` a `split` function ignores trailing empty strings unless original
     // string is empty.
     if (numBytes() != 0 && pattern.numBytes() == 0) {
@@ -1669,7 +1678,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
       return result;
     }
-    return split(pattern.toString(), limit);
+    return compiledPattern != null
+      ? split(compiledPattern, limit) : split(pattern.toString(), limit);
   }
 
   public UTF8String[] splitSQL(UTF8String delimiter, int limit) {
@@ -1694,6 +1704,21 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       limit = -1;
     }
     String[] splits = toString().split(delimiter, limit);
+    UTF8String[] res = new UTF8String[splits.length];
+    for (int i = 0; i < res.length; i++) {
+      res[i] = fromString(splits[i]);
+    }
+    return res;
+  }
+
+  private UTF8String[] split(Pattern pattern, int limit) {
+    // Java String's split method supports "ignore empty string" behavior when the limit is 0
+    // whereas other languages do not. To avoid this java specific behavior, we fall back to
+    // -1 when the limit is 0.
+    if (limit == 0) {
+      limit = -1;
+    }
+    String[] splits = pattern.split(toString(), limit);
     UTF8String[] res = new UTF8String[splits.length];
     for (int i = 0; i < res.length; i++) {
       res[i] = fromString(splits[i]);

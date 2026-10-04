@@ -630,29 +630,59 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   private lazy val legacySplitTruncate =
     SQLConf.get.getConf(SQLConf.LEGACY_TRUNCATE_FOR_EMPTY_REGEX_SPLIT)
 
+  // last regex in UTF8String, we will update the pattern iff regexp value changed.
+  @transient private var lastRegex: UTF8String = _
+  // last regex pattern after collation-aware rewriting, cached for performance concern.
+  @transient private var lastCollationAwareRegex: UTF8String = _
+  // compiled pattern for lastCollationAwareRegex; null when the regex is empty.
+  @transient private var pattern: Pattern = _
+  override def stateful: Boolean = true
+
   def this(exp: Expression, regex: Expression) = this(exp, regex, Literal(-1))
 
+  private def updatePattern(regex: UTF8String): Unit = {
+    if (!regex.equals(lastRegex)) {
+      lastRegex = regex.clone()
+      lastCollationAwareRegex = CollationSupport.collationAwareRegex(
+        lastRegex, collationId, legacySplitTruncate)
+      pattern = if (lastCollationAwareRegex.numBytes() == 0) {
+        null
+      } else {
+        Pattern.compile(lastCollationAwareRegex.toString)
+      }
+    }
+  }
+
   override def nullSafeEval(string: Any, regex: Any, limit: Any): Any = {
-    val pattern = CollationSupport.collationAwareRegex(
-      regex.asInstanceOf[UTF8String], collationId, legacySplitTruncate)
+    updatePattern(regex.asInstanceOf[UTF8String])
+    val str = string.asInstanceOf[UTF8String]
     val strings = if (legacySplitTruncate) {
-      string.asInstanceOf[UTF8String].splitLegacyTruncate(pattern, limit.asInstanceOf[Int])
+      str.splitLegacyTruncate(pattern, lastCollationAwareRegex, limit.asInstanceOf[Int])
     } else {
-      string.asInstanceOf[UTF8String].split(pattern, limit.asInstanceOf[Int])
+      str.split(pattern, lastCollationAwareRegex, limit.asInstanceOf[Int])
     }
     new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
-    val pattern = ctx.freshName("pattern")
+    val classNamePattern = classOf[Pattern].getName
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termLastCollationAwareRegex = ctx.addMutableState("UTF8String", "lastCollationAwareRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
     nullSafeCodeGen(ctx, ev, (str, regex, limit) => {
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
       s"""
-         |UTF8String $pattern =
-         |  CollationSupport.collationAwareRegex($regex, $collationId, $legacySplitTruncate);
+         |if (!$regex.equals($termLastRegex)) {
+         |  $termLastRegex = $regex.clone();
+         |  $termLastCollationAwareRegex = CollationSupport.collationAwareRegex(
+         |    $termLastRegex, $collationId, $legacySplitTruncate);
+         |  $termPattern = $termLastCollationAwareRegex.numBytes() == 0 ? null :
+         |    java.util.regex.Pattern.compile($termLastCollationAwareRegex.toString());
+         |}
          |${ev.value} = new $arrayClass($legacySplitTruncate ?
-         |  $str.splitLegacyTruncate($pattern, $limit) : $str.split($pattern, $limit));
+         |  $str.splitLegacyTruncate($termPattern, $termLastCollationAwareRegex, $limit) :
+         |  $str.split($termPattern, $termLastCollationAwareRegex, $limit));
          |""".stripMargin
     })
   }
