@@ -1642,13 +1642,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         finally:
             AbstractTranspiler.varieties.pop("numeric_only_55213", None)
 
-    def test_udf_transpile_variety_tuple_with_none_column_declines(self):
-        # SPARK-55213: a variety that declines inside a tuple -- returning
-        # ``(None, categories)`` -- must be treated like a plain-``None`` decline,
-        # not appended as a ``None`` Column that would surface a raw JVM NPE at
-        # UDF-call time (breaking "a transpile failure must never break a working
-        # UDF"). The whole UDF falls back to interpreted Python with the usual
-        # warning, and no option is produced.
+    def test_udf_transpile_variety_tuple_with_none_column_falls_back(self):
+        # SPARK-55213: a variety that returns a ``(None, categories)`` tuple is
+        # malformed -- to decline it should return plain ``None``. Appending a
+        # ``None`` Column would surface a raw JVM NPE at UDF-call time (breaking
+        # "a transpile failure must never break a working UDF"), so refuse it
+        # and fall back to interpreted Python with a reason rather than silently
+        # declining.
         from pyspark.sql.transpile import AbstractTranspiler
 
         class DeclineInTupleTranspiler(AbstractTranspiler):
@@ -1672,9 +1672,10 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     return a + b
 
                 u, reasons = self._fallback_reason(add, LongType())
-                # The decline is silent (like a plain None), so no option is
-                # produced and the categories list stays empty too.
+                # Refused as malformed, so no option is produced and a reason is
+                # recorded -- it does NOT silently decline like a plain None.
                 self.assertEqual([], u._transpiled_input_categories)
+                self.assertIn("not a Column", reasons)
         finally:
             AbstractTranspiler.varieties.pop("decline_in_tuple_55213", None)
 
