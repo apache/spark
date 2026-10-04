@@ -23,7 +23,8 @@ import org.apache.spark.util.ArrayImplicits._
 
 /**
  * An SCD1 user-data field reconciled independently of all others: either a leaf of a column
- * selected for ignore-null, or a whole top-level column outside the selection. It depends only on
+ * selected for ignore-null, or a whole top-level column outside the selection. This is the first
+ * state of the field lifecycle described in [[Scd1LeafLevelReconciliation]], and depends only on
  * the user-data schema and the ignore-null selection.
  *
  * @param path The field's name parts within the user-data schema.
