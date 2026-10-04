@@ -317,10 +317,18 @@ case class EnsureRequirements(
     (plan.outputPartitioning, distribution) match {
       case (p @ KeyGroupedPartitioning(expressions, _, partitionValues, _, _, _),
         d @ OrderedDistribution(ordering)) if p.satisfies(d) =>
-        val attrs = expressions.flatMap(_.collectLeaves()).map(_.asInstanceOf[Attribute])
-        val partitionOrdering: Ordering[InternalRow] = {
-          RowOrdering.create(ordering, attrs)
-        }
+        // A partition value holds the values of the partition expressions. `p.satisfies(d)` holds
+        // here only when those expressions are the ordering's, position by position, so each sort
+        // order reads its position of the partition value. The expression need not be a bare
+        // column. A broadcast join can report the other side's join key, e.g. `100 - b`.
+        assert(d.areAllClusterKeysMatched(expressions),
+          "the partition expressions must be the ordering's, position by position")
+        val partitionOrdering: Ordering[InternalRow] = RowOrdering.create(
+          ordering.zipWithIndex.map { case (order, i) =>
+            order.copy(child = BoundReference(i, order.child.dataType, nullable = true),
+              sameOrderExpressions = Seq.empty)
+          },
+          Nil)
         // Sort 'commonPartitionValues' and use this mechanism to ensure BatchScan's
         // output partitions are ordered
         val sorted = partitionValues.sorted(partitionOrdering)
