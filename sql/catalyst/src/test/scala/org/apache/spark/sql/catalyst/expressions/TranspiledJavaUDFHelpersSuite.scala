@@ -176,6 +176,11 @@ class TranspiledJavaUDFHelpersSuite extends SparkFunSuite {
       H.repeat(utf8("ab"), 1L << 62)).getCondition === "ARITHMETIC_OVERFLOW")
   }
 
+  test("repeat on an empty string never overflows, matching CPython's '' * n == ''") {
+    assert(H.repeat(utf8(""), 1L << 62) === utf8(""))
+    assert(H.repeat(utf8(""), Int.MaxValue.toLong + 1L) === utf8(""))
+  }
+
   test("null in an ordering comparison raises rather than propagating") {
     // Returning NULL would make `if x > 0` take its false branch and hand back a confident wrong
     // answer. Python raises TypeError; the Catalyst target raises via `raise_error`, i.e.
