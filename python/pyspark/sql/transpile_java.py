@@ -64,7 +64,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Tuple
 from pyspark.errors import UnsupportedOperationException
 from pyspark.sql.column import Column
 from pyspark.sql.functions import col
-from pyspark.sql.transpile import AbstractTranspiler, _is_definitely_boolean
+from pyspark.sql.transpile import AbstractTranspiler, _is_definitely_boolean, _positional_args
 from pyspark.sql.types import (
     BinaryType,
     BooleanType,
@@ -235,7 +235,8 @@ class JavaTranspiler(AbstractTranspiler):
         n = len(public_params)
         if n == 0:
             return [{}]
-        public_args = function_ast.args.args[len(function_ast.args.args) - n :]
+        all_args = _positional_args(function_ast)
+        public_args = all_args[len(all_args) - n :]
         candidates: List[List[str]] = []
         untyped = 0
         for arg in public_args:
@@ -597,8 +598,8 @@ class JavaTranspiler(AbstractTranspiler):
         helper = _COMPARE_HELPERS.get((op_name, category))
         if helper is None:
             raise UnsupportedOperationException(
-                f"ordering comparisons on {category} operands are not lowered "
-                "(Python has no ordering for booleans against each other here)"
+                f"ordering comparisons on {category} operands are not lowered by the "
+                "java transpiler"
             )
         return _JavaValue(f"{_HELPERS}.{helper}({left}, {right})", "bool")
 
@@ -621,8 +622,7 @@ class JavaTranspiler(AbstractTranspiler):
         if {left, right} == {"integral", "fractional"}:
             return "fractional"
         raise UnsupportedOperationException(
-            f"{what} mixes {left} and {right} operands, which Python does not allow and the "
-            "java transpiler does not lower"
+            f"{what} mixes {left} and {right} operands, which the java transpiler does not lower"
         )
 
     def _coerce(self, value: _JavaValue, category: str) -> _JavaValue:
