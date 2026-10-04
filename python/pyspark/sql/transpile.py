@@ -394,7 +394,8 @@ def _describe_unsupported_series_node(node: ast.AST) -> str:
 
     These end up in the ``Unable to transpile UDF ...`` warning, which is the only place a
     user learns why the rewrite did not happen, so name the pandas-specific reason rather
-    than just the AST class.
+    than just the AST class. Only the constructs whose pandas divergence is non-obvious
+    get a custom message; everything else falls through to a generic label.
     """
     match node:
         case ast.Compare(ops=[ast.Is() | ast.IsNot(), *_]):
@@ -416,12 +417,6 @@ def _describe_unsupported_series_node(node: ast.AST) -> str:
             return f"the free variable {name!r}"
         case ast.Call():
             return "a function call other than the `.isnull()` family"
-        case ast.BinOp(op=op):
-            return f"the binary operator `{type(op).__name__}`"
-        case ast.UnaryOp(op=op):
-            return f"the unary operator `{type(op).__name__}`"
-        case ast.Constant(value=value):
-            return f"the constant {value!r} ({type(value).__name__})"
         case _:
             return f"an unsupported `{type(node).__name__}` node"
 
@@ -1190,14 +1185,11 @@ class CatalystTranspiler(AbstractTranspiler):
         # Short circuit on nothing to transpile.
         if src == "" or ast_info is None:
             return None
-        if series_semantics:
-            # Enforced here, next to the lowerings it constrains, so the two cannot drift:
-            # every construct `_check_series_semantics` refuses has a lowering below that
-            # would be wrong on a Series, and `_convert_chunk` only guards `ast.Call`.
-            # `_transpile_func` also checks it once up front, so that a refused body reports
-            # one reason rather than one per input-type variant; this call is what makes the
-            # guarantee hold for any other caller.
-            _check_series_semantics(function_ast, params)
+        # `_transpile_func` runs `_check_series_semantics` once up front (so a refused body
+        # reports one reason, not one per input-type variant) and returns early on failure.
+        # A direct caller of `_transpile_from_ast` with series_semantics=True must pre-check
+        # the same way; the per-combo lowerings below only guard the series-specific cases
+        # (`ast.Call`, and `ast.Mult` repeat via `_reject_series_string_repeat`).
         # Per-variant input-type assumption ({public_param_index -> category}),
         # read by ``_category`` to choose str vs numeric operators.
         self._param_categories = param_categories or {}
@@ -1259,36 +1251,19 @@ class CatalystTranspiler(AbstractTranspiler):
                 )
         converted = self._convert_chunk(params, function_body[0])
         if series_semantics and body_cat == "numeric":
-            # A scalar pandas UDF's numpy-backed result Series is serialized with
-            # ``mask = series.isnull()``, and ``isnull`` is True for NaN, so every NaN the
-            # function produces reaches Spark as NULL. Catalyst keeps NaN, so normalize to
-            # match. Two ways to get there: a fractional input column carrying NaN (the
-            # interpreted path cannot even tell that from a NULL, since the Arrow-to-pandas
-            # conversion merges them), and NaN arising from arithmetic on infinities.
-            #
-            # This models the DEFAULT dtype regime only. A pandas masked extension array
-            # takes ``mask=None`` instead, so there a NaN stays NaN and this normalization
-            # would be exactly backwards -- which is why ``preferIntExtensionDtype`` refuses
-            # transpilation outright, in udf.py and again in ConvertToCatalyst.
-            #
-            # Emitted for every numeric body rather than only the fractional ones, because
-            # the bound column's width is not known until the JVM prunes the options against
-            # the argument types. ``isnan(cast(<integral> as double))`` is constant-false, so
-            # on an integral column this is an extra node and no change in result. The cast
-            # exists only to satisfy ``isnan``'s float/double input type; the value returned
-            # is always the un-cast one, so no precision is lost.
-            #
-            # This references ``converted`` twice, so the lowered body appears twice in the
-            # option (subexpression elimination does not extract a value used in a CaseWhen
-            # condition and only one branch). The clean single-reference form is
-            # ``NaNvl(body, null)``, but that is only type-valid for float/double, and the
-            # body's resolved type is not known until the JVM prunes options -- and by then
-            # the cast to the return type is already baked in below, past the fractional
-            # value ``NaNvl`` would need. Applying it type-aware in
-            # ``ResolveTranspiledPythonUDFOptions`` (before that cast) would remove the
-            # duplication; it is left for a separate change, since the duplication is a
-            # plan-size/CPU cost only and the baseline it replaces is a per-row Python call.
-            # Correctness is unaffected.
+            # A scalar pandas UDF's numpy-backed result Series is masked with
+            # ``series.isnull()`` on the way to Arrow, and ``isnull`` is True for NaN, so
+            # every NaN the body produces reaches Spark as NULL. Catalyst keeps NaN, so
+            # normalize to match. Emitted for every numeric body (not just fractional)
+            # because the bound column's width is unknown until the JVM prunes options;
+            # ``isnan(cast(<integral> as double))`` is constant-false, so on an integral
+            # column this is one extra node and no change in result. The default dtype
+            # regime only -- the masked-extension regime is refused in udf.py /
+            # ConvertToCatalyst, where a NaN stays NaN. The clean single-reference form
+            # ``NaNvl(body, null)`` is type-valid only for float/double and the body's
+            # resolved type is not known here, so the body is referenced twice until a
+            # type-aware pass in ResolveTranspiledPythonUDFOptions removes the duplication
+            # (plan-size cost only; correctness preserved).
             converted = when(isnan(converted.cast("double")), lit(None)).otherwise(converted)
         # Cast to the declared return type so the rewritten plan reports a
         # known data type to the optimizer's plan validator (otherwise it
