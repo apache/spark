@@ -1402,29 +1402,20 @@ def _transpile_func(
                     )
                     if result is not None:
                         # A variety may report the input categories the option it
-                        # built actually needs (a ``(Column, list[str])`` tuple),
-                        # falling back to the combo we asked about otherwise -- so a
-                        # variety that works out its own input types (e.g. from
-                        # annotations) is not matched against our guess, and a new
-                        # type it supports is not another entry in a fixed enum.
+                        # actually needs via a (Column, list[str]) tuple, falling back
+                        # to the combo we asked about otherwise.
                         if isinstance(result, tuple):
                             transpiled_column, categories = result
-                            # A tuple whose Column is missing (``(None, ...)``) is
-                            # a malformed decline: appending a ``None`` Column
-                            # would surface a raw JVM NPE at call time. To decline,
-                            # return plain ``None``. Refuse anything that is not a
-                            # Column so the UDF falls back cleanly.
+                            # A None Column would surface a raw JVM NPE at call time;
+                            # to decline, return plain None.
                             if not isinstance(transpiled_column, Column):
                                 raise UnsupportedOperationException(
                                     "transpiler returned a (Column, list[str]) tuple "
                                     "whose first element is not a Column; return None to "
                                     "decline"
                                 )
-                            # The JVM matches options to bound column types by
-                            # index and drops the WHOLE option set if any one
-                            # list's length differs from the param count, so a
-                            # wrong-length list here would silently neuter every
-                            # other variety's options. Refuse it instead.
+                            # The JVM drops the WHOLE option set on a length mismatch,
+                            # so a wrong-length list would silently neuter every variety.
                             if len(categories) != len(public_params):
                                 raise UnsupportedOperationException(
                                     f"transpiler returned {len(categories)} input "
@@ -1437,10 +1428,8 @@ def _transpile_func(
                                 [combo.get(i, "numeric") for i in range(len(public_params))]
                             )
                         else:
-                            # Anything that is neither a Column nor a
-                            # (Column, categories) tuple is a malformed return;
-                            # appending it would surface a raw JVM NPE at call
-                            # time. Refuse so the UDF falls back cleanly.
+                            # Anything else (e.g. a bare list by typo) would surface a
+                            # raw JVM error at call time; refuse so the UDF falls back.
                             raise UnsupportedOperationException(
                                 f"transpiler returned an unsupported result of type "
                                 f"{type(result).__name__}; expected a Column, a "
