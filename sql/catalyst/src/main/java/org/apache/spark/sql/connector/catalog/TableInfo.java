@@ -25,7 +25,8 @@ import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 
 /**
- * Metadata describing a data-source table: its columns, properties, partitioning and constraints.
+ * Metadata describing a data-source table: its columns, properties, partitioning, constraints,
+ * and requested write distribution and ordering.
  * Spark realizes a {@code TableInfo} into a {@link Table} via {@link DelegatingTable}; a catalog
  * that has its own {@link Table} object returns that instead. Views are described by the sibling
  * {@link View}, which -- unlike a table -- is itself a {@link Relation} because Spark never builds
@@ -49,7 +50,8 @@ public class TableInfo {
     this.partitions = builder.partitions;
     this.constraints = builder.constraints;
     this.writeDistributionMode = builder.writeDistributionMode;
-    this.writeOrdering = builder.writeOrdering;
+    this.writeOrdering =
+      Objects.requireNonNull(builder.writeOrdering, "writeOrdering should not be null");
   }
 
   public Column[] columns() {
@@ -82,7 +84,8 @@ public class TableInfo {
    * {@link TableCatalog#createTable(Identifier, TableInfo)} and of the {@link StagingTableCatalog}
    * methods {@code stageCreate}, {@code stageReplace} and {@code stageCreateOrReplace}. Their
    * default implementations drop it, so a catalog that reports the capability must override each
-   * one it can be reached through.
+   * one it can be reached through. {@link TableCatalog#createTableLike} never gets a request: Spark
+   * does not copy the source table's write distribution and ordering into its {@code TableInfo}.
    *
    * @since 4.4.0
    */
@@ -93,9 +96,11 @@ public class TableInfo {
    * same capability and delivered the same way as {@link #writeDistributionMode()}.
    * <p>
    * A plain column is a {@link org.apache.spark.sql.connector.expressions.NamedReference}; any
-   * other key is a {@link Transform}, such as {@code bucket(16, id)}. Spark checks only that each
-   * referenced column exists in the table schema. It does not check that a key is orderable or
-   * that a transform accepts its arguments, so a catalog must reject a key it cannot honor.
+   * other key is a {@link Transform}, such as {@code bucket(16, id)}. Spark checks that each
+   * referenced column exists in the table schema, and the parser checks the arguments of
+   * {@code bucket}, {@code years}, {@code months}, {@code days} and {@code hours}. Spark does not
+   * check that a key is orderable or that any other transform accepts its arguments, so a catalog
+   * must reject a key it cannot honor.
    *
    * @since 4.4.0
    */

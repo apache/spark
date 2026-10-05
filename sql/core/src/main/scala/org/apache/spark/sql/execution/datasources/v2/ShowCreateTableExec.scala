@@ -19,19 +19,21 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolvedTable
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.CreateTable
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, CharVarcharUtils, WriteDistributionAndOrdering}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog, V1Table, WriteDistributionMode}
-import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform,
-  Expression => V2Expression, Literal, NamedReference, Transform}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog, TableCatalogCapability, V1Table, WriteDistributionMode}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, SortOrder}
 import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for show create table.
@@ -59,7 +61,7 @@ case class ShowCreateTableExec(
       }.toMap
     showTableOptions(builder, tableOptions)
     showTablePartitioning(table, builder)
-    showTableWriteDistributionAndOrdering(table, builder)
+    showTableWriteDistributionAndOrdering(resolvedTable, builder)
     showTableComment(table, builder)
     showTableCollation(table, builder)
     showTableLocation(table, builder)
@@ -128,68 +130,41 @@ case class ShowCreateTableExec(
   }
 
   /**
-   * True for a sort key expression the `transform` grammar rule can represent: a column
-   * reference, or a transform with at least one argument, each a column reference or a literal
-   * the `constant` rule can spell with the same type.
-   */
-  private def isSpellable(e: V2Expression): Boolean = e match {
-    case _: NamedReference => true
-    case t: Transform =>
-      t.arguments().nonEmpty && t.arguments().forall {
-        case _: NamedReference => true
-        case l: Literal[_] => isSpellableLiteral(l)
-        case _ => false
-      }
-    case _ => false
-  }
-
-  // Lists only the types whose rendering parses back as a `constant` of the same type. A typed
-  // NULL, a collated string, NaN, and infinity have none, nor does a FLOAT of maximal magnitude,
-  // whose shortest rendering exceeds the parser's range.
-  private def isSpellableLiteral(l: Literal[_]): Boolean = (l.value, l.dataType) match {
-    case (null, dataType) => dataType == NullType
-    case (f: Float, FloatType) => java.lang.Float.isFinite(f) && math.abs(f) < Float.MaxValue
-    case (d: Double, DoubleType) => java.lang.Double.isFinite(d)
-    case (_, s: StringType) => DataTypeUtils.isDefaultStringCharOrVarcharType(s)
-    case (_, BooleanType | ByteType | ShortType | IntegerType | LongType | _: DecimalType |
-        BinaryType | DateType | TimestampType | TimestampNTZType | _: DayTimeIntervalType |
-        _: YearMonthIntervalType) => true
-    case _ => false
-  }
-
-  /**
-   * Emits the table's declared write distribution and ordering as clauses. Pairs with no clause
-   * form, such as `HASH` without partitioning or an unspellable sort key, are omitted.
+   * Emits the table's declared write distribution and ordering as clauses when parsing them in
+   * this session declares the same pair. Otherwise the pair is omitted: it has no clause form, or
+   * the catalog does not accept the clauses, or a sort key references a column the table does not
+   * have or does not parse back to the same key.
    */
   private def showTableWriteDistributionAndOrdering(
-      table: Table,
+      resolvedTable: ResolvedTable,
       builder: StringBuilder): Unit = {
-    if (table.writeOrdering().forall(o => isSpellable(o.expression()))) {
-      val orderBy = if (table.writeOrdering().nonEmpty) {
-        Some(table.writeOrdering()
-          .map(WriteDistributionAndOrdering.describeSortOrder)
-          .mkString("ORDERED BY (", ", ", ")"))
-      } else {
-        None
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    val table = resolvedTable.table
+    val writeOrdering = table.writeOrdering().toImmutableArraySeq
+    val accepted = resolvedTable.catalog.capabilities().contains(
+      TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING)
+    if (accepted &&
+        WriteDistributionAndOrdering.referencesExist(table.columns.asSchema, writeOrdering)) {
+      WriteDistributionAndOrdering.writeClausesSQL(
+        table.writeDistributionMode(),
+        writeOrdering,
+        table.partitioning.toImmutableArraySeq,
+        replay
+      ).foreach(clauses => builder ++= s"$clauses\n")
+    }
+  }
+
+  // The partitioning only lets the parser accept DISTRIBUTED BY PARTITION; the clauses do not
+  // depend on the rest of the statement.
+  private def replay(clauses: String): Option[(WriteDistributionMode, Seq[SortOrder])] = {
+    try {
+      session.sessionState.sqlParser.parsePlan(
+          s"CREATE TABLE t USING foo PARTITIONED BY (p) $clauses") match {
+        case c: CreateTable => Some((c.writeDistributionMode, c.writeOrdering))
+        case _ => None
       }
-      // Bucketing counts as partitioning here; CLUSTER BY does not.
-      val hasPartitioning = table.partitioning.exists {
-        case ClusterByTransform(_) => false
-        case _ => true
-      }
-      (table.writeDistributionMode(), orderBy) match {
-        case (WriteDistributionMode.HASH, Some(o)) if hasPartitioning =>
-          builder ++= s"DISTRIBUTED BY PARTITION $o\n"
-        case (WriteDistributionMode.HASH, None) if hasPartitioning =>
-          builder ++= "DISTRIBUTED BY PARTITION\n"
-        case (WriteDistributionMode.RANGE, Some(o)) =>
-          builder ++= s"$o\n"
-        case (WriteDistributionMode.NONE, Some(o)) =>
-          builder ++= s"LOCALLY $o\n"
-        case (WriteDistributionMode.NONE, None) =>
-          builder ++= "UNORDERED\n"
-        case _ =>
-      }
+    } catch {
+      case NonFatal(_) => None
     }
   }
 

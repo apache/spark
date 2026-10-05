@@ -351,7 +351,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
           case other => other
         }
 
-        // Unlike the partitioning, an unresolvable ordering reference is kept as is for
+        // Unlike the partitioning, an ordering reference to a missing column is kept as is for
         // CheckAnalysis to report, and each reference is normalized independently.
         def normalizeResolvable(ref: NamedReference): NamedReference = {
           schema.findNestedField(ref.fieldNames().toImmutableArraySeq, resolver = resolver)

@@ -116,7 +116,9 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
     `CLUSTERED BY ... INTO ... BUCKETS` -- does **not** qualify: it lists clustering columns for the
     data source to interpret rather than defining a partitioning, and it cannot be combined with
     `PARTITIONED BY` or `CLUSTERED BY ... INTO ... BUCKETS`, so a table using it has no partitioning
-    to distribute by.
+    to distribute by. To distribute such a table by partition, replace `CLUSTER BY` with one of
+    those clauses. A `cluster_by(...)` transform in `PARTITIONED BY` is clustering too, so it does
+    not qualify either.
 
     A statement that defines no schema (no column list, no typed partition columns, and no
     `AS SELECT`) cannot declare partitioning, so it cannot use this clause either.
@@ -128,7 +130,8 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
     clause -- omitting it leaves the choice to the catalog. The parentheses are optional:
     `ORDERED BY (a, b)` and `ORDERED BY a, b` are the same. The sort keys must resolve against the
     table's columns, so a statement that defines no schema (no column list, no typed partition
-    columns, and no `AS SELECT`) cannot use this clause.
+    columns, and no `AS SELECT`) cannot use `ORDERED BY` or `LOCALLY ORDERED BY`. `UNORDERED` needs
+    no schema.
 
     The distribution decides how far the order reaches, and this clause picks one when
     `DISTRIBUTED BY PARTITION` is absent: a bare `ORDERED BY` range-partitions each write, so the
@@ -166,8 +169,10 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
     What the catalog records is a *default* for later writes, not a statement about the data
     already in the table: an individual write may override it, and rewriting existing data to match
     a newly requested layout is a separate operation. `SHOW CREATE TABLE` reproduces the clauses
-    when the recorded pair has a clause form, and `DESCRIBE TABLE EXTENDED` reports both values in
-    every case.
+    only when the catalog accepts them, every column they reference exists, and parsing them in
+    the current session gives back the same pair. A sort key with a `TRUE`, `FALSE` or `NULL`
+    argument, for example, is read back as a column reference when that keyword is not reserved,
+    so it is not reproduced. `DESCRIBE TABLE EXTENDED` reports both values in every case.
 
 * **AS select_statement**
 

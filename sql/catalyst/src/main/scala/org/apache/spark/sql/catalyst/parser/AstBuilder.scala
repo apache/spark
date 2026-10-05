@@ -46,7 +46,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeConstants, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeConstants, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils, WriteDistributionAndOrdering}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, fractionalSecondsDigits, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampLTZNanos, stringToTimestampNTZNanos, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogContext, PathElement, SupportsNamespaces, TableCatalog, TableWritePrivilege, WriteDistributionMode}
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
@@ -6307,7 +6307,8 @@ class AstBuilder extends DataTypeAstBuilder
    *
    * Returns the distribution mode and the ordering. The mode is null when the statement did not ask
    * for one, which leaves the choice to the catalog; `NONE` is an explicit request.
-   * `DISTRIBUTED BY PARTITION` is rejected when `partitionTransforms` is empty.
+   * `DISTRIBUTED BY PARTITION` is rejected beside CLUSTER BY, and when `partitionTransforms` has no
+   * partitioning by `WriteDistributionAndOrdering.hasPartitioning`.
    */
   private def writeSpecsFrom(
       ctx: CreateTableClausesContext,
@@ -6317,9 +6318,13 @@ class AstBuilder extends DataTypeAstBuilder
 
     val distributionSpec = ctx.writeDistributionSpec.asScala.headOption.orNull
     val orderingSpec = ctx.writeOrderingSpec.asScala.headOption.orNull
-    // Bucketing counts as partitioning here; CLUSTER BY does not.
-    if (distributionSpec != null && partitionTransforms.isEmpty) {
-      throw QueryParsingErrors.distributedByPartitionWithoutPartitioningError(ctx)
+    if (distributionSpec != null) {
+      if (!ctx.clusterBySpec.isEmpty) {
+        throw QueryParsingErrors.clusterByWithDistributedByPartition(ctx)
+      }
+      if (!WriteDistributionAndOrdering.hasPartitioning(partitionTransforms)) {
+        throw QueryParsingErrors.distributedByPartitionWithoutPartitioningError(ctx)
+      }
     }
     if (distributionSpec == null && orderingSpec == null) {
       (null, Seq.empty)
@@ -6489,14 +6494,15 @@ class AstBuilder extends DataTypeAstBuilder
    *     [DEFAULT COLLATION collation_name]
    *     [TBLPROPERTIES (property_name=property_value, ...)]
    *     [DISTRIBUTED BY PARTITION]
-   *     [[LOCALLY] ORDERED BY (write_order_fields) | UNORDERED]
+   *     [[LOCALLY] ORDERED BY write_order_fields | UNORDERED]
    *
    *   partition_fields:
    *     col_name, transform(col_name), transform(constant, col_name), ... |
    *     col_name data_type [NOT NULL] [COMMENT col_comment], ...
    *
    *   write_order_fields:
-   *     transform(col_name) [ASC|DESC] [NULLS FIRST|LAST], ...
+   *     [(] {col_name | transform(col_name | constant, ...)} [ASC|DESC] [NULLS FIRST|LAST], ...
+   *     [)]
    * }}}
    */
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
@@ -6595,14 +6601,15 @@ class AstBuilder extends DataTypeAstBuilder
    *     [DEFAULT COLLATION collation_name]
    *     [TBLPROPERTIES (property_name=property_value, ...)]
    *     [DISTRIBUTED BY PARTITION]
-   *     [[LOCALLY] ORDERED BY (write_order_fields) | UNORDERED]
+   *     [[LOCALLY] ORDERED BY write_order_fields | UNORDERED]
    *
    *   partition_fields:
    *     col_name, transform(col_name), transform(constant, col_name), ... |
    *     col_name data_type [NOT NULL] [COMMENT col_comment], ...
    *
    *   write_order_fields:
-   *     transform(col_name) [ASC|DESC] [NULLS FIRST|LAST], ...
+   *     [(] {col_name | transform(col_name | constant, ...)} [ASC|DESC] [NULLS FIRST|LAST], ...
+   *     [)]
    * }}}
    */
   override def visitReplaceTable(ctx: ReplaceTableContext): LogicalPlan = withOrigin(ctx) {

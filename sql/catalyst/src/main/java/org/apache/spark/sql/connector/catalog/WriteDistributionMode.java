@@ -38,8 +38,9 @@ public enum WriteDistributionMode {
    */
   RANGE,
   /**
-   * Requested with {@code UNORDERED} or {@code LOCALLY ORDERED BY}: do not distribute, so any
-   * ordering holds within a write task only.
+   * Requested with {@code UNORDERED} or {@code LOCALLY ORDERED BY} without
+   * {@code DISTRIBUTED BY PARTITION}: do not distribute, so any ordering holds within a write task
+   * only.
    */
   NONE;
 

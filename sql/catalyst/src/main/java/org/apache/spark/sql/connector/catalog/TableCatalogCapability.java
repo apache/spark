@@ -110,6 +110,10 @@ public enum TableCatalogCapability {
    * because a {@code CREATE TABLE} without {@code AS SELECT} is not staged and arrives at
    * {@code createTable}.
    * <p>
+   * {@link DelegatingCatalogExtension} does not forward this capability from its delegate, because
+   * it does not override {@code createTable(Identifier, TableInfo)}. A subclass that overrides the
+   * {@link TableInfo} overloads may report it again.
+   * <p>
    * Without this capability, such a statement fails with
    * {@code UNSUPPORTED_FEATURE.TABLE_OPERATION} before anything is created or dropped.
    * <p>
