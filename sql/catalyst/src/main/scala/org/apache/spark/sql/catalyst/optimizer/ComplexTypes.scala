@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Simplify redundant [[CreateNamedStruct]], [[CreateArray]] and [[CreateMap]] expressions.
@@ -66,7 +67,15 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
           // out of bounds, mimic the runtime behavior and return null
           Literal(null, ga.dataType)
         }
-      case GetMapValue(CreateMap(elems, _), key) => CaseKeyWhen(key, elems)
+      case GetMapValue(CreateMap(elems, _), key) =>
+        // CASE returns the first matching value, whereas LAST_WIN keeps the last map entry.
+        val entries = if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) ==
+            SQLConf.MapKeyDedupPolicy.LAST_WIN) {
+          elems.grouped(2).toSeq.reverse.flatten
+        } else {
+          elems
+        }
+        CaseKeyWhen(key, entries)
     }
   }
 }
