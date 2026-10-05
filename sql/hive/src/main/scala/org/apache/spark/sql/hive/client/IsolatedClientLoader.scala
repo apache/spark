@@ -125,10 +125,11 @@ private[hive] object IsolatedClientLoader extends Logging {
   private[hive] def getRemoteRepos(
       sparkConf: SparkConf,
       ivySettingsPath: Option[String]): Option[String] = {
-    if (ivySettingsPath.isDefined) {
-      sparkConf.getOption(SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.key)
-    } else {
+    if (ivySettingsPath.isEmpty ||
+        sparkConf.contains(SQLConf.ADDITIONAL_REMOTE_REPOSITORIES)) {
       Some(sparkConf.get(SQLConf.ADDITIONAL_REMOTE_REPOSITORIES))
+    } else {
+      None
     }
   }
 

@@ -43,6 +43,17 @@ class IsolatedClientLoaderIvySettingsSuite extends SparkFunSuite {
     assert(IsolatedClientLoader.getRemoteRepos(sparkConf, None).contains(remoteRepos))
   }
 
+  test("substitute variables in remote repositories with custom Ivy settings") {
+    val sparkConf = new SparkConf()
+    val remoteRepos = "https://repository.example.com/maven2/"
+    sparkConf.set("spark.test.remoteRepository", remoteRepos)
+    sparkConf.set(
+      SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.key, "${spark.test.remoteRepository}")
+
+    assert(IsolatedClientLoader.getRemoteRepos(sparkConf, Some("ivysettings.xml"))
+      .contains(remoteRepos))
+  }
+
   test("SPARK-56867: respect spark.jars.ivySettings when downloading Hive metastore jars") {
     val ivyPath = Utils.createTempDir(namePrefix = "ivy-settings-test")
     val ivySettingsFile = new File(ivyPath, "ivysettings.xml")
