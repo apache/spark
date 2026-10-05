@@ -253,6 +253,7 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
       checkError(
         exception = ex,
         condition = "INVALID_STATEMENT_OR_CLAUSE",
+        sqlState = Some("42601"),
         parameters = Map(
           "operation" -> s"CREATE $datasetSqlSyntax ... DISTRIBUTED BY/ORDERED BY/UNORDERED"),
         queryContext = ex.getQueryContext.map(toExpectedContext)

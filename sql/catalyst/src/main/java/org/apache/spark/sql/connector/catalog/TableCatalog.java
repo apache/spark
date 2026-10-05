@@ -395,13 +395,17 @@ public interface TableCatalog extends CatalogPlugin {
    * excluded from {@code tableInfo}; connectors may read {@code sourceTable.properties()} to
    * clone additional format-specific or custom state as appropriate for their implementation.
    * <p>
+   * The source table's write distribution and ordering are not copied either:
+   * {@code tableInfo.writeDistributionMode()} is null and {@code tableInfo.writeOrdering()} is
+   * empty. Connectors that want to carry them forward may read them from {@code sourceTable}.
+   * <p>
    * The default implementation throws {@link UnsupportedOperationException}. Connectors that
    * support {@code CREATE TABLE ... LIKE ...} must override this method.
    *
    * @param ident a table identifier for the new table
    * @param tableInfo complete description of the new table: columns, partitioning, constraints,
    *                  explicit properties (user overrides + owner); source table properties
-   *                  are NOT included
+   *                  and the source's write distribution and ordering are NOT included
    * @param sourceTable the resolved source table; connectors may read format-specific properties
    *                    or other custom state from this object to clone additional metadata
    * @return metadata for the new table
