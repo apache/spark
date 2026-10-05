@@ -271,9 +271,8 @@ class UserDefinedFunction:
                 value = session.conf.get(key, default)
             return value is not None and value.lower() == "true"
 
-        # Raising NULL checks the kept options still needed. Collected inside the try
-        # below but warned about after it, so warnings-as-errors cannot cost us a
-        # lowering; see the deferral there.
+        # Collected inside the try but warned after it, so warnings-as-errors cannot
+        # cost us a lowering; see the deferral below.
         pending_guard_warning: list[str] = []
         try:
             transpile_enabled = (
@@ -340,26 +339,11 @@ class UserDefinedFunction:
             self._transpiled_input_categories = []
             self._positional_only_param_names = frozenset()
         if pending_guard_warning and self.transpiled:
-            # A check that raises makes the expression throwable, and the optimizer
-            # will not move a throwable predicate: a filter on this UDF stays put
-            # instead of being pushed through a join or merged with an adjacent
-            # filter. Worth saying once -- the UDF transpiled and there is nothing
-            # wrong with it -- so no ``stacklevel``: the depth to the user's own frame
-            # differs between ``udf(...)`` and a direct ``UserDefinedFunction(...)``,
-            # and a wrong constant is worse than the default, which at least matches
-            # the two sibling warnings above.
-            #
-            # In its own handler, and NOT in the one above: this warning is advice
-            # about a lowering that is already good, so under warnings-as-errors it
-            # must not escape and break the UDF definition outright. The handler
-            # above would instead have thrown the lowering away, which is the other
-            # way to get this wrong.
-            #
-            # Says "may not" rather than "cannot": what reaches the plan is not
-            # decided yet. Binding a non-nullable column folds the check away
-            # (NullPropagation and SimplifyConditionals), and
-            # ``asNondeterministic()`` discards the lowering entirely -- both
-            # happen after this point.
+            # Advice, not an error: the lowering is fine, so warn in its own handler --
+            # under warnings-as-errors the handler above would have thrown the
+            # lowering away, which is the wrong fix. "may not" because a non-nullable
+            # bound column (NullPropagation) or ``asNondeterministic()`` can still drop
+            # the check after this point.
             try:
                 warnings.warn(
                     f"Transpiled UDF {func} still checks for NULL in "

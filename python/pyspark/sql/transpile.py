@@ -151,12 +151,9 @@ class AbstractTranspiler(object):
     # Specify the "friendly" name a user can add to spark.sql.experimental.optimizer.pyTranspilers
     # to enable this transpiler.
     variety: str = ""
-    #: The raising NULL checks the last lowering needed, as short human-readable labels
-    #: ("comparison `>` on a, b"). Read after each ``_transpile_from_ast`` and unioned
-    #: across the kept variants, so a subclass that emits a check which raises should
-    #: assign it here; the caller warns once per UDF that such a check makes the
-    #: expression throwable and so unmovable by the optimizer. Leave it empty to say
-    #: nothing. A bare ``str`` is accepted and treated as a single label.
+    #: Raising NULL checks the last lowering needed (e.g. "comparison `>` on a, b");
+    #: empty when none survived. A subclass emitting a check assigns it here so the
+    #: caller can warn once per UDF. A bare ``str`` is treated as a single label.
     null_guards: frozenset = frozenset()
 
     @classmethod
@@ -271,11 +268,9 @@ def _null_facts(node: ast.AST) -> Tuple[frozenset, frozenset]:
     * Anything else proves nothing, which is the safe direction -- a fact we miss
       leaves a check in place, it never drops one we needed.
 
-    Consumers need more than "true implies the true-facts", since ``And``/``Or`` and
-    ``CASE WHEN`` treat NULL as not-true rather than false. What holds: a node that is
-    not FALSE proves its true-facts, one that is not TRUE proves its false-facts --
-    because every node a fact comes FROM cannot itself be NULL, so "not false"
-    collapses to "true" for it.
+    Callers use "not FALSE => true-facts, not TRUE => false-facts" rather than just
+    "TRUE => true-facts", because ``And``/``Or`` and ``CASE WHEN`` treat NULL as
+    not-true, not false -- and a node a fact came FROM cannot itself be NULL.
 
     TODO (SPARK-55218): with multi-statement bodies, an ``if x is None: return ...``
     should add its false-facts to the statements after it.
@@ -338,18 +333,15 @@ class CatalystTranspiler(AbstractTranspiler):
         # ``_transpile_from_ast``; both are reset there per variant.
         self._param_categories: dict[int, str] = {}
         self._category_cache: dict[int, str] = {}
-        # ``_pending_null_guards`` is an instance attribute, not a class one: as a
-        # class default, re-annotating it as ``set`` -- which reads like a cleanup --
-        # would turn the ``|=`` in ``_raise_on_null`` into an in-place mutation of the
-        # class dict, leaking state between every UDF in the process. ``_non_null`` is
-        # only ever rebound, never ``|=``'d, so it is safe either way and frozenset
-        # merely keeps the two consistent. Both are reset per variant in
+        # Instance attrs (not class defaults): ``_raise_on_null`` does ``|=`` on
+        # ``_pending_null_guards``, which on a class-default set would mutate the
+        # class dict and leak state across UDFs. Both reset per variant in
         # ``_transpile_from_ast``.
         self._non_null: frozenset = frozenset()
         self._pending_null_guards: frozenset = frozenset()
-        #: The checks the LAST lowered variant needed. ``_transpile_func`` unions
-        #: this across the variants it keeps, into a local, and warns once per UDF.
-        #: Assigned rather than accumulated, so nothing carries into a later UDF.
+        #: Raising NULL checks the last lowered variant needed; empty when none
+        #: survived. ``_transpile_func`` unions this across kept variants and warns
+        #: once per UDF. Assigned, not accumulated, so nothing leaks between UDFs.
         self.null_guards: frozenset = frozenset()
 
     @contextlib.contextmanager
@@ -425,18 +417,13 @@ class CatalystTranspiler(AbstractTranspiler):
     ) -> Column:
         """``otherwise``, guarded so that a NULL operand raises ``message`` instead.
 
-        The only place that emits a ``raise_error``, so future lowerings needing one
+        The only place that emits a ``raise_error``; future lowerings needing one
         (SPARK-55210's arithmetic/unary/concat guards) must come through here or they
-        will silently skip the narrowing and the warning.
-
-        Operands proven non-NULL contribute no check, and with none left the guard is
-        dropped entirely -- ``RaiseError`` is ``throwable`` (SPARK-58627), so a plan
-        holding one cannot be pushed through a join or merged with a nearby filter.
-
-        ``label`` names the construct (e.g. ``"comparison `>`"``) plus the parameters
-        checked, so a half-narrowed ``a is not None and a > b`` reports just ``b``.
-        Reached through the whole operand, not just a bare one: ``a > (b + 1)`` checks
-        ``b + 1``, so ``b`` is what the user has to guard and ``b`` is what we name.
+        skip the narrowing and the warning. Operands proven non-NULL contribute no
+        check, and with none left the guard is dropped -- ``RaiseError`` is
+        ``throwable`` (SPARK-58627), so a plan holding one cannot be pushed through a
+        join. ``label`` names the construct plus the parameters checked (reached
+        through the whole operand, so ``a > (b + 1)`` names ``b``).
         """
         checked = [(node, c) for node, c in operands if not self._is_never_null(params, node)]
         if not checked:
@@ -525,11 +512,9 @@ class CatalystTranspiler(AbstractTranspiler):
         outcome establishes -- an ``if x is not None:`` body must not re-check ``x``.
         Their nodes are still needed for the shape checks below.
         """
-        # The test first, before the refusals below and outside the narrowing: it
-        # establishes the facts rather than using them. Order decides the fallback
-        # message, which is all a user gets -- an unlowerable test should say why
-        # rather than be reported as a bare truthiness test -- and neither arm gets
-        # built only to be discarded.
+        # Lower the test first and outside the narrowing: it establishes the facts
+        # rather than using them. Doing it before the refusals below gives a better
+        # fallback message and skips building an arm only to discard it.
         test_col = self._convert_chunk(params, test_node)
         # Determine the boolean guard for the CASE WHEN.
         # Two paths:
@@ -659,8 +644,7 @@ class CatalystTranspiler(AbstractTranspiler):
         Operands already proven non-NULL contribute no check, and with neither
         nullable -- ``if x is not None: x > 0`` -- the guard goes entirely rather than
         sitting in the plan unreachable. (A literal removes only its OWN check;
-        ``x > 0`` still guards ``x``.) See ``_raise_on_null`` for why that matters
-        beyond plan size.
+        ``x > 0`` still guards ``x``.)
 
         Python also forbids ordering across types (``1 < "a"`` -> TypeError),
         whereas Spark would coerce the operands and return a (wrong) boolean.
