@@ -20,12 +20,14 @@ package org.apache.spark.sql
 import java.sql.Timestamp
 import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkArithmeticException, SparkThrowable}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.BinByExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class BinBySuite extends QueryTest with SharedSparkSession {
+  import testImplicits._
 
   private def tsAt(s: String, zone: ZoneId = ZoneOffset.UTC): Timestamp =
     Timestamp.from(LocalDateTime.parse(s.replace(' ', 'T')).atZone(zone).toInstant)
@@ -425,6 +427,32 @@ class BinBySuite extends QueryTest with SharedSparkSession {
       // rangeStart == rangeEnd: one row, ratio 1.0, value kept.
       checkAnswer(df, Seq(
         Row(tsAt("2024-01-01 00:00:00"), tsAt("2024-01-01 00:05:00"), 1.0, 100.0)))
+    }
+  }
+
+  test("BIN BY raises an overflow when the next bin index is not representable") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+      withTempView("bin_by_overflow") {
+        val maxTimestamp = DateTimeUtils.microsToLocalDateTime(Long.MaxValue)
+        Seq((maxTimestamp, maxTimestamp, 1.0d))
+          .toDF("ts_start", "ts_end", "value")
+          .createOrReplaceTempView("bin_by_overflow")
+
+        checkError(
+          exception = intercept[SparkArithmeticException] {
+            spark.sql(
+              """SELECT * FROM bin_by_overflow
+                |BIN BY (
+                |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '0.000001' SECOND
+                |  ALIGN TO TIMESTAMP_NTZ '1970-01-01 00:00:00'
+                |  DISTRIBUTE UNIFORM (value))""".stripMargin).collect()
+          },
+          condition = "ARITHMETIC_OVERFLOW",
+          parameters = Map(
+            "message" -> "overflow",
+            "alternative" -> "",
+            "config" -> s"\"${SQLConf.ANSI_ENABLED.key}\""))
+      }
     }
   }
 

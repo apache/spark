@@ -24,7 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeSet, BindReferences, BoundReference, Cast, Expression, GenericInternalRow, JoinedRow, Literal, Multiply, NamedExpression, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.BinBy
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, MathUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.DoubleType
@@ -122,7 +122,8 @@ case class BinByExec(
             } else if (rs == re) {
               val (k, binStart) = DateTimeUtils.timeBucketFromTimestampDTInterval(width, rs, origin,
                 zone)
-              val binEnd = DateTimeUtils.timeBucketFromIndexDTInterval(width, k + 1, origin, zone)
+              val nextK = MathUtils.addExact(k, 1L)
+              val binEnd = DateTimeUtils.timeBucketFromIndexDTInterval(width, nextK, origin, zone)
               appended.update(0, binStart)
               appended.update(1, binEnd)
               appended.update(2, 1.0d)
