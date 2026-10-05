@@ -265,8 +265,9 @@ object ParquetStorageFilter {
    *
    * An error from decoding differs in three ways:
    *  - a plain read raises it from the reader, where `FileScanRDD` wraps a `NonFatal` one in
-   *    FAILED_READ_FILE before the executor looks, so a fatal error deeper in the chain has to sit
-   *    one level shallower to count. Under `ignoreCorruptFiles` a plain read may skip the rest of
+   *    FAILED_READ_FILE before the executor looks. So a fatal error deeper in the chain of a
+   *    `NonFatal` one has to sit one level shallower to count, while any other error is searched
+   *    as deep as the executor does. Under `ignoreCorruptFiles` a plain read may skip the rest of
    *    the file on it instead.
    *  - an `InternalError` is corrupt data, as `DataSourceUtils.shouldIgnoreCorruptFileException`
    *    takes it.
@@ -289,7 +290,8 @@ object ParquetStorageFilter {
     if (Executor.isFatalError(e, 1) && !corrupt(e)) throw out(e)
     throwIfKilled(e)
     if (fromRead && isVectorGrowthFailure(e)) return
-    if (Executor.isFatalError(e, if (fromRead) fatalErrorDepth - 1 else fatalErrorDepth)) {
+    val depth = if (fromRead && NonFatal(e)) fatalErrorDepth - 1 else fatalErrorDepth
+    if (Executor.isFatalError(e, depth)) {
       // The one `Executor.isFatalError` found, which no SparkOutOfMemoryError can precede.
       val fatal = Iterator.iterate(e)(_.getCause).find(Utils.isFatalError).get
       if (!corrupt(fatal)) throw out(fatal)
@@ -322,8 +324,11 @@ object ParquetStorageFilter {
    *
    * The executor reports a task as killed only for an `InterruptedException` or a `NonFatal`
    * error. So a `surfaced` error of any other type goes out as it is, the way a plain read raises
-   * it where it meets the same error. For example a codec's `InternalError` while decoding, or a
-   * `LinkageError` from a UDF.
+   * it when decoding meets the same error. For example a codec's `InternalError`, or a native
+   * codec's `UnsatisfiedLinkError`. One from evaluating the filter goes out as it is too. Only a
+   * built-in expression can raise one there, such as an `ExceptionInInitializerError`, since
+   * `InjectRuntimeFilter` builds no bloom over a key with a Scala or Python UDF, and a Hive UDF
+   * wraps its errors in a `SparkException`.
    */
   private def throwIfKilled(surfaced: Throwable): Unit = {
     val context = TaskContext.get()

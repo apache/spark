@@ -50,10 +50,10 @@ import org.apache.spark.util.Utils
  * Every case reads a fact table of about 100 MB in 34 row groups. The cases differ in four things:
  *  - the width of a row. One table has 50,000 rows of a long key and a 2 kB value that does not
  *    compress. The other has 1.4M rows of a long key and eight hashed long values;
- *  - the page size. Each table is written twice, in 8 kB pages and in parquet's default 1 MB
- *    ones. One surviving row makes the reader read its whole page, so this decides how much a
- *    survivor costs. A wide row fills a small page in a few values, while narrow ones still put
- *    about a thousand in it;
+ *  - the page size. Each table is written twice, in 8 kB pages and in parquet's default ones,
+ *    1 MB or 20,000 rows, whichever comes first. One surviving row makes the reader read its
+ *    whole page, so this decides how much a survivor costs. A wide row fills a small page in a
+ *    few values, while narrow ones still put about a thousand in it;
  *  - where the surviving keys fall. Keys from a contiguous range put the survivors in a few
  *    pages, so the reader skips the other row groups whole and the other pages of the row groups
  *    that hold them. Keys selected by their hash put survivors anywhere, so the reader skips

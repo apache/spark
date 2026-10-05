@@ -44,9 +44,9 @@ import org.apache.spark.util.SparkClassUtils
  *   - `ParquetVectorUpdaterFactory` (constructor)
  *   - `VectorizedDeltaByteArrayReader` (no-arg constructor)
  *   - `VectorizedDeltaLengthByteArrayReader` (no-arg constructor)
- *   - `LateMaterializationParquetRecordReader`'s scratch vectors, the column readers and row
- *     indexes a reader still holds, and a vector's byte-child capacity (private state a test
- *     checks the reader's memory by)
+ *   - `LateMaterializationParquetRecordReader`'s scratch vectors and queued survivor sets, the
+ *     column readers and row indexes a reader still holds, and a vector's byte-child capacity
+ *     (private state a test checks the reader's memory by)
  */
 object ParquetTestAccess {
 
@@ -189,7 +189,10 @@ object ParquetTestAccess {
 
   // -------- LateMaterializationParquetRecordReader --------
 
-  private val keyScratchVectorsField = {
+  // Lazy, so a renamed member fails only the tests that reach it, not every user of this
+  // object at its initialization.
+
+  private lazy val keyScratchVectorsField = {
     val f = classOf[LateMaterializationParquetRecordReader].getDeclaredField("keyScratchVectors")
     f.setAccessible(true)
     f
@@ -199,22 +202,34 @@ object ParquetTestAccess {
   def keyScratchVectors(reader: LateMaterializationParquetRecordReader): Seq[WritableColumnVector] =
     keyScratchVectorsField.get(reader).asInstanceOf[Array[WritableColumnVector]].toSeq
 
-  private val columnVectorsField = {
+  private lazy val survivorBatchesField = {
+    val f = classOf[LateMaterializationParquetRecordReader].getDeclaredField("survivorBatches")
+    f.setAccessible(true)
+    f
+  }
+
+  /** The survivor sets phase 1 queued and the reader has not emitted yet, oldest first. */
+  def queuedSurvivorSets(
+      reader: LateMaterializationParquetRecordReader): Seq[Seq[WritableColumnVector]] =
+    survivorBatchesField.get(reader)
+      .asInstanceOf[java.util.ArrayDeque[Array[WritableColumnVector]]].asScala.map(_.toSeq).toSeq
+
+  private lazy val columnVectorsField = {
     val f = classOf[VectorizedParquetRecordReader].getDeclaredField("columnVectors")
     f.setAccessible(true)
     f
   }
 
-  private val columnVectorCls = SparkClassUtils.classForName[Any](
+  private lazy val columnVectorCls = SparkClassUtils.classForName[Any](
     "org.apache.spark.sql.execution.datasources.parquet.ParquetColumnVector")
 
-  private val getLeavesMethod = {
+  private lazy val getLeavesMethod = {
     val m = columnVectorCls.getDeclaredMethod("getLeaves")
     m.setAccessible(true)
     m
   }
 
-  private val getColumnReaderMethod = {
+  private lazy val getColumnReaderMethod = {
     val m = columnVectorCls.getDeclaredMethod("getColumnReader")
     m.setAccessible(true)
     m
@@ -226,7 +241,7 @@ object ParquetTestAccess {
       .flatMap(v => getLeavesMethod.invoke(v).asInstanceOf[java.util.List[AnyRef]].asScala)
       .count(leaf => getColumnReaderMethod.invoke(leaf) != null)
 
-  private val rowIndexGeneratorField = {
+  private lazy val rowIndexGeneratorField = {
     val f = classOf[VectorizedParquetRecordReader].getDeclaredField("rowIndexGenerator")
     f.setAccessible(true)
     f
@@ -240,7 +255,7 @@ object ParquetTestAccess {
     generator.rowIndexIterator != null
   }
 
-  private val capacityField = {
+  private lazy val capacityField = {
     val f = classOf[WritableColumnVector].getDeclaredField("capacity")
     f.setAccessible(true)
     f

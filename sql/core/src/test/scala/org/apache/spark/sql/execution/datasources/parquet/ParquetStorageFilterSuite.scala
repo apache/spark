@@ -52,11 +52,10 @@ import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{sources, DataFrame, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BloomFilterMightContain, BoundReference, Cast, Coalesce, EqualTo, Expression, GreaterThanOrEqual, IsNull, LessThan, LessThanOrEqual, Literal, Or, Predicate, Rand, Remainder, SecondsToTimestamp, UnaryExpression, XxHash64}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BloomFilterMightContain, BoundReference, Cast, Coalesce, EqualTo, Expression, GreaterThanOrEqual, In, IsNull, LessThan, LessThanOrEqual, Literal, Or, Predicate, Rand, Remainder, SecondsToTimestamp, Substring, UnaryExpression, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.{Filter => LogicalFilter}
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.execution.{CollapseCodegenStages, ColumnarToRowExec, FileSourceScanExec, FilterExec, LocalLimitExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FileFormat, FileSourceStrategy, OutputWriterFactory, PartitionedFile}
@@ -181,6 +180,22 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       Map(FileFormat.OPTION_RETURNING_BATCH -> "true"), hadoopConf, metrics)
       .getOrElse(fail("ParquetFileFormat must answer with a reader"))
 
+  // Asserts that a row group costs exactly `charge`: a cap of it keeps splicing, which reads the
+  // key column once, and a cap one byte under it gives splicing up, which reads it again. `read`
+  // reads the file under a cap and returns the rows it emitted with the bytes it transferred.
+  private def assertSpliceCharge(charge: Long, rows: Int)(read: String => (Int, Long)): Unit = {
+    val (uncappedRows, uncapped) = read("64MB")
+    val (atChargeRows, atCharge) = read(s"${charge}b")
+    val (underChargeRows, underCharge) = read(s"${charge - 1}b")
+    assert(Seq(uncappedRows, atChargeRows, underChargeRows) == Seq(rows, rows, rows),
+      s"every cap must keep the same $rows rows; got $uncappedRows, $atChargeRows and " +
+        underChargeRows)
+    assert(atCharge == uncapped,
+      s"a cap of exactly the charge, $charge, must keep splicing; got $atCharge against $uncapped")
+    assert(underCharge > uncapped,
+      s"a cap one byte under it must give splicing up; got $underCharge against $uncapped")
+  }
+
   // Reads `path` whole through the format under a splice cap and a batch size, and returns the rows
   // it emitted with the bytes it transferred.
   private def readUnderCap(
@@ -208,6 +223,18 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  // Runs `body` as a task under `context`. The block manager has to know the task for a format
+  // reader to read its broadcast hadoop conf there.
+  private def asTask[T](context: TaskContext)(body: => T): T = {
+    val blockManager = SparkEnv.get.blockManager
+    blockManager.registerTask(context.taskAttemptId())
+    try {
+      TaskContext.withTaskContext(context)(body)
+    } finally {
+      blockManager.releaseAllLocksForTask(context.taskAttemptId())
+    }
+  }
+
   // Runs `body`, and returns its result with how many log lines containing `text` it logged.
   private def withLogged[T](text: String)(body: => T): (T, Int) = {
     val logAppender = new LogAppender(text)
@@ -223,27 +250,13 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   // What the reader logs when it reads a row group without page-level storage filtering.
   private val partialReadWarning = "without page-level storage filtering"
 
-  // Runs `body`, and returns its result with whether the reader logged its WARN about reading a
-  // row group without page-level storage filtering.
-  private def withPartialReadWarning[T](body: => T): (T, Boolean) = {
-    val (result, logged) = withLogged(partialReadWarning)(body)
-    (result, logged > 0)
-  }
-
-  // Runs `body` as a task under `context`. The block manager has to know the task for a format
-  // reader to read its broadcast hadoop conf there.
-  private def asTask[T](context: TaskContext)(body: => T): T = {
-    val blockManager = SparkEnv.get.blockManager
-    blockManager.registerTask(context.taskAttemptId())
-    try {
-      TaskContext.withTaskContext(context)(body)
-    } finally {
-      blockManager.releaseAllLocksForTask(context.taskAttemptId())
-    }
-  }
-
   // What the reader logs when filling the survivor buffer fails and it gives splicing up.
   private val splicingGivenUpOnError = "buffering a surviving key value raised an error"
+
+  // What the reader logs when applying the filter to a row, or decoding the key pages, raises an
+  // error and it gives the filter up for that row group.
+  private val evaluationGivenUp = "applying it to a row raised an error"
+  private val decodingGivenUp = "decoding its key columns raised an error"
 
 
   // The metric map a scan hands the format, for a test that builds a reader by hand.
@@ -596,7 +609,6 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       def filterOn(key: Expression): ParquetStorageFilter =
         createFilter(Seq(GreaterThanOrEqual(key, Literal(10L))), requested)
       def read(key: Expression): Unit = readAll(path, filterOn(key))._2.close()
-      def readWith(key: Expression): SparkException = intercept[SparkException](read(key))
       def assertPropagates(thrown: SparkException, original: Class[_]): Unit = {
         assert(!DataSourceUtils.shouldIgnoreCorruptFileException(thrown),
           s"ignoreCorruptFiles must not be able to read this as a corrupt file; got $thrown")
@@ -606,9 +618,9 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       }
 
       def killedWhile(key: Expression): SparkException =
-        TaskContext.withTaskContext(TaskContext.empty())(readWith(key))
+        TaskContext.withTaskContext(TaskContext.empty())(intercept[SparkException](read(key)))
       // The reader does not give the filter up on a kill, so it does not report doing so.
-      val (killed, warnings) = withLogged("applying it to a row raised an error") {
+      val (killed, warnings) = withLogged(evaluationGivenUp) {
         killedWhile(OnKey(bound, at = 7L, killsTask = true, error = new SparkException(_)))
       }
       assertPropagates(killed, classOf[SparkException])
@@ -646,36 +658,48 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   test("a fatal error goes out as itself, found as deep as the executor would find it") {
     // A plain plan raises a filter's error from the post-scan Filter as it is, and a decoding error
     // from the reader, which `FileScanRDD` wraps in FAILED_READ_FILE. The executor looks
-    // `spark.executor.killOnFatalError.depth` levels down from what reaches it, so a decoding
-    // error's fatal cause counts down to one level less. An `InternalError` from decoding is
-    // corrupt data, which the plain read meets again.
+    // `spark.executor.killOnFatalError.depth` levels down from what reaches it, so the fatal cause
+    // of a `NonFatal` decoding error counts down to one level less. An `InternalError` from
+    // decoding is corrupt data, which the plain read meets again.
     val depth = SparkEnv.get.conf.get(KILL_ON_FATAL_ERROR_DEPTH)
     def under(levels: Int, fatal: Throwable): Throwable =
       (0 until levels).foldLeft(fatal)((cause, _) => new IllegalStateException("wraps", cause))
     def rethrow(e: Throwable, fromRead: Boolean): Unit =
       ParquetStorageFilter.rethrowIfMustPropagate(e, fromRead)
+    def fallsBack(e: Throwable, fromRead: Boolean): Unit =
+      try rethrow(e, fromRead) catch {
+        // ScalaTest would abort the whole suite on these rather than fail this test.
+        case t: VirtualMachineError => fail(s"the reader must fall back on $e; got $t", t)
+      }
     val oom = new OutOfMemoryError("fatal")
 
     assert(intercept[OutOfMemoryError](rethrow(under(depth - 1, oom), fromRead = false)) eq oom,
       "the deepest level the executor sees counts")
-    rethrow(under(depth, oom), fromRead = false)
+    fallsBack(under(depth, oom), fromRead = false)
 
     assert(intercept[OutOfMemoryError](rethrow(under(depth - 2, oom), fromRead = true)) eq oom,
       "a decoding error's chain counts one level less deep")
-    rethrow(under(depth - 1, oom), fromRead = true)
+    fallsBack(under(depth - 1, oom), fromRead = true)
 
     // The depth is the executor's conf, not its default.
-    SparkEnv.get.conf.set(KILL_ON_FATAL_ERROR_DEPTH.key, "2")
-    try {
+    withSparkEnvConfs(KILL_ON_FATAL_ERROR_DEPTH.key -> "2") {
       intercept[OutOfMemoryError](rethrow(under(1, oom), fromRead = false))
-      rethrow(under(2, oom), fromRead = false)
-    } finally {
-      SparkEnv.get.conf.set(KILL_ON_FATAL_ERROR_DEPTH.key, depth.toString)
+      fallsBack(under(2, oom), fromRead = false)
+    }
+    // `FileScanRDD` wraps only a `NonFatal` error, so a decoding `LinkageError` is searched as
+    // deep as the executor searches it. The OOM sits three levels down here.
+    withSparkEnvConfs(KILL_ON_FATAL_ERROR_DEPTH.key -> "3") {
+      val linkage = new ExceptionInInitializerError(new RuntimeException("static init", oom))
+      assert(intercept[OutOfMemoryError](rethrow(linkage, fromRead = true)) eq oom,
+        "a decoding error that is not NonFatal reaches the executor unwrapped")
+      // One level further down is past what the executor looks at.
+      fallsBack(new ExceptionInInitializerError(
+        new RuntimeException("static init", new RuntimeException("wraps", oom))), fromRead = true)
     }
 
     // A codec's `InternalError` while decoding is corrupt data, at the top or in the chain.
-    rethrow(new InternalError("codec"), fromRead = true)
-    rethrow(under(1, new InternalError("codec")), fromRead = true)
+    fallsBack(new InternalError("codec"), fromRead = true)
+    fallsBack(under(1, new InternalError("codec")), fromRead = true)
     // One from an expression goes out in an `UnknownError`, raw or wrapped. `ignoreCorruptFiles`
     // would take the bare `InternalError` for a corrupt file.
     Seq(new InternalError("expression"), under(1, new InternalError("expression"))).foreach { e =>
@@ -683,7 +707,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       assert(thrown.getCause.isInstanceOf[InternalError], s"got $thrown")
       assert(!DataSourceUtils.shouldIgnoreCorruptFileException(thrown), s"got $thrown")
     }
-    rethrow(new AssertionError("not fatal"), fromRead = false)
+    fallsBack(new AssertionError("not fatal"), fromRead = false)
 
     // A vector only the reader allocates that cannot grow, the way `reserve` reports it, is the
     // reader's own extra work while decoding. Raised from an expression it is a wrapped OOM. The
@@ -693,7 +717,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     assert(reserved.getClass == classOf[RuntimeException],
       s"`reserve` must still throw the class the reader matches; got ${reserved.getClass}")
     val growth = new RuntimeException("Cannot reserve", new OutOfMemoryError("reserve"))
-    rethrow(growth, fromRead = true)
+    fallsBack(growth, fromRead = true)
     assert(intercept[OutOfMemoryError](rethrow(growth, fromRead = false)).getMessage == "reserve")
     // Only that exact shape. A plain exception with a fatal error deeper down is not one, and
     // neither is a subclass with an OutOfMemoryError cause.
@@ -736,12 +760,9 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       withTempDir { dir =>
         val path =
           writeSingleParquetFile(dir, spark.range(0, 10).selectExpr("id AS v"), 1024L)
-        val withDefault = new MetadataBuilder()
-          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "7")
-          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "7")
-          .build()
         val schema = StructType(Seq(
-          StructField("k", LongType, nullable = true, withDefault), StructField("v", LongType)))
+          StructField("k", LongType).withExistenceDefaultValue("7").withCurrentDefaultValue("7"),
+          StructField("v", LongType)))
         val bound = BoundReference(0, LongType, nullable = true)
         def read(key: Expression): Seq[Long] = readLongs(
           formatReader(schema, Nil, Seq(GreaterThanOrEqual(key, Literal(0L)))), path, ordinal = 1)
@@ -768,22 +789,28 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("a give-up WARN is reported once per split") {
-    // Two row groups give the filter up on an evaluation error, and the reader reports that once.
+  test("a give-up WARN is reported once per split, and a give-up stays in its row group") {
+    // The first and the last of three row groups give the filter up on an evaluation error, and the
+    // reader reports that once. The middle one raises nothing, so the filter must still drop its
+    // keys 151 to 200, which a reader that gave the filter up for the rest of the split would not.
     withTempDir { dir =>
-      val rows = (1L to 200L).map(i => (i, s"v_$i"))
-      val path = writeParquetFile(dir, rows, rowGroupSize = 256L)
-      val rowGroups = footerOf(path).getBlocks.asScala.map(_.getRowCount)
-      assert(rowGroups.size == 2 && rowGroups.head >= 5L && rowGroups.head < 150L,
-        s"keys 5 and 150 must fall in two row groups; got $rowGroups")
+      val rows = (1L to 300L).map(i => (i, s"v_$i"))
+      val path = writeSingleParquetFile(dir, rows.toDF("k", "v"),
+        rowGroupSize = ParquetWriter.DEFAULT_BLOCK_SIZE,
+        options = Map(ParquetOutputFormat.BLOCK_ROW_COUNT_LIMIT -> "100"))
+      assert(footerOf(path).getBlocks.asScala.map(_.getRowCount) == Seq(100L, 100L, 100L),
+        "the fixture must be three row groups of 100 rows")
       val bound = BoundReference(0, LongType, nullable = true)
       def failingAt(key: Long): Expression = GreaterThanOrEqual(
         OnKey(bound, at = key, error = new IllegalStateException(_)), Literal(0L))
-      val filter = createFilter(Seq(And(failingAt(5L), failingAt(150L))), kvSchema())
-      val ((result, reader), warnings) =
-        withLogged("applying it to a row raised an error")(readAll(path, filter))
+      val dropsMiddle = Or(LessThanOrEqual(bound, Literal(150L)), LessThan(Literal(200L), bound))
+      val filter = createFilter(Seq(And(And(failingAt(5L), failingAt(250L)), dropsMiddle)),
+        kvSchema())
+      val ((result, reader), warnings) = withLogged(evaluationGivenUp)(readAll(path, filter))
       try {
-        assert(result == rows, s"both row groups must come back whole; got ${result.size} rows")
+        assert(result == rows.filter { case (k, _) => k <= 150L || k > 200L },
+          s"the middle row group must be filtered and the other two come back whole; got " +
+            s"${result.size} rows")
         assert(warnings == 1, s"the evaluation WARN must be reported once; got $warnings")
       } finally {
         reader.close()
@@ -1063,15 +1090,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
 
       // The exact charge. Seven survivors in one range cost 7 * 9 + 40 = 103 bytes, which a cap of
       // 103 holds and one of 102 does not. A charge one byte off either way flips one of the two.
-      val (_, sevenUncapped, _) = run("64MB", 394L)
-      val (_, sevenAtCharge, _) = run("103b", 394L)
-      val (_, sevenUnderCharge, _) = run("102b", 394L)
-      assert(sevenAtCharge == sevenUncapped,
-        s"a cap of exactly the charge must keep splicing; got $sevenAtCharge against " +
-          sevenUncapped)
-      assert(sevenUnderCharge > sevenUncapped,
-        s"a cap one byte under it must give splicing up; got $sevenUnderCharge against " +
-          sevenUncapped)
+      assertSpliceCharge(103L, rows = 7) { cap =>
+        val (rows, bytes, _) = run(cap, 394L)
+        (rows, bytes)
+      }
     }
   }
 
@@ -1173,33 +1195,23 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     (rows.map(r => (r._1, r._2)), rows.drop(4).map(_._3).distinct)
   }
 
-  test("a later accumulator set is sized for the rows left and charged once") {
+  test("a later accumulator set is sized for the survivors it can expect and charged once") {
     // Every set after the first sizes a variable-length key's byte child to what the set before it
-    // held, scaled to the rows that can still reach it. That memory is taken before any value
-    // arrives, so it is charged then. Six survivors over a capacity of 4 fill one set of four
-    // 1000-byte keys, and the second set starts two rows before the end of the row group. So it
-    // is sized for two of those values, 2000 bytes, charged 8000. Its own two keys are 2000 bytes
-    // each, so they add 8000 more once the sizing is used up, and the row group holds 32142 bytes
-    // in all. A cap of 32142 keeps splicing and one of 32141 gives it up, which a missing or a
-    // double charge would each get wrong. The second set's byte child is reserved for 2000 bytes,
-    // which `reserve` doubles to 4000, where sizing it as a full set would have taken 8000. And
-    // the keys must come back right whichever path the row group took.
+    // held, scaled to the survivors it can still expect at the rate seen since the row group's
+    // first survivor. That memory is taken before any value arrives, so it is charged then. Six
+    // survivors over a capacity of 4 fill one set of four 1000-byte keys, and the second set starts
+    // two rows before the end of the row group, with every row since the first survivor kept. So
+    // it is sized for two of those values, 2000 bytes, charged 8000. Its own two keys are 2000
+    // bytes each, so they add 8000 more once the sizing is used up, and the row group holds 32142
+    // bytes in all. A cap of 32142 keeps splicing and one of 32141 gives it up, which a missing or
+    // a double charge would each get wrong. The second set's byte child is reserved for 2000
+    // bytes, which `reserve` doubles to 4000, where sizing it as a full set would have taken 8000.
+    // And the keys must come back right whichever path the row group took.
     withTempDir { dir =>
       val (path, expected) = writeLaterSetFile(dir, lastTwoBytes = 2000)
-      def run(maxSplicedBytes: String): (Int, Long) =
-        readUnderCap(path, laterSetSchema, laterSetFilter, maxSplicedBytes, batchSize = 4)
-
-      val (uncappedRows, uncappedBytes) = run("64MB")
-      val (atChargeRows, atChargeBytes) = run("32142b")
-      assert(uncappedRows == 6 && atChargeRows == 6,
-        s"the filter keeps keys 15..20 either way; got $uncappedRows and $atChargeRows")
-      assert(atChargeBytes == uncappedBytes,
-        "a cap of exactly the row group's charge must keep splicing and read the key column " +
-          s"once; got $atChargeBytes against $uncappedBytes")
-      val (_, underChargeBytes) = run("32141b")
-      assert(underChargeBytes > uncappedBytes,
-        "a cap one byte under it must give splicing up and read the key column again; " +
-          s"got $underChargeBytes against $uncappedBytes")
+      assertSpliceCharge(32142L, rows = 6) { cap =>
+        readUnderCap(path, laterSetSchema, laterSetFilter, cap, batchSize = 4)
+      }
 
       Seq(Long.MaxValue, 32142L, 32141L).foreach { cap =>
         val (rows, secondSet) = readLaterSet(path, cap)
@@ -1213,29 +1225,81 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("a later accumulator set is sized only when it fits with its rows' fixed part") {
+  test("a later accumulator set is sized only when it fits with its rows' fixed part and ranges") {
     // The second set's two keys are 500 bytes here, shorter than the first set's 1000, so growing
-    // value by value is the cheaper path: 20142 bytes in all against 24142 sized. A cap of 24142
+    // value by value is the cheaper path: 20142 bytes in all against 24142 sized. A cap of 24222
     // sizes the set, whose byte child is then reserved for 2000 bytes and holds 4000. One of
-    // 24141 leaves 8033 bytes after the first set and its range, a byte short of the 8000 of
-    // sizing and the 34 of the two rows' fixed part. So the set grows instead, to a 1000-byte
-    // child, and keeps splicing. A cap of 20141 gives splicing up.
+    // 24221 leaves 8113 bytes after the first set and its range, a byte short of the 8000 of
+    // sizing, the 34 of the two rows' fixed part and the 80 of a range for each. So the set grows
+    // instead, to a 1000-byte child, and keeps splicing. A cap of 20141 gives splicing up.
     withTempDir { dir =>
       val (path, expected) = writeLaterSetFile(dir, lastTwoBytes = 500)
       def run(maxSplicedBytes: String): Long =
         readUnderCap(path, laterSetSchema, laterSetFilter, maxSplicedBytes, batchSize = 4)._2
 
       val uncapped = run("64MB")
-      assert(run("24142b") == uncapped, "a cap that fits the sizing must keep splicing")
-      assert(run("24141b") == uncapped, "and so must one that only fits growing value by value")
+      assert(run("24222b") == uncapped, "a cap that fits the sizing must keep splicing")
+      assert(run("24221b") == uncapped, "and so must one that only fits growing value by value")
       assert(run("20141b") > uncapped, "a cap under both must give splicing up")
 
-      Seq(Long.MaxValue -> 4000, 24142L -> 4000, 24141L -> 1000).foreach { case (cap, child) =>
+      Seq(Long.MaxValue -> 4000, 24222L -> 4000, 24221L -> 1000).foreach { case (cap, child) =>
         val (rows, secondSet) = readLaterSet(path, cap)
         assert(rows == expected, s"every survivor must come back with its own key under cap $cap")
         assert(secondSet == Seq(child),
           s"under cap $cap the second set's byte child must hold $child bytes; got $secondSet")
       }
+    }
+  }
+
+  test("a later set is sized only when the ranges of its scattered survivors fit too") {
+    // Keys 9 to 12 fill the first set over a capacity of 4, and keys 14 and 17 come scattered, each
+    // in a range of its own. The second set opens at key 14, sized for the four rows the rate
+    // since the first survivor promises, and its sizing is charged up front. So it is sized only
+    // when the cap holds a range for each of those rows as well. Without that, caps of 32216 to
+    // 32221 sized the set and then passed the cap on key 17's range, giving splicing up where a
+    // smaller cap of 32215, which grows the set instead, kept it. For this file, every cap from
+    // the smallest that splices up must splice, and every cap returns the same six rows.
+    withTempDir { dir =>
+      val (path, _) = writeLaterSetFile(dir, lastTwoBytes = 1000)
+      val prefix = Substring(BoundReference(0, StringType, nullable = true), Literal(1), Literal(4))
+      val keys = Seq("0009", "0010", "0011", "0012", "0014", "0017").map(Literal(_))
+      def readUnder(cap: Long): (Int, Long) =
+        readUnderCap(path, laterSetSchema, Seq(In(prefix, keys)), s"${cap}b", batchSize = 4)
+      val (_, uncapped) = readUnder(64L * 1024 * 1024)
+      val (smallerRows, smaller) = readUnder(24221L)
+      assert(smallerRows == 6 && smaller > uncapped, "the smallest cap that splices must be 24222")
+      Seq(24222L, 32215L, 32216L, 32221L, 32222L).foreach { cap =>
+        val (rows, bytes) = readUnder(cap)
+        assert(rows == 6 && bytes == uncapped,
+          s"a cap of $cap must keep the six rows and splicing; got $rows rows")
+      }
+    }
+  }
+
+  test("a sparse last set is sized for the survivors it can expect") {
+    // Every tenth of 125 keys survives, so over a capacity of 4 the fourth set holds key 120 alone.
+    // It opens five rows before the end of the row group, at a rate of 13 survivors in 121 rows, so
+    // it expects one survivor and is sized for one 1000-byte value, which `reserve` doubles to a
+    // 2000-byte child. Sized for the five rows left, as a full set, it would have taken 8000. The
+    // two sets before it are sized as full ones, since the rate promises them four survivors each.
+    withTempDir { dir =>
+      val df = spark.range(0, 125).selectExpr(
+        "CONCAT(LPAD(CAST(id AS STRING), 4, '0'), REPEAT('x', 996)) AS k",
+        "CAST(id AS STRING) AS v")
+      val path = writeSingleParquetFile(dir, df, rowGroupSize = 1024L * 1024)
+      assert(footerOf(path).getBlocks.size == 1, "the fixture must be one row group")
+      val lastDigit =
+        Substring(BoundReference(0, StringType, nullable = true), Literal(4), Literal(1))
+      val (rows, reader) = readAllWith(path, Seq("k", "v"),
+        createFilter(Seq(EqualTo(lastDigit, Literal("0"))), laterSetSchema),
+        (b, i) => (b.column(0).getUTF8String(i).toString.take(4),
+          ParquetTestAccess.byteChildCapacity(b.column(0).asInstanceOf[WritableColumnVector])),
+        capacity = 4)
+      reader.close()
+      assert(rows.map(_._1) == (0 to 120 by 10).map(id => f"$id%04d"), s"got ${rows.map(_._1)}")
+      val children = rows.map(_._2)
+      assert(children.slice(4, 12).distinct == Seq(8000) && children.drop(12) == Seq(2000),
+        s"the sparse last set must be sized for its one survivor; got $children")
     }
   }
 
@@ -1250,16 +1314,9 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       val storageFilters = Seq(And(
         GreaterThanOrEqual(BoundReference(0, LongType, nullable = true), Literal(394L)),
         GreaterThanOrEqual(BoundReference(1, LongType, nullable = true), Literal(0L))))
-      def run(maxSplicedBytes: String): (Int, Long) =
-        readUnderCap(path, schema, storageFilters, maxSplicedBytes, batchSize = 16)
-      val (_, uncapped) = run("64MB")
-      val (rows, atCharge) = run("166b")
-      val (_, underCharge) = run("165b")
-      assert(rows == 7, s"the filter keeps keys 394..400; got $rows")
-      assert(atCharge == uncapped,
-        s"a cap of exactly the charge must keep splicing; got $atCharge against $uncapped")
-      assert(underCharge > uncapped,
-        s"a cap one byte under it must give splicing up; got $underCharge against $uncapped")
+      assertSpliceCharge(166L, rows = 7) { cap =>
+        readUnderCap(path, schema, storageFilters, cap, batchSize = 16)
+      }
     }
   }
 
@@ -1345,7 +1402,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
           And(GreaterThanOrEqual(k, Literal(250L)), LessThanOrEqual(k, Literal(260L))))),
         requested,
         m)
-      val ((result, reader), warned) = withPartialReadWarning {
+      val ((result, reader), warnings) = withLogged(partialReadWarning) {
         readAllWith(path, Seq("k", "v"), filter,
           (b, i) => (b.column(0).getLong(i), b.column(1).getLong(i)))
       }
@@ -1356,7 +1413,8 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         // buffers anything, and the phase-2 read never asks parquet for a narrowed one. Without
         // that, the first partially surviving row group copies its survivors and the exception path
         // throws them away, which is what this WARN reports.
-        assert(!warned, "the footer check must get there before the exception path")
+        assert(warnings == 0,
+          s"the footer check must get there before the exception path; got $warnings")
         assert(m.rowGroupsSkipped.value == 1 && m.rowsExcludedByRowGroup.value == 100,
           s"one row group skipped whole, with its rows counted; got " +
             s"${m.rowGroupsSkipped.value} and ${m.rowsExcludedByRowGroup.value}")
@@ -1396,13 +1454,13 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       val pushed = Seq(sources.In("v", Array[Any](1L, 101L, 201L)))
       // Keeps part of each row group, so a row group that can be narrowed is narrowed.
       val storageFilters = Seq(keyAtLeast(50L))
-      val (values, warned) = withPartialReadWarning {
+      val (values, warnings) = withLogged(partialReadWarning) {
         readLongs(formatReader(schema, pushed, storageFilters), path, ordinal = 1)
       }
       // The footer check gets there before the phase-2 read does, which is what keeps the rest of
       // the file's page filtering. This WARN is what the exception path would have reported.
-      assert(!warned,
-        "the footer check must decline the row group rather than the read discovering it")
+      assert(warnings == 0, "the footer check must decline the row group rather than the read " +
+        s"discovering it; got $warnings")
       // The row group that cannot be narrowed comes back whole, since its filter is given up and
       // the empty store widens its ranges to the block.
       assert((1L to 100L).forall(values.contains),
@@ -1468,31 +1526,6 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     writeBytes(filePath, chunk.getDictionaryPageOffset, rewritten.toByteArray)
   }
 
-  // Two row groups of 100 rows with `v = k * 10`, and a pushed `v IN (x, 1500)`, where `x` falls
-  // between the first two pages of the first row group. Its statistics keep that row group, while
-  // its column index keeps no page of it.
-  private def writeColumnIndexEmptiedFile(dir: File): (String, Seq[sources.Filter]) = {
-    val blocks =
-      (0 until 2).map(b => ((b * 100 + 1L) to (b * 100 + 100L)).map(i => (i, i * 10)))
-    val path = writeParquetFileByHand(dir, blocks, (_, _) => true)
-    (path, Seq(sources.In("v", Array[Any](valueBetweenFirstTwoPages(path), 1500L))))
-  }
-
-  // A value of the long column `v` that falls between the first two pages of the first row group.
-  private def valueBetweenFirstTwoPages(filePath: String): Long =
-    Utils.tryWithResource(ParquetFileReader.open(
-        HadoopInputFile.fromPath(new Path(filePath), spark.sessionState.newHadoopConf()))) {
-      reader =>
-        val index = reader.readColumnIndex(reader.getRowGroups.get(0).getColumns.get(1))
-        def asLong(bytes: java.nio.ByteBuffer): Long =
-          bytes.duplicate().order(java.nio.ByteOrder.LITTLE_ENDIAN).getLong(0)
-        val firstMax = asLong(index.getMaxValues.get(0))
-        val secondMin = asLong(index.getMinValues.get(1))
-        assert(secondMin - firstMax > 1,
-          s"no gap between the first two pages: $firstMax, $secondMin")
-        firstMax + 1
-    }
-
   // Overwrites `length` bytes at `offset` with 0xFF.
   private def overwriteBytes(filePath: String, offset: Long, length: Int): Unit =
     writeBytes(filePath, offset, Array.fill(length)(0xFF.toByte))
@@ -1530,12 +1563,13 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       corruptDataPage(path, column = "k", pageIdx = 4)
 
       // The rows a reader hands back before it throws, what it throws, and, for the filtering
-      // reader, whether its scratch vectors were replaced on the way.
+      // reader, whether its scratch vectors were replaced on the way and the old ones freed. Both
+      // read off heap, where an old scratch vector left open would leak native memory.
       def readUntilFailure(storageFilter: ParquetStorageFilter): (Seq[Long], Throwable, Boolean) = {
         val reader = if (storageFilter == null) {
-          new VectorizedParquetRecordReader(false, 16)
+          new VectorizedParquetRecordReader(true, 16)
         } else {
-          new LateMaterializationParquetRecordReader(false, 16, storageFilter)
+          new LateMaterializationParquetRecordReader(true, 16, storageFilter)
         }
         def scratch: Seq[WritableColumnVector] = reader match {
           case filtering: LateMaterializationParquetRecordReader =>
@@ -1556,7 +1590,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
           } catch {
             case NonFatal(e) => e
           }
-          (read.toSeq, error, scratch.zip(scratchBefore).exists { case (a, b) => a ne b })
+          val replacedAndFreed = scratch.zip(scratchBefore).exists { case (now, before) =>
+            (now ne before) && before.asInstanceOf[OffHeapColumnVector].valuesNativeAddress() == 0
+          }
+          (read.toSeq, error, replacedAndFreed)
         } finally {
           reader.close()
         }
@@ -1575,7 +1612,8 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       // A failed decode can leave the scratch vectors grown. Phase 2 reads the same pages into
       // vectors of its own, so the reader replaces them with capacity-sized ones rather than keep
       // the grown ones for the rest of the split.
-      assert(scratchReplaced, "the decoding fallback must replace the scratch vectors")
+      assert(scratchReplaced,
+        "the decoding fallback must replace the scratch vectors and free the old ones")
 
       // A kill that shows only at the decoding catch, after the per-chunk check has passed, is
       // seen there. Without that catch's own check the row group would fall back and phase 2
@@ -1600,30 +1638,54 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     // what a plain read reads. An `InternalError` from decoding is how a codec like hadoop-lzo
     // reports a corrupt page, which the plain read of the same pages meets again. Raised from the
     // filter instead, the first goes out as its OutOfMemoryError and the second in an
-    // `UnknownError`.
+    // `UnknownError`. Off heap, the scratch vectors the failed decode used must be freed, and the
+    // second row group's phase 1 runs over the ones that replace them.
     withTempDir { dir =>
-      val rows = (0L until 20L).map(i => (i, i.toString))
-      val path = writeParquetFile(dir, rows, rowGroupSize = 64 * 1024L)
-      assert(footerOf(path).getBlocks.size == 1, "the fixture must be one row group")
+      val rows = (0L until 40L).map(i => (i, i.toString))
+      val path = writeSingleParquetFile(dir, rows.toDF("k", "v"),
+        rowGroupSize = ParquetWriter.DEFAULT_BLOCK_SIZE,
+        options = Map(ParquetOutputFormat.BLOCK_ROW_COUNT_LIMIT -> "20"))
+      assert(footerOf(path).getBlocks.asScala.map(_.getRowCount) == Seq(20L, 20L),
+        "the fixture must be two row groups of 20 rows")
       Seq(
         new RuntimeException("Cannot reserve", new OutOfMemoryError("reserve")),
         new InternalError("codec")).foreach { error =>
-        val failing: KeyReaderHook.OnKeyReader = (_, keyReader) => {
-          val failingReader = spy(keyReader)
-          doThrow(error).when(failingReader).readBatch(anyInt(), any(), any(), any())
-          failingReader
+        var failedScratch: Seq[WritableColumnVector] = Nil
+        // Only the first row group's key reader fails.
+        val failing: KeyReaderHook.OnKeyReader = (reader, keyReader) => {
+          if (failedScratch.nonEmpty) {
+            // Checked before phase 1 writes into them, since a freed one would crash the JVM.
+            val scratch = ParquetTestAccess.keyScratchVectors(
+              reader.asInstanceOf[LateMaterializationParquetRecordReader])
+            assert(scratch.forall { v =>
+              !failedScratch.exists(_ eq v) &&
+                v.asInstanceOf[OffHeapColumnVector].valuesNativeAddress() != 0
+            }, "the second row group must decode into new scratch vectors")
+            keyReader
+          } else {
+            failedScratch = ParquetTestAccess.keyScratchVectors(
+              reader.asInstanceOf[LateMaterializationParquetRecordReader])
+            val failingReader = spy(keyReader)
+            doThrow(error).when(failingReader).readBatch(anyInt(), any(), any(), any())
+            failingReader
+          }
         }
         val ((result, reader), warnings) = try {
-          withLogged("decoding its key columns raised an error") {
-            readAll(path, keyAtLeastFilter(10L), onKeyReader = failing)
+          withLogged(decodingGivenUp) {
+            readAll(path, keyAtLeastFilter(30L), useOffHeap = true, onKeyReader = failing)
           }
         } catch {
           // ScalaTest would abort the whole suite on these rather than fail this test.
           case e: VirtualMachineError => fail(s"the reader must fall back on $error; got $e", e)
         }
         try {
-          assert(result == rows, s"the row group must come back whole on $error; got $result")
+          assert(result == rows.take(20) ++ rows.drop(30),
+            s"the first row group must come back whole and the second filtered on $error; got " +
+              s"${result.map(_._1)}")
           assert(warnings == 1, s"the decoding fallback must report $error; got $warnings")
+          assert(failedScratch.forall { v =>
+            v.asInstanceOf[OffHeapColumnVector].valuesNativeAddress() == 0
+          }, s"the scratch vectors of the failed decode must be freed on $error")
         } finally {
           reader.close()
         }
@@ -1705,8 +1767,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         Remainder(BoundReference(0, LongType, nullable = false), Literal(2L)), Literal(0L)))
       def read(storageFilters: Seq[Expression]): Seq[Long] =
         readLongs(formatReader(schema, pushed, storageFilters), path, ordinal = 0)
-      val (filtered, warned) = withPartialReadWarning(read(evenKeys))
-      assert(warned, "the read must have discovered the damaged index, or this test proves nothing")
+      val (filtered, warnings) = withLogged(partialReadWarning)(read(evenKeys))
+      assert(warnings == 1,
+        "the read must have discovered the damaged index, or this test proves nothing; got " +
+          warnings)
       // A plain read of the same query is the bar. The filtering one must never hand the post-scan
       // Filter more rows than that.
       val plain = read(Nil)
@@ -1734,10 +1798,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       val twiceDamaged = writeParquetFileByHand(dir, blocks, (_, _) => true)
       breakOffsetIndex(twiceDamaged, blockIdx = 0, columnIdx = 0)
       breakOffsetIndex(twiceDamaged, blockIdx = 1, columnIdx = 0)
-      val (_, warnings) = withLogged(partialReadWarning) {
+      val (_, twiceWarned) = withLogged(partialReadWarning) {
         readLongs(formatReader(schema, pushed, evenKeys), twiceDamaged, ordinal = 0)
       }
-      assert(warnings == 1, s"two damaged row groups must be reported once; got $warnings")
+      assert(twiceWarned == 1, s"two damaged row groups must be reported once; got $twiceWarned")
     }
   }
 
@@ -1755,7 +1819,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       val killsAt202 = EqualTo(Remainder(
         OnKey(BoundReference(0, LongType, nullable = false), at = 202L, killsTask = true),
         Literal(2L)), Literal(0L))
-      val (thrown, warned) = withPartialReadWarning {
+      val (thrown, warnings) = withLogged(partialReadWarning) {
         asTask(TaskContext.empty()) {
           intercept[SparkException] {
             readLongs(formatReader(schema, pushed, Seq(killsAt202)), path, ordinal = 0)
@@ -1763,7 +1827,8 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         }
       }
       assert(thrown.getCause.isInstanceOf[TaskKilledException], s"got $thrown")
-      assert(!warned, "the kill must not be logged as an unreadable offset index")
+      assert(warnings == 0,
+        s"the kill must not be logged as an unreadable offset index; got $warnings")
     }
   }
 
@@ -3022,7 +3087,13 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
           "the first batch must be spliced, or this proves nothing")
         assert(reader.nextBatch())
         assert(address(firstKeys) == 0, "a spliced batch's keys must be freed by the next batch")
+        // Closed mid-read, with one set published and more queued, which `close()` frees too.
+        val publishedKeys = reader.resultBatch().column(0)
+        val queued = ParquetTestAccess.queuedSurvivorSets(reader)
+        assert(queued.nonEmpty, "sets must still be queued at close, or this proves nothing")
         reader.close()
+        assert(address(publishedKeys) == 0 && queued.flatten.forall(v => address(v) == 0),
+          "the published and the queued survivor sets must be freed at close")
         assert(address(persistentKeys) == 0, "the persistent key vector must be freed at close")
         assert(scratch.forall(v => address(v) == 0), "and so must the scratch vectors")
       } finally {
@@ -3096,6 +3167,31 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   }
 
   // ----- Page-level pushedFilterRanges (a strict subset of the row group) -----
+
+  // Two row groups of 100 rows with `v = k * 10`, and a pushed `v IN (x, 1500)`, where `x` falls
+  // between the first two pages of the first row group. Its statistics keep that row group, while
+  // its column index keeps no page of it.
+  private def writeColumnIndexEmptiedFile(dir: File): (String, Seq[sources.Filter]) = {
+    val blocks =
+      (0 until 2).map(b => ((b * 100 + 1L) to (b * 100 + 100L)).map(i => (i, i * 10)))
+    val path = writeParquetFileByHand(dir, blocks, (_, _) => true)
+    (path, Seq(sources.In("v", Array[Any](valueBetweenFirstTwoPages(path), 1500L))))
+  }
+
+  // A value of the long column `v` that falls between the first two pages of the first row group.
+  private def valueBetweenFirstTwoPages(filePath: String): Long =
+    Utils.tryWithResource(ParquetFileReader.open(
+        HadoopInputFile.fromPath(new Path(filePath), spark.sessionState.newHadoopConf()))) {
+      reader =>
+        val index = reader.readColumnIndex(reader.getRowGroups.get(0).getColumns.get(1))
+        def asLong(bytes: java.nio.ByteBuffer): Long =
+          bytes.duplicate().order(java.nio.ByteOrder.LITTLE_ENDIAN).getLong(0)
+        val firstMax = asLong(index.getMaxValues.get(0))
+        val secondMin = asLong(index.getMinValues.get(1))
+        assert(secondMin - firstMax > 1,
+          s"no gap between the first two pages: $firstMax, $secondMin")
+        firstMax + 1
+    }
 
   test("a row group the pushed filter narrowed and the storage filter emptied: rows and bytes " +
     "add up") {

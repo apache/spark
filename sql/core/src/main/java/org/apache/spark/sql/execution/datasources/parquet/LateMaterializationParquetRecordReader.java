@@ -494,7 +494,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     // with. Released here rather than at the next assignment, so a row group the filter empties,
     // or the end of the file, does not keep the previous one's pages alive. Its column readers go
     // too. They hold the row ranges it was read over, which the budget no longer counts, and the
-    // dictionary and decoders of their last page.
+    // decoders of their last page.
     closeDataPages();
     releaseRowGroupReaders();
     StorageFilterMetrics m = storageFilter.metrics();
@@ -739,6 +739,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     long splicedBytes = 0L;
     long rangeBytes = 0L;
     long previousSurvivor = -2L;
+    long survivors = 0L;
+    long firstSurvivorAt = 0L;
     long cap = storageFilter.maxSplicedRowGroupBytes();
     // Out of the loop, because reaching it through the filter resolves a `lazy val`, which is a
     // volatile read the loop would pay per row.
@@ -798,13 +800,18 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
           return null;
         }
         finalRangesBuilder.addSelectedRow(blockRow);
+        long rowsBefore = pushedFilterRowCount - remaining + r;
+        if (survivors++ == 0) firstSurvivorAt = rowsBefore;
         if (blockRow != previousSurvivor + 1) rangeBytes += ROW_RANGE_BYTES;
         previousSurvivor = blockRow;
         if (spliceCurrentRowGroup) {
           try {
             if (currentKeyAccumulators == null) {
-              splicedBytes +=
-                  allocateKeyAccumulators(cap - splicedBytes - rangeBytes, remaining - r);
+              // The survivors from this one on, at the rate seen since the first one, so that rows
+              // before it, which a clustered key leaves, do not dilute the rate.
+              long expected = (long) Math.ceil(
+                  (double) survivors * (remaining - r) / (rowsBefore - firstSurvivorAt + 1));
+              splicedBytes += allocateKeyAccumulators(cap - splicedBytes - rangeBytes, expected);
             }
             splicedBytes += appendSurvivorRowToAccumulators(r);
           } catch (RuntimeException e) {
@@ -882,17 +889,23 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
    * Allocates a set of accumulators, {@link #capacity} rows each, and returns the charge for the
    * byte children it sized up front. The rest of the set is charged per row as survivors arrive.
    * A variable-length key's byte child is reserved for what the set queued before it held, scaled
-   * to the {@code rowsLeft} rows that can still reach this set, where that is more than its default
+   * to the {@code expectedRows} survivors this set can expect, where that is more than its default
    * allocation. So it does not grow one doubling at a time for every capacity's worth of
-   * survivors. With its default doubling, {@code reserve} takes twice what it is asked for, so
-   * with its null bytes the child takes the factor's four bytes per value byte. That happens only
-   * when the charge and the fixed part of those rows fit within {@code headroom}, what the cap
-   * leaves. The memory is taken before any value arrives, so it is charged now, as if those values
-   * had arrived, and the values written into it use that charge up before they add to it.
+   * survivors, and a sparse last set is not sized as a full one. With its default doubling,
+   * {@code reserve} takes twice what it is asked for, so with its null bytes the child takes the
+   * factor's four bytes per value byte. That happens only when the charge fits within
+   * {@code headroom}, what the cap leaves, together with the fixed part and a range of each of
+   * those rows, since a scattered survivor adds a range. So the rows the set is sized for stay
+   * within the cap. The sizing is a prediction, though. A set sized for values longer than the
+   * ones that then arrive keeps the unused part charged, since its child holds that memory. So a
+   * larger cap can still give splicing up where a smaller one, which grew the set instead, keeps
+   * splicing. That costs one more read of the key columns, never a different answer. The memory
+   * is taken before any value arrives, so it is charged now, as if those values had arrived, and
+   * the values written into it use that charge up before they add to it.
    */
-  private long allocateKeyAccumulators(long headroom, long rowsLeft) {
+  private long allocateKeyAccumulators(long headroom, long expectedRows) {
     WritableColumnVector[] previous = survivorBatches.peekLast();
-    int rows = (int) Math.min(capacity, rowsLeft);
+    int rows = (int) Math.min(capacity, expectedRows);
     int[] sizeTo = new int[keyColumns.length];
     long charge = 0L;
     for (int i = 0; i < keyColumns.length; i++) {
@@ -905,7 +918,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
       }
     }
     // A set that is not sized up front grows as the first one does, charged value by value.
-    boolean sizeUpFront = charge + (long) keyFixedBytesPerRow * rows <= headroom;
+    boolean sizeUpFront = charge + (keyFixedBytesPerRow + ROW_RANGE_BYTES) * rows <= headroom;
     // Assigned before the loop, so an allocation failure part way through leaves the vectors
     // allocated so far reachable for `abandonSplicing`.
     currentKeyAccumulators = new WritableColumnVector[keyColumns.length];
