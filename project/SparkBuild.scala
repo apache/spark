@@ -1815,7 +1815,6 @@ object Unidoc {
         "-noqualifier", "java.lang",
         "-tag", """example:a:Example\:""",
         "-tag", """note:a:Note\:""",
-        "-tag", """implNote:a:Implementation Note\:""",
         "-tag", "group:X",
         "-tag", "tparam:X",
         "-tag", "constructor:X",
