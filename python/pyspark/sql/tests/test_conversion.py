@@ -390,7 +390,7 @@ class PandasToArrowConversionTests(unittest.TestCase):
 
         arrow_out = _check_series_convert_timestamps_internal(arrow_ser, tz)
         numpy_out = _check_series_convert_timestamps_internal(numpy_ser, tz)
-        self.assertEqual(str(arrow_out.iloc[0]), str(numpy_out.iloc[0]))
+        self.assertEqual(arrow_out.iloc[0], numpy_out.iloc[0])
         self.assertTrue(pd.isna(arrow_out.iloc[1]))
 
         # DST-ambiguous values resolve to standard time, like numpy.
@@ -402,7 +402,7 @@ class PandasToArrowConversionTests(unittest.TestCase):
         numpy_amb = _check_series_convert_timestamps_internal(
             pd.Series(ambiguous, dtype="datetime64[ns]"), ny
         )
-        self.assertEqual(str(arrow_amb.iloc[0]), str(numpy_amb.iloc[0]))
+        self.assertEqual(arrow_amb.iloc[0], numpy_amb.iloc[0])
 
         # A tz-aware column must not be re-localized with the session timezone.
         ny = "America/New_York"
@@ -413,20 +413,20 @@ class PandasToArrowConversionTests(unittest.TestCase):
         aware_numpy = pd.Series(values, dtype="datetime64[ns]").dt.tz_localize(ny)
         aware_arrow_out = _check_series_convert_timestamps_internal(aware_arrow, tz)
         aware_numpy_out = _check_series_convert_timestamps_internal(aware_numpy, tz)
-        self.assertEqual(str(aware_arrow_out.iloc[0]), str(aware_numpy_out.iloc[0]))
-        self.assertEqual(str(aware_arrow_out.iloc[0]), "2020-01-01 17:00:00+00:00")
+        self.assertEqual(aware_arrow_out.iloc[0], aware_numpy_out.iloc[0])
+        self.assertEqual(aware_arrow_out.iloc[0], pd.Timestamp("2020-01-01 17:00:00", tz="UTC"))
         self.assertTrue(pd.isna(aware_arrow_out.iloc[1]))
 
         # Zone ids pyarrow rejects must still match numpy.
         for tz in ("UTC+01:00", "+01:00:30"):
             arrow_out = _check_series_convert_timestamps_internal(arrow_ser, tz)
             numpy_out = _check_series_convert_timestamps_internal(numpy_ser, tz)
-            self.assertEqual(str(arrow_out.iloc[0]), str(numpy_out.iloc[0]), f"Failed for {tz}")
+            self.assertEqual(arrow_out.iloc[0], numpy_out.iloc[0], f"Failed for {tz}")
 
         # timezone=None uses the local timezone, like numpy.
         self.assertEqual(
-            str(_check_series_convert_timestamps_internal(arrow_ser, None).iloc[0]),
-            str(_check_series_convert_timestamps_internal(numpy_ser, None).iloc[0]),
+            _check_series_convert_timestamps_internal(arrow_ser, None).iloc[0],
+            _check_series_convert_timestamps_internal(numpy_ser, None).iloc[0],
         )
 
     def test_from_pandas(self):

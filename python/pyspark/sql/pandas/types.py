@@ -770,6 +770,7 @@ def _check_series_convert_timestamps_internal(
 
     require_minimum_pandas_version()
 
+    import numpy as np
     import pandas as pd
     import pyarrow as pa
     import pyarrow.compute as pc
@@ -822,7 +823,7 @@ def _check_series_convert_timestamps_internal(
             # Unparseable zone ids (e.g. "UTC+01:00") and nonexistent times use the numpy branch.
             unit = s.dtype.pyarrow_dtype.unit
             return _check_series_convert_timestamps_internal(
-                s.astype(f"datetime64[{unit}]"), timezone
+                s.astype(np.dtype(f"datetime64[{unit}]")), timezone
             )
         return pd.Series(
             pd.arrays.ArrowExtensionArray(localized), index=s.index, name=s.name
