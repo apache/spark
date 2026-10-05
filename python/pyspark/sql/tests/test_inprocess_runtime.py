@@ -416,7 +416,8 @@ class InProcessRuntimeTests(unittest.TestCase):
                     self.assertEqual(result.type, expected)
 
     def test_equivalent_representations_are_cast_to_the_declared_type(self):
-        strings = pa.array(["a", None, "bc"])
+        # A value longer than 12 bytes gives views a variadic data buffer.
+        strings = pa.array(["a", None, "a value longer than twelve bytes"])
         cases = [
             (pa.array([[1], None, [2, 3]], pa.large_list(pa.int64())), pa.list_(pa.int64())),
             (pa.array([[1, 2], None, [3, 4]], pa.list_(pa.int64(), 2)), pa.list_(pa.int64())),

@@ -188,26 +188,43 @@ def _has_offsets_buffers(array: pa.Array) -> bool:
     return all(_has_offsets_buffers(child) for child in _child_arrays(array))
 
 
-def _repair_offsets(array: pa.Array) -> Optional[pa.Array]:
-    """Return a copy whose zero-length levels have offsets buffers, or None if unchanged.
+def _rebuild(
+    array: pa.Array,
+    level: Callable[[pa.Array], Optional[pa.Array]],
+    nullable_fields: bool = False,
+) -> Optional[pa.Array]:
+    """Rebuild ``array`` around the levels that ``level`` replaces, or return None if none.
 
-    Arrow permits a zero-length variable-width, list or map array without an offsets buffer,
-    or with a zero-size one, e.g. from PyArrow's IPC reader. Concatenation can crash on it,
-    and Arrow Java reads past it. Validation already rejects such buffers at other lengths.
+    ``level`` returns a replacement for a level, or None to look at its children instead.
+    Ancestors of a replaced level keep their own buffers. With ``nullable_fields``, rebuilt
+    levels have nullable fields, and maps become the equivalent lists of entries, so that
+    they can hold nulls under null parents whatever the replaced children are.
     """
+    replaced = level(array)
+    if replaced is not None:
+        return replaced
     data_type = array.type
-    if len(array) == 0:
-        return None if _has_offsets_buffers(array) else pa.array([], type=data_type)
     children = _child_arrays(array)
-    repaired = [_repair_offsets(child) for child in children]
-    if all(child is None for child in repaired):
+    rebuilt = [_rebuild(child, level, nullable_fields) for child in children]
+    if all(child is None for child in rebuilt):
         return None
-    children = [child if new is None else new for child, new in zip(children, repaired)]
+    children = [child if new is None else new for child, new in zip(children, rebuilt)]
     if pa.types.is_struct(data_type):
+        fields = [f.with_type(c.type) for f, c in zip(data_type, children)]
+        if nullable_fields:
+            fields = [f.with_nullable(True) for f in fields]
         mask = array.is_null() if array.null_count else None
-        return pa.StructArray.from_arrays(children, fields=list(data_type), mask=mask)
+        return pa.StructArray.from_arrays(children, fields=fields, mask=mask)
     if pa.types.is_dictionary(data_type):
         return pa.DictionaryArray.from_arrays(array.indices, children[0])
+    if nullable_fields:
+        child = pa.field("item", children[0].type)
+        if pa.types.is_fixed_size_list(data_type):
+            data_type = pa.list_(child, data_type.list_size)
+        elif pa.types.is_large_list(data_type):
+            data_type = pa.large_list(child)
+        else:
+            data_type = pa.list_(child)
     return pa.Array.from_buffers(
         data_type,
         len(array),
@@ -216,6 +233,22 @@ def _repair_offsets(array: pa.Array) -> Optional[pa.Array]:
         offset=array.offset,
         children=children,
     )
+
+
+def _repair_offsets(array: pa.Array) -> Optional[pa.Array]:
+    """Return a copy whose zero-length levels have offsets buffers, or None if unchanged.
+
+    Arrow permits a zero-length variable-width, list or map array without an offsets buffer,
+    or with a zero-size one, e.g. from PyArrow's IPC reader. Concatenation can crash on it,
+    and Arrow Java reads past it. Validation already rejects such buffers at other lengths.
+    """
+
+    def level(array: pa.Array) -> Optional[pa.Array]:
+        if len(array) == 0 and not _has_offsets_buffers(array):
+            return pa.array([], type=array.type)
+        return None
+
+    return _rebuild(array, level)
 
 
 def _canonical_type(data_type: pa.DataType) -> pa.DataType:
@@ -270,46 +303,25 @@ def _strings_as_binary(array: pa.Array) -> Optional[pa.Array]:
     """Rebind each string level as binary over the same buffers, or return None if none.
 
     Full validation then checks every offset, but not UTF-8: Spark strings may hold invalid
-    UTF-8, which workers accept too. Unlike ``Array.view``, the rebound levels are nullable,
-    so null children under null parents of non-nullable fields pass, as Spark writes them,
-    and each level keeps its own length. Maps are rebound as the equivalent lists of
-    entries; ``Array.validate`` already rejects null keys.
+    UTF-8, which workers accept too. Unlike ``Array.view`` of the whole array, the rebound
+    levels are nullable, so null children under null parents of non-nullable fields pass, as
+    Spark writes them, and each level keeps its own length. ``Array.validate`` already
+    rejects null map keys.
     """
-    data_type = array.type
-    if pa.types.is_string(data_type) or pa.types.is_large_string(data_type):
-        binary = pa.binary() if pa.types.is_string(data_type) else pa.large_binary()
-        return pa.Array.from_buffers(
-            binary, len(array), array.buffers()[:3], array.null_count, array.offset
-        )
-    if pa.types.is_string_view(data_type):
-        return pa.Array.from_buffers(
-            pa.binary_view(), len(array), array.buffers(), array.null_count, array.offset
-        )
-    children = _child_arrays(array)
-    rebound = [_strings_as_binary(child) for child in children]
-    if all(child is None for child in rebound):
+
+    def level(array: pa.Array) -> Optional[pa.Array]:
+        data_type = array.type
+        if pa.types.is_string(data_type) or pa.types.is_large_string(data_type):
+            binary = pa.binary() if pa.types.is_string(data_type) else pa.large_binary()
+            return pa.Array.from_buffers(
+                binary, len(array), array.buffers()[:3], array.null_count, array.offset
+            )
+        if pa.types.is_string_view(data_type):
+            # A leaf has no fields; from_buffers accepts variadic buffers only in PyArrow 19.
+            return array.view(pa.binary_view())
         return None
-    children = [child if new is None else new for child, new in zip(children, rebound)]
-    if pa.types.is_struct(data_type):
-        mask = array.is_null() if array.null_count else None
-        return pa.StructArray.from_arrays(children, names=[f.name for f in data_type], mask=mask)
-    if pa.types.is_dictionary(data_type):
-        return pa.DictionaryArray.from_arrays(array.indices, children[0])
-    child = pa.field("item", children[0].type)
-    if pa.types.is_fixed_size_list(data_type):
-        rebound_type = pa.list_(child, data_type.list_size)
-    elif pa.types.is_large_list(data_type):
-        rebound_type = pa.large_list(child)
-    else:
-        rebound_type = pa.list_(child)
-    return pa.Array.from_buffers(
-        rebound_type,
-        len(array),
-        array.buffers()[: data_type.num_buffers],
-        array.null_count,
-        array.offset,
-        children=children,
-    )
+
+    return _rebuild(array, level, nullable_fields=True)
 
 
 # The predicate is deliberately conservative: hidden nulls may request a check, but a
@@ -405,15 +417,8 @@ def _null_checker(expected_type: pa.DataType) -> Optional[NullChecker]:
 
 
 def _has_offset(array: pa.Array) -> bool:
-    if array.offset:
-        return True
-    if pa.types.is_struct(array.type):
-        return any(_has_offset(array.field(i)) for i in range(array.type.num_fields))
-    if pa.types.is_list(array.type) or pa.types.is_large_list(array.type):
-        return _has_offset(array.values)
-    if pa.types.is_map(array.type):
-        return _has_offset(array.values)
-    return False
+    # Dictionaries, fixed-size lists and views are cast away before this is called.
+    return bool(array.offset) or any(_has_offset(c) for c in _child_arrays(array))
 
 
 def _with_schema(array: pa.Array, expected_type: pa.DataType) -> pa.Array:
