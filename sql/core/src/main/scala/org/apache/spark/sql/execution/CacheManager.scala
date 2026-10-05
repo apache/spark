@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.datasources.{
   HadoopFsRelation,
   LogicalRelation,
   LogicalRelationWithTable}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, ChangelogTable, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
 import org.apache.spark.sql.execution.python.InProcessPythonUDFBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
@@ -444,7 +444,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private def tryRefreshPlan(spark: SparkSession, plan: LogicalPlan): Option[LogicalPlan] = {
     try {
       EliminateSubqueryAliases(plan) match {
-        case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
+        case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
+            if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] =>
           val table = CatalogV2Util.getTable(catalog, ident, options = r.options)
           if (r.table.id == table.id) {
             Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), r.options))
@@ -469,9 +470,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       resolver: Resolver): Option[LogicalPlan] = {
     val name = ident.toQualifiedNameParts(catalog)
     val cachedRelations = findCachedRelations(name, resolver)
+    // Changelog loads have their own context and state options, so they cannot supply an
+    // ordinary table's metadata even when the catalog and identifier match.
     val cachedRelation = cachedRelations.collectFirst {
       case r: DataSourceV2Relation
-          if r.catalog.contains(catalog) && r.identifier.contains(ident) &&
+          if !r.table.isInstanceOf[ChangelogTable] &&
+            r.catalog.contains(catalog) && r.identifier.contains(ident) &&
             tableId.forall(_ == r.table.id) &&
             CatalogV2Util.extractTableStateOptions(catalog, r.options) == stateOptions =>
         r

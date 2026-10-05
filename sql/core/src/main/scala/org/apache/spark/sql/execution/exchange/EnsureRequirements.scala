@@ -139,10 +139,20 @@ case class EnsureRequirements(
               // OrderedDistribution requires grouped KeyedPartitioning with sorted keys
               // according to the distribution's ordering.
               val satisfyingKeyedPartitioning = resolution.fold(identity, _._1)
-              // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees
-              // one attribute per partition expression.
-              val attrs = satisfyingKeyedPartitioning.expressions.flatMap(_.references)
-              val keyRowOrdering = RowOrdering.create(o.ordering, attrs)
+              // A key row holds the values of the partition expressions. `keysSatisfy` admits a
+              // partitioning here only when those expressions are the ordering's, position by
+              // position, so each sort order reads its position of the key row. The expression
+              // need not be a bare column. A join can report the other side's join key, e.g.
+              // `100 - b`.
+              assert(o.areAllClusterKeysMatched(satisfyingKeyedPartitioning.expressions),
+                "the partition expressions must be the ordering's, position by position")
+              val keyRowOrdering = RowOrdering.create(
+                o.ordering.zip(satisfyingKeyedPartitioning.keyDataTypes).zipWithIndex.map {
+                  case ((order, dataType), i) =>
+                    order.copy(child = BoundReference(i, dataType, nullable = true),
+                      sameOrderExpressions = Seq.empty)
+                },
+                Nil)
               val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
               val keys = satisfyingKeyedPartitioning.partitionKeys
               // An empty zip is vacuously sorted, which is the answer for a single key.
@@ -367,25 +377,28 @@ case class EnsureRequirements(
     val shouldConsiderMinParallelism = children.zip(specs).forall { case (child, spec) =>
       spec.forall(!_.canCreatePartitioning) || child.isInstanceOf[ShuffleExchangeLike]
     }
-    // Choose all the specs that can be used to shuffle other children
-    val candidateSpecs = children.zip(specs).collect {
-      case (child, Some(spec)) if spec.canCreatePartitioning &&
-          (!shouldConsiderMinParallelism ||
-            child.outputPartitioning.numPartitions >= conf.defaultNumShufflePartitions) =>
-        child -> spec
+    // Choose all the children whose spec can be used to shuffle other children, each with the
+    // members that can serve as the layout. Any other member would build a partitioning its own
+    // child is not laid out on, and it does not count towards the ranking below either.
+    val candidateSpecs = children.zip(specs).flatMap {
+      case (child, Some(spec)) if !shouldConsiderMinParallelism ||
+          child.outputPartitioning.numPartitions >= conf.defaultNumShufflePartitions =>
+        val members = spec.flatten.filter(_.canCreatePartitioning)
+        if (members.nonEmpty) Some(child -> members) else None
+      case _ => None
     }
     // Rank on two things at once. A child with no `ShuffleExchangeLike` node comes first, since
     // keeping it costs nothing. For instance, if we have:
     //   A: (No_Exchange, 100) <---> B: (Exchange, 120)
     // it's better to pick A and change B to (Exchange, 100) instead of picking B and insert a
     // new shuffle for A. Then the best parallelism decides, and for a collection that is the best
-    // any member offers, since a collection has no count of its own.
+    // any serving member offers, since a collection has no count of its own.
     //
     // What the winner contributes is its members, the alternatives the layout is picked from below.
     // Empty when no child can serve as the layout.
-    val bestMembers: Seq[LeafShuffleSpec] = candidateSpecs.maxByOption { case (child, spec) =>
-      (!child.isInstanceOf[ShuffleExchangeLike], spec.flatten.map(_.numPartitions).max)
-    }.toSeq.flatMap(_._2.flatten)
+    val bestMembers: Seq[LeafShuffleSpec] = candidateSpecs.maxByOption { case (child, members) =>
+      (!child.isInstanceOf[ShuffleExchangeLike], members.map(_.numPartitions).max)
+    }.toSeq.flatMap(_._2)
 
     // A `ShuffleSpecCollection` answers `isCompatibleWith` if *any* of its members does, so the
     // winner alone does not say which member the sides agreed on. The projection pushed into a
@@ -398,7 +411,7 @@ case class EnsureRequirements(
     val pairings: Seq[(LeafShuffleSpec, Seq[Option[LeafShuffleSpec]])] = bestMembers.map { member =>
       member -> childMembers.map(_.find(member.isCompatibleWith))
     }
-    // Which children the winner reaches at all, over all of its members.
+    // Which children the winner reaches at all, over all of its serving members.
     val reached: Seq[Boolean] = pairings.map(_._2).transpose.map(_.exists(_.isDefined))
     // The member picked has to pair with every child the winner reaches. A child it does not
     // reach, and a child that is not in the decision, are shuffled whichever member wins, so
@@ -527,15 +540,17 @@ case class EnsureRequirements(
           .orElse(reorderJoinKeysRecursively(
             leftKeys, rightKeys, leftPartitioning, None))
       case (Some(kp: KeyedPartitioning), _) =>
-        // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
-        // attribute per partition expression.
+        // A scan reports one column per partition expression. A side a join laid out on another
+        // side's keys can report an expression over several, e.g. `b + c`. `reorder` then sees
+        // more columns than keys and gives up.
         val leafExprs = kp.expressions.flatMap(_.references)
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, leftKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, None, rightPartitioning))
       case (_, Some(kp: KeyedPartitioning)) =>
-        // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
-        // attribute per partition expression.
+        // A scan reports one column per partition expression. A side a join laid out on another
+        // side's keys can report an expression over several, e.g. `b + c`. `reorder` then sees
+        // more columns than keys and gives up.
         val leafExprs = kp.expressions.flatMap(_.references)
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, rightKeys)
             .orElse(reorderJoinKeysRecursively(
@@ -1121,9 +1136,11 @@ case class EnsureRequirements(
       // the skew of joining on keys that are coarser than the join keys. Key order and duplicated
       // cluster keys don't matter.
       def allClusterKeysCovered: Boolean =
-        // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
-        // attribute per partition expression.
-        distribution.allClusterKeysAmong(partitioning.expressions.flatMap(_.references))
+        // Only an expression over a single column covers that column. One over several, e.g.
+        // `b + c`, maps to no position (`KeyedShuffleSpec.keyPositions`). The spec turns it away
+        // or projects it away, so its columns are not covered.
+        distribution.allClusterKeysAmong(
+          partitioning.expressions.filter(_.references.size == 1).flatMap(_.references))
 
       // The coverage requirement is a comparison of expressions, while `keysMaySatisfy` can end in
       // a projection of the partition keys, so the cheap question is asked first. The requirement

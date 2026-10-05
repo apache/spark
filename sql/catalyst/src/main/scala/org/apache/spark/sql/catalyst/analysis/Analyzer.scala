@@ -60,7 +60,7 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.internal.connector.V1Function
@@ -138,6 +138,8 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  * @param tableCache A mapping from (catalog, identifier, time travel spec, table-state options) to
  *                   concrete tables. This pins one table state while allowing references to keep
  *                   different read-specific options.
+ * @param changelogCache A mapping from (catalog, identifier, changelog context, state options) to
+ *                       changelog metadata. References retain their own scan options.
  * @param referredTempViewNames All the temp view names referred by the current view we are
  *                              resolving. It's used to make sure the relation resolution is
  *                              consistent between view creation and view resolution. For example,
@@ -159,6 +161,7 @@ case class AnalysisContext(
     maxNestedViewDepth: Int = -1,
     relationCache: mutable.Map[RelationCacheKey, LogicalPlan] = mutable.Map.empty,
     tableCache: mutable.Map[TableCacheKey, Table] = mutable.Map.empty,
+    changelogCache: mutable.Map[ChangelogCacheKey, ChangelogTable] = mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     // 1. If we are resolving a view, this field will be restored from the view metadata,
     //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.
@@ -166,6 +169,20 @@ case class AnalysisContext(
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
+    // Like `referredTempFunctionNames`, this is populated only by fixed-point analysis (by
+    // `ResolveIdentifierClause`, the sole writer). A temporary view, temporary ALTER VIEW, or
+    // CACHE TABLE AS SELECT stores the names in its metadata so they resolve when the stored view
+    // text is analyzed again. A persisted CREATE/ALTER VIEW instead rejects them -- usually in
+    // `ResolveIdentifierClause` while resolving the body, and otherwise (e.g. an IDENTIFIER nested
+    // in a scalar subquery) by persisted-view validation: `verifyTemporaryObjectsNotExists`, which
+    // the v1 runnable commands call while executing and the v2 commands reach during analysis via
+    // `CheckViewReferences`. When `spark.sql.legacy.allowSessionVariableInPersistedView` is set,
+    // the persisted paths simply discard the set. The single-pass resolver has no IDENTIFIER-clause
+    // resolution of its own, so there is no second writer to keep in sync. LinkedHashSet keeps
+    // insertion order so the recorded names (and any error naming them) are deterministic when more
+    // than one variable is read via an IDENTIFIER clause.
+    referredTempVariableNamesUnderIdentifier: mutable.Set[Seq[String]] =
+      mutable.LinkedHashSet.empty,
     outerPlan: Option[LogicalPlan] = None,
     collation: Option[String] = None,
 
@@ -254,9 +271,14 @@ object AnalysisContext {
       maxNestedViewDepth = maxNestedViewDepth,
       relationCache = originContext.relationCache,
       tableCache = originContext.tableCache,
+      changelogCache = originContext.changelogCache,
       referredTempViewNames = viewDesc.viewReferredTempViewNames,
       referredTempFunctionNames = mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
       referredTempVariableNames = viewDesc.viewReferredTempVariableNames,
+      // Reset rather than share: a temporary nested view records its own IDENTIFIER-clause
+      // variables in its own metadata, and a persisted one does not carry them at all, so in
+      // neither case may they be attributed to the object whose creation is driving this analysis.
+      referredTempVariableNamesUnderIdentifier = mutable.LinkedHashSet.empty,
       collation = viewDesc.collation)
     context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)
     set(context)
@@ -270,6 +292,13 @@ object AnalysisContext {
       resolutionPathEntries = function.functionStoredResolutionPath
         .map(CatalogManager.deserializePathEntriesOrFail(
           _, "SQL function", function.name.unquotedString)),
+      // Unlike `withAnalysisContext(viewDesc)`, do NOT reset this accumulator. A SQL function has
+      // no IDENTIFIER-variable metadata of its own, so a variable its body reads through IDENTIFIER
+      // clause is part of the enclosing object's definition (e.g. the temporary view or CACHE TABLE
+      // AS SELECT that selects the function), and must be recorded there. Sharing the caller's set
+      // records it; a nested view, by contrast, stores its own and so is reset.
+      referredTempVariableNamesUnderIdentifier =
+        originContext.referredTempVariableNamesUnderIdentifier,
       collation = function.collation)
     set(context)
     try f finally { set(originContext) }
@@ -498,6 +527,53 @@ class Analyzer(
 
   private def executeSameContext(plan: LogicalPlan): LogicalPlan =
     runWithSessionConf(super.execute(plan))
+
+  /**
+   * Like [[executeAndCheck]], but also returns the temporary variables recorded via IDENTIFIER
+   * clauses during this analysis (`AnalysisContext.referredTempVariableNamesUnderIdentifier`).
+   *
+   * Those variables are absent from the analyzed plan (the placeholder is replaced by the plan
+   * built from the evaluated name), and the accumulator that holds them is discarded when the
+   * analysis scope exits. A caller that separately validates a freshly analyzed body against
+   * persisted-view rules (metric-view creation) therefore cannot recover them afterwards, so this
+   * entry point reads them inside the owning scope and freezes them into the returned result.
+   *
+   * When single-pass resolution is forced on, this defers to [[executeAndCheck]] so the configured
+   * routing is preserved: the only caller analyzes a metric-view placeholder, which is explicitly
+   * unsupported by the single-pass resolver, and forced mode must surface that incompatibility
+   * rather than silently succeeding through fixed-point analysis (no IDENTIFIER variables are
+   * captured on that path -- the call fails before persisted-view validation is reached).
+   * Otherwise it runs the fixed-point analyzer directly, in a context it owns so the accumulator
+   * stays readable.
+   */
+  def executeAndCheckReferredTempVariablesUnderIdentifier(
+      plan: LogicalPlan,
+      tracker: QueryPlanningTracker): (LogicalPlan, Seq[Seq[String]]) = {
+    if (plan.analyzed) {
+      (plan, Seq.empty)
+    } else if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED)) {
+      (executeAndCheck(plan, tracker), Seq.empty)
+    } else {
+      def analyze(): (LogicalPlan, Seq[Seq[String]]) = AnalysisHelper.markInAnalyzer {
+        val analyzed = QueryPlanningTracker.withTracker(tracker) {
+          executeSameContext(plan)
+        }
+        // Read the accumulator before the surrounding context is reset / restored below.
+        val referredTempVariablesUnderIdentifier =
+          AnalysisContext.get.referredTempVariableNamesUnderIdentifier.toSeq
+        checkAnalysis(analyzed)
+        (analyzed, referredTempVariablesUnderIdentifier)
+      }
+      if (AnalysisContext.get.isDefault) {
+        AnalysisContext.reset()
+        try analyze() finally AnalysisContext.reset()
+      } else {
+        AnalysisContext.withNewAnalysisContext {
+          analyze()
+        }
+      }
+    }
+  }
 
   def resolver: Resolver = conf.resolver
 
@@ -1151,7 +1227,7 @@ class Analyzer(
       case view: View if !view.child.resolved =>
         ViewResolution
           .resolve(view, options, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
-      // V2TableReference is a placeholder for DSv2 tables that needs to be resolved to
+      // V2Reference is a placeholder for DSv2 tables or changelogs that must be resolved to
       // DataSourceV2Relation on each view access. Only dataframe temp view may contain it
       // as it stores resolved plans directly.
       case view: View if view.isTempViewStoringAnalyzedPlan =>
@@ -1161,7 +1237,7 @@ class Analyzer(
       case _ => plan
     }
 
-    // Unwrap temp views storing analyzed plans and resolve V2TableReference nodes in the child.
+    // Unwrap temp views storing analyzed plans and resolve V2Reference nodes in the child.
     private def unwrapRelationPlan(plan: LogicalPlan): LogicalPlan = {
       EliminateSubqueryAliases(plan) match {
         case v: View if v.isTempViewStoringAnalyzedPlan => resolveTableReferencesInTempView(v.child)
@@ -1169,12 +1245,12 @@ class Analyzer(
       }
     }
 
-    // Resolve V2TableReference nodes inside temp view plans. These are created by
-    // V2TableReference.createForTempView. We only need to resolve it when returning
+    // Resolve V2Reference nodes inside temp view plans. These are created by
+    // V2Reference.createForTempView. We only need to resolve it when returning
     // the plan of temp views (in resolveViews and unwrapRelationPlan).
     private def resolveTableReferencesInTempView(plan: LogicalPlan): LogicalPlan = {
       plan.resolveOperatorsUp {
-        case r: V2TableReference if r.context.isInstanceOf[V2TableReference.TemporaryViewContext] =>
+        case r: V2Reference if r.context.isInstanceOf[V2Reference.TemporaryViewContext] =>
           relationResolution.resolveReference(r)
       }
     }
@@ -1191,7 +1267,7 @@ class Analyzer(
         // Inserting into a file-based temporary view is allowed.
         // (e.g., spark.read.parquet("path").createOrReplaceTempView("t").
         // Thus, we need to look at the raw plan if `relation` is a temporary view.
-        // unwrapRelationPlan also resolves V2TableReference nodes in temp view plans.
+        // unwrapRelationPlan also resolves V2Reference nodes in temp view plans.
         unwrapRelationPlan(relation) match {
           case v: View if i.replaceCriteriaOpt.exists(_.isReplaceWhere) =>
             throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.desc.identifier, i)
@@ -1202,11 +1278,11 @@ class Analyzer(
 
       case write: V2StreamingWriteCommand =>
         write.table match {
-          case ref: V2TableReference =>
+          case ref: V2Reference =>
             relationResolution.resolveReference(ref) match {
               case r: NamedRelation => write.withNewTable(r)
               case other => throw SparkException.internalError(
-                s"Expected V2TableReference write target to resolve to a NamedRelation, " +
+                s"Expected V2Reference write target to resolve to a NamedRelation, " +
                   s"but got ${other.getClass.getName}")
             }
           case _ => write
@@ -1232,7 +1308,7 @@ class Analyzer(
       case u: UnresolvedRelation =>
         resolveRelation(u).map(resolveViews(_, u.options)).getOrElse(u)
 
-      case r: V2TableReference =>
+      case r: V2Reference =>
         relationResolution.resolveReference(r)
 
       case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
@@ -2679,13 +2755,13 @@ class Analyzer(
         case a: FunctionTableSubqueryArgumentExpression if !a.plan.resolved =>
           resolveSubQuery(a, outer)(
             (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs))
-        // The subquery's plan is already resolved. Replace any V2TableReferences without
+        // The subquery's plan is already resolved. Replace any V2References without
         // re-running any analyzer rules.
         case se: SubqueryExpression
             if se.plan.resolved &&
-               se.plan.collectFirstWithSubqueries { case _: V2TableReference => () }.isDefined =>
+               se.plan.collectFirstWithSubqueries { case _: V2Reference => () }.isDefined =>
           val newPlan = se.plan.transformWithSubqueries {
-            case r: V2TableReference => relationResolution.resolveReference(r)
+            case r: V2Reference => relationResolution.resolveReference(r)
           }
           se.withNewPlan(newPlan)
       }

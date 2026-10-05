@@ -129,6 +129,7 @@ class Module(object):
         Define a new module.
 
         :param name: A short module name, for display in logging and error messages.
+            Must be unique across modules.
         :param dependencies: A set of dependencies for this module. This should only include direct
             dependencies; transitive dependencies are resolved automatically.
         :param source_file_regexes: a set of regexes that match source files belonging to this
@@ -147,7 +148,17 @@ class Module(object):
             is not explicitly changed.
         :param should_run_r_tests: If true, changes in this module will trigger all R tests.
         :param should_run_build_tests: If true, changes in this module will trigger build tests.
+
+        Duplicate names are rejected and not registered:
+
+        >>> Module("core", [], [])
+        Traceback (most recent call last):
+            ...
+        ValueError: module name 'core' is already in use
         """
+        if any(module.name == name for module in all_modules):
+            raise ValueError(f"module name {name!r} is already in use")
+
         self.name = name
         self.dependencies = dependencies
         self.source_file_prefixes = source_file_regexes
@@ -656,6 +667,7 @@ pyspark_sql = Module(
         # unittests
         "pyspark.eval_handlers.tests.test_arrow_eval_type_handlers",
         "pyspark.eval_handlers.tests.test_base_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_pandas_eval_type_handlers",
         "pyspark.sql.tests.test_artifact",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",

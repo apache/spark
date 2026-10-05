@@ -35,6 +35,10 @@ public interface SupportsReportOrdering extends Scan {
 
   /**
    * Returns the order in each partition of this data source scan.
+   * <p>
+   * Spark resolves the column references in these sort orders against the table columns,
+   * including columns pruned from the scan output. If any of them cannot be resolved, Spark
+   * ignores the whole reported ordering and logs a warning.
    */
   SortOrder[] outputOrdering();
 }
