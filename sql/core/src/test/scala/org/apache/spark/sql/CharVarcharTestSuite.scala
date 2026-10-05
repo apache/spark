@@ -2231,6 +2231,53 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58814: preserve-only ORC CHAR/VARCHAR inference and STRING values") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      Seq("v1" -> "orc", "v2" -> "").foreach { case (sourceVersion, useV1List) =>
+        Seq(true, false).foreach { vectorizedReaderEnabled =>
+          withSQLConf(
+              SQLConf.USE_V1_SOURCE_LIST.key -> useV1List,
+              SQLConf.ORC_VECTORIZED_READER_ENABLED.key ->
+                vectorizedReaderEnabled.toString) {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              spark.range(1).selectExpr(
+                "cast('ab' AS CHAR(4)) AS c",
+                "cast('xy' AS VARCHAR(4)) AS v")
+                .write.mode("overwrite").orc(path)
+              val inferred = spark.read.orc(path)
+              withClue(s"ORC $sourceVersion vectorized=$vectorizedReaderEnabled infer: ") {
+                assert(inferred.schema.map(_.dataType) === Seq(CharType(4), VarcharType(4)))
+                checkAnswer(
+                  inferred.selectExpr("concat('<', c, '>')", "v"),
+                  Row("<ab  >", "xy"))
+              }
+            }
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              Seq("abcdef").toDF("c").write.mode("overwrite").orc(path)
+              Seq("CHAR", "VARCHAR").foreach { typ =>
+                withClue(
+                    s"ORC $sourceVersion vectorized=$vectorizedReaderEnabled $typ: ") {
+                  val readDf = spark.read.schema(s"c $typ(4)").orc(path)
+                  assert(readDf.schema.head.dataType ===
+                    (if (typ == "CHAR") CharType(4) else VarcharType(4)))
+                  // Collect InternalRows so CHAR does not hit SafeProjection write-side
+                  // checks. This pins that ORC did not truncate the stored STRING.
+                  val values = readDf.queryExecution.toRdd.map(_.getUTF8String(0).toString)
+                    .collect()
+                  assert(values === Array("abcdef"))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-58802: single-pass resolver agrees with fixed-point under standardSemantics") {
     // Dual run defaults to on under tests, but pin it explicitly so this coverage cannot be
     // silently lost: the HybridAnalyzer compares output schema and normalized plan across the

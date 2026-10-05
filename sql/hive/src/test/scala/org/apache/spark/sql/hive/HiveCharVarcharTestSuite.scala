@@ -58,6 +58,20 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
   test("SPARK-35700, SPARK-58814: read native char/varchar ORC") {
     withTable("t") {
       hiveClient.runSqlHive("CREATE TABLE t(c CHAR(5), v VARCHAR(7)) STORED AS ORC")
+      hiveClient.runSqlHive("INSERT INTO t VALUES('Spark', 'kyuubi')")
+      Seq(true, false).foreach { vectorizedReaderEnabled =>
+        withSQLConf(
+            SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString,
+            HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
+          checkAnswer(sql("SELECT c, v from t"), Row("Spark", "kyuubi"))
+          checkAnswer(
+            sql("SELECT v from t where c = 'Spark' and v = 'kyuubi'"),
+            Row("kyuubi"))
+        }
+      }
+    }
+    withTable("t") {
+      hiveClient.runSqlHive("CREATE TABLE t(c CHAR(5), v VARCHAR(7)) STORED AS ORC")
       hiveClient.runSqlHive("INSERT INTO t VALUES('Sp', 'kyuubi')")
       Seq(true, false).foreach { vectorizedReaderEnabled =>
         withSQLConf(
