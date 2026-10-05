@@ -139,9 +139,10 @@ class CollectInputsSuite extends SparkFunSuite with SQLHelper {
     assert(!ctx.collectInputs(Seq(input(0)), operator, Map.empty).get.readsRow)
   }
 
-  test("a slot of a compacted mutable state array is a field under every policy, never a " +
-      "parameter, which no method could declare") {
+  test("a slot of a compacted mutable state array is a field under every policy with the whole " +
+      "stage split on, never a parameter, which no method could declare") {
     val ctx = context()
+    ctx.wholeStageSplit = WholeStageSplit.Record
     // A state of a type that is not primitive is compacted into an array, and its name is a slot.
     val slot = ctx.addMutableState("UTF8String", "value")
     assert(slot.matches("\\w+\\[\\d+\\]"), slot)
@@ -150,6 +151,34 @@ class CollectInputsSuite extends SparkFunSuite with SQLHelper {
     for (policy <- Seq(InputPolicy.wholeStageSplit, commonExpr, operator)) {
       assert(names(ctx.collectInputs(Seq(expr), policy, Map.empty).get).isEmpty, policy)
     }
+  }
+
+  test("with the whole stage split off, a slot is answered as before that split existed") {
+    // A common expression's method refuses it, so its definition stays inline, and an operator's
+    // method lists it among its inputs.
+    val ctx = context()
+    val slot = ctx.addMutableState("UTF8String", "value")
+    ctx.currentVars = Seq(ExprCode(EmptyBlock, FalseLiteral, JavaCode.variable(slot, StringType)))
+    val expr = Length(BoundReference(0, StringType, nullable = false))
+    assert(ctx.collectInputs(Seq(expr), commonExpr, Map.empty).isEmpty)
+    assert(names(ctx.collectInputs(Seq(expr), operator, Map.empty).get) == Seq(slot))
+  }
+
+  test("the whole stage split walks below the state of a node that generates its child") {
+    // `Collate` generates its child's code, which reads the input below it, never the state, so a
+    // method takes that input; where the node's own code reads the state, the state is taken.
+    val ctx = context()
+    ctx.currentVars = Seq(evaluated(0))
+    val state = SubExprEliminationState(ExprCode(EmptyBlock,
+      JavaCode.isNullVariable("subExprIsNull_0"), JavaCode.variable("subExpr_0", StringType)))
+    val column = BoundReference(0, StringType, nullable = true)
+    val collated = Collate(column, Literal("UNICODE_CI"))
+    val passThrough = Map(ExpressionEquals(collated) -> state)
+    assert(names(ctx.collectInputs(Seq(Length(collated)), InputPolicy.wholeStageSplit,
+      passThrough).get) == Seq("value_0", "isNull_0"))
+    val upper = Upper(column)
+    assert(names(ctx.collectInputs(Seq(Length(upper)), InputPolicy.wholeStageSplit,
+      Map(ExpressionEquals(upper) -> state)).get) == Seq("subExpr_0", "subExprIsNull_0"))
   }
 
   test("the whole stage split leaves a block it cannot move inline, between the runs of calls") {

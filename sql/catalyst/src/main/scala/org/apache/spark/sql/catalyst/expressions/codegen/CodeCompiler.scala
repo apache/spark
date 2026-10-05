@@ -337,7 +337,8 @@ object CodeCompiler extends Logging {
 
   /**
    * A compile whose result its caller may discard ([[trial]]). What the compile would report of
-   * methods past the JIT limit is held here, for the caller to report if it keeps the code.
+   * methods past the JIT limit is held here, for the caller to report if it keeps the code, and so
+   * are its updates of the codegen metrics, which describe the code that runs.
    *
    * @param failureExpected whether a failure to compile is an answer the caller asks for, which the
    *                        compile then logs at debug level rather than as an error.
@@ -345,6 +346,9 @@ object CodeCompiler extends Logging {
   private[sql] final class TrialCompile private[codegen] (val failureExpected: Boolean) {
     private val hugeMethods = mutable.ArrayBuffer.empty[(String, String, Int)]
     private val methods = mutable.ArrayBuffer.empty[(String, Int)]
+    private val metricUpdates = mutable.ArrayBuffer.empty[() => Unit]
+
+    private[codegen] def holdMetricUpdate(update: () => Unit): Unit = metricUpdates += update
 
     private[codegen] def holdHugeMethod(className: String, methodName: String, size: Int): Unit =
       hugeMethods += ((className, methodName, size))
@@ -361,9 +365,12 @@ object CodeCompiler extends Logging {
     def methodSizes: Map[String, Int] =
       methods.groupMapReduce(_._1.stripSuffix("$"))(_._2)(math.max)
 
-    /** Makes the reports the compile held back, for the code its caller keeps. */
-    def report(): Unit = hugeMethods.foreach { case (className, methodName, size) =>
-      logHugeMethod(className, methodName, size)
+    /** Makes the reports and metric updates the compile held back, for the code kept. */
+    def report(): Unit = {
+      metricUpdates.foreach(_())
+      hugeMethods.foreach { case (className, methodName, size) =>
+        logHugeMethod(className, methodName, size)
+      }
     }
   }
 
@@ -385,6 +392,15 @@ object CodeCompiler extends Logging {
 
   /** The trial the calling thread compiles under, or null outside one. */
   private[codegen] def activeTrial: TrialCompile = currentTrial.get
+
+  /**
+   * Updates the codegen metrics, or, in a trial, holds the update back until the caller keeps the
+   * code ([[TrialCompile.report]]), so that code compiled only to be discarded is not counted.
+   */
+  private[codegen] def updateMetrics(update: => Unit): Unit = Option(currentTrial.get) match {
+    case Some(trial) => trial.holdMetricUpdate(() => update)
+    case None => update
+  }
 
   /** Runs `body` on this thread under `trial`, which is null outside one. */
   private[codegen] def withTrial[T](trial: TrialCompile)(body: => T): T = {
@@ -459,14 +475,14 @@ object CodeCompiler extends Logging {
       classBytecodes: Iterable[(String, Array[Byte])]): ByteCodeStats = {
     val perClass = classBytecodes.map { case (_, classBytes) =>
       val classCodeSize = classBytes.length
-      CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classCodeSize)
+      updateMetrics(CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classCodeSize))
       try {
         val cf = new ClassFile(new ByteArrayInputStream(classBytes))
         val constPoolSize = cf.getConstantPoolSize
         val methodCodeSizes = cf.methodInfos.asScala.flatMap { method =>
           method.getAttributes.collect { case attr: CodeAttribute =>
             val byteCodeSize = attr.code.length
-            CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
+            updateMetrics(CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize))
             Option(currentTrial.get).foreach(_.recordMethod(method.getName, byteCodeSize))
             if (byteCodeSize > CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT) {
               logHugeMethod(cf.getThisClassName, method.getName, byteCodeSize)
