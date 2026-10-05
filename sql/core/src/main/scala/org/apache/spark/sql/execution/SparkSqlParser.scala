@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, WriteDistributionAndOrdering}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
@@ -584,6 +584,10 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
+  private def hasWriteClauses(ctx: CreateTableClausesContext): Boolean = {
+    !ctx.writeDistributionSpec.isEmpty || !ctx.writeOrderingSpec.isEmpty
+  }
+
   /**
    * Create a table, returning a [[CreateTable]] logical plan.
    *
@@ -608,10 +612,9 @@ class SparkSqlAstBuilder extends AstBuilder {
         invalidStatement("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
       }
 
-      if (!ctx.createTableClauses().writeDistributionSpec.isEmpty ||
-          !ctx.createTableClauses().writeOrderingSpec.isEmpty) {
+      if (hasWriteClauses(ctx.createTableClauses())) {
         // A temp view cannot record a write distribution or ordering.
-        invalidStatement("CREATE TEMPORARY TABLE ... DISTRIBUTED BY/ORDERED BY/UNORDERED", ctx)
+        invalidStatement(s"CREATE TEMPORARY TABLE ... ${WriteDistributionAndOrdering.CLAUSES}", ctx)
       }
 
       val (_, _, _, _, options, location, _, _, _, _) =
@@ -1690,9 +1693,9 @@ class SparkSqlAstBuilder extends AstBuilder {
         s"$syntaxTypeErrorStr statements. The storage location for a pipeline dataset is " +
         "managed by the pipeline itself.", ctx)
     }
-    if (!ctx.createTableClauses().writeDistributionSpec.isEmpty ||
-      !ctx.createTableClauses().writeOrderingSpec.isEmpty) {
-      invalidStatement(s"CREATE $syntaxTypeErrorStr ... DISTRIBUTED BY/ORDERED BY/UNORDERED", ctx)
+    if (hasWriteClauses(ctx.createTableClauses())) {
+      invalidStatement(
+        s"CREATE $syntaxTypeErrorStr ... ${WriteDistributionAndOrdering.CLAUSES}", ctx)
     }
 
     val spec = TableSpec(
