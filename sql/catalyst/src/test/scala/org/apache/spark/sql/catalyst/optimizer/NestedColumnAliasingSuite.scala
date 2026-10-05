@@ -333,6 +333,50 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, expected)
   }
 
+  test("Redundant nested fields are detected through cosmetic variations of their parents") {
+    val a = $"a".struct(StructType.fromDDL("b struct<c: int, d: int>, e int"))
+    // `a.b`, referenced many times below.
+    val ab = GetStructField(a, 0, Some("b"))
+    // `a.b` without the field name.
+    val unnamedAb = GetStructField(a, 0, None)
+    // `a.b.c` over the unnamed `a.b`.
+    val abc = GetStructField(unnamedAb, 0, Some("c"))
+    // `a.b.d` over a qualified `a`.
+    val abd = GetStructField(
+      GetStructField(a.withQualifier(Seq("t")), 0, Some("b")), 1, Some("d"))
+
+    val attrToExtractValues = NestedColumnAliasing.getAttributeToExtractValues(
+      Seq.fill(100)(ab) ++ Seq(unnamedAb, abc, abd), Seq.empty)
+
+    assert(attrToExtractValues.keys.map(_.exprId).toSeq == Seq(a.exprId))
+    assert(attrToExtractValues.values.toSeq == Seq(Seq(ab, unnamedAb)))
+  }
+
+  test("Nested fields are not redundant with non-deterministic parents") {
+    // `getAttributeToExtractValues` only returns a column if its kept reads' leaf counts sum to
+    // fewer than its own leaf count. The kept reads below sum to 5, so `e` through `h` pad `a` to
+    // 6 leaves.
+    val a = $"a".array(StructType.fromDDL("b struct<c: int, d: int>, e int, f int, g int, h int"))
+    // `a[ordinal].b` and `a[ordinal].b.c`.
+    def parentAndChild(ordinal: Expression): Seq[ExtractValue] = {
+      val parent = GetStructField(GetArrayItem(a, ordinal), 0, Some("b"))
+      Seq(parent, GetStructField(parent, 0, Some("c")))
+    }
+
+    val deterministicReadPair = parentAndChild(Literal(0))
+    val nondeterministicReadPair = parentAndChild(Cast(Rand(Literal(0L)), IntegerType))
+    // `a[rand].b` is non-deterministic, so `a[rand].b.c` is not redundant with it, while the
+    // redundant deterministic `a[0].b.c` is still dropped.
+    assert(
+      NestedColumnAliasing.getAttributeToExtractValues(
+        deterministicReadPair ++ nondeterministicReadPair,
+        Seq.empty
+      )
+      .values
+      .toSeq == Seq(deterministicReadPair.take(1) ++ nondeterministicReadPair)
+    )
+  }
+
   test("Nested field pruning for Project and Generate") {
     val query = contact
       .generate(Explode($"friends".getField("first")), outputNames = Seq("explode"))
