@@ -140,10 +140,16 @@ trait DataSourceV2ScanExecBase
    * output, e.g. the k-way merge of `GroupPartitionsExec`. Ordering is prefix-based, so the
    * leading run of sort orders over the output is kept and the rest is dropped, except the sort
    * orders on a partition key when the output partitioning is a `KeyedPartitioning`: each
-   * partition holds a single key, so those still hold. Otherwise, when the output partitioning
-   * is a `KeyedPartitioning` and `spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled`
-   * is on, each partition contains rows where the key expressions evaluate to a single constant
-   * value, so the data is trivially sorted by those expressions within the partition.
+   * partition holds a single key, so those still hold.
+   *
+   * If no sort order is left, the ordering is derived from the partition keys instead, when the
+   * output partitioning is a `KeyedPartitioning` and
+   * `spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled` is on. Each partition contains
+   * rows where the key expressions evaluate to a single constant value, so the data is trivially
+   * sorted by those expressions within the partition. No sort order is left when the source:
+   *  - reports none, or reports one Spark ignores (see `V2ScanPartitioningAndOrdering`);
+   *  - reports an empty one;
+   *  - reports only sort orders that are dropped.
    *
    * Either way, a sort order that holds a partition transform is dropped, even on a partition key.
    * In a reported ordering it also ends the leading run, like a sort order over a pruned column.
@@ -155,19 +161,21 @@ trait DataSourceV2ScanExecBase
    */
   override def outputOrdering: Seq[SortOrder] = {
     def holdsTransform(e: Expression): Boolean = e.exists(_.isInstanceOf[TransformExpression])
-    (ordering, outputPartitioning) match {
-      case (Some(o), p) =>
-        val (prefix, rest) =
-          o.span(order => order.references.subsetOf(outputSet) && !holdsTransform(order.child))
-        p match {
-          case k: KeyedPartitioning if rest.nonEmpty =>
-            val keyExprs = ExpressionSet(k.expressions.filterNot(holdsTransform))
-            prefix ++ rest.filter(order => keyExprs.contains(order.child))
-          case _ => prefix
-        }
-      case (_, k: KeyedPartitioning) if conf.v2BucketingPartitionKeyOrderingEnabled =>
+    val reported = ordering.map { o =>
+      val (prefix, rest) =
+        o.span(order => order.references.subsetOf(outputSet) && !holdsTransform(order.child))
+      outputPartitioning match {
+        case k: KeyedPartitioning if rest.nonEmpty =>
+          val keyExprs = ExpressionSet(k.expressions.filterNot(holdsTransform))
+          prefix ++ rest.filter(order => keyExprs.contains(order.child))
+        case _ => prefix
+      }
+    }.getOrElse(Seq.empty)
+    outputPartitioning match {
+      case k: KeyedPartitioning
+          if reported.isEmpty && conf.v2BucketingPartitionKeyOrderingEnabled =>
         k.expressions.filterNot(holdsTransform).map(SortOrder(_, Ascending))
-      case _ => Seq.empty
+      case _ => reported
     }
   }
 

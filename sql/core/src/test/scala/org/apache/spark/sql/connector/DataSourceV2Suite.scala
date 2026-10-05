@@ -315,7 +315,11 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
   }
 
   test("ordering and partitioning reporting") {
-    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
+    // The source breaks the `KeyGroupedPartitioning` contract, e.g. [1, 1, 3] under the key 1.
+    // So the ordering derived from the keys is turned off. This test checks the reported one.
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "false") {
       Seq(
         classOf[OrderAndPartitionAwareDataSource],
         classOf[JavaOrderAndPartitionAwareDataSource]
