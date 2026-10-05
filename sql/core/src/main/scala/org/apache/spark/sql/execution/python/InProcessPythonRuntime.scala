@@ -356,9 +356,7 @@ private[python] object InProcessPythonRuntime extends Logging {
             }
           }
         } {
-          Utils.tryWithSafeFinally {
-            if (schema.snapshot().release != 0L) schema.release()
-          } { schema.close() }
+          InProcessArrowBridge.closeStruct(schema)
         }
       } { buffer.close() }
     }

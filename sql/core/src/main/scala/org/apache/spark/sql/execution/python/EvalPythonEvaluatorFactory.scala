@@ -45,7 +45,8 @@ abstract class EvalPythonEvaluatorFactory(
 
   /**
    * Evaluates the UDFs over the input rows and returns the output rows: each input row's
-   * columns followed by its results, as unsafe rows that remain valid after the next call.
+   * columns followed by its results, as unsafe rows that stay valid until the next call and do
+   * not reference buffers the evaluator releases, e.g. at task completion.
    * Returns None to let the evaluator buffer the input rows and join them with the results of
    * `evaluate`, which receives only the projected arguments.
    *

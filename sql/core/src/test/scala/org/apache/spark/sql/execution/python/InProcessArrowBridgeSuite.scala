@@ -92,6 +92,36 @@ class InProcessArrowBridgeSuite extends SparkFunSuite {
     assert(allocator.getAllocatedMemory == before)
   }
 
+  test("closeStruct frees empty, exported and consumed CDI structs") {
+    val allocator = ArrowUtils.rootAllocator
+    val before = allocator.getAllocatedMemory
+    // Never exported: the release callback is NULL.
+    InProcessArrowBridge.closeStruct(ArrowArray.allocateNew(allocator))
+    InProcessArrowBridge.closeStruct(ArrowSchema.allocateNew(allocator))
+    // Exported but not consumed: closing releases the exported buffers.
+    val vector = new IntVector("value", allocator)
+    try {
+      vector.allocateNew(1)
+      vector.setSafe(0, 7)
+      vector.setValueCount(1)
+      val array = ArrowArray.allocateNew(allocator)
+      val schema = ArrowSchema.allocateNew(allocator)
+      InProcessArrowBridge.exportColumn(vector, array, schema)
+      InProcessArrowBridge.closeStruct(array)
+      InProcessArrowBridge.closeStruct(schema)
+      // Consumed: the importer moved the callback out, leaving it NULL.
+      val consumedArray = ArrowArray.allocateNew(allocator)
+      val consumedSchema = ArrowSchema.allocateNew(allocator)
+      InProcessArrowBridge.exportColumn(vector, consumedArray, consumedSchema)
+      InProcessArrowBridge.cdiToColumn(consumedArray, consumedSchema).close()
+      InProcessArrowBridge.closeStruct(consumedArray)
+      InProcessArrowBridge.closeStruct(consumedSchema)
+    } finally {
+      vector.close()
+    }
+    assert(allocator.getAllocatedMemory == before)
+  }
+
   test("CDI rejects a result type mismatch before constructing an accessor") {
     val allocator = ArrowUtils.rootAllocator
     val before = allocator.getAllocatedMemory

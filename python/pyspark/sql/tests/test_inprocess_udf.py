@@ -27,7 +27,6 @@ Otherwise, the suite runs when JEP, PyArrow and the CDI JAR are available.
 import os
 import shutil
 import tempfile
-import time
 import unittest
 import zipfile
 from importlib.util import find_spec
@@ -35,6 +34,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import eventually
 
 _jep_spec = find_spec("jep")
 _cdi_jar = os.environ.get("ARROW_C_DATA_JAR")
@@ -863,29 +863,28 @@ class BootstrapFailureProbe {
         allocator = arrow_utils.rootAllocator()
         before = allocator.getAllocatedMemory()
 
-        def assert_released_after_failure():
-            # A failed job does not wait for its other tasks, which release their memory as
-            # they finish, and the interpreter thread releases Python's references later.
-            deadline = time.monotonic() + 30
-            while allocator.getAllocatedMemory() != before and time.monotonic() < deadline:
-                time.sleep(0.05)
+        # The interpreter thread releases Python's references after the query returns, and a
+        # failed job does not wait for its other tasks to release their memory.
+        @eventually(timeout=30.0, catch_assertions=True)
+        def assert_released():
             self.assertEqual(allocator.getAllocatedMemory(), before)
 
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "2"}):
             df = self.spark.range(9, numPartitions=3)
             for _ in range(3):
                 self.assertEqual(df.select(identity(df.id)).collect()[0][0], 0)
-                self.assertEqual(allocator.getAllocatedMemory(), before)
-            df.select(identity(df.id)).limit(1).collect()
-            self.assertEqual(allocator.getAllocatedMemory(), before)
+                assert_released()
+            # The filter keeps the limit above the in-process node, which then stops early.
+            df.select(identity(df.id).alias("v")).filter("v >= 0").limit(1).collect()
+            assert_released()
             with self.assertRaisesRegex(Exception, "second UDF failed"):
                 df.select(identity(df.id), fail(df.id)).collect()
-            assert_released_after_failure()
+            assert_released()
             # Deserialization fails before Python imports any input CDI structures.
             identity._serialized = b"invalid pickle"
             with self.assertRaisesRegex(Exception, "UnpicklingError"):
                 df.select(identity(df.id)).collect()
-            assert_released_after_failure()
+            assert_released()
 
     def test_double_long(self):
         """@inprocess_udf with LongType input/output doubles each value."""
@@ -1608,15 +1607,21 @@ class BootstrapFailureProbe {
             double = inprocess_udf("long")(lambda x: pc.multiply(x, 2))
             plus_one = arrow_udf(lambda x: pc.add(x, 1), "long")
             with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "100"}):
-                # The task completes after one row while the writer thread still pulls input.
+                # The task completes after a few rows while the writer thread still pulls input.
+                # A filter on the UDF result keeps the limit from being pushed below the UDFs.
                 df = self.spark.range(0, 100000, 1, 2).selectExpr("id", "id % 7 AS k")
+                # A coalesced parent evaluates the in-process node on the writer thread.
+                coalesced = df.select(double("id").alias("a"), "k").coalesce(1)
+                queries = [
+                    df.select("k", plus_one(double("id")).alias("v")).filter("v > 0").limit(1),
+                    coalesced.select(plus_one("a").alias("v"), "k").filter("v > 0").limit(10),
+                ]
+                for query in queries:
+                    plan = query._jdf.queryExecution().executedPlan().toString()
+                    self.assertNotIn("Limit", plan[plan.index("ArrowEvalPython") :])
                 for _ in range(5):
-                    rows = df.select("k", plus_one(double("id"))).limit(1).collect()
-                    self.assertEqual(len(rows), 1)
-                    # A coalesced parent evaluates the in-process node on the writer thread.
-                    coalesced = df.select(double("id").alias("a"), "k").coalesce(1)
-                    rows = coalesced.select(plus_one("a"), "k").limit(10).collect()
-                    self.assertEqual(len(rows), 10)
+                    self.assertEqual(len(queries[0].collect()), 1)
+                    self.assertEqual(len(queries[1].collect()), 10)
                 # Later tasks in the same executor still run correctly.
                 total = df.select(plus_one(double("id")).alias("v")).groupBy().sum("v")
                 self.assertEqual(total.first()[0], sum(2 * i + 1 for i in range(100000)))

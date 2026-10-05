@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.File
+import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -27,7 +28,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import com.google.common.util.concurrent.Uninterruptibles
-import org.apache.arrow.c.{ArrowArray, ArrowSchema}
+import org.apache.arrow.c.{ArrowArray, ArrowSchema, BaseStruct}
 import org.apache.arrow.util.AutoCloseables
 import org.apache.arrow.vector.VectorSchemaRoot
 
@@ -140,13 +141,16 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     // Rows are copied out of the queue and Arrow vectors before they are returned, so they
     // remain valid after task completion releases those, on whichever thread consumes them.
     val resultProj = UnsafeProjection.create(output, output)
-    val (queue, projection) = joinInput match {
+    val (queue, queueDir, projection) = joinInput match {
       case Buffered(projection) =>
-        // Only the consumer holding the iterator's lock uses the queue.
-        val queue = HybridRowQueue(context.taskMemoryManager(),
-          new File(Utils.getLocalDir(SparkEnv.get.conf)), childOutput.length, lockFree = true)
-        (queue, projection.orNull)
-      case ReadBack => (null, null)
+        // A directory of its own lets task completion delete the spill files of a queue that
+        // it cannot close. Only the consumer holding the iterator's lock uses the queue.
+        val dir = Files.createTempDirectory(
+          new File(Utils.getLocalDir(SparkEnv.get.conf)).toPath, "inprocess-udf-").toFile
+        val queue = HybridRowQueue(
+          context.taskMemoryManager(), dir, childOutput.length, lockFree = true)
+        (queue, dir, projection.orNull)
+      case ReadBack => (null, null, null)
     }
     val joined = new JoinedRow
     val handles = functions.map(_ => UUID.randomUUID().toString)
@@ -167,7 +171,10 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     }
 
     val resources = new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(
-      releaseTaskMemory = () => if (queue != null) queue.close(),
+      releaseTaskMemory = () => if (queue != null) {
+        Utils.tryWithSafeFinally(queue.close())(Utils.deleteRecursively(queueDir))
+      },
+      abandonTaskMemory = () => if (queueDir != null) Utils.deleteRecursively(queueDir),
       releaseOthers = () => {
         if (startedAt != 0L) {
           metrics("pythonTotalTime") += (System.nanoTime() - startedAt) / 1000000
@@ -183,8 +190,6 @@ class InProcessArrowEvalPythonEvaluatorFactory(
 
     new Iterator[InternalRow] {
       private var batchIter: Iterator[InternalRow] = Iterator.empty
-      // Rows of the current batch not yet returned, read without the lock by `hasNext`.
-      @volatile private var pendingRows = 0
 
       private def endOfInput: Nothing =
         throw new NoSuchElementException("End of in-process UDF input")
@@ -202,15 +207,18 @@ class InProcessArrowEvalPythonEvaluatorFactory(
         available
       }
 
-      // Each call takes the lock without allocating a closure per row.
+      // Each call takes the lock without allocating a closure per row. Within a batch, only
+      // the consumer advances `batchIter`, whose `hasNext` compares row indexes.
       override def hasNext: Boolean = {
-        if (pendingRows > 0 && !resources.isClosed) return true
+        if (batchIter.hasNext && !resources.isClosed) return true
         if (!resources.enter()) return false
-        try {
+        val available = try {
           try hasNextLocked catch { case t: Throwable => fail(t) }
         } finally {
           resources.exit()
         }
+        // Task completion may have closed the iterator while the input was being read.
+        available && !resources.isClosed
       }
 
       override def next(): InternalRow = {
@@ -220,7 +228,6 @@ class InProcessArrowEvalPythonEvaluatorFactory(
             if (!hasNextLocked) endOfInput
             if (!batchIter.hasNext) nextBatch()
             val result = batchIter.next()
-            pendingRows -= 1
             resultProj(if (queue != null) joined(queue.remove(), result) else result)
           } catch {
             case t: Throwable => fail(t)
@@ -237,9 +244,13 @@ class InProcessArrowEvalPythonEvaluatorFactory(
         result
       }
 
-      /** Writes the next input row to the batch, returning false at the end of input. */
+      /**
+       * Writes the next input row to the batch, returning false at the end of input. Task
+       * completion can happen while the input is read; then the row is not written.
+       */
       private def pullRow(): Boolean = rows.hasNext && {
         val row = rows.next()
+        if (resources.isClosed) endOfInput
         if (queue != null) queue.add(row.asInstanceOf[UnsafeRow])
         writer.write(if (projection != null) projection(row) else row)
         true
@@ -248,6 +259,22 @@ class InProcessArrowEvalPythonEvaluatorFactory(
       // Called with the lock held.
       private def nextBatch(): Unit = {
         closeBatch()
+        val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+        writer = try {
+          ArrowWriter.create(root)
+        } catch {
+          case t: Throwable => Utils.tryWithSafeFinally { throw t } { root.close() }
+        }
+        // Task completion stops the fill within a row, and Python never sees a partial batch.
+        var count = 0
+        while (!resources.isClosed && (batchSize <= 0 || count < batchSize) &&
+            (count == 0 || maxBytes <= 0 || writer.sizeInBytes() < maxBytes) && {
+              checkCancellation()
+              pullRow()
+            }) {
+          count += 1
+        }
+        if (resources.isClosed) endOfInput
         if (!registered) {
           // Mark before registering so failure after any registration still cleans up.
           registered = true
@@ -257,20 +284,6 @@ class InProcessArrowEvalPythonEvaluatorFactory(
               expectedFields(i), func.pythonVer, hideTraceback, simplifiedTraceback,
               tracebackWithLocals, fullValidation)))
           }
-        }
-        val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
-        writer = try {
-          ArrowWriter.create(root)
-        } catch {
-          case t: Throwable => Utils.tryWithSafeFinally { throw t } { root.close() }
-        }
-        var count = 0
-        while ((batchSize <= 0 || count < batchSize) &&
-            (count == 0 || maxBytes <= 0 || writer.sizeInBytes() < maxBytes) && {
-              checkCancellation()
-              pullRow()
-            }) {
-          count += 1
         }
         writer.finish()
         metrics("pythonDataSent") += writer.sizeInBytes()
@@ -282,26 +295,13 @@ class InProcessArrowEvalPythonEvaluatorFactory(
           // Register each acquired resource immediately, including partially exported
           // inputs and results of earlier UDFs if a later UDF throws.
           val structs = ArrayBuffer.empty[AutoCloseable]
-          def array(): ArrowArray = {
-            val value = ArrowArray.allocateNew(ArrowUtils.rootAllocator)
-            structs += new AutoCloseable {
-              override def close(): Unit =
-                Utils.tryWithSafeFinally {
-                  if (value.snapshot().release != 0L) value.release()
-                } { value.close() }
-            }
-            value
+          def track[S <: BaseStruct](struct: S): S = {
+            val closer: AutoCloseable = () => InProcessArrowBridge.closeStruct(struct)
+            structs += closer
+            struct
           }
-          def schema(): ArrowSchema = {
-            val value = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
-            structs += new AutoCloseable {
-              override def close(): Unit =
-                Utils.tryWithSafeFinally {
-                  if (value.snapshot().release != 0L) value.release()
-                } { value.close() }
-            }
-            value
-          }
+          def array(): ArrowArray = track(ArrowArray.allocateNew(ArrowUtils.rootAllocator))
+          def schema(): ArrowSchema = track(ArrowSchema.allocateNew(ArrowUtils.rootAllocator))
           Utils.tryWithSafeFinally {
             val inArrays = ordinals.map(_ => array())
             val inSchemas = ordinals.map(_ => schema())
@@ -334,7 +334,6 @@ class InProcessArrowEvalPythonEvaluatorFactory(
         }
         val columns = (inputs ++ results).toArray[ColumnVector]
         batchIter = new ColumnarBatch(columns, count).rowIterator().asScala
-        pendingRows = count
       }
     }
   }
@@ -371,16 +370,21 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
    * `coalesce`) can create the iterator on that thread too.
    *
    * The consumer holds the lock while it reads input, the row queue or Arrow vectors, and
-   * releases it only while Python runs, so the listener (`close`) never waits for Python. The
-   * listener releases task memory (the row queue) at once, before the executor frees it, and
-   * the other resources (Arrow vectors and Python handles) unless Python is running; then the
-   * consumer releases them when Python returns. A consumer can also be blocked in its input,
-   * on an upstream operator that only a later listener unblocks, so the listener waits for the
-   * lock only briefly; the executor then frees the task memory, and the consumer releases the
-   * other resources once its input returns.
+   * releases it only while this evaluator's Python runs. The listener (`close`) first requests
+   * closing, which the consumer checks after each input row, so the listener waits for at most
+   * one row before it releases task memory (the row queue), ahead of the executor. It releases
+   * the other resources (Arrow vectors and Python handles) too, unless Python is running; then
+   * the consumer releases them when Python returns.
+   *
+   * Reading one row can take long: the input can be another in-process evaluator, whose next
+   * row may need a batch of Python, or an upstream operator that only a later listener
+   * unblocks. So the listener waits for the lock only briefly. Then it leaves the task memory
+   * to the executor, deleting what lives outside it, and the consumer releases the other
+   * resources once its row returns, without touching the task memory again.
    */
   class IteratorResources(
       releaseTaskMemory: () => Unit,
+      abandonTaskMemory: () => Unit,
       releaseOthers: () => Unit,
       lockWaitMillis: Long = 1000L) {
     private val lock = new ReentrantLock()
@@ -433,7 +437,10 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
       } else if (Uninterruptibles.tryLockUninterruptibly(
           lock, lockWaitMillis, TimeUnit.MILLISECONDS)) {
         try releaseAll() finally lock.unlock()
-      } else if (!taskMemory.compareAndSet(TaskMemoryHeld, TaskMemoryAbandoned)) {
+      } else if (taskMemory.compareAndSet(TaskMemoryHeld, TaskMemoryAbandoned)) {
+        // The executor frees the task memory, but not what lives outside it, e.g. spill files.
+        abandonTaskMemory()
+      } else {
         // The consumer is releasing the task memory; let it finish before the executor does.
         lock.lock()
         lock.unlock()

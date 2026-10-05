@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.arrow.c.{ArrowArray, ArrowSchema, Data}
+import org.apache.arrow.c.{ArrowArray, ArrowSchema, BaseStruct, Data}
 import org.apache.arrow.memory.util.MemoryUtil
 import org.apache.arrow.vector.FieldVector
 import org.apache.arrow.vector.types.pojo.Field
@@ -54,6 +54,10 @@ import org.apache.spark.util.Utils
  * The runtime validates the returned schema before ArrowColumnVector reads the buffers.
  */
 private[python] object InProcessArrowBridge {
+
+  /** Releases the data exported into a CDI struct, if any, and frees the struct. */
+  def closeStruct(struct: BaseStruct): Unit =
+    Utils.tryWithSafeFinally(struct.release())(struct.close())
 
   /** Exercise the provided CDI JAR and its native library before accepting tasks. */
   def verifyDependencies(): Unit = {

@@ -97,11 +97,14 @@ each exported result until the next invocation for that task or task cleanup, af
 has released its references. The runtime drops its Python references on the interpreter
 thread, so releasing JVM results does not trigger Python finalizers on Spark task threads.
 Cleanup can remain queued behind another task's invocation. The rows can also be consumed
-on another thread, such as a pipelined Python worker's writer. Task completion then waits
-for that consumer to finish reading input, buffered rows or Arrow vectors, but not for
-Python: it stops further input and releases the buffered rows at once, and releases the
-Arrow vectors when Python returns. Each row is copied before it is returned, so it remains
-valid after the task releases them.
+on another thread, such as a pipelined Python worker's writer. Task completion then stops
+that consumer after the input row it is reading, and waits for it, but not for this
+operator's Python: it releases the buffered rows at once, and the Arrow vectors when Python
+returns. Reading one row can take longer when the input is another in-process UDF, whose
+next row may need a batch of Python, or a blocked upstream operator; task completion waits
+for at most one second, and then leaves the buffered rows to the executor and deletes
+their spill files. Each row is copied before it is returned, so it remains valid after the
+task releases them.
 
 UDF deserialization uses PySpark's bundled cloudpickle. Each task registers its
 own function instance once and passes a small handle for subsequent batches.

@@ -19,18 +19,18 @@ package org.apache.spark.sql.execution.python
 
 import java.util.Collections
 import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SparkConf, SparkFunSuite, SparkIllegalArgumentException, TaskContext, TaskKilledException}
 import org.apache.spark.api.plugin.PluginContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, SimplePythonFunction}
-import org.apache.spark.internal.config.Python.IN_PROCESS_SITE_PACKAGES
+import org.apache.spark.internal.config.Python.{IN_PROCESS_PATH_RULE, IN_PROCESS_SITE_PACKAGES}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.PythonUDF
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PythonUDF}
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 
 class InProcessPythonRuntimeSuite extends SparkFunSuite {
@@ -87,7 +87,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
       new InProcessPythonExecutorPlugin().init(ctx, Collections.emptyMap())
     }
     assert(e.getCondition == "INVALID_CONF_VALUE.REQUIREMENT")
-    assert(e.getMessage.contains("single quotes") && !e.getMessage.contains("libjep"))
+    assert(e.getMessage.contains(IN_PROCESS_PATH_RULE) && !e.getMessage.contains("libjep"))
   }
 
   test("task-side calls after shutdown report the shutdown") {
@@ -181,12 +181,16 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
 
   private class Releases {
     val taskMemory = new AtomicInteger()
+    val abandoned = new AtomicInteger()
     val others = new AtomicInteger()
 
     def resources(lockWaitMillis: Long = 10000L)
       : InProcessArrowEvalPythonEvaluatorFactory.IteratorResources =
       new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(
-        () => taskMemory.incrementAndGet(), () => others.incrementAndGet(), lockWaitMillis)
+        () => taskMemory.incrementAndGet(),
+        () => abandoned.incrementAndGet(),
+        () => others.incrementAndGet(),
+        lockWaitMillis)
   }
 
   private def thread(body: => Unit): Thread = {
@@ -195,25 +199,52 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     t
   }
 
+  /**
+   * Runs `test` while a consumer on another thread is inside a call, optionally running
+   * Python, until `test` returns. The consumer is released and joined even if `test` fails.
+   */
+  private def withConsumer(
+      resources: InProcessArrowEvalPythonEvaluatorFactory.IteratorResources,
+      inPython: Boolean = false)(test: => Unit): Boolean = {
+    val entered = new CountDownLatch(1)
+    val finish = new CountDownLatch(1)
+    val closedAfterCall = new AtomicBoolean()
+    val consumer = thread {
+      assert(resources.enter())
+      try {
+        if (inPython) {
+          resources.withoutLock { entered.countDown(); finish.await(10, TimeUnit.SECONDS) }
+        } else {
+          entered.countDown()
+          finish.await(10, TimeUnit.SECONDS)
+        }
+        closedAfterCall.set(resources.isClosed)
+      } finally {
+        resources.exit()
+      }
+    }
+    try {
+      assert(entered.await(10, TimeUnit.SECONDS))
+      test
+    } finally {
+      finish.countDown()
+      consumer.join(10000)
+    }
+    assert(!consumer.isAlive)
+    closedAfterCall.get
+  }
+
   test("task completion waits for the consumer's lock and stops later calls") {
     val releases = new Releases
     val resources = releases.resources()
-    val entered = new CountDownLatch(1)
-    val finish = new CountDownLatch(1)
-    val consumer = thread {
-      assert(resources.enter())
-      entered.countDown()
-      finish.await()
-      resources.exit()
+    var closing: Thread = null
+    withConsumer(resources) {
+      closing = thread(resources.close())
+      closing.join(200)
+      // Nothing is released while the consumer reads input, the queue or Arrow vectors.
+      assert(closing.isAlive && resources.isClosed && releases.taskMemory.get == 0)
     }
-    assert(entered.await(10, TimeUnit.SECONDS))
-    val closing = thread(resources.close())
-    closing.join(200)
-    // Nothing is released while the consumer reads input, the queue or Arrow vectors.
-    assert(closing.isAlive && resources.isClosed && releases.taskMemory.get == 0)
-    finish.countDown()
     closing.join(10000)
-    consumer.join(10000)
     assert(!closing.isAlive && releases.taskMemory.get == 1 && releases.others.get == 1)
     assert(!resources.enter())
     assert(releases.taskMemory.get == 1 && releases.others.get == 1)
@@ -222,67 +253,43 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
   test("task completion releases task memory at once while Python runs") {
     val releases = new Releases
     val resources = releases.resources()
-    val inPython = new CountDownLatch(1)
-    val finish = new CountDownLatch(1)
-    val closedAfterPython = new AtomicBoolean()
-    val consumer = thread {
-      assert(resources.enter())
-      try {
-        resources.withoutLock { inPython.countDown(); finish.await() }
-        closedAfterPython.set(resources.isClosed)
-      } finally {
-        resources.exit()
-      }
+    val closedAfterPython = withConsumer(resources, inPython = true) {
+      resources.close()
+      // The listener does not wait for Python, but keeps the Arrow vectors Python may use.
+      assert(releases.taskMemory.get == 1 && releases.others.get == 0)
     }
-    assert(inPython.await(10, TimeUnit.SECONDS))
-    resources.close()
-    // The listener does not wait for Python, but keeps the Arrow vectors Python may use.
-    assert(releases.taskMemory.get == 1 && releases.others.get == 0)
-    finish.countDown()
-    consumer.join(10000)
-    assert(closedAfterPython.get && releases.taskMemory.get == 1 && releases.others.get == 1)
+    assert(closedAfterPython && releases.taskMemory.get == 1 && releases.others.get == 1)
   }
 
   test("task completion waits only briefly for a consumer blocked on its input") {
     val releases = new Releases
     val resources = releases.resources(lockWaitMillis = 50L)
-    val entered = new CountDownLatch(1)
-    val finish = new CountDownLatch(1)
-    val consumer = thread {
-      assert(resources.enter())
-      entered.countDown()
-      finish.await()
-      resources.exit()
+    withConsumer(resources) {
+      resources.close()
+      // The executor frees the task memory, after the listener deletes what lives outside it.
+      assert(releases.taskMemory.get == 0 && releases.abandoned.get == 1)
+      assert(releases.others.get == 0)
     }
-    assert(entered.await(10, TimeUnit.SECONDS))
-    resources.close()
-    // The executor frees the task memory; the consumer releases the rest when it returns.
-    assert(releases.taskMemory.get == 0 && releases.others.get == 0)
-    finish.countDown()
-    consumer.join(10000)
     assert(releases.taskMemory.get == 0 && releases.others.get == 1)
   }
 
   test("an interrupted completion listener still waits for the consumer's lock") {
     val releases = new Releases
     val resources = releases.resources()
-    val entered = new CountDownLatch(1)
-    val consumer = thread {
-      assert(resources.enter())
-      entered.countDown()
-      Thread.sleep(300)
-      resources.exit()
-    }
-    assert(entered.await(10, TimeUnit.SECONDS))
     val interrupted = new AtomicBoolean()
-    val closing = thread {
-      Thread.currentThread().interrupt()
-      resources.close()
-      interrupted.set(Thread.currentThread().isInterrupted)
+    var closing: Thread = null
+    withConsumer(resources) {
+      closing = thread {
+        Thread.currentThread().interrupt()
+        resources.close()
+        interrupted.set(Thread.currentThread().isInterrupted)
+      }
+      closing.join(200)
+      assert(closing.isAlive && releases.taskMemory.get == 0)
     }
     closing.join(10000)
-    consumer.join(10000)
-    assert(releases.taskMemory.get == 1 && releases.others.get == 1 && interrupted.get)
+    assert(!closing.isAlive && interrupted.get)
+    assert(releases.taskMemory.get == 1 && releases.others.get == 1)
   }
 
   test("exhausted iterators close within a call and return no more rows") {
@@ -294,6 +301,84 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     assert(!resources.enter())
     resources.close()
     assert(releases.taskMemory.get == 1 && releases.others.get == 1)
+  }
+
+  /**
+   * An evaluator without UDFs, which reads its single input column back from Arrow, so that
+   * its iterator runs without Python. `rows` blocks on `gate` before reading row `blockAt`.
+   */
+  private class BlockingInput(blockAt: Int) {
+    val reached = new CountDownLatch(1)
+    val gate = new CountDownLatch(1)
+    val pulled = new AtomicInteger()
+    val context = TaskContext.empty()
+    private val column = AttributeReference("x", LongType)()
+
+    val rows: Iterator[InternalRow] = new Iterator[InternalRow] {
+      private def block(): Unit = if (pulled.get == blockAt) {
+        reached.countDown()
+        gate.await(10, TimeUnit.SECONDS)
+      }
+      override def hasNext: Boolean = { block(); true }
+      override def next(): InternalRow = {
+        block()
+        InternalRow(pulled.incrementAndGet().toLong)
+      }
+    }
+
+    def iterator(): Iterator[InternalRow] = {
+      val metrics = Seq("pythonInitTime", "pythonProcessingTime", "pythonTotalTime")
+        .map(_ -> new SQLMetric("timing", 0L)).toMap
+      new InProcessArrowEvalPythonEvaluatorFactory(Seq(column), Seq.empty, Seq(column), 10,
+          0L, "UTC", false, false, false, false, true, metrics) {
+        override private[python] def runtimeSession = runtime
+      }.evaluateBatches(Seq.empty, Array.empty, rows,
+        StructType(Seq(StructField("x", LongType))), context,
+        InProcessArrowEvalPythonEvaluatorFactory.ReadBack)
+    }
+  }
+
+  test("task completion stops a batch fill within one input row") {
+    val input = new BlockingInput(blockAt = 3)
+    val iterator = input.iterator()
+    val error = new AtomicReference[Throwable]()
+    val consumer = thread {
+      try iterator.next() catch { case t: Throwable => error.set(t) }
+    }
+    try {
+      assert(input.reached.await(10, TimeUnit.SECONDS))
+      val closing = thread(input.context.markTaskCompleted(None))
+      closing.join(200)
+      assert(closing.isAlive)
+      input.gate.countDown()
+      closing.join(10000)
+      assert(!closing.isAlive)
+    } finally {
+      input.gate.countDown()
+      consumer.join(10000)
+    }
+    // The row read while closing is discarded, and no later row is read.
+    assert(error.get.isInstanceOf[NoSuchElementException] && input.pulled.get == 4)
+    assert(!iterator.hasNext)
+  }
+
+  test("hasNext returns false when task completion happens while it reads input") {
+    val input = new BlockingInput(blockAt = 0)
+    val iterator = input.iterator()
+    val available = new AtomicReference[java.lang.Boolean]()
+    val consumer = thread(available.set(iterator.hasNext))
+    try {
+      assert(input.reached.await(10, TimeUnit.SECONDS))
+      val closing = thread(input.context.markTaskCompleted(None))
+      closing.join(200)
+      input.gate.countDown()
+      closing.join(10000)
+      assert(!closing.isAlive)
+    } finally {
+      input.gate.countDown()
+      consumer.join(10000)
+    }
+    assert(available.get == false && input.pulled.get == 0)
   }
 
   test("calls from different threads use the same interpreter owner thread") {
