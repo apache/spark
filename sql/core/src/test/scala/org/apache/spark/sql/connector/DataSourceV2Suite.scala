@@ -411,7 +411,7 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
             s"(scan ${scanRelation.scan.getClass.getName}) because the ordering columns " +
             "cannot be resolved: missing."
         val warnings = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
-          .filter(_.contains("ordering columns cannot be resolved"))
+          .filter(_.contains("columns cannot be resolved"))
         assert(warnings.toSet == Set(expectedWarning), warnings)
         assert(scanRelation.ordering.isEmpty)
       }

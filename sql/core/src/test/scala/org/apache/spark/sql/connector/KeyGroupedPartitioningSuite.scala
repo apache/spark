@@ -3608,7 +3608,7 @@ class KeyGroupedPartitioningSuite
     (plan, reportingScans.head, warnings)
   }
 
-  test("SPARK-59721: an unresolvable reported partition key falls back to unknown partitioning") {
+  test("SPARK-59721: a reported partitioning with an unresolvable key is ignored") {
     // CustomReportingCatalog is not a FunctionCatalog, so a `bucket` key would be dropped even with
     // a resolvable column. The warning assertion shows the unresolvable column is what drops it.
     val cases = Seq[(Seq[Expression], Option[String])](
@@ -3648,13 +3648,14 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("SPARK-59721: an unresolvable reported ordering column is ignored") {
+  test("SPARK-59721: a reported ordering with an unresolvable column is ignored") {
     withCustomReportingTable { reportingCatalog =>
       withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true") {
         reportingCatalog.reportedKeys = Seq(identity("id"))
         Seq[(SortOrder, String)](
           (sort(FieldReference("id"), SortDirection.ASCENDING), "id"),
           (sort(FieldReference("ID"), SortDirection.ASCENDING), "ID"),
+          // `index` is a metadata column of InMemoryBaseTable.
           (sort(FieldReference("index"), SortDirection.ASCENDING), "index"),
           (ChildrenOverridingSortOrder(FieldReference("id"), Seq(FieldReference("missing"))), "id")
         ).foreach { case (order, column) =>
