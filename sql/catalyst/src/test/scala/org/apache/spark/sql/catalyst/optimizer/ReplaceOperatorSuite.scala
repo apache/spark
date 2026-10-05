@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Coalesce, If, Literal, Not}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Coalesce, If, KnownNotNull, Literal, Not}
 import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -211,6 +211,26 @@ class ReplaceOperatorSuite extends PlanTest {
         input)
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-44517: replacing Deduplicate preserves non-key attribute nullability") {
+    val input = LocalRelation($"key".int.notNull, $"value".int.notNull, $"nullable".int)
+    val key = input.output.head
+    for (keys <- Seq(Seq(key), Seq.empty)) {
+      val query = Deduplicate(keys, input)
+      val optimized = Optimize.execute(query.analyze)
+      val nonemptyKeys = if (keys.isEmpty) Seq(Literal(1)) else keys
+      val aggregates = input.output.map { attr =>
+        if (keys.contains(attr)) {
+          attr
+        } else {
+          val first = new First(attr).toAggregateExpression()
+          Alias(if (attr.nullable) first else KnownNotNull(first), attr.name)()
+        }
+      }
+      comparePlans(optimized, Aggregate(nonemptyKeys, aggregates, input))
+      assert(optimized.output.map(_.nullable) == Seq(false, false, true))
+    }
   }
 
   test("add one grouping key if necessary when replace Deduplicate with Aggregate") {
