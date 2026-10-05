@@ -98,7 +98,7 @@ hll_sketch_agg(expr [, lgConfigK])
 
 | Argument | Type | Description |
 |----------|------|-------------|
-| `expr` | INT, BIGINT, STRING, or BINARY | The expression whose distinct values will be counted |
+| `expr` | INT, BIGINT, TIME, STRING, or BINARY | The expression whose distinct values will be counted |
 | `lgConfigK` | INT (optional) | Log-base-2 of K, where K is the number of buckets. Range: 4-21. Default: 12. Higher values provide more accuracy but use more memory. |
 
 Returns a BINARY containing the HLL sketch in updatable binary representation.

@@ -57,7 +57,6 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    CredentialProviderLoader.resetForTesting()
     tokenFile = File.createTempFile("oidc-token-", ".jwt")
     tokenFile.deleteOnExit()
     writeTokenFile("fake.jwt.token.workload")
@@ -67,7 +66,6 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
     try {
       if (tokenFile != null) tokenFile.delete()
     } finally {
-      CredentialProviderLoader.resetForTesting()
       super.afterEach()
     }
   }
@@ -511,7 +509,8 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
       .set(NETWORK_AUTH_ENABLED, true)
       .set(NETWORK_CRYPTO_ENABLED, true)
 
-    val oidcManager = UserCredentialManager.create(conf, (_, _) => ())
+    val oidcManager = UserCredentialManager.create(
+      conf, (_, _) => (), Some(new CredentialProviderLoader()))
     assert(oidcManager.isEmpty, "OIDC manager should not be created when disabled")
 
     val dtManager = new HadoopDelegationTokenManager(conf, hadoopConf, mockRef)

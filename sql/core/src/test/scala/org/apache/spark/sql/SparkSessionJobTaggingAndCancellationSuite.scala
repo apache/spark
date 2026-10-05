@@ -160,8 +160,9 @@ class SparkSessionJobTaggingAndCancellationSuite
         }
 
         override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-          sem.release()
+          // Update the counter before waking the test thread so it observes the new value.
           jobEnded.incrementAndGet()
+          sem.release()
         }
       })
 

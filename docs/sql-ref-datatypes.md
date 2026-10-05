@@ -179,6 +179,8 @@ You can access them by doing
 |**BooleanType**|Boolean|BooleanType|
 |**TimestampType**|java.time.Instant or java.sql.Timestamp|TimestampType|
 |**TimestampNTZType**|java.time.LocalDateTime|TimestampNTZType|
+|**TimestampLTZNanosType(precision)**|java.time.Instant|TimestampLTZNanosType(precision)|
+|**TimestampNTZNanosType(precision)**|java.time.LocalDateTime|TimestampNTZNanosType(precision)|
 |**DateType**|java.time.LocalDate or java.sql.Date|DateType|
 |**TimeType**|java.time.LocalTime|TimeType|
 |**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|

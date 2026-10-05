@@ -75,11 +75,11 @@ object FakeTask {
       priority: Int,
       rpId: Int,
       prefLocs: Seq[TaskLocation]*): TaskSet = {
-    if (prefLocs.size != 0 && prefLocs.size != numTasks) {
+    if (prefLocs.nonEmpty && prefLocs.size != numTasks) {
       throw new IllegalArgumentException("Wrong number of task locations")
     }
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
-      new FakeTask(stageId, i, if (prefLocs.size != 0) prefLocs(i) else Nil)
+      new FakeTask(stageId, i, if (prefLocs.nonEmpty) prefLocs(i) else Nil)
     }
     new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null, rpId, None)
   }
@@ -98,7 +98,7 @@ object FakeTask {
       stageAttemptId: Int,
       priority: Int,
       prefLocs: Seq[TaskLocation]*): TaskSet = {
-    if (prefLocs.size != 0 && prefLocs.size != numTasks) {
+    if (prefLocs.nonEmpty && prefLocs.size != numTasks) {
       throw new IllegalArgumentException("Wrong number of task locations")
     }
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
@@ -131,11 +131,11 @@ object FakeTask {
       priority: Int,
       rpId: Int,
       prefLocs: Seq[TaskLocation]*): TaskSet = {
-    if (prefLocs.size != 0 && prefLocs.size != numTasks) {
+    if (prefLocs.nonEmpty && prefLocs.size != numTasks) {
       throw new IllegalArgumentException("Wrong number of task locations")
     }
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
-      new FakeTask(stageId, i, if (prefLocs.size != 0) prefLocs(i) else Nil, isBarrier = true)
+      new FakeTask(stageId, i, if (prefLocs.nonEmpty) prefLocs(i) else Nil, isBarrier = true)
     }
     new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null, rpId, None)
   }

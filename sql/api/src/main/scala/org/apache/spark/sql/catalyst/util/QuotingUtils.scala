@@ -73,10 +73,15 @@ object QuotingUtils {
     }
   }
 
+  /**
+   * Escapes a string so that it can be emitted inside a single-quoted SQL string literal and
+   * parsed back to the original value by the default string literal parser.
+   */
   def escapeSingleQuotedString(str: String): String = {
     val builder = new StringBuilder
 
     str.foreach {
+      case '\\' => builder ++= "\\\\"
       case '\'' => builder ++= s"\\\'"
       case ch => builder += ch
     }

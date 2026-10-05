@@ -1484,14 +1484,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  // Floors a sub-microsecond nanos component (0..999) to the given timestamp precision in [7, 9],
-  // mirroring the production truncation rule used by the cross-precision cast.
-  private def floorNanosToPrecision(nanosWithinMicro: Int, precision: Int): Int = precision match {
-    case 7 => (nanosWithinMicro / 100) * 100
-    case 8 => (nanosWithinMicro / 10) * 10
-    case 9 => nanosWithinMicro
-  }
-
   test("SPARK-57490: cast between timestamp_ntz nanos types of different precision") {
     // Same physical (epochMicros, nanosWithinMicro) pair; only the sub-microsecond part is
     // re-floored to the target precision. epochMicros never changes and no time zone is involved.
@@ -1506,8 +1498,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       // The source value is already valid at p1 (its sub-micro digits are floored to p1); casting
       // to p2 re-floors to p2, so the net effect is flooring to min(p1, p2). Widening (p2 >= p1)
       // is lossless, narrowing (p2 < p1) drops the extra sub-microsecond digits.
-      val srcNanos = floorNanosToPrecision(789, p1)
-      val expectedNanos = floorNanosToPrecision(srcNanos, p2)
+      val srcNanos = nanoOfSecTruncator(p1)(789)
+      val expectedNanos = nanoOfSecTruncator(p2)(srcNanos)
       checkEvaluation(
         cast(Literal.create(nanosVal(micros, srcNanos), TimestampNTZNanosType(p1)),
           TimestampNTZNanosType(p2)),
@@ -1534,8 +1526,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       p1 <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION
       p2 <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION
     } {
-      val srcNanos = floorNanosToPrecision(789, p1)
-      val expectedNanos = floorNanosToPrecision(srcNanos, p2)
+      val srcNanos = nanoOfSecTruncator(p1)(789)
+      val expectedNanos = nanoOfSecTruncator(p2)(srcNanos)
       checkEvaluation(
         cast(Literal.create(nanosVal(micros, srcNanos), TimestampLTZNanosType(p1)),
           TimestampLTZNanosType(p2), UTC_OPT),
@@ -1569,8 +1561,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         } {
           // The source already floors to p; the cross-family cast then floors to q, i.e. to
           // min(p, q). Only the wall-clock epoch-micros part shifts with the zone.
-          val srcNanos = floorNanosToPrecision(789, p)
-          val expectedNanos = floorNanosToPrecision(srcNanos, q)
+          val srcNanos = nanoOfSecTruncator(p)(789)
+          val expectedNanos = nanoOfSecTruncator(q)(srcNanos)
           checkEvaluation(
             cast(Literal.create(nanosVal(srcMicros, srcNanos), TimestampLTZNanosType(p)),
               TimestampNTZNanosType(q), zid),
@@ -1604,8 +1596,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           p <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION
           q <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION
         } {
-          val srcNanos = floorNanosToPrecision(789, q)
-          val expectedNanos = floorNanosToPrecision(srcNanos, p)
+          val srcNanos = nanoOfSecTruncator(q)(789)
+          val expectedNanos = nanoOfSecTruncator(p)(srcNanos)
           checkEvaluation(
             cast(Literal.create(nanosVal(srcMicros, srcNanos), TimestampNTZNanosType(q)),
               TimestampLTZNanosType(p), zid),
@@ -1630,7 +1622,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       foreachNanosPrecision { p =>
         val src = nanosVal(
           instantToNanosVal(timestampLTZ(2020, 7, 1, 6, 15, 30, 123456789)).epochMicros,
-          floorNanosToPrecision(789, p))
+          nanoOfSecTruncator(p)(789))
         checkEvaluation(
           cast(
             cast(Literal.create(src, TimestampLTZNanosType(p)), TimestampNTZNanosType(p), zid),
@@ -1668,17 +1660,17 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         q <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION
       } {
         // NTZ(q) -> LTZ(p): the epoch-micros part resolves DST exactly like the micro cast.
-        val ntzToLtzSrc = floorNanosToPrecision(789, q)
+        val ntzToLtzSrc = nanoOfSecTruncator(q)(789)
         checkEvaluation(
           cast(Literal.create(nanosVal(ntzMicros, ntzToLtzSrc), TimestampNTZNanosType(q)),
             TimestampLTZNanosType(p), la),
-          nanosVal(microLtz, floorNanosToPrecision(ntzToLtzSrc, p)))
+          nanosVal(microLtz, nanoOfSecTruncator(p)(ntzToLtzSrc)))
         // LTZ(p) -> NTZ(q): rendering the resolved instant matches the micro cast too.
-        val ltzToNtzSrc = floorNanosToPrecision(789, p)
+        val ltzToNtzSrc = nanoOfSecTruncator(p)(789)
         checkEvaluation(
           cast(Literal.create(nanosVal(microLtz, ltzToNtzSrc), TimestampLTZNanosType(p)),
             TimestampNTZNanosType(q), la),
-          nanosVal(microNtz, floorNanosToPrecision(ltzToNtzSrc, q)))
+          nanosVal(microNtz, nanoOfSecTruncator(q)(ltzToNtzSrc)))
       }
     }
   }
@@ -1709,12 +1701,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         // TIMESTAMP_NTZ(p) -> TIMESTAMP (LTZ(6)): drops the sub-microsecond digits before the zone
         // reinterpretation. A non-zero nanosWithinMicro on the source proves the truncation.
         checkEvaluation(
-          cast(Literal.create(nanosVal(ntzMicros, floorNanosToPrecision(789, p)),
+          cast(Literal.create(nanosVal(ntzMicros, nanoOfSecTruncator(p)(789)),
             TimestampNTZNanosType(p)), TimestampType, zid),
           convertTz(ntzMicros, zone, UTC))
         // TIMESTAMP_LTZ(p) -> TIMESTAMP_NTZ (NTZ(6)): drops the sub-microsecond digits likewise.
         checkEvaluation(
-          cast(Literal.create(nanosVal(ltzMicros, floorNanosToPrecision(789, p)),
+          cast(Literal.create(nanosVal(ltzMicros, nanoOfSecTruncator(p)(789)),
             TimestampLTZNanosType(p)), TimestampNTZType, zid),
           convertTz(ltzMicros, UTC, zone))
         // Null input in all four directions.

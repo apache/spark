@@ -1198,7 +1198,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       "spark.hadoop.fs.s3.awsAccessKeyId",
       "spark.hadoop.fs.s3a.access.key",
       "spark.my.password",
-      "spark.my.sECreT")
+      "spark.my.sECreT",
+      "spark.sql.catalog.mycatalog.credential")
     secretKeys.foreach { key => sparkConf.set(key, "sensitive_value") }
     // Set a non-secret key
     sparkConf.set("spark.regular.property", "regular_value")

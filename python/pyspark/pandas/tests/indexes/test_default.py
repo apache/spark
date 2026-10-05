@@ -17,8 +17,8 @@
 
 import pandas as pd
 
-from pyspark.sql import functions as F
 from pyspark import pandas as ps
+from pyspark.sql import functions as F
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 

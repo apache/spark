@@ -18,12 +18,16 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io.File
+import java.util.concurrent.{CompletionException, CountDownLatch, ExecutionException, TimeUnit}
 
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkThrowable}
+import org.apache.spark.errors.SparkCoreErrors
+import org.apache.spark.sql.{Encoder, SparkSession}
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit}
 import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, StreamExecution}
 import org.apache.spark.sql.execution.streaming.runtime.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED}
 import org.apache.spark.sql.execution.streaming.runtime.MicroBatchExecution
@@ -33,11 +37,31 @@ import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.execution.streaming.state.{FailureInjectionCheckpointFileManager, FailureInjectionFileSystem}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StreamRealTimeModeManualClockSuiteBase}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkErrorUtils, Utils}
 
 
 private class UnsupportedSink extends MemorySink {
   override def name(): String = "UnsupportedSink"
+}
+
+private class CategorizedExecutionException(cause: Throwable)
+  extends ExecutionException("categorized execution failure", cause) with SparkThrowable {
+
+  override def getCondition: String = "TEST_ERROR_CLASS"
+}
+
+private class BlockingLatestOffsetMemoryStream(
+    sparkSession: SparkSession,
+    latestOffsetEntered: CountDownLatch,
+    releaseLatestOffset: CountDownLatch)(
+    implicit encoder: Encoder[Int])
+  extends LowLatencyMemoryStream[Int](Int.MaxValue, sparkSession) {
+
+  override def latestOffset(startOffset: OffsetV2, limit: ReadLimit): OffsetV2 = {
+    latestOffsetEntered.countDown()
+    releaseLatestOffset.await()
+    super.latestOffset(startOffset, limit)
+  }
 }
 
 class AsyncProgressTrackingRealTimeModeSuite
@@ -340,19 +364,11 @@ class AsyncProgressTrackingRealTimeModeSuite
             AddData(inputData, 10 until 20: _*),
             CheckAnswerWithTimeout(60000, 0 until 20: _*),
             advanceRealTimeClock,
-            ExpectFailure[Exception](
+            ExpectFailure[SparkRuntimeException](
               assertFailure = e => {
-                // The async log write failure surfaces in one of two valid ways, depending on a
-                // benign race in how the execution thread observes the error: either wrapped in
-                // STREAMING_ASYNC_OPERATION_FAILED (when the thread is interrupted mid-batch) or
-                // thrown directly (when the post-batch error check picks it up first). Unwrap the
-                // async wrapper if present, then assert on the categorized log write failure.
-                val categorized = e match {
-                  case sre: SparkRuntimeException
-                      if sre.getCondition == "STREAMING_ASYNC_OPERATION_FAILED" => sre.getCause
-                  case other => other
-                }
-                val sparkEx = categorized.asInstanceOf[SparkException]
+                val asyncFailure = e.asInstanceOf[SparkRuntimeException]
+                assert(asyncFailure.getCondition === "STREAMING_ASYNC_OPERATION_FAILED")
+                val sparkEx = asyncFailure.getCause.asInstanceOf[SparkException]
                 checkError(
                   sparkEx,
                   expectedErrorClass,
@@ -361,13 +377,83 @@ class AsyncProgressTrackingRealTimeModeSuite
                 // The original IOException must be preserved as the root cause.
                 assert(sparkEx.getCause.isInstanceOf[java.io.IOException])
                 assert(sparkEx.getCause.getMessage === "Fake File Stream Close Failure")
-              },
-              typeIsSuperClass = true)
+              })
           )
         } finally {
           FailureInjectionFileSystem.removePathFromTempToInjectionState(checkpointDir.getPath)
         }
       }
+    }
+  }
+
+  private def testInjectedAsyncFailure(
+      asyncWriteError: Throwable,
+      retainedError: Option[Throwable] = None,
+      batchId: Long = 7L)(
+      assertFailure: SparkRuntimeException => Unit): Unit = {
+    withTempDir { checkpointDir =>
+      val latestOffsetEntered = new CountDownLatch(1)
+      val releaseLatestOffset = new CountDownLatch(1)
+      val inputData = new BlockingLatestOffsetMemoryStream(
+        spark, latestOffsetEntered, releaseLatestOffset)
+
+      testStream(
+        inputData.toDF(),
+        outputMode = OutputMode.Update(),
+        sink = new ContinuousMemorySink(),
+        extraOptions = Map(
+          ASYNC_PROGRESS_TRACKING_ENABLED -> "true",
+          ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS -> "0"))(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        Execute { query =>
+          try {
+            assert(latestOffsetEntered.await(60, TimeUnit.SECONDS))
+            val execution = query.asInstanceOf[AsyncProgressTrackingMicroBatchExecution]
+            retainedError.foreach(execution.errorNotifier.markError)
+            execution.handleAsyncLogWriteError(
+              asyncWriteError, batchId, StreamingErrors.offsetLogWriteFailure)
+          } finally {
+            releaseLatestOffset.countDown()
+          }
+        },
+        ExpectFailure[SparkRuntimeException] { error =>
+          assertFailure(error.asInstanceOf[SparkRuntimeException])
+        })
+    }
+  }
+
+  private def testRetainedAndInterruptingErrors(
+      retainedError: Throwable,
+      writeError: Throwable,
+      expectedSuppressedErrors: Seq[Throwable]): Unit = {
+    testInjectedAsyncFailure(writeError, retainedError = Some(retainedError)) { failure =>
+      assert(failure.getCondition === "STREAMING_ASYNC_OPERATION_FAILED")
+      val categorized = failure.getCause.asInstanceOf[SparkException]
+      checkError(
+        categorized,
+        StreamingErrors.OFFSET_LOG_WRITE_FAILURE,
+        parameters = Map("batchId" -> "7", "checkpointLocation" -> ".*"),
+        matchPVals = true)
+      assert(categorized.getCause eq writeError)
+      assert(failure.getSuppressed.toSeq === expectedSuppressedErrors)
+      assert(retainedError.getSuppressed.isEmpty)
+      assert(!SparkErrorUtils.stackTraceToString(failure).contains("CIRCULAR REFERENCE"))
+    }
+  }
+
+  private def testWrappedCategorizedFailure(
+      wrap: Throwable => Throwable,
+      preserveWrapper: Boolean = false): Unit = {
+    val categorizedError = StreamingErrors.offsetLogWriteFailure(
+      batchId = 1L,
+      checkpointLocation = "/checkpoint",
+      cause = new java.io.IOException("checkpoint authorization failure"))
+    val asyncWriteError = wrap(categorizedError)
+    val expectedCause = if (preserveWrapper) asyncWriteError else categorizedError
+
+    testInjectedAsyncFailure(asyncWriteError, batchId = 1L) { failure =>
+      assert(failure.getCondition === "STREAMING_ASYNC_OPERATION_FAILED")
+      assert(failure.getCause eq expectedCause)
     }
   }
 
@@ -377,5 +463,65 @@ class AsyncProgressTrackingRealTimeModeSuite
 
   test("throw exceptions immediately on offset log write failure") {
     testAsyncLogWriteFailure("offsets", StreamingErrors.OFFSET_LOG_WRITE_FAILURE)
+  }
+
+  test("report the async error that interrupted RTM instead of an earlier retained error") {
+    val retainedError = new java.io.IOException("earlier async purge failure")
+    testRetainedAndInterruptingErrors(
+      retainedError = retainedError,
+      writeError = new java.io.IOException("current offset write failure"),
+      expectedSuppressedErrors = Seq(retainedError))
+  }
+
+  test("wrap a non-fatal notifier error observed before the RTM interruption") {
+    val retainedError = new java.io.IOException("earlier async failure")
+    val interruptingError = new java.io.IOException("interrupting async failure")
+    val failure = AsyncProgressTrackingMicroBatchExecution.getAsyncOperationFailure(
+      thrownError = retainedError,
+      isInterruption = false,
+      interruptingError = Some(interruptingError),
+      notifierError = Some(retainedError)).get
+
+    assert(failure.getCause eq interruptingError)
+    assert(failure.getSuppressed.toSeq === Seq(retainedError))
+  }
+
+  test("do not wrap a fatal notifier error observed before the RTM interruption") {
+    val fatalError = SparkCoreErrors.outOfMemoryError(
+      requestedBytes = 1L,
+      receivedBytes = 0L,
+      consumerBreakdown = "test")
+    val failure = AsyncProgressTrackingMicroBatchExecution.getAsyncOperationFailure(
+      thrownError = fatalError,
+      isInterruption = false,
+      interruptingError = Some(new RuntimeException("interrupting async failure")),
+      notifierError = Some(fatalError))
+
+    assert(failure.isEmpty)
+  }
+
+  test("do not suppress a retained error already in the interrupting error graph") {
+    val retainedError = new java.io.IOException("earlier async failure")
+    testRetainedAndInterruptingErrors(
+      retainedError = retainedError,
+      writeError = retainedError,
+      expectedSuppressedErrors = Seq.empty)
+  }
+
+  Seq[(String, Throwable => Throwable)](
+    "CompletionException" -> ((error: Throwable) => new CompletionException(error)),
+    "ExecutionException" -> ((error: Throwable) => new ExecutionException(error)),
+    "mixed future wrappers" -> ((error: Throwable) =>
+      new CompletionException(new ExecutionException(error)))).foreach {
+    case (wrapperName, wrap) =>
+      test(s"unwrap a categorized failure nested in $wrapperName") {
+        testWrappedCategorizedFailure(wrap)
+      }
+  }
+
+  test("preserve a categorized failure that is also an ExecutionException") {
+    testWrappedCategorizedFailure(
+      error => new CategorizedExecutionException(error),
+      preserveWrapper = true)
   }
 }

@@ -19,7 +19,7 @@ import array as pyarray
 
 from numpy import arange, array, array_equal, inf, ones, tile, zeros
 
-from pyspark.serializers import CPickleSerializer
+from pyspark.errors import AnalysisException
 from pyspark.ml.linalg import (
     DenseMatrix,
     DenseVector,
@@ -27,12 +27,14 @@ from pyspark.ml.linalg import (
     SparseMatrix,
     SparseVector,
     Vector,
-    VectorUDT,
     Vectors,
+    VectorUDT,
 )
-from pyspark.testing.mllibutils import MLlibTestCase
+from pyspark.serializers import CPickleSerializer
 from pyspark.sql import Row
-from pyspark.sql.functions import unwrap_udt
+from pyspark.sql.functions import lit, unwrap_udt, wrap_udt
+from pyspark.sql.types import StructField, StructType
+from pyspark.testing.mllibutils import MLlibTestCase
 
 
 class VectorTests(MLlibTestCase):
@@ -367,6 +369,49 @@ class VectorUDTTests(MLlibTestCase):
         ]
         self.assertEqual(results, expected)
 
+    def test_wrap_udt(self):
+        schema = StructType([StructField("vec", VectorUDT.sqlType(), True)])
+        vector_struct = Row("type", "size", "indices", "values")
+        df = self.spark.createDataFrame(
+            [
+                (vector_struct(1, None, None, [1.0, 2.0]),),
+                (vector_struct(0, 2, [1], [2.0]),),
+            ],
+            schema,
+        )
+        wrapped = df.select(wrap_udt("vec", VectorUDT()).alias("vec"))
+
+        self.assertEqual(wrapped.schema["vec"].dataType, VectorUDT())
+        self.assertEqual(wrapped.collect(), [Row(vec=self.dv1), Row(vec=self.sv1)])
+
+    def test_wrap_udt_type_mismatch(self):
+        schema = StructType([StructField("vec", VectorUDT.sqlType(), True)])
+        vector_struct = Row("type", "size", "indices", "values")
+        df = self.spark.createDataFrame(
+            [(vector_struct(1, None, None, [1.0, 2.0]),)],
+            schema,
+        )
+
+        with self.assertRaises(AnalysisException) as context:
+            df.select(wrap_udt("vec", MatrixUDT())).collect()
+        self.assertEqual(
+            context.exception.getCondition(), "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"
+        )
+
+    def test_wrap_unwrap_udt_round_trip(self):
+        df = self.spark.createDataFrame([(self.dv1,), (self.sv1,)], ["vec"])
+        round_trip = df.select(wrap_udt(unwrap_udt("vec"), VectorUDT()).alias("vec"))
+
+        self.assertEqual(round_trip.schema["vec"].dataType, VectorUDT())
+        self.assertEqual(round_trip.collect(), [Row(vec=self.dv1), Row(vec=self.sv1)])
+
+    def test_wrap_unwrap_udt_round_trip_with_udt_column(self):
+        df = self.spark.createDataFrame([(self.dv1,), (self.sv1,)], ["vec"])
+        round_trip = df.select(wrap_udt(unwrap_udt("vec"), lit(VectorUDT().json())).alias("vec"))
+
+        self.assertEqual(round_trip.schema["vec"].dataType, VectorUDT())
+        self.assertEqual(round_trip.collect(), [Row(vec=self.dv1), Row(vec=self.sv1)])
+
     def test_hashable(self):
         _ = hash(VectorUDT())
 
@@ -403,6 +448,65 @@ class MatrixUDTTests(MLlibTestCase):
                 self.assertEqual(m, self.sm1)
             else:
                 raise ValueError("Expected a matrix but got type %r" % type(m))
+
+    def test_wrap_udt(self):
+        schema = StructType([StructField("mat", MatrixUDT.sqlType(), True)])
+        matrix_struct = Row(
+            "type",
+            "numRows",
+            "numCols",
+            "colPtrs",
+            "rowIndices",
+            "values",
+            "isTransposed",
+        )
+        df = self.spark.createDataFrame(
+            [
+                (matrix_struct(1, 3, 2, None, None, [0.0, 1.0, 4.0, 5.0, 9.0, 10.0], False),),
+                (matrix_struct(0, 1, 1, [0, 1], [0], [2.0], False),),
+            ],
+            schema,
+        )
+        wrapped = df.select(wrap_udt("mat", MatrixUDT()).alias("mat"))
+
+        self.assertEqual(wrapped.schema["mat"].dataType, MatrixUDT())
+        self.assertEqual(wrapped.collect(), [Row(mat=self.dm1), Row(mat=self.sm1)])
+
+    def test_wrap_udt_type_mismatch(self):
+        schema = StructType([StructField("mat", MatrixUDT.sqlType(), True)])
+        matrix_struct = Row(
+            "type",
+            "numRows",
+            "numCols",
+            "colPtrs",
+            "rowIndices",
+            "values",
+            "isTransposed",
+        )
+        df = self.spark.createDataFrame(
+            [(matrix_struct(1, 3, 2, None, None, [0.0, 1.0, 4.0, 5.0, 9.0, 10.0], False),)],
+            schema,
+        )
+
+        with self.assertRaises(AnalysisException) as context:
+            df.select(wrap_udt("mat", VectorUDT())).collect()
+        self.assertEqual(
+            context.exception.getCondition(), "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"
+        )
+
+    def test_wrap_unwrap_udt_round_trip(self):
+        df = self.spark.createDataFrame([(self.dm1,), (self.sm1,)], ["mat"])
+        round_trip = df.select(wrap_udt(unwrap_udt("mat"), MatrixUDT()).alias("mat"))
+
+        self.assertEqual(round_trip.schema["mat"].dataType, MatrixUDT())
+        self.assertEqual(round_trip.collect(), [Row(mat=self.dm1), Row(mat=self.sm1)])
+
+    def test_wrap_unwrap_udt_round_trip_with_udt_column(self):
+        df = self.spark.createDataFrame([(self.dm1,), (self.sm1,)], ["mat"])
+        round_trip = df.select(wrap_udt(unwrap_udt("mat"), lit(MatrixUDT().json())).alias("mat"))
+
+        self.assertEqual(round_trip.schema["mat"].dataType, MatrixUDT())
+        self.assertEqual(round_trip.collect(), [Row(mat=self.dm1), Row(mat=self.sm1)])
 
     def test_hashable(self):
         _ = hash(MatrixUDT())

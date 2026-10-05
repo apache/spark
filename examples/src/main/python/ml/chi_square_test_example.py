@@ -20,10 +20,11 @@ An example for Chi-square hypothesis testing.
 Run with:
   bin/spark-submit examples/src/main/python/ml/chi_square_test_example.py
 """
-from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.stat import ChiSquareTest
+from pyspark.sql import SparkSession
+
 # $example off$
 
 if __name__ == "__main__":

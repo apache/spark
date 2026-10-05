@@ -15,12 +15,11 @@
 # limitations under the License.
 #
 
-from pyspark.sql import SparkSession
-
 # $example on$
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.recommendation import ALS
-from pyspark.sql import Row
+from pyspark.sql import Row, SparkSession
+
 # $example off$
 
 if __name__ == "__main__":

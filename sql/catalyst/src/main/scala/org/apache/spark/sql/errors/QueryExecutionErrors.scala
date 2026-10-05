@@ -43,11 +43,11 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
+import org.apache.spark.sql.catalyst.plans.physical.KeyReducer
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, IntervalUtils, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -582,7 +582,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def unableToCreateDatabaseAsFailedToCreateDirectoryError(
       dbDefinition: CatalogDatabase, e: IOException): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2033",
+      errorClass = "UNABLE_TO_CREATE_DATABASE_DIRECTORY",
       messageParameters = Map(
         "name" -> dbDefinition.name,
         "locationUri" -> dbDefinition.locationUri.toString()),
@@ -653,6 +653,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2041",
       messageParameters = Map("methodName" -> methodName))
+  }
+
+  def externalUDFInBarrierTaskUnsupportedError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException("UNSUPPORTED_FEATURE.EXTERNAL_UDF_IN_BARRIER_TASK")
   }
 
   def binaryArithmeticCauseOverflowError(
@@ -1394,6 +1398,25 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "INVALID_JSON_ROOT_FIELD",
       messageParameters = Map.empty)
+  }
+
+  def invalidJsonFormatJsonValueError(
+      functionName: String, position: Int, value: String): SparkRuntimeException = {
+    // Bound the echoed value: a FORMAT JSON argument can be a large payload column, and inlining it
+    // whole would bloat task-failure messages, logs, and UI/event metadata. Show a capped preview
+    // plus the full length instead.
+    val maxPreviewLen = 100
+    val preview = if (value.length > maxPreviewLen) {
+      s"${value.take(maxPreviewLen)}... (${value.length} characters)"
+    } else {
+      value
+    }
+    new SparkRuntimeException(
+      errorClass = "INVALID_JSON_FORMAT_JSON_VALUE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "position" -> position.toString,
+        "value" -> toSQLValue(preview, StringType)))
   }
 
   def paramExceedOneCharError(paramName: String, actualValue: String): SparkRuntimeException = {
@@ -2437,7 +2460,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
-  def invalidStartIndexError(numRows: Int, startIndex: Int): SparkArrayIndexOutOfBoundsException = {
+  def invalidStartIndexError(
+      numRows: Long, startIndex: Int): SparkArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "_LEGACY_ERROR_TEMP_2266",
       messageParameters = Map(
@@ -2453,6 +2477,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "_LEGACY_ERROR_TEMP_2267",
       messageParameters = Map(
         "className" -> className))
+  }
+
+  def windowFunctionPartitionSizeExceedsLimitError(numRows: Long): SparkException = {
+    new SparkException(
+      errorClass = "WINDOW_FUNCTION_PARTITION_SIZE_EXCEEDS_LIMIT",
+      messageParameters = Map("numRows" -> numRows.toString()),
+      cause = null)
   }
 
   def doExecuteBroadcastNotImplementedError(
@@ -3215,8 +3246,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "parameter" -> toSQLId("extension"),
-        "fileExtension" -> toSQLId(extension),
-        "acceptable" -> "Extension is limited to exactly 3 letters (e.g. csv, tsv, etc...)"))
+        "invalidValue" -> toSQLId(extension)))
   }
 
   def invalidCharsetError(functionName: String, charset: String): RuntimeException = {
@@ -3240,7 +3270,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def invalidWriterCommitMessageError(details: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "INVALID_WRITER_COMMIT_MESSAGE",
-      messageParameters = Map("details" -> details))
+      messageParameters = Map("detail" -> details))
   }
 
   def codecNotAvailableError(codecName: String, availableCodecs: String): Throwable = {
@@ -3357,12 +3387,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def storagePartitionJoinIncompatibleReducedTypesError(
-      leftReducers: Option[Seq[Option[Reducer[_, _]]]],
+      leftReducers: Option[Seq[Option[KeyReducer]]],
       leftReducedDataTypes: Seq[DataType],
-      rightReducers: Option[Seq[Option[Reducer[_, _]]]],
+      rightReducers: Option[Seq[Option[KeyReducer]]],
       rightReducedDataTypes: Seq[DataType]): Throwable = {
-    def reducersNames(reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
-      reducers.toSeq.flatMap(_.map(_.map(_.displayName()).getOrElse("identity")))
+    def reducersNames(reducers: Option[Seq[Option[KeyReducer]]]) = {
+      reducers.toSeq.flatMap(_.map(_.map(_.reducer.displayName()).getOrElse("identity")))
         .mkString("[", ", ", "]")
     }
 

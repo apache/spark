@@ -93,31 +93,8 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       ds match {
         // file source v2 does not support streaming yet.
         case provider: TableProvider if !provider.isInstanceOf[FileDataSourceV2] =>
-          val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-            source = provider, conf = sparkSession.sessionState.conf)
-          val finalOptions =
-            sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
-            optionsWithPath.originalMap
-          val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-          provider match {
-            case p: PythonDataSourceV2 => p.setShortName(source)
-            case _ =>
-          }
-          val table =
-            DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
-          import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-          table match {
-            case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
-              import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-              StreamingRelationV2(
-                  Some(provider), source, table, dsOptions,
-                  table.columns.toOutputAttributes, None, None, v1Relation,
-                  v1DataSource.streamingSourceIdentifyingName)
-
-            // fallback to v1
-            // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.
-            case _ => StreamingRelation(v1DataSource)
-          }
+          resolveV2StreamingRelation(
+            provider, source, optionsWithPath, userSpecifiedSchema, v1Relation, v1DataSource)
 
         case _ =>
           // Code path for data source v1.
@@ -154,37 +131,52 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       ds match {
         // file source v2 does not support streaming yet.
         case provider: TableProvider if !provider.isInstanceOf[FileDataSourceV2] =>
-          val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-            source = provider, conf = sparkSession.sessionState.conf)
-          val finalOptions =
-            sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
-            optionsWithPath.originalMap
-          val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-          provider match {
-            case p: PythonDataSourceV2 => p.setShortName(source)
-            case _ =>
-          }
-          val table =
-            DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
-          import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-          table match {
-            case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
-              import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-              StreamingRelationV2(
-                  Some(provider), source, table, dsOptions,
-                  table.columns.toOutputAttributes, None, None, v1Relation,
-                  v1DataSource.streamingSourceIdentifyingName)
-
-            // fallback to v1
-            // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.
-            case _ => StreamingRelation(v1DataSource)
-          }
+          resolveV2StreamingRelation(
+            provider, source, optionsWithPath, userSpecifiedSchema, v1Relation, v1DataSource)
 
         case _ =>
           // Code path for data source v1.
           StreamingRelation(v1DataSource)
       }
 
+  }
+
+  /**
+   * Builds the streaming relation for a v2 `TableProvider`: a `StreamingRelationV2` if the
+   * table supports micro-batch or continuous reads, else a v1 `StreamingRelation` fallback.
+   */
+  private def resolveV2StreamingRelation(
+      provider: TableProvider,
+      source: String,
+      optionsWithPath: CaseInsensitiveMap[String],
+      userSpecifiedSchema: Option[StructType],
+      v1Relation: Option[LogicalPlan],
+      v1DataSource: DataSource): LogicalPlan = {
+    val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+      source = provider, conf = sparkSession.sessionState.conf)
+    val finalOptions =
+      sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
+      optionsWithPath.originalMap
+    val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
+    provider match {
+      case p: PythonDataSourceV2 => p.setShortName(source)
+      case _ =>
+    }
+    val table =
+      DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
+    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+    table match {
+      case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
+        import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+        StreamingRelationV2(
+            Some(provider), source, table, dsOptions,
+            table.columns.toOutputAttributes, None, None, v1Relation,
+            v1DataSource.streamingSourceIdentifyingName)
+
+      // fallback to v1
+      // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.
+      case _ => StreamingRelation(v1DataSource)
+    }
   }
 
   private def loadV1BatchSource(

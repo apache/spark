@@ -186,6 +186,12 @@ case class JDBCScanBuilder(
       return false
     }
 
+    // Join pushdown uses the query option, which cannot be combined with partitionColumn.
+    if (jdbcOptions.partitionColumn.isDefined) {
+      logDebug("Skipping JDBC join pushdown because partitionColumn is defined.")
+      return false
+    }
+
     val joinTypeStringOption = joinType match {
       case JoinType.INNER_JOIN => Some("INNER JOIN")
       case JoinType.LEFT_OUTER_JOIN => Some("LEFT JOIN")

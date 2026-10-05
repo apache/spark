@@ -629,6 +629,18 @@ Configuration of Parquet can be done via `spark.conf.set` or by running
   <td>3.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.sql.parquet.timeType.allowIsAdjustedToUtcRead</code></td>
+  <td>false</td>
+  <td>
+    When enabled, Parquet TIME columns with annotation <code>isAdjustedToUTC = true</code> are
+    inferred as TIME type during schema inference, for compatibility with writers such as Apache
+    Arrow. Otherwise, schema inference rejects such columns with an error. This only affects schema
+    inference: a read with an explicit user-specified TIME schema succeeds regardless of this flag,
+    since Spark's zone-less TIME type decodes the same time-of-day either way.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
 <td>spark.sql.parquet.datetimeRebaseModeInRead</td>
   <td><code>EXCEPTION</code></td>
   <td>The rebasing mode for the values of the <code>DATE</code>, <code>TIMESTAMP_MILLIS</code>, <code>TIMESTAMP_MICROS</code> logical types from the Julian to Proleptic Gregorian calendar:<br>

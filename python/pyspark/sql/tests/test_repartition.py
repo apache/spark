@@ -16,15 +16,15 @@
 #
 
 
-from pyspark.sql.functions import spark_partition_id, col, lit, when
-from pyspark.sql.types import (
-    StringType,
-    IntegerType,
-    DoubleType,
-    StructType,
-    StructField,
-)
 from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.sql.functions import col, lit, spark_partition_id, when
+from pyspark.sql.types import (
+    DoubleType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

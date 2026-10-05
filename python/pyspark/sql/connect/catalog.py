@@ -14,30 +14,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.errors import PySparkTypeError
-
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
-
 import warnings
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+
 import pyarrow as pa
 
-from pyspark.storagelevel import StorageLevel
-from pyspark.sql.types import StructType
-from pyspark.sql.connect.dataframe import DataFrame
+from pyspark.errors import PySparkTypeError
 from pyspark.sql.catalog import (
     Catalog as PySparkCatalog,
+)
+from pyspark.sql.catalog import (
     CatalogMetadata,
+    Column,
     Database,
+    Function,
     Table,
     TablePartition,
-    Function,
-    Column,
 )
 from pyspark.sql.connect import plan
+from pyspark.sql.connect.dataframe import DataFrame
+from pyspark.sql.types import StructType
+from pyspark.storagelevel import StorageLevel
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.connect._typing import DataTypeOrString, UserDefinedFunctionLike
+    from pyspark.sql.connect.session import SparkSession
 
 
 class Catalog:
@@ -410,11 +411,12 @@ Catalog.__doc__ = PySparkCatalog.__doc__
 
 
 def _test() -> None:
+    import doctest
     import os
     import sys
-    import doctest
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.connect.catalog
+    from pyspark.sql import SparkSession as PySparkSession
 
     globs = pyspark.sql.connect.catalog.__dict__.copy()
     globs["spark"] = (

@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.exchange
 import java.util.concurrent.atomic.AtomicReference
 import java.util.function.Supplier
 
-import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
 import org.apache.spark._
@@ -31,13 +30,14 @@ import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProces
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
-  Attribute, BoundReference, CollationAwareMurmur3Hash, Literal, Pmod, UnsafeProjection,
-  UnsafeRow, UnsafeRowChecksum}
+  Attribute, BoundReference, CollationAwareMurmur3Hash, GenericInternalRow, Literal, Pmod,
+  UnsafeProjection, UnsafeRow, UnsafeRowChecksum}
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -206,9 +206,8 @@ case class ShuffleExchangeExec(
 
   override def nodeName: String = "Exchange"
 
-  // `pipelined` is only meaningful for a Real-Time Mode plan, and the default arg string is
-  // positional, so printing it unconditionally would add a bare `false` to every shuffle in every
-  // plan. Show it only when set, and name it when shown.
+  // The default arg string is positional, so printing `pipelined` unconditionally would add a bare
+  // `false` to every shuffle in every plan. Show it only when set, and name it when shown.
   override def stringArgs: Iterator[Any] = {
     // `pipelined` is the last field, so drop it positionally rather than by value; argString drops
     // the child on its own. Exchange's `[plan_id=...]` suffix is re-appended here.
@@ -307,15 +306,18 @@ object ShuffleExchangeExec {
    * @param partitioner the partitioner for the shuffle
    * @return true if rows should be copied before being shuffled, false otherwise
    */
-  private def needToCopyObjectsBeforeShuffle(partitioner: Partitioner): Boolean = {
+  private def needToCopyObjectsBeforeShuffle(
+      partitioner: Partitioner,
+      pipelined: Boolean): Boolean = {
+    if (pipelined) {
+      return SparkEnv.get.pipelinedShuffleManager.requiresDetachedRecords
+    }
     // Note: even though we only use the partitioner's `numPartitions` field, we require it to be
     // passed instead of directly passing the number of partitions in order to guard against
     // corner-cases where a partitioner constructed with `numPartitions` partitions may output
     // fewer partitions (like RangePartitioner, for example).
     val conf = SparkEnv.get.conf
-    // This decision concerns the regular (materialized) shuffle path only. A pipelined shuffle is
-    // served by a separate pipelined manager (see SparkEnv.shuffleManagerFor) and does not go
-    // through here, so inspect the blocking manager's type directly.
+    // The remaining cases concern the regular shuffle manager.
     val shuffleManager = SparkEnv.get.blockingShuffleManager
     val sortBasedShuffleOn = shuffleManager.isInstanceOf[SortShuffleManager]
     val bypassMergeThreshold = conf.get(config.SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD)
@@ -399,11 +401,26 @@ object ShuffleExchangeExec {
           samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
       case SinglePartition => new ConstantPartitioner
       case k: KeyedPartitioning =>
-        val keyGroupedPartitioning = k.toGrouped
-        val valueMap = keyGroupedPartitioning.partitionKeys.zipWithIndex.map {
-          case (key, index) => (key.row.toSeq(keyGroupedPartitioning.expressionDataTypes), index)
-        }.toMap
-        new KeyGroupedPartitioner(mutable.Map.from(valueMap), keyGroupedPartitioning.numPartitions)
+        // `partitionKeys` is the physical layout its producer declared: partition `i` holds key
+        // `partitionKeys(i)`. Keep that order, whatever it is -- it need not be sorted, and
+        // re-deriving one here would disagree with the side this shuffle co-partitions with.
+        // Unique keys are a precondition, since each key gets exactly one partition;
+        // `KeyedShuffleSpec.canCreatePartitioning` is what refuses an ungrouped partitioning.
+        assert(k.isGrouped,
+          s"Expected a grouped KeyedPartitioning on ${k.expressions}, but got ${k.numPartitions} " +
+            "partition keys with duplicates among them")
+        // The map keys and the lookup keys produced by `getPartitionKeyExtractor` below are
+        // wrapped through the same `InternalRowComparableWrapper` factory over this
+        // partitioning's expression data types, so map lookups share the exact equivalence
+        // (`RowOrdering`, e.g. binary keys by content, -0.0 == 0.0, NaNs equal) that grouped and
+        // de-duplicated `partitionKeys`. Re-wrapping the stored keys, which were built at
+        // `keyDataTypes`, is what makes the two type lists agree, and a mismatch is silent:
+        // `KeyGroupedPartitioner.getPartition` answers a miss with the key's hash (SPARK-59054).
+        val wrapperFactory = InternalRowComparableWrapper
+          .getInternalRowComparableWrapperFactory(k.expressionDataTypes)
+        val valueMap = k.partitionKeys.map(key => wrapperFactory(key.row)).zipWithIndex
+          .toMap[Any, Int]
+        new KeyGroupedPartitioner(valueMap, k.numPartitions)
       case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
@@ -456,8 +473,22 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
-      case KeyedPartitioning(expressions, _, _, _) =>
-        row => bindReferences(expressions, outputAttributes).map(_.eval(row))
+      case k: KeyedPartitioning =>
+        val expressions = bindReferences(k.expressions, outputAttributes).toArray
+        // Wrap the evaluated partition key so it compares equal to the KeyGroupedPartitioner's
+        // map keys (the partitioning's own wrappers) under `RowOrdering` semantics. The wrapped
+        // row is reused across records; KeyGroupedPartitioner does not retain lookup keys.
+        val wrapperFactory = InternalRowComparableWrapper
+          .getInternalRowComparableWrapperFactory(k.expressionDataTypes)
+        val partitionKeyRow = new GenericInternalRow(expressions.length)
+        row => {
+          var i = 0
+          while (i < expressions.length) {
+            partitionKeyRow.update(i, expressions(i).eval(row))
+            i += 1
+          }
+          wrapperFactory(partitionKeyRow)
+        }
       case s: ShufflePartitionIdPassThrough =>
         // For ShufflePartitionIdPassThrough, the expression directly evaluates to the partition ID
         // If the value is null, `InternalRow#getInt` returns 0.
@@ -533,7 +564,7 @@ object ShuffleExchangeExec {
       // would reject a chain of round-robin repartitions rather than protect anything.
       val isOrderSensitive = (isRoundRobin || isNullAwareHashPartitioning) &&
         !SQLConf.get.sortBeforeRepartition && !pipelined
-      if (needToCopyObjectsBeforeShuffle(part)) {
+      if (needToCopyObjectsBeforeShuffle(part, pipelined)) {
         newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()
           iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
@@ -587,10 +618,7 @@ object ShuffleExchangeExec {
     dependency
   }
 
-  /**
-   * Create a customized [[ShuffleWriteProcessor]] for SQL which wrap the default metrics reporter
-   * with [[SQLShuffleWriteMetricsReporter]] as new reporter for [[ShuffleWriteProcessor]].
-   */
+  /** Create the SQL shuffle metrics reporter shared by both shuffle transports. */
   def createShuffleWriteProcessor(metrics: Map[String, SQLMetric]): ShuffleWriteProcessor = {
     new ShuffleWriteProcessor {
       override protected def createMetricsReporter(

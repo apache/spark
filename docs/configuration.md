@@ -464,8 +464,7 @@ of the most common options to set are:
   <td>
     A timeout for Spark driver in minutes. 0 means infinite. For the positive time value,
     terminate the driver with the exit code 124 if it runs after timeout duration. To use,
-    it's required to set <code>spark.plugins</code> with
-    <code>org.apache.spark.deploy.DriverTimeoutPlugin</code>.
+    it's required to set <code>spark.plugins</code> with <code>DriverTimeoutPlugin</code>.
   </td>
   <td>4.0.0</td>
 </tr>
@@ -530,7 +529,7 @@ of the most common options to set are:
   <td>
     Comma-separated list of the console output kind for driver that needs to redirect
     to logging system. Supported values are `stdout`, `stderr`. It only takes affect when
-    `spark.plugins` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.
+    `spark.plugins` is configured with `RedirectConsolePlugin`.
   </td>
   <td>4.1.0</td>
 </tr>
@@ -789,7 +788,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma-separated list of the console output kind for executor that needs to redirect
     to logging system. Supported values are `stdout`, `stderr`. It only takes affect when
-    `spark.plugins` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.
+    `spark.plugins` is configured with `RedirectConsolePlugin`.
   </td>
   <td>4.1.0</td>
 </tr>
@@ -812,8 +811,90 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.9.0</td>
 </tr>
 <tr>
+  <td><code>spark.pythonWorkerEnv.[EnvironmentVariableName]</code></td>
+  <td>(none)</td>
+  <td>
+    Add the environment variable specified by <code>EnvironmentVariableName</code> to the Python
+    worker processes that run the session's Python UDFs, making it visible to
+    <code>os.environ</code> inside a UDF. Multiple of these may be set to add several environment
+    variables. Supported on both classic Spark and Spark Connect.
+    <br /><br />
+    Unlike <code>spark.executorEnv.[EnvironmentVariableName]</code>, which is scoped to the whole
+    application and fixed before it starts, this is a session configuration: each session carries
+    its own environment, may change it while running, and a change takes effect on the next action.
+    Where both set the same variable, this one wins. An environment variable that Spark sets for a
+    Python worker itself takes precedence over both.
+    <br /><br />
+    Applied to every Python worker the session launches for a Python function it supplied: scalar
+    UDFs in each of their forms, including Arrow-optimized, non-Arrow, pandas, iterator and the
+    element-wise form a UDF takes inside the lambda of a higher-order function such as
+    <code>transform</code>; <code>mapInPandas</code> and <code>mapInArrow</code>; grouped-map,
+    cogrouped-map, grouped-aggregate and window functions; Python UDTFs, both row and Arrow;
+    <code>applyInPandasWithState</code> and <code>transformWithState</code>;
+    <code>writeStream.foreach</code>; and Python data sources, including the workers that plan them
+    and read a streaming source.
+    <br /><br />
+    A running streaming query holds a configuration snapshot, because its batches run on a cloned
+    session whose configurations are copied when the query starts. A change made while a query is
+    running therefore reaches it only when the query restarts.
+    <br /><br />
+    A dynamic Python UDTF's <code>analyze</code> method and a Python data source's schema and
+    partition planning run in a worker while a query is being planned. Those results are resolved
+    once for a given DataFrame and are not recomputed if the environment changes afterwards; a new
+    read picks up the current values.
+    <br /><br />
+    Some Python code a session supplies does not run in a worker Spark launches, and no session
+    environment applies to it. <code>foreachBatch</code> receives the environment on Spark Connect,
+    where the function runs in a worker the server starts, but not on classic Spark, where it is a
+    callback into the client's own Python process. A streaming query listener added with
+    <code>addListener</code> likewise runs its callbacks in the client process on both classic Spark
+    and Spark Connect. In each of those cases the client process's own environment is what the
+    callback observes.
+    <br /><br />
+    Names Spark reserves for itself are rejected: any name beginning with <code>SPARK_</code>,
+    <code>PYSPARK_</code> or <code>PYTHON_WORKER_FACTORY_</code>, together with
+    <code>OMP_NUM_THREADS</code> and the <code>PYTHON_*</code> variables Spark sets only under a
+    condition (<code>PYTHON_FAULTHANDLER_DIR</code>,
+    <code>PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS</code>,
+    <code>PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE</code> and
+    <code>PYTHON_UNIX_DOMAIN_ENABLED</code>).
+    Where Spark sets a variable unconditionally, such as <code>PYTHONUNBUFFERED</code> or
+    <code>PYTHON_UDF_BATCH_SIZE</code>, a session may still set it and Spark's value wins.
+    <code>PYTHONPATH</code> is the one name that is neither reserved nor simply overridden: Spark
+    merges the session's value into the path it computes for the worker, so a session adds to the
+    worker's import path. The relative order is not guaranteed -- Spark contributes no entries of
+    its own when <code>SPARK_HOME</code> is unset and its classes did not come from a jar, which can
+    leave the session's path first -- so do not rely on a session entry being shadowed by Spark's.
+    <br /><br />
+    Each variable is a separate configuration, so setting several is not atomic: a client that sets
+    a batch may have some applied and then one rejected, leaving the earlier ones in place. Read the
+    configurations back to confirm what the session holds.
+    <br /><br />
+    On Spark Connect a variable cannot be read back through <code>spark.conf.get</code> when
+    <em>either</em> its name or its value matches <code>spark.redaction.regex</code> -- which by
+    default covers <code>secret</code>, <code>password</code>, <code>token</code> and
+    <code>access key</code> -- because the Spark Connect configuration RPC withholds such entries on
+    every read. So a variable named <code>MY_TOKEN</code> is hidden, and so is one whose value
+    merely contains <code>password</code>. The variable still reaches the worker. Classic Spark
+    returns the value.
+    <br /><br />
+    A variable name must match <code>[A-Za-z_][A-Za-z0-9_]*</code>, and a value must not contain a
+    NUL character, which a process environment cannot carry. The number of variables and the total
+    size of the environment are also bounded. Setting one fails immediately and stores nothing if
+    the result would be invalid -- through <code>spark.conf.set</code> or SQL <code>SET</code>, on
+    both classic Spark and Spark Connect. A configuration passed to
+    <code>SparkSession.builder</code> and merged into the session does not pass through that check,
+    so such a value is stored and instead fails the queries that would install it in a worker; unset
+    it to recover.
+    <br /><br />
+    Values are not redacted from the worker environment, so a session that puts a secret here is
+    responsible for keeping the Python code it runs from disclosing it.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.redaction.regex</code></td>
-  <td>(?i)secret|password|token|access[.]?key</td>
+  <td>(?i)secret|password|token|access[.]?key|credential</td>
   <td>
     Regex to decide which Spark configuration properties and environment variables in driver and
     executor environments contain sensitive information. When this regex matches a property key or
@@ -827,7 +908,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Regex to decide which parts of strings produced by Spark contain sensitive information.
     When this regex matches a string part, that string part is replaced by a dummy value.
-    This is currently used to redact the output of SQL explain commands.
+    This is currently used to redact the output of SQL explain commands and the exit exception annotation on Kubernetes.
   </td>
   <td>2.2.0</td>
 </tr>
@@ -989,9 +1070,16 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.jars.ivySettings</code></td>
   <td></td>
   <td>
-    Path to an Ivy settings file to customize resolution of jars specified using <code>spark.jars.packages</code>
-    instead of the built-in defaults, such as maven central. Additional repositories given by the command-line
-    option <code>--repositories</code> or <code>spark.jars.repositories</code> will also be included.
+    Path to an Ivy settings file to customize resolution of jars specified using
+    <code>spark.jars.packages</code> or <code>ivy://</code> URIs passed to
+    <code>SparkSession.addArtifact</code> instead of the built-in defaults, such as maven central.
+    For <code>spark.jars.packages</code>, additional repositories from
+    <code>spark.jars.repositories</code> will also be included.
+    The <code>spark-submit --repositories</code> option applies to submission-time resolution.
+    In Spark Connect, Ivy URIs with a <code>repos</code> query parameter or sent to a server without
+    server-side Maven resolution are resolved by the client and do not use this setting. Other Ivy
+    URIs are resolved by the server, so Maven and Ivy repositories local to the client, such as
+    <code>~/.m2/repository</code> and <code>~/.ivy2.5.2/local</code>, are not searched.
     Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
     artifact server like Artifactory. Details on the settings file format can be
     found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>.
@@ -1003,7 +1091,28 @@ Apart from these, the following properties are also available, and may be useful
   </td>
   <td>2.2.0</td>
 </tr>
- <tr>
+<tr>
+  <td><code>spark.jars.ivyConnectTimeout</code></td>
+  <td>30s</td>
+  <td>
+    Connection timeout for Ivy repository requests made by
+    <code>SparkSession.addArtifact</code>.
+    Client-resolved Spark Connect Ivy URIs do not use this setting.
+    This must be set before the SparkContext starts.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.jars.ivyReadTimeout</code></td>
+  <td>5m</td>
+  <td>
+    Read timeout for Ivy repository requests made by <code>SparkSession.addArtifact</code>.
+    Client-resolved Spark Connect Ivy URIs do not use this setting.
+    This must be set before the SparkContext starts.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.jars.repositories</code></td>
   <td></td>
   <td>
@@ -1606,6 +1715,30 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.ui.actionsViaGetEnabled</code></td>
+  <td><code>true</code> on YARN, <code>false</code> otherwise</td>
+  <td>
+    Whether the state-changing endpoints of the web UI (job/stage kill, application hold
+    and resume) accept HTTP GET requests in addition to POST. Left unset, this follows
+    the cluster manager: GET is accepted when <code>spark.master</code> is
+    <code>yarn</code>, because the YARN ResourceManager/AM proxy does not forward POST
+    requests, and refused everywhere else.
+    Either way the state-changing endpoints require the random per-UI CSRF token embedded
+    in the forms the UI renders, and reject prefetch requests (identified by
+    the Purpose, Sec-Purpose, or X-Moz headers) and HEAD requests, so forged cross-site
+    requests and incidental fetches cannot trigger them. Scripted clients can read
+    the token from the jobs page before calling the endpoint. The kill controls on the
+    jobs and stages pages and the hold/resume control on the jobs page are the same forms
+    in both modes; only their method follows this setting. In GET mode the browser
+    submits the token in the URL's query string, so it can be recorded in browser history
+    and server or proxy access logs; it is random per UI instance and grants nothing
+    beyond the UI's own state-changing endpoints. Prefetch rejection relies on the
+    prefetcher identifying itself via those headers; one that sends none of them is not
+    detected.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.ui.holdEnabled</code></td>
   <td>true</td>
   <td>
@@ -1616,7 +1749,9 @@ Apart from these, the following properties are also available, and may be useful
     executors (through either <code>spark.shuffle.service.enabled</code> or a
     <code>ShuffleDataIO</code> with reliable storage), and the cluster manager can hold
     executors: Standalone, YARN, and Kubernetes with
-    <code>spark.kubernetes.allocation.pods.allocator=direct</code>.
+    <code>spark.kubernetes.allocation.pods.allocator=direct</code>. On a Standalone Master,
+    this also gates the <code>hold</code> and <code>resume</code> actions of the
+    <a href="spark-standalone.html#rest-api">Master REST API</a>.
   </td>
   <td>4.4.0</td>
 </tr>
@@ -2968,6 +3103,24 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.1.0</td>
 </tr>
 <tr>
+  <td><code>spark.standalone.submit.filterEnvironment</code></td>
+  <td><code>true</code></td>
+  <td>
+    In standalone cluster mode, controls whether the client forwards only Spark-related environment
+    variables to the driver, i.e. variables whose name starts with <code>SPARK_</code>, excluding
+    <code>SPARK_ENV_LOADED</code>, <code>SPARK_HOME</code>, <code>SPARK_CONF_DIR</code>,
+    <code>SPARK_LOCAL_IP</code>, and <code>SPARK_LOCAL_HOSTNAME</code>, matching the REST submission
+    gateway. If set to <code>false</code>, the full environment of the submitting process is
+    forwarded to the driver, except <code>SPARK_LOCAL_IP</code> and
+    <code>SPARK_LOCAL_HOSTNAME</code>, which are never forwarded since they describe the
+    submitting host rather than the worker the driver runs on. This governs the RPC submission
+    gateway, which is what <code>spark-submit</code> uses unless
+    <code>spark.master.rest.enabled</code> is set to <code>true</code>; REST submissions filter
+    regardless of this setting.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.excludeOnFailure.enabled</code></td>
   <td>
     false
@@ -3562,7 +3715,7 @@ They are typically set via the config file and command-line options with `--conf
   <td>
     (none)
   </td>
-  <td>Comma separated list of class names that must implement the <code>io.grpc.ServerInterceptor</code> interface</td>
+  <td>Comma separated list of class names that must implement the <code>io.grpc.ServerInterceptor</code> interface. When authentication is enabled these interceptors run after it, so they only see calls that have already been authenticated and cannot supply the <code>Authorization</code> header themselves.</td>
   <td>3.4.0</td>
 </tr>
 <tr>
@@ -3704,6 +3857,10 @@ Command types in proto.</td>
 
 Please refer to the [Security](security.html) page for available options on how to secure different
 Spark subsystems.
+
+For OIDC credential propagation (obtaining and distributing short-lived, identity-derived
+credentials to executors), the `spark.security.oidc.*` configuration keys are documented under
+[OIDC Credential Propagation](security.html#oidc-credential-propagation).
 
 
 ### Spark SQL

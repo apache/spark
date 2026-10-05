@@ -17,9 +17,9 @@
 
 from pyspark.sql.streaming.list_state_client import ListStateClient
 from pyspark.sql.streaming.map_state_client import MapStateClient
-from pyspark.sql.streaming.value_state_client import ValueStateClient
 from pyspark.sql.streaming.stateful_processor import ListState, MapState, ValueState
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
+from pyspark.sql.streaming.value_state_client import ValueStateClient
 from pyspark.sql.types import StructType
 
 

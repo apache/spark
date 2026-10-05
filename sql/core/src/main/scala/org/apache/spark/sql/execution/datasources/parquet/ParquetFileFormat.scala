@@ -165,6 +165,9 @@ class ParquetFileFormat
     hadoopConf.setBoolean(
       SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key,
       sqlConf.parquetReaderRespectUnknownTypeAnnotation)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.key,
+      sqlConf.parquetTimeTypeAllowIsAdjustedToUtcRead)
   }
 
   /**
@@ -210,6 +213,18 @@ class ParquetFileFormat
     val pushDownStringPredicate = sqlConf.parquetFilterPushDownStringPredicate
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
+    // When shredded-variant predicate pushdown is enabled and `requiredSchema` actually carries a
+    // variant-extraction struct produced by PushVariantIntoScan, passing it lets ParquetFilters map
+    // logical paths like "v.`0`" to the physical shredded columns for row-group skipping. The
+    // `isVariantStruct` check keeps the per-file ParquetFilters construction free of any shredded
+    // traversal for the common case of scans with no variant-extraction columns.
+    val variantExtractionSchema =
+      if (sqlConf.getConf(SQLConf.VARIANT_SHREDDED_PREDICATE_PUSHDOWN_ENABLED) &&
+          requiredSchema.existsRecursively(VariantMetadata.isVariantStruct)) {
+        Some(requiredSchema)
+      } else {
+        None
+      }
     val parquetOptions = new ParquetOptions(options, sqlConf)
     val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
     val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
@@ -266,7 +281,8 @@ class ParquetFileFormat
             pushDownStringPredicate,
             pushDownInFilterThreshold,
             isCaseSensitive,
-            datetimeRebaseSpec)
+            datetimeRebaseSpec,
+            variantExtractionSchema = variantExtractionSchema)
           filters
             // Collects all converted Parquet filter predicates. Notice that not all predicates
             // can be converted (`ParquetFilters.createFilter` returns an `Option`). That's why
@@ -493,7 +509,8 @@ object ParquetFileFormat extends Logging {
       nanosAsLong = sqlConf.legacyParquetNanosAsLong,
       timestampNanosTypesEnabled = sqlConf.timestampNanosTypesEnabled,
       respectUnknownTypeAnnotation =
-        sqlConf.parquetReaderRespectUnknownTypeAnnotation)
+        sqlConf.parquetReaderRespectUnknownTypeAnnotation,
+      timeIsAdjustedToUTC = sqlConf.parquetTimeTypeAllowIsAdjustedToUtcRead)
 
     val seen = mutable.HashSet[String]()
     val finalSchemas: Seq[StructType] = footers.flatMap { footer =>
@@ -653,6 +670,7 @@ object ParquetFileFormat extends Logging {
     val timestampNanosTypesEnabled = sqlConf.timestampNanosTypesEnabled
     val respectUnknownTypeAnnotation =
       sqlConf.parquetReaderRespectUnknownTypeAnnotation
+    val timeIsAdjustedToUTC = sqlConf.parquetTimeTypeAllowIsAdjustedToUtcRead
 
     val reader = (files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean,
         ignoreMissingFiles: Boolean) => {
@@ -663,7 +681,8 @@ object ParquetFileFormat extends Logging {
         inferTimestampNTZ = inferTimestampNTZ,
         nanosAsLong = nanosAsLong,
         timestampNanosTypesEnabled = timestampNanosTypesEnabled,
-        respectUnknownTypeAnnotation = respectUnknownTypeAnnotation)
+        respectUnknownTypeAnnotation = respectUnknownTypeAnnotation,
+        timeIsAdjustedToUTC = timeIsAdjustedToUTC)
 
       // readParquetFootersInParallel reads archivePathFilter from the conf (its signature is fixed
       // by SchemaMergeUtils' schemaReader type), so put the option there.

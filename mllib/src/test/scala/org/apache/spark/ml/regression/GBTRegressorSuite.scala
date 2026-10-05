@@ -119,6 +119,17 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     testPredictionModelSinglePrediction(model, validationData.toDF())
   }
 
+  test("prediction column has correct metadata") {
+    val tree = new DecisionTreeRegressionModel("dtr", TreeTests.root0, 3)
+    val model = new GBTRegressionModel("gbtr", Array(tree), Array(1.0), 3)
+    val df = sc.parallelize(TreeTests.getTwoTreesLeafData.toImmutableArraySeq, 1)
+      .toDF("leafId", "features")
+
+    val expectedMetadata = model.transformSchema(df.schema)(model.getPredictionCol).metadata
+    val actualMetadata = model.transform(df).schema(model.getPredictionCol).metadata
+    assert(actualMetadata === expectedMetadata)
+  }
+
   test("Checkpointing") {
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString

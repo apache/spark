@@ -33,9 +33,7 @@ r"""
 import sys
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import explode
-from pyspark.sql.functions import split
-from pyspark.sql.functions import count, session_window
+from pyspark.sql.functions import count, explode, session_window, split
 
 if __name__ == "__main__":
     if len(sys.argv) != 3 and len(sys.argv) != 2:

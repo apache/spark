@@ -29,8 +29,8 @@ import textwrap
 import time
 import unittest
 
+from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 from pyspark.util import is_remote_only
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
 if should_test_connect:
     from pyspark.sql import SparkSession as PySparkSession

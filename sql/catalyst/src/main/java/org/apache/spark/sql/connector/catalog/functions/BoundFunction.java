@@ -112,16 +112,16 @@ public interface BoundFunction extends Function {
   /**
    * Implementations SHOULD override {@link Object#equals(Object)} and {@link Object#hashCode()}.
    * <p>
-   * Spark may bind a function multiple times, so the same transform can be represented by two
-   * different bound instances. Without a semantic {@code equals} it cannot tell they are the
-   * same, and misses optimizations such as:
+   * Spark may bind a function multiple times, so the same function call can be represented by two
+   * different bound instances. Without a semantic {@code equals} it cannot tell they are the same.
+   * This can prevent Spark from:
    * <ul>
+   *   <li>accepting a valid query that selects and groups by the same scalar function call</li>
    *   <li>keeping a union's keyed partitioning</li>
    *   <li>retaining a reported ordering that matches the partitioning</li>
    *   <li>reusing identical bucketed scans</li>
    *   <li>recognizing two identical subplans</li>
    * </ul>
-   * Missed matches cost performance only, never correctness.
    * <p>
    * Compare whatever state affects behaviour, and keep it stable across {@code bind} calls.
    * {@link #canonicalName()} alone is not always enough: two functions can share a name and still
@@ -133,6 +133,15 @@ public interface BoundFunction extends Function {
    * <p>
    * If this method is overridden, {@link #canonicalName()} should be overridden as well, so that
    * equal functions share the same name.
+   *
+   * <h4>Connector implementation examples</h4>
+   * <ul>
+   *   <li>A stateless {@code StringLengthFunction}, which returns a string's length, can compare
+   *   by concrete class.</li>
+   *   <li>A {@code TruncateFunction} that stores a configured width must include the width.</li>
+   *   <li>A {@code ToTimestampFunction} that stores a configured time zone must include the time
+   *   zone.</li>
+   * </ul>
    */
   @Override
   boolean equals(Object other);

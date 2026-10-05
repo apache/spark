@@ -17,8 +17,8 @@
 
 import unittest
 
-from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
+from pyspark.util import is_remote_only
 
 if not is_remote_only():
     from pyspark.ml.torch.tests.test_data_loader import TorchDistributorDataLoaderUnitTests

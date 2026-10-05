@@ -124,8 +124,8 @@ class CSVOptions(
 
   val extension = {
     val ext = parameters.getOrElse(EXTENSION, "csv")
-    if (ext.size != 3 && !ext.forall(_.isLetter)) {
-      throw QueryExecutionErrors.invalidFileExtensionError(EXTENSION, ext)
+    if (ext.isEmpty || !ext.forall(_.isLetter)) {
+      throw QueryExecutionErrors.invalidFileExtensionError("csv", ext)
     }
 
     ext
@@ -281,6 +281,25 @@ class CSVOptions(
   val emptyValueInWrite = emptyValue.getOrElse("\"\"")
 
   /**
+   * Whether a null value should be written as an empty string (which, given the default
+   * `emptyValue`, means a quoted empty string `""`) rather than as a bare, unquoted empty token.
+   *
+   * When set, this per-write option overrides the SQL config
+   * `spark.sql.legacy.nullValueWrittenAsQuotedEmptyStringCsv`. This lets a single write
+   * differentiate null from an actual empty string without changing the session-level default.
+   * When unset (including an explicit `null` value), the SQL config decides the behavior.
+   *
+   * Note this only takes effect when `nullValue` is left at its default (empty string): a
+   * non-empty `nullValue` is always written verbatim, so this option has no observable effect,
+   * matching how the SQL config it overrides already composes with `nullValue`.
+   */
+  val treatNullAsEmptyString: Option[Boolean] =
+    parameters.get(TREAT_NULL_AS_EMPTY_STRING) match {
+      case None | Some(null) => None
+      case Some(_) => Some(getBool(TREAT_NULL_AS_EMPTY_STRING))
+    }
+
+  /**
    * A string between two consecutive JSON records.
    */
   val lineSeparator: Option[String] = parameters.get(LINE_SEP).map { sep =>
@@ -336,6 +355,9 @@ class CSVOptions(
   // as a single VARIANT type column in the table with the given column name.
   // E.g. spark.read.format("csv").option("singleVariantColumn", "colName")
   val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
+
+  // When true, reading CSV values into a VARIANT honors `inferSchema` (default: false).
+  val variantRespectInferSchema = getBool(VARIANT_RESPECT_INFER_SCHEMA, default = false)
 
   def needHeaderForSingleVariantColumn: Boolean =
     singleVariantColumn.isDefined && headerFlag
@@ -425,6 +447,7 @@ object CSVOptions extends DataSourceOptions {
   val INPUT_BUFFER_SIZE = newOption("inputBufferSize")
   val COLUMN_NAME_OF_CORRUPT_RECORD = newOption(DataSourceOptions.COLUMN_NAME_OF_CORRUPT_RECORD)
   val NULL_VALUE = newOption("nullValue")
+  val TREAT_NULL_AS_EMPTY_STRING = newOption("treatNullAsEmptyString")
   val NAN_VALUE = newOption("nanValue")
   val POSITIVE_INF = newOption("positiveInf")
   val NEGATIVE_INF = newOption("negativeInf")
@@ -443,6 +466,7 @@ object CSVOptions extends DataSourceOptions {
   newOption(SEP, DELIMITER)
   val COLUMN_PRUNING = newOption("columnPruning")
   val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
+  val VARIANT_RESPECT_INFER_SCHEMA = newOption("variantRespectInferSchema")
 
   // Max error content length in CSV parser/writer exception messages, and the bound on the bad
   // record embedded in MALFORMED_CSV_RECORD errors.

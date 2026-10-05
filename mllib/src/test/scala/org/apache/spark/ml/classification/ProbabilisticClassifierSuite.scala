@@ -22,9 +22,11 @@ import org.scalatest.Assertions._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.MLTest
+import org.apache.spark.ml.util.{Identifiable, MLTest}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.{Column, Dataset, Row}
+import org.apache.spark.sql.functions.udf
 
 final class TestProbabilisticClassificationModel(
     override val uid: String,
@@ -47,8 +49,71 @@ final class TestProbabilisticClassificationModel(
   }
 }
 
+final class MockProbabilisticClassificationModelWithColumnFunctions(override val uid: String)
+  extends ProbabilisticClassificationModel[
+    Vector, MockProbabilisticClassificationModelWithColumnFunctions] {
 
-class ProbabilisticClassifierSuite extends SparkFunSuite {
+  def this() = this(Identifiable.randomUID("mockprobabilisticmodelwithcolumnfunctions"))
+
+  private def vectorColumn(input: Column): Column = udf((value: Vector) => value).apply(input)
+
+  private def predictionFromVector(input: Column): Column = {
+    udf((value: Vector) => value.argmax.toDouble).apply(input)
+  }
+
+  override protected def predictRawColumn(features: Column): Column = vectorColumn(features)
+
+  override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
+    vectorColumn(rawPrediction)
+  }
+
+  override protected def predictProbabilityColumn(features: Column): Column = vectorColumn(features)
+
+  override protected def raw2predictionColumn(rawPrediction: Column): Column = {
+    predictionFromVector(rawPrediction)
+  }
+
+  override protected def probability2predictionColumn(probability: Column): Column = {
+    predictionFromVector(probability)
+  }
+
+  override protected def predictionColumn(features: Column): Column = predictionFromVector(features)
+
+  override def predict(features: Vector): Double = throw new UnsupportedOperationException()
+
+  override def predictRaw(features: Vector): Vector = throw new UnsupportedOperationException()
+
+  override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
+    throw new UnsupportedOperationException()
+  }
+
+  override protected def raw2probability(rawPrediction: Vector): Vector = {
+    throw new UnsupportedOperationException()
+  }
+
+  override def predictProbability(features: Vector): Vector = {
+    throw new UnsupportedOperationException()
+  }
+
+  override protected def raw2prediction(rawPrediction: Vector): Double = {
+    throw new UnsupportedOperationException()
+  }
+
+  override protected def probability2prediction(probability: Vector): Double = {
+    throw new UnsupportedOperationException()
+  }
+
+  override def copy(extra: ParamMap): MockProbabilisticClassificationModelWithColumnFunctions = {
+    throw new UnsupportedOperationException()
+  }
+
+  override def numClasses: Int = 2
+}
+
+
+class ProbabilisticClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  import testImplicits._
 
   test("test thresholding") {
     val testModel = new TestProbabilisticClassificationModel("myuid", 2, 2)
@@ -100,6 +165,35 @@ class ProbabilisticClassifierSuite extends SparkFunSuite {
     intercept[IllegalArgumentException] {
       ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(vec3)
     }
+  }
+
+  test("transform uses probabilistic column prediction hooks") {
+    val expected = Vectors.dense(0.25, 0.75)
+    val data = Seq(Tuple1(expected)).toDF("features")
+
+    val allOutputs = new MockProbabilisticClassificationModelWithColumnFunctions()
+      .transform(data)
+      .select("rawPrediction", "probability", "prediction")
+      .head()
+    assert(allOutputs.getAs[Vector](0) === expected)
+    assert(allOutputs.getAs[Vector](1) === expected)
+    assert(allOutputs.getDouble(2) === 1.0)
+
+    val probabilityAndPrediction = new MockProbabilisticClassificationModelWithColumnFunctions()
+      .setRawPredictionCol("")
+      .transform(data)
+      .select("probability", "prediction")
+      .head()
+    assert(probabilityAndPrediction.getAs[Vector](0) === expected)
+    assert(probabilityAndPrediction.getDouble(1) === 1.0)
+
+    val predictionOnly = new MockProbabilisticClassificationModelWithColumnFunctions()
+      .setRawPredictionCol("")
+      .setProbabilityCol("")
+      .transform(data)
+      .select("prediction")
+      .head()
+    assert(predictionOnly.getDouble(0) === 1.0)
   }
 }
 

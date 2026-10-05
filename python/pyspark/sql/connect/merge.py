@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 import sys
-from typing import Dict, Optional, TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Dict, Optional
 
 from pyspark.sql.connect import proto
 from pyspark.sql.connect.column import Column
@@ -228,8 +228,9 @@ MergeIntoWriter.__doc__ = PySparkMergeIntoWriter.__doc__
 def _test() -> None:
     import doctest
     import os
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.connect.merge
+    from pyspark.sql import SparkSession as PySparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

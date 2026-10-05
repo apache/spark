@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.connector.expressions._
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class V2ExpressionUtilsSuite extends SparkFunSuite {
 
@@ -36,5 +36,31 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
         LocalRelation.apply(AttributeReference("a", StringType)()))
     }
     assert(exc.message.contains("v2Fun(a) ASC NULLS FIRST is not currently supported"))
+  }
+
+  test("SPARK-59721: resolveRefOpt returns None for an unresolvable reference") {
+    val plan = LocalRelation(AttributeReference("a", StringType)())
+    assert(V2ExpressionUtils.resolveRefOpt(FieldReference("a"), plan).isDefined)
+    assert(V2ExpressionUtils.resolveRefOpt(FieldReference("missing"), plan).isEmpty)
+  }
+
+  test("SPARK-59721: resolveRefOpt throws for a missing nested field or an ambiguous reference") {
+    val structPlan =
+      LocalRelation(AttributeReference("s", new StructType().add("x", IntegerType))())
+    checkError(
+      exception = intercept[AnalysisException] {
+        V2ExpressionUtils.resolveRefOpt(FieldReference("s.missing"), structPlan)
+      },
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`missing`", "fields" -> "`x`"))
+
+    val ambiguousPlan = LocalRelation(
+      AttributeReference("a", StringType)(), AttributeReference("a", StringType)())
+    checkError(
+      exception = intercept[AnalysisException] {
+        V2ExpressionUtils.resolveRefOpt(FieldReference("a"), ambiguousPlan)
+      },
+      condition = "AMBIGUOUS_REFERENCE",
+      parameters = Map("name" -> "`a`", "referenceNames" -> "[`a`, `a`]"))
   }
 }

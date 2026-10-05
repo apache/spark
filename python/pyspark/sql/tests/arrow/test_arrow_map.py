@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import logging
 import os
 import time
 import unittest
-import logging
 
+from pyspark.sql import Row
 from pyspark.sql.utils import PythonException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.sql import Row
 from pyspark.testing.utils import (
     assertDataFrameEqual,
     have_pandas,
@@ -52,6 +52,56 @@ class MapInArrowTestsMixin:
 
         df = self.spark.range(10)
         actual = df.mapInArrow(func, "id long").collect()
+        expected = df.collect()
+        self.assertEqual(actual, expected)
+
+    def test_map_in_arrow_legacy_accept_any_iterable(self):
+        # With the legacy flag enabled, returning a non-Iterator iterable (e.g. list) is accepted.
+        def list_not_iter(iterator):
+            return [batch for batch in iterator]
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled": True}
+        ):
+            df = self.spark.range(10)
+            actual = df.mapInArrow(list_not_iter, "id long").collect()
+            expected = df.collect()
+            self.assertEqual(actual, expected)
+
+    def test_map_in_arrow_legacy_accept_sequence_protocol(self):
+        # A sequence-protocol object (implements __getitem__ but not __iter__) is iterable via
+        # iter(...) even though it is not a collections.abc.Iterable, so the legacy flag must
+        # accept it too.
+        class SequenceOnly:
+            def __init__(self, items):
+                self._items = items
+
+            def __getitem__(self, index):
+                return self._items[index]
+
+        self.assertFalse(hasattr(SequenceOnly([]), "__iter__"))
+
+        def returns_sequence(iterator):
+            return SequenceOnly([batch for batch in iterator])
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled": True}
+        ):
+            df = self.spark.range(10)
+            actual = df.mapInArrow(returns_sequence, "id long").collect()
+            expected = df.collect()
+            self.assertEqual(actual, expected)
+
+    def test_map_in_arrow_accept_any_iterable_by_default(self):
+        # The legacy flag defaults to true, so returning a non-Iterator iterable (e.g. list) is
+        # accepted without setting any config. This guards the default against regression: the
+        # *_legacy_accept_any_iterable tests above force the flag on and would still pass if the
+        # default were flipped back to false.
+        def list_not_iter(iterator):
+            return [batch for batch in iterator]
+
+        df = self.spark.range(10)
+        actual = df.mapInArrow(list_not_iter, "id long").collect()
         expected = df.collect()
         self.assertEqual(actual, expected)
 
@@ -130,9 +180,14 @@ class MapInArrowTestsMixin:
         ):
             (self.spark.range(10, numPartitions=3).mapInArrow(bad_iter_elem, "a int").count())
 
-        with self.assertRaisesRegex(
-            PythonException,
-            r"iterator of pyarrow\.RecordBatch.*\blist\b",
+        with (
+            self.sql_conf(
+                {"spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled": False}
+            ),
+            self.assertRaisesRegex(
+                PythonException,
+                r"iterator of pyarrow\.RecordBatch.*\blist\b",
+            ),
         ):
             (self.spark.range(10, numPartitions=3).mapInArrow(list_not_iter, "a int").count())
 
@@ -196,7 +251,7 @@ class MapInArrowTestsMixin:
             df.mapInArrow(func0, "id long", False).collect()
 
         def func1(iterator):
-            from pyspark import TaskContext, BarrierTaskContext
+            from pyspark import BarrierTaskContext, TaskContext
 
             tc = TaskContext.get()
             assert tc is not None
@@ -207,7 +262,7 @@ class MapInArrowTestsMixin:
         df.mapInArrow(func1, "id long", False).collect()
 
         def func2(iterator):
-            from pyspark import TaskContext, BarrierTaskContext
+            from pyspark import BarrierTaskContext, TaskContext
 
             tc = TaskContext.get()
             assert tc is not None

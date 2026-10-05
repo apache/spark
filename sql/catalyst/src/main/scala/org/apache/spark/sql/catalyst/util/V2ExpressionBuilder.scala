@@ -98,8 +98,14 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
         && SQLConf.get.getConfByKeyStrict[Boolean]("spark.sql.optimizer.datasourceV2ExprFolding") =>
       // If the expression is context independent foldable, we can convert it to a literal.
       // This is useful for increasing the coverage of V2 expressions.
+      // Folding returns the expression unchanged when it failed to evaluate inside a conditional
+      // branch, and recursing on an unchanged expression would loop forever.
       val constantExpr = ConstantFolding.constantFolding(expr)
-      generateExpression(constantExpr, isPredicate)
+      if (constantExpr.fastEquals(expr)) {
+        None
+      } else {
+        generateExpression(constantExpr, isPredicate)
+      }
     case col @ ColumnOrField(nameParts) =>
       val ref = FieldReference(nameParts)
       if (isPredicate && col.dataType.isInstanceOf[BooleanType]) {

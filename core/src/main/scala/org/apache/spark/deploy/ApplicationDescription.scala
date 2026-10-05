@@ -33,6 +33,9 @@ private[spark] case class ApplicationDescription(
     // number of executors this application wants to start with,
     // only used if dynamic allocation is enabled
     initialExecutorLimit: Option[Int] = None,
+    // whether a web UI may offer the hold and resume controls for this application
+    // (spark.ui.holdEnabled on the application)
+    holdEnabled: Boolean = true,
     user: String = System.getProperty("user.name", "<unknown>")) {
 
   def memoryPerExecutorMB: Int = defaultProfile.getExecutorMemory.map(_.toInt).getOrElse(1024)

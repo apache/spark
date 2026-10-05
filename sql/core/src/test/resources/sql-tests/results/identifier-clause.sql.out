@@ -64,6 +64,14 @@ struct<c1:int>
 
 
 -- !query
+SELECT IDENTIFIER(concat('a', 'b')) FROM VALUES(1) AS T(ab)
+-- !query schema
+struct<ab:int>
+-- !query output
+1
+
+
+-- !query
 CREATE SCHEMA IF NOT EXISTS s
 -- !query schema
 struct<>
@@ -177,6 +185,14 @@ struct<c1:int>
 
 
 -- !query
+SELECT * FROM IDENTIFIER(concat('t', 'ab'))
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
 USE SCHEMA default
 -- !query schema
 struct<>
@@ -209,6 +225,14 @@ struct<coalesce(NULL, 1):int>
 
 
 -- !query
+SELECT IDENTIFIER(concat('COAL', 'ESCE'))(NULL, 1)
+-- !query schema
+struct<coalesce(NULL, 1):int>
+-- !query output
+1
+
+
+-- !query
 SELECT IDENTIFIER('abs')(c1) FROM VALUES(-1) AS T(c1)
 -- !query schema
 struct<abs(c1):int>
@@ -222,6 +246,547 @@ SELECT * FROM IDENTIFIER('ra' || 'nge')(0, 1)
 struct<id:bigint>
 -- !query output
 0
+
+
+-- !query
+VALUES(IDENTIFIER(abs(1)))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.WRONG_TYPE",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "dataType" : "int",
+    "expr" : "abs(1)",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 24,
+    "fragment" : "abs(1)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER(nullif('a', 'a'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "nullif('a', 'a')",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 41,
+    "fragment" : "nullif('a', 'a')"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER(max('c1')) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "max('c1')",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 27,
+    "fragment" : "max('c1')"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER(array_join(transform(array('c', '1'), element -> element), ''))
+FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "array_join(transform(array('c', '1'), lambdafunction(namedlambdavariable(), namedlambdavariable())), '')",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 80,
+    "fragment" : "array_join(transform(array('c', '1'), element -> element), '')"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER(rand()) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "rand()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 24,
+    "fragment" : "rand()"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER(row_number() OVER ()) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WINDOW_FUNCTION_FRAME_NOT_ORDERED",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "wf_expr" : "row_number()",
+    "wf_name" : "row_number"
+  }
+}
+
+
+-- !query
+SELECT IDENTIFIER(row_number() OVER (ORDER BY 'x')) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "row_number() OVER (ORDER BY 'x' ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 50,
+    "fragment" : "row_number() OVER (ORDER BY 'x')"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER(explode(array('c1'))) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "explode(array('c1'))",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 38,
+    "fragment" : "explode(array('c1'))"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER(max('identifier_function_table'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "max('identifier_function_table')",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 57,
+    "fragment" : "max('identifier_function_table')"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER(row_number() OVER (ORDER BY 'x'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "row_number() OVER (ORDER BY 'x' ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 57,
+    "fragment" : "row_number() OVER (ORDER BY 'x')"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER(
+  array_join(transform(array('identifier', '_function_table'), element -> element), '')
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "array_join(transform(array('identifier', '_function_table'), lambdafunction(namedlambdavariable(), namedlambdavariable())), '')",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 113,
+    "fragment" : "array_join(transform(array('identifier', '_function_table'), element -> element), '')"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_name()
+RETURNS STRING
+RETURN 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT IDENTIFIER(identifier_name()) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "identifier_name()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 35,
+    "fragment" : "identifier_name()"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION persistent_identifier_name()
+RETURNS STRING
+RETURN 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT IDENTIFIER(persistent_identifier_name()) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "spark_catalog.default.persistent_identifier_name()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 46,
+    "fragment" : "persistent_identifier_name()"
+  } ]
+}
+
+
+-- !query
+DROP FUNCTION persistent_identifier_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION persistent_identifier_function(value INT)
+RETURNS INT
+RETURN value + 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT IDENTIFIER(concat('persistent_identifier_', 'function'))(1)
+-- !query schema
+struct<spark_catalog.default.persistent_identifier_function(1):int>
+-- !query output
+2
+
+
+-- !query
+DROP FUNCTION persistent_identifier_function
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION persistent_identifier_base_name()
+RETURNS STRING
+RETURN 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION persistent_identifier_nested_name()
+RETURNS STRING
+RETURN persistent_identifier_base_name()
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT IDENTIFIER(persistent_identifier_nested_name()) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "spark_catalog.default.persistent_identifier_nested_name()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 53,
+    "fragment" : "persistent_identifier_nested_name()"
+  } ]
+}
+
+
+-- !query
+DROP FUNCTION persistent_identifier_nested_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION persistent_identifier_base_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_relation_name()
+RETURNS STRING
+RETURN 'identifier_function_table'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE identifier_function_table(c1 INT) USING csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM IDENTIFIER(identifier_relation_name())
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "identifier_relation_name()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 51,
+    "fragment" : "identifier_relation_name()"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_relation_count()
+RETURNS BIGINT
+RETURN SELECT count(*) FROM IDENTIFIER(concat('identifier_function_', 'table'))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT identifier_relation_count()
+-- !query schema
+struct<identifier_relation_count():bigint>
+-- !query output
+0
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_relation_count
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION persistent_identifier_relation_name()
+RETURNS STRING
+RETURN 'identifier_function_table'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM IDENTIFIER(persistent_identifier_relation_name())
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "spark_catalog.default.persistent_identifier_relation_name()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 62,
+    "fragment" : "persistent_identifier_relation_name()"
+  } ]
+}
+
+
+-- !query
+DROP FUNCTION persistent_identifier_relation_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE identifier_function_table
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_relation_name
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query
@@ -855,6 +1420,14 @@ struct<>
 
 
 -- !query
+CREATE TABLE identifier_name_source(name STRING) USING csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT * FROM IDENTIFIER((SELECT 't'))
 -- !query schema
 struct<>
@@ -873,6 +1446,54 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 26,
     "stopIndex" : 37,
     "fragment" : "(SELECT 't')"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER((SELECT max(name) FROM identifier_name_source))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "scalarsubquery()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 71,
+    "fragment" : "(SELECT max(name) FROM identifier_name_source)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER(
+  (SELECT 'x' FROM (SELECT 1) WHERE explode(array(1)) = 1)
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "scalarsubquery()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 84,
+    "fragment" : "(SELECT 'x' FROM (SELECT 1) WHERE explode(array(1)) = 1)"
   } ]
 }
 
@@ -967,6 +1588,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "fragment" : "SELECT 'col1'"
   } ]
 }
+
+
+-- !query
+DROP TABLE identifier_name_source
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query
@@ -2564,6 +3193,901 @@ org.apache.spark.sql.AnalysisException
 
 -- !query
 DROP SCHEMA identifier_clause_test_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_var_target AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_var_name STRING DEFAULT 'identifier_var_target'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_var_view AS
+SELECT * FROM IDENTIFIER(identifier_var_name)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT count(*) AS row_count FROM identifier_var_view
+-- !query schema
+struct<row_count:bigint>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_var_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW identifier_var_target
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_var_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW identifier_perm_target AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_perm_name STRING DEFAULT 'identifier_perm_target'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW identifier_perm_view AS SELECT * FROM IDENTIFIER(identifier_perm_name)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`identifier_clause_test_schema`.`identifier_perm_view`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`identifier_perm_name`"
+  }
+}
+
+
+-- !query
+DROP VIEW identifier_perm_target
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_perm_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE SCHEMA identifier_alter_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+USE identifier_alter_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE identifier_alter_target (c1 INT) USING parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_alter_name STRING DEFAULT 'identifier_alter_target'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW identifier_alter_view AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+ALTER VIEW identifier_alter_view AS SELECT * FROM IDENTIFIER(identifier_alter_name)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`identifier_alter_schema`.`identifier_alter_view`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`identifier_alter_name`"
+  }
+}
+
+
+-- !query
+SELECT * FROM identifier_alter_view
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_alter_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE identifier_alter_target
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_alter_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+USE default
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP SCHEMA identifier_alter_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE SCHEMA ivt_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+USE ivt_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW ivt_target AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE ivt_name STRING DEFAULT 'ivt_target'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+ALTER VIEW IDENTIFIER(ivt_name) AS SELECT 2 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM ivt_target
+-- !query schema
+struct<c1:int>
+-- !query output
+2
+
+
+-- !query
+DROP VIEW ivt_target
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE ivt_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+USE default
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP SCHEMA ivt_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_expr_col STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_expr_view AS
+SELECT IDENTIFIER(identifier_expr_col) AS x FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_expr_view
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_expr_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_expr_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_gtv_col STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE GLOBAL TEMPORARY VIEW identifier_gtv_view AS
+SELECT IDENTIFIER(identifier_gtv_col) AS x FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM global_temp.identifier_gtv_view
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW global_temp.identifier_gtv_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_gtv_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_view_name STRING DEFAULT 'identifier_named_view'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(identifier_view_name) AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_named_view
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_named_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_view_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_name_part STRING DEFAULT 'identifier_named_view2'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_body_part STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(identifier_name_part) AS
+SELECT IDENTIFIER(identifier_body_part) AS x FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_named_view2
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_named_view2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_name_part
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_body_part
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE SCHEMA identifier_named_perm_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+USE identifier_named_perm_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_perm_view_name STRING DEFAULT 'identifier_named_perm_view'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW IDENTIFIER(identifier_perm_view_name) AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_named_perm_view
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_named_perm_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_perm_view_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+USE default
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP SCHEMA identifier_named_perm_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.legacy.allowSessionVariableInPersistedView=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.allowSessionVariableInPersistedView	true
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_p2a_col STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW identifier_p2a_view AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+ALTER VIEW identifier_p2a_view AS SELECT IDENTIFIER(identifier_p2a_col) FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW identifier_p2a_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_p2a_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.legacy.allowSessionVariableInPersistedView=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.allowSessionVariableInPersistedView	false
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_nested_col STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_nested_inner AS
+SELECT IDENTIFIER(identifier_nested_col) AS x FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_nested_outer AS
+SELECT x FROM identifier_nested_inner
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_nested_outer
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_nested_outer
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW identifier_nested_inner
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_nested_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_fn_target AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_fn_var STRING DEFAULT 'identifier_fn_target'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_fn() RETURN SELECT count(*) FROM IDENTIFIER(identifier_fn_var)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_fn_view AS SELECT identifier_fn() AS c
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_fn_view
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_fn_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_fn
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW identifier_fn_target
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_fn_var
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_talter_view AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_talter_col STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+ALTER VIEW identifier_talter_view AS
+SELECT IDENTIFIER(identifier_talter_col) AS x FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_talter_view
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_talter_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_talter_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_cache_col STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CACHE TABLE identifier_cache_view AS
+SELECT IDENTIFIER(identifier_cache_col) AS x FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_cache_view
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+UNCACHE TABLE identifier_cache_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_cache_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_cache_name STRING DEFAULT 'identifier_cache_named'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CACHE TABLE IDENTIFIER(identifier_cache_name) AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_cache_named
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+UNCACHE TABLE identifier_cache_named
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_cache_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_subq_col STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW identifier_subq_view AS
+SELECT (SELECT IDENTIFIER(identifier_subq_col) FROM VALUES(1) AS t(c1)) AS x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`default`.`identifier_subq_view`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`identifier_subq_col`"
+  }
+}
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_subq_col
 -- !query schema
 struct<>
 -- !query output

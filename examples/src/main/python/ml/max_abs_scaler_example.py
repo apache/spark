@@ -18,6 +18,7 @@
 # $example on$
 from pyspark.ml.feature import MaxAbsScaler
 from pyspark.ml.linalg import Vectors
+
 # $example off$
 from pyspark.sql import SparkSession
 

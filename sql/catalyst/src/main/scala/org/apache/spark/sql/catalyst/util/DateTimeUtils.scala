@@ -991,6 +991,61 @@ object DateTimeUtils extends SparkDateTimeUtils {
     }
   }
 
+  /**
+   * Adds the specified number of units to a nanosecond-precision timestamp of precision `p` (in
+   * [7, 9]), returning a value floored to that precision.
+   *
+   * For units of MICROSECOND or coarser the addition runs on the microsecond grid (reusing
+   * [[timestampAdd]] for all the calendar, DST and overflow handling) and the input's already
+   * `p`-aligned fraction is carried through unchanged. For the NANOSECOND unit the fraction absorbs
+   * `quantity` nanoseconds and any whole microseconds carry into `epochMicros`; the resulting
+   * fraction is then floored to `p` (via [[truncateTimestampNanosToPrecision]]) so a NANOSECOND
+   * quantity finer than the type's step never produces an off-grid value that would compare, hash
+   * or sort unequal to its displayed (aligned) form. NANOSECOND is only valid here: adding
+   * nanoseconds to a microsecond timestamp is unrepresentable, so that combination is rejected as
+   * an invalid unit through the microsecond [[timestampAdd]] path.
+   *
+   * @param unit A keyword that specifies the interval units to add to the input timestamp.
+   * @param quantity The amount of `unit`s to add. It can be positive or negative.
+   * @param ts The input nanosecond-precision timestamp.
+   * @param precision The declared fractional-second precision `p` in [7, 9] of the input/output.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return A nanosecond-precision timestamp value floored to `precision`.
+   */
+  def timestampAddNanos(
+      unit: String,
+      quantity: Long,
+      ts: TimestampNanosVal,
+      precision: Int,
+      zoneId: ZoneId): TimestampNanosVal = {
+    if (unit.toUpperCase(Locale.ROOT) == "NANOSECOND") {
+      try {
+        // Split the added nanoseconds into whole microseconds and a [0, 999] remainder first, so
+        // the fraction sum stays within [0, 1998] and only the true microsecond total can overflow
+        // a Long (adding the remainder to `nanosWithinMicro` before the split would spuriously
+        // reject a large-but-representable quantity).
+        val quotientMicros = Math.floorDiv(quantity, NANOS_PER_MICROS)
+        val remainderNanos = Math.floorMod(quantity, NANOS_PER_MICROS)
+        val fractionSum = ts.nanosWithinMicro.toLong + remainderNanos
+        val carryMicros =
+          Math.addExact(quotientMicros, Math.floorDiv(fractionSum, NANOS_PER_MICROS))
+        val newFraction = Math.floorMod(fractionSum, NANOS_PER_MICROS).toShort
+        val newMicros = Math.addExact(ts.epochMicros, carryMicros)
+        truncateTimestampNanosToPrecision(
+          TimestampNanosVal.fromParts(newMicros, newFraction), precision)
+      } catch {
+        case _: ArithmeticException | _: DateTimeException =>
+          throw QueryExecutionErrors.timestampAddOverflowError(ts.epochMicros, quantity, unit)
+      }
+    } else {
+      // Units of MICROSECOND or coarser do not touch the sub-microsecond fraction; add on the
+      // microsecond grid and re-attach the input's fraction, which is already `p`-aligned. An
+      // unknown unit is rejected by timestampAdd, and NANOSECOND is handled above.
+      TimestampNanosVal.fromParts(
+        timestampAdd(unit, quantity, ts.epochMicros, zoneId), ts.nanosWithinMicro)
+    }
+  }
+
   private val timestampDiffMap = Map[String, (Temporal, Temporal) => Long](
     "MICROSECOND" -> ChronoUnit.MICROS.between,
     "MILLISECOND" -> ChronoUnit.MILLIS.between,
@@ -1391,5 +1446,47 @@ object DateTimeUtils extends SparkDateTimeUtils {
       c = candidate(k)
     }
     c
+  }
+
+  /**
+   * Nanosecond-precision DayTimeInterval bucketing. `bucketMicros` is an integer number of
+   * microseconds, so every bucket boundary `origin + k * bucketSize` carries the same
+   * `nanosWithinMicro` remainder as `origin` -- only the choice of `k` needs nanosecond
+   * resolution, and only when the micro-level boundary lands on the same microsecond as `ts`:
+   * if `origin`'s remainder is larger than `ts`'s there, the true boundary is one bucket earlier.
+   */
+  def timeBucketDTIntervalNanos(
+      bucketMicros: Long,
+      ts: TimestampNanosVal,
+      origin: TimestampNanosVal,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val startMicros = timeBucketDTInterval(bucketMicros, ts.epochMicros, origin.epochMicros, zoneId)
+    val adjustedStartMicros =
+      if (startMicros == ts.epochMicros && origin.nanosWithinMicro > ts.nanosWithinMicro) {
+        timeBucketDTInterval(bucketMicros, startMicros - 1, origin.epochMicros, zoneId)
+      } else {
+        startMicros
+      }
+    TimestampNanosVal.fromParts(adjustedStartMicros, origin.nanosWithinMicro)
+  }
+
+  /**
+   * Nanosecond-precision YearMonthInterval bucketing. See
+   * [[timeBucketDTIntervalNanos]] for why the result's `nanosWithinMicro` always equals
+   * `origin`'s, and why only the choice of `k` needs sub-microsecond resolution.
+   */
+  def timeBucketYMIntervalNanos(
+      bucketMonths: Int,
+      ts: TimestampNanosVal,
+      origin: TimestampNanosVal,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val startMicros = timeBucketYMInterval(bucketMonths, ts.epochMicros, origin.epochMicros, zoneId)
+    val adjustedStartMicros =
+      if (startMicros == ts.epochMicros && origin.nanosWithinMicro > ts.nanosWithinMicro) {
+        timeBucketYMInterval(bucketMonths, startMicros - 1, origin.epochMicros, zoneId)
+      } else {
+        startMicros
+      }
+    TimestampNanosVal.fromParts(adjustedStartMicros, origin.nanosWithinMicro)
   }
 }

@@ -16,7 +16,7 @@
 #
 import abc
 import dataclasses
-from typing import Optional, List, Tuple, Dict, Any, Union, TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from pyspark.errors import PySparkValueError
 

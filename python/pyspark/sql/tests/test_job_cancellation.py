@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 
-import unittest
 import threading
 import time
+import unittest
 
 from pyspark import InheritableThread, inheritable_thread_target
 from pyspark.errors import IllegalArgumentException, PySparkValueError

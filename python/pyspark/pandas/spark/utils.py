@@ -20,7 +20,7 @@ Helpers and utilities to deal with PySpark instances
 
 from typing import overload
 
-from pyspark.sql.types import DecimalType, StructType, MapType, ArrayType, StructField, DataType
+from pyspark.sql.types import ArrayType, DataType, DecimalType, MapType, StructField, StructType
 
 
 @overload
@@ -179,6 +179,7 @@ def force_decimal_precision_scale(
 def _test() -> None:
     import doctest
     import sys
+
     import pyspark.pandas.spark.utils
 
     globs = pyspark.pandas.spark.utils.__dict__.copy()

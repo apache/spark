@@ -116,6 +116,15 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
     assert(getNumBytesSpilled > 0)
   }
 
+  test("length is tracked as a Long") {
+    // `length` must return `Long` so a single partition can hold more than Int.MaxValue rows
+    // without the counter overflowing (window execution relies on this to detect oversized
+    // partitions). Assert the type directly: a plain value check would pass even if `length`
+    // reverted to `Int`, because small values widen implicitly.
+    assert(classOf[ExternalAppendOnlyUnsafeRowArray].getMethod("length").getReturnType ===
+      java.lang.Long.TYPE)
+  }
+
   test("insert rows less than the inMemoryThreshold") {
     val (inMemoryThreshold, spillThreshold) = (100, 50)
     withExternalArray(inMemoryThreshold, spillThreshold) { array =>

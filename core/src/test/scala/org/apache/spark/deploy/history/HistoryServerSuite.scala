@@ -348,6 +348,12 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     getContentAndCode("foobar")._1 should be (HttpServletResponse.SC_NOT_FOUND)
   }
 
+  test("SPARK-59010: hold status is not available through the history server") {
+    val holdStatus = getContentAndCode("applications/local-1422981780767/holdstatus")
+    holdStatus._1 should be (HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+    holdStatus._3 should be (Some("Hold status not available through the history server."))
+  }
+
   test("automatically retrieve uiRoot from request through Knox") {
     assert(sys.props.get("spark.ui.proxyBase").isEmpty,
       "spark.ui.proxyBase is defined but it should not for this UT")

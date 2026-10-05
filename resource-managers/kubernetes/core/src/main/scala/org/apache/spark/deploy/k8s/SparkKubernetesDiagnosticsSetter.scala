@@ -26,6 +26,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.EXIT_EXCEPTION_ANNOTATION
 import org.apache.spark.deploy.k8s.SparkKubernetesClientFactory.ClientType
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{STRING_REDACTION_PATTERN, SUBMIT_DEPLOY_MODE}
 import org.apache.spark.util.{SparkStringUtils, Utils}
 
 /**
@@ -59,18 +60,24 @@ private[spark] class SparkKubernetesDiagnosticsSetter(clientProvider: Kubernetes
   }
 
   override def setDiagnostics(throwable: Throwable, conf: SparkConf): Unit = {
-    val diagnostics = SparkStringUtils.abbreviate(Utils.stringifyException(throwable),
-      KUBERNETES_EXIT_EXCEPTION_MESSAGE_LIMIT_BYTES)
-    Utils.tryWithResource(clientProvider.create(conf)) { client =>
+    // In cluster deploy mode, this runs in the submission client, not in the driver pod.
+    // Skip it so that a submission failure (e.g. pod creation conflict) does not overwrite
+    // the annotation of an existing driver pod with the same name.
+    if (conf.get(SUBMIT_DEPLOY_MODE) != "cluster") {
       conf.get(KUBERNETES_DRIVER_POD_NAME).foreach { podName =>
-        client.pods()
-          .inNamespace(conf.get(KUBERNETES_NAMESPACE))
-          .withName(podName)
-          .patch(PATCH_CONTEXT, new PodBuilder()
-            .withNewMetadata()
-            .addToAnnotations(EXIT_EXCEPTION_ANNOTATION, diagnostics)
-            .endMetadata()
-            .build());
+        val diagnostics = SparkStringUtils.abbreviate(
+          Utils.redact(conf.get(STRING_REDACTION_PATTERN), Utils.stringifyException(throwable)),
+          KUBERNETES_EXIT_EXCEPTION_MESSAGE_LIMIT_BYTES)
+        Utils.tryWithResource(clientProvider.create(conf)) { client =>
+          client.pods()
+            .inNamespace(conf.get(KUBERNETES_NAMESPACE))
+            .withName(podName)
+            .patch(PATCH_CONTEXT, new PodBuilder()
+              .withNewMetadata()
+              .addToAnnotations(EXIT_EXCEPTION_ANNOTATION, diagnostics)
+              .endMetadata()
+              .build());
+        }
       }
     }
   }

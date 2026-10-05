@@ -15,21 +15,21 @@
 # limitations under the License.
 #
 
-import uuid
+import importlib
 import os
 import shutil
 import signal
 import sys
 import threading
+import uuid
 import warnings
-import importlib
-from threading import RLock
 from tempfile import NamedTemporaryFile
+from threading import RLock
 from types import TracebackType
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
-    cast,
     ClassVar,
     Dict,
     Iterable,
@@ -37,42 +37,42 @@ from typing import (
     NoReturn,
     Optional,
     Sequence,
+    Set,
     Tuple,
     Type,
-    TYPE_CHECKING,
     TypeVar,
-    Set,
+    cast,
 )
 
 from py4j.java_collections import JavaMap
+from py4j.java_gateway import JavaGateway, JavaObject, JVMView, is_instance_of
 from py4j.protocol import Py4JError
 
 from pyspark import accumulators
-from pyspark.conf import SparkConf
 from pyspark.accumulators import Accumulator
+from pyspark.conf import SparkConf
 from pyspark.core.broadcast import Broadcast, BroadcastPickleRegistry
 from pyspark.core.files import SparkFiles
+from pyspark.core.rdd import RDD
+from pyspark.core.status import StatusTracker
+from pyspark.errors import PySparkRuntimeError
 from pyspark.java_gateway import launch_gateway
+from pyspark.profiler import BasicProfiler, MemoryProfiler, ProfilerCollector, UDFBasicProfiler
+from pyspark.resource.information import ResourceInformation
 from pyspark.serializers import (
-    CPickleSerializer,
+    AutoBatchedSerializer,
     BatchedSerializer,
+    ChunkedStream,
+    CPickleSerializer,
+    NoOpSerializer,
+    PairDeserializer,
     Serializer,
     UTF8Deserializer,
-    PairDeserializer,
-    AutoBatchedSerializer,
-    NoOpSerializer,
-    ChunkedStream,
 )
 from pyspark.storagelevel import StorageLevel
-from pyspark.resource.information import ResourceInformation
-from pyspark.core.rdd import RDD
-from pyspark.util import _load_from_socket, local_connect_and_auth
 from pyspark.taskcontext import TaskContext
 from pyspark.traceback_utils import CallSite, first_spark_call
-from pyspark.core.status import StatusTracker
-from pyspark.profiler import ProfilerCollector, BasicProfiler, UDFBasicProfiler, MemoryProfiler
-from pyspark.errors import PySparkRuntimeError
-from py4j.java_gateway import is_instance_of, JavaGateway, JavaObject, JVMView
+from pyspark.util import _load_from_socket, local_connect_and_auth
 
 if TYPE_CHECKING:
     from pyspark.accumulators import AccumulatorParam

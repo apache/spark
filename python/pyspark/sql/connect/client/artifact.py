@@ -14,27 +14,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.errors import PySparkRuntimeError, PySparkValueError
-from pyspark.sql.connect.logging import logger
-
+import abc
 import hashlib
 import importlib
 import io
-import sys
 import os
+import sys
 import zlib
+from functools import cached_property
 from itertools import chain
-from typing import List, Iterable, BinaryIO, Iterator, Optional, Tuple
-import abc
 from pathlib import Path, PureWindowsPath
+from typing import BinaryIO, Iterable, Iterator, List, Optional, Tuple
 from urllib.parse import urlparse
 from urllib.request import url2pathname
-from functools import cached_property
 
 import grpc
 
 import pyspark.sql.connect.proto as proto
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
+from pyspark.sql.connect.logging import logger
 
 JAR_PREFIX: str = "jars"
 PYFILE_PREFIX: str = "pyfiles"

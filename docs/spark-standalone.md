@@ -575,6 +575,24 @@ Spark applications supports the following configuration properties specific to s
   </td>
   <td>3.1.0</td>
   </tr>
+  <tr>
+  <td><code>spark.standalone.submit.filterEnvironment</code></td>
+  <td><code>true</code></td>
+  <td>
+  In standalone cluster mode, controls whether the client forwards only Spark-related environment
+  variables to the driver, i.e. variables whose name starts with <code>SPARK_</code>, excluding
+  <code>SPARK_ENV_LOADED</code>, <code>SPARK_HOME</code>, <code>SPARK_CONF_DIR</code>,
+  <code>SPARK_LOCAL_IP</code>, and <code>SPARK_LOCAL_HOSTNAME</code>, matching the REST submission
+  gateway. If set to <code>false</code>, the full environment of the submitting process is
+  forwarded to the driver, except <code>SPARK_LOCAL_IP</code> and
+  <code>SPARK_LOCAL_HOSTNAME</code>, which are never forwarded since they describe the
+  submitting host rather than the worker the driver runs on. This governs the RPC submission
+  gateway, which is what <code>spark-submit</code> uses unless
+  <code>spark.master.rest.enabled</code> is set to <code>true</code>; REST submissions filter
+  regardless of this setting.
+  </td>
+  <td>4.3.0</td>
+  </tr>
 </table>
 
 
@@ -634,6 +652,20 @@ via <code>http://[host:port]/[version]/submissions/[action]</code> where
     <td>POST</td>
     <td>Kill all running Spark drivers.</td>
     <td>4.0.0</td>
+  </tr>
+  <tr>
+    <td><code>hold</code></td>
+    <td>POST</td>
+    <td>Hold a running Spark application, given its application ID rather than a submission ID.
+      See <a href="#held-applications">Held Applications</a>.</td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
+    <td><code>resume</code></td>
+    <td>POST</td>
+    <td>Resume a held Spark application, given its application ID rather than a submission ID.
+      See <a href="#held-applications">Held Applications</a>.</td>
+    <td>4.4.0</td>
   </tr>
   <tr>
     <td><code>status</code></td>
@@ -765,6 +797,64 @@ In addition, detailed log output for each job is also written to the work direct
 
 To track and review logs across completed applications, [enable event logging and start the History Server](monitoring.html#viewing-after-the-fact).
 
+## Held Applications
+
+An application that can be held reports to the Master whether it currently is, and the Master web
+UI annotates the application state accordingly, for example `RUNNING (held, draining 2 executors)`.
+An executor that has not exited yet is still finishing its running tasks, and the hold is complete
+once no executor is left. The Master's `/json/` endpoint reports the same in the `holdsupported`,
+`held`, and `draining` fields of each application.
+
+Only applications whose driver reports that it can be held are annotated, per the preconditions
+described in [Web UI](web-ui.html#jobs-tab).
+
+Such an application also gets a **Hold** button next to its **Kill** button, and a **Resume**
+button while it is held. Holding stops requesting new executors for the application and gracefully
+decommissions the running ones; the application keeps its driver and the shuffle output already
+written, while cached blocks are lost and recomputed after resuming. Holding and resuming require
+modify permissions, like killing. The buttons are gated by `spark.ui.holdEnabled` twice: on the
+Master, where setting it to false hides them for every application, and on each application,
+whose own setting travels with its registration -- an application that disabled it gets no buttons
+and its hold requests are rejected, while its hold status stays visible. The same controls remain
+available on the driver web UI.
+
+Scripts can hold and resume an application through the `/app/hold/` and `/app/resume/` endpoints
+the buttons submit to. Like the buttons, a request must be a POST carrying the application ID as
+`id` and the random per-UI `csrfToken`, the value of the hidden `csrfToken` field in the Master
+web UI page, which does not change for the lifetime of the Master. A request without a valid
+token is rejected with 403, and one without the trailing slash is only redirected, without
+taking effect. For example:
+
+```bash
+curl -X POST -d "id=<app-id>" -d "csrfToken=<csrf-token>" http://<master-host>:8080/app/hold/
+```
+
+If the Master web UI requires authentication, reading the token and sending the request both
+need the same credentials. The request is forwarded to the driver asynchronously, so its outcome
+shows up afterwards in the `held` and `draining` fields of the Master's `/json/` endpoint.
+
+Scripts can also use the `hold` and `resume` actions of the [REST API](#rest-api), which need no
+CSRF token. They take the application ID rather than a submission ID, so they work for
+applications submitted in client mode too, and they are gated the same way, by
+`spark.ui.holdEnabled` on the Master and on the application. The response only tells whether the
+request was forwarded to the driver; poll the `held` and `draining` fields of the Master's
+`/json/` endpoint for the outcome.
+
+```bash
+$ curl -XPOST http://IP:PORT/v1/submissions/hold/app-20260930120000-0000
+{
+  "action" : "HoldApplicationResponse",
+  "appId" : "app-20260930120000-0000",
+  "message" : "Requesting application app-20260930120000-0000 to hold.",
+  "serverSparkVersion" : "4.4.0",
+  "success" : true
+}
+```
+
+Like the other actions of the REST API, `hold` and `resume` check no ACLs, and a browser can be
+made to send them from another site. Require a signed `Authorization` header with `JWSFilter` as
+described in [REST API](#rest-api), or disable the REST API with `spark.master.rest.enabled=false`.
+
 
 # Running Alongside Hadoop
 
@@ -877,6 +967,24 @@ In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spa
     <td>None</td>
     <td>When <code>spark.deploy.recoveryMode</code> is set to ZOOKEEPER, this configuration is used to set the zookeeper directory to store recovery state.</td>
     <td>0.8.1</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.recoverySerializationFilter</code></td>
+    <td>java.**;scala.**;org.apache.spark.**;!*</td>
+    <td>Serialization filter pattern applied when the master reads back recovery state that
+      the built-in JavaSerializer wrote, currently for the ZOOKEEPER recovery mode. The default
+      allows only JDK, Scala and Spark classes, which covers everything the master persists;
+      znodes containing any other class are skipped, without being deleted, during recovery
+      instead of being instantiated in the newly elected master.
+      This only hardens deserialization and is not a replacement for ZooKeeper ACLs, which
+      remain the access control for the recovery state.
+      The filter is applied in addition to any JVM-wide <code>jdk.serialFilter</code>; znodes
+      rejected only by <code>jdk.serialFilter</code> are deleted like other unreadable znodes.
+      Skipped znodes are never cleaned up by the master and are logged on every failover, so
+      operators should inspect and remove them manually.
+      Set to <code>*</code> to disable filtering.
+    </td>
+    <td>4.3.0</td>
   </tr>
 </table>
 

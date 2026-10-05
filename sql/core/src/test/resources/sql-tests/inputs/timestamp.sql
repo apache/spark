@@ -207,6 +207,11 @@ select timestampdiff(SECOND, date'2022-02-15', timestamp'2022-02-14 23:59:59');
 select timestampdiff('MINUTE', timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 02:00:03');
 select timestampdiff('YEAR', date'2022-02-15', date'2023-02-15');
 
+-- NANOSECOND is a valid datetimeUnit keyword (timestampadd accepts it for nanosecond-precision
+-- timestamps) but timestampdiff does not support it, so it is rejected at runtime, matching other
+-- add-only units such as DAYOFYEAR.
+select timestampdiff(NANOSECOND, timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 01:02:04');
+
 select timediff(QUARTER, timestamp'2023-08-10 01:02:03', timestamp'2022-01-14 01:02:03');
 select timediff(HOUR, timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 12:00:03');
 select timediff(DAY, date'2022-02-15', date'2023-02-15');

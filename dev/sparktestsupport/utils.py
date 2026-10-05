@@ -18,8 +18,9 @@
 #
 
 import os
-import sys
 import subprocess
+import sys
+
 from sparktestsupport import modules
 from sparktestsupport.shellutils import run_cmd
 from sparktestsupport.toposort import toposort_flatten
@@ -36,7 +37,7 @@ def determine_modules_for_files(filenames):
     file to belong to the 'root' module. `.github` directory is counted only in GitHub Actions.
 
     >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
-    ['pyspark-core', 'pyspark-install', 'sql']
+    ['pyspark-core', 'pyspark-periodic', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
     >>> [x.name for x in determine_modules_for_files(["python/README.md"])]

@@ -18,6 +18,7 @@
 import sys
 import warnings
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Iterable,
@@ -27,19 +28,17 @@ from typing import (
     TypeVar,
     Union,
     overload,
-    TYPE_CHECKING,
 )
 
 import numpy as np
 
 from pyspark import since
-from pyspark.streaming.dstream import DStream
-from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
-from pyspark.mllib.linalg import _convert_to_vector
-from pyspark.mllib.util import Saveable, Loader
-from pyspark.core.rdd import RDD
 from pyspark.core.context import SparkContext
-from pyspark.mllib.linalg import Vector
+from pyspark.core.rdd import RDD
+from pyspark.mllib.common import _java2py, _py2java, callMLlibFunc, inherit_doc
+from pyspark.mllib.linalg import Vector, _convert_to_vector
+from pyspark.mllib.util import Loader, Saveable
+from pyspark.streaming.dstream import DStream
 
 if TYPE_CHECKING:
     from pyspark.mllib._typing import VectorLike
@@ -1038,8 +1037,9 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.mllib.regression
+    from pyspark.sql import SparkSession
 
     globs = pyspark.mllib.regression.__dict__.copy()
     spark = SparkSession.builder.master("local[2]").appName("mllib.regression tests").getOrCreate()
