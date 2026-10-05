@@ -78,6 +78,18 @@ object InProcessPythonUDFBuilder {
       PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF, deterministic))
   }
 
+  private val UnsupportedSessionConfiguration =
+    "INVALID_SPARK_CONFIG.UNSUPPORTED_IN_PROCESS_PYTHON_UDF"
+
+  /**
+   * Whether `checkConfiguration` rejected the session's settings, which can differ between the
+   * session that planned an in-process UDF and another one that re-plans it.
+   */
+  private[sql] def isUnsupportedSessionConfiguration(e: Throwable): Boolean = e match {
+    case e: SparkException => e.getCondition == UnsupportedSessionConfiguration
+    case _ => false
+  }
+
   private[sql] def checkConfiguration(conf: SQLConf): Unit = {
     val sparkConf = Option(SparkEnv.get).map(_.conf)
     // The legacy profilers wrap the function with an accumulator, which is not supported.
@@ -90,7 +102,7 @@ object InProcessPythonUDFBuilder {
         .map(_ => PYSPARK_EXECUTOR_MEMORY.key)).flatten ++ legacyProfilers
     unsupported.headOption.foreach { config =>
       throw new SparkException(
-        errorClass = "INVALID_SPARK_CONFIG.UNSUPPORTED_IN_PROCESS_PYTHON_UDF",
+        errorClass = UnsupportedSessionConfiguration,
         messageParameters = Map("config" -> config),
         cause = null)
     }

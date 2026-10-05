@@ -46,6 +46,7 @@ import org.apache.spark.sql.execution.datasources.{
   LogicalRelation,
   LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
+import org.apache.spark.sql.execution.python.InProcessPythonUDFBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -418,8 +419,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
           // session's configuration while planning; if it rejects them, drop the entry rather
           // than fail a command whose work is done. Other failures still propagate.
           case e: SparkException
-              if CacheManager.RecacheConfigurationErrors.contains(e.getCondition) =>
-            logWarning(log"Failed to rebuild the cache entry while attempting to recache", e)
+              if InProcessPythonUDFBuilder.isUnsupportedSessionConfiguration(e) =>
+            logWarning(log"Removed cache entry ${MDC(DATAFRAME_CACHE_ENTRY, cd)} because it " +
+              log"cannot be re-planned in the session that invalidated it", e)
             None
         }
       }
@@ -713,10 +715,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 }
 
 object CacheManager extends Logging {
-  private val RecacheConfigurationErrors = Set(
-    "INVALID_SPARK_CONFIG.UNSUPPORTED_IN_PROCESS_PYTHON_UDF",
-    "INVALID_SPARK_CONFIG.MISSING_IN_PROCESS_PYTHON_PLUGIN")
-
   def logCacheOperation(f: => MessageWithContext): Unit = {
     logBasedOnLevel(SQLConf.get.dataframeCacheLogLevel)(f)
   }
