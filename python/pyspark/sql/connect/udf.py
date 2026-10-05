@@ -198,7 +198,9 @@ class UserDefinedFunction:
         # so it survives ``_wrapped()``, ``asNondeterministic()`` and ``spark.udf.register``.
         self.bufferSchema = bufferSchema
         if isinstance(returnType, DataType):
-            PySparkUserDefinedFunction._check_return_type(returnType, evalType)
+            # Constrained SQL strings are rejected at construction. Eval-type Arrow/Pandas
+            # conversion stays on ``returnType`` so unrelated types fail only when consumed.
+            _check_no_char_varchar(returnType, "Python UDF return types")
         if bufferSchema is not None:
             _check_no_char_varchar(bufferSchema, "Python UDAF buffer schemas")
 

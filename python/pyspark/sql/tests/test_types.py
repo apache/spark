@@ -671,6 +671,8 @@ class TypesTestsMixin:
             VarcharType(8),
             ArrayType(CharType(5)),
             MapType(VarcharType(4), StringType()),
+            MapType(StringType(), VarcharType(4)),
+            MapType(StringType(), ArrayType(CharType(3))),
             StructType([StructField("c", CharType(3))]),
         ]
         for dt in cases:

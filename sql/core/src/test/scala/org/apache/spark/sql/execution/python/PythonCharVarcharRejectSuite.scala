@@ -78,6 +78,17 @@ class PythonCharVarcharRejectSuite extends SharedSparkSession {
         "data_type" -> "char(3)"))
   }
 
+  test("builder reports return type before buffer when both are CHAR/VARCHAR") {
+    val buffer = StructType(StructField("s", VarcharType(3)) :: Nil)
+    val udf = dummyPythonUdf(CharType(3), buffer)
+    checkError(
+      exception = intercept[AnalysisException] { udf.builder(Nil) },
+      condition = "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+      parameters = Map(
+        "feature" -> "Python UDF return types",
+        "data_type" -> "char(3)"))
+  }
+
   test("UDTF builder rejects CHAR return types") {
     val schema = StructType(StructField("c", CharType(3)) :: Nil)
     val udtf = UserDefinedPythonTableFunction(

@@ -40,6 +40,7 @@ from pyspark.sql.types import (
     ArrayType,
     BinaryType,
     BooleanType,
+    CharType,
     DayTimeIntervalType,
     DoubleType,
     IntegerType,
@@ -54,6 +55,7 @@ from pyspark.sql.types import (
     _parse_datatype_string,
 )
 from pyspark.sql.udf import UserDefinedFunction
+from pyspark.sql.utils import is_remote
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -61,7 +63,7 @@ from pyspark.testing.sqlutils import (
     test_not_compiled_message,
 )
 from pyspark.testing.utils import assertDataFrameEqual, eventually, timeout
-from pyspark.util import is_remote_only
+from pyspark.util import PythonEvalType, is_remote_only
 
 
 class BaseUDFTestsMixin:
@@ -1474,6 +1476,7 @@ class BaseUDFTestsMixin:
             (array_with_char_type, array_with_char_type_value),
             (array_with_varchar_type, array_with_varchar_value),
             (map_type, map_value),
+            (f"map<string, {varchar_type}>", {"a": "b"}),
             (struct_type, struct_value),
             (
                 f"struct<f1: {array_with_char_type}, f2: {array_with_varchar_type}, "
@@ -1507,6 +1510,50 @@ class BaseUDFTestsMixin:
                         "data_type": parsed.simpleString(),
                     },
                 )
+
+    def test_char_varchar_rejected_at_udf_construction(self):
+        if is_remote():
+            from pyspark.sql.connect.udf import UserDefinedFunction as UDF
+        else:
+            from pyspark.sql.udf import UserDefinedFunction as UDF
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            UDF(lambda x: x, CharType(3))
+        self.check_error(
+            exception=pe.exception,
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={
+                "feature": "Python UDF return types",
+                "data_type": "char(3)",
+            },
+        )
+
+    def test_eval_type_return_check_is_lazy(self):
+        if is_remote():
+            from pyspark.sql.connect.udf import UserDefinedFunction as UDF
+        else:
+            from pyspark.sql.udf import UserDefinedFunction as UDF
+
+        # Grouped-map Pandas UDFs require a StructType. Construction must succeed for STRING;
+        # the eval-type check runs only when returnType is consumed.
+        udf_obj = UDF(
+            lambda x: x,
+            StringType(),
+            evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        )
+        with self.assertRaises(PySparkTypeError) as pe:
+            _ = udf_obj.returnType
+        self.check_error(
+            exception=pe.exception,
+            errorClass="INVALID_RETURN_TYPE_FOR_PANDAS_UDF",
+            messageParameters={
+                "eval_type": (
+                    "SQL_GROUPED_MAP_PANDAS_UDF or SQL_GROUPED_MAP_PANDAS_ITER_UDF or "
+                    "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE"
+                ),
+                "return_type": str(StringType()),
+            },
+        )
 
     def test_udf_binary_type(self):
         def get_binary_type(x):

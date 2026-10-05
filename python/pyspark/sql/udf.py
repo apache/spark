@@ -215,7 +215,9 @@ class UserDefinedFunction:
         self.evalType = evalType
         self.deterministic = deterministic
         if isinstance(returnType, DataType):
-            UserDefinedFunction._check_return_type(returnType, evalType)
+            # Constrained SQL strings are rejected at construction. Eval-type Arrow/Pandas
+            # conversion stays on ``returnType`` so unrelated types fail only when consumed.
+            _check_no_char_varchar(returnType, "Python UDF return types")
         # Schema of the intermediate aggregation buffer, set only for an incremental Python
         # aggregator (see :class:`pyspark.sql.aggregator.Aggregator`); ``None`` otherwise. It is a
         # first-class field so it survives reconstruction paths such as ``_wrapped()``,
