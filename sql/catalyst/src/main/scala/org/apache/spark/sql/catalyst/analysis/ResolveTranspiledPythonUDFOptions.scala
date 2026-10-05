@@ -90,11 +90,9 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   // "binary" -> BinaryType, "map" -> MapType, "array" -> ArrayType. "string"
   // matches only StringType (not BinaryType): a bytes/BinaryType column is
   // tagged "binary" instead, so the string lowerings (e.g. `repeat`) never
-  // see it. "map" and "array" match any MapType/ArrayType regardless of the
-  // element type: the category is coarse on purpose (a per-element grammar
-  // inside the category string would put a type system where a category
-  // belongs), and the lowered body still type-checks against the bound
-  // column. Empty categories means "no restriction", so the option is kept.
+  // see it. "map"/"array" match any MapType/ArrayType (coarse on purpose;
+  // the lowered body type-checks against the bound column). Empty
+  // categories means "no restriction", so the option is kept.
   //
   // Two deliberate exclusions keep the transpiled semantics faithful to Python:
   // - DecimalType is NOT "numeric": Python receives decimal.Decimal objects,
