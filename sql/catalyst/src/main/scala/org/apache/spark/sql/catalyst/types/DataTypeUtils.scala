@@ -114,7 +114,8 @@ object DataTypeUtils {
       context: String,
       storeAssignmentPolicy: StoreAssignmentPolicy.Value,
       addError: String => Unit,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = ANALYSIS): Boolean = {
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck =
+        AnsiStoreAssignmentCastCheck.DEFAULT): Boolean = {
     (write, read) match {
       case (wArr: ArrayType, rArr: ArrayType) =>
         // run compatibility check first to produce all error messages
@@ -229,11 +230,18 @@ object DataTypeUtils {
       // branch of this match clause, or in checkAnalysis.
       case (w, r) if storeAssignmentPolicy == ANSI && ansiStoreAssignmentCastCheck == RUNTIME =>
         (w, r) match {
-          // Long/decimal -> timestamp can silently overflow, and variant -> complex types doesn't
-          // enforce nested field non-nullability. Keep rejecting them for now.
+          // Some casts that pass checkAnalysis don't behave correctly at runtime. Keep rejecting
+          // them for now:
+          // - Long/decimal -> timestamp can silently overflow.
+          // - Variant -> complex types doesn't enforce nested field non-nullability.
           case (LongType | _: DecimalType, TimestampType) |
-               (VariantType, _: StructType | _: ArrayType | _: MapType) |
-               (_: TimeType | _: AnyTimestampNanoType, VariantType) =>
+               (VariantType, _: StructType | _: ArrayType | _: MapType) =>
+            throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
+              tableName, context, w.catalogString, r.catalogString)
+          // - Building a variant from TIME or nanosecond timestamps isn't supported, whether the
+          //   value is top-level or nested in an array.
+          case (_, VariantType) if w.existsRecursively(
+              t => t.isInstanceOf[TimeType] || t.isInstanceOf[AnyTimestampNanoType]) =>
             throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
               tableName, context, w.catalogString, r.catalogString)
           case _ => true

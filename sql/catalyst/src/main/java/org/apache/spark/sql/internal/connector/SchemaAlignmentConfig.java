@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.internal.connector;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.Table;
 
 /**
  * Schema alignment configuration for DSv2 batch/row-level writes to a {@link Table}, exposed via
  * {@link SupportsConfigurableSchemaAlignment}.
+ *
+ * @since 4.4.0
  */
+@Evolving
 public class SchemaAlignmentConfig {
 
   /** The default data source v2 configuration. */
@@ -40,11 +44,14 @@ public class SchemaAlignmentConfig {
      * Insert an ANSI cast check, so malformed values or overflows fail at execution time instead
      * of being rejected during analysis.
      */
-    RUNTIME
+    RUNTIME;
+
+    /** The default ANSI store-assignment cast check. */
+    public static final AnsiStoreAssignmentCastCheck DEFAULT = ANALYSIS;
   }
 
   /** When the {@code ANSI} store-assignment cast check runs. */
   public AnsiStoreAssignmentCastCheck ansiStoreAssignmentCastCheck() {
-    return AnsiStoreAssignmentCastCheck.ANALYSIS;
+    return AnsiStoreAssignmentCastCheck.DEFAULT;
   }
 }

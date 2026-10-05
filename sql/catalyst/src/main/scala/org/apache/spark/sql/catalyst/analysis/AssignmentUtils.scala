@@ -31,7 +31,6 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
-import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck.ANALYSIS
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -69,7 +68,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       assignments: Seq[Assignment],
       fromStar: Boolean,
       coerceNestedTypes: Boolean,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = ANALYSIS): Seq[Assignment] = {
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Seq[Assignment] = {
 
     val errors = new mutable.ArrayBuffer[String]()
 
@@ -114,7 +113,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       attrs: Seq[Attribute],
       assignments: Seq[Assignment],
       coerceNestedTypes: Boolean = false,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = ANALYSIS): Seq[Assignment] = {
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Seq[Assignment] = {
 
     val errors = new mutable.ArrayBuffer[String]()
 

@@ -37,7 +37,6 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
-import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck.ANALYSIS
 import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralType, MapType, StructType, UserDefinedType}
 
 object TableOutputResolver extends SQLConfHelper with Logging {
@@ -97,7 +96,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       byName: Boolean,
       conf: SQLConf,
       defaultValueFillMode: DefaultValueFillMode.Value = NONE,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = ANALYSIS): LogicalPlan = {
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck =
+        AnsiStoreAssignmentCastCheck.DEFAULT): LogicalPlan = {
     resolveOutputColumnsInternal(
       tableName, expected, query, byName, conf, defaultValueFillMode,
       ansiStoreAssignmentCastCheck)._1
@@ -116,7 +116,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       byName: Boolean,
       conf: SQLConf,
       defaultValueFillMode: DefaultValueFillMode.Value = NONE,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = ANALYSIS
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck
   ): (LogicalPlan, Set[String]) = {
     resolveOutputColumnsInternal(
       tableName, expected, query, byName, conf, defaultValueFillMode,
@@ -190,7 +190,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       addError: String => Unit,
       colPath: Seq[String],
       defaultValueFillMode: DefaultValueFillMode.Value,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck = ANALYSIS): Expression = {
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Expression = {
 
     val fillChildDefaultValue = defaultValueFillMode == RECURSE
     (value.dataType, col.dataType) match {

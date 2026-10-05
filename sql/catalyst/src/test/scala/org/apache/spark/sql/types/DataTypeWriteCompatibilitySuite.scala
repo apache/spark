@@ -234,11 +234,14 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
   }
 
   test("RUNTIME rejects unsupported datetime-to-variant casts") {
-    Seq(
+    val unsupportedTypes = Seq(
       TimeType(TimeType.DEFAULT_PRECISION),
       TimeType(TimeType.MAX_PRECISION),
       TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION),
-      TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION)).foreach { writeType =>
+      TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION))
+    val arrays = unsupportedTypes.map(ArrayType(_))
+    val nestedArrays = unsupportedTypes.map(t => ArrayType(ArrayType(t)))
+    (unsupportedTypes ++ arrays ++ nestedArrays).foreach { writeType =>
       val errs = new mutable.ArrayBuffer[String]()
       checkError(
         exception = intercept[AnalysisException](
@@ -252,6 +255,17 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
           "colName" -> "`v`",
           "srcType" -> toSQLType(writeType),
           "targetType" -> toSQLType(VariantType)))
+    }
+  }
+
+  test("RUNTIME allows supported array-to-variant casts") {
+    Seq(ArrayType(DateType), ArrayType(ArrayType(TimestampType))).foreach { writeType =>
+      assert(
+        DataTypeUtils.canWrite("", writeType, VariantType, byName = true,
+          analysis.caseSensitiveResolution, "v", storeAssignmentPolicy,
+          _ => (),
+          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME),
+        s"$writeType -> variant should be allowed under RUNTIME")
     }
   }
 

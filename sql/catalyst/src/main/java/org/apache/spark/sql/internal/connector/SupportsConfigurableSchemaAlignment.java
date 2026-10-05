@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.internal.connector;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.Table;
 
 /**
  * Allows connectors to configure schema alignment and casting behavior for DSv2 batch/row-level
  * writes to a {@link Table}. It is not consulted for streaming writes, where alignment is
  * delegated to the connector.
+ *
+ * @since 4.4.0
  */
+@Evolving
 public interface SupportsConfigurableSchemaAlignment extends Table {
 
   /** The schema alignment configuration for writes to this table. */
