@@ -19,7 +19,8 @@ package org.apache.spark.sql
 
 import scala.util.Try
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable}
+import org.apache.spark.{
+  SparkConf, SparkException, SparkRuntimeException, SparkThrowable, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
 import org.apache.spark.sql.catalyst.expressions.{
@@ -3028,6 +3029,10 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           |  'MAP<CHAR(2), INT>'))""".stripMargin
       val exactRepeatAfterCollisionQuery =
         """SELECT from_json('{"a":1,"a ":2,"a":3}', 'MAP<CHAR(2), INT>')"""
+      val exactRepeatSuccessThenFailureQuery =
+        """SELECT from_json('{"a":1,"a":"bad"}', 'MAP<CHAR(2), INT>')"""
+      val exactRepeatFailureThenSuccessQuery =
+        """SELECT from_json('{"a":"bad","a":2}', 'MAP<CHAR(2), INT>')"""
       val varcharOverflowQuery =
         """SELECT from_json('{"abc":1}', 'MAP<VARCHAR(2), INT>')"""
       val varcharOverflowFailfastQuery =
@@ -3075,6 +3080,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(sql(interleavedCharJsonQuery), Row(Seq(Row("b ", 2), Row("a ", 3))))
       assertDuplicateMapKey(exactRepeatAfterCollisionQuery)
       assertDuplicateMapKey(badJsonKeyBeforeDuplicateQuery)
+      checkAnswer(sql(exactRepeatSuccessThenFailureQuery), Row(Map.empty[String, Int]))
+      checkAnswer(sql(exactRepeatFailureThenSuccessQuery), Row(Map("a " -> 2)))
       checkAnswer(sql(badKeyThenSiblingQuery), Row(2))
       withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
         assertDuplicateMapKey(jsonQuery)
@@ -3095,6 +3102,25 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         withSQLConf(
             SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
           checkAnswer(readJsonMap(), Row(Map("a " -> 2)))
+        }
+      }
+
+      withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
+        withTempPath { path =>
+          Seq("""[{"m":{"a":1,"a ":2}},{"m":{"b":3}}]""")
+            .toDS().write.text(path.getCanonicalPath)
+          def readMultilineJsonMap(): DataFrame = spark.read
+            .option("multiLine", true)
+            .schema("m MAP<CHAR(2), INT>")
+            .json(path.getCanonicalPath)
+
+          assertDuplicateMapKeyError(readMultilineJsonMap().collect())
+          withSQLConf(
+              SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+            checkAnswer(
+              readMultilineJsonMap(),
+              Seq(Row(Map("a " -> 2)), Row(Map("b " -> 3))))
+          }
         }
       }
 
@@ -3194,6 +3220,30 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         """SELECT from_json(
           |  '{"a":[1,"bad",99],"b":[3]}',
           |  'MAP<STRING, ARRAY<INT>>')""".stripMargin
+      val nestedObjectStartFailureQuery =
+        """SELECT map_keys(from_json(
+          |  '{"a":{"x":{"nested":1},"tail":9},"b":{"x":2,"tail":3}}',
+          |  'MAP<CHAR(2), STRUCT<x: INT, tail: INT>>'))""".stripMargin
+      val nestedArrayStartFailureQuery =
+        """SELECT map_keys(from_json(
+          |  '{"a":[1,[2],3],"b":[4]}',
+          |  'MAP<CHAR(2), ARRAY<INT>>'))""".stripMargin
+      val arrayOfConstrainedMapsQuery =
+        """SELECT from_json('[{"a":"bad"}]', 'ARRAY<MAP<CHAR(2), INT>>')"""
+      val mapOfConstrainedMapsQuery =
+        """SELECT from_json(
+          |  '{"outer":{"a":"bad"}}',
+          |  'MAP<STRING, MAP<CHAR(2), INT>>')""".stripMargin
+      val arrayOfConstrainedMapsFailFastQuery =
+        """SELECT from_json(
+          |  '[{"a":"bad"}]',
+          |  'ARRAY<MAP<CHAR(2), INT>>',
+          |  map('mode', 'FAILFAST'))""".stripMargin
+      val mapOfConstrainedMapsFailFastQuery =
+        """SELECT from_json(
+          |  '{"outer":{"a":"bad"}}',
+          |  'MAP<STRING, MAP<CHAR(2), INT>>',
+          |  map('mode', 'FAILFAST'))""".stripMargin
 
       Seq(true, false).foreach { partial =>
         withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
@@ -3207,6 +3257,47 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
         checkAnswer(sql(stringNestedArrayLeakQuery), Row(Seq("b")))
         checkAnswer(sql(stringNestedArrayMapQuery), Row(Map("b" -> Seq(3))))
+      }
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+        checkAnswer(sql(nestedObjectStartFailureQuery), Row(Seq("b ")))
+        checkAnswer(sql(nestedArrayStartFailureQuery), Row(Seq("b ")))
+        checkAnswer(sql(arrayOfConstrainedMapsQuery), Row(null))
+        checkAnswer(sql(mapOfConstrainedMapsQuery), Row(null))
+        assertMalformedJsonRecord(arrayOfConstrainedMapsFailFastQuery)
+        assertMalformedJsonRecord(mapOfConstrainedMapsFailFastQuery)
+      }
+    }
+  }
+
+  test("SPARK-59722: JSON constrained maps preserve SparkUpgradeException") {
+    val timestamp = "2020-01-27T20:06:11.847-08000"
+    val timestampFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSz"
+    def assertUpgradeException(body: => Unit): Unit = {
+      checkError(
+        exception = intercept[SparkUpgradeException](body),
+        condition = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+        parameters = Map(
+          "datetime" -> s"'$timestamp'",
+          "config" -> "\"spark.sql.legacy.timeParserPolicy\""))
+    }
+
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
+      val json = Seq(s"""{"a":"$timestamp"}""").toDF("json")
+      val parsed = json.select(functions.from_json(
+        $"json",
+        "MAP<CHAR(2), TIMESTAMP>",
+        Map("timestampFormat" -> timestampFormat)))
+      assertUpgradeException(parsed.collect())
+
+      withTempPath { path =>
+        Seq(s"""{"m":{"a":"$timestamp"}}""").toDS().write.text(path.getCanonicalPath)
+        val parsedFile = spark.read
+          .option("timestampFormat", timestampFormat)
+          .schema("m MAP<CHAR(2), TIMESTAMP>")
+          .json(path.getCanonicalPath)
+        assertUpgradeException(parsedFile.collect())
       }
     }
   }

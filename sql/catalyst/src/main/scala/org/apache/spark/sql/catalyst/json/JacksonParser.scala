@@ -621,29 +621,27 @@ class JacksonParser(
   }
 
   /**
-   * Finish a JSON value that failed conversion. `skipChildren` only works at
-   * START_OBJECT / START_ARRAY; if the converter already consumed tokens inside a nested
-   * object, leftover FIELD_NAMEs would otherwise leak as keys of the enclosing map.
+   * Finish a JSON value that failed conversion. `skipChildren` only skips the container at the
+   * current token; if the converter stopped inside a nested value, leftover `FIELD_NAME` tokens
+   * would otherwise leak as keys of the enclosing map.
    *
-   * The `_` branch is for a converter that stopped on a scalar inside a nested
-   * value. The loop advances until Jackson's nesting depth returns to this map,
-   * which is the nested value's END_OBJECT / END_ARRAY (or EOF if truncated).
-   * A null parsing context is treated as "keep draining" so leftover tokens
+   * After skipping a container at the failure point, keep advancing until the owning value's
+   * `END_OBJECT` or `END_ARRAY` returns Jackson's nesting depth to this map (or until EOF if the
+   * input is truncated). A null parsing context is treated as "keep draining" so leftover tokens
    * cannot be misread as the next map key.
    */
   private def skipRemainingValue(parser: JsonParser, mapDepth: Int): Unit = {
-    parser.getCurrentToken match {
+    var token = parser.getCurrentToken
+    token match {
       case START_OBJECT | START_ARRAY =>
         parser.skipChildren()
-      case END_OBJECT | END_ARRAY | null =>
-        // The value converter already consumed through its boundary.
+        token = parser.getCurrentToken
       case _ =>
-        var token = parser.getCurrentToken
-        while (token != null &&
-            (parser.getParsingContext == null ||
-              parser.getParsingContext.getNestingDepth > mapDepth)) {
-          token = parser.nextToken()
-        }
+    }
+    while (token != null &&
+        (parser.getParsingContext == null ||
+          parser.getParsingContext.getNestingDepth > mapDepth)) {
+      token = parser.nextToken()
     }
   }
 
@@ -659,9 +657,9 @@ class JacksonParser(
       keyType.isInstanceOf[CharType] || keyType.isInstanceOf[VarcharType]
     // CHAR/VARCHAR maps always drain to END_OBJECT, even when
     // jsonEnablePartialResults is false. Dedup and length checks need the
-    // full object; aborting at the first bad value would leak inner FIELD_NAMEs
+    // full object; aborting at the first bad value would leak inner FIELD_NAME tokens
     // as outer keys and skip mapKeyDedupPolicy. STRING maps still abort at the
-    // first NonFatal unless partial results are enabled.
+    // first NonFatal exception unless partial results are enabled.
     val drainErrors = constrainedKeys || enablePartialResults
     val mapDepth = parser.getParsingContext.getNestingDepth
 
@@ -694,6 +692,10 @@ class JacksonParser(
           badRecordException = badRecordException.orElse(Some(err.cause))
           values += err.partialResult
           keys += name
+        case err: PartialValueException =>
+          // A partial value belongs to the nested converter's type. Do not let it escape to the
+          // record boundary, where it would be mistaken for this enclosing map's root value.
+          throw err.cause
         case NonFatal(e) if drainErrors =>
           // Omit the failed pair so remaining keys stay in the partial map.
           // skipRemainingValue drains leftover nested tokens that skipChildren
@@ -722,9 +724,9 @@ class JacksonParser(
   }
 
   /**
-   * CHAR/VARCHAR JSON maps apply assignment to object names, then
-   * `spark.sql.mapKeyDedupPolicy` to collisions created by that normalization.
-   * Exact repeated names stay historical last-wins.
+   * CHAR/VARCHAR JSON maps normalize JSON object field names using CHAR/VARCHAR assignment
+   * semantics, then apply `spark.sql.mapKeyDedupPolicy` to collisions created by that
+   * normalization. Exact repeated names retain the historical last-wins behavior.
    */
   private def convertConstrainedMap(
       parser: JsonParser,
@@ -742,6 +744,7 @@ class JacksonParser(
       val value = try {
         Some(fieldConverter.apply(parser))
       } catch {
+        case e: SparkUpgradeException => throw e
         case err: PartialValueException if enablePartialResults =>
           partialResultException = partialResultException.orElse(Some(err.cause))
           Some(err.partialResult)
@@ -798,6 +801,10 @@ class JacksonParser(
         case err: PartialValueException if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(err.cause))
           values += err.partialResult
+        case err: PartialValueException =>
+          // A partial value belongs to the nested converter's type. Do not let it escape to the
+          // record boundary, where it would be mistaken for this enclosing array's root value.
+          throw err.cause
       }
     }
 
