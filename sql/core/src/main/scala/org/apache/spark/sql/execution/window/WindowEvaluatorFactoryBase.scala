@@ -22,8 +22,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate}
+import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, AttributeReference, BoundReference, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, DeclarativeAggregate}
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CalendarIntervalType, DateType, DayTimeIntervalType, DecimalType, IntegerType, TimestampNTZType, TimestampType, YearMonthIntervalType}
@@ -141,21 +142,31 @@ trait WindowEvaluatorFactoryBase {
    * [[WindowExpression]]s and factory function for the [[WindowFunctionFrame]].
    */
   protected lazy val windowFrameExpressionFactoryPairs = {
-    type FrameKey = (String, FrameType, Expression, Expression, Seq[Expression])
+    type FrameKey =
+      (String, FrameType, Expression, Expression, Seq[Expression], Option[Expression])
     type ExpressionBuffer = mutable.Buffer[Expression]
     val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
+
+    def distinctChildren(ae: AggregateExpression): Seq[Expression] = {
+      WindowExpression.distinctAggregateChildren(ae.aggregateFunction)
+    }
 
     // Add a function and its function to the map for a given frame.
     def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
       val key = fn match {
+        case ae: AggregateExpression if ae.isDistinct =>
+          val normalizedChildren =
+            distinctChildren(ae).map(NormalizeFloatingNumbers.normalize).map(_.canonicalized)
+          (tpe, fr.frameType, fr.lower, fr.upper, normalizedChildren,
+            ae.filter.map(_.canonicalized))
         // This branch is used for Lead/Lag to support ignoring null and optimize the performance
         // for NthValue ignoring null.
         // All window frames move in rows. If there are multiple Leads, Lags or NthValues acting on
         // a row and operating on different input expressions, they should not be moved uniformly
         // by row. Therefore, we put these functions in different window frames.
         case f: OffsetWindowFunction if f.ignoreNulls =>
-          (tpe, fr.frameType, fr.lower, fr.upper, f.children.map(_.canonicalized))
-        case _ => (tpe, fr.frameType, fr.lower, fr.upper, Nil)
+          (tpe, fr.frameType, fr.lower, fr.upper, f.children.map(_.canonicalized), None)
+        case _ => (tpe, fr.frameType, fr.lower, fr.upper, Nil, None)
       }
       val (es, fns) = framedFunctions.getOrElseUpdate(
         key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
@@ -169,6 +180,12 @@ trait WindowEvaluatorFactoryBase {
         case e@WindowExpression(function, spec) =>
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
+            case ae @ AggregateExpression(_, _, true, _, _)
+                if WindowExpression.isSupportedDistinctAggregate(ae.aggregateFunction, frame) =>
+              collect("DISTINCT_AGGREGATE", frame, e, ae)
+            case AggregateExpression(_, _, true, _, _) =>
+              throw SparkException.internalError(
+                s"Unsupported DISTINCT window expression reached physical planning: ${e.sql}")
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
             case f: FrameLessOffsetWindowFunction =>
               collect("FRAME_LESS_OFFSET", f.fakeFrame, e, f)
@@ -219,13 +236,69 @@ trait WindowEvaluatorFactoryBase {
               MutableProjection.create(expressions, schema),
             aggFilters)
         }
+        lazy val distinctAggregateExpressions =
+          functions.map(_.asInstanceOf[AggregateExpression])
+        lazy val originalDistinctExpressions =
+          distinctChildren(distinctAggregateExpressions.head)
+        lazy val normalizedDistinctExpressions =
+          originalDistinctExpressions.map(NormalizeFloatingNumbers.normalize)
+        lazy val distinctInputAttributes =
+          normalizedDistinctExpressions.zipWithIndex.map { case (expression, index) =>
+            AttributeReference(
+              s"windowDistinctValue$index",
+              expression.dataType,
+              expression.nullable)()
+          }
+        lazy val rewrittenDistinctFunctions: Array[Expression] =
+          distinctAggregateExpressions.map { ae =>
+            val distinctColumnAttributeLookup = Utils.toMap(
+              distinctChildren(ae).map(_.canonicalized),
+              distinctInputAttributes)
+            ae.aggregateFunction.transformDown {
+              case expression =>
+                distinctColumnAttributeLookup.getOrElse(expression.canonicalized, expression)
+            }.asInstanceOf[AggregateFunction]
+          }
+        lazy val distinctProcessor = AggregateProcessor(
+          rewrittenDistinctFunctions,
+          ordinal,
+          distinctInputAttributes,
+          (expressions, schema) => MutableProjection.create(expressions, schema),
+          Array.fill[Option[Expression]](functions.length)(None))
         val conf = SQLConf.get
         val blockSize = conf.windowSegmentTreeBlockSize
 
         // Create the factory to produce WindowFunctionFrame.
         val factory = key match {
+          case ("DISTINCT_AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, _, _) =>
+            target: InternalRow =>
+              new UnboundedDistinctWindowFunctionFrame(
+                target,
+                distinctProcessor,
+                normalizedDistinctExpressions,
+                distinctAggregateExpressions.head.filter,
+                childOutput,
+                spillSize,
+                conf.windowExecDistinctHashFallbackThreshold,
+                conf.windowExecBufferSpillThreshold,
+                conf.windowExecBufferSpillSizeThreshold)
+
+          case ("DISTINCT_AGGREGATE", frameType, UnboundedPreceding, upper, _, _) =>
+            target: InternalRow =>
+              new UnboundedPrecedingDistinctWindowFunctionFrame(
+                target,
+                distinctProcessor,
+                normalizedDistinctExpressions,
+                distinctAggregateExpressions.head.filter,
+                childOutput,
+                createBoundOrdering(frameType, upper, timeZone),
+                spillSize,
+                conf.windowExecDistinctHashFallbackThreshold,
+                conf.windowExecBufferSpillThreshold,
+                conf.windowExecBufferSpillSizeThreshold)
+
           // Frameless offset Frame
-          case ("FRAME_LESS_OFFSET", _, IntegerLiteral(offset), _, expr) =>
+          case ("FRAME_LESS_OFFSET", _, IntegerLiteral(offset), _, expr, _) =>
             target: InternalRow =>
               new FrameLessOffsetWindowFunctionFrame(
                 target,
@@ -237,7 +310,7 @@ trait WindowEvaluatorFactoryBase {
                   MutableProjection.create(expressions, schema),
                 offset,
                 expr.nonEmpty)
-          case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _, expr) =>
+          case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _, expr, _) =>
             target: InternalRow => {
               new UnboundedOffsetWindowFunctionFrame(
                 target,
@@ -250,7 +323,7 @@ trait WindowEvaluatorFactoryBase {
                 offset,
                 expr.nonEmpty)
             }
-          case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _, expr) =>
+          case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _, expr, _) =>
             target: InternalRow => {
               new UnboundedPrecedingOffsetWindowFunctionFrame(
                 target,
@@ -265,13 +338,13 @@ trait WindowEvaluatorFactoryBase {
             }
 
           // Entire Partition Frame.
-          case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, _) =>
+          case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, _, _) =>
             target: InternalRow => {
               new UnboundedWindowFunctionFrame(target, processor)
             }
 
           // Growing Frame.
-          case ("AGGREGATE", frameType, UnboundedPreceding, upper, _) =>
+          case ("AGGREGATE", frameType, UnboundedPreceding, upper, _, _) =>
             target: InternalRow => {
               new UnboundedPrecedingWindowFunctionFrame(
                 target,
@@ -280,7 +353,7 @@ trait WindowEvaluatorFactoryBase {
             }
 
           // Shrinking Frame.
-          case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
+          case ("AGGREGATE", frameType, lower, UnboundedFollowing, _, _) =>
             if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
               val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
               // Shrinking-frame queries `[lower, n)` on `WindowSegmentTree` touch the LRU
@@ -333,7 +406,7 @@ trait WindowEvaluatorFactoryBase {
             }
 
           // Moving Frame.
-          case ("AGGREGATE", frameType, lower, upper, _) =>
+          case ("AGGREGATE", frameType, lower, upper, _, _) =>
             if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
               val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
               val cacheHint = estimateMaxCachedBlocks(lower, upper, frameType, blockSize)
@@ -399,10 +472,8 @@ trait WindowEvaluatorFactoryBase {
    * code as the inner DeclarativeAggregate unwrapped from
    * [[AggregateExpression]] (see `windowFrameExpressionFactoryPairs.collect`).
    *
-   * DISTINCT aggregate window expressions are already rejected earlier in
-   * analysis by `WindowResolution.checkWindowFunction`
-   * (error class `DISTINCT_WINDOW_FUNCTION_UNSUPPORTED`), so no explicit
-   * `isDistinct` gate is needed here.
+   * DISTINCT aggregate window expressions use a separate frame factory and never reach this
+   * eligibility check, so no explicit `isDistinct` gate is needed here.
    */
   private def eligibleForSegTree(
       functions: Array[Expression],
