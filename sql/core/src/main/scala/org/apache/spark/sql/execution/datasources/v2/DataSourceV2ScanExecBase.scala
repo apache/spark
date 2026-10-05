@@ -135,15 +135,15 @@ trait DataSourceV2ScanExecBase
 
   /**
    * Returns the output ordering for this scan. When the source reports ordering via
-   * `SupportsReportOrdering`, that ordering may reference columns pruned out of the scan output
-   * (see V2ScanPartitioningAndOrdering), while a consumer binds it against the output, e.g. the
-   * k-way merge of `GroupPartitionsExec`. Ordering is prefix-based, so the leading run of sort
-   * orders over the output is kept and the rest is dropped, except the sort orders on a partition
-   * key when the output partitioning is a `KeyedPartitioning`: each partition holds a single key,
-   * so those still hold. Otherwise, when the output partitioning is a `KeyedPartitioning` and
-   * `spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled` is on, each partition
-   * contains rows where the key expressions evaluate to a single constant value, so the data
-   * is trivially sorted by those expressions within the partition.
+   * `SupportsReportOrdering` and `V2ScanPartitioningAndOrdering` keeps it, that ordering may
+   * reference columns pruned out of the scan output, while a consumer binds it against the
+   * output, e.g. the k-way merge of `GroupPartitionsExec`. Ordering is prefix-based, so the
+   * leading run of sort orders over the output is kept and the rest is dropped, except the sort
+   * orders on a partition key when the output partitioning is a `KeyedPartitioning`: each
+   * partition holds a single key, so those still hold. Otherwise, when the output partitioning
+   * is a `KeyedPartitioning` and `spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled`
+   * is on, each partition contains rows where the key expressions evaluate to a single constant
+   * value, so the data is trivially sorted by those expressions within the partition.
    */
   override def outputOrdering: Seq[SortOrder] = {
     (ordering, outputPartitioning) match {
