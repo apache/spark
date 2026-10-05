@@ -24,7 +24,9 @@ import pickle
 import re
 import sys
 import unittest
+import warnings
 from dataclasses import asdict, dataclass
+from unittest import mock
 
 from pyspark.errors import (
     AnalysisException,
@@ -34,10 +36,9 @@ from pyspark.errors import (
     PySparkRuntimeError,
     PySparkTypeError,
     PySparkValueError,
-    PythonException,
     SparkRuntimeException,
 )
-from pyspark.sql import Row
+from pyspark.sql import Row, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     ArrayType,
@@ -307,40 +308,148 @@ class TypesTestsMixin:
         self.assertEqual([Row(a="true", b=1), Row(a="false", b=1)], df.collect())
 
     def test_infer_schema_row_length_mismatch(self):
-        # SPARK-59781: the schema is inferred from the first row. A later row with more values used
-        # to be silently truncated when a field needed a converter (the string column here), and a
-        # Row with an extra key came back with the values shifted (Row(a="3", b=None)).
-        for data in [
-            [("a", 1), ("b", 2, 3)],
-            [Row(a="x", b=1), Row(c=3, a="y", b=2)],
-            [("a", 1), ("b",)],
+        # SPARK-59781: the schema is inferred from the first row. A later tuple or list with more
+        # values is truncated when a field needs a converter (the string column here), a Row with
+        # an extra key comes back with the values shifted (Row(a="3", b=None)) and a shorter row
+        # fails in the JVM at the first action. The rows are not changed; the Python worker warns
+        # once per partition, through _make_row_length_warner, which runs with verifySchema on.
+        for data, expected in [
+            ([("a", 1), ("b", 2, 3)], [Row(_1="a", _2=1), Row(_1="b", _2=2)]),
+            ([["a", 1], ["b", 2, 3]], [Row(_1="a", _2=1), Row(_1="b", _2=2)]),
+            ([Row(a="x", b=1), Row(c=3, a="y", b=2)], [Row(a="x", b=1), Row(a="3", b=None)]),
         ]:
             with self.subTest(data=data):
-                rdd = self.sc.parallelize(data)
-                with self.assertRaisesRegex(PythonException, "FIELD_STRUCT_LENGTH_MISMATCH"):
-                    self.spark.createDataFrame(rdd).collect()
+                with mock.patch.object(
+                    SparkSession,
+                    "_make_row_length_warner",
+                    wraps=SparkSession._make_row_length_warner,
+                ) as warner:
+                    df = self.spark.createDataFrame(self.sc.parallelize(data))
+                    self.assertEqual(expected, df.collect())
+                warner.assert_called_once()
+                self.assertEqual(2, len(warner.call_args.args[0].fields))
 
-    def test_create_dataframe_row_length_mismatch_without_verification(self):
-        # SPARK-59781: with verifySchema=False the type verifier is skipped and a row longer than
-        # the schema used to be silently truncated, by the converter when a field needed one (the
-        # string column) and by StructType.toInternal when a field needed conversion (the date
-        # column). A shorter row failed only later in the JVM.
-        d = datetime.date(2026, 9, 23)
-        for data, schema, object_length in [
-            ([("a", 1), ("b", 2, 3)], "x string, y long", "3"),
-            ([(1, d), (2, d, 3)], "y long, d date", "3"),
-            ([("a", 1), ("b",)], "x string, y long", "1"),
-            ([(1, d), (2,)], "y long, d date", "1"),
+        with self.assertRaises(IllegalArgumentException) as pe:
+            self.spark.createDataFrame(self.sc.parallelize([("a", 1), ("b",)])).collect()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="STRUCT_ARRAY_LENGTH_MISMATCH",
+            messageParameters={"expected": "2", "actual": "1"},
+        )
+
+    def test_infer_schema_row_length_mismatch_without_verification(self):
+        # SPARK-59781: with verifySchema=False no warner is attached to the RDD and the result is
+        # the same.
+        rdd = self.sc.parallelize([("a", 1), ("b", 2, 3)])
+        with mock.patch.object(
+            SparkSession, "_make_row_length_warner", wraps=SparkSession._make_row_length_warner
+        ) as warner:
+            df = self.spark.createDataFrame(rdd, verifySchema=False)
+            self.assertEqual([Row(_1="a", _2=1), Row(_1="b", _2=2)], df.collect())
+        warner.assert_not_called()
+
+    def test_row_length_warner(self):
+        # SPARK-59781: the function yields every row unchanged and warns once, at the end, with
+        # the number of mismatches, the number of rows, the field count and the first bad length.
+        # A Row with an extra key counts; a dict is paired by name and does not.
+        struct = StructType([StructField("_1", StringType()), StructField("_2", LongType())])
+        warner = SparkSession._make_row_length_warner(struct)
+        rows = [
+            ("a", 1),
+            ("b", 2, 3),
+            Row(c=3, a="y", b=2),
+            ["c", 4],
+            {"_1": "d", "_2": 5, "_3": 6},
+        ]
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            self.assertEqual(rows, list(warner(iter(rows))))
+        self.assertEqual(1, len(w), [str(x.message) for x in w])
+        self.assertIn(
+            "2 of 5 rows have a different number of values than the 2 fields of the inferred "
+            "schema (first mismatch: length 3)",
+            str(w[0].message),
+        )
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            self.assertEqual([("a", 1), ["b", 2]], list(warner(iter([("a", 1), ["b", 2]]))))
+        self.assertEqual([], w)
+
+    def test_create_dataframe_row_length_mismatch_inferred_schema(self):
+        # SPARK-59781: local data with an inferred schema (schema=None or a list of names).
+        # Inference unions the fields of all rows, so the two-value rows are the short ones against
+        # the three inferred fields. One warning names the counts; the rows are converted as
+        # before and, as before, the JVM rejects the short ones at the first action.
+        for data, names, fields, counts in [
+            ([("a", 1), ("b", 2, 3)], None, ["_1", "_2", "_3"], "1 of 2 rows"),
+            ([("a", 1), ("b", 2, 3)], ["x", "y"], ["x", "y", "_3"], "1 of 2 rows"),
+            ([("a", 1), ("b", 2, 3), ("c", 4)], None, ["_1", "_2", "_3"], "2 of 3 rows"),
+            ([Row(a="x", b=1), Row(c=3, a="y", b=2)], None, ["a", "b", "c"], "1 of 2 rows"),
         ]:
-            with self.subTest(data=data, schema=schema):
-                with self.assertRaises(PySparkValueError) as pe:
-                    self.spark.createDataFrame(data, schema, verifySchema=False)
+            with self.subTest(data=data, names=names):
+                with warnings.catch_warnings(record=True) as w:
+                    warnings.simplefilter("always")
+                    df = self.spark.createDataFrame(data, names)
+                messages = [str(x.message) for x in w if "inferred schema" in str(x.message)]
+                self.assertEqual(1, len(messages), messages)
+                self.assertIn(
+                    "%s have a different number of values than the 3 fields of the inferred "
+                    "schema (first mismatch: length 2)" % counts,
+                    messages[0],
+                )
+                self.assertEqual(fields, df.schema.names)
+                with self.assertRaises(IllegalArgumentException) as pe:
+                    df.collect()
 
                 self.check_error(
                     exception=pe.exception,
-                    errorClass="FIELD_STRUCT_LENGTH_MISMATCH",
-                    messageParameters={"object_length": object_length, "field_length": "2"},
+                    errorClass="STRUCT_ARRAY_LENGTH_MISMATCH",
+                    messageParameters={"expected": "3", "actual": "2"},
                 )
+
+    def test_create_dataframe_row_length_mismatch_inferred_schema_without_verification(self):
+        # SPARK-59781: verifySchema=False issues no warning for local data with an inferred schema
+        # and createDataFrame returns as before.
+        for names in [None, ["x", "y"]]:
+            with self.subTest(names=names):
+                with warnings.catch_warnings(record=True) as w:
+                    warnings.simplefilter("always")
+                    df = self.spark.createDataFrame(
+                        [("a", 1), ("b", 2, 3)], names, verifySchema=False
+                    )
+                self.assertEqual(
+                    [], [str(x.message) for x in w if "inferred schema" in str(x.message)]
+                )
+                self.assertEqual(3, len(df.schema.fields))
+
+    def test_create_dataframe_row_length_mismatch_explicit_schema(self):
+        # SPARK-59781: an explicit schema is not affected. With verifySchema on, the type verifier
+        # rejects the longer row as before; with it off, the row is truncated as before. No warning
+        # is issued on either path.
+        data = [("a", 1), ("b", 2, 3)]
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            with self.assertRaises(PySparkValueError) as pe:
+                self.spark.createDataFrame(data, "x string, y long")
+            df = self.spark.createDataFrame(data, "x string, y long", verifySchema=False)
+            with mock.patch.object(
+                SparkSession, "_make_row_length_warner", wraps=SparkSession._make_row_length_warner
+            ) as warner:
+                self.spark.createDataFrame(self.sc.parallelize(data), "x string, y long")
+                self.spark.createDataFrame(
+                    self.sc.parallelize(data), "x string, y long", verifySchema=False
+                )
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="FIELD_STRUCT_LENGTH_MISMATCH",
+            messageParameters={"object_length": "3", "field_length": "2"},
+        )
+        self.assertEqual([Row(x="a", y=1), Row(x="b", y=2)], df.collect())
+        self.assertEqual([], [str(x.message) for x in w if "inferred schema" in str(x.message)])
+        warner.assert_not_called()
 
     def test_infer_nested_schema(self):
         NestedRow = Row("f1", "f2")

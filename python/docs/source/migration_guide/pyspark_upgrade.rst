@@ -19,10 +19,6 @@
 Upgrading PySpark
 ==================
 
-Upgrading from PySpark 4.3 to 4.4
----------------------------------
-* In Spark 4.4, a row with more values than its schema has fields fails with ``FIELD_STRUCT_LENGTH_MISMATCH`` instead of being silently truncated. This applies to ``SparkSession.createDataFrame`` with ``verifySchema=False`` or with a schema inferred from an RDD, to struct results of Python UDFs without Arrow optimization, and to the state value of ``applyInPandasWithState`` and ``transformWithState``. The error reports both lengths. To get the previous result, drop the extra values so that each tuple or list has exactly as many values as the schema has fields.
-
 Upgrading from PySpark 4.2 to 4.3
 ---------------------------------
 * In Spark 4.3, Python 3.10 support was dropped in PySpark.

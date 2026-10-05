@@ -19,6 +19,7 @@ import datetime
 import unittest
 
 from pyspark.errors import PySparkValueError
+from pyspark.sql import Row
 from pyspark.sql.tests.test_types import TypesTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
@@ -122,24 +123,57 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_infer_schema_row_length_mismatch(self):
         super().test_infer_schema_row_length_mismatch()
 
-    def test_create_dataframe_row_length_mismatch_without_verification(self):
-        # Spark Connect checks the row length before any conversion, so the same inputs raise
-        # AXIS_LENGTH_MISMATCH instead of FIELD_STRUCT_LENGTH_MISMATCH.
-        d = datetime.date(2026, 9, 23)
-        for data, schema, actual_length in [
-            ([("a", 1), ("b", 2, 3)], "x string, y long", "3"),
-            ([(1, d), (2, d, 3)], "y long, d date", "3"),
-            ([("a", 1), ("b",)], "x string, y long", "1"),
-            ([(1, d), (2,)], "y long, d date", "1"),
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
+    def test_infer_schema_row_length_mismatch_without_verification(self):
+        super().test_infer_schema_row_length_mismatch_without_verification()
+
+    def test_create_dataframe_row_length_mismatch_inferred_schema(self):
+        # Spark Connect checks the row length before any conversion and rejects the rows. Its
+        # inference merges the fields of all rows, so the first row is reported against the merged
+        # field count.
+        for data, names in [
+            ([("a", 1), ("b", 2, 3)], None),
+            ([("a", 1), ("b", 2, 3)], ["x", "y"]),
+            ([("a", 1), ("b", 2, 3), ("c", 4)], None),
+            ([Row(a="x", b=1), Row(c=3, a="y", b=2)], None),
         ]:
-            with self.subTest(data=data, schema=schema):
+            with self.subTest(data=data, names=names):
                 with self.assertRaises(PySparkValueError) as pe:
-                    self.spark.createDataFrame(data, schema, verifySchema=False)
+                    self.spark.createDataFrame(data, names)
 
                 self.check_error(
                     exception=pe.exception,
                     errorClass="AXIS_LENGTH_MISMATCH",
-                    messageParameters={"expected_length": "2", "actual_length": actual_length},
+                    messageParameters={"expected_length": "3", "actual_length": "2"},
+                )
+
+    def test_create_dataframe_row_length_mismatch_inferred_schema_without_verification(self):
+        # Spark Connect ignores verifySchema and rejects the rows either way.
+        for names in [None, ["x", "y"]]:
+            with self.subTest(names=names):
+                with self.assertRaises(PySparkValueError) as pe:
+                    self.spark.createDataFrame([("a", 1), ("b", 2, 3)], names, verifySchema=False)
+
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="AXIS_LENGTH_MISMATCH",
+                    messageParameters={"expected_length": "3", "actual_length": "2"},
+                )
+
+    def test_create_dataframe_row_length_mismatch_explicit_schema(self):
+        # Spark Connect rejects the longer row with an explicit schema too, with or without
+        # verifySchema.
+        for verifySchema in [True, False]:
+            with self.subTest(verifySchema=verifySchema):
+                with self.assertRaises(PySparkValueError) as pe:
+                    self.spark.createDataFrame(
+                        [("a", 1), ("b", 2, 3)], "x string, y long", verifySchema=verifySchema
+                    )
+
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="AXIS_LENGTH_MISMATCH",
+                    messageParameters={"expected_length": "2", "actual_length": "3"},
                 )
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
