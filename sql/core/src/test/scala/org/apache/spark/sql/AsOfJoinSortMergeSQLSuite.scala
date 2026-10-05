@@ -525,8 +525,8 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("tuple vs nullable STRUCT column MATCH_CONDITION: a NULL struct does not end the scan") {
-    // A NULL struct and {NULL, NULL} have the same fields, so a sort by fields ties them. Both
-    // input orders must pick r11: a NULL row after a match must not stop the backward scan.
+    // r.s sorts as one value, so NULL comes before {NULL, NULL}. Sorting by its fields would tie
+    // them, and in one of these input orders the NULL row would end the scan before r11.
     val allNull = "(named_struct('a', CAST(NULL AS INT), 'b', CAST(NULL AS INT)), 'allnull')"
     val nullStruct = "(CAST(NULL AS STRUCT<a: INT, b: INT>), 'rnull')"
     val r11 = "(named_struct('a', 1, 'b', 1), 'r11')"
