@@ -260,31 +260,6 @@ def _none_check_subject(node: ast.AST) -> Optional[str]:
     return subject.id if isinstance(subject, ast.Name) else None
 
 
-def _is_effect_free(node: ast.AST) -> bool:
-    """Whether ``node``'s lowering can be dropped without losing an error.
-
-    Proving an operand non-NULL is not a licence to delete it: some of
-    ``_is_never_null``'s proofs hold only BECAUSE the expression raises (an ordering
-    comparison's ``raise_error``, an ANSI ``pmod`` on a zero divisor), so folding it
-    away deletes the error too. Only a literal or a bare parameter qualifies.
-    """
-    return isinstance(node, (ast.Constant, ast.Name))
-
-
-def _and3(left: Optional[bool], right: Optional[bool]) -> Optional[bool]:
-    """Kleene ``and`` where ``None`` means "only the runtime value can say"."""
-    if left is False or right is False:
-        return False
-    return True if (left is True and right is True) else None
-
-
-def _or3(left: Optional[bool], right: Optional[bool]) -> Optional[bool]:
-    """Kleene ``or`` where ``None`` means "only the runtime value can say"."""
-    if left is True or right is True:
-        return True
-    return False if (left is False and right is False) else None
-
-
 def _null_facts(node: ast.AST) -> Tuple[frozenset, frozenset]:
     """The parameters ``node`` proves non-NULL, as ``(when_true, when_false)``.
 
@@ -394,11 +369,9 @@ class CatalystTranspiler(AbstractTranspiler):
     def _is_never_null(self, params: List[str], node: ast.AST) -> bool:
         """Whether ``node`` provably cannot evaluate to NULL here.
 
-        Answers "do we still need a NULL check?", NOT "is this safe to delete?" --
-        some proofs below hold only because the expression raises, so a caller that
-        folds a branch away must also ask ``_is_effect_free``. Every arm is an
-        explicit proof and the catch-all is ``False``: a missed proof costs a
-        redundant check, a wrong one drops a check Python needs. Expressions only.
+        Answers "do we still need a NULL check?" Every arm is an explicit proof and
+        the catch-all is ``False``: a missed proof costs a redundant check, a wrong
+        one drops a check Python needs. Expressions only.
         """
         match node:
             case ast.Constant(value=value):
@@ -437,25 +410,10 @@ class CatalystTranspiler(AbstractTranspiler):
             case _:
                 return False
 
-    def _static_is_null(self, params: List[str], node: ast.AST) -> Optional[bool]:
-        """Whether ``node`` is NULL, as far as is knowable without the data.
-
-        ``True`` for the ``None`` literal, ``False`` when provably not, and ``None``
-        when only the runtime value can say -- then the caller must emit a check.
-        """
-        if isinstance(node, ast.Constant) and node.value is None:
-            return True
-        return False if self._is_never_null(params, node) else None
-
     @staticmethod
     def _any_null(columns: List[Column]) -> Column:
         """``columns[0] IS NULL OR ...``; raises on an empty list."""
         return functools.reduce(operator.or_, (column.isNull() for column in columns))
-
-    @staticmethod
-    def _all_null(columns: List[Column]) -> Column:
-        """``columns[0] IS NULL AND ...``; raises on an empty list."""
-        return functools.reduce(operator.and_, (column.isNull() for column in columns))
 
     def _raise_on_null(
         self,
@@ -652,12 +610,6 @@ class CatalystTranspiler(AbstractTranspiler):
         back to interpreted Python. A ``None`` literal operand stays allowed
         (the four-branch NULL handling above reproduces Python exactly).
 
-        Statically decided branches are dropped, provided both operands are
-        effect-free (see ``_is_effect_free``): two proven-non-NULL operands are just
-        Spark's ``=``, and a literal ``None`` folds to the constant Python gives. The
-        optimizer will not do this for us -- it has no branch-local knowledge that an
-        enclosing ``isnotnull`` makes the inner ``isnull`` false.
-
         One value-level difference remains (needs runtime values, so it is
         documented, not guarded): Spark treats ``NaN = NaN`` as true, while
         Python's ``nan == nan`` is False.
@@ -672,6 +624,8 @@ class CatalystTranspiler(AbstractTranspiler):
             )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
+        left_null = left_col.isNull()
+        right_null = right_col.isNull()
         if equal:
             both_null_val: Column = lit(True)
             one_null_val: Column = lit(False)
@@ -680,55 +634,11 @@ class CatalystTranspiler(AbstractTranspiler):
             both_null_val = lit(False)
             one_null_val = lit(True)
             value_cmp = left_col != right_col
-        # Folding a branch drops the operand columns -- and any error inside them,
-        # which would answer a constant where Python raises. So unless BOTH operands
-        # are effect-free, decide nothing statically and emit the full ladder, which
-        # names both columns and keeps their errors reachable.
-        if _is_effect_free(left_node) and _is_effect_free(right_node):
-            left_null = self._static_is_null(params, left_node)
-            right_null = self._static_is_null(params, right_node)
-        else:
-            left_null = right_null = None
-        # Only an operand whose NULL-ness needs the data contributes a check; a known
-        # one is already folded into the branch values below.
-        undecided = [
-            column
-            for known, column in ((left_null, left_col), (right_null, right_col))
-            if known is None
-        ]
-        both_known = _and3(left_null, right_null)
-        one_known = _or3(left_null, right_null)
-        if not undecided:
-            # Both known without the data, so one outcome applies and nothing is checked.
-            if both_known is True:
-                return both_null_val
-            if one_known is True:
-                return one_null_val
-            return value_cmp
-        ladder = [
-            (both_known, self._all_null(undecided), both_null_val),
-            (one_known, self._any_null(undecided), one_null_val),
-        ]
-        # Drop rungs that can never be taken; a rung we know IS taken ends the ladder,
-        # since nothing after it is reachable.
-        emitted: List[Tuple[Column, Column]] = []
-        otherwise = value_cmp
-        for known, condition, value in ladder:
-            if known is False:
-                continue
-            if known is True:
-                otherwise = value
-                break
-            emitted.append((condition, value))
-        # At least one rung survives. Not because an undecided operand leaves both
-        # rungs undecided -- it does not: with one side undecided and the other proven
-        # non-NULL, ``_and3(None, False)`` is False and that rung is dropped. It holds
-        # because every reachable (left, right) combination leaves at least one rung
-        # not-False, and the all-decided case took the early return above.
-        result = when(emitted[0][0], emitted[0][1])
-        for condition_col, value in emitted[1:]:
-            result = result.when(condition_col, value)
-        return result.otherwise(otherwise)
+        return (
+            when(left_null & right_null, both_null_val)
+            .when(left_null | right_null, one_null_val)
+            .otherwise(value_cmp)
+        )
 
     def _lower_value_compare(
         self,
