@@ -325,12 +325,12 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
       Seq(
         Row(1, Row("San Francisco", "10001"),
           Row(null, 2L, Map(city -> 1L, zip -> 2L))),
-        Row(2, null, Row(null, 1L, Map(city -> null, zip -> null)))
+        Row(2, Row(null, null), Row(null, 1L, Map(city -> null, zip -> null)))
       )
     )
   }
 
-  test("collapseMicrobatchRowsPerKey nulls structs whose reconciled leaves are all null") {
+  test("collapseMicrobatchRowsPerKey rebuilds selected structs from null leaves") {
     val locationType = new StructType()
       .add("city", StringType)
       .add("zip", StringType)
@@ -348,7 +348,6 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
     val input = dataFrameOf(schema)(
       // Structs provided with only null leaves author nothing, at any depth.
       Row(1, Row(Row(null, null), null), Row(null, 1L, unauthored)),
-      // A non-null leaf materializes its enclosing structs, but not a sibling struct of nulls.
       Row(2, Row(Row(null, null), "Ada"), Row(null, 1L, unauthored + (name -> 1L))),
       Row(3, Row(Row(null, "94107"), null), Row(null, 1L, unauthored + (zip -> 1L))),
       // A microbatch delete authors null for every leaf.
@@ -362,10 +361,11 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
     checkAnswer(
       result.orderBy(F.col("id")),
       Seq(
-        Row(1, null, Row(null, 1L, unauthored)),
-        Row(2, Row(null, "Ada"), Row(null, 1L, unauthored + (name -> 1L))),
+        Row(1, Row(Row(null, null), null), Row(null, 1L, unauthored)),
+        Row(2, Row(Row(null, null), "Ada"), Row(null, 1L, unauthored + (name -> 1L))),
         Row(3, Row(Row(null, "94107"), null), Row(null, 1L, unauthored + (zip -> 1L))),
-        Row(4, Row(null, "Ada"), Row(null, 3L, Map(city -> 2L, zip -> 2L, name -> 3L))))
+        Row(4, Row(Row(null, null), "Ada"),
+          Row(null, 3L, Map(city -> 2L, zip -> 2L, name -> 3L))))
     )
   }
 
@@ -489,6 +489,36 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
     assert(resultProfile.metadata == profileMetadata)
     assert(resultCity.metadata == cityMetadata)
     checkAnswer(result, Row(1, Row(null), Row(null, 1L, Map[String, Any](city -> null))))
+  }
+
+  test("collapseMicrobatchRowsPerKey nulls nullable structs whose non-nullable leaves are null") {
+    val locationType = StructType(Seq(StructField("city", StringType, nullable = false)))
+    val profileType = StructType(Seq(StructField("location", locationType, nullable = false)))
+    // `home` is nullable, so `address` is rebuilt around a null `home`.
+    val addressType = new StructType().add("home", locationType).add("note", StringType)
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("profile", profileType)
+      .add("address", addressType)
+      .add(metadataColName, metadataSchema)
+    val city = encodedPath("profile", "location", "city")
+    val homeCity = encodedPath("address", "home", "city")
+    val note = encodedPath("address", "note")
+    val unauthored = Map[String, Any](city -> null, homeCity -> null, note -> null)
+    val authored = Map[String, Any](city -> 1L, homeCity -> 1L, note -> null)
+    val input = dataFrameOf(schema)(
+      Row(1, null, null, Row(null, 1L, unauthored)),
+      Row(2, Row(Row("SF")), Row(Row("LA"), null), Row(null, 1L, authored)))
+
+    val result = collapseMicrobatchRowsPerKey(input)
+
+    assert(result.schema("profile") == schema("profile"))
+    assert(result.schema("address") == schema("address"))
+    checkAnswer(
+      result.orderBy(F.col("id")),
+      Seq(
+        Row(1, null, Row(null, null), Row(null, 1L, unauthored)),
+        Row(2, Row(Row("SF")), Row(Row("LA"), null), Row(null, 1L, authored))))
   }
 
   test("collapseMicrobatchRowsPerKey handles quoted paths and non-struct complex leaves") {
