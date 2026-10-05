@@ -362,10 +362,9 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
           And(boolCast, predicate),
           Or(predicate, boolCast))
         conditions.foreach { condition =>
+          val filter = Coalesce(Seq(condition, Literal(false)))
+          assert(DataSourceV2Strategy.translateFilterV2(filter).isEmpty)
           assert(new V2ExpressionBuilder(condition, isPredicate = true).buildPredicate().isEmpty)
-          val caseWhen = CaseWhen(Seq(condition -> Literal(true)), Some(Literal(false)))
-          val filter = EqualTo(caseWhen, Literal(false))
-          assert(new V2ExpressionBuilder(filter, isPredicate = true).buildPredicate().isEmpty)
         }
         assert(new V2ExpressionBuilder(Not(predicate), isPredicate = true)
           .buildPredicate().isDefined)
