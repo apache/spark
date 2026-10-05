@@ -323,6 +323,9 @@ class ArrowWindowPythonEvaluatorFactory(
             fetchNextRow()
           }
 
+          // Fail fast if the partition has more rows than window execution can handle.
+          checkPartitionSizeLimit(buffer.length)
+
           // Setup the frames.
           var i = 0
           while (i < numFrames) {

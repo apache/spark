@@ -17,6 +17,7 @@
 
 package org.apache.spark.util
 
+import java.util.{ArrayDeque, Collections, IdentityHashMap}
 import java.util.concurrent.atomic.AtomicReference
 
 import org.apache.spark.internal.Logging
@@ -36,20 +37,36 @@ import org.apache.spark.internal.Logging
 private[spark] class ErrorNotifier extends Logging {
 
   private val error = new AtomicReference[Throwable]
+  private val suppressionLock = new Object
 
   /**
-   * Record a fatal error. Only the first error is retained - subsequent calls
-   * are no-ops so cascading failures cannot mask the original cause.
+   * Record a fatal error. Only the first error is retained. Subsequent errors with disjoint
+   * throwable graphs are attached to it as suppressed exceptions so cascading failures cannot
+   * mask the original cause or create cyclic exception chains.
    */
   def markError(th: Throwable): Unit = {
+    if (!tryMarkError(th)) {
+      suppressionLock.synchronized {
+        val existing = error.get()
+        if (existing != null && existing != th &&
+            ErrorNotifier.haveDisjointThrowableGraphs(existing, th)) {
+          existing.addSuppressed(th)
+        }
+      }
+    }
+  }
+
+  /**
+   * Record an error only if none has been retained.
+   *
+   * @return true if this error was retained
+   */
+  def tryMarkError(th: Throwable): Boolean = {
     if (error.compareAndSet(null, th)) {
       logError(log"A fatal error has occurred.", th)
+      true
     } else {
-      // Attach subsequent errors as suppressed so they're not silently lost.
-      val existing = error.get()
-      if (existing != null && existing != th) {
-        existing.addSuppressed(th)
-      }
+      false
     }
   }
 
@@ -61,5 +78,32 @@ private[spark] class ErrorNotifier extends Logging {
   /** Throw errors that have occurred */
   def throwErrorIfExists(): Unit = {
     getError().foreach({th => throw th})
+  }
+}
+
+private[spark] object ErrorNotifier {
+
+  /**
+   * @return true if the cause and suppressed graphs share no Throwable object by identity
+   */
+  def haveDisjointThrowableGraphs(first: Throwable, second: Throwable): Boolean = {
+    def collect(root: Throwable): java.util.Set[Throwable] = {
+      val graph = Collections.newSetFromMap(
+        new IdentityHashMap[Throwable, java.lang.Boolean]())
+      val pending = new ArrayDeque[Throwable]()
+      pending.push(root)
+      while (!pending.isEmpty) {
+        val current = pending.pop()
+        if (graph.add(current)) {
+          if (current.getCause != null) {
+            pending.push(current.getCause)
+          }
+          current.getSuppressed.foreach(pending.push)
+        }
+      }
+      graph
+    }
+
+    Collections.disjoint(collect(first), collect(second))
   }
 }

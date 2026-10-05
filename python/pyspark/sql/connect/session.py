@@ -89,19 +89,58 @@ from pyspark.sql.profiler import Profile
 from pyspark.sql.session import SparkSession as PySparkSession
 from pyspark.sql.session import classproperty
 from pyspark.sql.types import (
+    ArrayType,
     AtomicType,
+    CharType,
     DataType,
     DayTimeIntervalType,
     MapType,
     Row,
     StringType,
+    StructField,
     StructType,
     TimestampType,
+    VarcharType,
     _has_nulltype,
     _infer_schema,
     _merge_type,
 )
 from pyspark.sql.utils import to_str
+
+
+def _replace_char_varchar_with_collation_preserving_string(
+    data_type: DataType,
+) -> DataType:
+    """Lower CHAR/VARCHAR recursively for Arrow storage, preserving explicit collations."""
+    if isinstance(data_type, (CharType, VarcharType)):
+        if data_type.collation is None:
+            return StringType()
+        return StringType(data_type.collation)
+    if isinstance(data_type, ArrayType):
+        return ArrayType(
+            _replace_char_varchar_with_collation_preserving_string(data_type.elementType),
+            data_type.containsNull,
+        )
+    if isinstance(data_type, MapType):
+        return MapType(
+            _replace_char_varchar_with_collation_preserving_string(data_type.keyType),
+            _replace_char_varchar_with_collation_preserving_string(data_type.valueType),
+            data_type.valueContainsNull,
+        )
+    if isinstance(data_type, StructType):
+        return StructType(
+            [
+                StructField(
+                    field.name,
+                    _replace_char_varchar_with_collation_preserving_string(field.dataType),
+                    field.nullable,
+                    field.metadata,
+                )
+                for field in data_type.fields
+            ]
+        )
+    return data_type
+
 
 if TYPE_CHECKING:
     import pyspark.sql.connect.proto as pb2
@@ -744,7 +783,13 @@ class SparkSession:
             # Spark Connect will try its best to build the Arrow table with the
             # inferred schema in the client side, and then rename the columns and
             # cast the datatypes in the server side.
-            _table = LocalDataToArrowConversion.convert(_data, _schema, prefers_large_types)
+            arrow_compatible_schema = cast(
+                StructType,
+                _replace_char_varchar_with_collation_preserving_string(_schema),
+            )
+            _table = LocalDataToArrowConversion.convert(
+                _data, arrow_compatible_schema, prefers_large_types
+            )
 
         # TODO: Beside the validation on number of columns, we should also check
         # whether the Arrow Schema is compatible with the user provided Schema.
@@ -776,7 +821,9 @@ class SparkSession:
             configs["spark.sql.session.localRelationChunkSizeBytes"]  # type: ignore[arg-type]
         )
         max_batch_of_chunks_size_bytes = int(
-            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type]
+            configs[  # type: ignore[arg-type]
+                "spark.sql.session.localRelationBatchOfChunksSizeBytes"
+            ]
         )
         plan: LogicalPlan = local_relation
         if cache_threshold <= _table.nbytes:

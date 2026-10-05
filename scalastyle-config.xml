@@ -210,6 +210,11 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
+  <check customId="sunmiscsignal" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bsun\.misc\.(\{[^}]*)?\bSignal</parameter></parameters>
+    <customMessage>Use org.apache.spark.util.SignalUtils instead.</customMessage>
+  </check>
+
   <check customId="awaitresult" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">Await\.result</parameter></parameters>
     <customMessage><![CDATA[

@@ -38,7 +38,7 @@ import org.apache.spark.sql.connect.{PythonTestDepsChecker, SparkConnectTestUtil
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.{PythonStreamingQueryListener, SparkConnectPlanner, StreamingForeachBatchHelper}
-import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper.RunnerCleaner
+import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper.ForeachBatchCleaner
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
 import org.apache.spark.sql.pipelines.logging.PipelineEvent
@@ -345,9 +345,9 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       capturedServer = SparkConnectService.server
 
       val pythonFn = dummyPythonFunction(sessionHolder)(streamingForeachBatchFunction)
-      val (fn1, cleaner1) =
+      val (fn1, cleaner1, _) =
         StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
-      val (fn2, cleaner2) =
+      val (fn2, cleaner2, _) =
         StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
 
       val query1 = spark.readStream
@@ -377,8 +377,9 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       // listeners we added so finally only removes ours, not a concurrent attempt's.
       ourNewListeners = spark.streams.listListeners().toSet -- baselineListeners
 
-      val (runner1, runner2) =
-        (cleaner1.asInstanceOf[RunnerCleaner].runner, cleaner2.asInstanceOf[RunnerCleaner].runner)
+      val (runner1, runner2) = (
+        cleaner1.asInstanceOf[ForeachBatchCleaner].runner.get,
+        cleaner2.asInstanceOf[ForeachBatchCleaner].runner.get)
 
       // assert both python processes are running
       assert(!runner1.isWorkerStopped().get)

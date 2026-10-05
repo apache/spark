@@ -23,7 +23,7 @@ import org.json4s.{JObject, JString}
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.{CollationFactory, QuotingUtils, StringConcat}
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
@@ -77,7 +77,9 @@ case class StructField(
   }
 
   private[sql] def dataTypeJsonValue: JValue = {
-    if (collationMetadata.isEmpty) return dataType.jsonValue
+    if (stringCollationMetadata.isEmpty && charVarcharCollationMetadata.isEmpty) {
+      return dataType.jsonValue
+    }
 
     def removeCollations(dt: DataType): DataType = dt match {
       // Only recurse into map and array types as any child struct type
@@ -96,36 +98,62 @@ case class StructField(
   }
 
   private def metadataJson: JValue = {
-    val metadataJsonValue = metadata.jsonValue
-    metadataJsonValue match {
-      case JObject(fields) if collationMetadata.nonEmpty =>
-        val collationFields = collationMetadata.map(kv => kv._1 -> JString(kv._2)).toList
-        JObject(fields :+ (DataType.COLLATIONS_METADATA_KEY -> JObject(collationFields)))
-
-      case _ => metadataJsonValue
+    if (metadata.contains(DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY)) {
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_CHAR_VARCHAR_COLLATION_METADATA.RESERVED_METADATA_KEY",
+        messageParameters = Map("metadataKey" -> DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY))
+    }
+    metadata.jsonValue match {
+      case JObject(fields) =>
+        val withString =
+          if (stringCollationMetadata.nonEmpty) {
+            val collationFields =
+              stringCollationMetadata.map(kv => kv._1 -> JString(kv._2)).toList
+            fields :+ (DataType.COLLATIONS_METADATA_KEY -> JObject(collationFields))
+          } else {
+            fields
+          }
+        val withBoth =
+          if (charVarcharCollationMetadata.nonEmpty) {
+            val collationFields =
+              charVarcharCollationMetadata.map(kv => kv._1 -> JString(kv._2)).toList
+            withString :+
+              (DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY -> JObject(collationFields))
+          } else {
+            withString
+          }
+        JObject(withBoth)
+      case other => other
     }
   }
 
-  /** Map of field path to collation name. */
-  private lazy val collationMetadata: Map[String, String] = {
+  /** Map of field path to STRING collation name. */
+  private lazy val stringCollationMetadata: Map[String, String] =
+    collectCollationMetadata(isCollatedPlainString)
+
+  /** Map of field path to CHAR/VARCHAR collation name. */
+  private lazy val charVarcharCollationMetadata: Map[String, String] =
+    collectCollationMetadata(isCollatedCharVarchar)
+
+  private def collectCollationMetadata(include: DataType => Boolean): Map[String, String] = {
     val fieldToCollationMap = mutable.Map[String, String]()
 
     def visitRecursively(dt: DataType, path: String): Unit = dt match {
       case at: ArrayType =>
-        processDataType(at.elementType, path + ".element")
+        processDataType(at.elementType, DataType.appendFieldToPath(path, "element"))
 
       case mt: MapType =>
-        processDataType(mt.keyType, path + ".key")
-        processDataType(mt.valueType, path + ".value")
+        processDataType(mt.keyType, DataType.appendFieldToPath(path, "key"))
+        processDataType(mt.valueType, DataType.appendFieldToPath(path, "value"))
 
-      case st: StringType if isCollatedString(st) =>
+      case st: StringType if include(st) =>
         fieldToCollationMap(path) = schemaCollationValue(st)
 
       case _ =>
     }
 
     def processDataType(dt: DataType, path: String): Unit = {
-      if (isCollatedString(dt)) {
+      if (include(dt)) {
         fieldToCollationMap(path) = schemaCollationValue(dt)
       } else {
         visitRecursively(dt, path)
@@ -136,7 +164,14 @@ case class StructField(
     fieldToCollationMap.toMap
   }
 
-  private def isCollatedString(dt: DataType): Boolean = dt match {
+  private def isCollatedCharVarchar(dt: DataType): Boolean = dt match {
+    case c: CharType => c.collation.isDefined
+    case v: VarcharType => v.collation.isDefined
+    case _ => false
+  }
+
+  private def isCollatedPlainString(dt: DataType): Boolean = dt match {
+    case _: CharType | _: VarcharType => false
     case st: StringType => !st.isUTF8BinaryCollation
     case _ => false
   }
