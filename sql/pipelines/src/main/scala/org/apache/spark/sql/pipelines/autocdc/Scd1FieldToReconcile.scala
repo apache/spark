@@ -85,10 +85,11 @@ private[autocdc] object Scd1FieldToReconcile {
    * Returns the fields to reconcile independently of each other, preserving schema order.
    *
    * A column selected for ignore-null is reconciled leaf by leaf, since an upsert authors only the
-   * leaves it provides as non-null. Every other column is reconciled as a whole value: every
-   * upsert authors all of its leaves, so they share one winning event, and keeping the winner's
-   * whole value preserves whether its structs were null. Reconstructing a selected struct's
-   * nullness from its leaves relies on this split.
+   * leaves it provides as non-null. A null leaf in such a column means no live value was found to
+   * inherit rather than an authored null, so two of its values are equivalent if every leaf reads
+   * the same, where a leaf beneath a null struct reads as null. Every other column is reconciled
+   * as a whole value: every upsert authors all of its leaves, so they share one winning event, and
+   * keeping the winner's whole value preserves whether its structs were null.
    *
    * @param schema The user-data schema, excluding key and CDC metadata columns.
    * @param ignoreNullSelection The top-level columns selected for ignore-null, or None if

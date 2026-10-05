@@ -20,6 +20,7 @@ package org.apache.spark.sql.pipelines.autocdc
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.expressions.KnownNullable
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.{DataFrame, ExpressionUtils}
@@ -224,9 +225,9 @@ private[pipelines] object Scd1RowLevelReconciliation extends Scd1ReconciliationS
  *     authors a whole column always, and a selected leaf only when it provides the leaf.
  *  3. Latest microbatch authorship: the candidate with the greatest sequence, or none if no event
  *     authored the field. This is the field's reconciled value.
- *  4. Output: the reconciled fields are reassembled into the key's columns, where a selected
- *     struct is null when every leaf beneath it is null. Each field also records its authoring
- *     sequence for every leaf it covers in the key's version map.
+ *  4. Output: the reconciled fields are reassembled into the key's columns, rebuilding each
+ *     selected struct from the leaves beneath it. Each field also records its authoring sequence
+ *     for every leaf it covers in the key's version map.
  */
 private[pipelines] object Scd1LeafLevelReconciliation {
 
@@ -482,13 +483,11 @@ private[pipelines] object Scd1LeafLevelReconciliation {
    * Reconstructs `field` from the collapsed fields beneath it, or returns its reconciled value if
    * it was reconciled as a whole.
    *
-   * A nullable struct reconstructed from leaves is null iff every reconciled leaf beneath it is
-   * null. Only columns selected for ignore-null are reconciled leaf by leaf, and for them this is
-   * exactly leaf-level authorship: an upsert authors only the non-null leaves it provides, so a
-   * reconciled leaf is non-null iff an upsert authored it, and that upsert necessarily provided
-   * every struct enclosing the leaf. An upsert that provided a struct whose leaves are all null
-   * authored none of them, so it has no claim on the struct. This relies on the ignore-null
-   * selection accepting only top-level columns, so every leaf beneath such a struct is selected.
+   * A struct reconciled leaf by leaf belongs to a column selected for ignore-null, where a null
+   * struct and a struct whose leaves are all null are equivalent, so it is rebuilt from its leaves
+   * even if every leaf is null. A nullable struct with a non-nullable leaf reachable through only
+   * non-nullable structs cannot be rebuilt with that leaf null, so it is instead null unless a leaf
+   * beneath it is non-null.
    */
   private def reconstructColumn(
       path: Seq[String],
@@ -510,9 +509,12 @@ private[pipelines] object Scd1LeafLevelReconciliation {
             .as(childField.name, childField.metadata)
         }: _*)
 
-        if (field.nullable) {
-          val anyLeafIsNotNull = fieldsBeneath.map(_.reconciledValue.isNotNull).reduce(_ || _)
-          F.when(anyLeafIsNotNull, rebuilt).otherwise(F.lit(null).cast(field.dataType))
+        if (field.nullable && cannotRebuildAsStructOfNulls(struct)) {
+          // The schema forbids a struct of nulls here, so the equivalent null struct is used when
+          // every leaf is null. If any leaf is non-null, the struct is rebuilt and a null
+          // non-nullable leaf fails its assertion rather than the struct dropping non-null leaves.
+          val everyLeafIsNull = fieldsBeneath.map(_.reconciledValue.isNull).reduce(_ && _)
+          F.when(everyLeafIsNull, F.lit(null).cast(field.dataType)).otherwise(rebuilt)
         } else {
           rebuilt
         }
@@ -520,15 +522,29 @@ private[pipelines] object Scd1LeafLevelReconciliation {
         fieldsBeneath.head.reconciledValue
     }
 
-    val nullabilityChecked =
+    val withDeclaredNullability =
       if (field.nullable) {
-        reconstructed
+        // Spark reports a rebuilt struct as non-nullable; only `KnownNullable` can widen that.
+        ExpressionUtils.column(KnownNullable(ExpressionUtils.expression(reconstructed)))
       } else {
         ExpressionUtils.column(
           AssertNotNull(ExpressionUtils.expression(reconstructed), path))
       }
-    nullabilityChecked.cast(field.dataType).as(field.name, field.metadata)
+    withDeclaredNullability.cast(field.dataType).as(field.name, field.metadata)
   }
+
+  /**
+   * Whether `struct` has a non-nullable leaf whose enclosing structs beneath `struct` are all also
+   * non-nullable. If such a leaf has no value, neither it nor any of those enclosing structs can
+   * be null, so `struct` itself cannot be non-null.
+   */
+  private def cannotRebuildAsStructOfNulls(struct: StructType): Boolean =
+    struct.fields.exists { field =>
+      !field.nullable && (field.dataType match {
+        case nested: StructType => cannotRebuildAsStructOfNulls(nested)
+        case _ => true
+      })
+    }
 
   /** Builds a version map containing one entry for every user-data leaf. */
   private def versionMapFrom(
