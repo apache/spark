@@ -459,6 +459,18 @@ if _have_hypothesis:
 
         return wrapper
 
+    def _seed_width_list_examples(edges, key="cols"):
+        """Like ``_seed_list_examples`` but for the width tests, whose seeds
+        are ``(dtype, value)`` pairs and whose multi-row argument shape is
+        ``(dtype, [value])``."""
+
+        def wrapper(method):
+            for dtype, value in reversed(edges):
+                method = example(**{key: (dtype, [value])})(method)
+            return method
+
+        return wrapper
+
     # ---- Bounds strategies: column widths -------------------------------
     #
     # Every integral width the "integral" category admits, with the largest
@@ -509,6 +521,25 @@ if _have_hypothesis:
             low, high = max(low, -cap), min(high, cap)
         low, high = low + headroom, high - headroom
         return dtype, draw(st.one_of(st.none(), st.integers(low, high)))
+
+    @st.composite
+    def _integral_column_batch(draw, cap=None, widths=_INTEGRAL_WIDTHS, headroom=0, size=_BATCH):
+        """A ``(dtype, values)`` pair: one width, many rows, for multi-row width tests.
+
+        ``_integral_column`` draws a fresh width per example, so each example is a
+        single row of a single type. Packing ``size`` values of one drawn width
+        into one DataFrame lets a multi-row differential cover ``size`` times as
+        many values per ``@given`` example at the same two-Spark-job cost -- the
+        same trick ``_multi_row_single_arg_df`` already plays for the LongType
+        tests. Only safe for UDFs that never raise at the job level for any value
+        the (capped) strategy can draw; a raising row would abort the whole batch.
+        """
+        dtype, low, high = draw(st.sampled_from(widths))
+        if cap is not None:
+            low, high = max(low, -cap), min(high, cap)
+        low, high = low + headroom, high - headroom
+        values = st.one_of(st.none(), st.integers(low, high))
+        return dtype, [draw(values) for _ in range(size)]
 
     @st.composite
     def _integral_sum_pair(draw, widths=_INTEGRAL_WIDTHS):
@@ -1732,8 +1763,8 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         # ---- Bounds 1: every integral width, not just LongType --------------
 
         @_hyp_settings
-        @given(cols=_integral_column(cap=_LONG_ARITH_BOUND, headroom=4))
-        @_seed_examples(_WIDTH_EDGES_PLUS_FOUR_SAFE, key="cols")
+        @given(cols=_integral_column_batch(cap=_LONG_ARITH_BOUND, headroom=4))
+        @_seed_width_list_examples(_WIDTH_EDGES_PLUS_FOUR_SAFE)
         def test_plus_four_across_integral_widths(self, cols):
             # `x + 4` at every width, staying 4 clear of each end. A byte or short
             # column widens to IntegerType for the addition and could take the full
@@ -1741,11 +1772,13 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             # so nothing widens and 2147483647 + 4 raises where Python answers
             # 2147483651. That boundary is the tier-2 overflow divergence, pinned by
             # test_overflow_raises_where_python_promotes; here we test the interior.
-            dtype, value = cols
-            df = self._single_arg_df(value, dtype)
-            transpiled, interpreted = self._run(plus_four_unsafe, LongType(), df, "a")
+            dtype, values = cols
+            df = self._multi_row_single_arg_df(values, dtype)
+            transpiled, interpreted = self._run(
+                plus_four_unsafe, LongType(), df, "a", all_rows=True
+            )
             self.assertSameValue(
-                transpiled, interpreted, f"plus_four on {dtype.simpleString()} {value!r}"
+                transpiled, interpreted, f"plus_four on {dtype.simpleString()} {values!r}"
             )
 
         @_hyp_settings
@@ -1799,54 +1832,53 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             )
 
         @_hyp_settings
-        @given(cols=_integral_column(cap=2**31))
-        @_seed_examples(_WIDTH_EDGES, key="cols")
+        @given(cols=_integral_column_batch(cap=2**31))
+        @_seed_width_list_examples(_WIDTH_EDGES)
         def test_square_across_integral_widths(self, cols):
             # This is the test the widening cast in `_lower_int_pow` exists for.
             # `Multiply` keeps its operands' type, so without `cast("long")` this
             # would raise ARITHMETIC_OVERFLOW from |x| >= 12 on a tinyint and
             # |x| >= 46341 on an int -- ranges Python handles without blinking.
-            dtype, value = cols
-            df = self._single_arg_df(value, dtype)
-            transpiled, interpreted = self._run(square, LongType(), df, "a")
+            dtype, values = cols
+            df = self._multi_row_single_arg_df(values, dtype)
+            transpiled, interpreted = self._run(square, LongType(), df, "a", all_rows=True)
             self.assertSameValue(
-                transpiled, interpreted, f"square on {dtype.simpleString()} {value!r}"
+                transpiled, interpreted, f"square on {dtype.simpleString()} {values!r}"
             )
 
         @_hyp_settings
-        @given(cols=_integral_column())
-        @_seed_examples(_WIDTH_EDGES, key="cols")
+        @given(cols=_integral_column_batch())
+        @_seed_width_list_examples(_WIDTH_EDGES)
         def test_pow_one_across_integral_widths(self, cols):
             # The degenerate expansion: zero multiplications, so the lowering has
             # to hand back the widened base. Folding to `lit(1)` here would be the
             # obvious off-by-one, and the full width range catches it.
-            dtype, value = cols
-            df = self._single_arg_df(value, dtype)
-            transpiled, interpreted = self._run(pow_one, LongType(), df, "a")
+            dtype, values = cols
+            df = self._multi_row_single_arg_df(values, dtype)
+            transpiled, interpreted = self._run(pow_one, LongType(), df, "a", all_rows=True)
             self.assertSameValue(
-                transpiled, interpreted, f"pow_one on {dtype.simpleString()} {value!r}"
+                transpiled, interpreted, f"pow_one on {dtype.simpleString()} {values!r}"
             )
 
         @_hyp_settings
-        @given(cols=_integral_column(cap=9))
-        @_seed_examples(
+        @given(cols=_integral_column_batch(cap=9))
+        @_seed_width_list_examples(
             ((ByteType(), 9), (ByteType(), -9), (LongType(), 2), (ShortType(), 0)),
-            key="cols",
         )
         def test_pow_at_the_expansion_cap(self, cols):
             # Exactly _MAX_POW_EXPANSION, so seven multiplications. |x| <= 9 keeps
             # 9**8 = 4.3e7 inside Long; one higher exponent and the transpiler
             # refuses outright (see test_pow_above_the_cap_falls_back).
-            dtype, value = cols
-            df = self._single_arg_df(value, dtype)
-            transpiled, interpreted = self._run(pow_eight, LongType(), df, "a")
+            dtype, values = cols
+            df = self._multi_row_single_arg_df(values, dtype)
+            transpiled, interpreted = self._run(pow_eight, LongType(), df, "a", all_rows=True)
             self.assertSameValue(
-                transpiled, interpreted, f"pow_eight on {dtype.simpleString()} {value!r}"
+                transpiled, interpreted, f"pow_eight on {dtype.simpleString()} {values!r}"
             )
 
         @_hyp_settings
-        @given(cols=_integral_column(cap=_LONG_ARITH_BOUND))
-        @_seed_examples(_WIDTH_EDGES, key="cols")
+        @given(cols=_integral_column_batch(cap=_LONG_ARITH_BOUND))
+        @_seed_width_list_examples(_WIDTH_EDGES)
         def test_abs_across_integral_widths(self, cols):
             # Every width's *full* range for byte, short and int, minimum included.
             # That used to need the minimum excluded, because two's complement has
@@ -1861,35 +1893,37 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             # wide we compute. That is the return-type limit, not an intermediate
             # one, and it is pinned by
             # test_abs_at_the_bigint_minimum_exceeds_the_return_type.
-            dtype, value = cols
-            df = self._single_arg_df(value, dtype)
-            transpiled, interpreted = self._run(abs_value, LongType(), df, "a")
+            dtype, values = cols
+            df = self._multi_row_single_arg_df(values, dtype)
+            transpiled, interpreted = self._run(abs_value, LongType(), df, "a", all_rows=True)
             self.assertSameValue(
-                transpiled, interpreted, f"abs on {dtype.simpleString()} {value!r}"
+                transpiled, interpreted, f"abs on {dtype.simpleString()} {values!r}"
             )
 
         @_hyp_settings
-        @given(cols=_integral_column(cap=_LONG_ARITH_BOUND // 10))
-        @_seed_examples(_WIDTH_EDGES, key="cols")
+        @given(cols=_integral_column_batch(cap=_LONG_ARITH_BOUND // 10))
+        @_seed_width_list_examples(_WIDTH_EDGES)
         def test_round_no_scale_across_integral_widths(self, cols):
             # `round(x)` is `round(x, 0)`, which is the identity on an integer --
             # but it goes through `bround` all the same, and on a narrow column
             # that means the scale-0 path has to preserve the value exactly.
-            dtype, value = cols
-            df = self._single_arg_df(value, dtype)
-            transpiled, interpreted = self._run(round_no_scale, LongType(), df, "a")
+            dtype, values = cols
+            df = self._multi_row_single_arg_df(values, dtype)
+            transpiled, interpreted = self._run(round_no_scale, LongType(), df, "a", all_rows=True)
             self.assertSameValue(
-                transpiled, interpreted, f"round(x) on {dtype.simpleString()} {value!r}"
+                transpiled, interpreted, f"round(x) on {dtype.simpleString()} {values!r}"
             )
 
         @_hyp_settings
-        @given(cols=_integral_column(cap=_INT32_MAX))
-        @_seed_examples(_WIDTH_EDGES, key="cols")
+        @given(cols=_integral_column_batch(cap=_INT32_MAX))
+        @_seed_width_list_examples(_WIDTH_EDGES)
         def test_bit_invert_across_integral_widths(self, cols):
-            dtype, value = cols
-            df = self._single_arg_df(value, dtype)
-            transpiled, interpreted = self._run(invert_value, LongType(), df, "a")
-            self.assertSameValue(transpiled, interpreted, f"~x on {dtype.simpleString()} {value!r}")
+            dtype, values = cols
+            df = self._multi_row_single_arg_df(values, dtype)
+            transpiled, interpreted = self._run(invert_value, LongType(), df, "a", all_rows=True)
+            self.assertSameValue(
+                transpiled, interpreted, f"~x on {dtype.simpleString()} {values!r}"
+            )
 
         @_hyp_settings
         @given(cols=_integral_pair_for_div())
