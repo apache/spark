@@ -60,6 +60,8 @@ JSON_OBJECT ( [ key, value [, key, value] ... ]
     An expression producing a member name. It must be a non-null string; a `NULL` key raises an
     error at runtime. The key is validated before the `ON NULL` handling, so a `NULL` key raises the
     error even when the member's value is `NULL` and `ABSENT ON NULL` would otherwise omit it.
+    In the `key : value` form, the first top-level `:` after the key ends it, so a key that is
+    itself a `:` extraction (e.g. `v:x`) must be parenthesized: `JSON_OBJECT((v:x) : 1)`.
 
 * **value**
 
@@ -106,12 +108,12 @@ JSON_OBJECT ( [ key, value [, key, value] ... ]
 
 ```sql
 -- Construct an object from key/value pairs
-SELECT json_object('id' VALUE 7, 'name' VALUE 'Ada');
-+-------------------------------------------+
-|json_object('id' VALUE 7, 'name' VALUE Ada)|
-+-------------------------------------------+
-|{"id":7,"name":"Ada"}                      |
-+-------------------------------------------+
+SELECT json_object('id' VALUE 7, 'name' VALUE 'Ada') AS obj;
++---------------------+
+|obj                  |
++---------------------+
+|{"id":7,"name":"Ada"}|
++---------------------+
 
 -- KEY before the member name is also accepted
 SELECT json_object(KEY 'id' VALUE 7, KEY 'name' VALUE 'Ada') AS obj;
@@ -146,12 +148,12 @@ SELECT json_object('id' : 7, 'v' : NULL ABSENT ON NULL) AS obj;
 +--------+
 
 -- A nested JSON_OBJECT composes and is spliced in raw
-SELECT json_object('a' VALUE json_object('b' VALUE 1));
-+-----------------------------------------------+
-|json_object('a' VALUE json_object('b' VALUE 1))|
-+-----------------------------------------------+
-|{"a":{"b":1}}                                  |
-+-----------------------------------------------+
+SELECT json_object('a' VALUE json_object('b' VALUE 1)) AS obj;
++-------------+
+|obj          |
++-------------+
+|{"a":{"b":1}}|
++-------------+
 
 -- FORMAT JSON splices an already-JSON string verbatim instead of quoting it
 SELECT json_object('a' VALUE '{"b":1}' FORMAT JSON) AS obj;

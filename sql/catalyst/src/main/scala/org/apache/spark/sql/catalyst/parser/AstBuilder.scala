@@ -4402,17 +4402,19 @@ class AstBuilder extends DataTypeAstBuilder
    * The `ON NULL` clause defaults to `NULL` when absent, per the standard.
    */
   override def visitJsonObject(ctx: JsonObjectContext): Expression = withOrigin(ctx) {
+    val body = ctx.jsonObjectConstructor()
     // Parse key-value pairs, tagging each value's explicit `FORMAT JSON` flag. The standard
     // `key VALUE value` / `key : value` forms and the compatibility `key, value` form are separate
     // grammar alternatives, so only one list is populated for a single constructor. Only the
     // standard forms carry `FORMAT JSON`; the comma form never does.
-    val standardMembers = ctx.jsonObjectMember().asScala.map { memberCtx =>
-      (expression(memberCtx.keyExpr), expression(memberCtx.valueExpr), memberCtx.FORMAT() != null)
+    val standardMembers = body.jsonObjectMember().asScala.map { memberCtx =>
+      val keyCtx = Option(memberCtx.keyExpr).getOrElse(memberCtx.colonKey.keyExpr)
+      (expression(keyCtx), expression(memberCtx.valueExpr), memberCtx.FORMAT() != null)
     }.toSeq
     val taggedMembers = if (standardMembers.nonEmpty) {
       standardMembers
     } else {
-      ctx.jsonObjectCommaMember().asScala.map { memberCtx =>
+      body.jsonObjectCommaMember().asScala.map { memberCtx =>
         (expression(memberCtx.keyExpr), expression(memberCtx.valueExpr), false)
       }.toSeq
     }
@@ -4438,7 +4440,7 @@ class AstBuilder extends DataTypeAstBuilder
     // (its lexical splice must stay frozen; VALUE syntax has no pre-existing routine call anyway).
     val isCommaForm = standardMembers.isEmpty
     val routeThroughResolution =
-      ctx.returning == null && ctx.nullBehavior == null &&
+      body.returning == null && body.nullBehavior == null &&
         !isDirectJsonConstructorArgument(ctx) &&
         (isCommaForm || !rawJson.contains(true))
     if (routeThroughResolution) {
@@ -4455,13 +4457,13 @@ class AstBuilder extends DataTypeAstBuilder
       // normalized to STRING: JSON_OBJECT serializes the fragment itself and never advertises a
       // length it does not enforce (CharVarcharUtils honors preserveCharVarcharTypeInfo, so it
       // cannot be used). A non-string RETURNING is left for checkInputDataTypes to reject.
-      val returning = Option(ctx.returning).map(typedVisit[DataType]).map {
+      val returning = Option(body.returning).map(typedVisit[DataType]).map {
         case c: CharType => c.toStringType
         case v: VarcharType => v.toStringType
         case other => other
       }.getOrElse(StringType)
       // JSON_OBJECT defaults to NULL ON NULL per the standard (emits keys with null values).
-      val nullBehavior = Option(ctx.nullBehavior)
+      val nullBehavior = Option(body.nullBehavior)
         .map(buildJsonConstructorNullBehavior).getOrElse(JsonConstructorNullBehavior.Null)
       JsonObjectExpr(members, rawJson, needsValidation, nullBehavior, returning)
     }

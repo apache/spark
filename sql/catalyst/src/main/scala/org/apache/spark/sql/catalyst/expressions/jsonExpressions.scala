@@ -2375,7 +2375,7 @@ case class JsonObjectExpr(
   with QueryErrorsBase
   // Default RETURNING is a plain STRING, so `DefaultStringProducingExpression` lets
   // `ApplyDefaultCollation` cast the result to a non-default collation; the `dataType` override
-  // below stays authoritative when RETURNING is given explicitly.
+  // below stays authoritative only for an explicitly collated RETURNING.
   with DefaultStringProducingExpression
   with ImplicitlyFormattedAsJson
   with RoutedSqlJsonExpression {
@@ -2398,16 +2398,21 @@ case class JsonObjectExpr(
   @transient private lazy val needsValidationArray: Array[Boolean] =
     needsValidation.toArray
 
-  // Always throwable: a null key raises JSON_OBJECT_NULL_KEY at eval even with non-throwable
-  // children, which keeps the optimizer from pushing it below a filtering join. Left non-foldable
-  // (the default) so folding a constant call does not eagerly raise that null-key error at
-  // optimization for rows a filter would later drop.
-  override lazy val throwable: Boolean = true
+  // Throwable only when eval can throw: a key that may be null (JSON_OBJECT_NULL_KEY), an explicit
+  // `FORMAT JSON` value to validate, or a throwable child. This keeps such shapes from being pushed
+  // below a filtering join.
+  override lazy val throwable: Boolean =
+    children.exists(_.throwable) || needsValidation.contains(true) ||
+      members.exists { case (k, _) => !k.resolved || k.nullable }
 
   // The value is never null, but report nullable as `throwable` (like JsonArray): `NullPropagation`
   // keys off `nullable`, so a non-nullable constructor would let it fold `IS [NOT] NULL` to a
   // constant or `count(...)` to `count(1)`, skipping the eval that must raise JSON_OBJECT_NULL_KEY.
   override def nullable: Boolean = throwable
+
+  // Only non-throwing shapes fold, so `ConstantFolding` cannot raise an error at optimization for
+  // rows a filter would later drop.
+  override def foldable: Boolean = children.forall(_.foldable) && !throwable
 
   override def dataType: DataType = returning
 

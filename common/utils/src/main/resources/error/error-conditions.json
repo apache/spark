@@ -5814,7 +5814,7 @@
     "message" : [
       "JSON_OBJECT key must be a non-null string, but got a null key."
     ],
-    "sqlState" : "2200E"
+    "sqlState" : "22004"
   },
   "JSON_QUERY_ON_ERROR" : {
     "message" : [
