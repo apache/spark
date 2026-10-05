@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution.planmerging
 
+import java.util.OptionalLong
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, AttributeReference, CreateNamedStruct, ExprId, GetStructField, If, Literal, Or, ScalarSubquery, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, AttributeReference, CreateNamedStruct, Expression, ExpressionSet, ExprId, GetStructField, GreaterThan, If, LessThan, Literal, Or, ScalarSubquery, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -28,10 +31,11 @@ import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier, Supp
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{Expressions, FieldReference, SortDirection => V2SortDirection, SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsReportOrdering, SupportsReportPartitioning}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsReportOrdering, SupportsReportPartitioning, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning => V2KeyGroupedPartitioning, Partitioning => V2Partitioning, UnknownPartitioning => V2UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -2058,6 +2062,20 @@ class MergeSubplansSuite extends PlanTest {
   private def v2Scans(plan: LogicalPlan): Seq[DataSourceV2ScanRelation] =
     plan.collectWithSubqueries { case s: DataSourceV2ScanRelation => s }
 
+  private def inferredFilterSubquery(
+      table: TestInferredFilterTable,
+      column: String,
+      withResidual: Boolean = false): ScalarSubquery = {
+    val relation = DataSourceV2Relation.create(table, None, None)
+    val id = relation.output.find(_.name == "id").get
+    val value = relation.output.find(_.name == "value").get
+    val attr = relation.output.find(_.name == column).get
+    val condition = if (withResidual) And(id > 0, attr > 0) else id > 0
+    val pushed = V2ScanRelationPushDown(
+      Project(Seq(id, value, attr), Filter(condition, relation)))
+    ScalarSubquery(pushed.groupBy()(sum(attr).as(s"sum_$column")))
+  }
+
   /**
    * Normalizes a merged plan so `comparePlans` can match it: (1) drops each DSv2 scan's
    * dynamically-built Scan to a schema-only placeholder (the pushed describe() strings are asserted
@@ -2101,6 +2119,89 @@ class MergeSubplansSuite extends PlanTest {
         extractorExpression(0, analyzedMergedSubquery.output, 1)),
       Seq(definitionNode(analyzedMergedSubquery, 0)))
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  gridTest("SPARK-58892: inferred filters survive rebuilding a merged scan")(
+      Seq(false, true)) { estimateInferred =>
+    val table = new TestInferredFilterTable(estimateInferred)
+    val subqueries = Seq("a", "b", "c").map(inferredFilterSubquery(table, _))
+    subqueries.foreach { subquery =>
+      val scan = v2Scans(subquery.plan).head
+      assert(scan.inferredFilters.size == 1)
+      val filters = subquery.plan.collect { case Filter(condition, _) => condition }
+      assert(filters.exists(_.exists(_.semanticEquals(scan.inferredFilters.head))) ==
+        !estimateInferred)
+    }
+
+    val originalQuery = testRelation.select(subqueries: _*).analyze
+    val optimized = Optimize.execute(originalQuery)
+    val scans = v2Scans(optimized)
+    assert(scans.size == 1, s"expected three scans to merge:\n$optimized")
+    val scan = scans.head
+    assert(scan.output.map(_.name).toSet == Set("id", "value", "a", "b", "c"))
+    val id = scan.output.find(_.name == "id").get
+    val value = scan.output.find(_.name == "value").get
+    // The deferred rebuild can offer the same predicate as both strict and best-effort pruning.
+    assert(ExpressionSet(scan.pushedFilters) == ExpressionSet(Seq(id > 0)))
+    assert(scan.inferredFilters.size == 1 &&
+      scan.inferredFilters.head.semanticEquals(value < 0))
+    assert(scan.scan.asInstanceOf[TestInferredFilterScan].estimateInferred == estimateInferred)
+    assert(optimized.resolved)
+    assert(optimized.collectWithSubqueries {
+      case plan if plan.missingInput.nonEmpty => plan
+    }.isEmpty)
+  }
+
+  gridTest("SPARK-58892: merge three scans with inferred filters under both symmetric modes")(
+      for {
+        estimateInferred <- Seq(false, true)
+        mode <- Seq("general", "dsv2", "disabled")
+      } yield (estimateInferred, mode)) { case (estimateInferred, mode) =>
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key ->
+          (mode == "general").toString,
+        SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key ->
+          (mode == "dsv2").toString) {
+      val table = new TestInferredFilterTable(estimateInferred)
+      val subqueries = Seq("a", "b", "c").map { column =>
+        inferredFilterSubquery(table, column, withResidual = true)
+      }
+      val originalQuery = testRelation.select(subqueries: _*).analyze
+      val optimized = Optimize.execute(originalQuery)
+
+      if (mode == "disabled") {
+        assert(v2Scans(optimized).size == 3)
+        comparePlans(optimized, originalQuery)
+      } else {
+        val scans = v2Scans(optimized)
+        assert(scans.size == 1, s"expected three scans to merge:\n$optimized")
+        val scan = scans.head
+        val value = scan.output.find(_.name == "value").get
+        assert(scan.inferredFilters.size == 1 &&
+          scan.inferredFilters.head.semanticEquals(value < 0))
+        val propagated = optimized.collectWithSubqueries {
+          case project: Project => project.projectList.collect {
+            case alias: Alias if alias.name.startsWith("propagatedFilter_") => alias.child
+          }
+        }.flatten
+        assert(propagated.nonEmpty)
+        if (estimateInferred) {
+          assert(propagated.forall(!_.references.exists(_.name == "value")),
+            s"inferred metadata must stay out of propagated aliases:\n$optimized")
+        }
+        val aggregates = optimized.collectWithSubqueries {
+          case aggregate: Aggregate => aggregate.aggregateExpressions.flatMap(_.collect {
+            case expression: AggregateExpression => expression
+          })
+        }.flatten
+        assert(aggregates.size == 3 && aggregates.forall(_.filter.nonEmpty))
+        assert(optimized.resolved)
+        assert(optimized.collectWithSubqueries {
+          case plan if plan.missingInput.nonEmpty => plan
+        }.isEmpty)
+      }
+    }
   }
 
   test("SPARK-40259: do not merge DSv2 scans when a pushdown is merge-blocking") {
@@ -3200,6 +3301,51 @@ private case class TestV2ReportingScan(
       new V2KeyGroupedPartitioning(Array(Expressions.bucket(numBuckets, col)), 0)
     case None => new V2UnknownPartitioning(0)
   }
+}
+
+/** Rows satisfy value = -id, so fully pushing id > n implies value < -n. */
+private class TestInferredFilterTable(estimateInferred: Boolean)
+  extends TestV2Table(StructType(Seq("id", "value", "a", "b", "c")
+    .map(StructField(_, IntegerType)))) {
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    new ScanBuilder with SupportsPushDownCatalystFilters with SupportsPushDownRequiredColumns {
+      private var requiredSchema = schema()
+      private var fullyPushed = Seq.empty[Expression]
+
+      override def pruneColumns(schema: StructType): Unit = requiredSchema = schema
+
+      override def pushFilters(filters: Seq[Expression]): Seq[Expression] = {
+        val (strict, residual) = filters.partition { filter =>
+          filter.references.nonEmpty && filter.references.forall(_.name == "id")
+        }
+        fullyPushed = strict
+        residual
+      }
+
+      override def pushedFilters: Array[Predicate] = Array.empty
+
+      override def inferredFilters: Seq[Expression] = fullyPushed.collect {
+        case GreaterThan(_: AttributeReference, Literal(n: Int, _)) =>
+          LessThan(AttributeReference("value", IntegerType)(), Literal(-n))
+      }
+
+      override def build(): Scan = TestInferredFilterScan(requiredSchema, estimateInferred)
+    }
+}
+
+private case class TestInferredFilterScan(schema: StructType, estimateInferred: Boolean)
+  extends Scan with SupportsReportStatistics {
+  override def readSchema(): StructType = schema
+
+  override def estimateStatistics(): V2Statistics = new V2Statistics {
+    override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+    override def numRows(): OptionalLong = OptionalLong.of(10L)
+  }
+
+  override def reflectsFullyPushedDownFilters(): Boolean = false
+
+  override def useInferredFilterEstimation(): Boolean = estimateInferred
 }
 
 /**

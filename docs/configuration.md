@@ -464,8 +464,7 @@ of the most common options to set are:
   <td>
     A timeout for Spark driver in minutes. 0 means infinite. For the positive time value,
     terminate the driver with the exit code 124 if it runs after timeout duration. To use,
-    it's required to set <code>spark.plugins</code> with
-    <code>org.apache.spark.deploy.DriverTimeoutPlugin</code>.
+    it's required to set <code>spark.plugins</code> with <code>DriverTimeoutPlugin</code>.
   </td>
   <td>4.0.0</td>
 </tr>
@@ -530,7 +529,7 @@ of the most common options to set are:
   <td>
     Comma-separated list of the console output kind for driver that needs to redirect
     to logging system. Supported values are `stdout`, `stderr`. It only takes affect when
-    `spark.plugins` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.
+    `spark.plugins` is configured with `RedirectConsolePlugin`.
   </td>
   <td>4.1.0</td>
 </tr>
@@ -789,7 +788,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma-separated list of the console output kind for executor that needs to redirect
     to logging system. Supported values are `stdout`, `stderr`. It only takes affect when
-    `spark.plugins` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.
+    `spark.plugins` is configured with `RedirectConsolePlugin`.
   </td>
   <td>4.1.0</td>
 </tr>
@@ -1750,7 +1749,9 @@ Apart from these, the following properties are also available, and may be useful
     executors (through either <code>spark.shuffle.service.enabled</code> or a
     <code>ShuffleDataIO</code> with reliable storage), and the cluster manager can hold
     executors: Standalone, YARN, and Kubernetes with
-    <code>spark.kubernetes.allocation.pods.allocator=direct</code>.
+    <code>spark.kubernetes.allocation.pods.allocator=direct</code>. On a Standalone Master,
+    this also gates the <code>hold</code> and <code>resume</code> actions of the
+    <a href="spark-standalone.html#rest-api">Master REST API</a>.
   </td>
   <td>4.4.0</td>
 </tr>

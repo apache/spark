@@ -1410,6 +1410,9 @@ class KeyGroupedPartitioningSuite
       // report the same partition key list, [0, 1] of LongType, while the rows behind a key differ:
       // the identity side's key 0 holds id 0, the transform side's holds id 1. The identity side's
       // raw keys have to be reduced onto `flip_low_bit` before the partitions can be paired up.
+      // Read as they stand, an inner join drops the mispaired rows (0 of 2) and a left outer join
+      // null-extends them; the reduce fixes both. Every left row here has a match, so the two join
+      // types expect the same rows.
       val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
       createTable("t1", cols, Array(identity("id")))
       sql("INSERT INTO testcat.ns.t1 VALUES (0, 'a'), (1, 'b')")
@@ -1417,23 +1420,29 @@ class KeyGroupedPartitioningSuite
       createTable("t2", cols, Array(Expressions.apply("flip_low_bit", Expressions.column("id"))))
       sql("INSERT INTO testcat.ns.t2 VALUES (0, 'x'), (1, 'y')")
 
-      val df = sql(
-        "SELECT t1.id, t1.data, t2.data FROM testcat.ns.t1 JOIN testcat.ns.t2 ON t1.id = t2.id")
+      val expected = Seq(Row(0L, "a", "x"), Row(1L, "b", "y"))
+      Seq("JOIN", "LEFT OUTER JOIN").foreach { joinType =>
+        val df = sql(
+          s"SELECT t1.id, t1.data, t2.data FROM testcat.ns.t1 $joinType testcat.ns.t2 " +
+            "ON t1.id = t2.id")
 
-      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-        checkAnswer(df, Seq(Row(0L, "a", "x"), Row(1L, "b", "y")))
-        val plan = stripAQEPlan(df.queryExecution.executedPlan)
-        assert(collectShuffles(plan).isEmpty, "storage-partitioned join should not shuffle")
-        val groupPartitions = collectGroupPartitions(plan)
-        assert(groupPartitions.size == 2,
-          "both sides should be regrouped onto the merged partition keys")
-        assert(groupPartitions.count(_.reducers.exists(_.exists(_.isDefined))) == 1,
-          "and exactly one side should reduce, the identity one onto `flip_low_bit`")
-        // The join subtree, not the whole plan: `ValidateRequirements` walks children and a query
-        // stage is a leaf, so validating an AQE plan checks nothing.
-        val joins = collect(plan) { case smj: SortMergeJoinExec => smj }
-        assert(joins.size == 1, s"test setup: one join to validate:\n$plan")
-        assert(ValidateRequirements.validate(joins.head), "the plan that leaves must hold up")
+        withSQLConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+          checkAnswer(df, expected)
+          val plan = stripAQEPlan(df.queryExecution.executedPlan)
+          assert(collectShuffles(plan).isEmpty,
+            s"$joinType: storage-partitioned join should not shuffle")
+          val groupPartitions = collectGroupPartitions(plan)
+          assert(groupPartitions.size == 2,
+            s"$joinType: both sides should be regrouped onto the merged partition keys")
+          assert(groupPartitions.count(_.reducers.exists(_.exists(_.isDefined))) == 1,
+            s"$joinType: exactly one side should reduce, the identity one onto `flip_low_bit`")
+          // The join subtree, not the whole plan: `ValidateRequirements` walks children and a
+          // query stage is a leaf, so validating an AQE plan checks nothing.
+          val joins = collect(plan) { case smj: SortMergeJoinExec => smj }
+          assert(joins.size == 1, s"$joinType: test setup: one join to validate:\n$plan")
+          assert(ValidateRequirements.validate(joins.head),
+            s"$joinType: the plan that leaves must hold up")
+        }
       }
     }
   }
@@ -5457,6 +5466,64 @@ class KeyGroupedPartitioningSuite
 
           val groupPartitions = collectAllGroupPartitions(df.queryExecution.executedPlan)
           assert(groupPartitions.map(_.outputPartitioning.numPartitions) == expectedPartitions)
+      }
+    }
+  }
+
+  test("SPARK-59905: ORDER BY a join-key expression a join reports as a partition expression") {
+    createTable("ident", Array(Column.create("id", LongType)), Array(identity("id")))
+    sql("INSERT INTO testcat.ns.ident VALUES " + (94 to 100).map(i => s"($i)").mkString(", "))
+    createTable("plain", Array(Column.create("b", LongType), Column.create("c", LongType),
+      Column.create("s", new StructType().add("a", LongType))), Array.empty)
+    sql("INSERT INTO testcat.ns.plain VALUES " +
+      (0 to 6).map(b => s"($b, 94, named_struct('a', ${94 + b}L))").mkString(", "))
+    createTable("ident2", Array(Column.create("x", LongType), Column.create("y", LongType)),
+      Array(identity("x"), identity("y")))
+    sql("INSERT INTO testcat.ns.ident2 VALUES (94, 1), (94, 2), (95, 1)")
+    createTable("plain2", Array(Column.create("b", LongType), Column.create("c", LongType)),
+      Array.empty)
+    sql("INSERT INTO testcat.ns.plain2 VALUES (6, 1), (6, 2), (5, 1)")
+
+    // The join lays `p` out on `i`'s keys and reports the join key, e.g. `100 - b`, as `p`'s
+    // partition expression. A one-side shuffle does that under the shuffle conf. An inner
+    // broadcast join does it too, by reporting `i`'s layout over `p`'s join key. The ORDER BY over
+    // that key is served by the key order, with no range shuffle. The keys come out ascending, so
+    // only another order needs a `GroupPartitionsExec` to sort the partitions.
+    case class Query(left: String, right: String, on: String, order: String, select: String,
+        expected: Seq[Row], sortingNodes: Int)
+    val ids = (94 to 100).map(i => Row(i.toLong))
+    val singleColumnKeys = Seq(
+      Query("ident", "plain", "i.id = 100 - p.b", "100 - p.b", "p.b",
+        (6 to 0 by -1).map(b => Row(b.toLong)), 0),
+      Query("ident", "plain", "i.id = 100 - p.b", "100 - p.b DESC", "p.b",
+        (0 to 6).map(b => Row(b.toLong)), 1),
+      Query("ident", "plain", "i.id = p.s.a", "p.s.a", "i.id", ids, 0),
+      Query("ident2", "plain2", "i.x = 100 - p.b AND i.y = p.c", "100 - p.b, p.c DESC", "p.b, p.c",
+        Seq(Row(6L, 2L), Row(6L, 1L), Row(5L, 1L)), 1))
+    // AQE's plan validation fails on `b + c` until SPARK-59901 is fixed, so it runs with AQE off.
+    val twoColumnKey =
+      Query("ident", "plain", "i.id = p.b + p.c", "p.b + p.c", "i.id", ids, 0)
+
+    for {
+      (query, aqe) <-
+        singleColumnKeys.flatMap(q => Seq(q -> true, q -> false)) :+ (twoColumnKey -> false)
+      broadcast <- Seq(false, true)
+    } {
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> (!broadcast).toString,
+          SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
+        val hint = if (broadcast) "/*+ BROADCAST(p) */ " else ""
+        val df = sql(
+          s"""SELECT $hint${query.select} FROM testcat.ns.${query.left} i
+             |JOIN testcat.ns.${query.right} p ON ${query.on} ORDER BY ${query.order}
+             |""".stripMargin)
+        val clue = s"${query.order}, aqe = $aqe, broadcast = $broadcast"
+        checkAnswer(df, query.expected)
+        val plan = df.queryExecution.executedPlan
+        // A one-side shuffle is the only shuffle, and a broadcast join needs none.
+        assert(collectAllShuffles(plan).size == (if (broadcast) 0 else 1), clue)
+        assert(collectAllGroupPartitions(plan).size == query.sortingNodes, clue)
       }
     }
   }

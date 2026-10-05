@@ -29,6 +29,9 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Success, Try}
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.core.{JsonParser, JsonProcessingException}
+import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
+
 import org.apache.spark._
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.internal.{Logging, MessageWithContext}
@@ -208,6 +211,53 @@ private[spark] object BasePythonRunner extends Logging {
       }
       perWorkerMb
     }
+  }
+
+  // Values used to update the existing Python SQL metrics and task spill metrics.
+  private[python] case class WorkerMetrics(
+      bootTimestampMs: Long,
+      initTimestampMs: Long,
+      finishTimestampMs: Long,
+      pythonExecutionDurationMs: Long,
+      memoryBytesSpilled: Long,
+      diskBytesSpilled: Long)
+
+  private lazy val workerMetricsMapper = new ObjectMapper()
+    .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+    .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+
+  /** Read and validate worker metrics after METRICS_DATA; ignore additional fields. */
+  private[python] def readWorkerMetrics(stream: DataInputStream): WorkerMetrics = {
+    val length = stream.readInt()
+    if (length <= 0) {
+      throw new SparkException(s"Invalid Python worker report length: $length")
+    }
+    val json = PythonWorkerUtils.readUTF(length, stream)
+    val report = try {
+      workerMetricsMapper.readTree(json)
+    } catch {
+      case e: JsonProcessingException =>
+        throw new SparkException("Malformed Python worker report JSON", e)
+    }
+    if (report == null || !report.isObject) {
+      throw new SparkException("Expected a Python worker JSON object")
+    }
+
+    def metricValue(name: String): Long = {
+      val value = report.get(name)
+      if (value == null || !value.isIntegralNumber || !value.canConvertToLong) {
+        throw new SparkException(s"Missing or invalid Python worker metric: $name")
+      }
+      value.longValue()
+    }
+
+    WorkerMetrics(
+      metricValue("bootTimestampMs"),
+      metricValue("initTimestampMs"),
+      metricValue("finishTimestampMs"),
+      metricValue("pythonExecutionDurationMs"),
+      metricValue("memoryBytesSpilled"),
+      metricValue("diskBytesSpilled"))
   }
 
   /**
@@ -857,12 +907,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
      */
     protected def read(): OUT
 
-    protected def handleTimingData(): Unit = {
-      // Timing data from worker
-      val bootTime = stream.readLong()
-      val initTime = stream.readLong()
-      val finishTime = stream.readLong()
-      val processingTimeMs = stream.readLong()
+    protected def handleMetricsData(): Unit = {
+      val workerMetrics = BasePythonRunner.readWorkerMetrics(stream)
+      val bootTime = workerMetrics.bootTimestampMs
+      val initTime = workerMetrics.initTimestampMs
+      val finishTime = workerMetrics.finishTimestampMs
+      val pythonExecutionDurationMs = workerMetrics.pythonExecutionDurationMs
       // A reused Python worker records bootTime before waiting for this task, so it can precede
       // startTime. Use the later timestamp to exclude the worker's idle time from initialization.
       val pythonWorkerInitializationStartTime = math.max(startTime, bootTime)
@@ -888,11 +938,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       metrics.get("pythonBootTime").foreach(_.add(boot))
       metrics.get("pythonInitTime").foreach(_.add(init))
       metrics.get("pythonTotalTime").foreach(_.add(total))
-      metrics.get("pythonProcessingTime").foreach(_.add(processingTimeMs))
-      val memoryBytesSpilled = stream.readLong()
-      val diskBytesSpilled = stream.readLong()
-      context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
-      context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
+      metrics.get("pythonProcessingTime").foreach(_.add(pythonExecutionDurationMs))
+      context.taskMetrics().incMemoryBytesSpilled(workerMetrics.memoryBytesSpilled)
+      context.taskMetrics().incDiskBytesSpilled(workerMetrics.diskBytesSpilled)
     }
 
     protected def handlePythonException(): PythonException = {
@@ -1398,8 +1446,8 @@ private[spark] class PythonRunner(
               batchesProcessed += 1
               totalDataReceived += length
               data
-            case SpecialLengths.TIMING_DATA =>
-              handleTimingData()
+            case SpecialLengths.METRICS_DATA =>
+              handleMetricsData()
               read()
             case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
               throw handlePythonException()
@@ -1422,7 +1470,7 @@ class PythonWorkerException(msg: String, cause: Throwable)
 private[spark] object SpecialLengths {
   val END_OF_DATA_SECTION = -1
   val PYTHON_EXCEPTION_THROWN = -2
-  val TIMING_DATA = -3
+  val METRICS_DATA = -3
   val END_OF_STREAM = -4
   val NULL = -5
   val START_ARROW_STREAM = -6
