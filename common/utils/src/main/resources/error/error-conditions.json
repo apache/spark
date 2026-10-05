@@ -10068,6 +10068,12 @@
     ],
     "sqlState" : "42601"
   },
+  "WINDOW_FUNCTION_PARTITION_SIZE_EXCEEDS_LIMIT" : {
+    "message" : [
+      "Cannot evaluate the window function because the window partition has <numRows> rows, which exceeds the maximum of 2,147,483,647 (2^31 - 1) rows supported per window partition. Reduce the partition size, for example by adding more expressions to the PARTITION BY clause."
+    ],
+    "sqlState" : "54000"
+  },
   "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE" : {
     "message" : [
       "Window function <funcName> requires an OVER clause."
