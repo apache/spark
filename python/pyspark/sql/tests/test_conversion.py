@@ -359,76 +359,6 @@ class ArrowBatchTransformerTests(unittest.TestCase):
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 @unittest.skipIf(not have_pandas, pandas_requirement_message)
 class PandasToArrowConversionTests(unittest.TestCase):
-    def test_arrow_dtype_timestamp_normalization_in_create_dataframe_path(self):
-        """Covers the createDataFrame path (create_arrow_array_from_pandas)."""
-        import pandas as pd
-        import pyarrow as pa
-
-        from pyspark.sql.pandas.conversion import create_arrow_array_from_pandas
-
-        tz = "America/Los_Angeles"
-        values = [datetime.datetime(2020, 1, 1, 12, 0)]
-        arrow_ser = pa.array(values, type=pa.timestamp("us")).to_pandas(types_mapper=pd.ArrowDtype)
-        numpy_ser = pd.Series(values, dtype="datetime64[ns]")
-
-        arrow_arr = create_arrow_array_from_pandas(arrow_ser, TimestampType(), timezone=tz)
-        numpy_arr = create_arrow_array_from_pandas(numpy_ser, TimestampType(), timezone=tz)
-        self.assertEqual(arrow_arr.to_pylist(), numpy_arr.to_pylist())
-
-    def test_arrow_dtype_timestamps_are_utc_normalized(self):
-        """ArrowDtype timestamps must be UTC normalized like numpy ones."""
-        import pandas as pd
-        import pyarrow as pa
-        import pyarrow.compute as pc
-
-        from pyspark.sql.pandas.types import _check_series_convert_timestamps_internal
-
-        tz = "America/Los_Angeles"
-        values = [datetime.datetime(2020, 1, 1, 12, 0), None]
-        arrow_ser = pa.array(values, type=pa.timestamp("us")).to_pandas(types_mapper=pd.ArrowDtype)
-        numpy_ser = pd.Series(values, dtype="datetime64[ns]")
-
-        arrow_out = _check_series_convert_timestamps_internal(arrow_ser, tz)
-        numpy_out = _check_series_convert_timestamps_internal(numpy_ser, tz)
-        self.assertEqual(arrow_out.iloc[0], numpy_out.iloc[0])
-        self.assertTrue(pd.isna(arrow_out.iloc[1]))
-
-        # DST-ambiguous values resolve to standard time, like numpy.
-        ny = "America/New_York"
-        ambiguous = [datetime.datetime(2015, 11, 1, 1, 30)]
-        arrow_amb = _check_series_convert_timestamps_internal(
-            pa.array(ambiguous, type=pa.timestamp("us")).to_pandas(types_mapper=pd.ArrowDtype), ny
-        )
-        numpy_amb = _check_series_convert_timestamps_internal(
-            pd.Series(ambiguous, dtype="datetime64[ns]"), ny
-        )
-        self.assertEqual(arrow_amb.iloc[0], numpy_amb.iloc[0])
-
-        # A tz-aware column must not be re-localized with the session timezone.
-        ny = "America/New_York"
-        # assume_timezone reads naive values as wall clock; pa.array with a tz would read UTC.
-        aware_arrow = pc.assume_timezone(pa.array(values, type=pa.timestamp("us")), ny).to_pandas(
-            types_mapper=pd.ArrowDtype
-        )
-        aware_numpy = pd.Series(values, dtype="datetime64[ns]").dt.tz_localize(ny)
-        aware_arrow_out = _check_series_convert_timestamps_internal(aware_arrow, tz)
-        aware_numpy_out = _check_series_convert_timestamps_internal(aware_numpy, tz)
-        self.assertEqual(aware_arrow_out.iloc[0], aware_numpy_out.iloc[0])
-        self.assertEqual(aware_arrow_out.iloc[0], pd.Timestamp("2020-01-01 17:00:00", tz="UTC"))
-        self.assertTrue(pd.isna(aware_arrow_out.iloc[1]))
-
-        # Zone ids pyarrow rejects must still match numpy.
-        for tz in ("UTC+01:00", "+01:00:30"):
-            arrow_out = _check_series_convert_timestamps_internal(arrow_ser, tz)
-            numpy_out = _check_series_convert_timestamps_internal(numpy_ser, tz)
-            self.assertEqual(arrow_out.iloc[0], numpy_out.iloc[0], f"Failed for {tz}")
-
-        # timezone=None uses the local timezone, like numpy.
-        self.assertEqual(
-            _check_series_convert_timestamps_internal(arrow_ser, None).iloc[0],
-            _check_series_convert_timestamps_internal(numpy_ser, None).iloc[0],
-        )
-
     def test_from_pandas(self):
         """Test basic DataFrame/Series to Arrow RecordBatch conversion."""
         import pandas as pd
@@ -496,6 +426,75 @@ class PandasToArrowConversionTests(unittest.TestCase):
         result = PandasToArrowConversion.from_pandas(df, schema, timezone="UTC")
         self.assertEqual(result.num_rows, 2)
         self.assertEqual(result.num_columns, 1)
+
+    def test_from_pandas_arrow_dtype_timestamp(self):
+        """Covers the createDataFrame path (create_arrow_array_from_pandas)."""
+        import pandas as pd
+        import pyarrow as pa
+
+        from pyspark.sql.pandas.conversion import create_arrow_array_from_pandas
+
+        tz = "America/Los_Angeles"
+        values = [datetime.datetime(2020, 1, 1, 12, 0)]
+        arrow_ser = pa.array(values, type=pa.timestamp("us")).to_pandas(types_mapper=pd.ArrowDtype)
+        numpy_ser = pd.Series(values, dtype="datetime64[ns]")
+
+        arrow_arr = create_arrow_array_from_pandas(arrow_ser, TimestampType(), timezone=tz)
+        numpy_arr = create_arrow_array_from_pandas(numpy_ser, TimestampType(), timezone=tz)
+        self.assertEqual(arrow_arr.to_pylist(), numpy_arr.to_pylist())
+
+    def test_from_pandas_arrow_dtype_timestamp_normalization(self):
+        """ArrowDtype timestamps must be UTC normalized like numpy ones."""
+        import pandas as pd
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
+        from pyspark.sql.pandas.types import _check_series_convert_timestamps_internal
+
+        tz = "America/Los_Angeles"
+        values = [datetime.datetime(2020, 1, 1, 12, 0), None]
+        arrow_ser = pa.array(values, type=pa.timestamp("us")).to_pandas(types_mapper=pd.ArrowDtype)
+        numpy_ser = pd.Series(values, dtype="datetime64[ns]")
+
+        arrow_out = _check_series_convert_timestamps_internal(arrow_ser, tz)
+        numpy_out = _check_series_convert_timestamps_internal(numpy_ser, tz)
+        self.assertEqual(arrow_out.iloc[0], numpy_out.iloc[0])
+        self.assertTrue(pd.isna(arrow_out.iloc[1]))
+
+        # DST-ambiguous values resolve to standard time, like numpy.
+        ny = "America/New_York"
+        ambiguous = [datetime.datetime(2015, 11, 1, 1, 30)]
+        arrow_amb = _check_series_convert_timestamps_internal(
+            pa.array(ambiguous, type=pa.timestamp("us")).to_pandas(types_mapper=pd.ArrowDtype), ny
+        )
+        numpy_amb = _check_series_convert_timestamps_internal(
+            pd.Series(ambiguous, dtype="datetime64[ns]"), ny
+        )
+        self.assertEqual(arrow_amb.iloc[0], numpy_amb.iloc[0])
+
+        # A tz-aware column must not be re-localized with the session timezone.
+        # assume_timezone reads naive values as wall clock; pa.array with a tz would read UTC.
+        aware_arrow = pc.assume_timezone(pa.array(values, type=pa.timestamp("us")), ny).to_pandas(
+            types_mapper=pd.ArrowDtype
+        )
+        aware_numpy = pd.Series(values, dtype="datetime64[ns]").dt.tz_localize(ny)
+        aware_arrow_out = _check_series_convert_timestamps_internal(aware_arrow, tz)
+        aware_numpy_out = _check_series_convert_timestamps_internal(aware_numpy, tz)
+        self.assertEqual(aware_arrow_out.iloc[0], aware_numpy_out.iloc[0])
+        self.assertEqual(aware_arrow_out.iloc[0], pd.Timestamp("2020-01-01 17:00:00", tz="UTC"))
+        self.assertTrue(pd.isna(aware_arrow_out.iloc[1]))
+
+        # Zone ids pyarrow rejects must still match numpy.
+        for zone in ("UTC+01:00", "+01:00:30"):
+            arrow_out = _check_series_convert_timestamps_internal(arrow_ser, zone)
+            numpy_out = _check_series_convert_timestamps_internal(numpy_ser, zone)
+            self.assertEqual(arrow_out.iloc[0], numpy_out.iloc[0], f"Failed for {zone}")
+
+        # timezone=None uses the local timezone, like numpy.
+        self.assertEqual(
+            _check_series_convert_timestamps_internal(arrow_ser, None).iloc[0],
+            _check_series_convert_timestamps_internal(numpy_ser, None).iloc[0],
+        )
 
     def test_from_pandas_arrow_cast(self):
         """Test arrow_cast allows type coercion on mismatch."""
