@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql
 
+import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
+import org.antlr.v4.runtime.atn.PredictionMode
+
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Cast, Collate, JsonConstructorNullBehavior, JsonImplicitFormatCarrier, JsonObjectExpr, Literal}
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.expressions.{Cast, Collate, Expression, JsonConstructorNullBehavior, JsonImplicitFormatCarrier, JsonObjectExpr, Literal}
+import org.apache.spark.sql.catalyst.parser.{ParseException, SparkParserBailErrorStrategy, SqlBaseLexer, SqlBaseParser}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{CharType, GeometryType, IntegerType, MapType, StringType, VarcharType}
@@ -75,6 +79,61 @@ class JsonObjectSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SELECT json_object('k': v) FROM VALUES ('x') t(v)"),
       Row("""{"k":"x"}"""))
+  }
+
+  test("a colon member splits at the first top-level colon after the key") {
+    val from = """FROM (SELECT parse_json('{"x":1,"y":"s"}') AS v, 'kk' AS k, 'e' AS `end`)"""
+    Seq(
+      "json_object('k': v:x)" -> """{"k":1}""",
+      "json_object(k: v:x)" -> """{"kk":1}""",
+      "json_object('k': v:x ABSENT ON NULL)" -> """{"k":1}""",
+      "json_object(k: v:x RETURNING STRING)" -> """{"kk":1}""",
+      "json_object('a': v:x, k: v:y)" -> """{"a":1,"kk":"s"}""",
+      "json_object((v:y::string) : 1)" -> """{"s":1}""",
+      "json_object(v:y::string VALUE v:x)" -> """{"s":1}""",
+      "json_object(CASE WHEN v:x::int = 1 THEN 'a' END : v:y)" -> """{"a":"s"}""",
+      "json_object(array('a')[0] : v:x)" -> """{"a":1}""",
+      "json_object(end : v:x)" -> """{"e":1}"""
+    ).foreach { case (call, expected) =>
+      checkAnswer(sql(s"SELECT $call $from"), Row(expected))
+    }
+    checkAnswer(
+      spark.sql(s"SELECT json_object('k': v:x) $from", Map("v" -> "zzz")),
+      Row("""{"k":1}"""))
+    checkAnswer(
+      spark.sql("SELECT json_object('k' :p VALUE 1), 'a' :p", Map("p" -> "x")),
+      Row("""{"kx":1}""", "ax"))
+  }
+
+  test("a member whose key and value are named key and value splits at VALUE") {
+    checkAnswer(
+      sql("SELECT json_object(key VALUE value + 1) FROM VALUES ('a', 1) t(key, value)"),
+      Row("""{"a":2}"""))
+    checkAnswer(
+      sql("SELECT json_object(KEY key VALUE value) FROM VALUES ('a', 1) t(key, value)"),
+      Row("""{"a":1}"""))
+    checkAnswer(
+      sql("SELECT json_object(KEY value VALUE key) FROM VALUES ('a', 'b') t(key, value)"),
+      Row("""{"b":"a"}"""))
+    checkAnswer(
+      sql("SELECT json_object('x' VALUE 0, key VALUE value + 1) " +
+        "FROM VALUES ('a', 1) t(key, value)"),
+      Row("""{"x":0,"a":2}"""))
+  }
+
+  test("JSON_OBJECT members parse in SLL mode without the LL fallback") {
+    Seq(
+      "SELECT JSON_OBJECT('k': V)",
+      "SELECT JSON_OBJECT(K: V)",
+      "SELECT JSON_OBJECT('k': V:X, K: V:Y)",
+      "SELECT JSON_OBJECT(KEY 'id' VALUE 7)",
+      "SELECT JSON_OBJECT(KEY VALUE VALUE 1)").foreach { query =>
+      val parser = new SqlBaseParser(
+        new CommonTokenStream(new SqlBaseLexer(CharStreams.fromString(query))))
+      parser.setErrorHandler(new SparkParserBailErrorStrategy())
+      parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
+      parser.singleStatement()
+    }
   }
 
   test("construct object using comma-separated key-value syntax") {
@@ -153,6 +212,16 @@ class JsonObjectSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("""SELECT json_object('ts' VALUE TIMESTAMP'2020-01-02 10:30:00')"""),
       Row("""{"ts":"2020-01-02T10:30:00.000-08:00"}"""))
+  }
+
+  test("TIMESTAMP rendering follows the session time zone on direct and routed paths") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val ts = "TIMESTAMP'2020-01-02 10:30:00'"
+      val expected = sql(s"SELECT to_json(named_struct('ts', $ts))")
+      checkAnswer(sql(s"SELECT json_object('ts' VALUE $ts)"), expected)
+      checkAnswer(sql(s"SELECT json_object('ts', $ts)"), expected)
+      checkAnswer(expected, Row("""{"ts":"2020-01-02T10:30:00.000Z"}"""))
+    }
   }
 
   test("struct value renders like to_json") {
@@ -294,7 +363,7 @@ world'))"""))
     }
     // Assert the structured error contract, not just the message text.
     assert(e.getCondition == "JSON_OBJECT_NULL_KEY")
-    assert(e.getSqlState == "2200E")
+    assert(e.getSqlState == "22004")
   }
 
   test("a null key is validated before a null value is omitted under ABSENT ON NULL") {
@@ -304,7 +373,7 @@ world'))"""))
       sql("SELECT json_object(NULL VALUE NULL ABSENT ON NULL)").collect()
     }
     assert(e.getCondition == "JSON_OBJECT_NULL_KEY")
-    assert(e.getSqlState == "2200E")
+    assert(e.getSqlState == "22004")
   }
 
   test("non-foldable key and value expressions") {
@@ -524,12 +593,33 @@ world'))"""))
     checkAnswer(sql(s"SELECT ${absent.sql}"), Row("""{"a":1}"""))
   }
 
-  test("JSON_OBJECT is not foldable") {
-    // Folding a constant JSON_OBJECT would surface a null-key error at optimization even for rows a
-    // filter/join drops, so it stays non-foldable.
-    assert(!JsonObjectExpr(
+  test("JSON_OBJECT is foldable only when it cannot throw") {
+    assert(JsonObjectExpr(
       Seq((Literal("k"), Literal(1))), Seq(false), Seq(false),
       JsonConstructorNullBehavior.Null, StringType).foldable)
+    // Folding a possibly-null key would surface the null-key error at optimization even for rows a
+    // filter/join drops.
+    assert(!JsonObjectExpr(
+      Seq((Literal.create(null, StringType), Literal(1))), Seq(false), Seq(false),
+      JsonConstructorNullBehavior.Null, StringType).foldable)
+    assert(!JsonObjectExpr(
+      Seq((Literal("k"), Literal("[1]"))), Seq(true), Seq(true),
+      JsonConstructorNullBehavior.Null, StringType).foldable)
+  }
+
+  test("a constant JSON_OBJECT is accepted as a column DEFAULT") {
+    withTable("t") {
+      sql("CREATE TABLE t (id INT, c STRING DEFAULT json_object('a' VALUE 1)) USING parquet")
+      sql("INSERT INTO t (id) VALUES (1)")
+      checkAnswer(sql("SELECT c FROM t"), Row("""{"a":1}"""))
+    }
+  }
+
+  test("a constant JSON_OBJECT is constant-folded") {
+    val df = sql("SELECT json_object('a' VALUE 1) AS r FROM range(2)")
+    assert(!df.queryExecution.optimizedPlan.exists(
+      _.expressions.exists(_.exists(_.isInstanceOf[JsonObjectExpr]))))
+    checkAnswer(df, Seq(Row("""{"a":1}"""), Row("""{"a":1}""")))
   }
 
   test("a null key raises JSON_OBJECT_NULL_KEY before the value is evaluated") {
@@ -542,7 +632,7 @@ world'))"""))
         "FROM VALUES (CAST(NULL AS STRING)) t(k)").collect()
     }
     assert(e.getCondition == "JSON_OBJECT_NULL_KEY")
-    assert(e.getSqlState == "2200E")
+    assert(e.getSqlState == "22004")
   }
 
   test("a foldable literal key is rendered once and reused across rows") {
@@ -558,7 +648,7 @@ world'))"""))
         sql(s"SELECT json_object($k VALUE 1)").collect()
       }
       assert(e.getCondition == "JSON_OBJECT_NULL_KEY", s"for key $k")
-      assert(e.getSqlState == "2200E", s"for key $k")
+      assert(e.getSqlState == "22004", s"for key $k")
     }
   }
 
@@ -625,13 +715,19 @@ world'))"""))
   }
 
   test("reports nullable to keep NullPropagation from skipping the null-key check") {
-    // The value is never null, but JSON_OBJECT is throwable (a null key raises at eval), so it must
+    // The value is never null, but a possibly-null key makes JSON_OBJECT throwable, so it must
     // report nullable: were it non-nullable, `NullPropagation` would fold `IS [NOT] NULL` and
     // `count(...)` away and skip the eval that must raise JSON_OBJECT_NULL_KEY (see below).
     assert(JsonObjectExpr(
+      Seq((Literal.create(null, StringType), Literal(1))), Seq(false), Seq(false),
+      JsonConstructorNullBehavior.Null, StringType).nullable)
+    assert(sql("SELECT json_object(k VALUE 1) FROM VALUES ('a'), (NULL) t(k)")
+      .schema.head.nullable)
+    // A non-null key with a null value cannot throw, so the result is non-nullable.
+    assert(!JsonObjectExpr(
       Seq((Literal("k"), Literal.create(null, IntegerType))), Seq(false), Seq(false),
       JsonConstructorNullBehavior.Null, StringType).nullable)
-    assert(sql("SELECT json_object('id' VALUE a) FROM VALUES (1), (2) t(a)")
+    assert(!sql("SELECT json_object('id' VALUE a) FROM VALUES (1), (2) t(a)")
       .schema.head.nullable)
   }
 
@@ -646,13 +742,14 @@ world'))"""))
     }
   }
 
-  test("is marked throwable so the optimizer will not push it below a filtering join") {
-    // JSON_OBJECT throws on a null key at runtime, so throwable must be true even when its children
-    // are not themselves throwable.
-    val e = JsonObjectExpr(
-      Seq((Literal("k"), Literal(1))), Seq(false), Seq(false),
-      JsonConstructorNullBehavior.Null, StringType)
-    assert(e.throwable)
+  test("is throwable only when a key may be null or a value needs validation") {
+    // A possibly-null key throws at runtime, so throwable must be true even when no child is
+    // itself throwable.
+    def obj(key: Expression, raw: Boolean = false): JsonObjectExpr = JsonObjectExpr(
+      Seq((key, Literal("[1]"))), Seq(raw), Seq(raw), JsonConstructorNullBehavior.Null, StringType)
+    assert(obj(Literal.create(null, StringType)).throwable)
+    assert(obj(Literal("k"), raw = true).throwable)
+    assert(!obj(Literal("k")).throwable)
   }
 
   test("throwable keeps a null-key predicate above a filtering join") {
@@ -677,6 +774,23 @@ world'))"""))
               |WHERE json_object(t.k VALUE 1) = '{"k1":1}'""".stripMargin).collect()
       }
       assert(e.getCondition == "JSON_OBJECT_NULL_KEY")
+    }
+  }
+
+  test("a non-throwing JSON_OBJECT predicate is pushed below a join") {
+    // Range-based views keep the filter from being folded into a local relation.
+    withTempView("t", "u") {
+      spark.range(3).selectExpr("id", "id AS x").createOrReplaceTempView("t")
+      spark.range(2).createOrReplaceTempView("u")
+      val df = sql("""SELECT t.id FROM t JOIN u ON t.id = u.id
+                     |WHERE json_object('a' VALUE t.x) = '{"a":1}'""".stripMargin)
+      val join = df.queryExecution.optimizedPlan.collectFirst { case j: Join => j }
+        .getOrElse(fail("expected a Join in the optimized plan"))
+      assert(join.exists {
+        case f: Filter => f.condition.exists(_.isInstanceOf[JsonObjectExpr])
+        case _ => false
+      })
+      checkAnswer(df, Row(1))
     }
   }
 
@@ -804,14 +918,16 @@ world'))"""))
 
   test("a constant-folded raw nested value round-trips through .sql as raw") {
     // ConstantFolding rewrites the nested json_array(1) to the literal '[1]', but rawJson stays
-    // frozen true. .sql must emit FORMAT JSON so reparse splices it raw rather than quoting it.
-    val jsonObj = sql("SELECT json_object('a' VALUE json_array(1)) AS r")
+    // frozen true. .sql must emit FORMAT JSON so reparse splices it raw rather than quoting it. The
+    // column-valued member keeps the outer constructor from folding.
+    val from = "FROM VALUES (1) t(x)"
+    val jsonObj = sql(s"SELECT json_object('a' VALUE json_array(1), 'b' VALUE x) AS r $from")
       .queryExecution.optimizedPlan.expressions
       .flatMap(_.collect { case j: JsonObjectExpr => j }).head
     assert(jsonObj.children(1).isInstanceOf[Literal],
       "the nested constructor should have been constant-folded to a literal")
     assert(jsonObj.sql.contains("FORMAT JSON"))
-    checkAnswer(sql(s"SELECT ${jsonObj.sql} AS r"), Row("""{"a":[1]}"""))
+    checkAnswer(sql(s"SELECT ${jsonObj.sql} AS r $from"), Row("""{"a":[1],"b":1}"""))
   }
 
   test("canonical .sql reparses to the built-in even under a shadowing routine") {
@@ -910,10 +1026,8 @@ world'))"""))
   }
 
   test("a compatible routine shadows a comma-form call even with a nested producer value") {
-    // The finding: argument shape must not remove routine candidates. A (STRING, STRING) routine is
-    // compatible with the nested-producer call (the nested value is STRING), so the clause-free
-    // comma form resolves to the routine, not the built-in -- the carrier is transparent to
-    // overload selection.
+    // Argument shape must not remove routine candidates: the carrier is transparent to overload
+    // selection, so a compatible (STRING, STRING) routine shadows the nested-producer call.
     withSQLConf(
       SQLConf.PATH_ENABLED.key -> "true",
       SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
@@ -922,7 +1036,6 @@ world'))"""))
           "RETURN 'shadowed'")
         sql("SET PATH = system.session, system.builtin")
         checkAnswer(sql("SELECT json_object('a', 'x')"), Row("shadowed"))
-        // Previously the nested-producer form bypassed the routine (built-in); now it is shadowed.
         checkAnswer(sql("SELECT json_object('a', json_object('b', 1))"), Row("shadowed"))
         checkAnswer(sql("SELECT json_object('a', json_array(1))"), Row("shadowed"))
         // The dedicated VALUE form's nested value stays on the direct path, so it is not shadowed
@@ -930,6 +1043,23 @@ world'))"""))
         checkAnswer(
           sql("SELECT json_object('a' VALUE json_object('b' VALUE 1))"),
           Row("""{"a":{"b":1}}"""))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_object")
+      }
+    }
+  }
+
+  test("a shadowing routine receives the routed nested producer's JSON text") {
+    // The routine returns its value argument, so this observes what the carrier passes through.
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_object(a STRING, b STRING) RETURNS STRING RETURN b")
+        sql("SET PATH = system.session, system.builtin")
+        checkAnswer(sql("SELECT json_object('a', json_object('b', 1))"), Row("""{"b":1}"""))
+        checkAnswer(sql("SELECT json_object('a', json_array(1))"), Row("[1]"))
       } finally {
         sql("SET PATH = DEFAULT_PATH")
         sql("DROP TEMPORARY FUNCTION IF EXISTS json_object")
@@ -965,10 +1095,9 @@ world'))"""))
     checkAnswer(sql("SELECT builtin.json_object()"), Row("{}"))
   }
 
-  test("a nested JSON-producing argument through a routed JSON_OBJECT call is quoted") {
-    // A routed call carries no lexical FORMAT JSON, so a nested JSON constructor argument is quoted
-    // as a plain value, unlike the JSON_OBJECT(...) grammar which splices it. Splicing through a
-    // routed/qualified call is left as a follow-up (SPARK-59243).
+  test("a nested JSON-producing argument through a qualified JSON_OBJECT call is quoted") {
+    // A qualified call carries no lexical FORMAT JSON, so the nested result is quoted, unlike the
+    // unqualified forms. Splicing through it is left as a follow-up (SPARK-59243).
     checkAnswer(
       sql("SELECT builtin.json_object('a', json_object('b', 1))"),
       Row("""{"a":"{\"b\":1}"}"""))

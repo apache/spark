@@ -2181,7 +2181,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "JSON_OBJECT_NULL_KEY",
-  "sqlState" : "2200E"
+  "sqlState" : "22004"
 }
 
 
