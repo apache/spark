@@ -2647,6 +2647,22 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
             |  CAST('<ROW><a>1</a></ROW>' AS CHAR(30)),
             |  'a INT')""".stripMargin),
         Row(Row(1)))
+      // Malformed padded CHAR documents keep the full pad in the corrupt record.
+      // Reinstating rtrim would drop those trailing spaces from _unparsed.
+      checkAnswer(
+        sql(
+          """SELECT from_json(
+            |  CAST('{"a":' AS CHAR(12)),
+            |  'a INT, _unparsed STRING',
+            |  map('columnNameOfCorruptRecord', '_unparsed'))""".stripMargin),
+        Row(Row(null, "{\"a\":       ")))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  CAST('<ROW>' AS CHAR(10)),
+            |  'a INT, _unparsed STRING',
+            |  map('columnNameOfCorruptRecord', '_unparsed'))""".stripMargin),
+        Row(Row(null, "<ROW>     ")))
       // With a space delimiter, CHAR padding tokenizes into extra empty fields.
       checkAnswer(
         sql(
