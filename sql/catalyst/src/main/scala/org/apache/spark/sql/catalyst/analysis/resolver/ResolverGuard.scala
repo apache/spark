@@ -248,7 +248,7 @@ class ResolverGuard(
       Some("Recursive CTE")
     } else {
       unresolvedWith.cteRelations
-        .map(cteDefinition => cteDefinition._2)
+        .map(_.plan)
         .collectFirst { case CheckOperator(reason) => reason }
         .orElse(checkOperator(unresolvedWith.child))
     }
@@ -633,7 +633,8 @@ class ResolverGuard(
         true
       // JSON
       case _: GetJsonObject | _: JsonTuple | _: JsonToStructs | _: StructsToJson |
-          _: SchemaOfJson | _: JsonObjectKeys | _: LengthOfJsonArray =>
+          _: SchemaOfJson | _: JsonObjectKeys | _: LengthOfJsonArray | _: JsonArray |
+          _: JsonExists | _: JsonQuery | _: JsonValue =>
         true
       // CSV
       case _: SchemaOfCsv | _: StructsToCsv | _: CsvToStructs =>

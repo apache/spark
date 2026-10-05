@@ -39,10 +39,27 @@ For more information on async_profiler see the [Async Profiler Manual](https://k
 To enable code profiling, first enable the code profiling plugin via
 
 ```
-spark.plugins=org.apache.spark.profiler.ProfilerPlugin
+spark.plugins=ProfilerPlugin
 ```
 
 Then enable the profiling in the configuration.
+
+### Task spans
+
+Set `spark.profiler.executor.taskSpan.enabled=true` to record each task attempt as a
+`profiler.Span` event on profiled executors. Task spans are disabled by default and
+require executor profiling to be enabled; executor sampling still applies.
+
+Spans are written to the same JFR file as the profiling samples.
+The span starts in the task start callback
+and ends in the success or failure callback, including result serialization on
+successful tasks. Task deserialization before the start callback is not included.
+
+The span tag starts with `SparkTask`, followed by comma-separated `stageId`,
+`stageAttemptNumber`, `partitionId`, `taskAttemptId`, `attemptNumber`, and `status`
+(`succeeded` or `failed`) key-value pairs. These tags allow profiling
+samples to be associated with individual task attempts, including retries and
+speculative attempts. Spans are only emitted while a JFR recording is active.
 
 
 ### Code profiling configuration
@@ -72,6 +89,16 @@ Then enable the profiling in the configuration.
     The fraction of executors on which to enable profiling. The executors to be profiled are picked at random.
   </td>
   <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.profiler.executor.taskSpan.enabled</code></td>
+  <td><code>false</code></td>
+  <td>
+    If true, record task attempt spans in the JFR output of executors selected for profiling.
+    Requires <code>spark.profiler.executor.enabled=true</code> and respects
+    <code>spark.profiler.executor.fraction</code>.
+  </td>
+  <td>4.4.0</td>
 </tr>
 <tr>
   <td><code>spark.profiler.dfsDir</code></td>
@@ -123,7 +150,7 @@ On Kubernetes, spark will try to shut down the executor pods while the profiler 
   --master <master-url> \
   --deploy-mode <deploy-mode> \
   -c spark.executor.extraJavaOptions="-XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -XX:+PreserveFramePointer" \
-  -c spark.plugins=org.apache.spark.profiler.ProfilerPlugin \
+  -c spark.plugins=ProfilerPlugin \
   -c spark.profiler.executor.enabled=true \
   -c spark.profiler.executor.fraction=0.10 \
   -c spark.profiler.dfsDir=s3a://my-bucket/spark/profiles/ \

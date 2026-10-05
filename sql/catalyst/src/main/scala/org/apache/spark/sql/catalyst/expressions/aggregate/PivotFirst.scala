@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import scala.collection.immutable.{HashMap, TreeMap}
+import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -88,11 +89,25 @@ case class PivotFirst(
 
   private val usesTreeMap: Boolean = !TypeUtils.typeWithProperEquals(pivotColumn.dataType)
 
-  val pivotIndex: Map[Any, Int] = if (usesTreeMap) {
-    TreeMap(pivotColumnValues.zipWithIndex: _*)(
-      TypeUtils.getInterpretedOrdering(pivotColumn.dataType))
-  } else {
-    HashMap(pivotColumnValues.zipWithIndex: _*)
+  private val (pivotIndex, slotOfValue, slotValues) = {
+    val slots = new Array[Int](pivotColumnValues.length)
+    val values = mutable.ArrayBuffer.empty[Any]
+    var index: Map[Any, Int] = if (usesTreeMap) {
+      TreeMap.empty[Any, Int](TypeUtils.getInterpretedOrdering(pivotColumn.dataType))
+    } else {
+      HashMap.empty[Any, Int]
+    }
+    pivotColumnValues.zipWithIndex.foreach { case (value, i) =>
+      index.get(value) match {
+        case Some(existingSlot) =>
+          slots(i) = existingSlot
+        case None =>
+          slots(i) = values.length
+          index = index.updated(value, values.length)
+          values += value
+      }
+    }
+    (index, slots, values.toSeq)
   }
 
   // Null-safe lookup into pivotIndex. When pivotIndex is a TreeMap, its comparison-based lookup
@@ -104,7 +119,9 @@ case class PivotFirst(
     case _ => pivotIndex.getOrElse(key, -1)
   }
 
-  val indexSize = pivotIndex.size
+  // Values that compare as equal share a slot, so this counts distinct slots; the output has one
+  // element per entry in slotOfValue.
+  val indexSize = slotValues.length
 
   private val updateRow: (InternalRow, Int, Any) => Unit = PivotFirst.updateFunction(valueDataType)
 
@@ -142,9 +159,9 @@ case class PivotFirst(
   }
 
   override def eval(input: InternalRow): Any = {
-    val result = new Array[Any](indexSize)
-    for (i <- 0 until indexSize) {
-      result(i) = input.get(mutableAggBufferOffset + i, valueDataType)
+    val result = new Array[Any](slotOfValue.length)
+    for (i <- slotOfValue.indices) {
+      result(i) = input.get(mutableAggBufferOffset + slotOfValue(i), valueDataType)
     }
     new GenericArrayData(result)
   }
@@ -157,8 +174,8 @@ case class PivotFirst(
 
 
   override val aggBufferAttributes: Seq[AttributeReference] =
-    pivotIndex.toList.sortBy(_._2).map { kv =>
-      AttributeReference(Option(kv._1).getOrElse("null").toString, valueDataType)()
+    slotValues.map { value =>
+      AttributeReference(Option(value).getOrElse("null").toString, valueDataType)()
     }
 
   override val aggBufferSchema: StructType = DataTypeUtils.fromAttributes(aggBufferAttributes)

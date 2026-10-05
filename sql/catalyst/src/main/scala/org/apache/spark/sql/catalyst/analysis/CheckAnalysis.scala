@@ -339,6 +339,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     } finally {
       preemptedError.clear()
     }
+    // Check MATERIALIZED CTE relations on the original plan, as `inlinedPlan` has them inlined.
+    // This runs after `checkAnalysis0`, so that resolution errors are reported first.
+    MaterializedCTECheck(plan)
     plan.setAnalyzed()
   }
 
@@ -485,9 +488,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           context = u.origin.getQueryContext,
           summary = u.origin.context.summary)
 
-      case r: V2TableReference =>
+      case r: V2Reference =>
         throw SparkException.internalError(
-          s"V2TableReference should be resolved during analysis: ${r.name}")
+          s"V2Reference should be resolved during analysis: ${r.name}")
 
       case u: UnresolvedInlineTable if unresolvedInlineTableContainsScalarSubquery(u) =>
         throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)

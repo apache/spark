@@ -21,7 +21,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, Expression, GetArrayItem, PythonUDF, Rand, UpdateFields}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Collate, CreateArray, Expression, GetArrayItem, Literal, PythonUDF, Rand, ResolvedCollation, Substring, UpdateFields}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -363,5 +363,18 @@ class CollapseProjectSuite extends PlanTest {
     val expected = query // No always inlines so keep both nodes intact
 
     comparePlans(optimized, expected)
+  }
+
+  test("SPARK-59413: Collate is cheap when its value child is cheap") {
+    // `Collate` is a pure passthrough: `eval` delegates to the child and the collation argument
+    // is never evaluated, so `isCheap` mirrors the value child's cheapness.
+    val col = $"s".string
+    assert(CollapseProject.isCheap(col))
+    assert(CollapseProject.isCheap(Collate(col, ResolvedCollation("UTF8_LCASE"))))
+
+    // A non-cheap value child stays non-cheap through `Collate` (the SPARK-40228 guard is intact).
+    val nonCheap = Substring(col, Literal(1), Literal(5))
+    assert(!CollapseProject.isCheap(nonCheap))
+    assert(!CollapseProject.isCheap(Collate(nonCheap, ResolvedCollation("UTF8_LCASE"))))
   }
 }
