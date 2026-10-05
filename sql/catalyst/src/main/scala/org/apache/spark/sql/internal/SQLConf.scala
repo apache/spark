@@ -2393,6 +2393,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(!Utils.isTesting)
 
+  val V2_EXPRESSION_BUILDER_PRESERVE_BOOLEAN_LITERALS_ENABLED =
+    buildConf("spark.sql.v2ExpressionBuilder.preserveBooleanLiterals.enabled")
+      .internal()
+      .doc("When enabled, REPLACE WHERE b <=> true and b IN (true, false) succeed " +
+        "instead of failing with 'Table does not support overwrite by expression'. " +
+        "It also replaces matching true rows for b <=> true OR id = 4 " +
+        "instead of incorrectly retaining them.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE =
     buildConf("spark.sql.dataSource.alwaysCreateV2Predicate")
       .internal()
