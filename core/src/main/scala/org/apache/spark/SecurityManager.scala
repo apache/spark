@@ -442,6 +442,19 @@ private[spark] class SecurityManager(
       Map()
     }
   }
+
+  /**
+   * Like [[getEnvironmentForSslRpcPasswords]], but limited to passwords stored in plaintext in
+   * SparkConf (`spark.ssl.rpc.*` or `spark.ssl.*`).
+   */
+  def getEnvironmentForSslRpcPasswordsFromSparkConf: Map[String, String] = {
+    getEnvironmentForSslRpcPasswords.filter { case (env, password) =>
+      SSLOptions.SPARK_RPC_SSL_PASSWORD_CONFS_BY_ENV.get(env).exists { rpcConf =>
+        Seq(rpcConf, rpcConf.replace("spark.ssl.rpc.", "spark.ssl."))
+          .exists(sparkConf.getOption(_).contains(password))
+      }
+    }
+  }
 }
 
 private[spark] object SecurityManager {

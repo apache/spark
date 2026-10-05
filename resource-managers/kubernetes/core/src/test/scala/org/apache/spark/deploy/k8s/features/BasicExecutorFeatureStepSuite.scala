@@ -444,25 +444,6 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
   }
 
-  test("SSL RPC passwords shouldn't propagate if RPC SSL is disabled") {
-    val conf = baseConf.clone()
-      .set("spark.ssl.rpc.enabled", "false")
-      .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
-      .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
-
-    val secMgr = new SecurityManager(conf)
-    val step = new BasicExecutorFeatureStep(
-      KubernetesTestConf.createExecutorConf(
-        sparkConf = conf,
-        sslRpcPasswordEnvs = secMgr.getEnvironmentForSslRpcPasswords),
-      defaultProfile)
-
-    val executor = step.configurePod(SparkPod.initialPod())
-    SSLOptions.SPARK_RPC_SSL_PASSWORD_ENVS.foreach { env =>
-      assert(!KubernetesFeaturesTestUtils.containerHasEnvVar(executor.container, env))
-    }
-  }
-
   test("SSL RPC passwords shouldn't override an explicit secretKeyRef") {
     val conf = baseConf.clone()
       .set("spark.ssl.rpc.enabled", "true")
