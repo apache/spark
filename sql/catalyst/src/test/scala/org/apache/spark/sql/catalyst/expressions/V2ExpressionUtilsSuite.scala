@@ -21,6 +21,7 @@ import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.connector.expressions._
+import org.apache.spark.sql.connector.expressions.filter.{Predicate => V2Predicate}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -45,7 +46,12 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
       Array(LiteralValue(UTF8String.fromString("MONTH"), StringType), FieldReference("a")))
     assert(dateTrunc.toString === "DATE_TRUNC('MONTH', a)")
     assert(dateTrunc.describe() === "DATE_TRUNC('MONTH', a)")
-    // The SQL builder for pushdown still rejects it.
+    assert(new GeneralScalarExpression("ABS", Array(dateTrunc)).toString ===
+      "ABS(DATE_TRUNC('MONTH', a))")
+    val like = new V2Predicate("LIKE",
+      Array(FieldReference("a"), LiteralValue(UTF8String.fromString("x%"), StringType)))
+    assert(like.toString === "LIKE(a, 'x%')")
+    // The SQL builder for pushdown still rejects an unknown name.
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         new V2ExpressionSQLBuilder().build(dateTrunc)
