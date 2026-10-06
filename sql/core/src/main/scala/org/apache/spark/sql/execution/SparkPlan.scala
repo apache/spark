@@ -218,15 +218,16 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     executeBroadcastBcast.get.asInstanceOf[broadcast.Broadcast[T]]
   }
 
+  @transient
   private val executeColumnarRDD = LazyTry {
     doExecuteColumnar()
   }
 
   /**
-   * Returns the result of this query as an RDD[ColumnarBatch] by delegating to `doColumnarExecute`
+   * Returns the result of this query as an RDD[ColumnarBatch] by delegating to `doExecuteColumnar`
    * after preparations.
    *
-   * Concrete implementations of SparkPlan should override `doColumnarExecute` if `supportsColumnar`
+   * Concrete implementations of SparkPlan should override `doExecuteColumnar` if `supportsColumnar`
    * returns true.
    */
   final def executeColumnar(): RDD[ColumnarBatch] = executeQuery {
