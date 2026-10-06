@@ -6571,6 +6571,78 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  /** Two rows with `id` 1, each on its own split, so a join on `id` coalesces them. */
+  private def insertItemsInTwoYears(): Unit = sql(s"INSERT INTO testcat.ns.$items VALUES " +
+    "(1, 'aa', 10.0, cast('2021-01-01' as timestamp)), " +
+    "(1, 'ab', 11.0, cast('2022-01-01' as timestamp)), " +
+    "(2, 'bb', 20.0, cast('2021-01-01' as timestamp))")
+
+  /**
+   * Joins `items` with `purchases` on `joinCondition` and checks that the plan k-way merges over an
+   * ordering with a partition transform.
+   */
+  private def checkKWayMergeOverTransform(joinCondition: String): Unit = {
+    val df = sql(
+      s"""
+         |${selectWithMergeJoinHint("i", "p")}
+         |i.id, i.name, i.arrive_time
+         |FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON $joinCondition
+         |""".stripMargin)
+    checkAnswer(df, Seq(
+      Row(1, "aa", Timestamp.valueOf("2021-01-01 00:00:00")),
+      Row(1, "ab", Timestamp.valueOf("2022-01-01 00:00:00")),
+      Row(2, "bb", Timestamp.valueOf("2021-01-01 00:00:00"))))
+    val merging = collectAllGroupPartitions(df.queryExecution.executedPlan)
+      .filter(_.enableSortedMerge)
+    assert(merging.length == 1, "expected one k-way merge")
+    assert(merging.head.child.outputOrdering.exists(_.child.isInstanceOf[TransformExpression]),
+      "expected a partition transform in the merge's ordering")
+    assert(merging.head.execute().isInstanceOf[SortedMergeCoalescedRDD[_]])
+  }
+
+  test("SPARK-59995: k-way merge over a reported ordering with a partition transform") {
+    // The join on (id, name) needs the merge, since the key ordering on id alone is not enough.
+    // The merge's ordering is [id, name, years(arrive_time)], so generating its comparator
+    // generates code for the transform.
+    val itemOrdering = Array(
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("name"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(years("arrive_time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(items, itemsColumns, Array(identity("id")), itemOrdering)
+    insertItemsInTwoYears()
+    val namedPurchasesColumns = Array(
+      Column.create("item_id", LongType),
+      Column.create("name", StringType))
+    createTable(purchases, namedPurchasesColumns, Array(identity("item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES (1, 'aa'), (1, 'ab'), (2, 'bb')")
+
+    withSQLConf(
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      checkKWayMergeOverTransform("p.item_id = i.id AND p.name = i.name")
+    }
+  }
+
+  test("SPARK-59995: k-way merge over an ordering derived from a partition transform key") {
+    // The scan reports no ordering, so it derives [id, years(arrive_time)] from its keys. The join
+    // on id projects the keys to id. With preserveKeyOrderingOnCoalesce off, the coalesced
+    // partitions keep no ordering on id unless they are merged.
+    createTable(items, itemsColumns, Array(identity("id"), years("arrive_time")))
+    insertItemsInTwoYears()
+    createTable(purchases, purchasesColumns, Array(identity("item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 10.0, cast('2021-01-01' as timestamp)), " +
+      "(2, 20.0, cast('2021-01-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
+      checkKWayMergeOverTransform("p.item_id = i.id")
+    }
+  }
+
   test("SPARK-56549: k-way merge enabled only when parent requires ordering") {
     // Dynamic gate: with the config enabled, k-way merge must be activated only when the parent
     // actually requires ordering (SMJ), and must stay off when the parent does not (hash join).

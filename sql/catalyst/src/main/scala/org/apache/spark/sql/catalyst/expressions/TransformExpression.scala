@@ -186,8 +186,15 @@ case class TransformExpression(
     case None => throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
   }
 
+  // `resolvedFunction` is not a child, so a tree walk does not see it. For a function with only
+  // `produceResult` it falls back to `eval` on the input row, which whole-stage codegen does not
+  // provide (see `CodegenFallback.generate`). No whole-stage operator generates code for a
+  // transform today.
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+    resolvedFunction match {
+      case Some(fn) => fn.genCode(ctx)
+      case None => throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+    }
 }
 
 object TransformExpression {
