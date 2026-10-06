@@ -142,6 +142,6 @@ class PandasScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
             if self._worker_metrics is not None:
-                self._worker_metrics.add("pythonNumTimedBatches")
+                self._worker_metrics.increment("pythonNumTimedBatches")
             # End timing before yielding, since the consumer may pause between batches.
             yield output_batch

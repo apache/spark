@@ -116,7 +116,7 @@ class PandasScalarUDFHandlerTests(unittest.TestCase):
                 now += 1_000_000_000
 
         self.assertEqual(
-            metrics.to_report(),
+            metrics.to_dict(),
             {
                 "pythonInputConversionTime": 2,
                 "pythonUDFExecutionTime": 24,
@@ -132,7 +132,7 @@ class PandasScalarUDFHandlerTests(unittest.TestCase):
         handler.set_worker_metrics(metrics)
         self.assertEqual(list(handler.run(0, iter(()))), [])
         self.assertEqual(
-            metrics.to_report(),
+            metrics.to_dict(),
             {
                 "pythonInputConversionTime": 0,
                 "pythonUDFExecutionTime": 0,

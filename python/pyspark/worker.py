@@ -161,9 +161,9 @@ class _WorkerTimer:
 class WorkerMetrics:
     """Collect values and duration totals for one worker task.
 
-    set/add store values in their reporting units: counts, byte counts, or epoch milliseconds.
+    set/increment store values in their reporting units: counts, byte counts, or epoch milliseconds.
     measure creates timer scopes that accumulate nanoseconds in a separate shared dictionary.
-    to_report combines both dictionaries, converting only durations to milliseconds.
+    to_dict combines both dictionaries, converting only durations to milliseconds.
     """
 
     def __init__(self) -> None:
@@ -181,7 +181,7 @@ class WorkerMetrics:
         """
         self._values_in_report_units[name] = value
 
-    def add(self, name: str, value: int = 1) -> None:
+    def increment(self, name: str, value: int = 1) -> None:
         """Add to a counter in its reporting unit, starting from zero.
 
         The default increment is one, as used for the number of timed batches.
@@ -194,7 +194,7 @@ class WorkerMetrics:
         self._duration_totals_ns.setdefault(name, 0)
         return _WorkerTimer(self._duration_totals_ns, name)
 
-    def to_report(self) -> dict[str, int]:
+    def to_dict(self) -> dict[str, int]:
         """Build the numeric report dictionary consumed by report_metrics.
 
         Counters, bytes, and epoch timestamps already have their reporting units. Only the
@@ -4275,7 +4275,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     # Spill totals are byte counts already expressed in their reporting unit.
     metrics.set("memoryBytesSpilled", shuffle.MemoryBytesSpilled)
     metrics.set("diskBytesSpilled", shuffle.DiskBytesSpilled)
-    report_metrics(outfile, metrics.to_report())
+    report_metrics(outfile, metrics.to_dict())
 
     # Mark the beginning of the accumulators section of the output
     write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
