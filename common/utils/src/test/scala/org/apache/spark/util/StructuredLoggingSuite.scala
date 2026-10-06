@@ -270,25 +270,36 @@ trait LoggingSuiteBase
 
   test("LogEntry concatenation should only be evaluated when the log level is enabled") {
     var constructionCount = 0
+    var constructionCount2 = 0
 
     def executorId(): String = {
       constructionCount += 1
       "1"
     }
 
-    def lostExecutor: LogEntry = log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, executorId())}."
+    def workerId(): String = {
+      constructionCount2 += 1
+      "2"
+    }
+
+    def lostWorker: LogEntry = log"Lost worker ${MDC(LogKeys.WORKER_ID, workerId())}."
 
     val originalLevel = LogManager.getLogger(logName).getLevel
     try {
       Seq(Level.INFO, Level.DEBUG, Level.TRACE).foreach { level =>
         Configurator.setLevel(logName, level)
         constructionCount = 0
-        val logOutput = captureLogOutput(() => logTrace(log"Concat: " + lostExecutor))
+        constructionCount2 = 0
+        val logOutput = captureLogOutput { () =>
+          logTrace(log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, executorId())}. " + lostWorker)
+        }
         if (level == Level.TRACE) {
           assert(constructionCount === 1)
-          assert(logOutput.contains("Concat: Lost executor 1."))
+          assert(constructionCount2 === 1)
+          assert(logOutput.contains("Lost executor 1. Lost worker 2."))
         } else {
           assert(constructionCount === 0)
+          assert(constructionCount2 === 0)
           assert(logOutput.isEmpty)
         }
       }
