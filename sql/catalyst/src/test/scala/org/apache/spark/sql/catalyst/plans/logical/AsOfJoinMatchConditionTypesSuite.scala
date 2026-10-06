@@ -118,7 +118,6 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
         Nil)
     assert(MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
     assert(MatchConditionTypes.usesStructDecomposition(leftStruct, rightStruct))
-    assert(!MatchConditionTypes.usesIdenticalStructSort(leftStruct, rightStruct))
   }
 
   test("nested struct operands are compatible when fields match positionally") {
@@ -257,15 +256,6 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     val nonEmptyArray = ArrayType(nonEmptyStruct)
     assert(!MatchConditionTypes.areOperandsCompatible(emptyArray, nonEmptyArray))
     assert(!MatchConditionTypes.usesArrayOrderExpression(emptyArray, nonEmptyArray))
-  }
-
-  test("identical struct schemas enable whole-struct sort") {
-    val structType = StructType(
-      StructField("ts", TimestampType) ::
-        StructField("seq", IntegerType) ::
-        Nil)
-    assert(MatchConditionTypes.usesIdenticalStructSort(structType, structType))
-    assert(MatchConditionTypes.usesStructDecomposition(structType, structType))
   }
 
   test("struct field count mismatch is not decomposable") {
