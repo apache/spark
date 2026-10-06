@@ -108,10 +108,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
    * when it grows, by default. A factor rather than an exact figure, so with that default this
    * half of the charge over-counts rather than under-counts, since nothing above this buffer can
    * spill it. A {@code hugeVectorReserveRatio} above 2 makes it under-count for a child past
-   * {@code hugeVectorThreshold}. That threshold is off by default. A byte child sized up front is
-   * charged by the same factor when it is sized, see {@link #allocateKeyAccumulators}. A
-   * fixed-width key needs no factor, since its accumulator is allocated at capacity and never
-   * grows.
+   * {@code hugeVectorThreshold}. That threshold is off by default. A fixed-width key needs no
+   * factor, since its accumulator is allocated at capacity and never grows.
    */
   private static final long VARIABLE_LENGTH_BYTES_FACTOR = 4L;
 
@@ -128,7 +126,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
 
   /**
    * The byte child a variable-length vector is allocated with, per row, which is
-   * `WritableColumnVector.DEFAULT_ARRAY_LENGTH`. `keyFixedBytesPerRow` already charges it.
+   * `WritableColumnVector.DEFAULT_ARRAY_LENGTH`. It is part of `keyFixedBytesPerRow`, counted
+   * twice, for its data byte and its null byte.
    */
   private static final int DEFAULT_CHILD_BYTES_PER_ROW = 4;
 
@@ -215,11 +214,6 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   private WritableColumnVector[] currentKeyAccumulators;
   /** Row count of {@link #currentKeyAccumulators}. */
   private int currentKeyAccumulatorRowCount;
-  /**
-   * Per key column, the part of what {@link #currentKeyAccumulators}' byte child was charged when
-   * it was sized that its values have not used up yet. Always zero for a fixed-width key.
-   */
-  private long[] prepaidValueBytes;
   /**
    * The survivor vectors the current batch is built on. This reader owns them until the next batch
    * releases them, so a consumer that stops between batches, such as a limit or the end of the
@@ -475,7 +469,6 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     }
     keyFixedBytesPerRow = fixedBytesPerRow;
     keyOnlyColumns = Arrays.stream(keys).map(KeyColumn::descriptor).toList();
-    prepaidValueBytes = new long[keys.length];
     // Last, since a non-null `keyColumns` is what says the filter is applied to this file.
     keyColumns = keys;
   }
@@ -739,8 +732,6 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     long splicedBytes = 0L;
     long rangeBytes = 0L;
     long previousSurvivor = -2L;
-    long survivors = 0L;
-    long firstSurvivorAt = 0L;
     long cap = storageFilter.maxSplicedRowGroupBytes();
     // Out of the loop, because reaching it through the filter resolves a `lazy val`, which is a
     // volatile read the loop would pay per row.
@@ -800,19 +791,11 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
           return null;
         }
         finalRangesBuilder.addSelectedRow(blockRow);
-        long rowsBefore = pushedFilterRowCount - remaining + r;
-        if (survivors++ == 0) firstSurvivorAt = rowsBefore;
         if (blockRow != previousSurvivor + 1) rangeBytes += ROW_RANGE_BYTES;
         previousSurvivor = blockRow;
         if (spliceCurrentRowGroup) {
           try {
-            if (currentKeyAccumulators == null) {
-              // The survivors from this one on, at the rate seen since the first one, so that rows
-              // before it, which a clustered key leaves, do not dilute the rate.
-              long expected = (long) Math.ceil(
-                  (double) survivors * (remaining - r) / (rowsBefore - firstSurvivorAt + 1));
-              splicedBytes += allocateKeyAccumulators(cap - splicedBytes - rangeBytes, expected);
-            }
+            if (currentKeyAccumulators == null) allocateKeyAccumulators();
             splicedBytes += appendSurvivorRowToAccumulators(r);
           } catch (RuntimeException e) {
             // The buffer is this reader's own and optional, so failing to fill it gives splicing up
@@ -886,51 +869,19 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   }
 
   /**
-   * Allocates a set of accumulators, {@link #capacity} rows each, and returns the charge for the
-   * byte children it sized up front. The rest of the set is charged per row as survivors arrive.
-   * A variable-length key's byte child is reserved for what the set queued before it held, scaled
-   * to the {@code expectedRows} survivors this set can expect, where that is more than its default
-   * allocation. So it does not grow one doubling at a time for every capacity's worth of
-   * survivors, and a sparse last set is not sized as a full one. With its default doubling,
-   * {@code reserve} takes twice what it is asked for, so with its null bytes the child takes the
-   * factor's four bytes per value byte. That happens only when the charge fits within
-   * {@code headroom}, what the cap leaves, together with the fixed part and a range of each of
-   * those rows, since a scattered survivor adds a range. So the rows the set is sized for stay
-   * within the cap. The sizing is a prediction, though. A set sized for values longer than the
-   * ones that then arrive keeps the unused part charged, since its child holds that memory. So a
-   * larger cap can still give splicing up where a smaller one, which grew the set instead, keeps
-   * splicing. That costs one more read of the key columns, never a different answer. The memory
-   * is taken before any value arrives, so it is charged now, as if those values had arrived, and
-   * the values written into it use that charge up before they add to it.
+   * Allocates a set of accumulators, {@link #capacity} rows each, charged per row as survivors
+   * arrive. A later set grows the way the first one does rather than being sized from the set
+   * before it. Sizing would save a long key's byte child its regrowth copies. But the memory it
+   * takes up front is a prediction, and charging it made what a row group is charged depend on the
+   * cap. A larger cap could then give splicing up where a smaller one kept it.
    */
-  private long allocateKeyAccumulators(long headroom, long expectedRows) {
-    WritableColumnVector[] previous = survivorBatches.peekLast();
-    int rows = (int) Math.min(capacity, expectedRows);
-    int[] sizeTo = new int[keyColumns.length];
-    long charge = 0L;
-    for (int i = 0; i < keyColumns.length; i++) {
-      // Only a child the default allocation would not already hold gains from being sized.
-      long valueBytes = previous != null && keyColumns[i].variableLength()
-          ? (long) previous[i].arrayData().getElementsAppended() * rows / capacity : 0L;
-      if (valueBytes > (long) capacity * DEFAULT_CHILD_BYTES_PER_ROW) {
-        sizeTo[i] = (int) valueBytes;
-        charge += VARIABLE_LENGTH_BYTES_FACTOR * valueBytes;
-      }
-    }
-    // A set that is not sized up front grows as the first one does, charged value by value.
-    boolean sizeUpFront = charge + (keyFixedBytesPerRow + ROW_RANGE_BYTES) * rows <= headroom;
+  private void allocateKeyAccumulators() {
     // Assigned before the loop, so an allocation failure part way through leaves the vectors
     // allocated so far reachable for `abandonSplicing`.
     currentKeyAccumulators = new WritableColumnVector[keyColumns.length];
     for (int i = 0; i < keyColumns.length; i++) {
       currentKeyAccumulators[i] = newKeyVector(i);
-      prepaidValueBytes[i] = 0L;
-      if (sizeUpFront && sizeTo[i] > 0) {
-        currentKeyAccumulators[i].arrayData().reserve(sizeTo[i]);
-        prepaidValueBytes[i] = VARIABLE_LENGTH_BYTES_FACTOR * sizeTo[i];
-      }
     }
-    return sizeUpFront ? charge : 0L;
   }
 
   /**
@@ -955,10 +906,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
         // Measured on the destination, because a dictionary-encoded source has no length of its
         // own, its values being read through the dictionary.
         if (key.variableLength()) {
-          long valueCharge = VARIABLE_LENGTH_BYTES_FACTOR * dst.getArrayLength(dstRow);
-          long prepaid = Math.min(prepaidValueBytes[i], valueCharge);
-          prepaidValueBytes[i] -= prepaid;
-          charged += valueCharge - prepaid;
+          charged += VARIABLE_LENGTH_BYTES_FACTOR * dst.getArrayLength(dstRow);
         }
       }
     }

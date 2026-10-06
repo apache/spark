@@ -223,6 +223,11 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  // The native address of an off-heap vector's values, 0 once it is freed. Only for a fixed-width
+  // vector. A string or binary one keeps its bytes in a child and reports 0 even while live.
+  private def address(vector: Any): Long =
+    vector.asInstanceOf[OffHeapColumnVector].valuesNativeAddress()
+
   // Runs `body` as a task under `context`. The block manager has to know the task for a format
   // reader to read its broadcast hadoop conf there.
   private def asTask[T](context: TaskContext)(body: => T): T = {
@@ -669,7 +674,8 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     def fallsBack(e: Throwable, fromRead: Boolean): Unit =
       try rethrow(e, fromRead) catch {
         // ScalaTest would abort the whole suite on these rather than fail this test.
-        case t: VirtualMachineError => fail(s"the reader must fall back on $e; got $t", t)
+        case t @ (_: VirtualMachineError | _: LinkageError) =>
+          fail(s"the reader must fall back on $e; got $t", t)
       }
     val oom = new OutOfMemoryError("fatal")
 
@@ -1183,123 +1189,66 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   private val laterSetFilter: Seq[Expression] = Seq(GreaterThanOrEqual(
     BoundReference(0, StringType, nullable = true), Literal.create("0015", StringType)))
 
-  // Reads a later-set file over a capacity of 4 under `cap`. Returns the rows, and the byte-child
-  // capacities the second set's rows came back in.
-  private def readLaterSet(path: String, cap: Long): (Seq[(String, String)], Seq[Int]) = {
+  // Reads a later-set file over a capacity of 4 under `cap`, and returns the rows.
+  private def readLaterSet(path: String, cap: Long): Seq[(String, String)] = {
     val (rows, reader) = readAllWith(
       path, Seq("k", "v"), createFilter(laterSetFilter, laterSetSchema, allMetrics(), cap),
-      (b, i) => (b.column(0).getUTF8String(i).toString, b.column(1).getUTF8String(i).toString,
-        ParquetTestAccess.byteChildCapacity(b.column(0).asInstanceOf[WritableColumnVector])),
+      (b, i) => (b.column(0).getUTF8String(i).toString, b.column(1).getUTF8String(i).toString),
       capacity = 4)
     reader.close()
-    (rows.map(r => (r._1, r._2)), rows.drop(4).map(_._3).distinct)
+    rows
   }
 
-  test("a later accumulator set is sized for the survivors it can expect and charged once") {
-    // Every set after the first sizes a variable-length key's byte child to what the set before it
-    // held, scaled to the survivors it can still expect at the rate seen since the row group's
-    // first survivor. That memory is taken before any value arrives, so it is charged then. Six
-    // survivors over a capacity of 4 fill one set of four 1000-byte keys, and the second set starts
-    // two rows before the end of the row group, with every row since the first survivor kept. So
-    // it is sized for two of those values, 2000 bytes, charged 8000. Its own two keys are 2000
-    // bytes each, so they add 8000 more once the sizing is used up, and the row group holds 32142
-    // bytes in all. A cap of 32142 keeps splicing and one of 32141 gives it up, which a missing or
-    // a double charge would each get wrong. The second set's byte child is reserved for 2000
-    // bytes, which `reserve` doubles to 4000, where sizing it as a full set would have taken 8000.
-    // And the keys must come back right whichever path the row group took.
+  test("a later accumulator set of a variable-length key is charged per value") {
+    // Six survivors over a capacity of 4 fill one set of four 1000-byte keys and a second of two
+    // 2000-byte ones. Every set grows as its values arrive, the way the first one does. Each value
+    // is charged four times its bytes plus its row's fixed part of 17, and the one range adds 40.
+    // So the row group is charged 4 * (4000 + 17) + 2 * (8000 + 17) + 40 = 32142 bytes. A cap of
+    // 32142 keeps splicing and one of 32141 gives it up, which a missing or a double charge would
+    // each get wrong. And the keys must come back right whichever path the row group took.
     withTempDir { dir =>
       val (path, expected) = writeLaterSetFile(dir, lastTwoBytes = 2000)
       assertSpliceCharge(32142L, rows = 6) { cap =>
         readUnderCap(path, laterSetSchema, laterSetFilter, cap, batchSize = 4)
       }
-
       Seq(Long.MaxValue, 32142L, 32141L).foreach { cap =>
-        val (rows, secondSet) = readLaterSet(path, cap)
+        val rows = readLaterSet(path, cap)
         assert(rows == expected,
           s"every survivor must come back with its own key under cap $cap; got ${rows.map(_._2)}")
-        if (cap >= 32142L) {
-          assert(secondSet == Seq(4000),
-            s"the second set must be sized for the two values left under cap $cap; got $secondSet")
-        }
       }
     }
   }
 
-  test("a later accumulator set is sized only when it fits with its rows' fixed part and ranges") {
-    // The second set's two keys are 500 bytes here, shorter than the first set's 1000, so growing
-    // value by value is the cheaper path: 20142 bytes in all against 24142 sized. A cap of 24222
-    // sizes the set, whose byte child is then reserved for 2000 bytes and holds 4000. One of
-    // 24221 leaves 8113 bytes after the first set and its range, a byte short of the 8000 of
-    // sizing, the 34 of the two rows' fixed part and the 80 of a range for each. So the set grows
-    // instead, to a 1000-byte child, and keeps splicing. A cap of 20141 gives splicing up.
-    withTempDir { dir =>
-      val (path, expected) = writeLaterSetFile(dir, lastTwoBytes = 500)
-      def run(maxSplicedBytes: String): Long =
-        readUnderCap(path, laterSetSchema, laterSetFilter, maxSplicedBytes, batchSize = 4)._2
-
-      val uncapped = run("64MB")
-      assert(run("24222b") == uncapped, "a cap that fits the sizing must keep splicing")
-      assert(run("24221b") == uncapped, "and so must one that only fits growing value by value")
-      assert(run("20141b") > uncapped, "a cap under both must give splicing up")
-
-      Seq(Long.MaxValue -> 4000, 24222L -> 4000, 24221L -> 1000).foreach { case (cap, child) =>
-        val (rows, secondSet) = readLaterSet(path, cap)
-        assert(rows == expected, s"every survivor must come back with its own key under cap $cap")
-        assert(secondSet == Seq(child),
-          s"under cap $cap the second set's byte child must hold $child bytes; got $secondSet")
-      }
-    }
-  }
-
-  test("a later set is sized only when the ranges of its scattered survivors fit too") {
+  test("what a row group of scattered survivors is charged does not depend on the cap") {
     // Keys 9 to 12 fill the first set over a capacity of 4, and keys 14 and 17 come scattered, each
-    // in a range of its own. The second set opens at key 14, sized for the four rows the rate
-    // since the first survivor promises, and its sizing is charged up front. So it is sized only
-    // when the cap holds a range for each of those rows as well. Without that, caps of 32216 to
-    // 32221 sized the set and then passed the cap on key 17's range, giving splicing up where a
-    // smaller cap of 32215, which grows the set instead, kept it. For this file, every cap from
-    // the smallest that splices up must splice, and every cap returns the same six rows.
+    // in a range of its own. Every set grows as values arrive and is charged per value, so the row
+    // group's charge is one number: the first set's 16068, three ranges of 40 and the second
+    // set's 8034, 24222 in all. A cap of it splices and one byte under it gives splicing up.
+    // Larger caps splice too, which a few of them check, among them 32216 to 32221. Those gave
+    // splicing up when a later set was sized from the one before it with no room for its ranges.
+    // The second set is not sized at all, so its byte child grows to 2000 bytes for its two
+    // 1000-byte values, where sizing it from the first set would have reserved 8000.
     withTempDir { dir =>
       val (path, _) = writeLaterSetFile(dir, lastTwoBytes = 1000)
       val prefix = Substring(BoundReference(0, StringType, nullable = true), Literal(1), Literal(4))
       val keys = Seq("0009", "0010", "0011", "0012", "0014", "0017").map(Literal(_))
-      def readUnder(cap: Long): (Int, Long) =
-        readUnderCap(path, laterSetSchema, Seq(In(prefix, keys)), s"${cap}b", batchSize = 4)
-      val (_, uncapped) = readUnder(64L * 1024 * 1024)
-      val (smallerRows, smaller) = readUnder(24221L)
-      assert(smallerRows == 6 && smaller > uncapped, "the smallest cap that splices must be 24222")
-      Seq(24222L, 32215L, 32216L, 32221L, 32222L).foreach { cap =>
-        val (rows, bytes) = readUnder(cap)
+      def readUnder(cap: String): (Int, Long) =
+        readUnderCap(path, laterSetSchema, Seq(In(prefix, keys)), cap, batchSize = 4)
+      assertSpliceCharge(24222L, rows = 6)(readUnder)
+      val (_, uncapped) = readUnder("64MB")
+      Seq(32215L, 32216L, 32221L, 32222L).foreach { cap =>
+        val (rows, bytes) = readUnder(s"${cap}b")
         assert(rows == 6 && bytes == uncapped,
           s"a cap of $cap must keep the six rows and splicing; got $rows rows")
       }
-    }
-  }
-
-  test("a sparse last set is sized for the survivors it can expect") {
-    // Every tenth of 125 keys survives, so over a capacity of 4 the fourth set holds key 120 alone.
-    // It opens five rows before the end of the row group, at a rate of 13 survivors in 121 rows, so
-    // it expects one survivor and is sized for one 1000-byte value, which `reserve` doubles to a
-    // 2000-byte child. Sized for the five rows left, as a full set, it would have taken 8000. The
-    // two sets before it are sized as full ones, since the rate promises them four survivors each.
-    withTempDir { dir =>
-      val df = spark.range(0, 125).selectExpr(
-        "CONCAT(LPAD(CAST(id AS STRING), 4, '0'), REPEAT('x', 996)) AS k",
-        "CAST(id AS STRING) AS v")
-      val path = writeSingleParquetFile(dir, df, rowGroupSize = 1024L * 1024)
-      assert(footerOf(path).getBlocks.size == 1, "the fixture must be one row group")
-      val lastDigit =
-        Substring(BoundReference(0, StringType, nullable = true), Literal(4), Literal(1))
-      val (rows, reader) = readAllWith(path, Seq("k", "v"),
-        createFilter(Seq(EqualTo(lastDigit, Literal("0"))), laterSetSchema),
-        (b, i) => (b.column(0).getUTF8String(i).toString.take(4),
-          ParquetTestAccess.byteChildCapacity(b.column(0).asInstanceOf[WritableColumnVector])),
+      val (children, reader) = readAllWith(path, Seq("k", "v"),
+        createFilter(Seq(In(prefix, keys)), laterSetSchema),
+        (b, _) => ParquetTestAccess.byteChildCapacity(
+          b.column(0).asInstanceOf[WritableColumnVector]),
         capacity = 4)
       reader.close()
-      assert(rows.map(_._1) == (0 to 120 by 10).map(id => f"$id%04d"), s"got ${rows.map(_._1)}")
-      val children = rows.map(_._2)
-      assert(children.slice(4, 12).distinct == Seq(8000) && children.drop(12) == Seq(2000),
-        s"the sparse last set must be sized for its one survivor; got $children")
+      assert(children.drop(4).distinct == Seq(2000),
+        s"the second set's byte child must grow as values arrive; got $children")
     }
   }
 
@@ -1591,7 +1540,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
             case NonFatal(e) => e
           }
           val replacedAndFreed = scratch.zip(scratchBefore).exists { case (now, before) =>
-            (now ne before) && before.asInstanceOf[OffHeapColumnVector].valuesNativeAddress() == 0
+            (now ne before) && address(before) == 0
           }
           (read.toSeq, error, replacedAndFreed)
         } finally {
@@ -1653,18 +1602,15 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         var failedScratch: Seq[WritableColumnVector] = Nil
         // Only the first row group's key reader fails.
         val failing: KeyReaderHook.OnKeyReader = (reader, keyReader) => {
+          val scratch = ParquetTestAccess.keyScratchVectors(
+            reader.asInstanceOf[LateMaterializationParquetRecordReader])
           if (failedScratch.nonEmpty) {
             // Checked before phase 1 writes into them, since a freed one would crash the JVM.
-            val scratch = ParquetTestAccess.keyScratchVectors(
-              reader.asInstanceOf[LateMaterializationParquetRecordReader])
-            assert(scratch.forall { v =>
-              !failedScratch.exists(_ eq v) &&
-                v.asInstanceOf[OffHeapColumnVector].valuesNativeAddress() != 0
-            }, "the second row group must decode into new scratch vectors")
+            assert(scratch.forall(v => !failedScratch.exists(_ eq v) && address(v) != 0),
+              "the second row group must decode into new scratch vectors")
             keyReader
           } else {
-            failedScratch = ParquetTestAccess.keyScratchVectors(
-              reader.asInstanceOf[LateMaterializationParquetRecordReader])
+            failedScratch = scratch
             val failingReader = spy(keyReader)
             doThrow(error).when(failingReader).readBatch(anyInt(), any(), any(), any())
             failingReader
@@ -1683,9 +1629,8 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
             s"the first row group must come back whole and the second filtered on $error; got " +
               s"${result.map(_._1)}")
           assert(warnings == 1, s"the decoding fallback must report $error; got $warnings")
-          assert(failedScratch.forall { v =>
-            v.asInstanceOf[OffHeapColumnVector].valuesNativeAddress() == 0
-          }, s"the scratch vectors of the failed decode must be freed on $error")
+          assert(failedScratch.forall(v => address(v) == 0),
+            s"the scratch vectors of the failed decode must be freed on $error")
         } finally {
           reader.close()
         }
@@ -2053,6 +1998,28 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("FileSourceStrategy offers a conjunct that appears twice only once") {
+    // Spelled in two cases, a bloom over `k` normalizes to one conjunct, which the scan then takes
+    // once, as `afterScanFilters` does.
+    withTempDir { dir =>
+      val path = writeSingleParquetFile(dir,
+        spark.range(0, 50).selectExpr("id AS k", "CAST(id AS STRING) AS v"),
+        rowGroupSize = 64 * 1024L)
+      withSQLConf(SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        val bloomLit = bloomLiteralOf(42L)
+        val relation = spark.read.parquet(path).queryExecution.optimizedPlan
+        val k = relation.output.find(_.name == "k").getOrElse(fail("no k in the relation output"))
+        def bloomOn(key: Attribute): Expression =
+          BloomFilterMightContain(bloomLit, new XxHash64(Seq(key)))
+        val logical = LogicalFilter(And(bloomOn(k), bloomOn(k.withName("K"))), relation)
+        val physical = FileSourceStrategy(logical).headOption
+          .getOrElse(fail(s"FileSourceStrategy did not plan $logical"))
+        val offered = scanOf(physical).storageFilters
+        assert(offered.size == 1, s"the repeated conjunct must be offered once; got $offered")
+      }
+    }
+  }
+
   // ----- Generic reader plumbing for the coverage tests below -----
 
   // Writes a single-column (`k`) parquet file from a SQL expression over `id`, avoiding the need
@@ -2216,9 +2183,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     dictionary <-
       if (dt == BooleanType || DecimalType.isByteArrayDecimalType(dt)) Seq(false)
       else Seq(false, true)
-    // The byte-array copy and a later set's up-front sizing go through `putByteArray`, `getBinary`
-    // and `reserve`, which off-heap vectors implement apart. So the variable-length types run off
-    // heap too, over a capacity of 4, which gives the string and binary keys a later set to size.
+    // The byte-array copy and a set's growth go through `putByteArray`, `getBinary` and
+    // `reserve`, which off-heap vectors implement apart. So the variable-length types, strings,
+    // binaries and byte-array decimals, run off heap too, over a capacity of 4, so every set's
+    // byte child has to grow.
     offHeap <- if (ValueCopier.isVariableLength(dt)) Seq(false, true) else Seq(false)
   } {
     val encoding = (if (dictionary) "dictionary-encoded" else "plain-encoded") +
@@ -3074,8 +3042,6 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     withTempDir { dir =>
       val path = writeParquetFile(dir, (1L to 200L).map(i => (i, s"v_$i")), rowGroupSize = 256L)
       val reader = new LateMaterializationParquetRecordReader(true, 16, keyAtLeastFilter(1L))
-      def address(vector: Any): Long =
-        vector.asInstanceOf[OffHeapColumnVector].valuesNativeAddress()
       try {
         reader.initialize(path, Seq("k", "v").asJava)
         reader.initBatch(new StructType(), null)

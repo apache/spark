@@ -198,7 +198,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
     if (!fsRelation.fileFormat.supportBatch(sparkSession, resultSchema)) return Nil
 
     val dataAttrs = AttributeSet(readDataColumns)
-    val offered = normalizedFilters.filter { expr =>
+    // Deduplicated through an `ExpressionSet`, as `afterScanFilters` is, once a scan can take any.
+    val offered = ExpressionSet(normalizedFilters).toSeq.filter { expr =>
       val refs = expr.references
       refs.nonEmpty && refs.subsetOf(dataAttrs) && fsRelation.fileFormat.supportsStorageFilter(expr)
     }
@@ -352,10 +353,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val outputDataSchema = (readDataColumns ++ generatedMetadataColumns).toStructType
 
       // Offered conjuncts become `storageFilters` on the scan and stay in the post-scan Filter too.
-      // This runs here because eligibility depends on `outputDataSchema`. Deduplicated through an
-      // `ExpressionSet`, as `afterScanFilters` is.
-      val storageFilters = storageFiltersFor(
-        ExpressionSet(normalizedFilters).toSeq, fsRelation, readDataColumns, outputDataSchema)
+      // This runs here because eligibility depends on `outputDataSchema`.
+      val storageFilters =
+        storageFiltersFor(normalizedFilters, fsRelation, readDataColumns, outputDataSchema)
 
       // The output rows will be produced during file scan operation in three steps:
       //  (1) File format reader populates a `Row` with `readDataColumns` and

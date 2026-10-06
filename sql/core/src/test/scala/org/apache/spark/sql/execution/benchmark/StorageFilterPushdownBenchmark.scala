@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.classic.ExpressionUtils.column
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.parquet.StorageFilterMetrics
+import org.apache.spark.sql.functions.{bit_xor, col, count, lit, xxhash64}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.BinaryType
 import org.apache.spark.util.Utils
@@ -204,7 +205,9 @@ object StorageFilterPushdownBenchmark extends SqlBasedBenchmark {
     scan
   }
 
-  // Runs `df` with pushdown off and on, and returns the benchmark that timed it.
+  // Runs `df` with pushdown off and on. Then, untimed, asserts that both arms return the same
+  // rows, counted and fingerprinted over every column, so a faster arm cannot be a wrong one.
+  // Returns the benchmark that timed it.
   private def runOffAndOn(title: String, numRows: Long, df: () => DataFrame): Benchmark = {
     val benchmark = new Benchmark(title, numRows, minNumIters = 3, output = output)
     Seq(false, true).foreach { enabled =>
@@ -214,6 +217,15 @@ object StorageFilterPushdownBenchmark extends SqlBasedBenchmark {
       }
     }
     benchmark.run()
+    def fingerprint(enabled: Boolean) = withPushdown(enabled) {
+      val rows = df()
+      val fingerprinted =
+        rows.select(count(lit(1)), bit_xor(xxhash64(rows.columns.map(col).toIndexedSeq: _*)))
+      checkedFactScan(fingerprinted, enabled)
+      fingerprinted.head()
+    }
+    val (off, on) = (fingerprint(enabled = false), fingerprint(enabled = true))
+    assert(off == on, s"$title: both arms must return the same rows; got $off and $on")
     benchmark
   }
 

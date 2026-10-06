@@ -325,10 +325,8 @@ object ParquetStorageFilter {
    * The executor reports a task as killed only for an `InterruptedException` or a `NonFatal`
    * error. So a `surfaced` error of any other type goes out as it is, the way a plain read raises
    * it when decoding meets the same error. For example a codec's `InternalError`, or a native
-   * codec's `UnsatisfiedLinkError`. One from evaluating the filter goes out as it is too. Only a
-   * built-in expression can raise one there, such as an `ExceptionInInitializerError`, since
-   * `InjectRuntimeFilter` builds no bloom over a key with a Scala or Python UDF, and a Hive UDF
-   * wraps its errors in a `SparkException`.
+   * codec's `UnsatisfiedLinkError`. One from evaluating the filter goes out as it is too, such as
+   * an `ExceptionInInitializerError`.
    */
   private def throwIfKilled(surfaced: Throwable): Unit = {
     val context = TaskContext.get()
