@@ -308,4 +308,82 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     assertBothReject(target, source, "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
   }
 
+  // Invalid source values and the error the cast or null check inserted under RUNTIME raises. The
+  // values are read from a table, so the casts aren't constant-folded during analysis.
+  private val invalidValues = Seq(
+    // Malformed string.
+    "'abc'" -> "CAST_INVALID_INPUT",
+    // Out-of-range numeric string.
+    "'9999999999'" -> "CAST_INVALID_INPUT",
+    // NULL written to a NOT NULL column.
+    "CAST(NULL AS STRING)" -> "NOT_NULL_ASSERT_VIOLATION")
+
+  Seq(true, false).foreach { ansiEnabled =>
+    test(s"RUNTIME: INSERT of invalid values fails at execution, ansi.enabled=$ansiEnabled") {
+      invalidValues.foreach { case (value, expectedCondition) =>
+        withTable(s"$relaxed.src", s"$relaxed.t") {
+          sql(s"CREATE TABLE $relaxed.src (v STRING) USING foo")
+          sql(s"INSERT INTO $relaxed.src VALUES ($value)")
+          sql(s"CREATE TABLE $relaxed.t (c INT NOT NULL) USING foo")
+          withSQLConf(
+              SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString,
+              SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+            val error = intercept[SparkThrowable] {
+              sql(s"INSERT INTO $relaxed.t SELECT v FROM $relaxed.src")
+            }
+            assert(error.getCondition == expectedCondition, s"value: $value")
+          }
+          checkAnswer(sql(s"SELECT * FROM $relaxed.t"), Seq.empty)
+        }
+      }
+    }
+
+    test(s"RUNTIME: UPDATE with invalid values fails at execution, ansi.enabled=$ansiEnabled") {
+      invalidValues.foreach { case (value, expectedCondition) =>
+        withTable(s"$relaxed.t") {
+          sql(s"CREATE TABLE $relaxed.t (id INT, data INT NOT NULL, s STRING) USING foo")
+          sql(s"INSERT INTO $relaxed.t VALUES (1, 0, $value)")
+          withSQLConf(
+              SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString,
+              SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+            val error = intercept[SparkThrowable] {
+              sql(s"UPDATE $relaxed.t SET data = s WHERE id = 1")
+            }
+            assert(error.getCondition == expectedCondition, s"value: $value")
+          }
+          checkAnswer(sql(s"SELECT id, data FROM $relaxed.t"), Row(1, 0))
+        }
+      }
+    }
+
+    test(s"RUNTIME: MERGE with invalid values fails at execution, ansi.enabled=$ansiEnabled") {
+      invalidValues.foreach { case (value, expectedCondition) =>
+        Seq(
+          "WHEN MATCHED THEN UPDATE SET t.data = s.v" -> 1,
+          "WHEN NOT MATCHED THEN INSERT (id, data) VALUES (s.id, s.v)" -> 2
+        ).foreach { case (clause, sourceId) =>
+          withTable(s"$relaxed.src", s"$relaxed.t") {
+            sql(s"CREATE TABLE $relaxed.src (id INT, v STRING) USING foo")
+            sql(s"INSERT INTO $relaxed.src VALUES ($sourceId, $value)")
+            sql(s"CREATE TABLE $relaxed.t (id INT, data INT NOT NULL) USING foo")
+            sql(s"INSERT INTO $relaxed.t VALUES (1, 0)")
+            withSQLConf(
+                SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString,
+                SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+              val error = intercept[SparkThrowable] {
+                sql(
+                  s"""MERGE INTO $relaxed.t t
+                     |USING $relaxed.src s
+                     |ON t.id = s.id
+                     |$clause""".stripMargin)
+              }
+              assert(error.getCondition == expectedCondition, s"value: $value, clause: $clause")
+            }
+            checkAnswer(sql(s"SELECT * FROM $relaxed.t"), Row(1, 0))
+          }
+        }
+      }
+    }
+  }
+
 }
