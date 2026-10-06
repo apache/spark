@@ -228,8 +228,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         // Without standard semantics, no-SerDe scalar CHAR/VARCHAR stays unsupported
         // (they extend StringType, so this case must come before `_: StringType`).
         if (!standardCharVarcharSemantics) {
-          throw QueryExecutionErrors.outputDataTypeUnsupportedByNodeWithoutSerdeError(
-            nodeName, dt)
+          throw QueryExecutionErrors.scriptTransformWithoutSerdeUnsupportedTypeError(dt)
         }
         // Do not use the SerDe null-on-error wrapper; that would hide EXCEED_LIMIT_LENGTH.
         (data: String) =>
@@ -314,7 +313,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
       case dt =>
-        throw QueryExecutionErrors.outputDataTypeUnsupportedByNodeWithoutSerdeError(nodeName, dt)
+        throw QueryExecutionErrors.scriptTransformWithoutSerdeUnsupportedTypeError(dt)
     }
   }
 

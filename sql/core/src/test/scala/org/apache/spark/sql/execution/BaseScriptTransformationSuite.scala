@@ -26,7 +26,7 @@ import org.json4s.jackson.JsonMethods._
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.{SparkException, TaskContext, TestUtils}
+import org.apache.spark.{SparkException, SparkThrowable, TaskContext, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -69,6 +69,23 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
       output: Seq[Attribute],
       child: SparkPlan,
       ioschema: ScriptTransformationIOSchema): BaseScriptTransformationExec
+
+  protected def checkTransformWithoutSerdeUnsupportedType(
+      exception: Throwable,
+      sqlType: String): Unit = {
+    val err = Iterator.iterate[Throwable](exception)(_.getCause)
+      .takeWhile(_ != null)
+      .collectFirst {
+        case t: SparkThrowable
+            if t.getCondition == "UNSUPPORTED_FEATURE.TRANSFORM_WITHOUT_SERDE_TYPE" => t
+      }.getOrElse {
+        fail(s"expected TRANSFORM_WITHOUT_SERDE_TYPE, got $exception")
+      }
+    checkError(
+      exception = err,
+      condition = "UNSUPPORTED_FEATURE.TRANSFORM_WITHOUT_SERDE_TYPE",
+      parameters = Map("dataType" -> sqlType))
+  }
 
   test("cat without SerDe") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
@@ -383,18 +400,7 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
             ioschema = defaultIOSchema),
           spark.sqlContext)
       }
-      var cur: Throwable = exception
-      var sparkException: SparkException = null
-      while (cur != null && sparkException == null) {
-        cur match {
-          case s: SparkException => sparkException = s
-          case _ =>
-        }
-        cur = cur.getCause
-      }
-      assert(sparkException != null, exception)
-      assert(sparkException.getCondition === "_LEGACY_ERROR_TEMP_2265")
-      assert(sparkException.getMessageParameters.get("dt") === "CharType")
+      checkTransformWithoutSerdeUnsupportedType(exception, "\"CHAR(4)\"")
     }
   }
 
@@ -448,17 +454,7 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
       val exception = intercept[Exception] {
         QueryTest.executePlan(disabledPlan, spark.sqlContext)
       }
-      var cur: Throwable = exception
-      var sparkException: SparkException = null
-      while (cur != null && sparkException == null) {
-        cur match {
-          case s: SparkException => sparkException = s
-          case _ =>
-        }
-        cur = cur.getCause
-      }
-      assert(sparkException != null, exception)
-      assert(sparkException.getCondition === "_LEGACY_ERROR_TEMP_2265")
+      checkTransformWithoutSerdeUnsupportedType(exception, "\"CHAR(4)\"")
     }
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{SparkException, TestUtils}
+import org.apache.spark.TestUtils
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -89,17 +89,7 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
           val exception = intercept[Exception] {
             sql("SELECT * FROM v_disabled").collect()
           }
-          var cur: Throwable = exception
-          var sparkException: SparkException = null
-          while (cur != null && sparkException == null) {
-            cur match {
-              case s: SparkException => sparkException = s
-              case _ =>
-            }
-            cur = cur.getCause
-          }
-          assert(sparkException != null, exception)
-          assert(sparkException.getCondition === "_LEGACY_ERROR_TEMP_2265")
+          checkTransformWithoutSerdeUnsupportedType(exception, "\"CHAR(4)\"")
         }
       }
     }

@@ -9444,6 +9444,11 @@
           "TRANSFORM with SERDE is only supported in hive mode."
         ]
       },
+      "TRANSFORM_WITHOUT_SERDE_TYPE" : {
+        "message" : [
+          "TRANSFORM without SERDE does not support the output data type <dataType>."
+        ]
+      },
       "TRIM_COLLATION" : {
         "message" : [
           "TRIM specifier in the collation."
@@ -11736,11 +11741,6 @@
   "_LEGACY_ERROR_TEMP_2264" : {
     "message" : [
       "Subprocess exited with status <exitCode>. Error: <stderrBuffer>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2265" : {
-    "message" : [
-      "<nodeName> without serde does not support <dt> as output data type."
     ]
   },
   "_LEGACY_ERROR_TEMP_2266" : {
