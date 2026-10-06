@@ -48,10 +48,10 @@ class WorkerMetricsTests(unittest.TestCase):
         ):
             with metrics.measure("duration"):
                 pass
-            self.assertEqual(metrics.to_report(), {"duration": 0})
+            self.assertEqual(metrics.to_dict(), {"duration": 0})
             with metrics.measure("duration"):
                 pass
-        self.assertEqual(metrics.to_report(), {"duration": 1})
+        self.assertEqual(metrics.to_dict(), {"duration": 1})
 
     def test_nested_timings_are_inclusive(self):
         metrics = WorkerMetrics()
@@ -61,7 +61,7 @@ class WorkerMetricsTests(unittest.TestCase):
             with metrics.measure("outer"):
                 with metrics.measure("inner"):
                     pass
-        self.assertEqual(metrics.to_report(), {"outer": 5, "inner": 2})
+        self.assertEqual(metrics.to_dict(), {"outer": 5, "inner": 2})
 
     def test_reuse_timer_scope(self):
         metrics = WorkerMetrics()
@@ -75,7 +75,7 @@ class WorkerMetricsTests(unittest.TestCase):
                         pass
             with timer:
                 pass
-        self.assertEqual(metrics.to_report(), {"duration": 3})
+        self.assertEqual(metrics.to_dict(), {"duration": 3})
 
     def test_accumulate_and_propagate_exception(self):
         metrics = WorkerMetrics()
@@ -87,7 +87,7 @@ class WorkerMetricsTests(unittest.TestCase):
                     raise ValueError("worker failure")
             with metrics.measure("duration"):
                 pass
-        self.assertEqual(metrics.to_report(), {"duration": 3})
+        self.assertEqual(metrics.to_dict(), {"duration": 3})
 
 
 class WorkerTests(ReusedPySparkTestCase):
