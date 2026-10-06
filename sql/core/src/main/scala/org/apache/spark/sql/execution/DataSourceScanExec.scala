@@ -821,9 +821,9 @@ case class FileSourceScanExec(
   // No conf check here, since the conf decides at planning time whether a scan is offered storage
   // filters at all, and re-reading it now could only make this scan drop work it already has.
   //
-  // `output` is `readDataColumns ++ generatedMetadataColumns ++ partitionColumns ++
-  // constantMetadataColumns` and `requiredSchema` is the StructType of the first two groups, so
-  // the first `requiredSchema.length` attributes line up with its fields.
+  // `output` is `readDataColumns ++ generatedMetadataColumns ++ storageFilterCheckedColumn ++
+  // partitionColumns ++ constantMetadataColumns` and `requiredSchema` is the StructType of the
+  // first three groups, so the first `requiredSchema.length` attributes line up with its fields.
   @transient
   protected lazy val preparedStorageFilters: Seq[Expression] = {
     val requestedDataAttrs = output.take(requiredSchema.length)

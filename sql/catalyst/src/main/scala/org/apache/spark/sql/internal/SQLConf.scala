@@ -1982,13 +1982,16 @@ object SQLConf {
         "only for the rows that survived. This is a planning-time decision. " +
         "A filter that is attached also stays in the post-scan filter, the way a pushed data " +
         "filter does, so the reader is free to stop applying it wherever doing so would cost " +
-        "more than it saves, and the answer does not change. A row group where it stops reads " +
+        "more than it saves, and the answer does not change. The post-scan filter skips it on " +
+        "the rows the reader applied it to, except where one more column would push the scan " +
+        "past spark.sql.codegen.maxFields. A row group where it stops reads " +
         "its key columns twice, which is slower than not pushing the filter. " +
         "Under spark.sql.files.ignoreCorruptFiles the answer can change, because this reader " +
         "reads different pages in a different order than a plain read. Which rows survive a " +
         "corrupt page can then differ from a plain read, in either direction. " +
         "Returning only the surviving rows of a row group relies on the Parquet page index, so a " +
-        "file whose page index is wrong can pair a row's key with another row's values. Setting " +
+        "file whose page index is wrong can pair a row's key with another row's values, or " +
+        "return rows the filter rejects. Setting " +
         "parquet.filter.columnindex.enabled to false makes the reader fall back to skipping " +
         "whole row groups in which the filter rejects every row. A row group with a surviving " +
         "row then reads its key columns twice. A file without a page index falls back the same " +

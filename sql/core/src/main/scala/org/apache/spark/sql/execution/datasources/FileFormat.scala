@@ -177,6 +177,21 @@ trait FileFormat {
    * leaves every one of them in the post-scan `Filter` as well, so ignoring one is a missed
    * optimization rather than a wrong answer.
    *
+   * The `Filter` skips them on the rows the reader says it has checked. `requiredSchema` then
+   * ends with a nullable boolean column named [[FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME]],
+   * which is not a column of the relation. The `Filter` evaluates each storage filter as
+   * `checked OR filter`.
+   *  - True says every storage filter was evaluated on the row's own values and kept it.
+   *  - False says the row was not checked, so the `Filter` decides it.
+   *  - Null filters exactly as false does. So a reader that does not know the column, and reads
+   *    it as missing from the file, is still right.
+   *
+   * The column is in the `requiredSchema` of the ordinary reader too, the one the caller builds
+   * when this returns `None`. So every reader a format builds for such a scan has to read it as
+   * missing from the file, or mark it. The planner leaves the column out where it alone would push
+   * the scan past the whole-stage codegen field limit, and the `Filter` then evaluates every
+   * storage filter on every row.
+   *
    * Being optional is also an obligation. A storage filter is evaluated out of the plan's order,
    * without the conjuncts that precede it, so it can raise an error on a row those conjuncts would
    * have rejected, which is an error a plain scan never raises. A reader must not fail the query
@@ -343,6 +358,12 @@ object FileFormat {
    * by calling supportBatch.
    */
   val OPTION_RETURNING_BATCH = "returning_batch"
+
+  /**
+   * The column a reader that applies storage filters marks the rows it has checked in. See
+   * [[FileFormat.buildReaderWithStorageFilters]].
+   */
+  val STORAGE_FILTER_CHECKED_COLUMN_NAME = "_tmp_storage_filter_checked"
 
   /**
    * Schema of metadata struct that can be produced by every file format,
