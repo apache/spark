@@ -145,7 +145,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     case ByteType | ShortType | IntegerType | LongType |
          _: AnsiIntervalType | TimestampNTZType => PredicateLeaf.Type.LONG
     case FloatType | DoubleType => PredicateLeaf.Type.FLOAT
-    case StringType => PredicateLeaf.Type.STRING
+    case _: StringType => PredicateLeaf.Type.STRING
     case DateType => PredicateLeaf.Type.DATE
     case TimestampType => PredicateLeaf.Type.TIMESTAMP
     case _: DecimalType => PredicateLeaf.Type.DECIMAL
