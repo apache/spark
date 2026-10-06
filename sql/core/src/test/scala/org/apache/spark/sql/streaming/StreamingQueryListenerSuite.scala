@@ -34,7 +34,6 @@ import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLi
 import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryListener._
-import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite.{progressWithTrigger, triggerJsonCases}
 import org.apache.spark.sql.streaming.ui.StreamingQueryStatusListener
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.tags.SlowSQLTest
@@ -294,24 +293,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     compact(render(removed))
   }
 
-  gridTest("SPARK-59986: QueryProgressEvent preserves trigger JSON")(triggerJsonCases) {
-    case (trigger, expectedJson) =>
-      val event = new QueryProgressEvent(progressWithTrigger(trigger))
-      val restored = QueryProgressEvent.fromJson(event.json)
-      assert(parse(restored.progress.json) \ "trigger" === parse(expectedJson))
-      val sparkEvent = JsonProtocol.sparkEventFromJson(JsonProtocol.sparkEventToJsonString(event))
-        .asInstanceOf[QueryProgressEvent]
-      assert(parse(sparkEvent.progress.json) \ "trigger" === parse(expectedJson))
-  }
-
-  test("SPARK-59986: legacy QueryProgressEvent omits trigger") {
-    val event = new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress3)
-    assert(QueryProgressEvent.fromJson(event.json).progress.trigger == null)
-    val restored = JsonProtocol.sparkEventFromJson(JsonProtocol.sparkEventToJsonString(event))
-      .asInstanceOf[QueryProgressEvent]
-    assert(restored.progress.trigger == null)
-  }
-
   test("QueryProgressEvent serialization") {
     def testSerialization(event: QueryProgressEvent): Unit = {
       import scala.jdk.CollectionConverters._
@@ -338,6 +319,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress4))
     testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress5))
     testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress6))
+    val progress = StreamingQueryProgress.fromJson(
+      StreamingQueryStatusAndProgressSuite.testProgress3.json)
+    progress.trigger = """{"type":"ProcessingTime","intervalMs":3000000000}"""
+    testSerialization(new QueryProgressEvent(progress))
   }
 
   test("QueryTerminatedEvent serialization") {

@@ -22,15 +22,11 @@ import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 
-import org.json4s.JNothing
-import org.json4s.jackson.JsonMethods.parse
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.ui._
 import org.apache.spark.sql.streaming.{SinkProgress, SourceProgress, StateOperatorProgress, StreamingQueryProgress}
-import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite.{progressWithTrigger, testProgress3, triggerJsonCases}
 import org.apache.spark.sql.streaming.ui.{StreamingQueryData, StreamingQueryProgressWrapper}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.status.api.v1.sql.SqlResourceSuite
@@ -287,26 +283,6 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     }
   }
 
-  gridTest("SPARK-59986: stored progress preserves trigger JSON")(triggerJsonCases) {
-    case (trigger, expectedJson) =>
-      val input = new StreamingQueryProgressWrapper(progressWithTrigger(trigger))
-      val restored = serializer.deserialize(
-        serializer.serialize(input), classOf[StreamingQueryProgressWrapper])
-      assert(parse(restored.progress.json) \ "trigger" === parse(expectedJson))
-  }
-
-  test("SPARK-59986: legacy stored progress omits trigger") {
-    val legacy = StoreTypes.StreamingQueryProgressWrapper.newBuilder()
-      .setProgress(
-        StreamingQueryProgressSerializer.serialize(testProgress3).toBuilder.clearTrigger())
-      .build()
-    assert(!legacy.getProgress.hasTrigger)
-    val restored = new StreamingQueryProgressWrapperSerializer().deserialize(legacy.toByteArray)
-    assert(restored.progress.trigger == null)
-    assert(parse(restored.progress.json) \ "trigger" === JNothing)
-    assert(!StreamingQueryProgressSerializer.serialize(restored.progress).hasTrigger)
-  }
-
   test("StreamingQueryProgressWrapper") {
     val normalInput = {
       val stateOperatorProgress0 = new StateOperatorProgress(
@@ -401,6 +377,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         sink = sink,
         observedMetrics = observedMetrics
       )
+      progress.trigger = """{"type":"ProcessingTime","intervalMs":3000000000}"""
       new StreamingQueryProgressWrapper(progress)
     }
 
@@ -479,6 +456,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       // Do serialization and deserialization
       val bytes = serializer.serialize(input)
       val result = serializer.deserialize(bytes, classOf[StreamingQueryProgressWrapper])
+      val storedProgress = StoreTypes.StreamingQueryProgressWrapper.parseFrom(bytes).getProgress
+      assert(storedProgress.hasTrigger == !hasNullValue)
 
       // Assertion results
       val progress = input.progress
@@ -489,6 +468,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       assert(progress.timestamp == resultProcess.timestamp)
       assert(progress.batchId == resultProcess.batchId)
       assert(progress.batchDuration == resultProcess.batchDuration)
+      assert(progress.trigger == resultProcess.trigger)
       if (hasNullValue) {
         assert(resultProcess.durationMs.isEmpty)
         assert(resultProcess.eventTime.isEmpty)

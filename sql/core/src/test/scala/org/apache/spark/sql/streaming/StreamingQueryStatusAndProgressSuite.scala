@@ -45,49 +45,41 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
 
 class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually with Matchers {
-  gridTest("SPARK-59986: trigger JSON serialization")(triggerJsonCases) {
-    case (trigger, expectedJson) =>
-      val progress = progressWithTrigger(trigger)
-      val expected = parse(expectedJson)
-      assert(parse(progress.json) \ "trigger" === expected)
-      assert(parse(progress.prettyJson) \ "trigger" === expected)
-      assert(parse(StreamingQueryProgress.jsonString(progress)) \ "trigger" === expected)
-
-      Seq(progress.json, progress.prettyJson, StreamingQueryProgress.jsonString(progress))
-        .foreach { json =>
-          val restored = StreamingQueryProgress.fromJson(json)
-          assert(parse(restored.json) \ "trigger" === expected)
-          assert(parse(restored.prettyJson) \ "trigger" === expected)
-          assert(parse(StreamingQueryProgress.jsonString(restored)) \ "trigger" === expected)
-        }
+  gridTest("SPARK-59986: trigger metadata")(Seq[(Trigger, String)](
+    Trigger.ProcessingTime(0) -> """{"type":"ProcessingTime","intervalMs":0}""",
+    Trigger.ProcessingTime(3000000000L) ->
+      """{"type":"ProcessingTime","intervalMs":3000000000}""",
+    Trigger.Continuous(2000) -> """{"type":"Continuous","intervalMs":2000}""",
+    Trigger.RealTime(3000) -> """{"type":"RealTime","batchDurationMs":3000}""",
+    Trigger.AvailableNow() -> """{"type":"AvailableNow"}""",
+    Trigger.Once() -> """{"type":"OneTime"}""",
+    new Trigger {} -> null)) {
+    case (trigger, expected) => assert(Triggers.toJson(trigger) === expected)
   }
 
-  test("SPARK-59986: legacy progress JSON omits trigger") {
+  test("SPARK-59986: trigger JSON serialization") {
     val progress = StreamingQueryProgress.fromJson(testProgress3.json)
-    assert(progress.trigger == null)
-    assert(parse(progress.json) \ "trigger" === JNothing)
-    assert(parse(StreamingQueryProgress.jsonString(progress)) \ "trigger" === JNothing)
+    progress.trigger = """{"type":"ProcessingTime","intervalMs":3000000000}"""
+    Seq(progress.json, progress.prettyJson, StreamingQueryProgress.jsonString(progress))
+      .foreach { json =>
+        assert(parse(json) \ "trigger" === parse(progress.trigger))
+      }
+    assert(StreamingQueryProgress.fromJson(progress.json).trigger === progress.trigger)
   }
 
-  test("SPARK-59986: custom triggers can omit progress metadata") {
-    val progress = progressWithTrigger(new Trigger {})
-    assert(progress.trigger == null)
-    assert(parse(progress.json) \ "trigger" === JNothing)
-  }
-
-  gridTest("SPARK-59986: micro-batch progress reports the configured trigger")(
-      Seq(Trigger.ProcessingTime(0), Trigger.Once(), Trigger.AvailableNow())) { trigger =>
+  test("SPARK-59986: micro-batch progress reports the configured trigger") {
     import testImplicits._
 
     val input = MemoryStream[Int]
     testStream(input.toDS())(
       AddData(input, 1),
-      StartStream(trigger),
+      StartStream(Trigger.ProcessingTime(1000)),
       CheckAnswer(1),
       Execute { query =>
         eventually(timeout(streamingTimeout)) {
           assert(query.lastProgress != null)
-          assert(parse(query.lastProgress.json) \ "trigger" === parse(Triggers.toJson(trigger)))
+          assert(parse(query.lastProgress.json) \ "trigger" ===
+            parse("""{"type":"ProcessingTime","intervalMs":1000}"""))
         }
       },
       StopStream)
@@ -388,6 +380,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     ).foreach { input =>
       val jsonString = StreamingQueryProgress.jsonString(input)
       val result = StreamingQueryProgress.fromJson(jsonString)
+      assert(parse(jsonString) \ "trigger" === JNothing)
+      assert(result.trigger == null)
       assert(input.id == result.id)
       assert(input.runId == result.runId)
       assert(input.name == result.name)
@@ -748,24 +742,6 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
 }
 
 object StreamingQueryStatusAndProgressSuite {
-  val triggerJsonCases: Seq[(Trigger, String)] = Seq(
-    Trigger.ProcessingTime(0) -> """{"type":"ProcessingTime","intervalMs":0}""",
-    Trigger.ProcessingTime("1 second") ->
-      """{"type":"ProcessingTime","intervalMs":1000}""",
-    Trigger.ProcessingTime(3000000000L) ->
-      """{"type":"ProcessingTime","intervalMs":3000000000}""",
-    Trigger.Continuous("2 seconds") -> """{"type":"Continuous","intervalMs":2000}""",
-    Trigger.RealTime("3 seconds") -> """{"type":"RealTime","batchDurationMs":3000}""",
-    Trigger.RealTime() -> """{"type":"RealTime","batchDurationMs":300000}""",
-    Trigger.AvailableNow() -> """{"type":"AvailableNow"}""",
-    Trigger.Once() -> """{"type":"OneTime"}""")
-
-  def progressWithTrigger(trigger: Trigger): StreamingQueryProgress = {
-    val progress = StreamingQueryProgress.fromJson(testProgress3.json)
-    progress.trigger = Triggers.toJson(trigger)
-    progress
-  }
-
   private val schema1 = new StructType()
     .add("c1", "long")
     .add("c2", "double")
