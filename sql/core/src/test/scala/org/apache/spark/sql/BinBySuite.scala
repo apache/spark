@@ -37,6 +37,32 @@ class BinBySuite extends QueryTest with SharedSparkSession {
   private def ratio(overlapMicros: Long, totalMicros: Long): Double =
     overlapMicros.toDouble / totalMicros.toDouble
 
+  private def checkBinByDatetimeOverflow(
+      rangeStart: LocalDateTime,
+      rangeEnd: LocalDateTime,
+      binWidthSql: String,
+      originSql: String): Unit = {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+      withTempView("bin_by_overflow") {
+        Seq((rangeStart, rangeEnd, 1.0d))
+          .toDF("ts_start", "ts_end", "value")
+          .createOrReplaceTempView("bin_by_overflow")
+
+        checkError(
+          exception = intercept[SparkArithmeticException] {
+            spark.sql(
+              s"""SELECT * FROM bin_by_overflow
+                 |BIN BY (
+                 |  RANGE ts_start TO ts_end BIN WIDTH $binWidthSql
+                 |  ALIGN TO $originSql
+                 |  DISTRIBUTE UNIFORM (value))""".stripMargin).collect()
+          },
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> "compute BIN BY bucket boundaries"))
+      }
+    }
+  }
+
   private def binByExecArgs(sqlText: String): String = {
     val plan = spark.sql(sqlText).queryExecution.executedPlan
     val binByExec = plan.collectFirst {
@@ -430,30 +456,46 @@ class BinBySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("BIN BY raises an overflow when the next bin index is not representable") {
-    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
-      withTempView("bin_by_overflow") {
-        val maxTimestamp = DateTimeUtils.microsToLocalDateTime(Long.MaxValue)
-        Seq((maxTimestamp, maxTimestamp, 1.0d))
-          .toDF("ts_start", "ts_end", "value")
-          .createOrReplaceTempView("bin_by_overflow")
+  test("BIN BY raises DATETIME_OVERFLOW when the next bin index is not representable") {
+    val maxTimestamp = DateTimeUtils.microsToLocalDateTime(Long.MaxValue)
+    checkBinByDatetimeOverflow(
+      rangeStart = maxTimestamp,
+      rangeEnd = maxTimestamp,
+      binWidthSql = "INTERVAL '0.000001' SECOND",
+      originSql = "TIMESTAMP_NTZ '1970-01-01 00:00:00'")
+  }
 
-        checkError(
-          exception = intercept[SparkArithmeticException] {
-            spark.sql(
-              """SELECT * FROM bin_by_overflow
-                |BIN BY (
-                |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '0.000001' SECOND
-                |  ALIGN TO TIMESTAMP_NTZ '1970-01-01 00:00:00'
-                |  DISTRIBUTE UNIFORM (value))""".stripMargin).collect()
-          },
-          condition = "ARITHMETIC_OVERFLOW",
-          parameters = Map(
-            "message" -> "overflow",
-            "alternative" -> "",
-            "config" -> s"\"${SQLConf.ANSI_ENABLED.key}\""))
-      }
-    }
+  test("BIN BY raises DATETIME_OVERFLOW when the range duration is not representable") {
+    checkBinByDatetimeOverflow(
+      rangeStart = DateTimeUtils.microsToLocalDateTime(Long.MinValue),
+      rangeEnd = DateTimeUtils.microsToLocalDateTime(Long.MaxValue),
+      binWidthSql = "INTERVAL '1' SECOND",
+      originSql = "TIMESTAMP_NTZ '1970-01-01 00:00:00'")
+  }
+
+  test("BIN BY raises DATETIME_OVERFLOW when locating a zero-length range bin overflows") {
+    val maxTimestamp = DateTimeUtils.microsToLocalDateTime(Long.MaxValue)
+    checkBinByDatetimeOverflow(
+      rangeStart = maxTimestamp,
+      rangeEnd = maxTimestamp,
+      binWidthSql = "INTERVAL '1' DAY",
+      originSql = "TIMESTAMP_NTZ '1969-12-31 23:59:59.999999'")
+  }
+
+  test("BIN BY raises DATETIME_OVERFLOW when locating a non-empty range bin overflows") {
+    checkBinByDatetimeOverflow(
+      rangeStart = DateTimeUtils.microsToLocalDateTime(Long.MaxValue - 1L),
+      rangeEnd = DateTimeUtils.microsToLocalDateTime(Long.MaxValue),
+      binWidthSql = "INTERVAL '1' DAY",
+      originSql = "TIMESTAMP_NTZ '1969-12-31 23:59:59.999998'")
+  }
+
+  test("BIN BY raises DATETIME_OVERFLOW when advancing a bin index overflows") {
+    checkBinByDatetimeOverflow(
+      rangeStart = DateTimeUtils.microsToLocalDateTime(Long.MaxValue - 1L),
+      rangeEnd = DateTimeUtils.microsToLocalDateTime(Long.MaxValue),
+      binWidthSql = "INTERVAL '0.000001' SECOND",
+      originSql = "TIMESTAMP_NTZ '1969-12-31 23:59:59.999999'")
   }
 
   test("BIN BY raises BIN_BY_INVALID_RANGE for an inverted range") {
