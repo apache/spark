@@ -262,16 +262,21 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
   test("SPARK-59962: delete with a condition reading a computed value twice") {
     // BETWEEN reads `id + pk` twice. A group-based delete pushes the condition down to the scan
     // and reuses it for runtime group filtering, where a column pre-evaluated under the write is
-    // not found.
+    // not found. The untouched `finance` group is copied only if that filter is missing.
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
         |{ "pk": 3, "id": 3, "dep": "hr" }
+        |{ "pk": 4, "id": 10, "dep": "finance" }
         |""".stripMargin)
 
     sql(s"DELETE FROM $tableNameAsString WHERE (id + pk) BETWEEN 2 AND 4")
 
-    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(3, 3, "hr") :: Nil)
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(3, 3, "hr") :: Row(4, 10, "finance") :: Nil)
+
+    checkDeleteMetrics(numDeletedRows = 2, numCopiedRows = 1)
   }
 
   test("delete with aliases") {

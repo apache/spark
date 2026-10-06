@@ -30,7 +30,9 @@ import org.apache.spark.util.Utils
 
 /**
  * Rewrites the `With` expressions by adding a `Project` to pre-evaluate the common expressions, or
- * just inline them if they are cheap.
+ * just inline them if they are cheap. In a command other than `CreateVariable`, whose expressions
+ * are not evaluated over its children's rows, every deterministic definition is inlined whatever
+ * it costs, and a nondeterministic one read more than once stays a `With`.
  *
  * Since this rule can introduce new `Project` operators, it is advised to run [[CollapseProject]]
  * after this rule.
@@ -68,16 +70,21 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         // they rewrite nothing, which is what makes this detectable.
         if ((rewrittenAgg eq agg) && (rewrittenProj eq proj)) p else rewrittenProj
       // A command's own expressions are not evaluated over its children's rows: most are stored as
-      // metadata or turned into source predicates. A definition hoisted into a child would leave
-      // them reading a column only that `Project` produces, or leave the command over a child its
-      // planner does not expect, so it is substituted instead. Analysis lets no command but
-      // `CreateVariable` hold a nondeterministic expression; one that does keeps its `With` rather
-      // than be read twice. `CreateVariable` is left out: its default is evaluated rather than
-      // stored, so a definition there should be memoized, not inlined.
+      // metadata or turned into source predicates, neither of which can hold a memoized value. A
+      // definition hoisted into a child would leave them reading a column only that `Project`
+      // produces, or leave the command over a child its planner does not expect, so a
+      // deterministic one is substituted whatever it costs. Where the expression is evaluated
+      // after all, as by the runtime group filter of a row-level command, that evaluates it at
+      // every reference, and it duplicates an impure one that declares itself deterministic (see
+      // `canSubstitute`). Analysis lets no command but `CreateVariable` hold a nondeterministic
+      // expression; one read more than once keeps its `With`. `CreateVariable` is left out: its
+      // default is evaluated rather than stored, so a definition there should be memoized.
       case c: Command if !c.isInstanceOf[CreateVariable] &&
           c.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         c.mapExpressions(_.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
-          case w: With => inlineDefs(w)(_.child.deterministic)
+          case w: With =>
+            val multiplyReferenced = multiplyReferencedIds(w.child, w.defs)
+            inlineDefs(w)(d => d.child.deterministic || !multiplyReferenced.contains(d.id))
         })
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         applyInternal(p)

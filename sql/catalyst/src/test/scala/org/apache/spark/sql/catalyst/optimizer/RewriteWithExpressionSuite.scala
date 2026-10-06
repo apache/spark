@@ -502,7 +502,7 @@ class RewriteWithExpressionSuite extends PlanTest {
       DeleteFromTable(testRelation, If(a > 0, (a + a) < 10 && (a + a) > 0, Literal(false))))
   }
 
-  test("SPARK-59962: a nondeterministic definition in a command keeps its With") {
+  test("SPARK-59962: a nondeterministic definition in a command keeps its With if read twice") {
     // Analysis keeps nondeterministic expressions out of every command but `CreateVariable`, so
     // this only pins that the rule would not read such a definition twice.
     val a = testRelation.output.head
@@ -510,22 +510,27 @@ class RewriteWithExpressionSuite extends PlanTest {
       ref < 10 && ref > 0
     })
     assert(Optimizer.execute(delete) == delete)
+
+    // Read once, it is inlined as anywhere else.
+    assert(Optimizer.execute(DeleteFromTable(testRelation,
+      With(Rand(Literal(0L)) + a) { case Seq(ref) => ref < 10 })) ==
+      DeleteFromTable(testRelation, (Rand(Literal(0L)) + a) < 10))
   }
 
   test("SPARK-59962: a definition in a DECLARE VARIABLE default is not inlined like a command's") {
     // The default is evaluated rather than stored, so a definition there that is worth memoizing
     // must not be substituted at each of its references the way a command's is. Until SPARK-59954
     // keeps it in the default, the generic case pre-evaluates it under the variable names instead;
-    // either way there is at most one copy.
+    // either way the plan holds exactly one copy.
     val ident = ResolvedIdentifier(FakeSystemCatalog, Identifier.of(Array("session"), "v"))
     // Deterministic but not cheap: the command case would inline it.
     val plusOne = ScalaUDF((i: Int) => i + 1, IntegerType, Seq(Literal(1)), udfName = Some("f"))
     val declare = CreateVariable(
       Seq(ident), DefaultValueExpression(With(plusOne) { case Seq(ref) => ref * ref }, "v"),
       replace = true)
-    val copies = Optimizer.execute(declare).expressions
-      .map(_.collect { case u: ScalaUDF => u }.size).sum
-    assert(copies <= 1, s"the definition was substituted at $copies references")
+    val copies = Optimizer.execute(declare).collectWithSubqueries { case p => p.expressions }
+      .flatten.map(_.collect { case u: ScalaUDF => u }.size).sum
+    assert(copies == 1, s"the plan holds $copies copies of the definition")
   }
 
   test("SPARK-58902: a With left in a conditional branch of an aggregate still converges") {
