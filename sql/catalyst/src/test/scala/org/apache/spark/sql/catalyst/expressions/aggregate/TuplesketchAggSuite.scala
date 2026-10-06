@@ -116,7 +116,7 @@ class TuplesketchAggSuite extends SparkFunSuite {
       assert(estimate(result) == 2.0)
     }
 
-    gridTest(s"$name does not skip real empty partials (serialized, emptyFirst)")(
+    gridTest(s"$name does not skip real empty partials, (serialized, emptyFirst) =")(
       Seq((false, false), (false, true), (true, false), (true, true))) {
       case (serialized, emptyFirst) =>
         val agg = createAggregate()

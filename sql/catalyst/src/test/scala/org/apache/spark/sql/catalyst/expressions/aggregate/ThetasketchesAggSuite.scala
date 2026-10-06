@@ -263,8 +263,8 @@ class ThetasketchesAggSuite extends SparkFunSuite {
     assert(ThetaSketchUtils.wrapCompactSketch(result, agg.prettyName).getEstimate == 2.0)
   }
 
-  gridTest("theta intersection does not skip real empty partials " +
-    "(serialized, emptyFirst)")(
+  gridTest("theta intersection does not skip real empty partials, " +
+    "(serialized, emptyFirst) =")(
     Seq((false, false), (false, true), (true, false), (true, true))) {
     case (serialized, emptyFirst) =>
       val agg = new ThetaIntersectionAgg(BoundReference(0, BinaryType, nullable = true))
