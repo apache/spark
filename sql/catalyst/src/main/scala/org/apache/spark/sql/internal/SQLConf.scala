@@ -96,6 +96,13 @@ object SQLConf {
     Option(sqlConfEntries.get(key)).getOrElse(ConfigEntry.findProtoDefinedEntry(key))
   }
 
+  private[sql] def isSessionBindingPolicy(key: String): Boolean = {
+    Option(getConfigEntry(key)).exists { entry =>
+      entry.bindingPolicy.contains(ConfigBindingPolicy.SESSION) ||
+        entry.bindingPolicy.contains(ConfigBindingPolicy.NOT_APPLICABLE)
+    }
+  }
+
   // TODO: once all configs are migrated to textproto, this can be replaced by
   //  ConfigEntry.listAllEntries() and callers can filter by config properties.
   private[sql] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
