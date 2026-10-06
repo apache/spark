@@ -94,27 +94,21 @@ object MathUtils {
   // (unlike `floorMod`, which takes the sign of `n`). Matches the `pmod` SQL function and
   // `HashPartitioning`, and is shared by `Pmod`'s eval and codegen so the two never diverge.
   //
-  // Integral `n > 0` uses `Math.floorMod`. The `n < 0` path can silently wrap for `Int`/`Long`
-  // when `r + n` overflows (large-magnitude negative `n`), e.g. `pmod(-1, Int.MinValue)` returns
-  // `Int.MaxValue`; tracked by SPARK-59934. `Byte`/`Short` delegate to `Int`; the float/double
-  // overloads keep `% n` because `r + n` can round up to exactly `n`.
+  // Integral `n > 0` computes `Math.floorMod(a, n)` with a branchless sign fix-up instead of
+  // calling it, because `Math.floorMod` adjusts with a data-dependent conditional (SPARK-59696).
+  // The `n < 0` path can silently wrap for `Int`/`Long` when `r + n` overflows (large-magnitude
+  // negative `n`), e.g. `pmod(-1, Int.MinValue)` returns `Int.MaxValue`; tracked by SPARK-59934.
+  // `Byte`/`Short` delegate to `Int`; the float/double overloads keep `% n` because `r + n` can
+  // round up to exactly `n`.
 
   def pmod(a: Int, n: Int): Int = {
-    if (n > 0) {
-      Math.floorMod(a, n)
-    } else {
-      val r = a % n
-      if (r >= 0) r else (r + n) % n
-    }
+    val r = a % n
+    if (n > 0) r + (n & (r >> 31)) else if (r >= 0) r else (r + n) % n
   }
 
   def pmod(a: Long, n: Long): Long = {
-    if (n > 0) {
-      Math.floorMod(a, n)
-    } else {
-      val r = a % n
-      if (r >= 0) r else (r + n) % n
-    }
+    val r = a % n
+    if (n > 0) r + (n & (r >> 63)) else if (r >= 0) r else (r + n) % n
   }
 
   def pmod(a: Byte, n: Byte): Byte = pmod(a.toInt, n.toInt).toByte
