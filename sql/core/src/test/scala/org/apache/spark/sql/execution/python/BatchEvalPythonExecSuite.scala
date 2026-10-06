@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkRuntimeException, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, SimplePythonFunction}
@@ -169,13 +170,14 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
       val pythonUdf = PythonUDF(
         "dummy", new DummyUDF, StringType, Seq(taskAttr), PythonEvalType.SQL_BATCHED_UDF,
         udfDeterministic = true)
-      val plan = new BatchEvalPythonExec(
-        Seq(pythonUdf),
-        Seq(AttributeReference("result", StringType)()),
-        LocalTableScanExec(Seq(taskAttr), Nil, None)) {
+      class TestBatchEvalPythonExec extends BatchEvalPythonExec(
+          Seq(pythonUdf),
+          Seq(AttributeReference("result", StringType)()),
+          LocalTableScanExec(Seq(taskAttr), Nil, None)) {
         def testEvaluatorFactory: BatchEvalPythonEvaluatorFactory =
           evaluatorFactory.asInstanceOf[BatchEvalPythonEvaluatorFactory]
       }
+      val plan = new TestBatchEvalPythonExec
       val oversizedRow = InternalRow(
         UTF8String.fromString("x" * (expectedMaxRowSize.toInt + 1)))
       checkError(
