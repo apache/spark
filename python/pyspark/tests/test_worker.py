@@ -33,7 +33,9 @@ from py4j.protocol import Py4JJavaError
 
 from pyspark import SparkConf, SparkContext
 from pyspark.testing.utils import QuietTest, ReusedPySparkTestCase, eventually
-from pyspark.worker import WorkerMetrics
+
+with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+    from pyspark.worker import WorkerMetrics
 
 
 class WorkerMetricsTests(unittest.TestCase):
