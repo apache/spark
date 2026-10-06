@@ -371,35 +371,25 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   /**
-   * Merges the dialect's plan-time options into `parameters` so a later conf change can't alter an
-   * already-planned read or write when its options are rebuilt. Apply at each planning entry point.
-   * `url` overrides the one in `parameters` for callers that pass it separately.
-   */
-  def withPlanTimeOptions(
-      parameters: Map[String, String],
-      url: Option[String] = None): Map[String, String] =
-    url.orElse(CaseInsensitiveMap(parameters).get(JDBCOptions.JDBC_URL))
-      .map(u => JdbcDialects.get(u).planTimeOptions.foldLeft(parameters)(_ + _))
-      .getOrElse(parameters)
-
-  /**
    * Convert a [[ResultSet]] into an iterator of Catalyst Rows.
    */
   def resultSetToRows(
       resultSet: ResultSet,
-      schema: StructType): Iterator[Row] = {
-    resultSetToRows(resultSet, schema, NoopDialect)
+      schema: StructType,
+      options: Option[JDBCOptions]): Iterator[Row] = {
+    resultSetToRows(resultSet, schema, NoopDialect, options)
   }
 
   def resultSetToRows(
       resultSet: ResultSet,
       schema: StructType,
-      dialect: JdbcDialect): Iterator[Row] = {
+      dialect: JdbcDialect,
+      options: Option[JDBCOptions]): Iterator[Row] = {
     val inputMetrics =
       Option(TaskContext.get()).map(_.taskMetrics().inputMetrics).getOrElse(new InputMetrics)
     val fromRow = ExpressionEncoder(schema).resolveAndBind().createDeserializer()
     val internalRows = resultSetToSparkInternalRows(
-      resultSet, dialect, schema, inputMetrics, options = JDBCOptions.noopOptions)
+      resultSet, dialect, schema, inputMetrics, options = options)
     internalRows.map(fromRow)
   }
 
@@ -409,7 +399,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       schema: StructType,
       inputMetrics: InputMetrics,
       fetchAndTransformToInternalRowsMetric: Option[SQLMetric] = None,
-      options: JDBCOptions): Iterator[InternalRow] = {
+      options: Option[JDBCOptions]): Iterator[InternalRow] = {
     new NextIterator[InternalRow] {
       private[this] val rs = resultSet
       private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema, options)
@@ -466,7 +456,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
   private def makeGetters(
       dialect: JdbcDialect,
       schema: StructType,
-      options: JDBCOptions): Array[JDBCValueGetter] = {
+      options: Option[JDBCOptions]): Array[JDBCValueGetter] = {
     val replaced = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     replaced.fields.map(sf => makeGetter(sf.dataType, dialect, sf.metadata, options))
   }
@@ -475,7 +465,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       dt: DataType,
       dialect: JdbcDialect,
       metadata: Metadata,
-      options: JDBCOptions): JDBCValueGetter = dt match {
+      options: Option[JDBCOptions]): JDBCValueGetter = dt match {
     case BooleanType => JDBCValueGetter.BooleanGetter
     case DateType => JDBCValueGetter.DateGetter(dialect)
     case _: TimeType => JDBCValueGetter.TimeGetter
@@ -494,7 +484,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case TimestampType => JDBCValueGetter.TimestampGetter(dialect)
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeNTZGetter(dialect)
-    case TimestampNTZType if options.timestampNTZAsWallClock =>
+    case TimestampNTZType if options.exists(_.timestampNTZAsWallClock) =>
       JDBCValueGetter.TimestampNTZWallClockGetter
     case TimestampNTZType => JDBCValueGetter.TimestampNTZGetter(dialect)
     case t: TimestampNTZNanosType => JDBCValueGetter.TimestampNTZNanosGetter(t.precision)

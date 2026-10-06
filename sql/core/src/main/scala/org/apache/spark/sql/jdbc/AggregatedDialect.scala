@@ -46,9 +46,7 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
     dialects.flatMap(_.getJDBCType(dt)).headOption
   }
 
-  // Reverse so the first dialect wins on a key conflict, matching the first-wins methods above.
-  override def planTimeOptions: Map[String, String] =
-    dialects.reverse.flatMap(_.planTimeOptions).toMap
+  override def timestampNTZAsWallClock: Boolean = dialects.exists(_.timestampNTZAsWallClock)
 
   override def quoteIdentifier(colName: String): String = {
     dialects.head.quoteIdentifier(colName)
