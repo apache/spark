@@ -133,6 +133,18 @@ private[spark] object UI {
     .booleanConf
     .createWithDefault(true)
 
+  val UI_THREAD_DUMP_DOWNLOAD_IN_BROWSER_ENABLED =
+    ConfigBuilder("spark.ui.threadDump.downloadInBrowser.enabled")
+      .internal()
+      .doc("Whether the Download button on the executor thread dump page builds the file in " +
+        "the browser from the dump embedded in the page. When disabled, the button is a link " +
+        "with the whole dump inlined into a data: URI, which browsers truncate at the first " +
+        "'#' (a character that thread names contain). This is a kill switch to restore the " +
+        "old link if building the file in the browser causes a regression.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val UI_HEAP_HISTOGRAM_ENABLED = ConfigBuilder("spark.ui.heapHistogramEnabled")
     .doc("Whether to show a link for executor heap histogram in Executor page.")
     .version("3.5.0")
