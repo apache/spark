@@ -428,7 +428,7 @@ class PandasToArrowConversionTests(unittest.TestCase):
         self.assertEqual(result.num_columns, 1)
 
     def test_from_pandas_arrow_dtype_timestamp(self):
-        """Covers the createDataFrame path (create_arrow_array_from_pandas)."""
+        """Covers the createDataFrame and UDF result paths."""
         import pandas as pd
         import pyarrow as pa
 
@@ -442,6 +442,12 @@ class PandasToArrowConversionTests(unittest.TestCase):
         arrow_arr = create_arrow_array_from_pandas(arrow_ser, TimestampType(), timezone=tz)
         numpy_arr = create_arrow_array_from_pandas(numpy_ser, TimestampType(), timezone=tz)
         self.assertEqual(arrow_arr.to_pylist(), numpy_arr.to_pylist())
+
+        # The UDF result path converts through from_pandas.
+        schema = StructType([StructField("t", TimestampType())])
+        arrow_batch = PandasToArrowConversion.from_pandas([arrow_ser], schema, timezone=tz)
+        numpy_batch = PandasToArrowConversion.from_pandas([numpy_ser], schema, timezone=tz)
+        self.assertEqual(arrow_batch.column(0).to_pylist(), numpy_batch.column(0).to_pylist())
 
     def test_from_pandas_arrow_dtype_timestamp_normalization(self):
         """ArrowDtype timestamps must be UTC normalized like numpy ones."""
