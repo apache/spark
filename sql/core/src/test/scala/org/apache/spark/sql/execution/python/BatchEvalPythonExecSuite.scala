@@ -18,9 +18,8 @@
 package org.apache.spark.sql.execution.python
 
 import scala.collection.mutable.ArrayBuffer
-import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkRuntimeException, SparkThrowable, TaskContext}
+import org.apache.spark.{SparkRuntimeException, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, SimplePythonFunction}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{
@@ -142,19 +141,19 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
       }
       try {
         factory.createEvaluator().eval(0, Iterator(taskRow)).hasNext
-        Iterator(("NO_ERROR", Map.empty[String, String], expectedMaxRowSize))
+        Iterator.empty[(SparkRuntimeException, Long)]
       } catch {
-        case e: SparkThrowable =>
-          Iterator((
-            e.getCondition, e.getMessageParameters.asScala.toMap, expectedMaxRowSize))
+        case e: SparkRuntimeException => Iterator((e, expectedMaxRowSize))
       }
     }.collect().toSeq
     assert(errors.length === 1)
-    val (condition, parameters, expectedMaxRowSize) = errors.head
-    assert(condition === "UDF_LIMITS.ROW_SIZE")
-    assert(parameters === Map(
-      "maxRowSize" -> expectedMaxRowSize.toString,
-      "actualRowSize" -> "1200"))
+    val (exception, expectedMaxRowSize) = errors.head
+    checkError(
+      exception = exception,
+      condition = "UDF_LIMITS.ROW_SIZE",
+      parameters = Map(
+        "maxRowSize" -> expectedMaxRowSize.toString,
+        "actualRowSize" -> "1200"))
   }
 
   test("SPARK-59824: pickle UDF row-size guard uses SQLConf settings") {
