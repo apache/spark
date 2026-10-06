@@ -470,6 +470,10 @@ class StreamingQueryProgress(dict):
         self._jprogress: Optional["JavaObject"] = jprogress
         self._jdict: Optional[Dict[str, Any]] = jdict
 
+        progress_data = json.loads(jprogress.json()) if jprogress is not None else jdict
+        if progress_data is not None and "trigger" in progress_data:
+            self["trigger"] = progress_data["trigger"]
+
     @classmethod
     def fromJObject(cls, jprogress: "JavaObject") -> "StreamingQueryProgress":
         from pyspark import SparkContext
@@ -582,6 +586,15 @@ class StreamingQueryProgress(dict):
         The process duration of each batch.
         """
         return self["batchDuration"]
+
+    @property
+    def trigger(self) -> Optional[Dict[str, Any]]:
+        """
+        The configured trigger type and options, or ``None`` when unavailable.
+
+        .. versionadded:: 4.4.0
+        """
+        return self.get("trigger")
 
     @property
     def durationMs(self) -> Dict[str, int]:

@@ -18,6 +18,7 @@ import json
 import time
 import uuid
 from datetime import datetime
+from unittest.mock import Mock
 
 from pyspark import Row
 from pyspark.sql.functions import col, count, lit
@@ -74,7 +75,7 @@ class StreamingListenerTestsMixin:
         self.assertTrue(isinstance(progress.runId, uuid.UUID))
         self.assertTrue(progress.name.startswith("test"))
         try:
-            json.loads(progress.json)
+            progress_json = json.loads(progress.json)
         except Exception:
             self.fail("'%s' is not a valid JSON.")
         try:
@@ -91,6 +92,8 @@ class StreamingListenerTestsMixin:
             self.fail("'%s' is not in ISO 8601 format.")
         self.assertTrue(isinstance(progress.batchId, int))
         self.assertTrue(isinstance(progress.batchDuration, int))
+        self.assertEqual(progress.trigger, progress_json.get("trigger"))
+        self.assertEqual(progress.get("trigger"), progress_json.get("trigger"))
         self.assertTrue(isinstance(progress.durationMs, dict))
         self.assertTrue(
             set(progress.durationMs.keys()).issubset(
@@ -261,6 +264,7 @@ class StreamingListenerTestsMixin:
 
             q.stop()
 
+            self.assertEqual(q.lastProgress.trigger, {"type": "ProcessingTime", "intervalMs": 5000})
             self.check_streaming_query_progress(q.lastProgress, True)
             for p in q.recentProgress:
                 self.check_streaming_query_progress(p, True)
@@ -307,7 +311,9 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
         )
         self.assertEqual(
             get_number_of_public_methods("org.apache.spark.sql.streaming.StreamingQueryProgress"),
-            38,
+            # Includes internal Scala trigger accessors and synthetic JSON methods.
+            # Python exposes trigger metadata through the public JSON representation.
+            42,
             msg,
         )
         self.assertEqual(
@@ -401,6 +407,14 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 self.check_start_event(start_event)
                 self.check_progress_event(progress_event, True)
                 self.check_terminated_event(terminated_event)
+
+                legacy_jprogress = Mock(wraps=progress_event.progress._jprogress)
+                legacy_json = json.loads(legacy_jprogress.json())
+                del legacy_json["trigger"]
+                legacy_jprogress.json.return_value = json.dumps(legacy_json)
+                legacy_progress = StreamingQueryProgress.fromJObject(legacy_jprogress)
+                self.assertIsNone(legacy_progress.trigger)
+                self.assertNotIn("trigger", legacy_progress)
 
                 # Check query terminated with exception
                 from pyspark.sql.functions import col, udf
@@ -585,6 +599,13 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
         progress = StreamingQueryProgress.fromJson(json.loads(progress_json))
 
         self.check_streaming_query_progress(progress, True)
+        self.assertNotIn("trigger", progress)
+
+        configured_json = json.loads(progress_json)
+        configured_json["trigger"] = {"type": "ProcessingTime", "intervalMs": 3000000000}
+        configured_progress = StreamingQueryProgress.fromJson(configured_json)
+        self.assertEqual(configured_progress.trigger, configured_json["trigger"])
+        self.assertEqual(configured_progress["trigger"], configured_json["trigger"])
 
         # checks for progress
         self.assertEqual(progress.id, uuid.UUID("00000000-0000-0001-0000-000000000001"))
