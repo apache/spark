@@ -77,17 +77,16 @@ class PandasScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     def run(self, split_index: int, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
         import pandas as pd
 
-        runner_conf = self._runner_conf
         for input_batch in data:
             num_rows = input_batch.num_rows
 
             # Input: Arrow -> pandas Series (struct columns become DataFrames).
             pandas_columns = ArrowToPandasConversion.to_pandas(
                 input_batch,
-                timezone=runner_conf.timezone,
+                timezone=self._runner_conf.timezone,
                 struct_in_pandas="dict",
                 ndarray_as_list=False,
-                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                prefer_int_ext_dtype=self._runner_conf.prefer_int_ext_dtype,
                 df_for_struct=True,
             )
 
@@ -121,12 +120,12 @@ class PandasScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             yield PandasToArrowConversion.from_pandas(
                 results,
                 self._return_schema,
-                timezone=runner_conf.timezone,
-                safecheck=runner_conf.safecheck,
+                timezone=self._runner_conf.timezone,
+                safecheck=self._runner_conf.safecheck,
                 arrow_cast=True,
-                prefers_large_types=runner_conf.use_large_var_types,
-                assign_cols_by_name=runner_conf.assign_cols_by_name,
-                int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                prefers_large_types=self._runner_conf.use_large_var_types,
+                assign_cols_by_name=self._runner_conf.assign_cols_by_name,
+                int_to_decimal_coercion_enabled=self._runner_conf.int_to_decimal_coercion_enabled,
             )
 
 
@@ -158,8 +157,6 @@ class PandasScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         )
 
     def run(self, split_index: int, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
-        runner_conf = self._runner_conf
-        args_offsets = self._args_offsets
         num_input_rows = 0
 
         def extract_args(batch: "pa.RecordBatch") -> Any:
@@ -167,13 +164,13 @@ class PandasScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             # Input: Arrow -> pandas Series (struct columns become DataFrames).
             pandas_columns = ArrowToPandasConversion.to_pandas(
                 batch,
-                timezone=runner_conf.timezone,
+                timezone=self._runner_conf.timezone,
                 struct_in_pandas="dict",
                 ndarray_as_list=False,
-                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                prefer_int_ext_dtype=self._runner_conf.prefer_int_ext_dtype,
                 df_for_struct=True,
             )
-            args = tuple(pandas_columns[o] for o in args_offsets)
+            args = tuple(pandas_columns[o] for o in self._args_offsets)
             num_input_rows += batch.num_rows
             return args[0] if len(args) == 1 else args
 
@@ -182,28 +179,24 @@ class PandasScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         args_iter = map(extract_args, data)
         verified_iter = verify_return_type(self._udf_func(args_iter), self._expected_iter_type)
 
-        def process_results() -> "Iterator[pa.RecordBatch]":
-            for result in verified_iter:
-                verify_pandas_result(
-                    result,
-                    self._return_type,
-                    assign_cols_by_name=True,
-                    truncate_return_schema=True,
-                )
-                yield PandasToArrowConversion.from_pandas(
-                    [result],
-                    self._return_schema,
-                    timezone=runner_conf.timezone,
-                    safecheck=runner_conf.safecheck,
-                    arrow_cast=True,
-                    prefers_large_types=runner_conf.use_large_var_types,
-                    assign_cols_by_name=runner_conf.assign_cols_by_name,
-                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
-                )
+        def convert(result: Any) -> "pa.RecordBatch":
+            verify_pandas_result(
+                result, self._return_type, assign_cols_by_name=True, truncate_return_schema=True
+            )
+            return PandasToArrowConversion.from_pandas(
+                [result],
+                self._return_schema,
+                timezone=self._runner_conf.timezone,
+                safecheck=self._runner_conf.safecheck,
+                arrow_cast=True,
+                prefers_large_types=self._runner_conf.use_large_var_types,
+                assign_cols_by_name=self._runner_conf.assign_cols_by_name,
+                int_to_decimal_coercion_enabled=self._runner_conf.int_to_decimal_coercion_enabled,
+            )
 
         # Row-limit check (fail-fast) then exact row-count match (final).
-        limited = verify_output_row_limit(process_results(), lambda: num_input_rows)
-        yield from verify_iter_result_row_count(limited, lambda: num_input_rows)
+        batches = verify_output_row_limit(map(convert, verified_iter), lambda: num_input_rows)
+        yield from verify_iter_result_row_count(batches, lambda: num_input_rows)
 
         # Verify the input iterator was fully consumed.
         verify_iterator_exhausted(args_iter)
@@ -235,16 +228,14 @@ class PandasMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         )
 
     def run(self, split_index: int, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
-        runner_conf = self._runner_conf
-
         def dataframe_iter() -> "Iterator[Any]":
             # Input batches have a single struct column (see MapInBatchEvaluatorFactory);
             # convert lazily so peakmem stays bounded by one batch.
             for batch in data:
                 yield ArrowToPandasConversion.to_pandas(
                     batch,
-                    timezone=runner_conf.timezone,
-                    prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                    timezone=self._runner_conf.timezone,
+                    prefer_int_ext_dtype=self._runner_conf.prefer_int_ext_dtype,
                     df_for_struct=True,
                 )[0]
 
@@ -253,7 +244,9 @@ class PandasMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         # default. With the legacy flag, accept any object Python can iterate over -- via
         # iter(...), which honors both __iter__ and the sequence protocol (__getitem__) --
         # by adapting it into an iterator before the shared element-type verification.
-        if runner_conf.map_in_batch_legacy_accept_any_iterable and not isinstance(result, Iterator):
+        if self._runner_conf.map_in_batch_legacy_accept_any_iterable and not isinstance(
+            result, Iterator
+        ):
             try:
                 result = iter(result)
             except TypeError:
@@ -268,10 +261,10 @@ class PandasMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             yield PandasToArrowConversion.from_pandas(
                 [df],
                 self._return_schema,
-                timezone=runner_conf.timezone,
-                safecheck=runner_conf.safecheck,
+                timezone=self._runner_conf.timezone,
+                safecheck=self._runner_conf.safecheck,
                 arrow_cast=True,
-                prefers_large_types=runner_conf.use_large_var_types,
-                assign_cols_by_name=runner_conf.assign_cols_by_name,
-                int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                prefers_large_types=self._runner_conf.use_large_var_types,
+                assign_cols_by_name=self._runner_conf.assign_cols_by_name,
+                int_to_decimal_coercion_enabled=self._runner_conf.int_to_decimal_coercion_enabled,
             )
