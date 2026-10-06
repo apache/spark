@@ -2590,7 +2590,8 @@ object SQLConf {
     buildConf("spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled")
       .doc("When enabled, Spark derives output ordering from the partition key expressions of " +
         "a V2 data source that reports a KeyedPartitioning but does not report explicit ordering " +
-        "via SupportsReportOrdering. Within a single partition all rows share the same key " +
+        "via SupportsReportOrdering, or reports one that Spark ignores because it references a " +
+        "column that cannot be resolved. Within a single partition all rows share the same key " +
         s"value, so the data is trivially sorted by those expressions. Requires " +
         s"${V2_BUCKETING_ENABLED.key} to be enabled.")
       .version("4.2.0")
@@ -3865,10 +3866,13 @@ object SQLConf {
       .internal()
       .doc("Test/development only, not intended for production use. When true, plan a streaming " +
         "aggregation with the streamline aggregation operator, which merges each input row " +
-        "against state and emits immediately, instead of the microbatch operators that only emit " +
-        "once the batch ends. Real-Time Mode queries use the streamline operator regardless of " +
-        "this config; this flag exists only so the operator can be exercised under an ordinary " +
-        "microbatch trigger in tests, and changes an aggregation's output timing when set.")
+        "against state and emits an intermediate result per input in Update mode, instead of the " +
+        "microbatch operators that only emit once the batch ends. Append and Complete drain the " +
+        "input before producing their mode-specific output, and only non-session aggregations " +
+        "are planned this way (session windows use a separate planning path). Real-Time Mode " +
+        "queries use the streamline operator regardless of this config; this flag exists only so " +
+        "the operator can be exercised under an ordinary microbatch trigger in tests, and " +
+        "changes an aggregation's output timing when set.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -4988,6 +4992,20 @@ object SQLConf {
         "SQL executions.")
       .version("4.1.0")
       .fallbackConf(SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)
+
+  val CONNECT_STREAMING_FOREACH_BATCH_USE_CLONED_SESSION =
+    buildConf("spark.sql.connect.streaming.foreachBatch.useClonedSession")
+      .doc("When true, the DataFrame passed to a Python foreachBatch function under Spark " +
+        "Connect is bound to the streaming query's own session, which is a clone of the " +
+        "session that started the query, matching classic foreachBatch. This runs the batch " +
+        "under the configuration the streaming engine pins on the clone rather than the root " +
+        "session's. Set to false to restore the previous behavior, where the batch DataFrame " +
+        "is bound to the root session: this lets it be combined with the root session inside " +
+        "the function, but the batch no longer runs under the stream session's configuration.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   val THRIFTSERVER_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED =
     buildConf("spark.sql.thriftserver.shuffleDependency.fileCleanup.enabled")
@@ -6896,7 +6914,8 @@ object SQLConf {
     buildConf("spark.sql.maven.additionalRemoteRepositories")
       .doc("A comma-delimited string config of the optional additional remote Maven mirror " +
         "repositories. This is only used for downloading Hive jars in IsolatedClientLoader " +
-        "if the default Maven Central repo is unreachable.")
+        "if the default Maven Central repo is unreachable. When spark.jars.ivySettings is " +
+        "set, the repositories are added only if this configuration is explicitly set.")
       .version("3.0.0")
       .stringConf
       .createWithDefault(
@@ -7592,7 +7611,10 @@ object SQLConf {
     .doc("When true, Spark does not replace CHAR/VARCHAR with STRING in schemas and plans. " +
       "This is the Spark 4.0 experimental path: types can leak through transforming string " +
       "functions via child.dataType. Prefer spark.sql.charVarchar.standardSemantics.enabled " +
-      "for SQL standard CHAR/VARCHAR behavior (CAST/LCT/STRING-returning transforms).")
+      "for SQL standard CHAR/VARCHAR behavior (CAST/LCT/STRING-returning transforms). " +
+      "ORC reads with a CHAR/VARCHAR schema over STRING storage return the stored values " +
+      "without ORC truncation, matching Parquet. Read-side length checks apply only when " +
+      "spark.sql.charVarchar.standardSemantics.enabled is true.")
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
@@ -7603,7 +7625,9 @@ object SQLConf {
         "schemas and CAST targets; least-common-type for COALESCE/CASE/UNION may return " +
         "CHAR/VARCHAR; transforming string functions and operators return plain STRING. " +
         "This is a breaking change from the annotated-STRING default and from " +
-        "preserveCharVarcharTypeInfo (which keeps Char/Varchar through transforms).")
+        "preserveCharVarcharTypeInfo (which keeps Char/Varchar through transforms). " +
+        "Storage types stay with the data source: native ORC CHAR/VARCHAR keep ORC " +
+        "enforcement; STRING columns with a Spark CHAR/VARCHAR schema are checked by Spark.")
       .version("4.4.0")
       // PERSISTED, like ANSI mode: the flag decides the types a view body resolves to, so a view
       // created under standard semantics must keep computing CHAR/VARCHAR regardless of the

@@ -1824,7 +1824,7 @@ class ArrowToPandasConversion:
     def to_pandas(
         cls,
         batch: Union["pa.RecordBatch", "pa.Table"],
-        timezone: str,
+        timezone: Optional[str],
         schema: Optional["StructType"] = None,
         struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
@@ -1838,8 +1838,9 @@ class ArrowToPandasConversion:
         ----------
         batch : pa.RecordBatch or pa.Table
             The Arrow RecordBatch or Table to convert.
-        timezone : str
-            Timezone for timestamp conversion.
+        timezone : str or None
+            Timezone for timestamp conversion. Required if the data contains
+            timestamp types.
         schema : StructType, optional
             Spark schema for type conversion. If None, types are inferred from Arrow.
         struct_in_pandas : str

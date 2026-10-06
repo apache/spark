@@ -1817,7 +1817,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
@@ -2943,77 +2942,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 verify_iterator_exhausted(flat_args_iter)
 
             yield from process_results()
-
-        return func, ser
-
-    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
-        import pandas as pd
-        import pyarrow as pa
-
-        # --- UDF preparation ---
-        udf_infos = []
-        for udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type in udfs:
-            wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
-                udf_func, udf_args_offsets, udf_kwargs_offsets
-            )
-            udf_infos.append((wrapped_func, args_kwargs_offsets, udf_return_type))
-        return_schema = StructType(
-            [StructField(f"_{i}", info[2]) for i, info in enumerate(udf_infos)]
-        )
-
-        def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-            for input_batch in data:
-                num_rows = input_batch.num_rows
-
-                # --- Input: Arrow -> pandas Series (struct columns become DataFrames) ---
-                pandas_columns = ArrowToPandasConversion.to_pandas(
-                    input_batch,
-                    timezone=runner_conf.timezone,
-                    struct_in_pandas="dict",
-                    ndarray_as_list=False,
-                    prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
-                    df_for_struct=True,
-                )
-
-                # --- Process: evaluate each UDF column-wise on pandas Series ---
-                results = []
-                for udf_func, offsets, udf_return_type in udf_infos:
-                    result = udf_func(*[pandas_columns[o] for o in offsets])
-                    if not hasattr(result, "__len__"):
-                        pd_type = (
-                            "pandas.DataFrame"
-                            if isinstance(udf_return_type, StructType)
-                            else "pandas.Series"
-                        )
-                        raise PySparkTypeError(
-                            errorClass="UDF_RETURN_TYPE",
-                            messageParameters={
-                                "expected": pd_type,
-                                "actual": type(result).__name__,
-                            },
-                        )
-                    verify_result_row_count(len(result), num_rows)
-                    # struct_in_pandas="dict": UDF must return DataFrame for struct types
-                    if isinstance(udf_return_type, StructType) and not isinstance(
-                        result, pd.DataFrame
-                    ):
-                        raise PySparkValueError(
-                            "Invalid return type. Please make sure that the UDF returns a "
-                            "pandas.DataFrame when the specified return type is StructType."
-                        )
-                    results.append(result)
-
-                # --- Output: pandas -> Arrow ---
-                yield PandasToArrowConversion.from_pandas(
-                    results,
-                    return_schema,
-                    timezone=runner_conf.timezone,
-                    safecheck=runner_conf.safecheck,
-                    arrow_cast=True,
-                    prefers_large_types=runner_conf.use_large_var_types,
-                    assign_cols_by_name=runner_conf.assign_cols_by_name,
-                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
-                )
 
         return func, ser
 
