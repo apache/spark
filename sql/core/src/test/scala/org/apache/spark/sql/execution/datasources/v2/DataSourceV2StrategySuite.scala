@@ -351,7 +351,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
   }
 
   Seq(true, false).foreach { ansiEnabled =>
-    test(s"boolean operators skip V2 pushdown for boolean casts with ANSI $ansiEnabled") {
+    test(s"boolean operators wrap boolean casts for V2 pushdown with ANSI $ansiEnabled") {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
         val intCol = AttributeReference("c", IntegerType)()
         val boolCast = Cast(intCol, BooleanType)
@@ -363,12 +363,23 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
           Or(predicate, boolCast))
         conditions.foreach { condition =>
           val filter = Coalesce(Seq(condition, Literal(false)))
-          assert(DataSourceV2Strategy.translateFilterV2(filter).isEmpty)
-          assert(new V2ExpressionBuilder(condition, isPredicate = true).buildPredicate().isEmpty)
+          assert(DataSourceV2Strategy.translateFilterV2(filter).isDefined == ansiEnabled)
+          assert(new V2ExpressionBuilder(condition, isPredicate = true)
+            .buildPredicate().isDefined == ansiEnabled)
         }
         assert(new V2ExpressionBuilder(Not(predicate), isPredicate = true)
           .buildPredicate().isDefined)
       }
+    }
+  }
+
+  test("boolean cast operands fall back when V2 predicate wrapping is disabled") {
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE.key -> "false") {
+      val intCol = AttributeReference("c", IntegerType)()
+      val filter = Coalesce(Seq(Not(Cast(intCol, BooleanType)), Literal(false)))
+      assert(DataSourceV2Strategy.translateFilterV2(filter).isEmpty)
     }
   }
 

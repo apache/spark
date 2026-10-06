@@ -74,6 +74,16 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     }
   }
 
+  private def generatePredicate(expr: Expression): Option[V2Predicate] = {
+    generateExpression(expr, true).flatMap {
+      case p: V2Predicate => Some(p)
+      case other if expr.dataType == BooleanType &&
+          SQLConf.get.getConf(SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE) =>
+        Some(new V2Predicate("BOOLEAN_EXPRESSION", Array(other)))
+      case _ => None
+    }
+  }
+
   private def canTranslate(b: BinaryOperator) = b match {
     case _: BinaryComparison => true
     case _: BitwiseAnd | _: BitwiseOr | _: BitwiseXor => true
@@ -194,22 +204,20 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case _: Signum => generateExpressionWithName("SIGN", expr, isPredicate)
     case _: WidthBucket => generateExpressionWithName("WIDTH_BUCKET", expr, isPredicate)
     case and: And =>
-      // AND expects predicate
-      val l = generateExpression(and.left, true)
-      val r = generateExpression(and.right, true)
-      (l, r) match {
-        case (Some(left: V2Predicate), Some(right: V2Predicate)) =>
-          Some(new V2And(left, right))
-        case _ => None
+      val l = generatePredicate(and.left)
+      val r = generatePredicate(and.right)
+      if (l.isDefined && r.isDefined) {
+        Some(new V2And(l.get, r.get))
+      } else {
+        None
       }
     case or: Or =>
-      // OR expects predicate
-      val l = generateExpression(or.left, true)
-      val r = generateExpression(or.right, true)
-      (l, r) match {
-        case (Some(left: V2Predicate), Some(right: V2Predicate)) =>
-          Some(new V2Or(left, right))
-        case _ => None
+      val l = generatePredicate(or.left)
+      val r = generatePredicate(or.right)
+      if (l.isDefined && r.isDefined) {
+        Some(new V2Or(l.get, r.get))
+      } else {
+        None
       }
     case b: BinaryOperator if canTranslate(b) =>
       val l = generateExpression(b.left)
@@ -236,8 +244,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       } else {
         None
       }
-    case Not(child) => generateExpression(child, true) // NOT expects predicate
-      .collect { case v: V2Predicate => new V2Not(v) }
+    case Not(child) => generatePredicate(child).map(new V2Not(_))
     case UnaryMinus(_, true) => generateExpressionWithName("-", expr, isPredicate)
     case _: BitwiseNot => generateExpressionWithName("~", expr, isPredicate)
     case caseWhen @ CaseWhen(branches, elseValue) =>

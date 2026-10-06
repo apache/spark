@@ -267,6 +267,22 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     super.afterAll()
   }
 
+  test("COALESCE with Boolean cast pushes down") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      sql("CREATE TABLE h2.test.boolean_cast_coalesce (c INT)")
+      try {
+        sql("INSERT INTO h2.test.boolean_cast_coalesce VALUES (0), (1)")
+        val df = sql("SELECT c FROM h2.test.boolean_cast_coalesce " +
+          "WHERE COALESCE(NOT CAST(c AS BOOLEAN), false)")
+        checkFiltersRemoved(df)
+        checkPushedInfo(df, "PushedFilters: [COALESCE(NOT (CAST(c AS boolean)), FALSE)]")
+        checkAnswer(df, Seq(Row(0)))
+      } finally {
+        sql("DROP TABLE h2.test.boolean_cast_coalesce")
+      }
+    }
+  }
+
   test("simple scan") {
     checkAnswer(sql("SELECT * FROM h2.test.empty_table"), Seq())
     checkAnswer(sql("SELECT * FROM h2.test.people"), Seq(Row("fred", 1), Row("mary", 2)))
