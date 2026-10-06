@@ -80,11 +80,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  // Snapshot at plan construction. CHAR_VARCHAR_STANDARD_SEMANTICS is PERSISTED, so a
-  // plan built under one setting must keep that path even if a later task SQLConf.get
-  // (ReadOnlySQLConf with the executing session) differs. SparkPlan.session is
-  // @transient, so executor `conf` cannot recover the planning session.
-  private val standardCharVarcharSemantics: Boolean = conf.charVarcharStandardSemantics
+  // Bound at parse into the I/O schema under the query or persisted-view SQLConf.
+  // Do not re-read SQLConf: planning and task conf can differ from that captured mode.
+  private def standardCharVarcharSemantics: Boolean =
+    ioschema.standardCharVarcharSemantics
 
   override def doExecute(): RDD[InternalRow] = {
     val broadcastedHadoopConf =
@@ -434,7 +433,8 @@ case class ScriptTransformationIOSchema(
     outputSerdeProps: Seq[(String, String)],
     recordReaderClass: Option[String],
     recordWriterClass: Option[String],
-    schemaLess: Boolean) extends Serializable {
+    schemaLess: Boolean,
+    standardCharVarcharSemantics: Boolean = false) extends Serializable {
   import ScriptTransformationIOSchema._
 
   val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
@@ -462,11 +462,13 @@ object ScriptTransformationIOSchema {
   }
 
   /**
-   * Convert a Catalyst value from `sourceType` (JSON or unbounded STRING) to
-   * `targetType`. CHAR/VARCHAR leaves use write-side length checks. Maps always
-   * rebuild through a fresh [[ArrayBasedMapBuilder]] so CHAR/VARCHAR key
-   * collisions follow MAP_KEY_DEDUP_POLICY and a failed row cannot dirty the
-   * next one.
+   * Convert a Catalyst value from `sourceType` to `targetType`. `sourceType` is
+   * the parsed Catalyst type (unbounded STRING in place of CHAR/VARCHAR, and
+   * STRING map keys where JSON cannot preserve the declared key type).
+   * CHAR/VARCHAR leaves use write-side length checks. Maps rebuild through a
+   * fresh [[ArrayBasedMapBuilder]] when the source and target map types differ
+   * or the target contains CHAR/VARCHAR, so CHAR/VARCHAR key collisions follow
+   * MAP_KEY_DEDUP_POLICY. Same-typed maps without CHAR/VARCHAR are unchanged.
    */
   private[sql] def makeJsonToTargetRestorer(
       sourceType: DataType,
@@ -548,7 +550,7 @@ object ScriptTransformationIOSchema {
     ("TOK_TABLEROWFORMATNULL" -> "\\N")
   )
 
-  val defaultIOSchema = ScriptTransformationIOSchema(
+  def defaultIOSchema: ScriptTransformationIOSchema = ScriptTransformationIOSchema(
     inputRowFormat = Seq.empty,
     outputRowFormat = Seq.empty,
     inputSerdeClass = None,
@@ -557,7 +559,8 @@ object ScriptTransformationIOSchema {
     outputSerdeProps = Seq.empty,
     recordReaderClass = None,
     recordWriterClass = None,
-    schemaLess = false
+    schemaLess = false,
+    standardCharVarcharSemantics = SQLConf.get.charVarcharStandardSemantics
   )
 
   def apply(input: ScriptInputOutputSchema): ScriptTransformationIOSchema = {
@@ -570,6 +573,7 @@ object ScriptTransformationIOSchema {
       input.outputSerdeProps,
       input.recordReaderClass,
       input.recordWriterClass,
-      input.schemaLess)
+      input.schemaLess,
+      input.standardCharVarcharSemantics)
   }
 }

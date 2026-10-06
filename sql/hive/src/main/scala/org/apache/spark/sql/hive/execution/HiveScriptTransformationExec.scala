@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveInspectors
 import org.apache.spark.sql.hive.HiveShim._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
 
@@ -260,7 +259,8 @@ object HiveScriptIOSchema extends HiveInspectors {
       output: Seq[Attribute]): Option[(AbstractSerDe, StructObjectInspector)] = {
     ioschema.outputSerdeClass.map { serdeClass =>
       val (columns, columnTypes) = parseAttrs(output)
-      val serdeTypes = outputTypesForSerDe(serdeClass, columnTypes)
+      val serdeTypes = outputTypesForSerDe(
+        serdeClass, columnTypes, ioschema.standardCharVarcharSemantics)
       val serde = initSerDe(serdeClass, columns, serdeTypes, ioschema.outputSerdeProps)
       val structObjectInspector = serde.getObjectInspector().asInstanceOf[StructObjectInspector]
       (serde, structObjectInspector)
@@ -281,9 +281,10 @@ object HiveScriptIOSchema extends HiveInspectors {
    */
   private def outputTypesForSerDe(
       serdeClassName: String,
-      columnTypes: Seq[DataType]): Seq[DataType] = {
+      columnTypes: Seq[DataType],
+      standardCharVarcharSemantics: Boolean): Seq[DataType] = {
     val serdeClass = Utils.classForName[AbstractSerDe](serdeClassName)
-    if (SQLConf.get.charVarcharStandardSemantics &&
+    if (standardCharVarcharSemantics &&
         classOf[LazySimpleSerDe].isAssignableFrom(serdeClass)) {
       columnTypes.map(ScriptTransformationIOSchema.toUnboundedStringType)
     } else {

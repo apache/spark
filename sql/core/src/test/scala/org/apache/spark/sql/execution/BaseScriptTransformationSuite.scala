@@ -398,6 +398,71 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     }
   }
 
+  test("SPARK-59683: bound CHAR/VARCHAR mode survives execution conf change") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    val padded = Seq("ab").toDF("c")
+    val enabledPlan = withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      createScriptTransformationExec(
+        script = "cat",
+        output = Seq(AttributeReference("c", CharType(4))()),
+        child = padded.queryExecution.sparkPlan,
+        ioschema = defaultIOSchema)
+    }
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      assert(QueryTest.executePlan(enabledPlan, spark.sqlContext) === Seq(Row("ab  ")))
+    }
+
+    val overflow = Seq("abcdef").toDF("c")
+    val overflowPlan = withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      createScriptTransformationExec(
+        script = "cat",
+        output = Seq(AttributeReference("c", CharType(4))()),
+        child = overflow.queryExecution.sparkPlan,
+        ioschema = defaultIOSchema)
+    }
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val exception = intercept[Exception] {
+        QueryTest.executePlan(overflowPlan, spark.sqlContext)
+      }
+      val runtimeException = exception match {
+        case s: org.apache.spark.SparkRuntimeException => s
+        case other =>
+          other.getCause.asInstanceOf[org.apache.spark.SparkRuntimeException]
+      }
+      checkError(
+        exception = runtimeException,
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "4"))
+    }
+
+    val disabledPlan = withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      createScriptTransformationExec(
+        script = "cat",
+        output = Seq(AttributeReference("c", CharType(4))()),
+        child = padded.queryExecution.sparkPlan,
+        ioschema = defaultIOSchema)
+    }
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val exception = intercept[Exception] {
+        QueryTest.executePlan(disabledPlan, spark.sqlContext)
+      }
+      var cur: Throwable = exception
+      var sparkException: SparkException = null
+      while (cur != null && sparkException == null) {
+        cur match {
+          case s: SparkException => sparkException = s
+          case _ =>
+        }
+        cur = cur.getCause
+      }
+      assert(sparkException != null, exception)
+      assert(sparkException.getCondition === "_LEGACY_ERROR_TEMP_2265")
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
   test("script transformation should not swallow errors from upstream operators (no serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
 

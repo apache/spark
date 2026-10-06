@@ -67,7 +67,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     )
   }
 
-  private val hiveIOSchema: ScriptTransformationIOSchema = {
+  private def hiveIOSchema: ScriptTransformationIOSchema = {
     defaultIOSchema.copy(
       inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
       outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
@@ -528,6 +528,76 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         "varchar(5)")
       assert(soi.getAllStructFieldRefs.get(2).getFieldObjectInspector.getTypeName ===
         "array<char(4)>")
+    }
+  }
+
+  test("SPARK-59683: bound Hive SerDe CHAR/VARCHAR mode survives conf change") {
+    val output = Seq(
+      AttributeReference("c", CharType(4))(),
+      AttributeReference("v", VarcharType(5))(),
+      AttributeReference("nested", ArrayType(CharType(4)))())
+    val enabledSchema = withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      hiveIOSchema
+    }
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val (_, soi) = HiveScriptIOSchema.initOutputSerDe(enabledSchema, output).get
+      assert(soi.getAllStructFieldRefs.get(0).getFieldObjectInspector.getTypeName ===
+        "string")
+      assert(soi.getAllStructFieldRefs.get(1).getFieldObjectInspector.getTypeName ===
+        "string")
+      assert(soi.getAllStructFieldRefs.get(2).getFieldObjectInspector.getTypeName ===
+        "array<string>")
+    }
+    val disabledSchema = withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      hiveIOSchema
+    }
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val (_, soi) = HiveScriptIOSchema.initOutputSerDe(disabledSchema, output).get
+      assert(soi.getAllStructFieldRefs.get(0).getFieldObjectInspector.getTypeName ===
+        "char(4)")
+      assert(soi.getAllStructFieldRefs.get(1).getFieldObjectInspector.getTypeName ===
+        "varchar(5)")
+      assert(soi.getAllStructFieldRefs.get(2).getFieldObjectInspector.getTypeName ===
+        "array<char(4)>")
+    }
+  }
+
+  test("SPARK-59683: Hive TRANSFORM view keeps bound CHAR/VARCHAR mode") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withView("v") {
+        sql(
+          """CREATE VIEW v AS
+            |SELECT TRANSFORM('ab') USING 'cat' AS (c CHAR(4))
+            |FROM VALUES (1) input(dummy)""".stripMargin)
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+          checkAnswer(sql("SELECT * FROM v"), Row("ab  "))
+        }
+      }
+    }
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withView("v_overflow") {
+        sql(
+          """CREATE VIEW v_overflow AS
+            |SELECT TRANSFORM('abcdef') USING 'cat' AS (c CHAR(4))
+            |FROM VALUES (1) input(dummy)""".stripMargin)
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+          val exception = intercept[Exception] {
+            sql("SELECT * FROM v_overflow").collect()
+          }
+          val runtimeException = exception match {
+            case s: org.apache.spark.SparkRuntimeException => s
+            case other =>
+              other.getCause.asInstanceOf[org.apache.spark.SparkRuntimeException]
+          }
+          checkError(
+            exception = runtimeException,
+            condition = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "4"))
+        }
+      }
     }
   }
 
