@@ -3139,6 +3139,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         checkAnswer(sql(malformedValueBeforeDuplicateQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(interleavedCharJsonQuery), Row(Seq(Row("b ", 2), Row("a ", 3))))
         checkAnswer(sql(exactRepeatAfterCollisionQuery), Row(Map("a " -> 3)))
+        checkAnswer(sql(exactRepeatSuccessThenFailureQuery), Row(Map.empty[String, Int]))
+        checkAnswer(sql(exactRepeatFailureThenSuccessQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(badJsonKeyBeforeDuplicateQuery), Row(Map("a " -> 2)))
         withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
           checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
