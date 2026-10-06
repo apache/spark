@@ -22,12 +22,9 @@ ERROR_CONDITIONS_PATH = (
 
 def assemble_message(message_parts):
     message = " ".join(message_parts)
-    # Wrap bare `<placeholder>` tokens in backticks so that Markdown renders them as code
-    # and escapes the angle brackets. Placeholders that already sit inside an inline code
-    # span (e.g. `APPROX NEAREST <numResults> BY ...`) must be left alone: inserting
-    # backticks there would split the span and leak the placeholder into the generated
-    # HTML as a raw tag, which the browser then treats as an element and which breaks the
-    # surrounding table structure. See apache/spark GitHub issue #58094.
+    # If a message section contains backticks (e.g. `APPROX NEAREST <numResults> BY ...`),
+    # keep it as-is. Otherwise, wrap <placeholder> tags with backticks so they are not
+    # interpreted as HTML tags.
     cleaned_message = re.sub(
         r"`[^`]*`|(<.*?>)",
         lambda x: x.group(0) if x.group(1) is None else f"`{x.group(1)}`",
