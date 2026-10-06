@@ -1666,6 +1666,69 @@ class DataFrameSuite extends SharedSparkSession
     assert(newConstraints === newExpectedConstraints)
   }
 
+  Seq(true, false).foreach { eager =>
+    test(s"SPARK-52878: checkpoint case-insensitive constraints, eager=$eager") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        withTempDir { checkpointDir =>
+          spark.sparkContext.setCheckpointDir(checkpointDir.getAbsolutePath)
+          val first = spark.range(1).toDF("foo").checkpoint(eager)
+          val second = first.where("Foo = 0").checkpoint(eager)
+          checkAnswer(first.unionByName(second).checkpoint(eager), Seq(Row(0L), Row(0L)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-52878: rewrite constraints by expression ID") {
+    val original = AttributeReference("foo", IntegerType)()
+    val reference = original.withName("Foo").withQualifier(Seq("input"))
+    val metadata = new MetadataBuilder().putString("key", "value").build()
+    val replacement = original.newInstance().withName("replacement")
+      .withNullability(false).withMetadata(metadata)
+    val sameName = AttributeReference("foo", IntegerType)()
+    val unmapped = AttributeReference("other", IntegerType)()
+    val constraints = ExpressionSet(Seq(
+      EqualTo(reference, Literal(1)),
+      EqualTo(sameName, Literal(2)),
+      GreaterThan(unmapped, Literal(3))))
+
+    val rewritten = LogicalRDD.rewriteConstraints(
+      constraints, Map[Attribute, Attribute](original -> replacement))
+    assert(rewritten === ExpressionSet(Seq(
+      EqualTo(replacement, Literal(1)),
+      EqualTo(sameName, Literal(2)),
+      GreaterThan(unmapped, Literal(3)))))
+    val references = rewritten.toSeq.flatMap(_.references)
+    assert(references.find(_.exprId == replacement.exprId).contains(replacement))
+    assert(references.contains(sameName))
+    assert(references.contains(unmapped))
+  }
+
+  test("SPARK-52878: new LogicalRDD instances remap differently cased constraints") {
+    val output = AttributeReference("foo", IntegerType)()
+    val reference = output.withName("Foo").withQualifier(Seq("input"))
+    val logicalRDD = LogicalRDD(Seq(output), spark.sparkContext.emptyRDD[InternalRow])(
+      spark, None, Some(ExpressionSet(Seq(GreaterThan(reference, Literal(0))))))
+
+    val newLogicalRDD = logicalRDD.newInstance()
+    assert(newLogicalRDD.output.head.exprId != output.exprId)
+    assert(newLogicalRDD.constraints === ExpressionSet(Seq(
+      GreaterThan(newLogicalRDD.output.head, Literal(0)))))
+    val references = newLogicalRDD.constraints.toSeq.flatMap(_.references)
+    assert(references.map(_.exprId).toSet === newLogicalRDD.output.map(_.exprId).toSet)
+  }
+
+  test("SPARK-52878: case-sensitive resolution still rejects differently cased columns") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val df = spark.range(1).toDF("foo")
+      checkError(
+        exception = intercept[AnalysisException] { df.select("Foo") },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`Foo`", "proposal" -> "`foo`"),
+        context = ExpectedContext(fragment = "select", getCurrentClassCallSitePattern))
+    }
+  }
+
   test("SPARK-46794: exclude subqueries from LogicalRDD constraints") {
     withTempDir { checkpointDir =>
       val subquery =
