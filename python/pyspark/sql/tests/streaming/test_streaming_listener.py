@@ -406,14 +406,18 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 self.check_progress_event(progress_event, True)
                 self.check_terminated_event(terminated_event)
 
-                legacy_jprogress = Mock(wraps=progress_event.progress._jprogress)
-                legacy_json = json.loads(legacy_jprogress.json())
-                del legacy_json["trigger"]
-                legacy_jprogress.json.return_value = json.dumps(legacy_json)
-                legacy_progress = StreamingQueryProgress.fromJObject(legacy_jprogress)
+                jprogress = Mock(wraps=progress_event.progress._jprogress)
+                configured_progress = StreamingQueryProgress.fromJObject(jprogress)
+                self.assertEqual(configured_progress.trigger, progress_event.progress.trigger)
+                self.assertEqual(configured_progress["trigger"], progress_event.progress.trigger)
+                jprogress.trigger.assert_called_once_with()
+                jprogress.trigger.reset_mock()
+                jprogress.trigger.return_value = None
+                legacy_progress = StreamingQueryProgress.fromJObject(jprogress)
                 self.assertIsNone(legacy_progress.trigger)
                 self.assertIsNone(legacy_progress["trigger"])
-                self.assertNotIn("trigger", json.loads(legacy_progress.json))
+                jprogress.trigger.assert_called_once_with()
+                jprogress.json.assert_not_called()
 
                 # Check query terminated with exception
                 from pyspark.sql.functions import col, udf
