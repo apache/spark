@@ -27,6 +27,10 @@ class _WorkerTimer:
 
     The collector owns the duration dictionary. This scope keeps a reference to it and a
     start time for its current with block. Reuse the scope across sequential batches.
+    Nested scopes measure inclusive time, including their children.
+
+    Pipelined reads can overlap UDF work on another thread. An additive phase breakdown
+    for that mode would require tracking those overlapping intervals.
     """
 
     def __init__(self, shared_duration_totals_ns: dict[str, int], metric_name: str) -> None:

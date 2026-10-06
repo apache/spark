@@ -2118,25 +2118,33 @@ class ScalarPandasUDFTests(ScalarPandasUDFTestsMixin, ReusedSQLTestCase):
                 "spark.sql.adaptive.enabled": "false",
             }
         ):
-            # Check that each query reports its own task and batch counts.
-            for _ in range(2):
-                result = self.spark.range(6, numPartitions=1).select(measured("id"))
-                result.collect()
+            # Check worker reuse, then an empty task with one input partition.
+            for num_rows in (6, 6, 0):
+                if num_rows:
+                    data = self.spark.range(num_rows, numPartitions=1)
+                else:
+                    data = self.spark.createDataFrame(self.sc.parallelize([], 1), "id long")
+                result = data.select(measured("id"))
+                self.assertEqual([row[0] for row in result.collect()], list(range(1, num_rows + 1)))
 
                 metrics = self._python_metrics(result)
                 self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
-                self.assertEqual(metrics.apply("pythonNumTimedBatches").value(), 3)
+                self.assertEqual(metrics.apply("pythonNumTimedBatches").value(), num_rows // 2)
                 phases = [
                     metrics.apply(name).value()
                     for name in (
-                        "pythonInputConversionTime",
+                        "pythonDataReadTime",
+                        "pythonInputPreparationTime",
                         "pythonUDFExecutionTime",
-                        "pythonOutputConversionTime",
+                        "pythonOutputPreparationTime",
+                        "pythonDataWriteTime",
                     )
                 ]
-                self.assertGreaterEqual(phases[0], 0)
-                self.assertGreaterEqual(phases[1], 40)
-                self.assertGreaterEqual(phases[2], 0)
+                self.assertTrue(all(value >= 0 for value in phases))
+                if num_rows:
+                    self.assertGreaterEqual(phases[2], 40)
+                else:
+                    self.assertEqual(phases[2], 0)
                 self.assertLessEqual(
                     builtins.sum(phases), metrics.apply("pythonProcessingTime").value()
                 )
@@ -2150,9 +2158,11 @@ class ScalarPandasUDFTests(ScalarPandasUDFTestsMixin, ReusedSQLTestCase):
             result = self.spark.range(2, numPartitions=1).select(identity("id"))
             metrics = self._python_metrics(result)
             for name in (
-                "pythonInputConversionTime",
+                "pythonDataReadTime",
+                "pythonInputPreparationTime",
                 "pythonUDFExecutionTime",
-                "pythonOutputConversionTime",
+                "pythonOutputPreparationTime",
+                "pythonDataWriteTime",
                 "pythonNumTimingReports",
                 "pythonNumTimedBatches",
             ):
