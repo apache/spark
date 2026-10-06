@@ -278,8 +278,10 @@ class UnivocityParser(
         timeFormatter.parse(datum)
       }
 
-    case _: StringType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
+    case dt: StringType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { s =>
+        CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(s), dt)
+      }
 
     case _: BinaryType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(_.getBytes)

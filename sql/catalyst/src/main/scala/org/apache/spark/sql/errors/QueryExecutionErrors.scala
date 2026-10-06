@@ -655,6 +655,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("methodName" -> methodName))
   }
 
+  def externalUDFInBarrierTaskUnsupportedError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException("UNSUPPORTED_FEATURE.EXTERNAL_UDF_IN_BARRIER_TASK")
+  }
+
   def binaryArithmeticCauseOverflowError(
       eval1: Short,
       symbol: String,
@@ -2456,7 +2460,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
-  def invalidStartIndexError(numRows: Int, startIndex: Int): SparkArrayIndexOutOfBoundsException = {
+  def invalidStartIndexError(
+      numRows: Long, startIndex: Int): SparkArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "_LEGACY_ERROR_TEMP_2266",
       messageParameters = Map(
@@ -2472,6 +2477,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "_LEGACY_ERROR_TEMP_2267",
       messageParameters = Map(
         "className" -> className))
+  }
+
+  def windowFunctionPartitionSizeExceedsLimitError(numRows: Long): SparkException = {
+    new SparkException(
+      errorClass = "WINDOW_FUNCTION_PARTITION_SIZE_EXCEEDS_LIMIT",
+      messageParameters = Map("numRows" -> numRows.toString()),
+      cause = null)
   }
 
   def doExecuteBroadcastNotImplementedError(
