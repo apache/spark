@@ -465,4 +465,172 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("infer inequality constraints: chained inequalities within a single relation") {
+    Seq(($"a" < $"b" && $"b" < 3, $"a" < $"b" && $"b" < 3 && $"a" < 3),
+      ($"a" < $"b" && $"b" <= 3, $"a" < $"b" && $"b" <= 3 && $"a" < 3),
+      ($"a" < $"b" && $"b" === 3, $"a" < $"b" && $"b" === 3 && $"a" < 3),
+      ($"a" <= $"b" && $"b" < 3, $"a" <= $"b" && $"b" < 3 && $"a" < 3),
+      ($"a" <= $"b" && $"b" <= 3, $"a" <= $"b" && $"b" <= 3 && $"a" <= 3),
+      ($"a" <= $"b" && $"b" === 3, $"a" <= $"b" && $"b" === 3 && $"a" <= 3),
+      ($"a" > $"b" && $"b" > 3, $"a" > $"b" && $"b" > 3 && $"a" > 3),
+      ($"a" > $"b" && $"b" >= 3, $"a" > $"b" && $"b" >= 3 && $"a" > 3),
+      ($"a" > $"b" && $"b" === 3, $"a" > $"b" && $"b" === 3 && $"a" > 3),
+      ($"a" >= $"b" && $"b" > 3, $"a" >= $"b" && $"b" > 3 && $"a" > 3),
+      ($"a" >= $"b" && $"b" >= 3, $"a" >= $"b" && $"b" >= 3 && $"a" >= 3),
+      ($"a" >= $"b" && $"b" === 3, $"a" >= $"b" && $"b" === 3 && $"a" >= 3)
+    ).foreach {
+      case (filter, inferred) =>
+        val original = testRelation.where(filter)
+        val optimized = testRelation.where(IsNotNull($"a") && IsNotNull($"b") && inferred)
+        comparePlans(Optimize.execute(original.analyze), optimized.analyze)
+    }
+  }
+
+  test("infer inequality constraints: chained inequality across an equi-join") {
+    Seq(("left.b".attr < "right.b".attr, $"b" < 1, $"b" < 1),
+      ("left.b".attr < "right.b".attr, $"b" === 1, $"b" < 1),
+      ("left.b".attr < "right.b".attr, $"b" <= 1, $"b" < 1),
+      ("left.b".attr <= "right.b".attr, $"b" <= 1, $"b" <= 1),
+      ("left.b".attr <= "right.b".attr, $"b" === 1, $"b" <= 1),
+      ("left.b".attr > "right.b".attr, $"b" > 1, $"b" > 1),
+      ("left.b".attr > "right.b".attr, $"b" === 1, $"b" > 1),
+      ("left.b".attr > "right.b".attr, $"b" >= 1, $"b" > 1),
+      ("left.b".attr >= "right.b".attr, $"b" >= 1, $"b" >= 1),
+      ("left.b".attr >= "right.b".attr, $"b" === 1, $"b" >= 1)
+    ).foreach {
+      case (cond, filter, inferred) =>
+        val originalLeft = testRelation.subquery("left")
+        val originalRight = testRelation.where(filter).subquery("right")
+
+        val left =
+          testRelation.where(IsNotNull($"a") && IsNotNull($"b") && inferred).subquery("left")
+        val right =
+          testRelation.where(IsNotNull($"a") && IsNotNull($"b") && filter).subquery("right")
+        val condition = Some("left.a".attr === "right.a".attr && cond)
+        testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
+    }
+  }
+
+  test("infer inequality constraints: chained inequalities through an implicit cast") {
+    Seq(($"a" < $"b" && $"b" < 3L, $"a".cast(LongType) < $"b" && $"b" < 3L &&
+        $"a".cast(LongType) < 3L),
+      ($"a" < $"b" && $"b" <= 3L, $"a".cast(LongType) < $"b" && $"b" <= 3L &&
+        $"a".cast(LongType) < 3L),
+      ($"a" < $"b" && $"b" === 3L, $"a".cast(LongType) < $"b" && $"b" === 3L &&
+        $"a".cast(LongType) < 3L),
+      ($"a" <= $"b" && $"b" < 3L, $"a".cast(LongType) <= $"b" && $"b" < 3L &&
+        $"a".cast(LongType) < 3L),
+      ($"a" <= $"b" && $"b" <= 3L, $"a".cast(LongType) <= $"b" && $"b" <= 3L &&
+        $"a".cast(LongType) <= 3L),
+      ($"a" <= $"b" && $"b" === 3L, $"a".cast(LongType) <= $"b" && $"b" === 3L &&
+        $"a".cast(LongType) <= 3L),
+      ($"a" < $"b" && $"b" < 3, $"a".cast(LongType) < $"b" && $"b" < Literal(3).cast(LongType)
+        && $"a".cast(LongType) < Literal(3).cast(LongType)),
+      ($"a" > $"b" && $"b" > 3L, $"a".cast(LongType) > $"b" && $"b" > 3L &&
+        $"a".cast(LongType) > 3L),
+      ($"a" > $"b" && $"b" >= 3L, $"a".cast(LongType) > $"b" && $"b" >= 3L &&
+        $"a".cast(LongType) > 3L),
+      ($"a" > $"b" && $"b" === 3L, $"a".cast(LongType) > $"b" && $"b" === 3L &&
+        $"a".cast(LongType) > 3L),
+      ($"a" >= $"b" && $"b" > 3L, $"a".cast(LongType) >= $"b" && $"b" > 3L &&
+        $"a".cast(LongType) > 3L),
+      ($"a" >= $"b" && $"b" >= 3L, $"a".cast(LongType) >= $"b" && $"b" >= 3L &&
+        $"a".cast(LongType) >= 3L),
+      ($"a" >= $"b" && $"b" === 3L, $"a".cast(LongType) >= $"b" && $"b" === 3L &&
+        $"a".cast(LongType) >= 3L),
+      ($"a" > $"b" && $"b" > 3, $"a".cast(LongType) > $"b" && $"b" > Literal(3).cast(LongType)
+        && $"a".cast(LongType) > Literal(3).cast(LongType))
+    ).foreach {
+      case (filter, inferred) =>
+        val testRelation = LocalRelation($"a".int, $"b".long)
+        val original = testRelation.where(filter)
+        val optimized = testRelation.where(IsNotNull($"a") && IsNotNull($"b") && inferred)
+        comparePlans(Optimize.execute(original.analyze), optimized.analyze)
+    }
+  }
+
+  test("infer inequality constraints: an attr=literal binding on one join side bounds " +
+    "an inequality join key on the other side") {
+    val condition = Some("x.a".attr > "y.a".attr)
+    val optimizedLeft = testRelation.where(IsNotNull($"a") && $"a" === 1).as("x")
+    val optimizedRight = testRelation.where($"a" < 1 && IsNotNull($"a")).as("y")
+    val correct = optimizedLeft.join(optimizedRight, Inner, condition)
+
+    Seq(Literal(1) === $"a", $"a" === Literal(1)).foreach { filter =>
+      val original =
+        testRelation.where(filter).as("x").join(testRelation.as("y"), Inner, condition)
+      comparePlans(Optimize.execute(original.analyze), correct.analyze)
+    }
+  }
+
+  test("infer inequality constraints: a three-attribute chain bounded by a literal") {
+    val original = testRelation.where($"a" < $"b" && $"b" < $"c" && $"c" < 5)
+    val optimized = testRelation.where(IsNotNull($"a") && IsNotNull($"b") && IsNotNull($"c")
+      && $"a" < $"b" && $"b" < $"c" && $"a" < 5 && $"b" < 5 && $"c" < 5)
+    comparePlans(Optimize.execute(original.analyze), optimized.analyze)
+  }
+
+  test("infer inequality constraints: a range join condition combined with a range filter") {
+    val left = testRelation.where($"b" >= 3 && $"b" <= 13).as("x")
+    val right = testRelation.as("y")
+
+    val optimizedLeft = testRelation.where(IsNotNull($"a") && IsNotNull($"b")
+      && $"b" >= 3 && $"b" <= 13).as("x")
+    val optimizedRight = testRelation.where(IsNotNull($"a") && IsNotNull($"b") && IsNotNull($"c")
+      && $"c" > 3 && $"b" <= 13).as("y")
+    val condition = Some("x.a".attr === "y.a".attr
+      && "x.b".attr >= "y.b".attr && "x.b".attr < "y.c".attr)
+    val original = left.join(right, Inner, condition)
+    val optimized = optimizedLeft.join(optimizedRight, Inner, condition)
+    comparePlans(Optimize.execute(original.analyze), optimized.analyze)
+  }
+
+  test("infer inequality constraints: chain across a join through an implicit cast") {
+    val testRelation1 = LocalRelation($"a".long, $"b".long, $"c".long).as("x")
+    val testRelation2 = LocalRelation($"a".int, $"b".int, $"c".int).as("y")
+
+    // y.b < 13 inferred from y.b < x.b && x.b <= 13
+    val left = testRelation1.where($"b" <= 13L).as("x")
+    val right = testRelation2.as("y")
+
+    val optimizedLeft =
+      testRelation1.where(IsNotNull($"a") && IsNotNull($"b") && $"b" <= 13L).as("x")
+    val optimizedRight = testRelation2.where(IsNotNull($"a") && IsNotNull($"b")
+      && $"b".cast(LongType) < 13L).as("y")
+
+    val condition = Some("x.a".attr === "y.a".attr && "y.b".attr < "x.b".attr)
+    val original = left.join(right, Inner, condition)
+    val optimized = optimizedLeft.join(optimizedRight, Inner, condition)
+    comparePlans(Optimize.execute(original.analyze), optimized.analyze)
+  }
+
+  test("infer inequality constraints: range predicate in left-outer join ON clause " +
+    "is pushed to right side when left attr is bounded by inequality") {
+    // Left side: a.k >= 5
+    // Join condition: b.v >= a.k
+    // Transitive inference should deduce b.v >= 5 and push it down to the right side of
+    // LeftOuter join.
+    val left = LocalRelation($"k".int, $"key".int).subquery("a")
+    val right = LocalRelation($"v".int, $"key".int).subquery("b")
+
+    val joinCond = ("a.key".attr === "b.key".attr) && ("b.v".attr >= "a.k".attr)
+    val originalQuery = left
+      .where("a.k".attr >= 5)
+      .join(right, LeftOuter, Some(joinCond))
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    var pushedToRight = false
+    optimized.foreach {
+      case Join(_, Filter(cond, _), LeftOuter, _, _) =>
+        pushedToRight = splitConjunctivePredicates(cond).exists {
+          case GreaterThanOrEqual(attr: Attribute, Literal(v: Int, IntegerType)) =>
+            attr.name == "v" && v == 5
+          case _ => false
+        }
+      case _ =>
+    }
+    assert(pushedToRight, s"Expected b.v >= 5 pushed to right side; plan was:\n$optimized")
+  }
+
 }
