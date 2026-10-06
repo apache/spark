@@ -629,16 +629,12 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringSplit(Literal("\"quote"), Literal("\"quote"), Literal(-1)) :: Nil)
   }
 
-  test("SPARK-59961: split refreshes its cached pattern when the regex changes") {
-    // UnsafeProjection reuses its output buffer, so every input row's strings point into the
-    // same bytes: the cached regex must be a copy, or the same-length "[,;]+" would look equal
-    // to the "[0-9]" before it.
+  // Evaluates `expr` on each (str, regex) row, both interpreted and with codegen. UnsafeProjection
+  // reuses its output buffer, so every input row's strings point into the same bytes: the cached
+  // regex must be a copy, or a regex the same length as the one before it would look equal to it.
+  private def checkSplitWithChangingRegex(
+      expr: StringSplit, rows: Seq[(String, String, Seq[String])]): Unit = {
     val toUnsafe = UnsafeProjection.create(Array[DataType](StringType, StringType))
-    val rows = Seq(
-      ("a1b2c", "[0-9]", Seq("a", "b", "c")),
-      ("a,b;c", "[,;]+", Seq("a", "b", "c")),
-      ("a1b,c", "[0-9]", Seq("a", "b,c")))
-    val expr = StringSplit($"a".string.at(0), $"b".string.at(1), Literal(-1))
     val codegen = GenerateUnsafeProjection.generate(expr :: Nil)
     rows.foreach { case (s, regex, expected) =>
       val input = toUnsafe(create_row(s, regex))
@@ -646,6 +642,36 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(interpreted.toSeq[UTF8String](StringType).map(_.toString) === expected)
       val generated = codegen(input).getArray(0)
       assert(generated.toSeq[UTF8String](StringType).map(_.toString) === expected)
+    }
+  }
+
+  test("SPARK-59961: split refreshes its cached pattern when the regex changes") {
+    // "[,;]+" is the same length as the "[0-9]" before it.
+    checkSplitWithChangingRegex(
+      StringSplit($"a".string.at(0), $"b".string.at(1), Literal(-1)),
+      Seq(
+        ("a1b2c", "[0-9]", Seq("a", "b", "c")),
+        ("a,b;c", "[,;]+", Seq("a", "b", "c")),
+        ("a1b,c", "[0-9]", Seq("a", "b,c"))))
+  }
+
+  test("SPARK-59961: split with legacy truncate and UTF8_LCASE refreshes its cached pattern") {
+    withSQLConf(SQLConf.LEGACY_TRUNCATE_FOR_EMPTY_REGEX_SPLIT.key -> "true") {
+      val lcase = StringType("UTF8_LCASE")
+      // UTF8_LCASE prefixes the regex with (?ui), and with the legacy conf it does so for an
+      // empty regex too. So "" splits as a regex, and the limit does not truncate the rest of
+      // the string: "abcd" gives ["a", "bcd"], where UTF8_BINARY would give ["a", "b"].
+      // "Y" is the same length as the "x" before it.
+      checkSplitWithChangingRegex(
+        StringSplit(
+          BoundReference(0, lcase, nullable = true),
+          BoundReference(1, lcase, nullable = true),
+          Literal(2)),
+        Seq(
+          ("aXbxc", "x", Seq("a", "bxc")),
+          ("aybYc", "Y", Seq("a", "bYc")),
+          ("abcd", "", Seq("a", "bcd")),
+          ("aXbxc", "x", Seq("a", "bxc"))))
     }
   }
 
