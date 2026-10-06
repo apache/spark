@@ -39,6 +39,7 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 from pyspark.util import PythonEvalType
+from pyspark.worker import WorkerMetrics
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
     from pyspark.worker_util import RunnerConf
@@ -84,6 +85,63 @@ class PandasEvalTypeHandlerRegistrationTests(unittest.TestCase):
 
 @unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
 class PandasScalarUDFHandlerTests(unittest.TestCase):
+    def test_phase_boundaries_exclude_input_and_output_iteration(self):
+        metrics = WorkerMetrics()
+        now = 0
+        batch = _batch(a=[1, 2])
+
+        def clock():
+            nonlocal now
+            # Each timed block spans one millisecond plus any simulated work inside it.
+            now += 1_000_000
+            return now
+
+        def udf(values):
+            nonlocal now
+            now += 5_000_000
+            return values + 1
+
+        def inputs():
+            nonlocal now
+            for _ in range(2):
+                now += 100_000_000
+                yield batch
+
+        handler = _handler(_udf(udf), _udf(udf))
+        handler.set_worker_metrics(metrics)
+        with patch("pyspark.worker.time.perf_counter_ns", side_effect=clock):
+            for output in handler.run(0, inputs()):
+                self.assertEqual(output.column(0).to_pylist(), [2, 3])
+                self.assertEqual(output.column(1).to_pylist(), [2, 3])
+                now += 1_000_000_000
+
+        self.assertEqual(
+            metrics.to_report(),
+            {
+                "pythonInputConversionTime": 2,
+                "pythonUDFExecutionTime": 24,
+                "pythonOutputConversionTime": 2,
+                "pythonNumTimingReports": 1,
+                "pythonNumTimedBatches": 2,
+            },
+        )
+
+    def test_empty_partition_reports_supported_zero_timings(self):
+        metrics = WorkerMetrics()
+        handler = _handler(_udf(lambda values: values))
+        handler.set_worker_metrics(metrics)
+        self.assertEqual(list(handler.run(0, iter(()))), [])
+        self.assertEqual(
+            metrics.to_report(),
+            {
+                "pythonInputConversionTime": 0,
+                "pythonUDFExecutionTime": 0,
+                "pythonOutputConversionTime": 0,
+                "pythonNumTimingReports": 1,
+                "pythonNumTimedBatches": 0,
+            },
+        )
+
     def test_invokes_udf_per_batch(self):
         handler = _handler(_udf(lambda s: s + 1))
         out = list(handler.run(0, iter([_batch(a=[1, 2, 3])])))

@@ -213,21 +213,12 @@ private[spark] object BasePythonRunner extends Logging {
     }
   }
 
-  // Values used to update the existing Python SQL metrics and task spill metrics.
-  private[python] case class WorkerMetrics(
-      bootTimestampMs: Long,
-      initTimestampMs: Long,
-      finishTimestampMs: Long,
-      pythonExecutionDurationMs: Long,
-      memoryBytesSpilled: Long,
-      diskBytesSpilled: Long)
-
   private lazy val workerMetricsMapper = new ObjectMapper()
     .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
     .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
 
-  /** Read and validate worker metrics after METRICS_DATA; ignore additional fields. */
-  private[python] def readWorkerMetrics(stream: DataInputStream): WorkerMetrics = {
+  /** Decode all numeric fields after METRICS_DATA without knowing their metric names. */
+  private[python] def readWorkerMetrics(stream: DataInputStream): Map[String, Long] = {
     val length = stream.readInt()
     if (length <= 0) {
       throw new SparkException(s"Invalid Python worker report length: $length")
@@ -243,21 +234,13 @@ private[spark] object BasePythonRunner extends Logging {
       throw new SparkException("Expected a Python worker JSON object")
     }
 
-    def metricValue(name: String): Long = {
-      val value = report.get(name)
-      if (value == null || !value.isIntegralNumber || !value.canConvertToLong) {
-        throw new SparkException(s"Missing or invalid Python worker metric: $name")
+    report.fields().asScala.map { entry =>
+      val value = entry.getValue
+      if (!value.isIntegralNumber || !value.canConvertToLong) {
+        throw new SparkException(s"Invalid Python worker metric: ${entry.getKey}")
       }
-      value.longValue()
-    }
-
-    WorkerMetrics(
-      metricValue("bootTimestampMs"),
-      metricValue("initTimestampMs"),
-      metricValue("finishTimestampMs"),
-      metricValue("pythonExecutionDurationMs"),
-      metricValue("memoryBytesSpilled"),
-      metricValue("diskBytesSpilled"))
+      entry.getKey -> value.longValue()
+    }.toMap
   }
 
   /**
@@ -909,17 +892,32 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     protected def handleMetricsData(): Unit = {
       val workerMetrics = BasePythonRunner.readWorkerMetrics(stream)
-      val bootTime = workerMetrics.bootTimestampMs
-      val initTime = workerMetrics.initTimestampMs
-      val finishTime = workerMetrics.finishTimestampMs
-      val pythonExecutionDurationMs = workerMetrics.pythonExecutionDurationMs
+      def requiredMetric(name: String): Long = workerMetrics.getOrElse(name,
+        throw new SparkException(s"Missing Python worker metric: $name"))
+
+      // Read required inputs before updating any SQL or task metrics.
+      val bootTime = requiredMetric("bootTimestampMs")
+      val initTime = requiredMetric("initTimestampMs")
+      val finishTime = requiredMetric("finishTimestampMs")
+      val pythonExecutionDurationMs = requiredMetric("pythonExecutionDurationMs")
+      val memoryBytesSpilled = requiredMetric("memoryBytesSpilled")
+      val diskBytesSpilled = requiredMetric("diskBytesSpilled")
+
       // A reused Python worker records bootTime before waiting for this task, so it can precede
       // startTime. Use the later timestamp to exclude the worker's idle time from initialization.
       val pythonWorkerInitializationStartTime = math.max(startTime, bootTime)
       val boot = pythonWorkerInitializationStartTime - startTime
       val init = initTime - pythonWorkerInitializationStartTime
-      val finish = finishTime - initTime
       val total = finishTime - startTime
+      val finish = finishTime - initTime
+      val calculatedMetrics = Map(
+        "pythonBootTime" -> boot,
+        "pythonInitTime" -> init,
+        "pythonTotalTime" -> total,
+        "pythonProcessingTime" -> pythonExecutionDurationMs)
+      // Select registered report values; calculated timings take precedence over raw aliases.
+      val sqlMetrics = workerMetrics.filter { case (name, _) => metrics.contains(name) } ++
+        calculatedMetrics
 
       // Format data size for readability
       val dataKB = totalDataReceived / 1024.0
@@ -935,12 +933,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         log"finish = ${MDC(TIME, finish)} - " +
         log"Batches: ${MDC(COUNT, batchesProcessed)}, Data: ${MDC(SIZE, dataStr)} - " +
         log"${MDC(TASK_NAME, taskIdentifier(context))}")
-      metrics.get("pythonBootTime").foreach(_.add(boot))
-      metrics.get("pythonInitTime").foreach(_.add(init))
-      metrics.get("pythonTotalTime").foreach(_.add(total))
-      metrics.get("pythonProcessingTime").foreach(_.add(pythonExecutionDurationMs))
-      context.taskMetrics().incMemoryBytesSpilled(workerMetrics.memoryBytesSpilled)
-      context.taskMetrics().incDiskBytesSpilled(workerMetrics.diskBytesSpilled)
+      sqlMetrics.foreach { case (name, value) =>
+        metrics.get(name).foreach(_.add(value))
+      }
+      context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
+      context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
     }
 
     protected def handlePythonException(): PythonException = {
