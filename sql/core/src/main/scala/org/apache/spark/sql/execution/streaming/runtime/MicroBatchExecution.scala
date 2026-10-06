@@ -635,22 +635,6 @@ class MicroBatchExecution(
 
   private def disableAQESupportInStatelessIfUnappropriated(
       sparkSessionToRunBatches: SparkSession): Unit = {
-    def containsStatefulOperator(p: LogicalPlan): Boolean = {
-      p.exists {
-        case node: Aggregate if node.isStreaming => true
-        case node: Deduplicate if node.isStreaming => true
-        case node: DeduplicateWithinWatermark if node.isStreaming => true
-        case node: Distinct if node.isStreaming => true
-        case node: Join if node.left.isStreaming && node.right.isStreaming => true
-        case node: FlatMapGroupsWithState if node.isStreaming => true
-        case node: FlatMapGroupsInPandasWithState if node.isStreaming => true
-        case node: TransformWithState if node.isStreaming => true
-        case node: TransformWithStateInPySpark if node.isStreaming => true
-        case node: GlobalLimit if node.isStreaming => true
-        case _ => false
-      }
-    }
-
     if (trigger.isInstanceOf[RealTimeTrigger]) {
       logWarning(log"Disabling AQE since AQE is not supported for Real-time Mode.")
       sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
@@ -658,6 +642,22 @@ class MicroBatchExecution(
       // SPARK-53941: We disable AQE for stateful workloads as of now.
       logWarning(log"Disabling AQE since AQE is not supported in stateful workloads.")
       sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+    }
+  }
+
+  private def containsStatefulOperator(p: LogicalPlan): Boolean = {
+    p.exists {
+      case node: Aggregate if node.isStreaming => true
+      case node: Deduplicate if node.isStreaming => true
+      case node: DeduplicateWithinWatermark if node.isStreaming => true
+      case node: Distinct if node.isStreaming => true
+      case node: Join if node.left.isStreaming && node.right.isStreaming => true
+      case node: FlatMapGroupsWithState if node.isStreaming => true
+      case node: FlatMapGroupsInPandasWithState if node.isStreaming => true
+      case node: TransformWithState if node.isStreaming => true
+      case node: TransformWithStateInPySpark if node.isStreaming => true
+      case node: GlobalLimit if node.isStreaming => true
+      case _ => false
     }
   }
 
@@ -911,7 +911,7 @@ class MicroBatchExecution(
       sparkSessionToRunBatches: SparkSession,
       latestBatchId: Long,
       committedBatchId: Long): OffsetSeqMetadataBase = {
-    if (metadata.version != OffsetSeqLog.VERSION_2 || committedBatchId < 0) {
+    if (metadata.version != OffsetSeqLog.VERSION_2) {
       metadata
     } else {
       val hasStatefulShufflePartitions = OffsetSeqMetadata.readValueOpt(
@@ -929,19 +929,26 @@ class MicroBatchExecution(
         metadata match {
           case v2: OffsetSeqMetadataV2 =>
             val stateCheckpointLocation = new Path(checkpointFile("state")).getParent
-            try {
+            val stateMetadataBatchId = if (committedBatchId >= 0) {
+              committedBatchId
+            } else {
+              latestBatchId
+            }
+            val numPartitionsOpt = try {
               val stateMetadataReader = new StateMetadataPartitionReader(
                 stateCheckpointLocation.toString,
                 new SerializableConfiguration(
                   sparkSessionToRunBatches.sessionState.newHadoopConf()),
-                committedBatchId)
-              stateMetadataReader.stateStoreNumPartitions.map { numPartitions =>
-                logWarning(log"Recovered state-store partition count " +
-                  log"${MDC(CONFIG, SQLConf.SHUFFLE_PARTITIONS.key)}=" +
-                  log"${MDC(NUM_PARTITIONS, numPartitions)} " +
-                  log"from checkpoint state metadata")
-                OffsetSeqMetadata.withStatefulShufflePartitions(v2, numPartitions)
-              }.getOrElse(metadata)
+                stateMetadataBatchId)
+              val partitionsOpt = stateMetadataReader.stateStoreNumPartitions
+              // If the query was stateful and we could not get the number of partitions
+              // for any reason, abort the query.
+              if (partitionsOpt.isEmpty && containsStatefulOperator(analyzedPlan)) {
+                throw new IllegalStateException(
+                  s"State metadata at $stateCheckpointLocation did not provide a partition " +
+                    "count for this stateful query.")
+              }
+              partitionsOpt
             } catch {
               case NonFatal(e) =>
                 throw new SparkException(
@@ -952,6 +959,15 @@ class MicroBatchExecution(
                     "restart the query to recover.",
                   e)
             }
+            // Otherwise we either have the partitions from state or
+            // the query was stateless and session config can be used.
+            numPartitionsOpt.map { numPartitions =>
+              logWarning(log"Recovered state-store partition count " +
+                log"${MDC(CONFIG, SQLConf.SHUFFLE_PARTITIONS.key)}=" +
+                log"${MDC(NUM_PARTITIONS, numPartitions)} " +
+                log"from checkpoint state metadata")
+              OffsetSeqMetadata.withStatefulShufflePartitions(v2, numPartitions)
+            }.getOrElse(metadata)
           case _ =>
             metadata
         }

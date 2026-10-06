@@ -437,6 +437,59 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     }
   }
 
+  test("[SPARK-59919] VERSION_2 recovers state-store partitions when the commit log is missing") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[(Int, Int)]
+      val aggregated = inputData.toDS().groupBy("_1").count()
+
+      val query1 = startStatefulQuery(
+        aggregated, checkpointDir, shufflePartitions = 5,
+        queryName = "offsetlog_v2_stateful_missing_commit_log_test")
+      try {
+        inputData.addData((1, 0), (2, 0))
+        query1.processAllAvailable()
+        assert(query1.streamingQuery.lastExecution.numStateStores === 5)
+      } finally {
+        query1.stop()
+      }
+
+      val offsetLog = new OffsetSeqLog(spark, s"${checkpointDir.getAbsolutePath}/offsets")
+      val latestBatchId = offsetLog.getLatestBatchId().get
+      val offsetMap = offsetLog.get(latestBatchId).get match {
+        case offset: OffsetMap => offset
+        case offset => fail(s"Expected a v2 offset, but found ${offset.getClass.getSimpleName}")
+      }
+      val offsetsPath = s"${checkpointDir.getAbsolutePath}/offsets"
+      val offsetWithoutShufflePartitions = offsetMap.copy(metadata =
+        offsetMap.metadata.copy(conf =
+          offsetMap.metadata.conf - SQLConf.SHUFFLE_PARTITIONS.key))
+
+      val offsetFile = new Path(offsetsPath, latestBatchId.toString)
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      val fileSystem = offsetFile.getFileSystem(hadoopConf)
+      assert(fileSystem.delete(offsetFile, false))
+      assert(offsetLog.add(latestBatchId, offsetWithoutShufflePartitions))
+      assert(!offsetLog.get(latestBatchId).get.metadataOpt.get.conf
+        .contains(SQLConf.SHUFFLE_PARTITIONS.key))
+
+      val commitsPath = new Path(checkpointDir.getAbsolutePath, "commits")
+      val commitsFileSystem = commitsPath.getFileSystem(hadoopConf)
+      assert(commitsFileSystem.exists(commitsPath))
+      assert(commitsFileSystem.delete(commitsPath, true))
+      assert(!commitsFileSystem.exists(commitsPath))
+
+      val query2 = startStatefulQuery(
+        aggregated, checkpointDir, shufflePartitions = 10,
+        queryName = "offsetlog_v2_stateful_missing_commit_log_test")
+      try {
+        query2.processAllAvailable()
+        assert(query2.streamingQuery.lastExecution.numStateStores === 5)
+      } finally {
+        query2.stop()
+      }
+    }
+  }
+
   test("[SPARK-59919] VERSION_2 fails when state metadata is corrupt during partition recovery") {
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[(Int, Int)]
@@ -489,6 +542,62 @@ class OffsetSeqLogSuite extends SharedSparkSession {
           "Delete the checkpoint and restart the query"))
         assert(offsetLog.getLatest().get._2.metadataOpt.get.conf
           .get(SQLConf.SHUFFLE_PARTITIONS.key).isEmpty)
+      } finally {
+        query2.stop()
+      }
+    }
+  }
+
+  test("[SPARK-59919] VERSION_2 fails when state metadata is missing during partition recovery") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[(Int, Int)]
+      val aggregated = inputData.toDS().groupBy("_1").count()
+
+      val query1 = startStatefulQuery(
+        aggregated, checkpointDir, shufflePartitions = 5,
+        queryName = "offsetlog_v2_stateful_missing_metadata_test")
+      try {
+        inputData.addData((1, 0), (2, 0))
+        query1.processAllAvailable()
+        assert(query1.streamingQuery.lastExecution.numStateStores === 5)
+      } finally {
+        query1.stop()
+      }
+
+      val offsetLog = new OffsetSeqLog(spark, s"${checkpointDir.getAbsolutePath}/offsets")
+      val latestBatchId = offsetLog.getLatestBatchId().get
+      val offsetMap = offsetLog.get(latestBatchId).get match {
+        case offset: OffsetMap => offset
+        case offset => fail(s"Expected a v2 offset, but found ${offset.getClass.getSimpleName}")
+      }
+      val offsetsPath = s"${checkpointDir.getAbsolutePath}/offsets"
+      val offsetWithoutShufflePartitions = offsetMap.copy(metadata =
+        offsetMap.metadata.copy(conf =
+          offsetMap.metadata.conf - SQLConf.SHUFFLE_PARTITIONS.key))
+
+      val batchFile = new Path(offsetsPath, latestBatchId.toString)
+      batchFile.getFileSystem(spark.sessionState.newHadoopConf()).delete(batchFile, false)
+      assert(offsetLog.add(latestBatchId, offsetWithoutShufflePartitions))
+      assert(!offsetLog.get(latestBatchId).get.metadataOpt.get.conf
+        .contains(SQLConf.SHUFFLE_PARTITIONS.key))
+
+      val stateMetadataFile = new File(checkpointDir, "state/0/_metadata/metadata")
+      assert(stateMetadataFile.isFile, s"Missing state metadata file: $stateMetadataFile")
+      assert(
+        stateMetadataFile.delete(),
+        s"Failed to delete state metadata file: $stateMetadataFile")
+
+      val query2 = startStatefulQuery(
+        aggregated, checkpointDir, shufflePartitions = 10,
+        queryName = "offsetlog_v2_stateful_missing_metadata_test")
+      try {
+        val exception = intercept[StreamingQueryException] {
+          query2.processAllAvailable()
+        }
+        assert(exception.getCause.getMessage.contains(
+          "Failed to recover the state-store partition count from checkpoint metadata"))
+        assert(exception.getCause.getMessage.contains(
+          "Delete the checkpoint and restart the query"))
       } finally {
         query2.stop()
       }
