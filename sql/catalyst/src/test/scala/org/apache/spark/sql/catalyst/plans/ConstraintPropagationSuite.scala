@@ -591,4 +591,30 @@ class ConstraintPropagationSuite extends PlanTest {
       case _ => false
     }, s"Should not infer c = 5 from attr-attr EqualTo target; got: $inferred")
   }
+
+  test("infer inequality constraints: transitive inequality chaining") {
+    val tr = LocalRelation($"a".int, $"b".int, $"c".int)
+    val a = resolveColumn(tr, "a")
+    val b = resolveColumn(tr, "b")
+    val c = resolveColumn(tr, "c")
+
+    // Given a < b, b < c, c < 5
+    val plan = tr.where(LessThan(a, b) && LessThan(b, c) && LessThan(c, Literal(5)))
+    val constraints = plan.constraints
+
+    assert(constraints.contains(LessThan(b, Literal(5))))
+    assert(constraints.contains(LessThan(a, Literal(5))))
+  }
+
+  test("infer inequality constraints: directional lower and upper bounds") {
+    val tr = LocalRelation($"a".int, $"b".int)
+    val a = resolveColumn(tr, "a")
+    val b = resolveColumn(tr, "b")
+
+    val plan1 = tr.where(GreaterThan(a, b) && GreaterThan(b, Literal(3)))
+    assert(plan1.constraints.contains(GreaterThan(a, Literal(3))))
+
+    val plan2 = tr.where(LessThanOrEqual(a, b) && LessThanOrEqual(b, Literal(3)))
+    assert(plan2.constraints.contains(LessThanOrEqual(a, Literal(3))))
+  }
 }

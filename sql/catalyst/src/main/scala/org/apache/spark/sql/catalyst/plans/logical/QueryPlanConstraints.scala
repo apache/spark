@@ -33,8 +33,7 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
   lazy val constraints: ExpressionSet = {
     if (conf.constraintPropagationEnabled) {
       validConstraints
-        .union(inferAdditionalConstraints(validConstraints))
-        .union(inferConstraintsFromLiteralBindings(validConstraints))
+        .union(inferAllAdditionalConstraints(validConstraints))
         .union(constructIsNotNullConstraints(validConstraints, output))
         .filter { c =>
           c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
@@ -124,6 +123,92 @@ trait ConstraintHelper {
       inferred ++= replaceConstraints(targets, attr, lit)
     }
     inferred -- constraints
+  }
+
+  /**
+   * Infers the full additional constraint set for a given set of constraints by combining the
+   * equality-based inferences above ([[inferAdditionalConstraints]],
+   * [[inferConstraintsFromLiteralBindings]]) with transitive inequality chaining
+   * ([[inferInequalityConstraints]]). The inequality step is iterated to a fixed point because a
+   * single pass only chains pairs present in the input set: e.g. `a < b && b < c && c < 5`
+   * requires one pass to derive `b < 5` and a second to derive `a < 5` from it.
+   */
+  def inferAllAdditionalConstraints(constraints: ExpressionSet): ExpressionSet = {
+    @tailrec
+    def chainInequalities(inferred: ExpressionSet): ExpressionSet = {
+      val newlyInferred = inferInequalityConstraints(constraints ++ inferred)
+      if (newlyInferred.isEmpty) inferred else chainInequalities(inferred ++ newlyInferred)
+    }
+
+    chainInequalities(
+      inferAdditionalConstraints(constraints) ++
+        inferConstraintsFromLiteralBindings(constraints))
+  }
+
+  /**
+   * Infers an additional set of constraints from a given set of inequality constraints.
+   * For e.g., if an operator has constraints of the form (`a > b`, `b > 5`), this returns an
+   * additional constraint of the form `a > 5`.
+   */
+  private def inferInequalityConstraints(constraints: ExpressionSet): ExpressionSet = {
+    // Substituting through a comparison is only safe under binary-stable collations, for the
+    // same reason as in inferConstraintsFromLiteralBindings: non-binary-stable collations may
+    // order values differently than their binary representation would suggest. Attribute-to-
+    // attribute equality is excluded here too: its transitivity is already handled by
+    // inferAdditionalConstraints via substitution, so chaining it here would only re-derive the
+    // same fact as a redundant <= / >= pair instead of the clean substituted equality that path
+    // already produces.
+    val validComparisons = constraints.filter {
+      case b: BinaryComparison =>
+        b.deterministic && !b.isInstanceOf[EqualNullSafe] &&
+          (!b.isInstanceOf[EqualTo] || b.left.foldable || b.right.foldable) &&
+          isBinaryStable(b.left.dataType) && isBinaryStable(b.right.dataType)
+      case _ => false
+    }
+
+    def hasFoldableOperand(e: Expression): Boolean = e match {
+      case BinaryComparison(l, r) => l.foldable || r.foldable
+      case _ => false
+    }
+
+    if (!validComparisons.exists(hasFoldableOperand)) {
+      return ExpressionSet()
+    }
+
+    // Canonicalize comparisons into LessThan / LessThanOrEqual direction. EqualTo is expanded
+    // into both directions, unlike GreaterThan/GreaterThanOrEqual, because an equality acts as
+    // both an upper and a lower bound and the matching below is direction-sensitive on which
+    // side carries the literal.
+    val canonical = validComparisons.toSet[Expression].flatMap {
+      case GreaterThan(l, r) => LessThan(r, l) :: Nil
+      case GreaterThanOrEqual(l, r) => LessThanOrEqual(r, l) :: Nil
+      case EqualTo(l, r) => EqualTo(l, r) :: EqualTo(r, l) :: Nil
+      case other => other :: Nil
+    }
+
+    val (bounds, candidates) = canonical.partition(hasFoldableOperand)
+    if (bounds.isEmpty || candidates.isEmpty) return ExpressionSet()
+
+    def isStrict(c: Expression, b: Expression): Boolean =
+      c.isInstanceOf[LessThan] || b.isInstanceOf[LessThan]
+
+    val inferred = for {
+      candidate @ BinaryComparison(l, r) <- candidates
+      bound <- bounds
+      result <- bound match {
+        // Upper bound on r propagates to l: (l < r) && (r < lit) => (l < lit)
+        case BinaryComparison(b, lit) if lit.foldable && r.semanticEquals(b) =>
+          Some(if (isStrict(candidate, bound)) LessThan(l, lit) else LessThanOrEqual(l, lit))
+
+        // Lower bound on l propagates to r: (l < r) && (lit < l) => (r > lit)
+        case BinaryComparison(lit, b) if lit.foldable && l.semanticEquals(b) =>
+          Some(if (isStrict(candidate, bound)) GreaterThan(r, lit) else GreaterThanOrEqual(r, lit))
+
+        case _ => None
+      }
+    } yield result
+
+    ExpressionSet(inferred) -- constraints
   }
 
   private def replaceConstraints(
