@@ -452,10 +452,9 @@ object CollationTypeCoercion extends SQLConfHelper {
    * `preserveCharVarcharTypeInfo`).
    *
    * Same collation: string-family LCT `max(n, m)` with the stronger strength.
-   * Different collations, equal Implicit/Explicit strength: mismatch (error if
-   * Explicit, else indeterminate). Different collations, unequal strength: the
-   * stronger operand wins in full, including its length.
-   * Different collations, both Default: UTF8_BINARY yields; otherwise mismatch.
+   * Different collations, equal strength: mismatch (error if Explicit, else
+   * indeterminate). Different collations, unequal strength: the stronger
+   * operand wins in full, including its length.
    */
   private def getWinningStringType(
       left: StringTypeWithContext,
@@ -474,27 +473,8 @@ object CollationTypeCoercion extends SQLConfHelper {
 
     StringHelper.tightestCommonString(left.stringType, right.stringType) match {
       case Some(lct) => StringTypeWithContext(lct, winner.strength)
-      case None if left.strength == Default && right.strength == Default =>
-        defaultCollationWinner(left, right).getOrElse(handleMismatch())
       case None if left.strength.priority == right.strength.priority => handleMismatch()
       case None => winner
-    }
-  }
-
-  /**
-   * Equal Default strength, different collations. UTF8_BINARY yields; otherwise none.
-   */
-  private def defaultCollationWinner(
-      left: StringTypeWithContext,
-      right: StringTypeWithContext): Option[StringTypeWithContext] = {
-    val leftUtf8 = left.stringType.isUTF8BinaryCollation
-    val rightUtf8 = right.stringType.isUTF8BinaryCollation
-    if (leftUtf8 == rightUtf8) {
-      None
-    } else if (leftUtf8) {
-      Some(right)
-    } else {
-      Some(left)
     }
   }
 
