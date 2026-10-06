@@ -39,9 +39,9 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 from pyspark.util import PythonEvalType
-from pyspark.worker import WorkerMetrics
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+    from pyspark.worker import WorkerMetrics
     from pyspark.worker_util import RunnerConf
 
 if have_pandas and have_pyarrow:
