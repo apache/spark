@@ -42,6 +42,7 @@ from pyspark.testing.utils import (
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+    from pyspark.worker import WorkerMetrics
     from pyspark.worker_util import EvalConf, RunnerConf
 
 if have_pandas and have_pyarrow:
