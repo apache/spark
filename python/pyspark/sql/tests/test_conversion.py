@@ -484,7 +484,7 @@ class PandasToArrowConversionTests(unittest.TestCase):
         self.assertEqual(aware_arrow_out.iloc[0], pd.Timestamp("2020-01-01 17:00:00", tz="UTC"))
         self.assertTrue(pd.isna(aware_arrow_out.iloc[1]))
 
-        # Zone ids pyarrow rejects must still match numpy.
+        # Zone ids pyarrow cannot parse are fine: conversion goes through pandas.
         for zone in ("UTC+01:00", "+01:00:30"):
             arrow_out = _check_series_convert_timestamps_internal(arrow_ser, zone)
             numpy_out = _check_series_convert_timestamps_internal(numpy_ser, zone)
