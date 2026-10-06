@@ -168,8 +168,7 @@ class StateOperatorProgress private[spark] (
 /**
  * Information about progress made in the execution of a [[StreamingQuery]] during a trigger. Each
  * event relates to processing done for a single trigger of the streaming query. Events are
- * emitted even when no new data is available to be processed. The JSON representation includes
- * the configured trigger type and its configuration.
+ * emitted even when no new data is available to be processed.
  *
  * @param id
  *   A unique query id that persists across restarts. See `StreamingQuery.id()`.

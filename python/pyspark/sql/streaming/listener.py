@@ -471,8 +471,7 @@ class StreamingQueryProgress(dict):
         self._jdict: Optional[Dict[str, Any]] = jdict
 
         progress_data = json.loads(jprogress.json()) if jprogress is not None else jdict
-        if progress_data is not None and "trigger" in progress_data:
-            self["trigger"] = progress_data["trigger"]
+        self["trigger"] = progress_data.get("trigger") if progress_data is not None else None
 
     @classmethod
     def fromJObject(cls, jprogress: "JavaObject") -> "StreamingQueryProgress":
@@ -594,7 +593,7 @@ class StreamingQueryProgress(dict):
 
         .. versionadded:: 4.4.0
         """
-        return self.get("trigger")
+        return self["trigger"]
 
     @property
     def durationMs(self) -> Dict[str, int]:

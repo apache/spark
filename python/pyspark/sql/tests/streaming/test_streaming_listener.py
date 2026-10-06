@@ -93,7 +93,7 @@ class StreamingListenerTestsMixin:
         self.assertTrue(isinstance(progress.batchId, int))
         self.assertTrue(isinstance(progress.batchDuration, int))
         self.assertEqual(progress.trigger, progress_json.get("trigger"))
-        self.assertEqual(progress.get("trigger"), progress_json.get("trigger"))
+        self.assertEqual(progress["trigger"], progress_json.get("trigger"))
         self.assertTrue(isinstance(progress.durationMs, dict))
         self.assertTrue(
             set(progress.durationMs.keys()).issubset(
@@ -311,8 +311,6 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
         )
         self.assertEqual(
             get_number_of_public_methods("org.apache.spark.sql.streaming.StreamingQueryProgress"),
-            # Includes internal Scala trigger accessors and synthetic JSON methods.
-            # Python exposes trigger metadata through the public JSON representation.
             42,
             msg,
         )
@@ -414,7 +412,8 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 legacy_jprogress.json.return_value = json.dumps(legacy_json)
                 legacy_progress = StreamingQueryProgress.fromJObject(legacy_jprogress)
                 self.assertIsNone(legacy_progress.trigger)
-                self.assertNotIn("trigger", legacy_progress)
+                self.assertIsNone(legacy_progress["trigger"])
+                self.assertNotIn("trigger", json.loads(legacy_progress.json))
 
                 # Check query terminated with exception
                 from pyspark.sql.functions import col, udf
@@ -599,7 +598,8 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
         progress = StreamingQueryProgress.fromJson(json.loads(progress_json))
 
         self.check_streaming_query_progress(progress, True)
-        self.assertNotIn("trigger", progress)
+        self.assertIsNone(progress["trigger"])
+        self.assertNotIn("trigger", json.loads(progress.json))
 
         configured_json = json.loads(progress_json)
         configured_json["trigger"] = {"type": "ProcessingTime", "intervalMs": 3000000000}
