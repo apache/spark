@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.datasketches.tuple.{Intersection, Sketch, Summary, Union, UpdatableSketch, UpdatableSummary}
+import org.apache.datasketches.tuple.{Intersection, Sketch, Sketches, Summary, Union, UpdatableSketch, UpdatableSummary}
 
 /**
  * Sealed trait representing the internal state of tuple sketch aggregation operations.
@@ -45,8 +45,22 @@ case class UnionTupleAggregationBuffer[S <: Summary](union: Union[S])
 
 case class IntersectionTupleAggregationBuffer[S <: Summary](intersection: Intersection[S])
     extends TupleSketchState[S] {
-  override def serialize(): Array[Byte] = intersection.getResult.toByteArray
-  override def eval(): Array[Byte] = intersection.getResult.toByteArray
+  override def serialize(): Array[Byte] = {
+    // An untouched intersection represents no contribution, not an empty sketch.
+    if (intersection.hasResult()) {
+      intersection.getResult.toByteArray
+    } else {
+      null
+    }
+  }
+
+  override def eval(): Array[Byte] = {
+    if (intersection.hasResult()) {
+      intersection.getResult.toByteArray
+    } else {
+      Sketches.createEmptySketch[S]().toByteArray
+    }
+  }
 }
 
 case class FinalizedTupleSketch[S <: Summary](sketch: Sketch[S]) extends TupleSketchState[S] {

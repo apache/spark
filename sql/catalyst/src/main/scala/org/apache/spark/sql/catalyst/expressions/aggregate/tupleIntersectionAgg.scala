@@ -315,6 +315,10 @@ abstract class TupleIntersectionAggBase[S <: Summary]
       input: TupleSketchState[S]): TupleSketchState[S] = {
 
     (intersectionBuffer, input) match {
+      // Null and untouched input states do not contribute to the intersection.
+      case (_, null) => intersectionBuffer
+      case (_, IntersectionTupleAggregationBuffer(intersection)) if !intersection.hasResult() =>
+        intersectionBuffer
       // The input was serialized then deserialized.
       case (
             intersectionBuffer @ IntersectionTupleAggregationBuffer(intersection),
@@ -359,10 +363,12 @@ abstract class TupleIntersectionAggBase[S <: Summary]
    * @param buffer
    *   A serialized sketch byte array
    * @return
-   *   A CompactSketch instance wrapped with FinalizedTupleSketch
+   *   A CompactSketch instance wrapped with FinalizedTupleSketch, or null for null input
    */
   override def deserialize(buffer: Array[Byte]): TupleSketchState[S] = {
-    if (buffer.nonEmpty) {
+    if (buffer == null) {
+      null
+    } else if (buffer.nonEmpty) {
       FinalizedTupleSketch(heapifySketch(buffer))
     } else {
       createAggregationBuffer()

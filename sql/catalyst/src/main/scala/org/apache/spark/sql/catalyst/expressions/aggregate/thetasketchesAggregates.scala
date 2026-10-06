@@ -44,8 +44,22 @@ case class UnionAggregationBuffer(union: Union) extends ThetaSketchState {
   override def eval(): Array[Byte] = union.getResult.toByteArrayCompressed
 }
 case class IntersectionAggregationBuffer(intersection: Intersection) extends ThetaSketchState {
-  override def serialize(): Array[Byte] = intersection.getResult.toByteArrayCompressed
-  override def eval(): Array[Byte] = intersection.getResult.toByteArrayCompressed
+  override def serialize(): Array[Byte] = {
+    // An untouched intersection represents no contribution, not an empty sketch.
+    if (intersection.hasResult()) {
+      intersection.getResult.toByteArrayCompressed
+    } else {
+      null
+    }
+  }
+
+  override def eval(): Array[Byte] = {
+    if (intersection.hasResult()) {
+      intersection.getResult.toByteArrayCompressed
+    } else {
+      new UpdateSketchBuilder().build().compact().toByteArrayCompressed
+    }
+  }
 }
 case class FinalizedSketch(sketch: CompactSketch) extends ThetaSketchState {
   override def serialize(): Array[Byte] = sketch.toByteArrayCompressed
@@ -617,6 +631,10 @@ case class ThetaIntersectionAgg(
       intersectionBuffer: ThetaSketchState,
       input: ThetaSketchState): ThetaSketchState = {
     (intersectionBuffer, input) match {
+      // Null and untouched input states do not contribute to the intersection.
+      case (_, null) => intersectionBuffer
+      case (_, IntersectionAggregationBuffer(intersection)) if !intersection.hasResult() =>
+        intersectionBuffer
       // If both arguments are intersection objects, merge them directly.
       case (
             IntersectionAggregationBuffer(intersectLeft),
@@ -658,9 +676,11 @@ case class ThetaIntersectionAgg(
     sketchState.serialize()
   }
 
-  /** Wrap the byte array into a Compact sketch instance. */
+  /** Wrap the byte array into a Compact sketch instance, or return null for null input. */
   override def deserialize(buffer: Array[Byte]): ThetaSketchState = {
-    if (buffer.nonEmpty) {
+    if (buffer == null) {
+      null
+    } else if (buffer.nonEmpty) {
       FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))
     } else {
       this.createAggregationBuffer()
