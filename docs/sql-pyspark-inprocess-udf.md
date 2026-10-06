@@ -103,7 +103,8 @@ operator's Python: it releases the buffered rows at once, and the Arrow vectors 
 returns. Reading one row can take longer when the input is another in-process UDF, whose
 next row may need a batch of Python, or a blocked upstream operator; task completion waits
 for at most one second, and then leaves the buffered rows to the executor and deletes
-their spill files. Each row is copied before it is returned, so it remains valid after the
+their spill files. The executor then logs "Managed memory leak detected" for the task, or
+fails it if `spark.unsafe.exceptionOnMemoryLeak` is `true`. Each row is copied before it is returned, so it remains valid after the
 task releases them.
 
 UDF deserialization uses PySpark's bundled cloudpickle. Each task registers its

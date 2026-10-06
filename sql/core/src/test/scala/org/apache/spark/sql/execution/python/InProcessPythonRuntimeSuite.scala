@@ -45,6 +45,11 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     try { runtime.shutdown() } finally { super.afterEach() }
   }
 
+  /** Every metric that an evaluator may update, as `PythonSQLMetrics` defines them. */
+  private def allMetrics(): Map[String, SQLMetric] =
+    (PythonSQLMetrics.pythonSizeMetricsDesc ++ PythonSQLMetrics.pythonTimingMetricsDesc ++
+      PythonSQLMetrics.pythonOtherMetricsDesc).keys.map(_ -> new SQLMetric("sum", 0L)).toMap
+
   test("site-packages config validates JEP include paths") {
     val conf = new SparkConf(false)
     assert(conf.get(IN_PROCESS_SITE_PACKAGES).isEmpty)
@@ -125,8 +130,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
   }
 
   test("unused evaluator iterators do not charge Python total time") {
-    val metrics = Seq("pythonInitTime", "pythonProcessingTime", "pythonTotalTime")
-      .map(_ -> new SQLMetric("timing", 0L)).toMap
+    val metrics = allMetrics()
     val context = TaskContext.empty()
     class TestEvaluator extends InProcessArrowEvalPythonEvaluatorFactory(
         Seq.empty, Seq.empty, Seq.empty, 10, 0L, "UTC", false, false, false, false, true, metrics) {
@@ -145,8 +149,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
   }
 
   test("evaluators retain the generation captured before consuming any input") {
-    val metrics = Seq("pythonInitTime", "pythonProcessingTime", "pythonTotalTime")
-      .map(_ -> new SQLMetric("timing", 0L)).toMap
+    val metrics = allMetrics()
     val context = TaskContext.empty()
     val function = SimplePythonFunction(
       Seq.empty, Collections.emptyMap[String, String](), Collections.emptyList[String](),
@@ -327,8 +330,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     }
 
     def iterator(): Iterator[InternalRow] = {
-      val metrics = Seq("pythonInitTime", "pythonProcessingTime", "pythonTotalTime")
-        .map(_ -> new SQLMetric("timing", 0L)).toMap
+      val metrics = allMetrics()
       new InProcessArrowEvalPythonEvaluatorFactory(Seq(column), Seq.empty, Seq(column), 10,
           0L, "UTC", false, false, false, false, true, metrics) {
         override private[python] def runtimeSession = runtime
@@ -357,8 +359,9 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
       input.gate.countDown()
       consumer.join(10000)
     }
-    // The row read while closing is discarded, and no later row is read.
-    assert(error.get.isInstanceOf[NoSuchElementException] && input.pulled.get == 4)
+    // The fill stops at the row it was waiting for, without reading it.
+    assert(error.get.isInstanceOf[NoSuchElementException])
+    assert(error.get.getMessage == "End of in-process UDF input" && input.pulled.get == 3)
     assert(!iterator.hasNext)
   }
 

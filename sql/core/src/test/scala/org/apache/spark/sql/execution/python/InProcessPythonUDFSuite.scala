@@ -17,22 +17,34 @@
 
 package org.apache.spark.sql.execution.python
 
+import java.io.File
+import java.util.Properties
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.{SparkEnv, SparkException, TaskContextImpl}
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.config.PLUGINS
+import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.{AnalysisException, Column, QueryTest}
 import org.apache.spark.sql.api.python.PythonSQLUtils
-import org.apache.spark.sql.catalyst.expressions.PythonUDF
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PythonUDF, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ArrowEvalPython, Filter, LocalLimit}
 import org.apache.spark.sql.execution.{GlobalLimitExec, ProjectExec, SortExec}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{DataType, LongType, StructField, StructType}
+import org.apache.spark.util.Utils
 
-/** Planning regressions; runtime coverage lives in the PySpark integration suite. */
+/**
+ * Planning regressions, and evaluator tests that need no Python; runtime coverage lives in
+ * the PySpark integration suite.
+ */
 class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
@@ -78,6 +90,102 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
     assert(physical.head.producedAttributes ==
       (physical.head.outputSet -- physical.head.child.outputSet))
     assert(physical.head.missingInput.isEmpty)
+  }
+
+  /** Spill directories of in-process evaluators under the executor's local directory. */
+  private def spillDirs(): Set[String] =
+    Option(new File(Utils.getLocalDir(SparkEnv.get.conf)).listFiles()).toSeq.flatten
+      .map(_.getName).filter(_.startsWith("inprocess-udf-")).toSet
+
+  /**
+   * A Buffered evaluator without UDFs over `rowCount` rows of one long column, whose queue
+   * spills unless `memory` allows otherwise. The input blocks before reading row `blockAt`.
+   */
+  private class BufferedInput(rowCount: Int, spill: Boolean, blockAt: Int = -1) {
+    val memory = new TestMemoryManager(SparkEnv.get.conf)
+    if (spill) memory.limit(0)
+    val taskMemory = new TaskMemoryManager(memory, 0)
+    val context = new TaskContextImpl(0, 0, 0, 0, 0, 1, taskMemory, new Properties, null)
+    val reached = new CountDownLatch(1)
+    val gate = new CountDownLatch(1)
+    val pulled = new AtomicInteger()
+    private val column = AttributeReference("x", LongType)()
+    private val toUnsafe = UnsafeProjection.create(Array[DataType](LongType))
+    val session = new InProcessPythonRuntime.InterpreterSession()
+
+    private val rows: Iterator[InternalRow] = new Iterator[InternalRow] {
+      private def block(): Unit = if (pulled.get == blockAt) {
+        reached.countDown()
+        gate.await(10, TimeUnit.SECONDS)
+      }
+      override def hasNext: Boolean = { block(); pulled.get < rowCount }
+      override def next(): InternalRow = {
+        block()
+        toUnsafe(InternalRow(pulled.incrementAndGet().toLong)).copy()
+      }
+    }
+
+    def iterator(): Iterator[InternalRow] = {
+      val metrics = (PythonSQLMetrics.pythonSizeMetricsDesc ++
+        PythonSQLMetrics.pythonTimingMetricsDesc ++ PythonSQLMetrics.pythonOtherMetricsDesc)
+        .keys.map(_ -> new SQLMetric("sum", 0L)).toMap
+      new InProcessArrowEvalPythonEvaluatorFactory(Seq(column), Seq.empty, Seq(column), 10,
+          0L, "UTC", false, false, false, false, true, metrics) {
+        override private[python] def runtimeSession = session
+      }.evaluateBatches(Seq.empty, Array.empty, rows,
+        StructType(Seq(StructField("x", LongType))), context,
+        InProcessArrowEvalPythonEvaluatorFactory.Buffered(None))
+    }
+  }
+
+  test("buffered rows create a spill directory only when they spill") {
+    val before = spillDirs()
+    val input = new BufferedInput(rowCount = 25, spill = false)
+    try {
+      val iterator = input.iterator()
+      // The first batch is buffered in memory, while the queue is in use.
+      assert(iterator.next().getLong(0) == 1L && spillDirs() == before)
+      assert(iterator.map(_.getLong(0)).toSeq == (2L to 25L) && spillDirs() == before)
+    } finally {
+      input.context.markTaskCompleted(None)
+      input.session.shutdown()
+    }
+  }
+
+  test("buffered rows that spill delete their spill directory at the end of input") {
+    val before = spillDirs()
+    val input = new BufferedInput(rowCount = 25, spill = true)
+    try {
+      val iterator = input.iterator()
+      assert(iterator.next().getLong(0) == 1L && (spillDirs() -- before).size == 1)
+      assert(iterator.map(_.getLong(0)).toSeq == (2L to 25L) && spillDirs() == before)
+    } finally {
+      input.context.markTaskCompleted(None)
+      input.session.shutdown()
+    }
+  }
+
+  test("task completion deletes the spill directory of a queue it leaves to the executor") {
+    val before = spillDirs()
+    val input = new BufferedInput(rowCount = 25, spill = true, blockAt = 5)
+    val iterator = input.iterator()
+    val error = new AtomicReference[Throwable]()
+    val consumer = new Thread(() => {
+      try iterator.next() catch { case t: Throwable => error.set(t) }
+    })
+    consumer.start()
+    try {
+      assert(input.reached.await(10, TimeUnit.SECONDS) && (spillDirs() -- before).size == 1)
+      // The consumer is blocked on its input, so the listener gives up on the lock after 1 s.
+      input.context.markTaskCompleted(None)
+      assert(spillDirs() == before && consumer.isAlive)
+      input.taskMemory.cleanUpAllAllocatedMemory()
+    } finally {
+      input.gate.countDown()
+      consumer.join(10000)
+      input.session.shutdown()
+    }
+    assert(error.get.isInstanceOf[NoSuchElementException] && input.pulled.get == 5)
   }
 
   test("a committed write that invalidates a cached in-process plan does not fail") {
