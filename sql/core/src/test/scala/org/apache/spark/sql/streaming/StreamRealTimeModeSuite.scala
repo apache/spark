@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
 
+import org.json4s.jackson.JsonMethods.parse
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkIllegalStateException, TaskContext}
@@ -41,6 +42,22 @@ import org.apache.spark.sql.internal.SQLConf
 
 class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
   import testImplicits._
+
+  test("SPARK-59986: real-time progress reports the configured trigger") {
+    val input = LowLatencyMemoryStream.singlePartition[Int]
+    testStream(input.toDS(), OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+      AddData(input, 1),
+      StartStream(),
+      CheckAnswer(1),
+      Execute { query =>
+        eventually(Timeout(streamingTimeout)) {
+          assert(query.lastProgress != null)
+          assert(parse(query.lastProgress.json) \ "trigger" ===
+            parse("""{"type":"RealTime","batchDurationMs":4000}"""))
+        }
+      },
+      StopStream)
+  }
 
   test("test trigger") {
     def testTrigger(trigger: Trigger, actual: Long): Unit = {

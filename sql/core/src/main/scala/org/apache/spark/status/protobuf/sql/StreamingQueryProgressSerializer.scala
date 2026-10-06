@@ -55,6 +55,7 @@ private[protobuf] object StreamingQueryProgressSerializer {
     )
     builder.setSink(SinkProgressSerializer.serialize(process.sink))
     setJMapField(process.observedMetrics, putAllObservedMetrics(builder, _))
+    setStringField(process.trigger, builder.setTrigger)
     builder.build()
   }
 
@@ -65,7 +66,7 @@ private[protobuf] object StreamingQueryProgressSerializer {
     val runId = if (process.hasId) {
       UUID.fromString(process.getRunId)
     } else null
-    new StreamingQueryProgress(
+    val progress = new StreamingQueryProgress(
       id = id,
       runId = runId,
       name = getStringField(process.hasName, () => process.getName),
@@ -80,6 +81,8 @@ private[protobuf] object StreamingQueryProgressSerializer {
       sink = SinkProgressSerializer.deserialize(process.getSink),
       observedMetrics = convertToObservedMetrics(process.getObservedMetricsMap)
     )
+    progress.trigger = getStringField(process.hasTrigger, () => process.getTrigger)
+    progress
   }
 
   private def putAllObservedMetrics(

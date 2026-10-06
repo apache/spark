@@ -189,7 +189,7 @@ abstract class StreamExecution(
 
   override val runId: UUID = UUID.randomUUID
 
-  protected val progressReporter = new ProgressReporter(sparkSession, triggerClock,
+  protected val progressReporter = new ProgressReporter(sparkSession, triggerClock, trigger,
     () => logicalPlan)
 
   /**

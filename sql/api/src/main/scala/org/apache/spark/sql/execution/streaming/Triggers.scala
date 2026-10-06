@@ -30,7 +30,19 @@ import org.apache.spark.sql.catalyst.util.SparkIntervalUtils
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.unsafe.types.UTF8String
 
-private object Triggers {
+private[spark] object Triggers {
+  def toJson(trigger: Trigger): String = trigger match {
+    case ProcessingTimeTrigger(intervalMs) =>
+      s"""{"type":"ProcessingTime","intervalMs":$intervalMs}"""
+    case ContinuousTrigger(intervalMs) =>
+      s"""{"type":"Continuous","intervalMs":$intervalMs}"""
+    case RealTimeTrigger(batchDurationMs) =>
+      s"""{"type":"RealTime","batchDurationMs":$batchDurationMs}"""
+    case AvailableNowTrigger => """{"type":"AvailableNow"}"""
+    case OneTimeTrigger => """{"type":"OneTime"}"""
+    case _ => null
+  }
+
   def validate(intervalMs: Long): Unit = {
     require(intervalMs >= 0, "the interval of trigger should not be negative")
   }
