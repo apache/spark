@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
@@ -87,6 +87,24 @@ case class ArrowEvalPythonExec(
     evalType: Int) extends EvalPythonExec with PythonSQLMetrics {
   if (!supportedPythonEvalTypes.contains(evalType)) {
     throw SparkException.internalError(s"Unexpected eval type $evalType")
+  }
+
+  override protected def additionalMetrics: Map[String, SQLMetric] = {
+    if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF) {
+      Map(
+        "pythonInputConversionTime" ->
+          SQLMetrics.createTimingMetric(sparkContext, "time to convert Python input"),
+        "pythonUDFExecutionTime" ->
+          SQLMetrics.createTimingMetric(sparkContext, "time to evaluate Python UDFs"),
+        "pythonOutputConversionTime" ->
+          SQLMetrics.createTimingMetric(sparkContext, "time to convert Python output"),
+        "pythonNumTimingReports" ->
+          SQLMetrics.createMetric(sparkContext, "number of Python tasks with detailed timing"),
+        "pythonNumTimedBatches" ->
+          SQLMetrics.createMetric(sparkContext, "number of Python batches with detailed timing"))
+    } else {
+      Map.empty
+    }
   }
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
