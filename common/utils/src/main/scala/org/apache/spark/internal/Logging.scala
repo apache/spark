@@ -96,8 +96,9 @@ class LogEntry(messageWithContext: => MessageWithContext) {
 
   def context: java.util.Map[String, String] = cachedMessageWithContext.context
 
-  // Passed by name, so that neither entry is evaluated unless the result is logged.
   def +(other: LogEntry): LogEntry =
+    // Concatenation passed by name to LogEntry constructor, so that neither entry is evaluated
+    // unless the result is logged.
     new LogEntry(cachedMessageWithContext + other.cachedMessageWithContext)
 }
 
