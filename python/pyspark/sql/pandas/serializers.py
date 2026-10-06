@@ -19,7 +19,8 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 
-from typing import IO, TYPE_CHECKING, Iterable, Iterator, List, Tuple
+from contextlib import nullcontext
+from typing import IO, TYPE_CHECKING, ContextManager, Iterable, Iterator, List, Optional, Tuple
 
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.serializers import (
@@ -51,12 +52,23 @@ class ArrowStreamSerializer(Serializer):
     write_start_stream : bool
         If True, writes the START_ARROW_STREAM marker before the first
         output batch. Default False.
+    read_timer, write_timer : context manager, optional
+        Reusable scopes supplied by the caller for serialization and stream I/O timing.
     """
 
-    def __init__(self, write_start_stream: bool = False, flush_per_batch: bool = False) -> None:
+    def __init__(
+        self,
+        write_start_stream: bool = False,
+        flush_per_batch: bool = False,
+        *,
+        read_timer: Optional[ContextManager[None]] = None,
+        write_timer: Optional[ContextManager[None]] = None,
+    ) -> None:
         super().__init__()
         self._write_start_stream: bool = write_start_stream
         self._flush_per_batch: bool = flush_per_batch
+        self._read_timer = read_timer
+        self._write_timer = write_timer
 
     def dump_stream(self, iterator: Iterable["pa.RecordBatch"], stream: IO[bytes]) -> None:
         """Optionally prepend START_ARROW_STREAM, then write batches."""
@@ -65,26 +77,37 @@ class ArrowStreamSerializer(Serializer):
             iterator = self._write_stream_start(iterator, stream)
         import pyarrow as pa
 
+        write_timer = self._write_timer or nullcontext()
         writer = None
         try:
             for batch in iterator:
-                if writer is None:
-                    writer = pa.RecordBatchStreamWriter(stream, batch.schema)
-                writer.write_batch(batch)
-                # In pipelined mode, flush after each batch so the JVM can read output
-                # while still sending input, rather than buffering all output.
-                if self._flush_per_batch:
-                    stream.flush()
+                # Fetching a batch above runs the handler; only time the write below.
+                with write_timer:
+                    if writer is None:
+                        writer = pa.RecordBatchStreamWriter(stream, batch.schema)
+                    writer.write_batch(batch)
+                    # Flush pipelined output so the JVM can read while sending input.
+                    if self._flush_per_batch:
+                        stream.flush()
         finally:
             if writer is not None:
-                writer.close()
+                with write_timer:
+                    writer.close()
 
     def load_stream(self, stream: IO[bytes]) -> Iterator["pa.RecordBatch"]:
         """Load batches from a plain Arrow stream."""
         import pyarrow as pa
 
-        reader = pa.ipc.open_stream(stream)
-        for batch in reader:
+        read_timer = self._read_timer or nullcontext()
+        with read_timer:
+            reader = pa.ipc.open_stream(stream)
+        while True:
+            with read_timer:
+                try:
+                    batch = next(reader)
+                except StopIteration:
+                    return
+            # End the read scope before yielding control to the handler.
             yield batch
 
     def _write_stream_start(
@@ -99,7 +122,8 @@ class ArrowStreamSerializer(Serializer):
 
         # Signal the JVM after the first batch succeeds, so errors during
         # batch creation can be reported before the Arrow stream starts.
-        write_int(SpecialLengths.START_ARROW_STREAM, stream)
+        with self._write_timer or nullcontext():
+            write_int(SpecialLengths.START_ARROW_STREAM, stream)
         yield from itertools.chain([first], batch_iterator)
 
     def __repr__(self) -> str:
