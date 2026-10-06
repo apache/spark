@@ -29,8 +29,7 @@ dependency surfaces a clear error when the handler runs.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import nullcontext
-from typing import TYPE_CHECKING, Any, ContextManager
+from typing import TYPE_CHECKING, Any
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import BatchEvalTypeHandler
@@ -46,7 +45,6 @@ from pyspark.util import PythonEvalType
 if TYPE_CHECKING:
     import pyarrow as pa
 
-    from pyspark.worker import WorkerMetrics
     from pyspark.worker_util import EvalConf, RunnerConf
 
 
@@ -68,21 +66,15 @@ class PandasScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         self._return_schema = StructType(
             [StructField("_%d" % i, rt) for i, (_, _, _, rt) in enumerate(udfs)]
         )
-        self._input_timer: ContextManager[None] = nullcontext()
-        self._udf_timer: ContextManager[None] = nullcontext()
-        self._output_timer: ContextManager[None] = nullcontext()
-
-    def set_worker_metrics(self, metrics: "WorkerMetrics") -> None:
-        super().set_worker_metrics(metrics)
         # Bind scopes once per task; each batch reuses them without creating new timers.
         # These phases run on the main thread even when a reader thread prefetches input.
         # The callback timer includes profiling work when a profiler wraps the UDF.
-        self._input_timer = metrics.measure("pythonInputConversionTime")
-        self._udf_timer = metrics.measure("pythonUDFExecutionTime")
-        self._output_timer = metrics.measure("pythonOutputConversionTime")
+        self._input_timer = self.metrics.measure("pythonInputConversionTime")
+        self._udf_timer = self.metrics.measure("pythonUDFExecutionTime")
+        self._output_timer = self.metrics.measure("pythonOutputConversionTime")
         # Advertise timing support even when the task has no input batches.
-        metrics.set("pythonNumTimingReports", 1)
-        metrics.set("pythonNumTimedBatches", 0)
+        self.metrics.set("pythonNumTimingReports", 1)
+        self.metrics.set("pythonNumTimedBatches", 0)
 
     def run(self, split_index: int, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
         import pandas as pd
@@ -141,7 +133,6 @@ class PandasScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                     assign_cols_by_name=runner_conf.assign_cols_by_name,
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
-            if self._worker_metrics is not None:
-                self._worker_metrics.increment("pythonNumTimedBatches")
+            self.metrics.increment("pythonNumTimedBatches")
             # End timing before yielding, since the consumer may pause between batches.
             yield output_batch

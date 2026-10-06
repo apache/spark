@@ -114,6 +114,7 @@ from pyspark.util import (
     with_faulthandler,
 )
 from pyspark.worker_message import WorkerInitInfo
+from pyspark.worker_metrics import WorkerMetrics
 from pyspark.worker_util import (
     EvalConf,
     RunnerConf,
@@ -126,85 +127,6 @@ from pyspark.worker_util import (
     setup_memory_limits,
     setup_spark_files,
 )
-
-
-class _WorkerTimer:
-    """Measure one named duration and add each interval to the collector's task total.
-
-    The collector owns the duration dictionary. This scope keeps a reference to it and a
-    start time for its current with block. Reuse the scope across sequential batches.
-    """
-
-    def __init__(self, shared_duration_totals_ns: dict[str, int], metric_name: str) -> None:
-        """Bind one metric name to the collector's shared duration totals."""
-        # Keep the collector's dictionary by reference so updates reach its task totals.
-        self._shared_duration_totals_ns = shared_duration_totals_ns
-        self._metric_name = metric_name
-        self._block_start_ns: Optional[int] = None
-
-    def __enter__(self) -> None:
-        """Start the clock when Python enters the with block."""
-        # Re-entering this instance would overwrite an unfinished measurement's start time.
-        if self._block_start_ns is not None:
-            raise RuntimeError("Worker timer is already running")
-        self._block_start_ns = time.perf_counter_ns()
-
-    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
-        """Accumulate elapsed time when Python leaves the block, including on an exception."""
-        assert self._block_start_ns is not None
-        elapsed_ns = time.perf_counter_ns() - self._block_start_ns
-        self._block_start_ns = None
-        self._shared_duration_totals_ns[self._metric_name] += elapsed_ns
-        # Python supplies the exception arguments; returning None lets the error propagate.
-
-
-class WorkerMetrics:
-    """Collect values and duration totals for one worker task.
-
-    set/increment store values in their reporting units: counts, byte counts, or epoch milliseconds.
-    measure creates timer scopes that accumulate nanoseconds in a separate shared dictionary.
-    to_dict combines both dictionaries, converting only durations to milliseconds.
-    """
-
-    def __init__(self) -> None:
-        """Create fresh task state so a reused worker does not retain the previous totals."""
-        # Counters, spill byte counts, and epoch timestamps need no conversion at report time.
-        self._values_in_report_units: dict[str, int] = {}
-        # These totals belong to the collector; timer scopes share and update them.
-        self._duration_totals_ns: dict[str, int] = {}
-
-    def set(self, name: str, value: int) -> None:
-        """Store a value in its reporting unit, replacing any earlier value.
-
-        Used for initial counter values, epoch timestamps, and final spill byte counts.
-        Elapsed durations are accumulated through measure instead.
-        """
-        self._values_in_report_units[name] = value
-
-    def increment(self, name: str, value: int = 1) -> None:
-        """Add to a counter in its reporting unit, starting from zero.
-
-        The default increment is one, as used for the number of timed batches.
-        """
-        self._values_in_report_units[name] = self._values_in_report_units.get(name, 0) + value
-
-    def measure(self, name: str) -> _WorkerTimer:
-        """Create a named timing scope; entering it starts the clock."""
-        # Register zero so an empty supported task can still report this timing.
-        self._duration_totals_ns.setdefault(name, 0)
-        return _WorkerTimer(self._duration_totals_ns, name)
-
-    def to_dict(self) -> dict[str, int]:
-        """Build the numeric report dictionary consumed by report_metrics.
-
-        Counters, bytes, and epoch timestamps already have their reporting units. Only the
-        accumulated duration totals require conversion from nanoseconds to milliseconds.
-        """
-        # Round once per task, preserving sub-millisecond contributions from individual batches.
-        return {
-            **self._values_in_report_units,
-            **{name: duration // 1_000_000 for name, duration in self._duration_totals_ns.items()},
-        }
 
 
 def report_metrics(outfile: BinaryIO, metrics: dict[str, int]) -> None:
@@ -548,6 +470,7 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
 # ensure the UDTF is valid. This function also prepares a mapper function for applying
 # the UDTF logic to input rows.
 def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
+    metrics = WorkerMetrics()
     if eval_type in (
         # Pure Arrow stream I/O for both the legacy pandas conversion path and the
         # non-legacy path; the pandas (de)serialization for the legacy path and the
@@ -1310,7 +1233,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                 if cleanup is not None:
                     cleanup()
 
-        return func, ser
+        return func, ser, metrics
 
     elif (
         eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF
@@ -1474,7 +1397,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                 if cleanup is not None:
                     cleanup()
 
-        return func, ser
+        return func, ser, metrics
 
     elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
         import pyarrow as pa
@@ -1582,7 +1505,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                 if cleanup is not None:
                     cleanup()
 
-        return func, ser
+        return func, ser, metrics
 
     else:
 
@@ -1684,7 +1607,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                 if cleanup is not None:
                     cleanup()
 
-        return mapper, ser
+        return mapper, ser, metrics
 
 
 def _elementwise_udf_input_type(data_type: DataType, depth: int) -> DataType:
@@ -1865,9 +1788,9 @@ def _elementwise_pandas_or_arrow_udf_output_to_flat_batch(
         )
 
 
-def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metrics):
+def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
     # If an eval type has a registered handler, dispatch through it: the handler
-    # provides both the function and the serializer.
+    # provides the function, serializer, and task-owned metric collector.
     handler_cls = get_eval_type_handler(eval_type)
     if handler_cls is not None:
         udfs = [
@@ -1875,8 +1798,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
             for udf_index, udf_info in enumerate(udf_info_list)
         ]
         handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
-        handler.set_worker_metrics(metrics)
-        return handler.run, handler.serializer
+        return handler.run, handler.serializer, handler.metrics
+
+    metrics = WorkerMetrics()
 
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
@@ -1964,7 +1888,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
 
-        return grouped_func, ser
+        return grouped_func, ser, metrics
 
     if eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
         import pandas as pd
@@ -2009,7 +1933,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
 
-        return grouped_func, ser
+        return grouped_func, ser, metrics
 
     if eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
         import pandas as pd
@@ -2095,7 +2019,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
 
-        return grouped_func, ser
+        return grouped_func, ser, metrics
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         import pandas as pd
@@ -2179,7 +2103,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
                     max_output_bytes,
                 )
 
-        return grouped_func, ser
+        return grouped_func, ser, metrics
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
         import pandas as pd
@@ -2254,7 +2178,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
                 for _ in group_iter:
                     pass
 
-        return grouped_func, ser
+        return grouped_func, ser, metrics
 
     if eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
         import pandas as pd
@@ -2330,7 +2254,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
 
-        return func, ser
+        return func, ser, metrics
 
     if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         import pandas as pd
@@ -2398,7 +2322,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
                 )
                 del result
 
-        return cogrouped_func, ser
+        return cogrouped_func, ser, metrics
 
     if (
         eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
@@ -2490,7 +2414,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)
 
-        return func, ser
+        return func, ser, metrics
 
     if (
         eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
@@ -2579,7 +2503,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
 
-        return func, ser
+        return func, ser, metrics
 
     if eval_type == PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF:
         # This path exchanges data with the JVM over Arrow, so PyArrow is required. Fail with a
@@ -2705,7 +2629,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)
 
-        return func, ser
+        return func, ser, metrics
 
     if eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
@@ -2839,7 +2763,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)
 
-        return func, ser
+        return func, ser, metrics
 
     if eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
@@ -3011,7 +2935,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
 
             yield from process_results()
 
-        return func, ser
+        return func, ser, metrics
 
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
         import pandas as pd
@@ -3087,7 +3011,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
             # Verify iterator consumed
             verify_iterator_exhausted(args_iter)
 
-        return func, ser
+        return func, ser, metrics
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         import pandas as pd
@@ -3229,7 +3153,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
                 )
             )
 
-        return transform_with_state_func, ser
+        return transform_with_state_func, ser, metrics
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF:
         import pandas as pd
@@ -3441,7 +3365,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
                 )
             )
 
-        return func, ser
+        return func, ser, metrics
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
         import pandas as pd
@@ -3774,7 +3698,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
                     pdfs, pdf_data_cnt, return_type, state_pdfs, state_data_cnt
                 )
 
-        return func, ser
+        return func, ser, metrics
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
         import pyarrow as pa
@@ -3875,7 +3799,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
                 )
             )
 
-        return func, ser
+        return func, ser, metrics
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF:
         import pyarrow as pa
@@ -4055,7 +3979,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
                 )
             )
 
-        return func, ser
+        return func, ser, metrics
 
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
         # Plain Python (pickle) UDFs, the only eval type reaching this branch. read_single_udf
@@ -4072,7 +3996,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf, metri
                 for row in data
             )
 
-        return func, ser
+        return func, ser, metrics
 
     else:
         raise ValueError("Unknown eval type: {}".format(eval_type))
@@ -4088,7 +4012,6 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     """
     try:
         boot_time = time.time()
-        metrics = WorkerMetrics()
         # Initialization
         init_message = message_receiver.get_init_message()
         init_info = WorkerInitInfo.from_stream(init_message)
@@ -4120,6 +4043,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         # read_single_udf); only the classic RDD command carries a profiler of its own.
         profiler = None
         if eval_type == PythonEvalType.NON_UDF:
+            metrics = WorkerMetrics()
             assert isinstance(init_info.udf_info, (bytes, memoryview))
             func, profiler, deserializer, serializer = read_command(pickleSer, init_info.udf_info)
         else:
@@ -4129,14 +4053,10 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 PythonEvalType.SQL_ARROW_TABLE_UDF,
                 PythonEvalType.SQL_ARROW_UDTF,
             )
-            if is_udtf:
-                func, serializer = read_udtf(
-                    pickleSer, init_info.udf_info, eval_type, runner_conf, eval_conf
-                )
-            else:
-                func, serializer = read_udfs(
-                    pickleSer, init_info.udf_info, eval_type, runner_conf, eval_conf, metrics
-                )
+            read = read_udtf if is_udtf else read_udfs
+            func, serializer, metrics = read(
+                pickleSer, init_info.udf_info, eval_type, runner_conf, eval_conf
+            )
             deserializer = serializer
 
         split_index = init_info.split_index

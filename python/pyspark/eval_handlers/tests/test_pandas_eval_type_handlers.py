@@ -41,7 +41,6 @@ from pyspark.testing.utils import (
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
-    from pyspark.worker import WorkerMetrics
     from pyspark.worker_util import RunnerConf
 
 if have_pandas and have_pyarrow:
@@ -86,7 +85,6 @@ class PandasEvalTypeHandlerRegistrationTests(unittest.TestCase):
 @unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
 class PandasScalarUDFHandlerTests(unittest.TestCase):
     def test_phase_boundaries_exclude_input_and_output_iteration(self):
-        metrics = WorkerMetrics()
         now = 0
         batch = _batch(a=[1, 2])
 
@@ -108,8 +106,8 @@ class PandasScalarUDFHandlerTests(unittest.TestCase):
                 yield batch
 
         handler = _handler(_udf(udf), _udf(udf))
-        handler.set_worker_metrics(metrics)
-        with patch("pyspark.worker.time.perf_counter_ns", side_effect=clock):
+        metrics = handler.metrics
+        with patch("pyspark.worker_metrics.time.perf_counter_ns", side_effect=clock):
             for output in handler.run(0, inputs()):
                 self.assertEqual(output.column(0).to_pylist(), [2, 3])
                 self.assertEqual(output.column(1).to_pylist(), [2, 3])
@@ -127,9 +125,8 @@ class PandasScalarUDFHandlerTests(unittest.TestCase):
         )
 
     def test_empty_partition_reports_supported_zero_timings(self):
-        metrics = WorkerMetrics()
         handler = _handler(_udf(lambda values: values))
-        handler.set_worker_metrics(metrics)
+        metrics = handler.metrics
         self.assertEqual(list(handler.run(0, iter(()))), [])
         self.assertEqual(
             metrics.to_dict(),

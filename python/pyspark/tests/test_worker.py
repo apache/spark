@@ -33,9 +33,7 @@ from py4j.protocol import Py4JJavaError
 
 from pyspark import SparkConf, SparkContext
 from pyspark.testing.utils import QuietTest, ReusedPySparkTestCase, eventually
-
-with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
-    from pyspark.worker import WorkerMetrics
+from pyspark.worker_metrics import WorkerMetrics
 
 
 class WorkerMetricsTests(unittest.TestCase):
@@ -43,7 +41,7 @@ class WorkerMetricsTests(unittest.TestCase):
         metrics = WorkerMetrics()
         # Control the clock to retain fractional milliseconds and exclude gaps between blocks.
         with patch(
-            "pyspark.worker.time.perf_counter_ns",
+            "pyspark.worker_metrics.time.perf_counter_ns",
             side_effect=[10_000_000, 10_600_000, 100_000_000, 100_700_000],
         ):
             with metrics.measure("duration"):
@@ -56,7 +54,8 @@ class WorkerMetricsTests(unittest.TestCase):
     def test_nested_timings_are_inclusive(self):
         metrics = WorkerMetrics()
         with patch(
-            "pyspark.worker.time.perf_counter_ns", side_effect=[0, 1_000_000, 3_000_000, 5_000_000]
+            "pyspark.worker_metrics.time.perf_counter_ns",
+            side_effect=[0, 1_000_000, 3_000_000, 5_000_000],
         ):
             with metrics.measure("outer"):
                 with metrics.measure("inner"):
@@ -67,7 +66,8 @@ class WorkerMetricsTests(unittest.TestCase):
         metrics = WorkerMetrics()
         timer = metrics.measure("duration")
         with patch(
-            "pyspark.worker.time.perf_counter_ns", side_effect=[0, 2_000_000, 3_000_000, 4_000_000]
+            "pyspark.worker_metrics.time.perf_counter_ns",
+            side_effect=[0, 2_000_000, 3_000_000, 4_000_000],
         ):
             with timer:
                 with self.assertRaisesRegex(RuntimeError, "already running"):
@@ -80,7 +80,8 @@ class WorkerMetricsTests(unittest.TestCase):
     def test_accumulate_and_propagate_exception(self):
         metrics = WorkerMetrics()
         with patch(
-            "pyspark.worker.time.perf_counter_ns", side_effect=[0, 2_000_000, 3_000_000, 4_000_000]
+            "pyspark.worker_metrics.time.perf_counter_ns",
+            side_effect=[0, 2_000_000, 3_000_000, 4_000_000],
         ):
             with self.assertRaisesRegex(ValueError, "worker failure"):
                 with metrics.measure("duration"):
