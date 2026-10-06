@@ -26,7 +26,6 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.config.ConfigBindingPolicy
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode._
@@ -322,25 +321,15 @@ object AnalysisContext {
 object Analyzer {
   // Configs with bindingPolicy SESSION or NOT_APPLICABLE are retained when resolving views and
   // SQL UDFs, so that their values propagate from the active session rather than falling back to
-  // Spark defaults. Note: configs defined in lazily-loaded modules (e.g., sql/hive) will only
-  // be included if their holding Scala object has been initialized before this set is computed.
+  // Spark defaults. Entries from lazily-loaded modules are recognized once registered.
   def retainResolutionConfigsForAnalysis(
       newConf: SQLConf,
       existingConf: SQLConf,
       createSparkVersion: String = ""): Unit = {
-    val retainedConfigKeys = SQLConf.getConfigEntries().asScala
-      .filter(entry =>
-        entry.bindingPolicy.contains(ConfigBindingPolicy.SESSION) ||
-        entry.bindingPolicy.contains(ConfigBindingPolicy.NOT_APPLICABLE))
-      .map(_.key)
-      .toSet
-
-    val retainedConfigs = existingConf.getAllConfs.filter { case (key, _) =>
-      retainedConfigKeys.contains(key) || key.startsWith("spark.sql.catalog.")
-    }
-
-    retainedConfigs.foreach { case (k, v) =>
-      newConf.settings.put(k, v)
+    existingConf.getAllConfs.foreach { case (key, value) =>
+      if (key.startsWith("spark.sql.catalog.") || SQLConf.isSessionBindingPolicy(key)) {
+        newConf.settings.put(key, value)
+      }
     }
 
     trySetAnsiValue(newConf, createSparkVersion)
