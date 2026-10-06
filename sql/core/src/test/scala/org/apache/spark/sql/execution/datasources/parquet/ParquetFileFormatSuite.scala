@@ -215,7 +215,8 @@ abstract class ParquetFileFormatSuite
           Seq(StructField("f1", IntegerType), StructField("f2", ArrayType(IntegerType))) -> enabled,
           Seq(StructField("f1", BooleanType), StructField("f2", testUDT)) -> enabled
         ).foreach { case (schema, expected) =>
-          assert(ParquetUtils.isBatchReadSupportedForSchema(conf, StructType(schema)) == expected)
+          assert(ParquetUtils.isBatchReadSupportedForSchema(conf, StructType(schema),
+            strictlyColumnar = false) == expected)
         }
       }
     }
