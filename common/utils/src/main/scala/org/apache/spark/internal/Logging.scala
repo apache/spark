@@ -96,10 +96,9 @@ class LogEntry(messageWithContext: => MessageWithContext) {
 
   def context: java.util.Map[String, String] = cachedMessageWithContext.context
 
-  def +(other: LogEntry): LogEntry = {
-    val combined = cachedMessageWithContext + other.cachedMessageWithContext
-    new LogEntry(combined)
-  }
+  // Passed by name, so that neither entry is evaluated unless the result is logged.
+  def +(other: LogEntry): LogEntry =
+    new LogEntry(cachedMessageWithContext + other.cachedMessageWithContext)
 }
 
 /**

@@ -22,7 +22,8 @@ import java.nio.file.Files
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.{Level, LogManager}
+import org.apache.logging.log4j.core.config.Configurator
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
@@ -265,6 +266,35 @@ trait LoggingSuiteBase
       log"worker id ${MDC(LogKeys.WORKER_ID, workerId())}")
     assert(constructionCount === 1)
     assert(constructionCount2 === 1)
+  }
+
+  test("LogEntry concatenation should only be evaluated when the log level is enabled") {
+    var constructionCount = 0
+
+    def executorId(): String = {
+      constructionCount += 1
+      "1"
+    }
+
+    def lostExecutor: LogEntry = log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, executorId())}."
+
+    val originalLevel = LogManager.getLogger(logName).getLevel
+    try {
+      Seq(Level.INFO, Level.DEBUG, Level.TRACE).foreach { level =>
+        Configurator.setLevel(logName, level)
+        constructionCount = 0
+        val logOutput = captureLogOutput(() => logTrace(log"Concat: " + lostExecutor))
+        if (level == Level.TRACE) {
+          assert(constructionCount === 1)
+          assert(logOutput.contains("Concat: Lost executor 1."))
+        } else {
+          assert(constructionCount === 0)
+          assert(logOutput.isEmpty)
+        }
+      }
+    } finally {
+      Configurator.setLevel(logName, originalLevel)
+    }
   }
 }
 
