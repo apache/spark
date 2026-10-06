@@ -1189,6 +1189,14 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       // LCT(NULL, T) = T
       assert(sql("SELECT coalesce(null, cast('a' AS CHAR(5))) AS c")
         .schema.head.dataType === CharType(5))
+      // SPARK-58798 intent: LCT widen nests Cast. Inner CAST('abcdef' AS VARCHAR(2)/CHAR(2))
+      // truncates to "ab"; retargeting the inner Cast to length 4 would yield "abcd".
+      checkAnswer(
+        sql("SELECT coalesce(cast('abcdef' AS VARCHAR(2)), cast('x' AS VARCHAR(4))) AS c"),
+        Row("ab"))
+      checkAnswer(
+        sql("SELECT coalesce(cast('abcdef' AS CHAR(2)), cast('x' AS CHAR(4))) AS c"),
+        Row("ab  "))
     }
   }
 
@@ -1549,6 +1557,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           s"$key=$value same-strength mixed CHAR lengths")
         assert(sql(mixedStrength).schema.head.dataType === CharType(4, "UTF8_LCASE"),
           s"$key=$value Implicit CHAR(2) vs Default CHAR(4) must widen, not narrow")
+        // Mixed strength must still pad the Implicit CHAR(2) to CHAR(4), not keep length 2.
+        checkAnswer(sql(mixedStrength), Row("a   "))
       }
     }
   }
