@@ -203,15 +203,38 @@ class PandasScalarIterUDFHandlerTests(unittest.TestCase):
         self.assertEqual(out[0].schema.field(0).type, pa.int64())
         self.assertEqual(out[0].column(0).to_pylist(), [11, 21])
 
-    def test_rejects_row_count_mismatch(self):
-        # Emitting more rows than were consumed must fail (fail-fast row limit).
+    def test_rejects_too_many_rows(self):
+        # Emitting more rows than consumed fails fast via the output row-limit guard.
         def too_many(series_iter):
             for s in series_iter:
                 yield pd.Series(list(range(len(s) + 1)))
 
         handler = _scalar_iter_handler(too_many)
-        with self.assertRaises(PySparkRuntimeError):
+        with self.assertRaises(PySparkRuntimeError) as cm:
             list(handler.run(0, iter([_batch(a=[1, 2])])))
+        self.assertEqual(cm.exception.getCondition(), "OUTPUT_EXCEEDS_INPUT_ROWS")
+
+    def test_rejects_too_few_rows(self):
+        # Emitting fewer rows than consumed fails the final row-count equality guard.
+        def too_few(series_iter):
+            for s in series_iter:
+                yield s.head(len(s) - 1)
+
+        handler = _scalar_iter_handler(too_few)
+        with self.assertRaises(PySparkRuntimeError) as cm:
+            list(handler.run(0, iter([_batch(a=[1, 2, 3])])))
+        self.assertEqual(cm.exception.getCondition(), "RESULT_ROWS_MISMATCH")
+
+    def test_rejects_unconsumed_input(self):
+        # A UDF that stops reading before the input stream is exhausted must raise
+        # INPUT_NOT_FULLY_CONSUMED.
+        def first_only(series_iter):
+            yield next(series_iter)
+
+        handler = _scalar_iter_handler(first_only)
+        with self.assertRaises(PySparkRuntimeError) as cm:
+            list(handler.run(0, iter([_batch(a=[1, 2]), _batch(a=[3, 4])])))
+        self.assertEqual(cm.exception.getCondition(), "INPUT_NOT_FULLY_CONSUMED")
 
     def test_struct_return_takes_dataframe(self):
         # struct_in_pandas="dict" + df_for_struct=True: a struct return is a DataFrame.
