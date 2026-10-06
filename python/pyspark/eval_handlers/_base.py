@@ -41,6 +41,7 @@ from pyspark.sql.pandas.serializers import (
 if TYPE_CHECKING:
     import pyarrow as pa  # noqa: F401  # only in the batch category's forward-ref subscript
 
+    from pyspark.worker import WorkerMetrics
     from pyspark.worker_util import EvalConf, RunnerConf
 
 # eval type -> (variant_conf or None, {variant_value: handler class}), populated by
@@ -144,6 +145,11 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         self._udfs = udfs
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
+        self._worker_metrics: Optional["WorkerMetrics"] = None
+
+    def set_worker_metrics(self, metrics: "WorkerMetrics") -> None:
+        """Attach the collector owned by the current worker task."""
+        self._worker_metrics = metrics
 
     @property
     @abstractmethod

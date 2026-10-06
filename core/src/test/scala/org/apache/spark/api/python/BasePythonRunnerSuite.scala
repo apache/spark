@@ -96,7 +96,13 @@ class BasePythonRunnerSuite extends SparkFunSuite {
     "{\"bootTimestampMs\":1250,\"initTimestampMs\":2500," +
       "\"finishTimestampMs\":3750,\"pythonExecutionDurationMs\":42," +
       "\"memoryBytesSpilled\":7,\"diskBytesSpilled\":9}"
-  private val expectedMetrics = BasePythonRunner.WorkerMetrics(1250L, 2500L, 3750L, 42L, 7L, 9L)
+  private val expectedMetrics = Map(
+    "bootTimestampMs" -> 1250L,
+    "initTimestampMs" -> 2500L,
+    "finishTimestampMs" -> 3750L,
+    "pythonExecutionDurationMs" -> 42L,
+    "memoryBytesSpilled" -> 7L,
+    "diskBytesSpilled" -> 9L)
 
   private def framedMetricsStream(json: String, declaredLength: Option[Int] = None,
       endMarkers: Boolean = true): DataInputStream = {
@@ -121,41 +127,32 @@ class BasePythonRunnerSuite extends SparkFunSuite {
   }
 
   test("SPARK-59773: read worker metrics and leave the following sections aligned") {
-    val withExtra = metricsReport.dropRight(1) + ",\"futureMetric\":{\"value\":[1,2]}}"
+    val withExtra = metricsReport.dropRight(1) + ",\"futureMetric\":17,\"zeroMetric\":0}"
     val stream = framedMetricsStream(withExtra)
-    assert(BasePythonRunner.readWorkerMetrics(stream) == expectedMetrics)
+    val result = BasePythonRunner.readWorkerMetrics(stream)
+    assert(result == expectedMetrics ++ Map("futureMetric" -> 17L, "zeroMetric" -> 0L))
     checkEndMarkers(stream)
   }
 
-  test("SPARK-59773: worker metrics require all current fields") {
-    val fields = Seq(
-      "bootTimestampMs" -> "\"bootTimestampMs\":1250,",
-      "initTimestampMs" -> "\"initTimestampMs\":2500,",
-      "finishTimestampMs" -> "\"finishTimestampMs\":3750,",
-      "pythonExecutionDurationMs" -> "\"pythonExecutionDurationMs\":42,",
-      "memoryBytesSpilled" -> "\"memoryBytesSpilled\":7,",
-      "diskBytesSpilled" -> ",\"diskBytesSpilled\":9")
-    fields.foreach { case (name, field) =>
-      val stream = framedMetricsStream(metricsReport.replace(field, ""))
-      val error = intercept[SparkException] {
-        BasePythonRunner.readWorkerMetrics(stream)
-      }
-      assert(error.getMessage.contains(name))
-      checkEndMarkers(stream)
-    }
+  test("SPARK-59993: decode worker metric names independently of lifecycle and SQL consumers") {
+    val stream = framedMetricsStream("{\"futureDuration\":42}")
+    val result = BasePythonRunner.readWorkerMetrics(stream)
+    assert(result == Map("futureDuration" -> 42L))
+    checkEndMarkers(stream)
   }
 
-  test("SPARK-59773: worker metrics reject non-int64 values") {
+  test("SPARK-59773: worker metric decoder rejects non-int64 values") {
     val invalidValues = Seq("null", "true", "\"42\"", "42.0", "[]", "{}",
       "9223372036854775808", "-9223372036854775809")
+    val reportWithExtra = metricsReport.dropRight(1) + ",\"futureMetric\":17}"
     val fields = Seq("pythonExecutionDurationMs" -> 42,
-      "memoryBytesSpilled" -> 7, "diskBytesSpilled" -> 9)
+      "memoryBytesSpilled" -> 7, "diskBytesSpilled" -> 9, "futureMetric" -> 17)
     for {
       (name, originalValue) <- fields
       value <- invalidValues
     } {
       val field = "\"" + name + "\":"
-      val json = metricsReport.replace(field + originalValue, field + value)
+      val json = reportWithExtra.replace(field + originalValue, field + value)
       val stream = framedMetricsStream(json)
       val error = intercept[SparkException] {
         BasePythonRunner.readWorkerMetrics(stream)
@@ -173,8 +170,8 @@ class BasePythonRunnerSuite extends SparkFunSuite {
         .replace("\"diskBytesSpilled\":9", "\"diskBytesSpilled\":" + value)
       val stream = framedMetricsStream(json)
       assert(BasePythonRunner.readWorkerMetrics(stream) ==
-        expectedMetrics.copy(pythonExecutionDurationMs = value,
-          memoryBytesSpilled = value, diskBytesSpilled = value))
+        expectedMetrics ++ Map("pythonExecutionDurationMs" -> value,
+          "memoryBytesSpilled" -> value, "diskBytesSpilled" -> value))
       checkEndMarkers(stream)
     }
   }
@@ -206,9 +203,10 @@ class BasePythonRunnerSuite extends SparkFunSuite {
   }
 
   test("SPARK-59773: worker metrics accept a larger report with an additional field") {
-    val json = metricsReport.dropRight(1) + ",\"future\":\"" + ("x" * (70 * 1024)) + "\"}"
+    val json = metricsReport.dropRight(1) + ",\"futureMetric\":17" + (" " * (70 * 1024)) + "}"
     val stream = framedMetricsStream(json)
-    assert(BasePythonRunner.readWorkerMetrics(stream) == expectedMetrics)
+    val result = BasePythonRunner.readWorkerMetrics(stream)
+    assert(result == expectedMetrics + ("futureMetric" -> 17L))
     checkEndMarkers(stream)
   }
 }
