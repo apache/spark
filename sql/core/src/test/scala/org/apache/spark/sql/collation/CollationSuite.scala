@@ -3243,13 +3243,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         Row(null, s"${fullyQualifiedPrefix}UTF8_LCASE"))
     }
 
-    // Both COALESCE sides have default strength but different collations, so the result
-    // is the IndeterminateCollation, whose name is "null".
+    // Default UNICODE CAST vs Default UTF8_BINARY literal: UTF8_BINARY yields.
     checkAnswer(
       sql(
         """EXECUTE IMMEDIATE 'SELECT COLLATION(COALESCE(?, "hello"))'
           | USING CAST(NULL AS STRING COLLATE UNICODE)""".stripMargin),
-      Row("null"))
+      Row(s"${fullyQualifiedPrefix}UNICODE"))
 
     withTable("t") {
       sql(
