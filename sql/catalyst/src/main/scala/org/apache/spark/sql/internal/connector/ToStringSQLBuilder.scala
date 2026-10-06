@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal.connector
 
+import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.connector.expressions.GeneralScalarExpression
 import org.apache.spark.sql.connector.expressions.GetArrayItem
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 
@@ -39,5 +41,13 @@ class ToStringSQLBuilder extends V2ExpressionSQLBuilder with Serializable {
 
   override protected def visitGetArrayItem(getArrayItem: GetArrayItem): String = {
     s"${getArrayItem.childArray.toString}[${getArrayItem.ordinal.toString}]"
+  }
+
+  // `super.visitUnexpectedExpr` builds its error message from `expr.toString`, which calls back
+  // into `ToStringSQLBuilder` for a `GeneralScalarExpression`, so an unknown name would recurse
+  // until StackOverflowError. Render it as a function call instead.
+  override protected def visitUnexpectedExpr(expr: Expression): String = expr match {
+    case e: GeneralScalarExpression => visitSQLFunction(e.name(), e.children())
+    case _ => super.visitUnexpectedExpr(expr)
   }
 }
