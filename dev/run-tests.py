@@ -33,6 +33,7 @@ from sparktestsupport.utils import (
     determine_dangling_python_tests,
     determine_modules_for_files,
     determine_modules_to_test,
+    determine_shell_script_test_goals,
     identify_changed_files_from_git_commits,
 )
 
@@ -380,8 +381,17 @@ def run_python_packaging_tests():
     run_cmd(command)
 
 
-def run_build_tests():
-    run_cmd([os.path.join(SPARK_HOME, "dev", "test-dependencies.sh")])
+def run_shell_script_tests(test_modules, stage):
+    shell_script_test_goals = determine_shell_script_test_goals(test_modules, stage)
+
+    if not shell_script_test_goals:
+        return
+
+    title = f"Running {stage.value} shell script tests"
+    with titled_block(title):
+        for test_goal in shell_script_test_goals:
+            command = [os.path.join(SPARK_HOME, test_goal.path)]
+            run_cmd(command)
 
 
 def run_sparkr_tests():
@@ -602,14 +612,20 @@ def main():
             with titled_block("Running R style checks"):
                 run_sparkr_style_checks()
 
-    if any(m.should_run_build_tests for m in test_modules):
-        with titled_block("Running build tests"):
-            run_build_tests()
+    run_shell_script_tests(
+        test_modules,
+        modules.TestStage.PRE_BUILD,
+    )
 
     # spark build
     if os.environ.get("SKIP_SCALA_BUILD", "false") != "true":
         with titled_block("Building Spark"):
             build_apache_spark(build_tool, extra_profiles)
+
+    run_shell_script_tests(
+        test_modules,
+        modules.TestStage.POST_BUILD,
+    )
 
     # backwards compatibility checks
     if build_tool == "sbt":
@@ -622,12 +638,21 @@ def main():
         if os.environ.get("SKIP_SCALA_BUILD", "false") != "true":
             with titled_block("Building Spark assembly"):
                 build_spark_assembly_sbt(extra_profiles)
+            run_shell_script_tests(
+                test_modules,
+                modules.TestStage.POST_ASSEMBLY_SBT,
+            )
             if should_run_java_style_checks:
                 with titled_block("Running Java style checks"):
                     run_java_style_checks(extra_profiles + modules.root.build_profile_flags)
             if not os.environ.get("SKIP_UNIDOC"):
                 with titled_block("Building Unidoc API Documentation"):
                     build_spark_unidoc_sbt(extra_profiles)
+
+    run_shell_script_tests(
+        test_modules,
+        modules.TestStage.POST_ASSEMBLY,
+    )
 
     # run the test suites
     with titled_block("Running Spark unit tests"):
