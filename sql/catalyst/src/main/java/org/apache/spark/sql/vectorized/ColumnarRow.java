@@ -20,6 +20,7 @@ import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.catalyst.expressions.SpecializedGettersReader;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
@@ -190,50 +191,7 @@ public final class ColumnarRow extends InternalRow {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    if (isNullAt(ordinal)) return null;
-    if (dataType instanceof BooleanType) {
-      return getBoolean(ordinal);
-    } else if (dataType instanceof ByteType) {
-      return getByte(ordinal);
-    } else if (dataType instanceof ShortType) {
-      return getShort(ordinal);
-    } else if (dataType instanceof IntegerType || dataType instanceof YearMonthIntervalType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof LongType || dataType instanceof DayTimeIntervalType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof FloatType) {
-      return getFloat(ordinal);
-    } else if (dataType instanceof DoubleType) {
-      return getDouble(ordinal);
-    } else if (dataType instanceof StringType) {
-      return getUTF8String(ordinal);
-    } else if (dataType instanceof BinaryType) {
-      return getBinary(ordinal);
-    } else if (dataType instanceof DecimalType t) {
-      return getDecimal(ordinal, t.precision(), t.scale());
-    } else if (dataType instanceof DateType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof TimestampType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof TimestampNTZType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof TimestampNTZNanosType) {
-      return getTimestampNTZNanos(ordinal);
-    } else if (dataType instanceof TimestampLTZNanosType) {
-      return getTimestampLTZNanos(ordinal);
-    } else if (dataType instanceof ArrayType) {
-      return getArray(ordinal);
-    } else if (dataType instanceof StructType) {
-      return getStruct(ordinal, ((StructType)dataType).fields().length);
-    } else if (dataType instanceof MapType) {
-      return getMap(ordinal);
-    } else if (dataType instanceof VariantType) {
-      return getVariant(ordinal);
-    } else if (dataType instanceof UserDefinedType<?> udt) {
-      return get(ordinal, udt.sqlType());
-    } else {
-      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3155");
-    }
+    return SpecializedGettersReader.read(this, ordinal, dataType, true, true);
   }
 
   @Override

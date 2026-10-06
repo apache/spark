@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{LocalDateTime, LocalTime}
+import java.time.{Instant, LocalDateTime, LocalTime}
 import java.util
 
 import scala.collection.mutable
@@ -2232,8 +2232,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   // TimeType is physically a long (nanoseconds since midnight); precision affects display only.
-  // The generic `get(int, DataType)` accessor is intentionally not extended for TimeType in this
-  // change (tracked separately), so values are read back via the typed `getLong` accessor.
   Seq(0, 6, 7, 9).foreach { p =>
     val dt = TimeType(p)
     testVector(s"TIME(precision=$p)", 10, dt) {
@@ -2246,6 +2244,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
         (0 until 10).foreach { i =>
           batchRow.rowId = i
           assert(batchRow.getLong(0) == values(i))
+          assert(batchRow.get(0, dt) == values(i))
           val batchRowCopy = batchRow.copy()
           assert(batchRowCopy.getLong(0) == values(i))
         }
@@ -2271,6 +2270,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
         assert(batch.numRows() == 2)
         val structCol = batch.column(0)
         assert(structCol.getChild(0).getLong(0) == n1)
+        assert(structCol.getStruct(0).get(0, TimeType(6)) == n1)
         assert(structCol.getChild(1).getBoolean(0))
         assert(structCol.getChild(0).getLong(1) == n3)
         assert(!structCol.getChild(1).getBoolean(1))
@@ -2286,6 +2286,53 @@ class ColumnarBatchSuite extends SparkFunSuite {
         batch.close()
       }
     }
+  }
+
+  test("SPARK-57744: framework timestamp values in column batches") {
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { memMode =>
+      Seq(7, 8, 9).foreach { precision =>
+        val ntz = TimestampNTZNanosType(precision)
+        val ltz = TimestampLTZNanosType(precision)
+        val schema = new StructType().add("ntz", ntz).add("ltz", ltz)
+        val nanos = precision match {
+          case 7 => 700
+          case 8 => 780
+          case 9 => 789
+        }
+        val expected = TimestampNanosVal.fromParts(1123456L, nanos.toShort)
+        val internal = TimestampNanosVal.fromParts(2123456L, 789.toShort)
+        val rows = Seq(
+          Row(LocalDateTime.parse("1970-01-01T00:00:01.123456789"),
+            Instant.parse("1970-01-01T00:00:01.123456789Z")),
+          Row(null, null),
+          Row(internal, internal))
+        val batch = ColumnVectorUtils.toBatch(schema, memMode, rows.iterator.asJava)
+        try {
+          val row = batch.getRow(0)
+          assert(row.get(0, ntz) == expected)
+          assert(row.get(1, ltz) == expected)
+          assert(batch.getRow(1).isNullAt(0))
+          assert(batch.getRow(1).isNullAt(1))
+          assert(batch.getRow(2).get(0, ntz) == internal)
+          assert(batch.getRow(2).get(1, ltz) == internal)
+        } finally {
+          batch.close()
+        }
+      }
+    }
+  }
+
+  testVector("SPARK-57744: ColumnarRow TIME and interval getters", 2,
+    new StructType().add("time", TimeType(9)).add("interval", CalendarIntervalType)) { column =>
+    val interval = new CalendarInterval(1, 2, 3)
+    column.getChild(0).putLong(0, 123456789L)
+    column.getChild(1).putInterval(0, interval)
+    assert(column.getStruct(0).get(0, TimeType(9)) == 123456789L)
+    assert(column.getStruct(0).get(1, CalendarIntervalType) == interval)
+    column.getChild(0).putNull(1)
+    column.getChild(1).putNull(1)
+    assert(column.getStruct(1).get(0, TimeType(9)) == null)
+    assert(column.getStruct(1).get(1, CalendarIntervalType) == null)
   }
 
   test("SPARK-57570: toBatch throws on unsupported data type") {
