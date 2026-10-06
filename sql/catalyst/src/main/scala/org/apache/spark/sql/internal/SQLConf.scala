@@ -3075,10 +3075,13 @@ object SQLConf {
       .doc("When true, whole stage codegen splits the generated code of an expression that " +
         "supports it, such as a CASE WHEN with many branches, into methods that take the input " +
         "variables they read as parameters, the way code generation outside whole stage codegen " +
-        "splits it; and when subexpression elimination discards the code of its first pass for " +
-        "its split one, it removes the methods that pass added. When false, the code stays in " +
-        "the method of its operator, where a large enough expression goes past the JVM's 64KB " +
-        "method limit and fails to compile, and the class keeps those methods.")
+        "splits it. In a stage whose expressions are split, the methods that subexpression " +
+        "elimination's discarded first pass added are removed; and in every stage, a method " +
+        "that takes its inputs as parameters reads a slot of a compacted mutable state array " +
+        "as the field it is, rather than fail to compile taking it as a parameter. When false, " +
+        "the code stays in the method of its operator, where a large enough expression goes " +
+        "past the JVM's 64KB method limit and fails to compile, and the generated code is what " +
+        "it was before this conf existed.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

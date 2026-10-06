@@ -18,15 +18,13 @@
 package org.apache.spark.sql.execution
 
 import java.util.Locale
-import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import com.google.common.cache.CacheBuilder
-import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
+import com.google.common.cache.{Cache, CacheBuilder}
 
 import org.apache.spark.{broadcast, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.LogKeys.{CODEGEN_STAGE_ID, CONFIG, ERROR, HUGE_METHOD_LIMIT, MAX_METHOD_CODE_SIZE, TREE_NODE}
@@ -45,7 +43,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.{NonFateSharingCache, Utils}
+import org.apache.spark.util.{KeyLock, Utils}
 
 /**
  * An interface for those physical operators that support codegen.
@@ -650,18 +648,19 @@ object WholeStageCodegenExec {
     TrialResult(sizes.map(m => Option.when(m.nonEmpty)(m)), () => trial.report())
   }
 
-  /** The methods a class runs once, whose being interpreted costs nothing per row. */
-  private val RunOnce = Set("<init>", "<clinit>", "init")
-
   /** The bytecode of the methods run per row that are past `limit`. */
   private def bytesOver(sizes: Map[String, Int], limit: Int): Int =
-    sizes.iterator.collect { case (m, size) if size > limit && !RunOnce(m) => size }.sum
+    sizes.iterator.collect {
+      case (m, size) if size > limit && !CodeCompiler.runOnceMethods(m) => size
+    }.sum
 
   /** What `chooseCode` decided for a stage's code; see [[splitDecisions]]. */
   private sealed trait SplitDecision
-  /** The code in one piece runs: the JIT compiles it whole, or no split compiles either. */
+  /**
+   * The code in one piece is kept: the JIT compiles it whole, no split lowers its bytes past the
+   * limit, or no split compiles either; where it fails to compile itself, `doExecute` reports that.
+   */
   private case object KeepWhole extends SplitDecision
-  private case object SplitFailed extends SplitDecision
   /** The expressions split, by their index in `CodegenContext.wholeStageSplitsRecorded`. */
   private case class SplitThese(indices: Option[Set[Int]]) extends SplitDecision
   /** Nothing decided, the method sizes being unknown: the code in one piece runs this time. */
@@ -669,37 +668,51 @@ object WholeStageCodegenExec {
 
   /**
    * What `chooseCode` decided for each stage's code, by [[decisionKey]], so that a stage generated
-   * again skips the trial compiles: the code kept in one piece, a split that failed to compile and
-   * runs in one piece, or the expressions split. A stage met by several threads at once is decided
-   * once, the others waiting for the decision. Sized as the compile cache is, 0 being unbounded.
+   * again skips the trial compiles: the code kept in one piece or the expressions split. Sized as
+   * the compile cache is, 0 being unbounded.
+   *
+   * A plain Guava cache, kept within sql/core: one handed to core's `NonFateSharingCache` fails
+   * sql/core's Maven tests, whose classes refer to Guava as it is while the installed core jar has
+   * it relocated (SPARK-44064, SPARK-50443). [[decided]] serializes the deciders itself.
    */
-  private val splitDecisions: NonFateSharingCache[AnyRef, SplitDecision] = {
+  private val splitDecisions: Cache[AnyRef, SplitDecision] = {
     val builder = CacheBuilder.newBuilder()
     val maxEntries = SQLConf.get.codegenCacheMaxEntries
-    NonFateSharingCache((if (maxEntries > 0) builder.maximumSize(maxEntries) else builder)
-      .build[AnyRef, SplitDecision]())
+    (if (maxEntries > 0) builder.maximumSize(maxEntries) else builder)
+      .build[AnyRef, SplitDecision]()
   }
+
+  /** Serializes the threads deciding one key of [[splitDecisions]]. */
+  private val decisionLock = new KeyLock[AnyRef]
 
   /**
    * The key of a decision for the stage's code `code` under `limit`: what the compile cache keys a
-   * class on - the class loader and the backend - with `methodSplitThreshold`, which packs the
-   * split's blocks, and a digest of the source with the marks of the recorded expressions
-   * (`CodegenContext.wholeStageSplitDigest`), whose marks say which expression each index of a
-   * decision is; a digest rather than the source, which runs to megabytes for the stages that
-   * split.
+   * class on besides its code - the class loader and the backend - with `methodSplitThreshold`,
+   * which packs the split's blocks, and a digest of the source with the marks of the recorded
+   * expressions (`CodegenContext.wholeStageSplitDigest`), whose marks say which expression each
+   * index of a decision is; a digest rather than the source, which runs to megabytes for the
+   * stages that split.
    */
   private def decisionKey(ctx: CodegenContext, code: CodeAndComment, limit: Int): AnyRef =
-    (CodeGenerator.classLoaderKey(), CodeCompiler.active(code), limit,
-      SQLConf.get.methodSplitThreshold, ctx.wholeStageSplitDigest)
+    (CodeGenerator.compileCacheScope(code), limit, SQLConf.get.methodSplitThreshold,
+      ctx.wholeStageSplitDigest)
 
-  /** The value of `splitDecisions.get`, with what its loader threw as it threw it. */
-  private def decided(key: AnyRef, decide: () => SplitDecision): SplitDecision = try {
-    splitDecisions.get(key, () => decide())
-  } catch {
-    case e @ (_: ExecutionException | _: UncheckedExecutionException | _: ExecutionError)
-        if e.getCause != null =>
-      throw e.getCause
-  }
+  /**
+   * The decision remembered for `key`, or else `decide()`'s, which is remembered unless it is
+   * `Undecided`. Threads that meet one key at once decide one at a time, so the later ones find
+   * the first one's decision; one whose `decide()` throws remembers nothing, and the next decides
+   * on its own.
+   */
+  private def decided(key: AnyRef, decide: () => SplitDecision): SplitDecision =
+    decisionLock.withLock(key) {
+      Option(splitDecisions.getIfPresent(key)).getOrElse {
+        val decision = decide()
+        if (decision != Undecided) {
+          splitDecisions.put(key, decision)
+        }
+        decision
+      }
+    }
 }
 
 /**
@@ -759,11 +772,13 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
    * Generates code for this subtree.
    *
    * Under `spark.sql.codegen.wholeStage.splitExpressions` the stage's code is first generated in
-   * one piece, as with the conf off, with the code of each expression a split could take marked,
-   * and only where there is one is that code compiled to choose which expressions to split
-   * ([[chooseCode]]). A stage the JIT compiles whole keeps the code it had without the split,
-   * which a split's calls would only slow down; the trial compile of the code kept is the one
-   * [[doExecute]] finds in the compile cache.
+   * one piece, with the code of each expression a split could take marked, and only where there
+   * is one is that code compiled to choose which expressions to split ([[chooseCode]]). A stage
+   * the JIT compiles whole keeps that code, which a split's calls would only slow down; the trial
+   * compile of the code kept is the one [[doExecute]] finds in the compile cache. That code
+   * differs from the code with the conf off in one place: a method that takes its inputs as
+   * parameters reads a slot of a compacted mutable state array as the field it is, rather than
+   * fail to compile taking it as a parameter (`CodegenContext.collectInputs`).
    *
    * @return the tuple of the codegen context and the actual generated source.
    */
@@ -787,23 +802,25 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
    * the codegen metrics, are made for the code kept.
    *
    *  - Where it fails to compile, the split of every expression is the code that can run, and is
-   *    compiled as a trial too; where that fails as well, the code in one piece is left to
-   *    [[doExecute]], which reports its failure, falls back or throws it, as without the split.
+   *    compiled as a trial too; where that fails as well, or no block could be split, the code in
+   *    one piece is left to [[doExecute]], which reports its failure, falls back or throws it, as
+   *    without the split.
    *  - Otherwise the methods run for each row past the limit - the lower of
    *    `spark.sql.codegen.wholeStage.splitExpressions.methodLimit` (HotSpot's JIT limit by default)
    *    and `spark.sql.codegen.hugeMethodLimit` - are the ones a split could help, and the
    *    expressions marked in them are split: an expression in a method the JIT compiles whole
-   *    would only be slowed down by a split's calls. Where none is marked in them, or the split
-   *    comes out as the code in one piece, the code in one piece is kept.
+   *    would only be slowed down by a split's calls. Where none is marked in them, or no block of
+   *    them could be split, the code in one piece is kept.
    *  - The split is kept if it lowers the bytes of the methods past the limit, and compiles;
-   *    otherwise the code in one piece runs, as it did before the split existed. A split that
-   *    fails to compile is thrown where `throwSplitFailure`, which is under testing.
+   *    otherwise the code in one piece runs, as it did before the split existed.
    *
-   * The decision is remembered by [[WholeStageCodegenExec.decisionKey]], so that a stage generated
-   * again, as every execution of a query generates it, skips the trial compiles, and threads that
-   * meet the stage at once wait for one decision; where a trial's sizes are unknown, nothing is
-   * remembered. The variant not kept leaves the compile cache (`invalidate`), so that it holds only
-   * code that runs and a later compile of that variant reports what it finds.
+   * A split that fails to compile is thrown where `throwSplitFailure`, which is under testing, and
+   * warned about otherwise. The decision is remembered by [[WholeStageCodegenExec.decisionKey]], so
+   * that a stage generated again, as every execution of a query generates it, skips the trial
+   * compiles, and threads that meet the stage at once wait for one decision; where a trial's sizes
+   * are unknown, nothing is remembered. The variant not kept leaves the compile cache
+   * (`invalidate`), so that it holds only code that runs and a later compile of that variant
+   * reports what it finds.
    */
   private[execution] def chooseCode(
       recorded: (CodegenContext, CodeAndComment),
@@ -819,24 +836,9 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     val limit = math.min(conf.wholeStageSplitExpressionsMethodLimit, conf.hugeMethodLimit)
     def splitOf(indices: Option[Set[Int]]) =
       split(indices.map(_.map(ctx.wholeStageSplitsRecorded)))
-    // The code of a decision; None for indices this recording does not have.
-    def codeOf(decision: SplitDecision) = decision match {
-      case SplitThese(indices)
-          if indices.forall(_.forall(_ < ctx.wholeStageSplitsRecorded.length)) =>
-        Some(splitOf(indices))
-      case SplitThese(_) => None
-      case _ => Some(recorded)
-    }
-    val key = decisionKey(ctx, whole, limit)
-    Option(splitDecisions.getIfPresent(key)).foreach { decision =>
-      codeOf(decision) match {
-        case Some(code) => return code
-        case None => splitDecisions.invalidate(key)
-      }
-    }
-
-    // The thread that decides keeps the code it chose; one that waited generates the code of the
-    // decision it gets.
+    // The thread that decides keeps the code it chose; one that finds a decision generates its
+    // code. The indices of a decision are among this recording's: its key holds the digest of the
+    // marked source, which says which expression each index is.
     var chosen: Option[(CodegenContext, CodeAndComment)] = None
     def decide(): SplitDecision = {
       val (decision, code) = decideFromTrials(ctx, whole, recorded, limit, splitOf, compile,
@@ -844,11 +846,11 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       chosen = Some(code)
       decision
     }
-    val decision = decided(key, () => decide())
-    if (decision == Undecided) {
-      splitDecisions.invalidate(key)
-    }
-    chosen.orElse(codeOf(decision)).getOrElse(recorded)
+    val decision = decided(decisionKey(ctx, whole, limit), () => decide())
+    chosen.getOrElse(decision match {
+      case SplitThese(indices) => splitOf(indices)
+      case _ => recorded
+    })
   }
 
   /** The decision of `chooseCode` from the trial compiles, with the code it keeps. */
@@ -863,25 +865,48 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       throwSplitFailure: Boolean): (WholeStageCodegenExec.SplitDecision,
         (CodegenContext, CodeAndComment)) = {
     import WholeStageCodegenExec._
+    // Whether the split generation `splitCode` turned any block into a method. Where it did not,
+    // its code is the code in one piece but for the helper functions of a discarded subexpression
+    // pass, which only a split generation removes, so the code in one piece is kept, its class
+    // cached for `doExecute` already.
+    def splitsSomething(splitCode: (CodegenContext, CodeAndComment)): Boolean =
+      splitCode._1.wholeStageBlocksSplit > 0
+    // A split that fails to compile is thrown under testing (`throwSplitFailure`), and warned
+    // about otherwise.
+    def splitFailed(e: Throwable): (SplitDecision, (CodegenContext, CodeAndComment)) = {
+      logWarning(log"Whole-stage codegen stage (id=${MDC(CODEGEN_STAGE_ID, codegenStageId)}) " +
+        log"failed to compile with its expressions split, so it runs its code without the " +
+        log"split:\n ${MDC(TREE_NODE, treeString)}", e)
+      (KeepWhole, recorded)
+    }
     val wholeTrial = compile(whole, true)
     wholeTrial.methodSizes match {
       case Failure(_) =>
         val splitAll = splitOf(None)
-        val splitTrial = compile(splitAll._2, true)
-        splitTrial.methodSizes match {
-          case Success(_) =>
-            splitTrial.report()
-            (SplitThese(None), splitAll)
-          case Failure(_) =>
-            // `doExecute` compiles the code in one piece, reporting its failure as any compile
-            // does, and falls back or throws it.
-            (KeepWhole, recorded)
+        if (!splitsSomething(splitAll)) {
+          (KeepWhole, recorded)
+        } else {
+          // Where the split fails as well, `doExecute` reports the failure of the code in one
+          // piece as any compile's, so the split's compile expects its failure, which the warning
+          // carries; under testing it is reported and thrown as any compile's.
+          val splitTrial = compile(splitAll._2, !throwSplitFailure)
+          splitTrial.methodSizes match {
+            case Success(_) =>
+              splitTrial.report()
+              (SplitThese(None), splitAll)
+            case Failure(e) if throwSplitFailure =>
+              throw e
+            case Failure(e) =>
+              splitFailed(e)
+          }
         }
       case Success(None) =>
         wholeTrial.report()
         (Undecided, recorded)
       case Success(Some(sizes)) =>
-        val over = sizes.filter { case (m, size) => size > limit && !RunOnce(m) }
+        val over = sizes.filter { case (m, size) =>
+          size > limit && !CodeCompiler.runOnceMethods(m)
+        }
         val indices = if (over.isEmpty) {
           Nil
         } else {
@@ -894,9 +919,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
           (KeepWhole, recorded)
         } else {
           val splitCode = splitOf(Some(indices.toSet))
-          if (splitCode._2 == whole) {
-            // No block of these expressions could be split: the split is the code in one piece,
-            // whose class is cached for `doExecute` already.
+          if (!splitsSomething(splitCode)) {
             wholeTrial.report()
             (KeepWhole, recorded)
           } else {
@@ -915,13 +938,9 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
                 (Undecided, recorded)
               case Failure(e) if throwSplitFailure =>
                 throw e
-              case Failure(_) =>
-                logWarning(log"Whole-stage codegen stage " +
-                  log"(id=${MDC(CODEGEN_STAGE_ID, codegenStageId)}) failed to compile with its " +
-                  log"expressions split, so it runs its code without the split:\n " +
-                  log"${MDC(TREE_NODE, treeString)}")
+              case Failure(e) =>
                 wholeTrial.report()
-                (SplitFailed, recorded)
+                splitFailed(e)
             }
           }
         }

@@ -327,8 +327,11 @@ object CodeCompiler extends Logging {
   private lazy val jitSkipsHugeMethods: Boolean =
     Utils.getVMOptionValue("DontCompileHugeMethods").contains("true")
 
-  /** Generated methods that run once per class or per partition, not per row. */
-  private val runOnceMethods = Set("<init>", "<clinit>", "init")
+  /**
+   * Generated methods that run once per class or per partition, not per row, so that one being
+   * interpreted costs nothing per row.
+   */
+  private[sql] val runOnceMethods = Set("<init>", "<clinit>", "init")
 
   private val hugeMethodWarned = new java.util.concurrent.atomic.AtomicBoolean(false)
 
@@ -337,21 +340,18 @@ object CodeCompiler extends Logging {
 
   /**
    * A compile whose result its caller may discard ([[trial]]). What the compile would report of
-   * methods past the JIT limit is held here, for the caller to report if it keeps the code, and so
-   * are its updates of the codegen metrics, which describe the code that runs.
+   * the code - its updates of the codegen metrics, which describe the code that runs, and its
+   * reports of methods past the JIT limit - is held here, in the order made, for the caller to
+   * make if it keeps the code.
    *
    * @param failureExpected whether a failure to compile is an answer the caller asks for, which the
    *                        compile then logs at debug level rather than as an error.
    */
   private[sql] final class TrialCompile private[codegen] (val failureExpected: Boolean) {
-    private val hugeMethods = mutable.ArrayBuffer.empty[(String, String, Int)]
     private val methods = mutable.ArrayBuffer.empty[(String, Int)]
-    private val metricUpdates = mutable.ArrayBuffer.empty[() => Unit]
+    private val reports = mutable.ArrayBuffer.empty[() => Unit]
 
-    private[codegen] def holdMetricUpdate(update: () => Unit): Unit = metricUpdates += update
-
-    private[codegen] def holdHugeMethod(className: String, methodName: String, size: Int): Unit =
-      hugeMethods += ((className, methodName, size))
+    private[codegen] def hold(report: () => Unit): Unit = reports += report
 
     private[codegen] def recordMethod(methodName: String, size: Int): Unit =
       methods += ((methodName, size))
@@ -366,12 +366,7 @@ object CodeCompiler extends Logging {
       methods.groupMapReduce(_._1.stripSuffix("$"))(_._2)(math.max)
 
     /** Makes the reports and metric updates the compile held back, for the code kept. */
-    def report(): Unit = {
-      metricUpdates.foreach(_())
-      hugeMethods.foreach { case (className, methodName, size) =>
-        logHugeMethod(className, methodName, size)
-      }
-    }
+    def report(): Unit = reports.foreach(_())
   }
 
   private val currentTrial = new ThreadLocal[TrialCompile]
@@ -394,12 +389,13 @@ object CodeCompiler extends Logging {
   private[codegen] def activeTrial: TrialCompile = currentTrial.get
 
   /**
-   * Updates the codegen metrics, or, in a trial, holds the update back until the caller keeps the
-   * code ([[TrialCompile.report]]), so that code compiled only to be discarded is not counted.
+   * Makes `report`, a metric update or a log line about the code compiled, or, in a trial, holds
+   * it back until the caller keeps the code ([[TrialCompile.report]]), so that code compiled only
+   * to be discarded is neither counted nor reported.
    */
-  private[codegen] def updateMetrics(update: => Unit): Unit = Option(currentTrial.get) match {
-    case Some(trial) => trial.holdMetricUpdate(() => update)
-    case None => update
+  private[codegen] def reportOrHold(report: => Unit): Unit = Option(currentTrial.get) match {
+    case Some(trial) => trial.hold(() => report)
+    case None => report
   }
 
   /** Runs `body` on this thread under `trial`, which is null outside one. */
@@ -434,14 +430,10 @@ object CodeCompiler extends Logging {
    * once, and `spark.sql.codegen.hugeMethodLimit` does not already make the stage fall back.
    * Every other report is INFO: every one after that first warning, every one from a generated
    * class outside whole-stage codegen, where the setting does not apply, and every one on an
-   * executor, since the driver compiles each stage before its tasks do and has reported it.
+   * executor, since the driver compiles each stage before its tasks do and has reported it. In a
+   * trial, the report is held back with the metric updates ([[reportOrHold]]).
    */
   private[catalyst] def logHugeMethod(className: String, methodName: String, size: Int): Unit = {
-    val trial = currentTrial.get
-    if (trial != null) {
-      trial.holdHugeMethod(className, methodName, size)
-      return
-    }
     val limit = CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT
     val wholeStage = className.contains("GeneratedIteratorForCodegenStage")
     // `WholeStageCodegenExec` falls back on the largest method of the stage, so with a limit
@@ -475,17 +467,17 @@ object CodeCompiler extends Logging {
       classBytecodes: Iterable[(String, Array[Byte])]): ByteCodeStats = {
     val perClass = classBytecodes.map { case (_, classBytes) =>
       val classCodeSize = classBytes.length
-      updateMetrics(CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classCodeSize))
+      reportOrHold(CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classCodeSize))
       try {
         val cf = new ClassFile(new ByteArrayInputStream(classBytes))
         val constPoolSize = cf.getConstantPoolSize
         val methodCodeSizes = cf.methodInfos.asScala.flatMap { method =>
           method.getAttributes.collect { case attr: CodeAttribute =>
             val byteCodeSize = attr.code.length
-            updateMetrics(CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize))
+            reportOrHold(CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize))
             Option(currentTrial.get).foreach(_.recordMethod(method.getName, byteCodeSize))
             if (byteCodeSize > CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT) {
-              logHugeMethod(cf.getThisClassName, method.getName, byteCodeSize)
+              reportOrHold(logHugeMethod(cf.getThisClassName, method.getName, byteCodeSize))
             }
             byteCodeSize
           }
@@ -530,6 +522,66 @@ object CodeCompiler extends Logging {
     } else {
       logInfo(formatted)
     }
+  }
+
+  /** What a span of generated Java source is, for [[forEachJavaSpan]]. */
+  private[codegen] sealed trait JavaSpan
+  private[codegen] object JavaSpan {
+    /** Code: whatever is neither a literal nor a comment. */
+    case object Code extends JavaSpan
+    /** A string or character literal, its quotes included. */
+    case object Literal extends JavaSpan
+    /** A `//` comment up to its line's end, or a block comment, its delimiters included. */
+    case object Comment extends JavaSpan
+  }
+
+  /**
+   * Calls `f` with each span of the generated Java `source` in turn: its kind, and where it
+   * starts and ends (exclusive). The spans cover the source. A literal's backslash escapes are
+   * honored, a `//` comment ends before its newline, and an unterminated literal or block comment
+   * runs to the end. The one scanner of generated Java: `JdkCodeCompiler.rewriteInnerClassRefs`
+   * rewrites the code spans, and `CodeGenerator.wholeStageSplitMarkersIn` reads the comments.
+   */
+  private[codegen] def forEachJavaSpan(source: String)(f: (JavaSpan, Int, Int) => Unit): Unit = {
+    val n = source.length
+    var i = 0
+    var codeStart = 0
+    def endCode(at: Int): Unit = if (at > codeStart) f(JavaSpan.Code, codeStart, at)
+    while (i < n) {
+      val c = source.charAt(i)
+      if (c == '"' || c == '\'') {
+        endCode(i)
+        val start = i
+        i += 1
+        var closed = false
+        while (i < n && !closed) {
+          val ch = source.charAt(i)
+          if (ch == '\\' && i + 1 < n) {
+            i += 2
+          } else {
+            i += 1
+            closed = ch == c
+          }
+        }
+        f(JavaSpan.Literal, start, i)
+        codeStart = i
+      } else if (c == '/' && i + 1 < n && source.charAt(i + 1) == '/') {
+        endCode(i)
+        val start = i
+        i = source.indexOf('\n', i) match { case -1 => n; case end => end }
+        f(JavaSpan.Comment, start, i)
+        codeStart = i
+      } else if (c == '/' && i + 1 < n && source.charAt(i + 1) == '*') {
+        endCode(i)
+        val start = i
+        i = source.indexOf("*/", i + 2) match { case -1 => n; case end => end + 2 }
+        f(JavaSpan.Comment, start, i)
+        codeStart = i
+      } else {
+        i += 1
+      }
+    }
+    endCode(n)
   }
 }
 
@@ -798,68 +850,19 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
    * The rewrite is applied only to actual code spans: string literals, char
    * literals, and `//` / block comments are copied verbatim so that a `$Upper`
    * sequence inside generated string data (e.g. a column name or error message)
-   * is never corrupted.
+   * is never corrupted. The spans come from `CodeCompiler.forEachJavaSpan`.
    */
   private[codegen] def rewriteInnerClassRefs(body: String, classLoader: ClassLoader): String = {
     val out = new java.lang.StringBuilder(body.length + 16)
-    val code = new java.lang.StringBuilder()
-    val n = body.length
     // A token's rewritten form is stable for a given classloader; memoize within
     // this call so repeated type references resolve at most once.
     val memo = mutable.HashMap.empty[String, String]
-
-    def flushCode(): Unit = {
-      if (code.length > 0) {
-        out.append(rewriteCodeSpan(code.toString, classLoader, memo))
-        code.setLength(0)
-      }
+    CodeCompiler.forEachJavaSpan(body) {
+      case (CodeCompiler.JavaSpan.Code, start, end) =>
+        out.append(rewriteCodeSpan(body.substring(start, end), classLoader, memo))
+      case (_, start, end) =>
+        out.append(body, start, end)
     }
-
-    // Copy a quoted literal (string or char) verbatim, honoring backslash escapes.
-    def copyQuoted(start: Int, quote: Char): Int = {
-      out.append(quote)
-      var j = start + 1
-      var closed = false
-      while (j < n && !closed) {
-        val ch = body.charAt(j)
-        if (ch == '\\' && j + 1 < n) {
-          out.append(ch).append(body.charAt(j + 1))
-          j += 2
-        } else {
-          out.append(ch)
-          j += 1
-          if (ch == quote) closed = true
-        }
-      }
-      j
-    }
-
-    var i = 0
-    while (i < n) {
-      val c = body.charAt(i)
-      if (c == '"' || c == '\'') {
-        flushCode()
-        i = copyQuoted(i, c)
-      } else if (c == '/' && i + 1 < n && body.charAt(i + 1) == '/') {
-        flushCode()
-        while (i < n && body.charAt(i) != '\n') { out.append(body.charAt(i)); i += 1 }
-      } else if (c == '/' && i + 1 < n && body.charAt(i + 1) == '*') {
-        flushCode()
-        out.append("/*")
-        i += 2
-        while (i < n && !(body.charAt(i) == '*' && i + 1 < n && body.charAt(i + 1) == '/')) {
-          out.append(body.charAt(i)); i += 1
-        }
-        // The scan exits either at the `*/` terminator (then i + 1 < n holds by the
-        // loop condition) or at end-of-body for an unterminated comment, whose
-        // characters the loop already copied verbatim.
-        if (i + 1 < n) { out.append("*/"); i += 2 }
-      } else {
-        code.append(c)
-        i += 1
-      }
-    }
-    flushCode()
     out.toString
   }
 
