@@ -5440,7 +5440,7 @@ object SQLConf {
         "top-level string and binary argument payloads whose combined size exceeds " +
         "rowSizeGuard.maxRowHeapFraction of executor heap. The guard checks the projected " +
         "arguments before conversion and pickling. Nested inputs are not estimated.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
@@ -5452,7 +5452,7 @@ object SQLConf {
         "binary Python UDF arguments, as a fraction of executor max heap. The default 0.083 " +
         "is approximately 1/12 of the executor heap; conversion and pickling can require " +
         "multiple copies of the argument bytes.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doubleConf
       .checkValue(v => v > 0.0 && v <= 1.0,
