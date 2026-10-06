@@ -83,10 +83,8 @@ class InProcessArrowBridgeSuite extends SparkFunSuite {
       }
       assert(error.getMessage.contains("offset"))
     } finally {
-      if (array.snapshot().release != 0L) array.release()
-      if (schema.snapshot().release != 0L) schema.release()
-      array.close()
-      schema.close()
+      InProcessArrowBridge.closeStruct(array)
+      InProcessArrowBridge.closeStruct(schema)
       input.close()
     }
     assert(allocator.getAllocatedMemory == before)
@@ -139,10 +137,8 @@ class InProcessArrowBridgeSuite extends SparkFunSuite {
       }
       assert(error.getMessage.contains("expected"))
     } finally {
-      if (array.snapshot().release != 0L) array.release()
-      if (schema.snapshot().release != 0L) schema.release()
-      array.close()
-      schema.close()
+      InProcessArrowBridge.closeStruct(array)
+      InProcessArrowBridge.closeStruct(schema)
       input.close()
     }
     assert(allocator.getAllocatedMemory == before)

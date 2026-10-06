@@ -87,23 +87,6 @@ private[python] object InProcessArrowBridge {
   def exportColumn(vector: FieldVector, outArray: ArrowArray, outSchema: ArrowSchema): Unit =
     Data.exportVector(ArrowUtils.rootAllocator, vector, null, outArray, outSchema)
 
-  /**
-   * Reconstruct an [[ArrowColumnVector]] from JVM-allocated Arrow C Data Interface structs.
-   *
-   * The JVM pre-allocates [[ArrowArray]] and [[ArrowSchema]] before invoking Python.
-   * Python fills them via ``arr._export_to_c(array_ptr, schema_ptr)``. This method
-   * calls [[Data.importIntoVector]] to wrap Python's Arrow buffers (zero-copy).
-   *
-   * Lifecycle:
-   *  - [[Data.importIntoVector]] internally calls ``ArrayImporter.importArray()``, which
-   *    moves the struct snapshot through a non-owning wrapper, leaving the caller's struct
-   *    storage alive for cleanup, and wraps the data buffers via
-   *    ``ReferenceCountedArrowArray`` (ForeignAllocation, zero-copy).
-   *  - Data.importField releases and closes a non-owning schema wrapper too.
-   *    The caller closes the original struct storage.
-   *  - When the returned [[ArrowColumnVector]] is closed, the reference count drops to
-   *    zero, PyArrow's C ``release`` callback is invoked, and the Python array is GC'd.
-   */
   private def checkOffsets(array: ArrowArray): Unit = {
     val snapshot = array.snapshot()
     if (snapshot.offset != 0L) {
@@ -123,6 +106,23 @@ private[python] object InProcessArrowBridge {
       }
   }
 
+  /**
+   * Reconstruct an [[ArrowColumnVector]] from JVM-allocated Arrow C Data Interface structs.
+   *
+   * The JVM pre-allocates [[ArrowArray]] and [[ArrowSchema]] before invoking Python.
+   * Python fills them via ``arr._export_to_c(array_ptr, schema_ptr)``. This method
+   * calls [[Data.importIntoVector]] to wrap Python's Arrow buffers (zero-copy).
+   *
+   * Lifecycle:
+   *  - [[Data.importIntoVector]] internally calls ``ArrayImporter.importArray()``, which
+   *    moves the struct snapshot through a non-owning wrapper, leaving the caller's struct
+   *    storage alive for cleanup, and wraps the data buffers via
+   *    ``ReferenceCountedArrowArray`` (ForeignAllocation, zero-copy).
+   *  - Data.importField releases and closes a non-owning schema wrapper too.
+   *    The caller closes the original struct storage.
+   *  - When the returned [[ArrowColumnVector]] is closed, the reference count drops to
+   *    zero, PyArrow's C ``release`` callback is invoked, and the Python array is GC'd.
+   */
   def cdiToColumn(
       arrowArray: ArrowArray,
       arrowSchema: ArrowSchema,

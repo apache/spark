@@ -82,13 +82,12 @@ object InProcessPythonUDFBuilder {
     "INVALID_SPARK_CONFIG.UNSUPPORTED_IN_PROCESS_PYTHON_UDF"
 
   /**
-   * Whether `checkConfiguration` rejected the session's settings, which can differ between the
-   * session that planned an in-process UDF and another one that re-plans it.
+   * Whether `checkConfiguration` rejected unsupported settings. When another session re-plans
+   * an in-process UDF, only its session settings can newly fail: the SparkConf settings and
+   * the plugin are the same as when the UDF was first planned.
    */
-  private[sql] def isUnsupportedSessionConfiguration(e: Throwable): Boolean = e match {
-    case e: SparkException => e.getCondition == UnsupportedSessionConfiguration
-    case _ => false
-  }
+  private[sql] def isUnsupportedSessionConfiguration(e: SparkException): Boolean =
+    e.getCondition == UnsupportedSessionConfiguration
 
   private[sql] def checkConfiguration(conf: SQLConf): Unit = {
     val sparkConf = Option(SparkEnv.get).map(_.conf)

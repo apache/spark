@@ -309,17 +309,16 @@ def _strings_as_binary(array: pa.Array) -> Optional[pa.Array]:
     rejects null map keys.
     """
 
+    binary_types = {
+        pa.string(): pa.binary(),
+        pa.large_string(): pa.large_binary(),
+        pa.string_view(): pa.binary_view(),
+    }
+
     def level(array: pa.Array) -> Optional[pa.Array]:
-        data_type = array.type
-        if pa.types.is_string(data_type) or pa.types.is_large_string(data_type):
-            binary = pa.binary() if pa.types.is_string(data_type) else pa.large_binary()
-            return pa.Array.from_buffers(
-                binary, len(array), array.buffers()[:3], array.null_count, array.offset
-            )
-        if pa.types.is_string_view(data_type):
-            # A leaf has no fields; from_buffers accepts variadic buffers only in PyArrow 19.
-            return array.view(pa.binary_view())
-        return None
+        # A leaf has no fields, so viewing it keeps its buffers, length and offset.
+        binary = binary_types.get(array.type)
+        return None if binary is None else array.view(binary)
 
     return _rebuild(array, level, nullable_fields=True)
 
