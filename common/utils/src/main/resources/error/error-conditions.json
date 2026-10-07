@@ -176,7 +176,7 @@
   },
   "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE" : {
     "message" : [
-      "Each operand of the MATCH_CONDITION comparison must reference exactly one join input, and the two operands must reference different inputs. Got: <operand1> and <operand2>."
+      "Each operand of the MATCH_CONDITION comparison must reference exactly one join input, and the two operands must reference different inputs. Got: <refs1> and <refs2>."
     ],
     "sqlState" : "42K0E"
   },
@@ -3331,6 +3331,11 @@
       "Detected incompatible changes to table <tableName> after DataFrame/Dataset has been resolved and analyzed, meaning the underlying plan is out of sync. Please, re-create DataFrame/Dataset before attempting to execute the query again."
     ],
     "subClass" : {
+      "CHANGELOG_METADATA_MISMATCH" : {
+        "message" : [
+          "Changelog metadata used for post-processing has changed: <changedProperties>."
+        ]
+      },
       "COLUMNS_MISMATCH" : {
         "message" : [
           "Data columns have changed:",
@@ -9439,6 +9444,11 @@
           "TRANSFORM with SERDE is only supported in hive mode."
         ]
       },
+      "TRANSFORM_WITHOUT_SERDE_TYPE" : {
+        "message" : [
+          "TRANSFORM without SERDE does not support the output data type <dataType>."
+        ]
+      },
       "TRIM_COLLATION" : {
         "message" : [
           "TRIM specifier in the collation."
@@ -10069,6 +10079,12 @@
       "It is not allowed to use window functions inside <clauseName> clause."
     ],
     "sqlState" : "42601"
+  },
+  "WINDOW_FUNCTION_PARTITION_SIZE_EXCEEDS_LIMIT" : {
+    "message" : [
+      "Cannot evaluate the window function because the window partition has <numRows> rows, which exceeds the maximum of 2,147,483,647 (2^31 - 1) rows supported per window partition. Reduce the partition size, for example by adding more expressions to the PARTITION BY clause."
+    ],
+    "sqlState" : "54000"
   },
   "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE" : {
     "message" : [
@@ -11731,11 +11747,6 @@
   "_LEGACY_ERROR_TEMP_2264" : {
     "message" : [
       "Subprocess exited with status <exitCode>. Error: <stderrBuffer>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2265" : {
-    "message" : [
-      "<nodeName> without serde does not support <dt> as output data type."
     ]
   },
   "_LEGACY_ERROR_TEMP_2266" : {

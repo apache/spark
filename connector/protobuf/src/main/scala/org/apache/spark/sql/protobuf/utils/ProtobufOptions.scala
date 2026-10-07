@@ -240,6 +240,15 @@ private[sql] class ProtobufOptions(
   val unwrapWellKnownTypes: Boolean =
     getBoolean("unwrap.primitive.wrapper.types", defaultValue = false)
 
+  // Whether google.protobuf.Timestamp and google.protobuf.Duration are converted to Spark's
+  // native TimestampType / DayTimeIntervalType. This is the default. Setting this option to
+  // false leaves them as ordinary messages, so they deserialize as struct<seconds: bigint,
+  // nanos: int> (the raw proto shape) via the generic message path. Useful when a downstream
+  // schema was defined against the struct representation and must stay stable, or when a
+  // consumer needs the raw seconds/nanos rather than a micro-truncated interval/timestamp.
+  val convertTimestampDurationToNative: Boolean =
+    getBoolean("convert.timestamp.duration.to.native", defaultValue = true)
+
   // Since Spark doesn't allow writing empty StructType, empty proto message type will be
   // dropped by default. Setting this option to true will insert a dummy column to empty proto
   // message so that the empty message will be retained.

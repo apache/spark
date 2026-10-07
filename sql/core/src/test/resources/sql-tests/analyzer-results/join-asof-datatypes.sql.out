@@ -225,7 +225,7 @@ ASOF JOIN (
   MATCH_CONDITION (t.k >= r.k)
 -- !query analysis
 Project [k#x.tag AS tag#x, k#x.inner_seq AS inner_seq#x]
-+- AsOfJoin (named_struct(inner_ts, k#x.inner_ts, inner_seq, k#x.inner_seq, tag, k#x.tag) >= named_struct(inner_ts, k#x.inner_ts, inner_seq, k#x.inner_seq, tag, k#x.tag)), Inner
++- AsOfJoin (k#x >= k#x), Inner
    :- SubqueryAlias t
    :  +- LocalRelation [k#x]
    +- SubqueryAlias r
@@ -241,7 +241,7 @@ ASOF JOIN VALUES (named_struct('x', 1, 'y', 9)) AS r(k)
   MATCH_CONDITION (t.k >= r.k)
 -- !query analysis
 Project [k#x.y AS matched#x]
-+- AsOfJoin (named_struct(a, k#x.a, b, k#x.b) >= named_struct(x, k#x.x, y, k#x.y)), Inner
++- AsOfJoin (k#x >= k#x), Inner
    :- SubqueryAlias t
    :  +- LocalRelation [k#x]
    +- SubqueryAlias r
@@ -257,11 +257,25 @@ ASOF JOIN VALUES
   MATCH_CONDITION (t.k >= r.k)
 -- !query analysis
 Project [k#x.a AS matched#xL]
-+- AsOfJoin (cast(named_struct(a, k#x.a) as struct<a:bigint>) >= named_struct(a, k#x.a)), Inner
++- AsOfJoin (cast(k#x as struct<a:bigint>) >= k#x), Inner
    :- SubqueryAlias t
    :  +- LocalRelation [k#x]
    +- SubqueryAlias r
       +- LocalRelation [k#x]
+
+
+-- !query
+SELECT t.id, r.tag AS matched
+FROM VALUES (1, named_struct()) AS t(id, k) ASOF JOIN
+     VALUES (named_struct(), 'hit') AS r(k, tag)
+  MATCH_CONDITION (t.k >= r.k)
+-- !query analysis
+Project [id#x, tag#x AS matched#x]
++- AsOfJoin (k#x >= k#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [id#x, k#x]
+   +- SubqueryAlias r
+      +- LocalRelation [k#x, tag#x]
 
 
 -- !query
@@ -462,3 +476,67 @@ Project [c1#x, c2#x]
    :  +- LocalRelation [c1#x, c2#x]
    +- SubqueryAlias r
       +- LocalRelation [c1#x, c2#x]
+
+
+-- !query
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a >= r.a)
+-- !query analysis
+Project [size(a#x, false) AS matched_size#x]
++- AsOfJoin (a#x >= a#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [a#x]
+   +- SubqueryAlias r
+      +- LocalRelation [a#x]
+
+
+-- !query
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a > r.a)
+-- !query analysis
+Project [size(a#x, false) AS matched_size#x]
++- AsOfJoin (a#x > a#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [a#x]
+   +- SubqueryAlias r
+      +- LocalRelation [a#x]
+
+
+-- !query
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a <= r.a)
+-- !query analysis
+Project [size(a#x, false) AS matched_size#x]
++- AsOfJoin (a#x <= a#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [a#x]
+   +- SubqueryAlias r
+      +- LocalRelation [a#x]
+
+
+-- !query
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a < r.a)
+-- !query analysis
+Project [size(a#x, false) AS matched_size#x]
++- AsOfJoin (a#x < a#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [a#x]
+   +- SubqueryAlias r
+      +- LocalRelation [a#x]

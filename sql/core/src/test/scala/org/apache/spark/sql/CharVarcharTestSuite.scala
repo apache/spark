@@ -23,13 +23,16 @@ import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, Spark
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
 import org.apache.spark.sql.catalyst.expressions.{
-  ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, InSet, Literal, ScalarSubquery,
-  StringRPad, StringToMap, Upper
+  Alias, ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, InSet, Literal,
+  ScalarSubquery, StringRPad, StringToMap, SupportTrimmedCharInput, Upper
 }
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  Aggregate, Filter, LogicalPlan, OneRowRelation, Project
+}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -39,6 +42,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.SimpleInsertSource
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 // The base trait for char/varchar tests that need to be run with different table implementations.
 trait CharVarcharTestSuite extends QueryTest {
@@ -1020,6 +1024,46 @@ trait CharVarcharTestSuite extends QueryTest {
 class BasicCharVarcharTestSuite extends SharedSparkSession {
   import testImplicits._
 
+  private def assertParseExceedLimit(query: String, expectedLimit: String = "5"): Unit = {
+    assertParseExceedLimitError(sql(query).collect(), expectedLimit)
+  }
+
+  private def assertParseExceedLimitError(body: => Any, expectedLimit: String = "5"): Unit = {
+    val e = intercept[SparkException] { body }
+    val cause = e.getCause match {
+      case r: SparkRuntimeException => r
+      case other =>
+        Option(other).flatMap(t => Option(t.getCause)).getOrElse(other) match {
+          case r: SparkRuntimeException => r
+          case _ => fail(s"expected EXCEED_LIMIT_LENGTH cause, got: $e")
+        }
+    }
+    checkError(
+      exception = cause,
+      condition = "EXCEED_LIMIT_LENGTH",
+      parameters = Map("limit" -> expectedLimit))
+  }
+
+  private def assertDuplicateMapKey(query: String, expectedKey: String = "a "): Unit = {
+    assertDuplicateMapKeyError(sql(query).collect(), expectedKey)
+  }
+
+  private def assertDuplicateMapKeyError(body: => Any, expectedKey: String = "a "): Unit = {
+    val error = intercept[Exception] { body }
+    val duplicateError = Iterator.iterate[Throwable](error)(_.getCause)
+      .takeWhile(_ != null)
+      .collectFirst {
+        case e: SparkRuntimeException if e.getCondition == "DUPLICATED_MAP_KEY" => e
+      }
+      .getOrElse(fail("expected DUPLICATED_MAP_KEY cause", error))
+    checkError(
+      exception = duplicateError,
+      condition = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> expectedKey,
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
+  }
+
   test("user-specified schema in cast") {
     def assertNoCharType(df: DataFrame): Unit = {
       checkAnswer(df, Row("0"))
@@ -1145,6 +1189,14 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       // LCT(NULL, T) = T
       assert(sql("SELECT coalesce(null, cast('a' AS CHAR(5))) AS c")
         .schema.head.dataType === CharType(5))
+      // SPARK-58798 intent: LCT widen nests Cast. Inner CAST('abcdef' AS VARCHAR(2)/CHAR(2))
+      // truncates to "ab"; retargeting the inner Cast to length 4 would yield "abcd".
+      checkAnswer(
+        sql("SELECT coalesce(cast('abcdef' AS VARCHAR(2)), cast('x' AS VARCHAR(4))) AS c"),
+        Row("ab"))
+      checkAnswer(
+        sql("SELECT coalesce(cast('abcdef' AS CHAR(2)), cast('x' AS CHAR(4))) AS c"),
+        Row("ab  "))
     }
   }
 
@@ -1505,6 +1557,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           s"$key=$value same-strength mixed CHAR lengths")
         assert(sql(mixedStrength).schema.head.dataType === CharType(4, "UTF8_LCASE"),
           s"$key=$value Implicit CHAR(2) vs Default CHAR(4) must widen, not narrow")
+        // Mixed strength must still pad the Implicit CHAR(2) to CHAR(4), not keep length 2.
+        checkAnswer(sql(mixedStrength), Row("a   "))
       }
     }
   }
@@ -1900,33 +1954,191 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         sql("DROP TEMPORARY FUNCTION IF EXISTS std_char_param")
         sql("DROP TEMPORARY FUNCTION IF EXISTS std_varchar_param")
       }
+    }
+  }
 
-      // ORC catalog tables stamp the catalyst type so typeof survives write/read.
-      withTable("std_orc") {
-        sql("CREATE TABLE std_orc (c CHAR(5), v VARCHAR(5)) USING orc")
-        sql("INSERT INTO std_orc VALUES ('ab', 'cd')")
-        assert(spark.table("std_orc").schema.map(_.dataType) ===
-          Seq(CharType(5), VarcharType(5)))
-        checkAnswer(
-          sql("SELECT concat('<', c, '>'), concat('<', v, '>') FROM std_orc"),
-          Row("<ab   >", "<cd>"))
-      }
+  test("SPARK-58814: major formats preserve CHAR/VARCHAR schemas and values") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("parquet", "orc").foreach { format =>
+        Seq("v1" -> format, "v2" -> "").foreach { case (sourceVersion, useV1List) =>
+          withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              val input = spark.range(1).selectExpr(
+                "cast('ab' AS CHAR(4)) AS c",
+                "cast('xy' AS VARCHAR(3)) AS v",
+                "named_struct('c', cast('z' AS CHAR(2))) AS s",
+                "array(cast('q' AS VARCHAR(2))) AS a",
+                "map(cast('k' AS CHAR(2)), cast('v' AS VARCHAR(2))) AS m")
+              input.write.mode("overwrite").format(format).save(path)
 
-      // File-only ORC inference recovers the catalyst type stamped on write.
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        spark.range(1).selectExpr("cast('ab' AS CHAR(4)) AS c")
-          .write.mode("overwrite").orc(path)
-        val orcDf = spark.read.orc(path)
-        assert(orcDf.schema.head.dataType === CharType(4))
-        checkAnswer(orcDf.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
-        // Reading with first-class types off replaces CHAR with STRING even if the
-        // file was stamped under standardSemantics.
-        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
-          val readOff = spark.read.orc(path)
-          assert(readOff.schema.head.dataType === StringType)
+              val vectorizedReaderModes = if (format == "orc") Seq(true, false) else Seq(true)
+              vectorizedReaderModes.foreach { vectorizedReaderEnabled =>
+                withSQLConf(
+                    SQLConf.ORC_VECTORIZED_READER_ENABLED.key ->
+                      vectorizedReaderEnabled.toString) {
+                  val readBack = spark.read.format(format).load(path)
+                  assert(DataType.equalsIgnoreNullability(readBack.schema, input.schema),
+                    s"$format $sourceVersion lost CHAR/VARCHAR schema")
+                  checkAnswer(
+                    readBack.selectExpr(
+                      "concat('<', c, '>')",
+                      "v",
+                      "concat('<', s.c, '>')",
+                      "a",
+                      "m"),
+                    Row("<ab  >", "xy", "<z >", Seq("q"), Map("k " -> "v")))
+
+                  withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+                    val readOff = spark.read.format(format).load(path)
+                    assert(DataType.equalsIgnoreNullability(
+                      readOff.schema,
+                      CharVarcharUtils.replaceCharVarcharWithString(input.schema)))
+                  }
+                  withSQLConf(
+                      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                      SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+                    assert(DataType.equalsIgnoreNullability(
+                      spark.read.format(format).load(path).schema,
+                      input.schema))
+                  }
+                }
+              }
+            }
+          }
         }
       }
+
+      Seq("parquet", "orc", "csv").foreach { format =>
+        Seq("v1" -> format, "v2" -> "").foreach { case (sourceVersion, useV1List) =>
+          withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+            withTempPath { dir =>
+              Seq("ab").toDF("c").write.format(format).save(dir.getCanonicalPath)
+              val charDf = spark.read.schema("c CHAR(4)").format(format)
+                .load(dir.getCanonicalPath)
+              checkAnswer(charDf.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
+            }
+            withTempPath { dir =>
+              Seq("abcdef").toDF("c").write.format(format).save(dir.getCanonicalPath)
+              Seq("CHAR", "VARCHAR").foreach { typ =>
+                withClue(s"$format $sourceVersion $typ: ") {
+                  // CSV's default PERMISSIVE mode treats a length overflow as a corrupt
+                  // field (null). FAILFAST surfaces EXCEED_LIMIT_LENGTH, matching from_csv.
+                  val reader = spark.read.schema(s"c $typ(4)").format(format)
+                  if (format == "csv") {
+                    val csvDf = reader.option("mode", "FAILFAST")
+                      .load(dir.getCanonicalPath)
+                    assertParseExceedLimitError(csvDf.collect(), expectedLimit = "4")
+                  } else {
+                    val readDf = reader.load(dir.getCanonicalPath)
+                    checkError(
+                      exception = intercept[SparkRuntimeException] {
+                        readDf.collect()
+                      },
+                      condition = "EXCEED_LIMIT_LENGTH",
+                      parameters = Map("limit" -> "4"))
+                  }
+                }
+              }
+            }
+
+            val table = s"std_${format}_${sourceVersion}_assignment"
+            withTable(table) {
+              sql(s"CREATE TABLE $table (c CHAR(4), v VARCHAR(4)) USING $format")
+              sql(s"INSERT INTO $table VALUES ('ab', 'xy')")
+              assert(spark.table(table).schema.map(_.dataType) ===
+                Seq(CharType(4), VarcharType(4)))
+              checkAnswer(
+                sql(s"SELECT concat('<', c, '>'), v FROM $table"),
+                Row("<ab  >", "xy"))
+              checkError(
+                exception = intercept[SparkRuntimeException] {
+                  sql(s"INSERT INTO $table VALUES ('abcde', 'xy')").collect()
+                },
+                condition = "EXCEED_LIMIT_LENGTH",
+                parameters = Map("limit" -> "4"))
+            }
+          }
+        }
+      }
+
+      Seq("v1" -> "orc", "v2" -> "").foreach { case (sourceVersion, useV1List) =>
+        Seq(true, false).foreach { vectorizedReaderEnabled =>
+          withSQLConf(
+              SQLConf.USE_V1_SOURCE_LIST.key -> useV1List,
+              SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString) {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              spark.range(1).selectExpr(
+                "named_struct('c', 'abcdef') AS s",
+                "array('abcdef') AS a",
+                "map('abcdef', 'ok') AS mk",
+                "map('ok', 'abcdef') AS mv")
+                .write.mode("overwrite").orc(path)
+              val readBack = spark.read.schema(
+                """s STRUCT<c: CHAR(4)>,
+                  |a ARRAY<VARCHAR(4)>,
+                  |mk MAP<CHAR(4), VARCHAR(4)>,
+                  |mv MAP<CHAR(4), VARCHAR(4)>""".stripMargin).orc(path)
+              Seq("s.c", "a", "mk", "mv").foreach { field =>
+                withClue(
+                    s"ORC $sourceVersion vectorized=$vectorizedReaderEnabled $field: ") {
+                  checkError(
+                    exception = intercept[SparkRuntimeException] {
+                      readBack.selectExpr(field).collect()
+                    },
+                    condition = "EXCEED_LIMIT_LENGTH",
+                    parameters = Map("limit" -> "4"))
+                }
+              }
+            }
+            // Spark ORC files store CHAR/VARCHAR as STRING plus spark.sql.catalyst.type metadata.
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              val input = Dataset.ofRows(spark, Project(Seq(
+                Alias(Literal(UTF8String.fromString("ab"), CharType(4)), "c")(),
+                Alias(Literal(UTF8String.fromString("xy"), VarcharType(4)), "v")()),
+                OneRowRelation()))
+              input.write.mode("overwrite").orc(path)
+              val readBack = spark.read.orc(path)
+              assert(readBack.schema.map(_.dataType) === Seq(CharType(4), VarcharType(4)))
+              checkAnswer(
+                readBack.selectExpr("concat('<', c, '>')", "v"),
+                Row("<ab  >", "xy"))
+            }
+
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              Seq("abcdef").toDF("v").write.mode("overwrite").orc(path)
+              val table = "std_orc_view_source"
+              val view = "std_orc_view"
+              withTable(table) {
+                withView(view) {
+                  sql(s"CREATE TABLE $table (v VARCHAR(4)) USING orc LOCATION '$path'")
+                  sql(s"CREATE VIEW $view AS SELECT v FROM $table")
+                  // The view was created under standard semantics, but the caller session does not
+                  // use them.
+                  withSQLConf(
+                      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+                    withClue(
+                        s"ORC view $sourceVersion vectorized=$vectorizedReaderEnabled: ") {
+                      checkError(
+                        exception = intercept[SparkRuntimeException] {
+                          sql(s"SELECT * FROM $view").collect()
+                        },
+                        condition = "EXCEED_LIMIT_LENGTH",
+                        parameters = Map("limit" -> "4"))
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
       // First-class types off: CAST CHAR is STRING before the writer, so ORC does not stamp CHAR.
       withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
         withTempPath { dir =>
@@ -1934,17 +2146,6 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           spark.range(1).selectExpr("cast('ab' AS CHAR(4)) AS c")
             .write.mode("overwrite").orc(path)
           assert(spark.read.orc(path).schema.head.dataType === StringType)
-        }
-      }
-      // preserveCharVarcharTypeInfo also keeps first-class types, so write still stamps CHAR.
-      withSQLConf(
-          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
-          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
-        withTempPath { dir =>
-          val path = dir.getCanonicalPath
-          spark.range(1).selectExpr("cast('ab' AS CHAR(4)) AS c")
-            .write.mode("overwrite").orc(path)
-          assert(spark.read.orc(path).schema.head.dataType === CharType(4))
         }
       }
       // ORC stamps collated unbounded STRING as plain "string"; the inferred type is the
@@ -2028,7 +2229,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         }
       }
 
-      // JSON / CSV keep a user-specified CHAR/VARCHAR schema under the flag.
+      // JSON has no embedded schema, so a user-specified schema supplies the logical type.
       withTempPath { dir =>
         val path = dir.getCanonicalPath
         spark.range(1).selectExpr("cast(id AS STRING) AS c").write.mode("overwrite")
@@ -2036,13 +2237,53 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         val jsonDf = spark.read.schema("c CHAR(5)").json(s"$path/json")
         assert(jsonDf.schema.head.dataType === CharType(5))
         checkAnswer(jsonDf.selectExpr("concat('<', c, '>')"), Row("<0    >"))
+      }
+    }
+  }
 
-        spark.range(1).selectExpr("cast(id AS STRING) AS c").write.mode("overwrite")
-          .option("header", "true").csv(s"$path/csv")
-        val csvDf = spark.read.schema("c VARCHAR(5)").option("header", "true")
-          .csv(s"$path/csv")
-        assert(csvDf.schema.head.dataType === VarcharType(5))
-        checkAnswer(csvDf, Row("0"))
+  test("SPARK-58814: preserve-only ORC CHAR/VARCHAR inference and STRING values") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      Seq("v1" -> "orc", "v2" -> "").foreach { case (sourceVersion, useV1List) =>
+        Seq(true, false).foreach { vectorizedReaderEnabled =>
+          withSQLConf(
+              SQLConf.USE_V1_SOURCE_LIST.key -> useV1List,
+              SQLConf.ORC_VECTORIZED_READER_ENABLED.key ->
+                vectorizedReaderEnabled.toString) {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              spark.range(1).selectExpr(
+                "cast('ab' AS CHAR(4)) AS c",
+                "cast('xy' AS VARCHAR(4)) AS v")
+                .write.mode("overwrite").orc(path)
+              val inferred = spark.read.orc(path)
+              withClue(s"ORC $sourceVersion vectorized=$vectorizedReaderEnabled infer: ") {
+                assert(inferred.schema.map(_.dataType) === Seq(CharType(4), VarcharType(4)))
+                checkAnswer(
+                  inferred.selectExpr("concat('<', c, '>')", "v"),
+                  Row("<ab  >", "xy"))
+              }
+            }
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              Seq("abcdef").toDF("c").write.mode("overwrite").orc(path)
+              Seq("CHAR", "VARCHAR").foreach { typ =>
+                withClue(
+                    s"ORC $sourceVersion vectorized=$vectorizedReaderEnabled $typ: ") {
+                  val readDf = spark.read.schema(s"c $typ(4)").orc(path)
+                  assert(readDf.schema.head.dataType ===
+                    (if (typ == "CHAR") CharType(4) else VarcharType(4)))
+                  // Collect InternalRows so CHAR does not hit SafeProjection write-side
+                  // checks. This pins that ORC did not truncate the stored STRING.
+                  val values = readDf.queryExecution.toRdd.map(_.getUTF8String(0).toString)
+                    .collect()
+                  assert(values === Array("abcdef"))
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -2398,6 +2639,527 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           assert(df.schema.head.dataType === VarcharType(5))
           checkAnswer(df, Row("cd"))
         }
+      }
+    }
+  }
+
+  test("SPARK-59274: from_json/csv/xml honor CHAR/VARCHAR under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      def checkTextInput(query: String, inputType: DataType): DataFrame = {
+        val df = sql(query)
+        val inputTypes = df.queryExecution.analyzed.expressions.flatMap(_.collect {
+          case e: SupportTrimmedCharInput => e.child.dataType
+        })
+        assert(inputTypes === Seq(inputType), df.queryExecution.analyzed)
+        df
+      }
+
+      checkAnswer(
+        checkTextInput(
+          """SELECT from_json(CAST('{"a":1}' AS CHAR(12)), 'a INT')""",
+          CharType(12)),
+        Row(Row(1)))
+      checkAnswer(
+        checkTextInput(
+          """SELECT from_csv(
+            |  CAST('1' AS CHAR(3)),
+            |  '_c0 INT',
+            |  map('delimiter', ' ', 'mode', 'FAILFAST'))""".stripMargin,
+          CharType(3)),
+        Row(Row(1)))
+      checkAnswer(
+        checkTextInput(
+          """SELECT from_xml(
+            |  CAST('<ROW><a>1</a></ROW>' AS CHAR(30)),
+            |  'a INT')""".stripMargin,
+          CharType(30)),
+        Row(Row(1)))
+      Seq(
+        ("CAST('1 ' AS VARCHAR(2))", VarcharType(2)),
+        ("CAST('1 ' AS STRING)", StringType)).foreach { case (input, inputType) =>
+        checkAnswer(
+          checkTextInput(
+            s"SELECT schema_of_csv($input, map('delimiter', ' '))",
+            inputType),
+          Row("STRUCT<_c0: INT, _c1: STRING>"))
+      }
+
+      val jsonChar = sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
+      val jsonCharType = jsonChar.schema.head.dataType.asInstanceOf[StructType]
+      assert(jsonCharType.head.dataType === CharType(5))
+      checkAnswer(jsonChar, Row(Row("str  ")))
+
+      val jsonVarchar = sql("""SELECT from_json('{"a": "ab"}', 'a VARCHAR(5)')""")
+      val jsonVarcharType = jsonVarchar.schema.head.dataType.asInstanceOf[StructType]
+      assert(jsonVarcharType.head.dataType === VarcharType(5))
+      checkAnswer(jsonVarchar, Row(Row("ab")))
+
+      // Default PERMISSIVE mode returns a parsed struct whose failed field is null.
+      Seq("CHAR(5)", "VARCHAR(5)").foreach { dataType =>
+        checkAnswer(
+          sql(s"""SELECT from_json('{"a": "abcdef"}', 'a $dataType')"""),
+          Row(Row(null)))
+        assertParseExceedLimit(
+          s"""SELECT from_json(
+             |  '{"a": "abcdef"}',
+             |  'a $dataType',
+             |  map('mode', 'FAILFAST'))""".stripMargin)
+      }
+
+      checkAnswer(sql("SELECT from_csv('str', 'a CHAR(5)')"), Row(Row("str  ")))
+      Seq("CHAR(5)", "VARCHAR(5)").foreach { dataType =>
+        checkAnswer(sql(s"SELECT from_csv('abcdef', 'a $dataType')"), Row(Row(null)))
+        assertParseExceedLimit(
+          s"SELECT from_csv('abcdef', 'a $dataType', map('mode', 'FAILFAST'))")
+      }
+
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><a>str</a></ROW>', 'a CHAR(5)')"),
+        Row(Row("str  ")))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><a></a></ROW>',
+            |  'a CHAR(5)',
+            |  map('nullValue', 'NULL'))""".stripMargin),
+        Row(Row("     ")))
+      Seq("CHAR(5)", "VARCHAR(5)").foreach { dataType =>
+        checkAnswer(
+          sql(s"SELECT from_xml('<ROW><a>abcdef</a></ROW>', 'a $dataType')"),
+          Row(Row(null)))
+        assertParseExceedLimit(
+          s"SELECT from_xml('<ROW><a>abcdef</a></ROW>', 'a $dataType', " +
+            "map('mode', 'FAILFAST'))")
+      }
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<CHAR(4), INT>')"),
+        Row(Row(Map("ab  " -> 1))))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><other>str</other></ROW>',
+            |  'xs_any CHAR(5)',
+            |  map('wildcardColName', 'xs_any'))""".stripMargin),
+        Row(Row("str  ")))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><first>a</first><second>bc</second></ROW>',
+            |  'xs_any ARRAY<CHAR(5)>',
+            |  map('wildcardColName', 'xs_any'))""".stripMargin),
+        Row(Row(Seq("a    ", "bc   "))))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><other>abcdef</other></ROW>',
+            |  'xs_any CHAR(5)',
+            |  map('wildcardColName', 'xs_any'))""".stripMargin),
+        Row(Row(null)))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><other>abcdef</other></ROW>',
+            |  'xs_any ARRAY<CHAR(5)>',
+            |  map('wildcardColName', 'xs_any'))""".stripMargin),
+        Row(Row(null)))
+      assertParseExceedLimit(
+        """SELECT from_xml(
+          |  '<ROW><other>abcdef</other></ROW>',
+          |  'xs_any CHAR(5)',
+          |  map('wildcardColName', 'xs_any', 'mode', 'FAILFAST'))""".stripMargin)
+      assertParseExceedLimit(
+        """SELECT from_xml(
+          |  '<ROW><other>abcdef</other></ROW>',
+          |  'xs_any ARRAY<CHAR(5)>',
+          |  map('wildcardColName', 'xs_any', 'mode', 'FAILFAST'))""".stripMargin)
+      withTempPath { path =>
+        Seq("<ROW><m><a>1</a></m></ROW>").toDS().write.text(path.getCanonicalPath)
+        val xmlDataFrame = spark.read
+          .option("rowTag", "ROW")
+          .schema("m MAP<CHAR(2), INT>")
+          .xml(path.getCanonicalPath)
+        assert(
+          xmlDataFrame.schema("m").dataType ===
+            MapType(CharType(2), IntegerType, valueContainsNull = true))
+        checkAnswer(xmlDataFrame, Row(Map("a " -> 1)))
+      }
+      withTempPath { path =>
+        Seq("""{"c":"ab"}""").toDS().write.text(path.getCanonicalPath)
+        val jsonDataFrame = spark.read.schema("c CHAR(4)").json(path.getCanonicalPath)
+        assert(jsonDataFrame.schema("c").dataType === CharType(4))
+        checkAnswer(jsonDataFrame, Row("ab  "))
+      }
+      withTempPath { path =>
+        Seq("abcdef").toDS().write.text(path.getCanonicalPath)
+        val csvOverflow = spark.read.schema("c VARCHAR(4)").csv(path.getCanonicalPath)
+        assert(csvOverflow.schema("c").dataType === VarcharType(4))
+        checkAnswer(csvOverflow, Row(null))
+      }
+
+      checkAnswer(
+        sql("""SELECT schema_of_json(CAST('{"a":1}' AS VARCHAR(20)))"""),
+        Row("STRUCT<a: BIGINT>"))
+      checkAnswer(
+        sql("SELECT schema_of_csv(CAST('1,abc' AS VARCHAR(20)))"),
+        Row("STRUCT<_c0: INT, _c1: STRING>"))
+      checkAnswer(
+        sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS VARCHAR(40)))"),
+        Row("STRUCT<a: BIGINT>"))
+      checkAnswer(
+        sql("""SELECT length(CAST('{"a":1}' AS CHAR(20)))"""),
+        Row(20))
+      checkAnswer(
+        sql("""SELECT schema_of_json(CAST('{"a":1}' AS CHAR(20)))"""),
+        Row("STRUCT<a: BIGINT>"))
+      checkAnswer(
+        sql("SELECT length(CAST('1' AS CHAR(3)))"),
+        Row(3))
+      checkAnswer(
+        sql("SELECT schema_of_csv(CAST('1' AS CHAR(3)))"),
+        Row("STRUCT<_c0: INT>"))
+      // Without trailing-only CHAR padding removal, the space delimiter creates empty columns.
+      checkAnswer(
+        sql(
+          """SELECT schema_of_csv(
+            |  CAST('1' AS CHAR(3)),
+            |  map('delimiter', ' '))""".stripMargin),
+        Row("STRUCT<_c0: INT>"))
+      checkAnswer(
+        sql("SELECT length(CAST('<ROW><a>1</a></ROW>' AS CHAR(30)))"),
+        Row(30))
+      checkAnswer(
+        sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS CHAR(30)))"),
+        Row("STRUCT<a: BIGINT>"))
+      Seq(
+        "schema_of_json(CAST('{\"a\":1}' AS CHAR(20) COLLATE SR_AI))" ->
+          "STRUCT<a: BIGINT>",
+        "schema_of_csv(CAST('1' AS CHAR(3) COLLATE SR_AI), map('delimiter', ' '))" ->
+          "STRUCT<_c0: INT>",
+        "schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS CHAR(30) COLLATE SR_AI))" ->
+          "STRUCT<a: BIGINT>").foreach { case (expression, expected) =>
+        checkAnswer(sql(s"SELECT $expression"), Row(expected))
+      }
+    }
+  }
+
+  test("SPARK-59274: normalized XML CHAR map keys honor the dedup policy") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val xmlQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><a>1</a>9</m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('valueTag', 'a ')).m""".stripMargin
+      val varcharXmlQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><ab>1</ab>2</m></ROW>',
+          |  'm MAP<VARCHAR(2), INT>',
+          |  map('valueTag', 'ab ')).m""".stripMargin
+      val exactCharXmlQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><a>1</a><a>2</a></m></ROW>',
+          |  'm MAP<CHAR(2), INT>').m""".stripMargin
+      val exactVarcharXmlQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><ab>1</ab><ab>2</ab></m></ROW>',
+          |  'm MAP<VARCHAR(2), INT>').m""".stripMargin
+      val interleavedCharXmlQuery =
+        """SELECT map_entries(from_xml(
+          |  '<ROW><m><a>1</a>2<a>3</a></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('valueTag', 'a ')).m)""".stripMargin
+      val badXmlKeyThenSiblingQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><abc>1</abc></m><tail>2</tail></ROW>',
+          |  'm MAP<CHAR(2), INT>, tail INT').tail""".stripMargin
+      val badXmlKeyBeforeDuplicateQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><abc>0</abc><a>1</a>2</m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('valueTag', 'a ')).m""".stripMargin
+      val malformedXmlValueBeforeDuplicateQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><a>bad</a>2</m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('valueTag', 'a ')).m""".stripMargin
+      val ignoreCorruptXmlQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><a>1</a>2</m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('valueTag', 'a ', 'ignoreCorruptFiles', 'true')).m""".stripMargin
+      val attributePaddingQuery =
+        """SELECT from_xml(
+          |  '<ROW><m a="1"><b>2</b></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('attributePrefix', '')).m""".stripMargin
+      val attributeOverflowQuery =
+        """SELECT from_xml(
+          |  '<ROW><m abc="1"><b>2</b></m></ROW>',
+          |  'm MAP<VARCHAR(2), INT>',
+          |  map('attributePrefix', '')).m""".stripMargin
+      val attributeOverflowFailfastQuery =
+        """SELECT from_xml(
+          |  '<ROW><m abc="1"><b>2</b></m></ROW>',
+          |  'm MAP<VARCHAR(2), INT>',
+          |  map('attributePrefix', '', 'mode', 'FAILFAST')).m""".stripMargin
+      val attributeCollisionQuery =
+        """SELECT from_xml(
+          |  '<ROW><m a="1"><b>0</b>2</m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('attributePrefix', '', 'valueTag', 'a ')).m""".stripMargin
+
+      assertDuplicateMapKey(xmlQuery)
+      assertDuplicateMapKey(varcharXmlQuery, expectedKey = "ab")
+      checkAnswer(sql(exactCharXmlQuery), Row(Map("a " -> 2)))
+      checkAnswer(sql(exactVarcharXmlQuery), Row(Map("ab" -> 2)))
+      assertDuplicateMapKey(interleavedCharXmlQuery)
+      assertDuplicateMapKey(badXmlKeyBeforeDuplicateQuery)
+      assertDuplicateMapKey(malformedXmlValueBeforeDuplicateQuery)
+      assertDuplicateMapKey(ignoreCorruptXmlQuery)
+      checkAnswer(sql(badXmlKeyThenSiblingQuery), Row(2))
+      checkAnswer(sql(attributePaddingQuery), Row(Map("a " -> 1, "b " -> 2)))
+      checkAnswer(sql(attributeOverflowQuery), Row(null))
+      assertParseExceedLimit(attributeOverflowFailfastQuery, expectedLimit = "2")
+      assertDuplicateMapKey(attributeCollisionQuery)
+
+      withTempPath { path =>
+        Seq("<ROW><m><a>1</a>2</m></ROW>").toDS().write.text(path.getCanonicalPath)
+        def readXmlMap(): DataFrame = spark.read
+          .option("rowTag", "ROW")
+          .option("valueTag", "a ")
+          .schema("m MAP<CHAR(2), INT>")
+          .xml(path.getCanonicalPath)
+
+        assertDuplicateMapKeyError(readXmlMap().collect())
+
+        withSQLConf(
+            SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+          checkAnswer(readXmlMap(), Row(Map("a " -> 2)))
+        }
+      }
+
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+        checkAnswer(sql(xmlQuery), Row(Map("a " -> 9)))
+        checkAnswer(sql(varcharXmlQuery), Row(Map("ab" -> 2)))
+        checkAnswer(sql(exactCharXmlQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(exactVarcharXmlQuery), Row(Map("ab" -> 2)))
+        checkAnswer(sql(interleavedCharXmlQuery), Row(Seq(Row("a ", 3))))
+        checkAnswer(sql(badXmlKeyBeforeDuplicateQuery), Row(null))
+        checkAnswer(sql(malformedXmlValueBeforeDuplicateQuery), Row(null))
+        checkAnswer(sql(ignoreCorruptXmlQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(attributeCollisionQuery), Row(Map("a " -> 2, "b " -> 0)))
+      }
+    }
+  }
+
+  test("SPARK-59274: pretty-printed XML map failures preserve parser position") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val overflowQueries = Seq("CHAR(5)", "VARCHAR(5)").map { valueType =>
+        s"""SELECT from_xml(
+           |  '<ROW>
+           |    <m>
+           |      <b>abcdef</b>
+           |      <a>x</a>y
+           |    </m>
+           |    <tail>9</tail>
+           |  </ROW>',
+           |  'm MAP<CHAR(2), $valueType>, tail INT',
+           |  map('valueTag', 'a '))""".stripMargin
+      }
+      val nestedFailureQuery =
+        """SELECT from_xml(
+          |  '<ROW>
+          |    <m>
+          |      <b><x>bad</x></b>
+          |      <a><x>1</x></a>ignored
+          |    </m>
+          |    <tail>9</tail>
+          |  </ROW>',
+          |  'm MAP<CHAR(2), MAP<CHAR(2), INT>>, tail INT',
+          |  map('valueTag', 'a '))""".stripMargin
+
+      (overflowQueries :+ nestedFailureQuery).foreach { query =>
+        // A duplicate, rather than an AssertionError from XML recovery, wins under EXCEPTION.
+        withClue(s"$query: ") {
+          assertDuplicateMapKey(query)
+        }
+      }
+
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+        // The failed map remains null, but its complete element is consumed and the `tail` field
+        // is parsed.
+        (overflowQueries :+ nestedFailureQuery).foreach { query =>
+          checkAnswer(sql(query), Row(Row(null, 9)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-59274: nested XML attribute failures preserve parser position") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("STRUCT<c CHAR(2), v INT>", "ARRAY<STRUCT<c VARCHAR(2), v INT>>")
+        .foreach { nestedType =>
+          val xml = "<ROW><nested c=\"abc\"><v>1</v></nested><tail>9</tail></ROW>"
+          val schema = s"nested $nestedType, tail INT"
+          val permissiveQuery =
+            s"""SELECT from_xml(
+               |  '$xml',
+               |  '$schema',
+               |  map('attributePrefix', ''))""".stripMargin
+          checkAnswer(sql(permissiveQuery), Row(Row(null, 9)))
+          assertParseExceedLimit(
+            s"""SELECT from_xml(
+               |  '$xml',
+               |  '$schema',
+               |  map('attributePrefix', '', 'mode', 'FAILFAST'))""".stripMargin,
+            expectedLimit = "2")
+        }
+    }
+  }
+
+  test("SPARK-59274: JSON map value overflow keeps EXCEED_LIMIT_LENGTH") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val json = """{"m":{"k":"abcdef"},"tail":1}"""
+      val goodJson = """{"m":{"k":"ab"},"tail":2}"""
+      Seq("CHAR(2)", "VARCHAR(2)").foreach { valueType =>
+        val schema = s"m MAP<STRING, $valueType>, tail INT"
+        val fromJson = s"SELECT from_json('$json', '$schema')"
+        Seq(true, false).foreach { partial =>
+          withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+            withClue(s"$valueType partial=$partial") {
+              if (partial) {
+                checkAnswer(sql(fromJson), Row(Row(null, 1)))
+              } else {
+                checkAnswer(sql(fromJson), Row(Row(null, null)))
+              }
+              assertParseExceedLimit(
+                s"SELECT from_json('$json', '$schema', map('mode', 'FAILFAST'))",
+                expectedLimit = "2")
+
+              withTempPath { path =>
+                Seq(json, goodJson).toDS()
+                  .repartition(1)
+                  .write.text(path.getCanonicalPath)
+                val fileSchema = schema
+                val permissive = spark.read.schema(fileSchema).json(path.getCanonicalPath)
+                if (partial) {
+                  checkAnswer(permissive, Seq(Row(null, 1), Row(Map("k" -> "ab"), 2)))
+                } else {
+                  checkAnswer(permissive, Seq(Row(null, null), Row(Map("k" -> "ab"), 2)))
+                }
+                val failFast = spark.read
+                  .option("mode", "FAILFAST")
+                  .schema(fileSchema)
+                  .json(path.getCanonicalPath)
+                assertParseExceedLimitError(failFast.collect(), expectedLimit = "2")
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59274: XML rowTag attribute overflow uses parse mode") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("CHAR(2)", "VARCHAR(2)").foreach { attrType =>
+        withTempPath { path =>
+          Seq(
+            """<ROWS><ROW c="abcdef"><v>1</v></ROW><ROW c="ok"><v>2</v></ROW></ROWS>"""
+          ).toDS().write.text(path.getCanonicalPath)
+          val schema = s"c $attrType, v INT"
+          withClue(attrType) {
+            val permissive = spark.read
+              .option("rowTag", "ROW")
+              .option("attributePrefix", "")
+              .schema(schema)
+              .xml(path.getCanonicalPath)
+            checkAnswer(permissive, Seq(Row(null, 1), Row("ok", 2)))
+            val failFast = spark.read
+              .option("rowTag", "ROW")
+              .option("attributePrefix", "")
+              .option("mode", "FAILFAST")
+              .schema(schema)
+              .xml(path.getCanonicalPath)
+            assertParseExceedLimitError(failFast.collect(), expectedLimit = "2")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59274: mixed XML rowTag attributes keep valid siblings") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val xml = """<ROW good="ok" bad="abcdef"/>"""
+      val schema = "good CHAR(2), bad VARCHAR(2)"
+      val opts = "map('attributePrefix', '')"
+      checkAnswer(
+        sql(s"SELECT from_xml('$xml', '$schema', $opts)"),
+        Row(Row("ok", null)))
+      assertParseExceedLimit(
+        s"SELECT from_xml('$xml', '$schema', map('attributePrefix', '', 'mode', 'FAILFAST'))",
+        expectedLimit = "2")
+      withTempPath { path =>
+        Seq(
+          """<ROWS><ROW good="ok" bad="abcdef"/><ROW good="ab" bad="cd"/></ROWS>"""
+        ).toDS().write.text(path.getCanonicalPath)
+        val permissive = spark.read
+          .option("rowTag", "ROW")
+          .option("attributePrefix", "")
+          .schema(schema)
+          .xml(path.getCanonicalPath)
+        checkAnswer(permissive, Seq(Row("ok", null), Row("ab", "cd")))
+        val failFast = spark.read
+          .option("rowTag", "ROW")
+          .option("attributePrefix", "")
+          .option("mode", "FAILFAST")
+          .schema(schema)
+          .xml(path.getCanonicalPath)
+        assertParseExceedLimitError(failFast.collect(), expectedLimit = "2")
+      }
+    }
+  }
+
+  test("SPARK-59274: ordinary STRING map duplicate behavior is unchanged") {
+    Seq("false", "true").foreach { standardSemantics =>
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standardSemantics) {
+        checkAnswer(
+          sql(
+            """SELECT size(m), map_entries(m)
+              |FROM (
+              |  SELECT from_json('{"a":1,"a":2}', 'MAP<STRING, INT>') AS m
+              |)""".stripMargin),
+          Row(2, Seq(Row("a", 1), Row("a", 2))))
+        checkAnswer(
+          sql("""SELECT from_xml(
+            |  '<ROW><m><a>1</a><a>2</a></m></ROW>',
+            |  'm MAP<STRING, INT>').m""".stripMargin),
+          Row(Map("a" -> 2)))
+      }
+    }
+  }
+
+  test("SPARK-59274: collated CHAR/VARCHAR map keys honor the dedup policy") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+      val xmlQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><a>1</a><A>2</A></m></ROW>',
+          |  'm MAP<CHAR(2) COLLATE UTF8_LCASE, INT>').m""".stripMargin
+      val varcharXmlQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><ab>1</ab><AB>2</AB></m></ROW>',
+          |  'm MAP<VARCHAR(2) COLLATE UTF8_LCASE, INT>').m""".stripMargin
+
+      assertDuplicateMapKey(xmlQuery, expectedKey = "A ")
+      assertDuplicateMapKey(varcharXmlQuery, expectedKey = "AB")
+
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+        checkAnswer(sql(xmlQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(varcharXmlQuery), Row(Map("ab" -> 2)))
       }
     }
   }

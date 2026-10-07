@@ -2450,17 +2450,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = cause)
   }
 
-  def outputDataTypeUnsupportedByNodeWithoutSerdeError(
-      nodeName: String, dt: DataType): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2265",
-      messageParameters = Map(
-        "nodeName" -> nodeName,
-        "dt" -> dt.getClass.getSimpleName),
-      cause = null)
+  def scriptTransformWithoutSerdeUnsupportedTypeError(
+      dt: DataType): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.TRANSFORM_WITHOUT_SERDE_TYPE",
+      messageParameters = Map("dataType" -> toSQLType(dt)))
   }
 
-  def invalidStartIndexError(numRows: Int, startIndex: Int): SparkArrayIndexOutOfBoundsException = {
+  def invalidStartIndexError(
+      numRows: Long, startIndex: Int): SparkArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "_LEGACY_ERROR_TEMP_2266",
       messageParameters = Map(
@@ -2476,6 +2474,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "_LEGACY_ERROR_TEMP_2267",
       messageParameters = Map(
         "className" -> className))
+  }
+
+  def windowFunctionPartitionSizeExceedsLimitError(numRows: Long): SparkException = {
+    new SparkException(
+      errorClass = "WINDOW_FUNCTION_PARTITION_SIZE_EXCEEDS_LIMIT",
+      messageParameters = Map("numRows" -> numRows.toString()),
+      cause = null)
   }
 
   def doExecuteBroadcastNotImplementedError(

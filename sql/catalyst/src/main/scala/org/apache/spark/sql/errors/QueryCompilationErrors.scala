@@ -2372,6 +2372,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "currentTableId" -> currentTableId))
   }
 
+  def changelogChangedAfterAnalysis(
+      tableName: String,
+      changedProperties: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.CHANGELOG_METADATA_MISMATCH",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "changedProperties" -> changedProperties.mkString(", ")))
+  }
+
   def columnsChangedAfterAnalysis(
       tableName: String,
       errors: Seq[String]): Throwable = {
@@ -5163,8 +5173,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       messageParameters = Map(
-        "operand1" -> toSQLExpr(expr1),
-        "operand2" -> toSQLExpr(expr2)))
+        "refs1" -> toSQLExpr(expr1),
+        "refs2" -> toSQLExpr(expr2)))
   }
 
   def nestedSequentialStreamingUnionError(): Throwable = {

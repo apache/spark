@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, PlanHelper, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CreateVariable, LogicalPlan, PlanHelper, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, CURRENT_LIKE, WITH_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
@@ -67,6 +67,13 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         // changed anything: `mapExpressions` and `withNewChildren` preserve reference equality when
         // they rewrite nothing, which is what makes this detectable.
         if ((rewrittenAgg eq agg) && (rewrittenProj eq proj)) p else rewrittenProj
+      // The children of a `CreateVariable` are the `ResolvedIdentifier`s naming the variables, not
+      // rows to evaluate the default over, and `V2CommandStrategy` plans the command only while
+      // they stay so. A `With` in the default is left in place to memoize the definitions worth
+      // it, as one in a conditional branch is. A later rule that copies its input, such as
+      // `LikeSimplification`, copies the `With` too, and each copy evaluates the definition at most
+      // once each time it is evaluated.
+      case c: CreateVariable => c.mapExpressions(inlineWithsThatGainNothing)
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         applyInternal(p)
     }
@@ -253,6 +260,12 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
     counts.filter(_._2 > 1).keys.toSet
   }
 
+  /** `e` with `inlineDefsThatGainNothing` applied to every `With`, bottom-up for nested ones. */
+  private def inlineWithsThatGainNothing(e: Expression): Expression =
+    e.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+      case w: With => inlineDefsThatGainNothing(w)
+    }
+
   /**
    * `w` with every definition that gains nothing from being memoized inlined into its references:
    * one cheap enough to evaluate twice, and one referenced at most once anyway. This is the test
@@ -373,11 +386,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         val newExpr = c.withNewAlwaysEvaluatedInputs(newAlwaysEvaluatedInputs)
         // A `With` in a conditional branch cannot go into a project, which is always evaluated
         // while the branch may not be. It stays where it is and memoizes its definition per entry
-        // instead, but only the definitions that gain something from it. Use transformUp to handle
-        // nested With.
-        newExpr.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
-          case w: With => inlineDefsThatGainNothing(w)
-        }
+        // instead, but only the definitions that gain something from it.
+        inlineWithsThatGainNothing(newExpr)
 
       case other => other.mapChildren(
         rewriteWithExprAndInputPlans(

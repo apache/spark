@@ -911,5 +911,9 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
         .equals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 2L)
         .`end`().build())
   }
-}
 
+  test("SPARK-58814: CHAR/VARCHAR filters use the ORC string predicate type") {
+    assert(OrcFilters.getPredicateLeafType(CharType(5)) === PredicateLeaf.Type.STRING)
+    assert(OrcFilters.getPredicateLeafType(VarcharType(7)) === PredicateLeaf.Type.STRING)
+  }
+}
