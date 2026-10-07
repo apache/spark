@@ -494,10 +494,11 @@ class RewriteWithExpressionSuite extends PlanTest {
     // The children are the variable names, not rows, so there is no `Project` to pre-evaluate a
     // definition in. One worth memoizing stays in the default for `CreateVariableExec` to evaluate.
     val kept = declare(With(Rand(Literal(0L))) { case Seq(ref) => ref * ref })
-    assert(Optimizer.execute(kept) == kept)
+    comparePlans(Optimizer.execute(kept), kept)
 
     // One that gains nothing from memoizing is inlined, as anywhere else.
-    assert(Optimizer.execute(declare(With(Literal(3)) { case Seq(ref) => ref * ref })) ==
+    comparePlans(
+      Optimizer.execute(declare(With(Literal(3)) { case Seq(ref) => ref * ref })),
       declare(Literal(3) * Literal(3)))
   }
 
