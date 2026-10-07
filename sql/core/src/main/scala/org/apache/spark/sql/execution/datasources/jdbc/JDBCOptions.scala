@@ -266,7 +266,6 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(false)
 
-  // Snapshotted from the dialect at construction (plan time); V2 loadTable stamps it in parameters.
   val timestampNTZAsWallClock: Boolean =
     parameters
       .get(JDBC_TIMESTAMP_NTZ_WALL_CLOCK)

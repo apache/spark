@@ -187,11 +187,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
-  test("SPARK-58876: V2 scan keeps the NTZ wall-clock decision pinned after a flip") {
+  test("SPARK-58876: a V2 NTZ read planned before a legacy flag flip still reads wall-clock") {
     val table = s"$catalogName.${namespaceOpt.get}.${caseConvert("datetime")}"
     withDefaultTimeZone(LA) {
-      // loadTable (analysis) pins the wall-clock decision under the flag off; the flag then flips
-      // on before the scan's options are rebuilt and executed.
       val df = withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
         sql(s"SELECT time1 FROM $table WHERE name = 'amy'")
       }

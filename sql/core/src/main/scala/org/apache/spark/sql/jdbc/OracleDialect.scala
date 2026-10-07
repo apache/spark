@@ -199,8 +199,6 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     }
   }
 
-  // Oracle DATE/TIMESTAMP are zoneless, so under the non-legacy mapping NTZ values read/write as
-  // wall-clock LocalDateTime, bypassing the JVM-default-zone java.sql.Timestamp bridge.
   override def timestampNTZAsWallClock: Boolean = !conf.legacyOracleTimestampNTZMappingEnabled
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {

@@ -798,8 +798,6 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
   }
 
   test("SPARK-58876: an NTZ read planned before a legacy flag flip still reads wall-clock") {
-    // The read decision is frozen when the DataFrame is planned, so a fresh query on it after the
-    // flip still reads wall-clock; the base conversion would shift both values in LA.
     withDefaultTimeZone(LA) {
       val df = withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
         spark.read.format("jdbc")

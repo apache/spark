@@ -1745,7 +1745,7 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58876: Oracle pins the NTZ wall-clock decision, legacy-gated, even wrapped") {
+  test("SPARK-58876: Oracle NTZ wall-clock follows the legacy flag, even wrapped") {
     val custom = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
     }
@@ -1799,14 +1799,11 @@ class JDBCSuite extends SharedSparkSession {
 
   test("SPARK-58876: Oracle NTZ reads wall-clock via frozen options after a flag flip") {
     val schema = new StructType().add("t", TimestampNTZType, nullable = true)
-    // Options built (planned) under legacy off snapshot the wall-clock decision.
     val options = withSQLConf(
         SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
       new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t", Map.empty[String, String])
     }
     val ldt = LocalDateTime.of(1991, 11, 9, 0, 0, 0)
-    // Flip the flag on after planning: the frozen options must still pick the wall-clock getter;
-    // the non-wall-clock getter would call the unstubbed getTimestamp and fail.
     withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
       val rs = mock(classOf[ResultSet])
       when(rs.next()).thenReturn(true, false)
