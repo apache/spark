@@ -376,26 +376,37 @@ abstract class StreamExecution(
           e
         }
 
-        streamDeathCause = new StreamingQueryException(
-          toDebugString(includeLogicalPlan = isInitialized),
-          cause = cause,
-          getLatestExecutionContext().startOffsets
-            .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
-              getLatestExecutionContext().offsetSeqMetadata)
-            .toString,
-          getLatestExecutionContext().endOffsets
-            .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
-              getLatestExecutionContext().offsetSeqMetadata)
-            .toString,
-          errorClass = "STREAM_FAILED",
-          messageParameters = Map(
-            "id" -> id.toString,
-            "runId" -> runId.toString,
-            "message" -> message))
-
         errorClassOpt = e match {
           case t: SparkThrowable => Option(t.getCondition)
           case _ => None
+        }
+
+        try {
+          streamDeathCause = new StreamingQueryException(
+            toDebugString(includeLogicalPlan = isInitialized),
+            cause = cause,
+            getLatestExecutionContext().startOffsets
+              .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
+                getLatestExecutionContext().offsetSeqMetadata)
+              .toString,
+            getLatestExecutionContext().endOffsets
+              .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
+                getLatestExecutionContext().offsetSeqMetadata)
+              .toString,
+            errorClass = "STREAM_FAILED",
+            messageParameters = Map(
+              "id" -> id.toString,
+              "runId" -> runId.toString,
+              "message" -> message))
+        } catch {
+          // If building the detailed exception fails (e.g. a source's `toString` throws), the
+          // query failure must still be reported instead of the query looking stopped cleanly.
+          case buildFailure: Throwable =>
+            streamDeathCause = fallbackStreamDeathCause(cause, message, buildFailure)
+            // Like a fatal `cause` below, hand fatal errors to the `UncaughtExceptionHandler`.
+            if (!NonFatal(buildFailure)) {
+              throw buildFailure
+            }
         }
 
         logError(log"Query ${MDC(PRETTY_ID_STRING, prettyIdString)} terminated with error", e)
@@ -730,6 +741,24 @@ abstract class StreamExecution(
 
   override def toString: String = {
     s"Streaming Query $prettyIdString [state = $state]"
+  }
+
+  /** The query failure without the debug string and offsets that could not be built. */
+  private def fallbackStreamDeathCause(
+      cause: Throwable,
+      message: String,
+      buildFailure: Throwable): StreamingQueryException = {
+    logWarning(log"Failed to build the detailed exception for query " +
+      log"${MDC(PRETTY_ID_STRING, prettyIdString)}", buildFailure)
+    val fallback = new StreamingQueryException(
+      queryDebugString = "",
+      cause = cause,
+      startOffset = "",
+      endOffset = "",
+      errorClass = "STREAM_FAILED",
+      messageParameters = Map("id" -> id.toString, "runId" -> runId.toString, "message" -> message))
+    fallback.addSuppressed(buildFailure)
+    fallback
   }
 
   private def toDebugString(includeLogicalPlan: Boolean): String = {

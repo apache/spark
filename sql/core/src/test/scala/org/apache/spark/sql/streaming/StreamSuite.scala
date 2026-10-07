@@ -21,6 +21,7 @@ import java.io.{File, InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.time.ZoneId
 import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.concurrent.TimeoutException
 import scala.reflect.ClassTag
@@ -444,6 +445,61 @@ class StreamSuite extends StreamTest {
         ExpectFailure(isFatalError = true)(ClassTag(e.getClass))
       )
     }
+  }
+
+  /** Also returns the error, if any, rethrown to the query thread's `UncaughtExceptionHandler`. */
+  private def failWhileBuildingQueryException(
+      buildFailure: Throwable): (StreamingQueryException, Option[Throwable]) = {
+    val source = new Source {
+      @volatile private var failed = false
+
+      override def getOffset: Option[Offset] = Some(LongOffset(0))
+
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+        failed = true
+        throw new IllegalStateException("getBatch failed")
+      }
+
+      override def schema: StructType = StructType(Array(StructField("value", IntegerType)))
+
+      override def stop(): Unit = {}
+
+      // The query debug string embeds the source, so this fails building the detailed exception.
+      override def toString: String = if (failed) throw buildFailure else "FailingSource"
+    }
+    val df = Dataset[Int](
+      sqlContext.sparkSession,
+      StreamingExecutionRelation(source, sqlContext.sparkSession))
+    val query = df.writeStream.format("noop").start()
+    val queryThread = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.queryExecutionThread
+    val uncaught = new AtomicReference[Throwable]()
+    queryThread.setUncaughtExceptionHandler((_: Thread, e: Throwable) => uncaught.set(e))
+    try {
+      val e = intercept[StreamingQueryException] {
+        query.awaitTermination(streamingTimeout.toMillis)
+      }
+      queryThread.join(streamingTimeout.toMillis)
+      assert(!queryThread.isAlive)
+      assert(query.exception.contains(e))
+      assert(e.cause.getMessage == "getBatch failed")
+      assert(e.getSuppressed.toSeq == Seq(buildFailure))
+      assert(e.getCondition == "STREAM_FAILED")
+      (e, Option(uncaught.get()))
+    } finally {
+      query.stop()
+    }
+  }
+
+  test("query failure is reported when building the detailed exception fails") {
+    val (_, uncaught) =
+      failWhileBuildingQueryException(new IllegalStateException("source toString failed"))
+    assert(uncaught.isEmpty)
+  }
+
+  test("query failure is reported when building the detailed exception fails fatally") {
+    val buildFailure = new StackOverflowError("source toString failed")
+    val (_, uncaught) = failWhileBuildingQueryException(buildFailure)
+    assert(uncaught.contains(buildFailure))
   }
 
   test("output mode API in Scala") {
