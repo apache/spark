@@ -71,6 +71,13 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         // changed anything: `mapExpressions` and `withNewChildren` preserve reference equality when
         // they rewrite nothing, which is what makes this detectable.
         if ((rewrittenAgg eq agg) && (rewrittenProj eq proj)) p else rewrittenProj
+      // The children of a `CreateVariable` are the `ResolvedIdentifier`s naming the variables, not
+      // rows to evaluate the default over, and `V2CommandStrategy` plans the command only while
+      // they stay so. A `With` in the default is left in place to memoize the definitions worth
+      // it, as one in a conditional branch is. A later rule that copies its input, such as
+      // `LikeSimplification`, copies the `With` too, and each copy evaluates the definition at most
+      // once each time it is evaluated.
+      case c: CreateVariable => c.mapExpressions(inlineWithsThatGainNothing)
       // A row-level write reads its `groupFilterCondition` only in the runtime group filter, which
       // puts it in a filter over the table and optimizes it there. A `With` in it is treated as one
       // in a conditional branch: the definitions that gain nothing from memoizing are inlined, so a
@@ -97,9 +104,9 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       // Analysis lets no command but `CreateVariable` hold a nondeterministic expression; a `Call`
       // can hold one, as `InvokeProcedures` optimizes it before analysis checks it, and then
       // rejects it as not foldable. A nondeterministic definition read more than once keeps its
-      // `With`. `CreateVariable` is left out: its default is evaluated and need not fold, so a
-      // definition there should be memoized.
-      case c @ (_: Command | _: Call) if !c.isInstanceOf[CreateVariable] =>
+      // `With`. `CreateVariable` is matched above instead: its default is evaluated and need not
+      // fold, so a definition there should be memoized.
+      case c @ (_: Command | _: Call) =>
         c.mapExpressions(inlineCommandWiths)
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         applyInternal(p)
@@ -453,11 +460,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         val newExpr = c.withNewAlwaysEvaluatedInputs(newAlwaysEvaluatedInputs)
         // A `With` in a conditional branch cannot go into a project, which is always evaluated
         // while the branch may not be. It stays where it is and memoizes its definition per entry
-        // instead, but only the definitions that gain something from it. Use transformUp to handle
-        // nested With.
-        newExpr.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
-          case w: With => inlineDefsThatGainNothing(w)
-        }
+        // instead, but only the definitions that gain something from it.
+        inlineWithsThatGainNothing(newExpr)
 
       case other => other.mapChildren(
         rewriteWithExprAndInputPlans(

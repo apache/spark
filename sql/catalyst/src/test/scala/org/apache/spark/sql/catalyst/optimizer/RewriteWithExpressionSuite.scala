@@ -520,18 +520,30 @@ class RewriteWithExpressionSuite extends PlanTest {
 
   test("SPARK-59962: a definition in a DECLARE VARIABLE default is not inlined like a command's") {
     // The default is evaluated rather than stored, so a definition there that is worth memoizing
-    // must not be substituted at each of its references the way a command's is. Until SPARK-59954
-    // keeps it in the default, the generic case pre-evaluates it under the variable names instead;
-    // either way the plan holds exactly one copy.
+    // stays in its `With` rather than being substituted at each of its references as a command's.
     val ident = ResolvedIdentifier(FakeSystemCatalog, Identifier.of(Array("session"), "v"))
     // Deterministic but not cheap: the command case would inline it.
     val plusOne = ScalaUDF((i: Int) => i + 1, IntegerType, Seq(Literal(1)), udfName = Some("f"))
     val declare = CreateVariable(
       Seq(ident), DefaultValueExpression(With(plusOne) { case Seq(ref) => ref * ref }, "v"),
       replace = true)
-    val copies = Optimizer.execute(declare).collectWithSubqueries { case p => p.expressions }
-      .flatten.map(_.collect { case u: ScalaUDF => u }.size).sum
-    assert(copies == 1, s"the plan holds $copies copies of the definition")
+    comparePlans(Optimizer.execute(declare), declare)
+  }
+
+  test("SPARK-59954: a With in a DECLARE VARIABLE default leaves the variable names alone") {
+    val ident = ResolvedIdentifier(FakeSystemCatalog, Identifier.of(Array("session"), "v"))
+    def declare(default: Expression): CreateVariable =
+      CreateVariable(Seq(ident), DefaultValueExpression(default, "v"), replace = true)
+
+    // The children are the variable names, not rows, so there is no `Project` to pre-evaluate a
+    // definition in. One worth memoizing stays in the default for `CreateVariableExec` to evaluate.
+    val kept = declare(With(Rand(Literal(0L))) { case Seq(ref) => ref * ref })
+    comparePlans(Optimizer.execute(kept), kept)
+
+    // One that gains nothing from memoizing is inlined, as anywhere else.
+    comparePlans(
+      Optimizer.execute(declare(With(Literal(3)) { case Seq(ref) => ref * ref })),
+      declare(Literal(3) * Literal(3)))
   }
 
   test("SPARK-58902: a With left in a conditional branch of an aggregate still converges") {
