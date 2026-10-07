@@ -89,6 +89,14 @@ case class ArrowEvalPythonExec(
     throw SparkException.internalError(s"Unexpected eval type $evalType")
   }
 
+  override protected def additionalMetrics: Map[String, SQLMetric] = {
+    if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF && !conf.legacyPandasConversionUDF) {
+      createPythonPhaseMetrics()
+    } else {
+      Map.empty
+    }
+  }
+
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
   private[this] val sessionUUID = {
     Option(session).collect {

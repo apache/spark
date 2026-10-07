@@ -15,13 +15,18 @@
 # limitations under the License.
 #
 
+import time
 import unittest
 from decimal import Decimal
+from io import BytesIO
+from unittest.mock import patch
 
 from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
 from pyspark.loose_version import LooseVersion
+from pyspark.serializers import read_int
 from pyspark.sql import Row
 from pyspark.sql.functions import col, udf
+from pyspark.sql.pandas.serializers import ArrowStreamSerializer, SpecialLengths
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.sql.types import (
     ArrayType,
@@ -43,6 +48,7 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 from pyspark.util import PythonEvalType
+from pyspark.worker_metrics import WorkerMetrics
 
 if have_pandas:
     import pandas as pd
@@ -541,6 +547,102 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
             super().tearDownClass()
+
+    def test_phase_metrics(self):
+        @udf("long", useArrow=True)
+        def measured(value):
+            time.sleep(0.002)
+            return value + 1
+
+        constant = udf(lambda: 7, "long", useArrow=True)
+        phase_names = (
+            "pythonDataReadTime",
+            "pythonInputPreparationTime",
+            "pythonUDFExecutionTime",
+            "pythonOutputPreparationTime",
+            "pythonDataWriteTime",
+        )
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.maxRecordsPerBatch": "2",
+                "spark.sql.adaptive.enabled": "false",
+            }
+        ):
+            # Exercise sequential and concurrent evaluation, then an empty worker task.
+            for num_rows, concurrency in ((5, 0), (3, 2), (0, 0)):
+                concurrency_conf = (
+                    {"spark.sql.execution.pythonUDF.arrow.concurrency.level": str(concurrency)}
+                    if concurrency
+                    else {}
+                )
+                with (
+                    self.subTest(num_rows=num_rows, concurrency=concurrency),
+                    self.sql_conf(concurrency_conf),
+                ):
+                    if num_rows:
+                        data = self.spark.range(num_rows, numPartitions=1)
+                    else:
+                        data = self.spark.createDataFrame(self.sc.parallelize([], 1), "id long")
+                    result = data.select(measured("id"), constant())
+                    self.assertEqual(
+                        [tuple(row) for row in result.collect()],
+                        [(value + 1, 7) for value in range(num_rows)],
+                    )
+                    plan = result._jdf.queryExecution().executedPlan()
+                    while plan.nodeName() != "ArrowEvalPython":
+                        self.assertEqual(plan.children().size(), 1)
+                        plan = plan.children().apply(0)
+                    metrics = plan.metrics()
+                    self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
+                    self.assertEqual(
+                        metrics.apply("pythonNumTimedBatches").value(), (num_rows + 1) // 2
+                    )
+                    phases = [metrics.apply(name).value() for name in phase_names]
+                    self.assertTrue(all(value >= 0 for value in phases))
+                    if num_rows:
+                        self.assertGreater(phases[2], 0)
+                    else:
+                        self.assertEqual(phases[1:4], [0, 0, 0])
+                    self.assertLessEqual(sum(phases), metrics.apply("pythonProcessingTime").value())
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowStreamTimingTests(unittest.TestCase):
+    def test_io_timers_exclude_batch_producer_and_consumer(self):
+        import pyarrow as pa
+
+        metrics = WorkerMetrics()
+        metrics.reset()
+        self.addCleanup(metrics.reset)
+        serializer = ArrowStreamSerializer(write_start_stream=True, collect_timing=True)
+        batch = pa.record_batch([[1, 2]], names=["value"])
+        clock_ns = 0
+
+        def clock():
+            nonlocal clock_ns
+            clock_ns += 1_000_000
+            return clock_ns
+
+        def produce():
+            nonlocal clock_ns
+            for _ in range(2):
+                clock_ns += 100_000_000
+                yield batch
+
+        stream = BytesIO()
+        with patch("pyspark.worker_metrics.time.perf_counter_ns", side_effect=clock):
+            serializer.dump_stream(produce(), stream)
+            stream.seek(0)
+            self.assertEqual(read_int(stream), SpecialLengths.START_ARROW_STREAM)
+            for actual in serializer.load_stream(stream):
+                clock_ns += 100_000_000
+                self.assertTrue(actual.equals(batch))
+
+        # Each I/O interval advances the fake clock by 1 ms; batch work costs 100 ms.
+        # Both durations must exclude the producer/consumer work between those intervals.
+        for name in ("pythonDataReadTime", "pythonDataWriteTime"):
+            self.assertGreater(metrics.to_dict()[name], 0)
+            self.assertLess(metrics.to_dict()[name], 100)
 
 
 if __name__ == "__main__":

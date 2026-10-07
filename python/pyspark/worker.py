@@ -1830,7 +1830,13 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             ser = ArrowStreamCoGroupSerializer(write_start_stream=True)
         else:
-            ser = ArrowStreamSerializer(write_start_stream=True)
+            ser = ArrowStreamSerializer(
+                write_start_stream=True,
+                collect_timing=(
+                    eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+                    and not runner_conf.use_legacy_pandas_udf_conversion
+                ),
+            )
     else:
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
         ser = BatchedSerializer(CPickleSerializer(), batch_size)
@@ -2359,6 +2365,14 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             for f in eval_conf.input_type
         ]
 
+        # Reuse one scope per phase across batches; the row loop has no timer calls.
+        metrics = WorkerMetrics()
+        input_timer = metrics.measure("pythonInputPreparationTime")
+        udf_timer = metrics.measure("pythonUDFExecutionTime")
+        output_timer = metrics.measure("pythonOutputPreparationTime")
+        metrics.set("pythonNumTimingReports", 1)
+        metrics.set("pythonNumTimedBatches", 0)
+
         @fail_on_stopiteration
         def _evaluate_batch_udf(udf_func, rows):
             if runner_conf.arrow_concurrency_level <= 0:
@@ -2370,44 +2384,53 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
         def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             for input_batch in data:
-                num_rows = input_batch.num_rows
-
                 # --- Input: Arrow -> Python columns ---
-                columns = [
-                    (
-                        [conv(v) for v in ArrowTableToRowsConversion._to_pylist(col)]
-                        if conv is not None
-                        else ArrowTableToRowsConversion._to_pylist(col)
-                    )
-                    for col, conv in zip(input_batch.itercolumns(), arrow_to_py_converters)
-                ]
-                if not columns:
-                    columns = [[_NoValue] * num_rows]
+                with input_timer:
+                    metrics.increment("pythonNumTimedBatches")
+                    num_rows = input_batch.num_rows
+                    columns = [
+                        (
+                            [conv(v) for v in ArrowTableToRowsConversion._to_pylist(col)]
+                            if conv is not None
+                            else ArrowTableToRowsConversion._to_pylist(col)
+                        )
+                        for col, conv in zip(input_batch.itercolumns(), arrow_to_py_converters)
+                    ]
+                    if not columns:
+                        columns = [[_NoValue] * num_rows]
+                    output_arrays = []
 
                 # --- Process: evaluate each UDF row-by-row ---
-                output_arrays = []
                 for udf_func, offsets, zero_arg, arrow_return_type, result_conv in udf_infos:
-                    rows = (
-                        [() for _ in range(num_rows)]
-                        if zero_arg
-                        else list(zip(*[columns[o] for o in offsets]))
-                    )
-                    results = _evaluate_batch_udf(udf_func, rows)
-                    verify_result_row_count(len(results), num_rows)
+                    with input_timer:
+                        rows = (
+                            [() for _ in range(num_rows)]
+                            if zero_arg
+                            else list(zip(*[columns[o] for o in offsets]))
+                        )
+                    with udf_timer:
+                        results = _evaluate_batch_udf(udf_func, rows)
 
                     # --- Output: Python -> Arrow ---
-                    converted = (
-                        [result_conv(r) for r in results] if result_conv is not None else results
-                    )
-                    try:
-                        arr = pa.array(converted, type=arrow_return_type)
-                    except pa.lib.ArrowInvalid:
-                        arr = pa.array(converted).cast(
-                            target_type=arrow_return_type, safe=runner_conf.safecheck
+                    with output_timer:
+                        verify_result_row_count(len(results), num_rows)
+                        converted = (
+                            [result_conv(r) for r in results]
+                            if result_conv is not None
+                            else results
                         )
-                    output_arrays.append(arr)
+                        try:
+                            arr = pa.array(converted, type=arrow_return_type)
+                        except pa.lib.ArrowInvalid:
+                            arr = pa.array(converted).cast(
+                                target_type=arrow_return_type, safe=runner_conf.safecheck
+                            )
+                        output_arrays.append(arr)
 
-                yield pa.RecordBatch.from_arrays(output_arrays, col_names)
+                with output_timer:
+                    output_batch = pa.RecordBatch.from_arrays(output_arrays, col_names)
+                yield output_batch
+                del output_batch
 
         return func, ser
 
