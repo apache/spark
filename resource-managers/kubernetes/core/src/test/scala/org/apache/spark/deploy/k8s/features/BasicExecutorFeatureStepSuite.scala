@@ -290,7 +290,9 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       sparkConf = baseConf,
       executorId = "EXECID",
       appId = KubernetesTestConf.APP_ID,
-      driverPod = Some(DRIVER_POD))
+      driverPod = Some(DRIVER_POD),
+      authSecret = None,
+      sslRpcPasswordEnvs = Map.empty)
     val step = new BasicExecutorFeatureStep(executorConf, defaultProfile)
     val executor = step.configurePod(SparkPod.initialPod())
 

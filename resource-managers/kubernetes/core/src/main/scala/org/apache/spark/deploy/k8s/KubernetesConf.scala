@@ -16,7 +16,9 @@
  */
 package org.apache.spark.deploy.k8s
 
-import java.util.{Locale, UUID}
+import java.util.{Locale, Map => JMap, UUID}
+
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
 
@@ -221,8 +223,8 @@ class KubernetesExecutorConf(
   extends KubernetesConf(sparkConf) with Logging {
 
   /**
-   * Java-friendly constructor that accepts a nullable Pod for driverPod and
-   * a nullable String for customAuthSecret instead of Option.
+   * Java-friendly constructor that accepts nullable values instead of Option and a
+   * java.util.Map instead of a Scala Map.
    */
   @Since("4.4.0")
   def this(
@@ -231,9 +233,11 @@ class KubernetesExecutorConf(
       executorId: String,
       driverPod: Pod,
       resourceProfileId: Int,
-      customAuthSecret: String) =
+      customAuthSecret: String,
+      sslRpcPasswordEnvs: JMap[String, String]) =
     this(sparkConf, appId, executorId, Option(driverPod), resourceProfileId,
-      Option(customAuthSecret))
+      Option(customAuthSecret),
+      Option(sslRpcPasswordEnvs).map(_.asScala.toMap).getOrElse(Map.empty))
 
   def authSecret: Option[String] = {
     customAuthSecret
@@ -357,8 +361,8 @@ private[spark] object KubernetesConf {
       appId: String,
       driverPod: Option[Pod],
       resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID,
-      authSecret: Option[String] = None,
-      sslRpcPasswordEnvs: Map[String, String] = Map.empty): KubernetesExecutorConf = {
+      authSecret: Option[String],
+      sslRpcPasswordEnvs: Map[String, String]): KubernetesExecutorConf = {
     new KubernetesExecutorConf(
       sparkConf.clone(), appId, executorId, driverPod, resourceProfileId, authSecret,
       sslRpcPasswordEnvs)
