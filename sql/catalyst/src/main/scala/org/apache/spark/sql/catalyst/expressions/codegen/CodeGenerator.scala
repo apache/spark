@@ -1516,7 +1516,8 @@ class CodegenContext extends Logging {
   /**
    * Under `WholeStageSplit.Split`, how many blocks [[splitExpressionsWithSources]] has turned into
    * methods in this generation: none, and the code is the code in one piece, whatever the split
-   * was asked for.
+   * was asked for, but for the helper functions of a discarded subexpression elimination pass,
+   * which only a split generation removes.
    */
   private[sql] var wholeStageBlocksSplit: Int = 0
 
@@ -3017,12 +3018,6 @@ object CodeGenerator extends Logging {
    * and a parameter of type long or double contributes two units. Besides, for nullable parameter,
    * we also need to pass a boolean parameter for the null status.
    */
-  /** The slots a parameter of the Java type `javaType` takes: two for a `long` or a `double`. */
-  private def paramSlotsOf(javaType: String): Int = javaType match {
-    case JAVA_LONG | JAVA_DOUBLE => 2
-    case _ => 1
-  }
-
   def calculateParamLength(params: Seq[Expression]): Int = {
     // For a nullable expression, we need to pass in an extra boolean parameter.
     def paramLengthForExpr(input: Expression): Int =
@@ -3031,11 +3026,17 @@ object CodeGenerator extends Logging {
     1 + params.map(paramLengthForExpr).sum
   }
 
+  /** The slots a parameter of the Java type `javaType` takes: two for a `long` or a `double`. */
+  private def paramSlotsOf(javaType: String): Int = javaType match {
+    case JAVA_LONG | JAVA_DOUBLE => 2
+    case _ => 1
+  }
+
   def calculateParamLengthFromExprValues(params: Seq[ExprValue]): Int =
     calculateParamLengthFromTypes(params.map(p => typeName(p.javaType)))
 
   /** The parameter length of a method whose parameters are of the Java types `javaTypes`. */
-  def calculateParamLengthFromTypes(javaTypes: Seq[String]): Int = {
+  private[codegen] def calculateParamLengthFromTypes(javaTypes: Seq[String]): Int = {
     // Initial value is 1 for `this`.
     1 + javaTypes.map(paramSlotsOf).sum
   }

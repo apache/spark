@@ -853,12 +853,7 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
       s"missing class declaration:\n$wrapped")
   }
 
-  // ---------------- rewriteInnerClassRefs ----------------
-
-  // Classloader used to resolve candidate type references in the tests below.
-  private val rewriteLoader: ClassLoader = getClass.getClassLoader
-  private def rewrite(body: String): String =
-    JdkCodeCompiler.rewriteInnerClassRefs(body, rewriteLoader)
+  // ---------------- forEachJavaSpan ----------------
 
   test("forEachJavaSpan: the spans of generated Java cover it, literals and comments apart") {
     import CodeCompiler.JavaSpan.{Code, Comment, Literal => Quoted}
@@ -879,6 +874,13 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
     assert(spans("a // b").map(_._1) === Seq(Code, Comment))
     assert(spans("") === Nil)
   }
+
+  // ---------------- rewriteInnerClassRefs ----------------
+
+  // Classloader used to resolve candidate type references in the tests below.
+  private val rewriteLoader: ClassLoader = getClass.getClassLoader
+  private def rewrite(body: String): String =
+    JdkCodeCompiler.rewriteInnerClassRefs(body, rewriteLoader)
 
   test("rewriteInnerClassRefs: converts binary inner-class refs to dotted form") {
     assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")

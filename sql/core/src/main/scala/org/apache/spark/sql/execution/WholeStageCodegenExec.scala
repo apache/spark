@@ -776,9 +776,10 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
    * is one is that code compiled to choose which expressions to split ([[chooseCode]]). A stage
    * the JIT compiles whole keeps that code, which a split's calls would only slow down; the trial
    * compile of the code kept is the one [[doExecute]] finds in the compile cache. That code
-   * differs from the code with the conf off in one place: a method that takes its inputs as
-   * parameters reads a slot of a compacted mutable state array as the field it is, rather than
-   * fail to compile taking it as a parameter (`CodegenContext.collectInputs`).
+   * differs from the code with the conf off in one place: a slot of a compacted mutable state
+   * array counts as the field it is when code moves into a method (`CodegenContext.collectInputs`).
+   * An operator's method that took it as a parameter, and failed to compile, now compiles; a
+   * `With` definition reading one, which stayed inline, gets its method.
    *
    * @return the tuple of the codegen context and the actual generated source.
    */
@@ -866,17 +867,21 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
         (CodegenContext, CodeAndComment)) = {
     import WholeStageCodegenExec._
     // Whether the split generation `splitCode` turned any block into a method. Where it did not,
-    // its code is the code in one piece but for the helper functions of a discarded subexpression
-    // pass, which only a split generation removes, so the code in one piece is kept, its class
-    // cached for `doExecute` already.
+    // the split would change nothing but drop the helper functions of a discarded subexpression
+    // pass, so the code in one piece is kept, as it is with no split compiled.
     def splitsSomething(splitCode: (CodegenContext, CodeAndComment)): Boolean =
       splitCode._1.wholeStageBlocksSplit > 0
     // A split that fails to compile is thrown under testing (`throwSplitFailure`), and warned
-    // about otherwise.
-    def splitFailed(e: Throwable): (SplitDecision, (CodegenContext, CodeAndComment)) = {
-      logWarning(log"Whole-stage codegen stage (id=${MDC(CODEGEN_STAGE_ID, codegenStageId)}) " +
-        log"failed to compile with its expressions split, so it runs its code without the " +
-        log"split:\n ${MDC(TREE_NODE, treeString)}", e)
+    // about otherwise. The warning carries the failure only where the split's compile expected
+    // it (`reported` false); otherwise that compile has logged it as an error, with the source.
+    def splitFailed(
+        e: Throwable,
+        reported: Boolean): (SplitDecision, (CodegenContext, CodeAndComment)) = {
+      if (throwSplitFailure) throw e
+      val message = log"Whole-stage codegen stage (id=${MDC(CODEGEN_STAGE_ID, codegenStageId)}) " +
+        log"failed to compile with its expressions split, so its code is kept in one " +
+        log"piece:\n ${MDC(TREE_NODE, treeString)}"
+      if (reported) logWarning(message) else logWarning(message, e)
       (KeepWhole, recorded)
     }
     val wholeTrial = compile(whole, true)
@@ -886,18 +891,16 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
         if (!splitsSomething(splitAll)) {
           (KeepWhole, recorded)
         } else {
-          // Where the split fails as well, `doExecute` reports the failure of the code in one
-          // piece as any compile's, so the split's compile expects its failure, which the warning
-          // carries; under testing it is reported and thrown as any compile's.
+          // Where the split fails as well, `doExecute` compiles the code in one piece again and
+          // reports its failure as any compile's, so the split's compile expects its failure,
+          // which the warning carries; under testing it is reported and thrown as any compile's.
           val splitTrial = compile(splitAll._2, !throwSplitFailure)
           splitTrial.methodSizes match {
             case Success(_) =>
               splitTrial.report()
               (SplitThese(None), splitAll)
-            case Failure(e) if throwSplitFailure =>
-              throw e
             case Failure(e) =>
-              splitFailed(e)
+              splitFailed(e, reported = throwSplitFailure)
           }
         }
       case Success(None) =>
@@ -936,11 +939,10 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
               case Success(None) =>
                 wholeTrial.report()
                 (Undecided, recorded)
-              case Failure(e) if throwSplitFailure =>
-                throw e
               case Failure(e) =>
+                val keepWhole = splitFailed(e, reported = true)
                 wholeTrial.report()
-                splitFailed(e)
+                keepWhole
             }
           }
         }

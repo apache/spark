@@ -372,12 +372,14 @@ object CodeCompiler extends Logging {
   private val currentTrial = new ThreadLocal[TrialCompile]
 
   /**
-   * Runs `body`, a compile whose result its caller may discard, holding back its reports of methods
-   * past the JIT limit until the caller keeps the code ([[TrialCompile.report]]); and, where
-   * `failureExpected`, its report of a failure to compile, which is then the answer the caller is
-   * asking for. Whole-stage codegen compiles a stage this way to decide whether to split its
-   * expressions (`spark.sql.codegen.wholeStage.splitExpressions.methodLimit`). The trial is the
-   * calling thread's, and a backend that compiles on a thread of its own carries it there
+   * Runs `body`, a compile whose result its caller may discard, holding back its codegen metric
+   * updates and reports of methods past the JIT limit until the caller keeps the code
+   * ([[TrialCompile.report]]); and, where `failureExpected`, logging its failure to compile at
+   * debug level, the failure being then the answer the caller is asking for. The source dump of
+   * `spark.sql.codegen.logLevel` is made for every compile, a trial's included. Whole-stage
+   * codegen compiles a stage this way to decide whether to split its expressions
+   * (`spark.sql.codegen.wholeStage.splitExpressions.methodLimit`). The trial is the calling
+   * thread's, and a backend that compiles on a thread of its own carries it there
    * ([[withTrial]]), as the JDK backend does.
    */
   private[sql] def trial[T](failureExpected: Boolean)(body: => T): (Try[T], TrialCompile) = {
@@ -389,9 +391,10 @@ object CodeCompiler extends Logging {
   private[codegen] def activeTrial: TrialCompile = currentTrial.get
 
   /**
-   * Makes `report`, a metric update or a log line about the code compiled, or, in a trial, holds
-   * it back until the caller keeps the code ([[TrialCompile.report]]), so that code compiled only
-   * to be discarded is neither counted nor reported.
+   * Makes `report`, a metric update or a report of a method past the JIT limit, or, in a trial,
+   * holds it back until the caller keeps the code ([[TrialCompile.report]]), so that code compiled
+   * only to be discarded is neither counted in the metrics nor reported as too large to be JIT
+   * compiled.
    */
   private[codegen] def reportOrHold(report: => Unit): Unit = Option(currentTrial.get) match {
     case Some(trial) => trial.hold(() => report)
@@ -431,7 +434,7 @@ object CodeCompiler extends Logging {
    * Every other report is INFO: every one after that first warning, every one from a generated
    * class outside whole-stage codegen, where the setting does not apply, and every one on an
    * executor, since the driver compiles each stage before its tasks do and has reported it. In a
-   * trial, the report is held back with the metric updates ([[reportOrHold]]).
+   * trial, its caller holds the report back with the metric updates ([[reportOrHold]]).
    */
   private[catalyst] def logHugeMethod(className: String, methodName: String, size: Int): Unit = {
     val limit = CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT
@@ -477,7 +480,11 @@ object CodeCompiler extends Logging {
             reportOrHold(CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize))
             Option(currentTrial.get).foreach(_.recordMethod(method.getName, byteCodeSize))
             if (byteCodeSize > CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT) {
-              reportOrHold(logHugeMethod(cf.getThisClassName, method.getName, byteCodeSize))
+              // Bound first, so that a report held in a trial keeps the names, not the parsed
+              // class.
+              val className = cf.getThisClassName
+              val methodName = method.getName
+              reportOrHold(logHugeMethod(className, methodName, byteCodeSize))
             }
             byteCodeSize
           }
