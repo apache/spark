@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, ExpressionSet, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, ExpressionSet, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -144,19 +144,29 @@ trait DataSourceV2ScanExecBase
    * is a `KeyedPartitioning` and `spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled`
    * is on, each partition contains rows where the key expressions evaluate to a single constant
    * value, so the data is trivially sorted by those expressions within the partition.
+   *
+   * Either way, a sort order that holds a partition transform is dropped, even on a partition key.
+   * In a reported ordering it also ends the leading run, like a sort order over a pruned column.
+   * This loses nothing today, since no operator requires an ordering over a transform. The write
+   * path sorts by the transform's function call instead. Dropping it is also a safe way to handle
+   * a transform Spark cannot evaluate. Keeping it would only add comparisons nobody uses. A sort
+   * order that Spark derives from a transform key is even constant within each partition. Revisit
+   * this if an ordering over a transform becomes a real requirement.
    */
   override def outputOrdering: Seq[SortOrder] = {
+    def holdsTransform(e: Expression): Boolean = e.exists(_.isInstanceOf[TransformExpression])
     (ordering, outputPartitioning) match {
       case (Some(o), p) =>
-        val (prefix, rest) = o.span(_.references.subsetOf(outputSet))
+        val (prefix, rest) =
+          o.span(order => order.references.subsetOf(outputSet) && !holdsTransform(order.child))
         p match {
           case k: KeyedPartitioning if rest.nonEmpty =>
-            val keyExprs = ExpressionSet(k.expressions)
+            val keyExprs = ExpressionSet(k.expressions.filterNot(holdsTransform))
             prefix ++ rest.filter(order => keyExprs.contains(order.child))
           case _ => prefix
         }
       case (_, k: KeyedPartitioning) if conf.v2BucketingPartitionKeyOrderingEnabled =>
-        k.expressions.map(SortOrder(_, Ascending))
+        k.expressions.filterNot(holdsTransform).map(SortOrder(_, Ascending))
       case _ => Seq.empty
     }
   }

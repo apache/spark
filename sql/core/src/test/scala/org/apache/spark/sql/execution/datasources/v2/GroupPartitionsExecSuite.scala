@@ -17,17 +17,19 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, CodegenObjectFactoryMode, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyReducer, Partitioning, PartitioningCollection, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.date
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
-import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, DaysFunctionWithToYearsReducerWithLongResult, DaysToYearsReducerWithLongResult, Reducer, YearsFunctionWithToYearsReducerWithLongResult}
+import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, DaysFunctionWithToYearsReducerWithLongResult, DaysToYearsReducerWithLongResult, Reducer, YearsFunction, YearsFunctionWithToYearsReducerWithLongResult}
 import org.apache.spark.sql.execution.{DummySparkPlan, LeafExecNode, SafeForKWayMerge}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, TimestampType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class GroupPartitionsExecSuite extends SharedSparkSession {
@@ -144,7 +146,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
   test("SPARK-58324: k-way merge ordering drops sameOrderExpressions") {
     // The child ordering carries sameOrderExpressions (planner metadata). The k-way merge
     // comparator only needs the sort key, so kWayMergeOrdering keeps child/direction/nullOrdering
-    // but drops sameOrderExpressions, so LazyCodeGenOrdering does not serialize them with the RDD.
+    // but drops sameOrderExpressions, so LazyRowOrdering does not serialize them with the RDD.
     val childOrdering = Seq(SortOrder(exprA, Ascending, Seq(exprB, exprC)))
     val child = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(1))),
@@ -155,6 +157,22 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val merged = gpe.kWayMergeOrdering
     assert(merged.map(so => (so.child, so.direction)) === Seq((exprA, Ascending)))
     assert(merged.forall(_.sameOrderExpressions.isEmpty))
+  }
+
+  test("SPARK-59995: the k-way merge ordering falls back to interpreted evaluation") {
+    // A `TransformExpression` generates no code, while `eval` calls its function. The ordering is
+    // serialized before any comparison, as the RDD ships it. Test sessions run `CODEGEN_ONLY`, so
+    // this sets the production default, `FALLBACK`.
+    val ts = AttributeReference("ts", TimestampType)()
+    val ordering = new LazyRowOrdering(
+      Seq(SortOrder(TransformExpression(YearsFunction, Seq(ts)), Ascending)), Seq(ts))
+    val serializer = new JavaSerializer(new SparkConf()).newInstance()
+    val shipped = serializer.deserialize[LazyRowOrdering](serializer.serialize(ordering))
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.FALLBACK.toString) {
+      assert(shipped.compare(InternalRow(date(2022)), InternalRow(date(2021, 6))) > 0)
+      // Two timestamps in the same year compare equal, so the year is what is compared.
+      assert(shipped.compare(InternalRow(date(2021)), InternalRow(date(2021, 6))) === 0)
+    }
   }
 
   test("SPARK-56241: coalescing without reducers keeps key-expression orders from child") {
