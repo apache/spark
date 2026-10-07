@@ -102,6 +102,21 @@ def _pid_alive(pid: int) -> bool:
             return False
         except OSError:
             pass
+    else:
+        # A child that has exited but has not been reaped still answers signal 0 on macOS.
+        # It cannot supervise a pool launch or serve a Connect request.
+        try:
+            state = subprocess.run(
+                ["ps", "-p", str(pid), "-o", "state="],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            pass
+        else:
+            if state.returncode == 0 and state.stdout.strip().startswith("Z"):
+                return False
     return True
 
 
@@ -128,7 +143,9 @@ def _process_command(pid: int) -> Optional[str]:
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    return result.stdout if result.returncode == 0 else ""
+    if result.returncode == 0:
+        return result.stdout
+    return None if _pid_alive(pid) else ""
 
 
 def _is_local_connect_server(pid: int) -> Optional[bool]:
