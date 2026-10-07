@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import java.io.File
 import java.util.concurrent.{Callable, ExecutionException, Executors, ThreadFactory, TimeoutException, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -149,6 +150,8 @@ private[python] object InProcessPythonRuntime extends Logging {
       }
     })
     @volatile private var running = true
+    // Calls submitted to the interpreter thread that have not finished or been cancelled.
+    private val pendingCalls = new AtomicInteger()
     // Accessed only on the owning thread.
     private var interp: SharedInterpreter = _
     // Guarded by this session's monitor. Shutdown must keep Python-owned result buffers
@@ -177,13 +180,14 @@ private[python] object InProcessPythonRuntime extends Logging {
       var cancelled = false
       val future = synchronized {
         checkRunning()
+        pendingCalls.incrementAndGet()
         executor.submit(new Callable[T] {
           override def call(): T = {
             gate.synchronized {
               if (cancelled) throw new TaskKilledException("Cancelled before Python invocation")
               started = true
             }
-            body
+            try body finally pendingCalls.decrementAndGet()
           }
         })
       }
@@ -196,6 +200,7 @@ private[python] object InProcessPythonRuntime extends Logging {
               if (started) false else {
                 cancelled = true
                 future.cancel(false)
+                pendingCalls.decrementAndGet()
                 true
               }
             }
@@ -308,6 +313,9 @@ private[python] object InProcessPythonRuntime extends Logging {
         running = false
         finishShutdown()
       }
+      // With registrations left but no call pending, nothing runs until the last release,
+      // which then finishes the shutdown. Wait only for calls or the final cleanup.
+      if (!executor.isShutdown && pendingCalls.get == 0) return
       try {
         if (!executor.awaitTermination(waitMillis, TimeUnit.MILLISECONDS)) {
           logWarning("In-process Python is still stopping; native work and its buffers " +

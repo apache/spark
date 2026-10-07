@@ -66,6 +66,20 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
       }
   }
 
+  test("shutdown does not wait for registrations while no call is running") {
+    val field = ArrowUtils.toArrowField("result", LongType, true, "UTC")
+    intercept[NullPointerException] {
+      runtime.register("idle", Array.emptyByteArray, field, "3.12", false, false, false, true)
+    }
+    val start = System.nanoTime()
+    runtime.shutdown(waitMillis = 5000)
+    assert(System.nanoTime() - start < TimeUnit.SECONDS.toNanos(2) && !runtime.isTerminated)
+    // The last release finishes the shutdown.
+    runtime.release(Seq("idle"))
+    runtime.shutdown()
+    assert(runtime.isTerminated)
+  }
+
   test("registration failure frees its temporary native command buffer") {
     val before = ArrowUtils.rootAllocator.getAllocatedMemory
     val field = ArrowUtils.toArrowField("result", LongType, true, "UTC")
@@ -199,7 +213,8 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
    */
   private def withConsumer(
       resources: InProcessArrowEvalPythonEvaluatorFactory.IteratorResources,
-      inPython: Boolean = false)(test: => Unit): Boolean = {
+      inPython: Boolean = false,
+      readingInput: Boolean = false)(test: => Unit): Boolean = {
     val entered = new CountDownLatch(1)
     val finish = new CountDownLatch(1)
     val closedAfterCall = new AtomicBoolean()
@@ -208,6 +223,14 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
       try {
         if (inPython) {
           resources.withoutLock { entered.countDown(); finish.await(10, TimeUnit.SECONDS) }
+        } else if (readingInput) {
+          resources.startReadingInput()
+          try {
+            entered.countDown()
+            finish.await(10, TimeUnit.SECONDS)
+          } finally {
+            resources.endReadingInput()
+          }
         } else {
           entered.countDown()
           finish.await(10, TimeUnit.SECONDS)
@@ -258,7 +281,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
   test("task completion waits only briefly for a consumer blocked on its input") {
     val releases = new Releases
     val resources = releases.resources(lockWaitMillis = 50L)
-    withConsumer(resources) {
+    withConsumer(resources, readingInput = true) {
       resources.close()
       // The executor frees the task memory, after the listener deletes what lives outside it.
       assert(releases.taskMemory.get == 0 && releases.abandoned.get == 1)
@@ -297,35 +320,16 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     assert(releases.taskMemory.get == 1 && releases.others.get == 1)
   }
 
-  test("task completion waits for a consumer adding a row instead of abandoning it") {
+  test("task completion waits for a consumer that is not reading input") {
     val releases = new Releases
     val resources = releases.resources(lockWaitMillis = 50L)
-    val adding = new CountDownLatch(1)
-    val finish = new CountDownLatch(1)
-    val consumer = thread {
-      assert(resources.enter())
-      try {
-        assert(resources.enterTaskMemory())
-        try {
-          adding.countDown()
-          finish.await(10, TimeUnit.SECONDS)
-        } finally {
-          resources.exitTaskMemory()
-        }
-      } finally {
-        resources.exit()
-      }
-    }
     var closing: Thread = null
-    try {
-      assert(adding.await(10, TimeUnit.SECONDS))
+    withConsumer(resources) {
       closing = thread(resources.close())
       closing.join(300)
-      // An add waits only for memory, so the listener keeps waiting past its 50 ms.
+      // The consumer may use the task memory, e.g. the queue, so the listener keeps waiting
+      // past its 50 ms instead of leaving that memory to the executor.
       assert(closing.isAlive && releases.abandoned.get == 0 && releases.taskMemory.get == 0)
-    } finally {
-      finish.countDown()
-      consumer.join(10000)
     }
     closing.join(10000)
     assert(!closing.isAlive && releases.abandoned.get == 0)

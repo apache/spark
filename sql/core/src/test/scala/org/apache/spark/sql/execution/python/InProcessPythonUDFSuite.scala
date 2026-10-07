@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.python
 
 import java.io.File
 import java.util.Properties
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{CountDownLatch, LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 
@@ -391,6 +392,49 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
       assert(error.isInstanceOf[NoSuchElementException])
       assert(error.getMessage == "End of in-process UDF input")
       assert(input.pulled.get == (if (blockInNext) 6 else 5) && spillDirs() == before)
+    }
+  }
+
+  test("task completion waits for a consumer reading its queue instead of freeing it") {
+    val taskMemory = new TaskMemoryManager(SparkEnv.get.memoryManager, 0)
+    val stall = new AtomicBoolean(false)
+    val stalled = new CountDownLatch(1)
+    val context = new TaskContextImpl(0, 0, 0, 0, 0, 1, taskMemory, new Properties, null) {
+      // A pause after the consumer takes the lock and before it reads the queue, as a GC
+      // pause or a slow read of a spilled queue would cause.
+      override private[spark] def killTaskIfInterrupted(): Unit = {
+        if (stall.compareAndSet(true, false)) {
+          stalled.countDown()
+          Thread.sleep(2000)
+        }
+        super.killTaskIfInterrupted()
+      }
+    }
+    val session = new InProcessPythonRuntime.InterpreterSession()
+    try {
+      val iterator = new BlockingInput(InProcessArrowEvalPythonEvaluatorFactory.Buffered(None),
+        context, session, rowCount = 25).iterator()
+      val results = new LinkedBlockingQueue[Any]()
+      val consumer = thread {
+        try {
+          results.put(iterator.next().getLong(0))
+          stall.set(true)
+          results.put(iterator.next().getLong(0))
+        } catch {
+          case t: Throwable => results.put(t)
+        }
+      }
+      assert(results.poll(30, TimeUnit.SECONDS) == 1L)
+      assert(stalled.await(30, TimeUnit.SECONDS))
+      val closing = thread(context.markTaskCompleted(None))
+      closing.join(30000)
+      assert(!closing.isAlive)
+      // What the executor does after the task and its listeners: nothing is left to free.
+      assert(taskMemory.cleanUpAllAllocatedMemory() == 0L)
+      assert(results.poll(30, TimeUnit.SECONDS) == 2L)
+      consumer.join(30000)
+    } finally {
+      session.shutdown()
     }
   }
 
