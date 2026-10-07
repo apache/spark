@@ -153,14 +153,22 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
   test("view with top-level ORDER BY is not converted") {
     // The shuffle boundary added above the definition would destroy the view's
     // ORDER BY, changing what an outer LIMIT sees; the view must stay unconverted.
-    withTempView("v") {
-      sql("CREATE OR REPLACE TEMP VIEW v AS SELECT id FROM range(100) ORDER BY id")
-      val query = "SELECT t1.id FROM v t1 JOIN v t2 ON t1.id = t2.id LIMIT 3"
-      val expected = spark.sql(query).collect()
-      assert(countRepartitions(query) == 0)
-      withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+    // OFFSET composes into Offset/limit nodes wrapping the Sort, so those bodies
+    // must be rejected as well.
+    val bodies = Seq(
+      "SELECT id FROM range(100) ORDER BY id",
+      "SELECT id FROM range(100) ORDER BY id OFFSET 1",
+      "SELECT id FROM range(100) ORDER BY id LIMIT 50 OFFSET 1")
+    bodies.foreach { body =>
+      withTempView("v") {
+        sql(s"CREATE OR REPLACE TEMP VIEW v AS $body")
+        val query = "SELECT t1.id FROM v t1 JOIN v t2 ON t1.id = t2.id LIMIT 3"
+        val expected = spark.sql(query).collect()
         assert(countRepartitions(query) == 0)
-        checkAnswer(spark.sql(query), expected)
+        withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+          assert(countRepartitions(query) == 0)
+          checkAnswer(spark.sql(query), expected)
+        }
       }
     }
   }
