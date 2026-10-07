@@ -340,9 +340,9 @@ object CodeCompiler extends Logging {
 
   /**
    * A compile whose result its caller may discard ([[trial]]). What the compile would report of
-   * the code - its updates of the codegen metrics, which describe the code that runs, and its
-   * reports of methods past the JIT limit - is held here, in the order made, for the caller to
-   * make if it keeps the code.
+   * the code - its updates of the codegen metrics, which describe the code that runs, its "Code
+   * generated in" log line with the compile time, and its reports of methods past the JIT limit -
+   * is held here, in the order made, for the caller to make if it keeps the code.
    *
    * @param failureExpected whether a failure to compile is an answer the caller asks for, which the
    *                        compile then logs at debug level rather than as an error.
@@ -373,13 +373,13 @@ object CodeCompiler extends Logging {
 
   /**
    * Runs `body`, a compile whose result its caller may discard, holding back its codegen metric
-   * updates and reports of methods past the JIT limit until the caller keeps the code
-   * ([[TrialCompile.report]]); and, where `failureExpected`, logging its failure to compile at
-   * debug level, the failure being then the answer the caller is asking for. The source dump of
-   * `spark.sql.codegen.logLevel` is made for every compile, a trial's included. Whole-stage
-   * codegen compiles a stage this way to decide whether to split its expressions
-   * (`spark.sql.codegen.wholeStage.splitExpressions.methodLimit`). The trial is the calling
-   * thread's, and a backend that compiles on a thread of its own carries it there
+   * updates, its compile time log line and its reports of methods past the JIT limit until the
+   * caller keeps the code ([[TrialCompile.report]]); and, where `failureExpected`, logging its
+   * failure to compile at debug level, the failure being then the answer the caller is asking
+   * for. The source dump of `spark.sql.codegen.logLevel` is made for every compile, a trial's
+   * included. Whole-stage codegen compiles a stage this way to decide whether to split its
+   * expressions (`spark.sql.codegen.wholeStage.splitExpressions.methodLimit`). The trial is the
+   * calling thread's, and a backend that compiles on a thread of its own carries it there
    * ([[withTrial]]), as the JDK backend does.
    */
   private[sql] def trial[T](failureExpected: Boolean)(body: => T): (Try[T], TrialCompile) = {
@@ -391,10 +391,10 @@ object CodeCompiler extends Logging {
   private[codegen] def activeTrial: TrialCompile = currentTrial.get
 
   /**
-   * Makes `report`, a metric update or a report of a method past the JIT limit, or, in a trial,
-   * holds it back until the caller keeps the code ([[TrialCompile.report]]), so that code compiled
-   * only to be discarded is neither counted in the metrics nor reported as too large to be JIT
-   * compiled.
+   * Makes `report`, a metric update or a log line about the code compiled - its compile time, or
+   * a method past the JIT limit - or, in a trial, holds it back until the caller keeps the code
+   * ([[TrialCompile.report]]), so that code compiled only to be discarded is neither counted in
+   * the metrics nor reported.
    */
   private[codegen] def reportOrHold(report: => Unit): Unit = Option(currentTrial.get) match {
     case Some(trial) => trial.hold(() => report)

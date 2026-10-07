@@ -1860,9 +1860,21 @@ class WholeStageCodegenSuite extends SharedSparkSession
    * Eight columns `<alias>0` to `<alias>7` over the column `col`, whose common subexpressions
    * take the split pass of subexpression elimination.
    */
-  private def commonSubexprColumns(col: String, alias: String): Seq[String] = (0 until 8).map {
-    i => s"concat(cast(array($col, $col + $i, $col * 2) AS STRING), " +
-      s"cast(array($col, $col + $i, $col * 2) AS STRING)) AS $alias$i"
+  private def commonSubexprColumns(col: String, alias: String): Seq[String] = (0 until 8).map { i =>
+    val repeated = s"cast(array($col, $col + $i, $col * 2) AS STRING)"
+    s"concat($repeated, $repeated) AS $alias$i"
+  }
+
+  /**
+   * Whether running `body` reports a method past the JIT limit, as the logger the compilers
+   * report under says.
+   */
+  private def reportsHugeMethod(body: => Unit): Boolean = {
+    val logs = new LogAppender("methods too long to be JIT compiled")
+    withLogAppender(logs, loggerNames = Seq(classOf[CodeGenerator[_, _]].getName),
+        level = Some(Level.INFO))(body)
+    logs.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+      "too long to be JIT compiled"))
   }
 
   /** The first whole-stage codegen stage of `df`. */
@@ -1996,17 +2008,11 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val query = caseWhenOverT(300, end = -1)
       for (backend <- Seq("janino", "jdk")) {
         withSQLConf(SQLConf.CODEGEN_COMPILER.key -> backend) {
-          // The warning is once per JVM and INFO after it, so the test reads every level, of the
-          // logger the compilers report under.
-          val logs = new LogAppender("the trial compile's reports")
-          withLogAppender(logs,
-              loggerNames = Seq(classOf[CodeGenerator[_, _]].getName),
-              level = Some(Level.DEBUG)) {
+          // The warning is once per JVM and INFO after it, so INFO and above is every report.
+          assert(!reportsHugeMethod {
             assert(splitsCaseWhen(sql(query)))
             sql(query).collect()
-          }
-          assert(!logs.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
-            "too long to be JIT compiled")), backend)
+          }, backend)
         }
       }
     }
@@ -2022,17 +2028,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
     withTempView("t") {
       spark.range(100).selectExpr("id AS v").createOrReplaceTempView("t")
       val query = caseWhenOverT(300, end = -7)
-      def reports(confs: (String, String)*): Boolean = {
-        val logs = new LogAppender("the kept code's reports")
-        withLogAppender(logs,
-            loggerNames = Seq(classOf[CodeGenerator[_, _]].getName),
-            level = Some(Level.DEBUG)) {
-          // Compiled here rather than by running the query, which compiles with the session's
-          // class loader, and so with Janino whatever the backend (`CodeCompiler.active`).
-          withSQLConf(confs: _*)(genCode(sql(query)).foreach(CodeGenerator.compile))
-        }
-        logs.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
-          "too long to be JIT compiled"))
+      def reports(confs: (String, String)*): Boolean = reportsHugeMethod {
+        // Compiled here rather than by running the query, which compiles with the session's
+        // class loader, and so with Janino whatever the backend (`CodeCompiler.active`).
+        withSQLConf(confs: _*)(genCode(sql(query)).foreach(CodeGenerator.compile))
       }
       for (backend <- Seq("janino", "jdk")) {
         withSQLConf(SQLConf.CODEGEN_COMPILER.key -> backend) {
@@ -2097,6 +2096,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
         // Whether each compile, in order, expects its failure.
         var failureExpected = Seq.empty[Boolean]
         var invalidated = Seq.empty[CodeAndComment]
+        // Which trial each replay of held reports belongs to, in order.
+        var replayed = Seq.empty[String]
         def choose(throwSplitFailure: Boolean = false): CodeAndComment = {
           ctx.wholeStageSplitDigest = digest
           stage.chooseCode(code,
@@ -2107,7 +2108,9 @@ class WholeStageCodegenSuite extends SharedSparkSession
                 compiles += 1
                 failureExpected :+= expected
               }
-              WholeStageCodegenExec.TrialResult(if (c eq code._2) whole else split, () => ())
+              val trial = if (c eq code._2) "whole" else "split"
+              WholeStageCodegenExec.TrialResult(if (c eq code._2) whole else split,
+                () => synchronized { replayed :+= trial })
             },
             c => synchronized { invalidated :+= c }, throwSplitFailure)._2
         }
@@ -2121,10 +2124,14 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val kept = new Run(sizes(method -> 20000), sizes(method -> 3000))
       assert(kept.choose() eq kept.splitCode._2)
       assert(kept.splitAsked === Seq(recordedOnly) && kept.invalidated === Seq(kept.code._2))
+      // The reports held back are made for the code kept, and for it alone: below, `replayed`
+      // says which trial's each Run made.
+      assert(kept.replayed === Seq("split"))
       // A larger method that holds nothing marked does not stop the split of the one that does.
       val beside = new Run(sizes(method -> 9000, "other" -> 12000),
         sizes(method -> 1500, "other" -> 12000))
       assert(beside.choose() eq beside.splitCode._2)
+      assert(beside.replayed === Seq("split"))
       // A method past the limit that holds nothing marked, or a method run once, is left alone,
       // with no split generated.
       for (whole <- Seq(sizes(method -> 1000, "other" -> 20000),
@@ -2132,17 +2139,20 @@ class WholeStageCodegenSuite extends SharedSparkSession
         val left = new Run(whole, notCompiling)
         assert(left.choose() eq left.code._2)
         assert(left.splitAsked.isEmpty && left.compiles === 1)
+        assert(left.replayed === Seq("whole"))
       }
       // A split that leaves the bytes past the limit as they were is not kept, and leaves the
       // compile cache itself.
       val same = new Run(sizes(method -> 20000), sizes(method -> 20000))
       assert(same.choose() eq same.code._2)
       assert(same.invalidated === Seq(same.splitCode._2))
+      assert(same.replayed === Seq("whole"))
       // A split that turns no block into a method is neither compiled nor dropped, though its code
       // differs: the code in one piece is kept, and its class stays cached for `doExecute`.
       val identical = new Run(sizes(method -> 20000), notCompiling, splitsNothing = true)
       assert(identical.choose() eq identical.code._2)
       assert(identical.compiles === 1 && identical.invalidated.isEmpty)
+      assert(identical.replayed === Seq("whole"))
       // A split that fails to compile leaves the code in one piece, which compiled, and is not
       // tried again; its compile reports the failure, which the warning does not repeat. Under
       // testing the failure is thrown.
@@ -2151,14 +2161,18 @@ class WholeStageCodegenSuite extends SharedSparkSession
       assert(fails.failureExpected === Seq(true, false))
       assert(fails.choose() eq fails.code._2)
       assert(fails.compiles === 2)
+      assert(fails.replayed === Seq("whole"))
       val thrown = new Run(sizes(method -> 20000), notCompiling)
       assert(intercept[IllegalStateException](thrown.choose(throwSplitFailure = true)) eq failure)
+      // The failure is thrown before the code in one piece makes its reports.
+      assert(thrown.replayed.isEmpty)
       // Code in one piece that fails to compile has every expression split where that compiles,
       // and the decision is remembered: the next generation asks for the same split with no trial.
       val broken = new Run(notCompiling, sizes(method -> 3000))
       assert(broken.choose() eq broken.splitCode._2)
       assert(broken.choose() eq broken.splitCode._2)
       assert(broken.splitAsked === Seq(None, None) && broken.compiles === 2)
+      assert(broken.replayed === Seq("split"))
       // Where the split fails too, the code in one piece is left to `doExecute`, which reports
       // its failure as without the split; the split's own failure is warned about, its compile
       // expecting it so that it reports no error of its own, and that is remembered as well.
@@ -2167,25 +2181,30 @@ class WholeStageCodegenSuite extends SharedSparkSession
       assert(warnsOfSplitFailure(withFailure = true)(bothFail.choose() eq bothFail.code._2))
       assert(bothFail.choose() eq bothFail.code._2)
       assert(bothFail.compiles === 2 && bothFail.failureExpected === Seq(true, true))
+      assert(bothFail.replayed.isEmpty)
       val bothFailThrown = new Run(notCompiling, notCompiling)
       assert(intercept[IllegalStateException](
         bothFailThrown.choose(throwSplitFailure = true)) eq failure)
       assert(bothFailThrown.failureExpected === Seq(true, false))
+      assert(bothFailThrown.replayed.isEmpty)
       // Where no block can be split, the split is not compiled: the code in one piece is left to
       // `doExecute` with one compile, as without the split.
       val nothingToSplit = new Run(notCompiling, notCompiling, splitsNothing = true)
       assert(nothingToSplit.choose(throwSplitFailure = true) eq nothingToSplit.code._2)
       assert(nothingToSplit.compiles === 1 && nothingToSplit.splitAsked === Seq(None))
+      assert(nothingToSplit.replayed.isEmpty)
       // Sizes unknown, a second compile cache hit, keep the code in one piece and decide nothing,
       // so the next generation compiles again.
       val unknownWhole = new Run(unknown, notCompiling)
       assert(unknownWhole.choose() eq unknownWhole.code._2)
       assert(unknownWhole.choose() eq unknownWhole.code._2)
       assert(unknownWhole.compiles === 2 && unknownWhole.splitAsked.isEmpty)
+      assert(unknownWhole.replayed === Seq("whole", "whole"))
       val unknownSplit = new Run(sizes(method -> 20000), unknown)
       assert(unknownSplit.choose() eq unknownSplit.code._2)
       assert(unknownSplit.choose() eq unknownSplit.code._2)
       assert(unknownSplit.compiles === 4)
+      assert(unknownSplit.replayed === Seq("whole", "whole"))
       // Threads that meet an undecided key at once decide it once: the second waits for the first
       // to decide, then generates the code of that decision with no trial of its own.
       val gate = new CountDownLatch(1)
@@ -2213,6 +2232,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
       assert(errors.isEmpty, errors)
       assert(chosen.size === 2 && chosen.toArray.forall(_ eq raced.splitCode._2))
       assert(raced.compiles === 2 && raced.splitAsked === Seq(recordedOnly, recordedOnly))
+      assert(raced.replayed === Seq("split"))
     }
   }
 
@@ -2697,11 +2717,12 @@ class WholeStageCodegenSuite extends SharedSparkSession
         val query = s"SELECT k, sum($caseWhen), max($caseWhen) FROM t GROUP BY k"
         val df = sql(query)
         assert(splitCaseWhenTakesRow(df))
-        assert(genCode(df).exists { c =>
-          val takingRow = "private void (\\w*subExpr_\\d+)\\([^)]*InternalRow ".r
-            .findAllMatchIn(c.body).map(_.group(1)).toSet
-          methodsHolding(c, "caseWhen_").exists(takingRow)
-        })
+        // A `subExpr` method takes the buffer and passes it on to the CASE WHEN's method, the
+        // call naming its parameter.
+        val passesBuffer = ("(?s)private void \\w*subExpr_\\d+\\([^)]*InternalRow (\\w+)" +
+          "[^)]*\\) \\{(?:(?!\\n(?:private|protected|public) ).)*?" +
+          "caseWhen_\\w*\\([^)]*\\b\\1\\b").r
+        assert(genCode(df).exists(c => passesBuffer.findFirstIn(c.body).nonEmpty))
         checkAnswer(df, withoutWholeStage(sql(query)))
       }
     }
@@ -2782,17 +2803,15 @@ class WholeStageCodegenSuite extends SharedSparkSession
         "repeat(v, 2), lpad(v, 10, 'x'), rpad(v, 10, 'y'))"
       def df: DataFrame =
         sql(s"SELECT c, $f AS x, concat($f, 'z') AS y FROM t UNPIVOT (v FOR c IN (a, b))")
-      val slotParameter = "private void \\w*subExpr_\\d+\\([^)]*mutableStateArray_\\d+\\[".r
-      assert(genCode(df).exists { c =>
-        methodsHolding(c, "expand_mutableStateArray_").exists(_.contains("subExpr_"))
-      })
-      assert(genCode(df).forall(c => slotParameter.findFirstIn(c.body).isEmpty))
-      genCode(df).foreach(CodeGenerator.compile)
+      // A parameter named for the slot's string, whatever its name: the slot is read as a field.
+      val stringParameter = "private void \\w*subExpr_\\d+\\([^)]*UTF8String ".r
+      val code = genCode(df)
+      assert(code.forall(c => stringParameter.findFirstIn(c.body).isEmpty))
+      code.foreach(CodeGenerator.compile)
       checkAnswer(df, withoutWholeStage(df))
       withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
-        assert(genCode(df).exists(c => slotParameter.findFirstIn(c.body).nonEmpty))
+        assert(genCode(df).exists(c => stringParameter.findFirstIn(c.body).nonEmpty))
       }
     }
   }
-
 }
