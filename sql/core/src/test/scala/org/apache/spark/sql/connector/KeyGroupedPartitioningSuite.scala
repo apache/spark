@@ -60,6 +60,7 @@ import org.apache.spark.sql.execution.window.{Final, Partial, WindowGroupLimitEx
 import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.ExtendedSQLTest
@@ -9944,11 +9945,12 @@ class CustomReportingCatalog extends InMemoryTableCatalog {
       advisoryPartitionSize: Option[Long],
       distributionStrictlyRequired: Boolean,
       numRowsPerSplit: Int,
-      id: String): InMemoryBaseTable = {
+      id: String,
+      schemaAlignmentConfig: SchemaAlignmentConfig): InMemoryBaseTable = {
     // scalastyle:on argcount
     new InMemoryTable(name, columns, partitioning, properties, constraints, distribution,
         ordering, requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired,
-        numRowsPerSplit, id) {
+        numRowsPerSplit, id, schemaAlignmentConfig) {
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
         new InMemoryScanBuilder(schema(), options) {
           override def build(): Scan =
