@@ -21,7 +21,7 @@ A leaf module (no pyspark imports), so it is safe to import from both the worker
 and the handlers, on the driver and the executor alike.
 """
 
-from typing import Any
+from typing import Any, Callable
 
 
 def extract_key_value_indexes(grouped_arg_offsets: list) -> list:
@@ -88,3 +88,30 @@ def hashable_grouping_key(key_values: tuple[Any, ...]) -> Any:
         return canonical
     except TypeError:
         return object()
+
+
+def wrap_kwargs_support(
+    f: Callable[..., Any], args_offsets: list[int], kwargs_offsets: dict[str, int]
+) -> tuple[Callable[..., Any], list[int]]:
+    """
+    Wrap ``f`` so it takes all arguments positionally: the positional ones first, then the
+    keyword ones in ``kwargs_offsets`` order. Returns the wrapped function and the matching
+    combined offsets.
+    """
+    if len(kwargs_offsets):
+        keys = list(kwargs_offsets.keys())
+
+        len_args_offsets = len(args_offsets)
+        if len_args_offsets > 0:
+
+            def func(*args: Any) -> Any:
+                return f(*args[:len_args_offsets], **dict(zip(keys, args[len_args_offsets:])))
+
+        else:
+
+            def func(*args: Any) -> Any:
+                return f(**dict(zip(keys, args)))
+
+        return func, args_offsets + [kwargs_offsets[key] for key in keys]
+    else:
+        return f, args_offsets

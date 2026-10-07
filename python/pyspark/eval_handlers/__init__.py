@@ -15,17 +15,18 @@
 # limitations under the License.
 #
 
-"""Internal handlers for the Arrow/Pandas UDF eval types.
+"""Internal handlers for the Arrow/Pandas UDF and UDTF eval types.
 
 Not a supported extension API: the registry is per executor process and filled at
 import time, so handlers must be defined in this package rather than by user code.
 Each eval type handled here is an ``EvalTypeHandler`` subclass (in ``_base``) that
 declares its ``eval_type`` and self-registers at class definition, which
-``read_udfs`` looks up via ``get_eval_type_handler``. Importing this package
+``read_udfs`` and ``read_udtf`` look up via ``get_eval_type_handler``. Importing this package
 imports the concrete handler submodules so they register.
 
-``_arrow`` and ``_pandas`` import pyarrow (and pandas) lazily, so they register
+``_arrow``, ``_pandas`` and ``_udtf`` import pyarrow (and pandas) lazily, so they register
 their handlers without those installed and defer the checks to when a handler runs.
 """
 
-from pyspark.eval_handlers import _arrow, _pandas  # noqa: F401  # registers handlers on import
+# Registers the handlers on import.
+from pyspark.eval_handlers import _arrow, _pandas, _udtf  # noqa: F401
