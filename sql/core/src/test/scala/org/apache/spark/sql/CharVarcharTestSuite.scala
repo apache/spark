@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
 import org.apache.spark.sql.catalyst.expressions.{
   Alias, ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, InSet, Literal,
-  ScalarSubquery, StringRPad, StringToMap, SupportTrimmedCharInput, Upper
+  ScalarSubquery, StringRPad, StringToMap, Upper
 }
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
@@ -2645,43 +2645,88 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
   test("SPARK-59274: from_json/csv/xml honor CHAR/VARCHAR under standardSemantics") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      def checkTextInput(query: String, inputType: DataType): DataFrame = {
-        val df = sql(query)
-        val inputTypes = df.queryExecution.analyzed.expressions.flatMap(_.collect {
-          case e: SupportTrimmedCharInput => e.child.dataType
-        })
-        assert(inputTypes === Seq(inputType), df.queryExecution.analyzed)
-        df
-      }
-
+      // CHAR padding is part of the STRING value after CAST. Parsers do not rtrim it.
+      // from_json on padded CHAR must match the same document as STRING with trailing spaces.
       checkAnswer(
-        checkTextInput(
-          """SELECT from_json(CAST('{"a":1}' AS CHAR(12)), 'a INT')""",
-          CharType(12)),
+        sql("""SELECT from_json(CAST('{"a":1}' AS CHAR(12)), 'a INT')"""),
+        sql("""SELECT from_json('{"a":1}     ', 'a INT')"""))
+      // XML ignores trailing whitespace, so a padded CHAR document still parses.
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  CAST('<ROW><a>1</a></ROW>' AS CHAR(30)),
+            |  'a INT')""".stripMargin),
         Row(Row(1)))
+      // Malformed padded CHAR documents keep the full pad in the corrupt record.
+      // Reinstating rtrim would drop those trailing spaces from _unparsed.
       checkAnswer(
-        checkTextInput(
+        sql(
+          """SELECT from_json(
+            |  CAST('{"a":' AS CHAR(12)),
+            |  'a INT, _unparsed STRING',
+            |  map('columnNameOfCorruptRecord', '_unparsed'))""".stripMargin),
+        Row(Row(null, "{\"a\":       ")))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  CAST('<ROW>' AS CHAR(10)),
+            |  'a INT, _unparsed STRING',
+            |  map('columnNameOfCorruptRecord', '_unparsed'))""".stripMargin),
+        Row(Row(null, "<ROW>     ")))
+      // With a space delimiter, CHAR padding tokenizes into extra empty fields.
+      checkAnswer(
+        sql(
+          """SELECT schema_of_csv(
+            |  CAST('1' AS CHAR(3)),
+            |  map('delimiter', ' '))""".stripMargin),
+        Row("STRUCT<_c0: INT, _c1: STRING, _c2: STRING>"))
+      checkAnswer(
+        sql(
           """SELECT from_csv(
             |  CAST('1' AS CHAR(3)),
             |  '_c0 INT',
-            |  map('delimiter', ' ', 'mode', 'FAILFAST'))""".stripMargin,
-          CharType(3)),
+            |  map('delimiter', ' '))""".stripMargin),
         Row(Row(1)))
-      checkAnswer(
-        checkTextInput(
-          """SELECT from_xml(
-            |  CAST('<ROW><a>1</a></ROW>' AS CHAR(30)),
-            |  'a INT')""".stripMargin,
-          CharType(30)),
-        Row(Row(1)))
+      checkError(
+        exception = intercept[SparkException] {
+          sql(
+            """SELECT from_csv(
+              |  CAST('1' AS CHAR(3)),
+              |  '_c0 INT',
+              |  map('delimiter', ' ', 'mode', 'FAILFAST'))""".stripMargin).collect()
+        },
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> "[1]", "failFastMode" -> "FAILFAST"))
       Seq(
-        ("CAST('1 ' AS VARCHAR(2))", VarcharType(2)),
-        ("CAST('1 ' AS STRING)", StringType)).foreach { case (input, inputType) =>
+        "CAST('1 ' AS VARCHAR(2))",
+        "CAST('1 ' AS STRING)").foreach { input =>
         checkAnswer(
-          checkTextInput(
-            s"SELECT schema_of_csv($input, map('delimiter', ' '))",
-            inputType),
+          sql(s"SELECT schema_of_csv($input, map('delimiter', ' '))"),
           Row("STRUCT<_c0: INT, _c1: STRING>"))
+      }
+      // Default comma delimiter: padding lands on the unquoted last field.
+      checkAnswer(
+        sql("SELECT schema_of_csv(CAST('1' AS CHAR(3)))"),
+        Row("STRUCT<_c0: DOUBLE>"))
+      checkAnswer(
+        sql("SELECT from_csv(CAST('1,2' AS CHAR(5)), 'a INT, b INT')"),
+        Row(Row(1, null)))
+      checkAnswer(
+        sql("SELECT from_csv(CAST('1,ab' AS CHAR(6)), 'a INT, b STRING')"),
+        Row(Row(1, "ab  ")))
+      checkAnswer(
+        sql(
+          """SELECT from_csv(
+            |  CAST('1,2' AS CHAR(5)),
+            |  'a INT, b INT',
+            |  map('ignoreTrailingWhiteSpace', 'true'))""".stripMargin),
+        Row(Row(1, 2)))
+      withTable("csv_char_doc") {
+        sql("CREATE TABLE csv_char_doc(c CHAR(5)) USING parquet")
+        sql("INSERT INTO csv_char_doc VALUES ('1,2')")
+        checkAnswer(
+          sql("SELECT from_csv(c, 'a INT, b INT') FROM csv_char_doc"),
+          Row(Row(1, null)))
       }
 
       val jsonChar = sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
@@ -2815,16 +2860,6 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         sql("SELECT length(CAST('1' AS CHAR(3)))"),
         Row(3))
       checkAnswer(
-        sql("SELECT schema_of_csv(CAST('1' AS CHAR(3)))"),
-        Row("STRUCT<_c0: INT>"))
-      // Without trailing-only CHAR padding removal, the space delimiter creates empty columns.
-      checkAnswer(
-        sql(
-          """SELECT schema_of_csv(
-            |  CAST('1' AS CHAR(3)),
-            |  map('delimiter', ' '))""".stripMargin),
-        Row("STRUCT<_c0: INT>"))
-      checkAnswer(
         sql("SELECT length(CAST('<ROW><a>1</a></ROW>' AS CHAR(30)))"),
         Row(30))
       checkAnswer(
@@ -2834,7 +2869,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         "schema_of_json(CAST('{\"a\":1}' AS CHAR(20) COLLATE SR_AI))" ->
           "STRUCT<a: BIGINT>",
         "schema_of_csv(CAST('1' AS CHAR(3) COLLATE SR_AI), map('delimiter', ' '))" ->
-          "STRUCT<_c0: INT>",
+          "STRUCT<_c0: INT, _c1: STRING, _c2: STRING>",
         "schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS CHAR(30) COLLATE SR_AI))" ->
           "STRUCT<a: BIGINT>").foreach { case (expression, expected) =>
         checkAnswer(sql(s"SELECT $expression"), Row(expected))
