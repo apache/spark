@@ -105,7 +105,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       // can hold one, as `InvokeProcedures` optimizes it before analysis checks it, and then
       // rejects it as not foldable. A nondeterministic definition read more than once keeps its
       // `With`. `CreateVariable` is matched above instead: its default is evaluated and need not
-      // fold, so a definition there should be memoized.
+      // fold, so a definition there worth memoizing keeps its `With`.
       case c @ (_: Command | _: Call) =>
         c.mapExpressions(inlineCommandWiths)
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
