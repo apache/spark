@@ -144,10 +144,9 @@ private[externalUDF] object ExternalUDFMetrics {
     "workCpuNanos" -> "external UDF worker CPU time",
     "finishWallNanos" -> "external UDF worker finish time")
 
-  // Per-stream maxima the worker reports rather than totals. Like peakMemory,
-  // these are timing metrics so the figure to read is the per-task max in the
-  // UI's min/med/max breakdown; the aggregated total (a sum of per-task maxima)
-  // is not meaningful on its own.
+  // Per-stream maxima rather than totals. Like peakMemory, the figure to read is the
+  // per-task max in the UI's (min, med, max) breakdown, not the aggregated total (a sum
+  // of per-task maxima). Formatted as nano timing metrics.
   private val peakMetrics = Map(
     "maxWorkWallNanos" -> "longest data unit executed by the external UDF worker",
     "maxWorkCpuNanos" -> "most CPU-intensive data unit executed by the external UDF worker")
@@ -163,29 +162,40 @@ private[externalUDF] object ExternalUDFMetrics {
   }
 
   def update(target: Map[String, SQLMetric], reported: ExecutionMetrics): Unit = {
-    def updateIfPresent(name: String, present: Boolean, value: => Long): Unit = {
+    def addIfPresent(name: String, present: Boolean, value: => Long): Unit = {
       if (present) {
         target(name) += value
       }
     }
 
-    updateIfPresent("bytesIn", reported.hasBytesIn, reported.getBytesIn)
-    updateIfPresent("bytesOut", reported.hasBytesOut, reported.getBytesOut)
-    updateIfPresent("rowsIn", reported.hasRowsIn, reported.getRowsIn)
-    updateIfPresent("rowsOut", reported.hasRowsOut, reported.getRowsOut)
-    updateIfPresent("batchesIn", reported.hasBatchesIn, reported.getBatchesIn)
-    updateIfPresent("batchesOut", reported.hasBatchesOut, reported.getBatchesOut)
-    updateIfPresent("initWallNanos", reported.hasInitWallNanos, reported.getInitWallNanos)
-    updateIfPresent(
+    // Peak metrics are per-stream maxima, so a task running several worker sessions keeps
+    // the largest rather than summing. Mirrors pythonPeakPickledBatchBytes in
+    // BatchEvalPythonExec; set() overwrites and SQLMetric surfaces the cross-task max.
+    def maxIfPresent(name: String, present: Boolean, value: => Long): Unit = {
+      if (present) {
+        val metric = target(name)
+        val reportedValue = value
+        if (metric.isZero || reportedValue > metric.value) {
+          metric.set(reportedValue)
+        }
+      }
+    }
+
+    addIfPresent("bytesIn", reported.hasBytesIn, reported.getBytesIn)
+    addIfPresent("bytesOut", reported.hasBytesOut, reported.getBytesOut)
+    addIfPresent("rowsIn", reported.hasRowsIn, reported.getRowsIn)
+    addIfPresent("rowsOut", reported.hasRowsOut, reported.getRowsOut)
+    addIfPresent("batchesIn", reported.hasBatchesIn, reported.getBatchesIn)
+    addIfPresent("batchesOut", reported.hasBatchesOut, reported.getBatchesOut)
+    addIfPresent("initWallNanos", reported.hasInitWallNanos, reported.getInitWallNanos)
+    addIfPresent(
       "processingWallNanos", reported.hasProcessingWallNanos, reported.getProcessingWallNanos)
-    updateIfPresent("receiveWallNanos", reported.hasReceiveWallNanos, reported.getReceiveWallNanos)
-    updateIfPresent("sendWallNanos", reported.hasSendWallNanos, reported.getSendWallNanos)
-    updateIfPresent("workWallNanos", reported.hasWorkWallNanos, reported.getWorkWallNanos)
-    updateIfPresent("workCpuNanos", reported.hasWorkCpuNanos, reported.getWorkCpuNanos)
-    updateIfPresent("finishWallNanos", reported.hasFinishWallNanos, reported.getFinishWallNanos)
-    updateIfPresent(
-      "maxWorkWallNanos", reported.hasMaxWorkWallNanos, reported.getMaxWorkWallNanos)
-    updateIfPresent(
-      "maxWorkCpuNanos", reported.hasMaxWorkCpuNanos, reported.getMaxWorkCpuNanos)
+    addIfPresent("receiveWallNanos", reported.hasReceiveWallNanos, reported.getReceiveWallNanos)
+    addIfPresent("sendWallNanos", reported.hasSendWallNanos, reported.getSendWallNanos)
+    addIfPresent("workWallNanos", reported.hasWorkWallNanos, reported.getWorkWallNanos)
+    addIfPresent("workCpuNanos", reported.hasWorkCpuNanos, reported.getWorkCpuNanos)
+    addIfPresent("finishWallNanos", reported.hasFinishWallNanos, reported.getFinishWallNanos)
+    maxIfPresent("maxWorkWallNanos", reported.hasMaxWorkWallNanos, reported.getMaxWorkWallNanos)
+    maxIfPresent("maxWorkCpuNanos", reported.hasMaxWorkCpuNanos, reported.getMaxWorkCpuNanos)
   }
 }

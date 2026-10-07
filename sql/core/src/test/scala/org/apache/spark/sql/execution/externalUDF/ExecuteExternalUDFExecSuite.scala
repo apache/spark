@@ -476,6 +476,23 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("external UDF keeps the max, not the sum, of peak metrics across sessions in a task") {
+    val metrics = ExternalUDFMetrics.create(spark.sparkContext)
+    def snapshot(workWallNanos: Long, maxWall: Long, maxCpu: Long): ExecutionMetrics =
+      ExecutionMetrics.newBuilder()
+        .setWorkWallNanos(workWallNanos)
+        .setMaxWorkWallNanos(maxWall)
+        .setMaxWorkCpuNanos(maxCpu)
+        .build()
+
+    ExternalUDFMetrics.update(metrics, snapshot(workWallNanos = 10, maxWall = 10, maxCpu = 4))
+    ExternalUDFMetrics.update(metrics, snapshot(workWallNanos = 20, maxWall = 5, maxCpu = 8))
+
+    assert(metrics("workWallNanos").value === 30L)
+    assert(metrics("maxWorkWallNanos").value === 10L)
+    assert(metrics("maxWorkCpuNanos").value === 8L)
+  }
+
   test("external UDF preserves missing and measured zero terminal metrics") {
     val reported = ExecutionMetrics.newBuilder()
       .setBytesIn(0)
@@ -490,7 +507,12 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
 
     assert(plan.metrics("bytesIn").value === 0L)
     assert(!plan.metrics("bytesIn").isZero)
-    assert(plan.metrics("bytesOut").isZero)
+    Seq(
+      "bytesOut", "initWallNanos", "processingWallNanos", "receiveWallNanos", "sendWallNanos",
+      "workWallNanos", "workCpuNanos", "finishWallNanos", "maxWorkWallNanos", "maxWorkCpuNanos"
+    ).foreach { name =>
+      assert(plan.metrics(name).isZero, s"$name should be unreported")
+    }
     // toInfoUpdate is the raw value the live SQL UI sums; value hides a negative initial value.
     Seq("rowsIn", "rowsOut", "batchesIn", "batchesOut").foreach { name =>
       assert(plan.metrics(name).toInfoUpdate.update === Some(0L))
