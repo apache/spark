@@ -22,7 +22,7 @@ import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.{CreateMap, If, Literal, RaiseError}
+import org.apache.spark.sql.catalyst.expressions.{CreateMap, If, KnownNullable, Literal, RaiseError}
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.{DataFrame, ExpressionUtils}
@@ -1731,10 +1731,22 @@ object Scd2BatchProcessor {
    * The supplied contexts must be nonempty and cover `path`. Struct fields without a context are
    * passed through unchanged.
    *
+   * An ignore-null column treats a null struct and a struct whose leaves are all null as
+   * equivalent, so each struct is rebuilt from its leaves even if every leaf is null. A leaf the
+   * schema declares non-nullable can still have an effective value of null, but only through a
+   * null struct enclosing it. So when every leaf beneath a nullable struct is null and the struct
+   * has such a leaf with no nullable struct in between, the struct itself is null rather than
+   * rebuilt.
+   *
    * A non-nullable field raises `NOT_NULL_ASSERT_VIOLATION` when coalescing cannot supply it a
    * non-null value: for example, when no preceding row authored it, when a delete boundary reset
-   * inheritance, or when a null parent struct must be materialized for an inheriting sibling and
-   * this field has no value.
+   * inheritance, or when another leaf beneath its nullable enclosing struct is non-null and this
+   * field has no value.
+   *
+   * @param path the name parts of the column or nested field to rebuild.
+   * @param field the schema field at `path`.
+   * @param contextsBeneath the inheritance contexts of the leaves at or beneath `path`.
+   * @return the rebuilt value of `field`.
    */
   private def constructCoalescedIgnoreNullColumn(
       path: Seq[String],
@@ -1755,23 +1767,22 @@ object Scd2BatchProcessor {
               .as(childField.name, childField.metadata)
           }: _*
         )
-        // If none of this struct's leaves are inheriting as part of this coalesce pass, let the
-        // struct pass its value through as-is. This is to avoid incorrectly materializing a null
-        // struct with a struct with all null leaves.
-        val anyInherits = contextsBeneath.map(_.inherits).reduce(_ || _)
-        F.when(anyInherits, rebuilt)
-          .otherwise(F.col(QuotingUtils.quoteNameParts(path)))
+        if (field.nullable && cannotRebuildAsStructOfNulls(struct)) {
+          // The schema forbids a struct of nulls here, so the equivalent null struct is used when
+          // every leaf is null. If any leaf is non-null, the struct is rebuilt and a null
+          // non-nullable leaf fails its assertion rather than the struct dropping non-null leaves.
+          val everyLeafIsNull = contextsBeneath.map(_.coalescedValue.isNull).reduce(_ && _)
+          F.when(everyLeafIsNull, F.lit(null).cast(field.dataType)).otherwise(rebuilt)
+        } else {
+          rebuilt
+        }
       case _ =>
-        // If this field is not a struct (and therefore must be a leaf), either directly apply the
-        // resolved value to inherit if the leaf should be inheriting, otherwise pass its value
-        // through as-is.
-        val context = contextsBeneath.head
-        F.when(context.inherits, context.valueToInherit)
-          .otherwise(F.col(QuotingUtils.quoteNameParts(path)))
+        contextsBeneath.head.coalescedValue
     }
     val validatedReconstructed =
       if (field.nullable) {
-        reconstructed
+        // Spark reports a rebuilt struct as non-nullable; only `KnownNullable` can widen that.
+        ExpressionUtils.column(KnownNullable(ExpressionUtils.expression(reconstructed)))
       } else {
         // If the field was marked as non-nullable but coalescing deduces it will resolve to a
         // null, throw an explicit exception. Pushing `AssertNotNull` into the plan for a
@@ -1781,6 +1792,19 @@ object Scd2BatchProcessor {
       }
     validatedReconstructed.cast(field.dataType)
   }
+
+  /**
+   * Whether `struct` has a non-nullable leaf whose enclosing structs beneath `struct` are all also
+   * non-nullable. If such a leaf has no value, neither it nor any of those enclosing structs can
+   * be null, so `struct` itself cannot be non-null.
+   */
+  private def cannotRebuildAsStructOfNulls(struct: StructType): Boolean =
+    struct.fields.exists { field =>
+      !field.nullable && (field.dataType match {
+        case nested: StructType => cannotRebuildAsStructOfNulls(nested)
+        case _ => true
+      })
+    }
 
   /**
    * Name of temporary column projected onto microbatch to compute the min sequencing value per
@@ -2178,6 +2202,10 @@ private[autocdc] case class LeafInheritanceContext(
   def valueToInherit: Column =
     F.col(valueToInheritIfAnyColName)
       .getField(LeafInheritanceContext.inheritanceValueFieldName)
+
+  /** The leaf's value after coalescing: [[valueToInherit]] if it [[inherits]], else stored. */
+  def coalescedValue: Column =
+    F.when(inherits, valueToInherit).otherwise(storedLeafValue)
 }
 
 private[autocdc] object LeafInheritanceContext {
@@ -2222,16 +2250,8 @@ private[autocdc] object LeafInheritanceContext {
       }
     )
 
-    val valueToInherit =
-      F.col(valueToInheritIfAnyColumnName(index)).getField(inheritanceValueFieldName)
-    // Skip null over null: rebuilding a nested leaf could otherwise turn a null parent struct
-    // into a non-null struct containing nulls.
-    val wouldInheritNullOverNull = storedLeafValue.isNull && valueToInherit.isNull
-
     val rowInheritsLeaf =
-      rowInheritanceContext.isUpsertRepresentingRow &&
-        !storedValueIsAuthoritative &&
-        !wouldInheritNullOverNull
+      rowInheritanceContext.isUpsertRepresentingRow && !storedValueIsAuthoritative
 
     LeafInheritanceContext(
       path = path,

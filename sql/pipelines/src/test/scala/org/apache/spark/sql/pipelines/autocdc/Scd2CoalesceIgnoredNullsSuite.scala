@@ -535,10 +535,7 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("nested leaves inherit without turning null-over-null parents into non-null structs") {
-    // "Null over null" means both the stored parent struct and the value available to inherit
-    // are null. The parent must stay null: rebuilding it would turn that null into a non-null
-    // struct whose fields are all null, even though no non-null value was inherited.
+  test("selected structs are rebuilt from their leaves, including null structs") {
     val selection = includeColumns("profile")
     val profileSchema = new StructType()
       .add("display.name", StringType)
@@ -568,8 +565,44 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
           cdcMetadata(10L, authoredAgeMap)),
         Row(1, Row("Alice", null), "keep-2", 20L, null,
           cdcMetadata(20L, unauthoredProfileMap)),
-        Row(2, null, "keep-3", 10L, null, cdcMetadata(10L, authoredProfileMap)),
-        Row(2, null, "keep-4", 20L, null, cdcMetadata(20L, unauthoredProfileMap))
+        Row(2, Row(null, null), "keep-3", 10L, null, cdcMetadata(10L, authoredProfileMap)),
+        Row(2, Row(null, null), "keep-4", 20L, null, cdcMetadata(20L, unauthoredProfileMap))
+      )
+    )
+  }
+
+  test("nullable structs that require a non-null leaf stay null when every leaf is null") {
+    val locationType = StructType(Seq(StructField("city", StringType, nullable = false)))
+    val profileType = StructType(Seq(StructField("location", locationType, nullable = false)))
+    // `home` is nullable, so `address` is rebuilt around a null `home`.
+    val addressType = new StructType().add("home", locationType).add("note", StringType)
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("profile", profileType)
+      .add("address", addressType)
+    val unauthoredMap = versionMap(
+      Seq("profile", "location", "city") -> false,
+      Seq("address", "home", "city") -> false,
+      Seq("address", "note") -> false)
+    val input = targetTableOf(schema)(
+      Row(1, null, null, 10L, null, cdcMetadata(10L, versionMap())),
+      Row(1, null, null, 20L, null, cdcMetadata(20L, unauthoredMap)),
+      Row(2, Row(Row("SF")), Row(Row("LA"), "note-1"), 10L, null, cdcMetadata(10L, versionMap())),
+      Row(2, null, null, 20L, null, cdcMetadata(20L, unauthoredMap))
+    )
+
+    val result = coalesce(input, includeColumns("profile", "address"))
+
+    assert(result.schema == input.schema)
+    checkAnswer(
+      result,
+      Seq(
+        Row(1, null, Row(null, null), 10L, null, cdcMetadata(10L, versionMap())),
+        Row(1, null, Row(null, null), 20L, null, cdcMetadata(20L, unauthoredMap)),
+        Row(2, Row(Row("SF")), Row(Row("LA"), "note-1"),
+          10L, null, cdcMetadata(10L, versionMap())),
+        Row(2, Row(Row("SF")), Row(Row("LA"), "note-1"),
+          20L, null, cdcMetadata(20L, unauthoredMap))
       )
     )
   }
