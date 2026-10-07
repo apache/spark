@@ -196,10 +196,11 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
       assert(countRepartitions(query) == 0)
       withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
         checkAnswer(spark.sql(query), expected)
-        // All three views convert: each of the two v sites carries a boundary for v's
-        // own ref, and the body copies contain two occurrences each of t and s (one
-        // per v body), so t and s convert as well: 3 boundaries x 2 sites = 6.
-        assert(countRepartitions(query) == 6)
+        // Only v converts: t and s occur once per v body copy at rule time, but after the
+        // rewrite each has a single reference inside v's definition, so InlineCTE flattens
+        // them instead of materializing them behind shuffles nothing reuses. Each of the
+        // two v sites carries exactly one (reused) shuffle boundary.
+        assert(countRepartitions(query) == 2)
       }
     }
   }
@@ -213,10 +214,27 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
       assert(countRepartitions(query) == 0)
       withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
         checkAnswer(spark.sql(query), expected)
-        // Both views convert: each reference site of v2 renders its own shuffle
-        // boundary with v1's boundary nested inside, so 2 sites x 2 boundaries = 4.
-        // (v1 alone would yield 2, no conversion 0.)
-        assert(countRepartitions(query) == 4)
+        // Only v2 converts into a materialized definition: v1's second reference dies with
+        // the dropped second occurrence's body, leaving v1 with a single reference inside
+        // v2's definition, which InlineCTE flattens back. So each of the 2 v2 sites carries
+        // exactly one (reused) shuffle boundary.
+        assert(countRepartitions(query) == 2)
+      }
+    }
+  }
+
+  test("a reference inside an unreferenced CTE does not trigger materialization") {
+    // `WITH c AS (SELECT id FROM v) SELECT id FROM v WHERE id < 5` reads v once, but the
+    // unreferenced `c` still holds a second occurrence when the rule runs. Materializing
+    // v for it would add a shuffle over a single live reference; instead the converted
+    // definition must stay inlinable, so InlineCTE drops `c` and flattens v's definition.
+    withTempView("v") {
+      spark.range(0, 10).select($"id", ($"id" % 10).as("k")).createOrReplaceTempView("v")
+      val query = "WITH c AS (SELECT id FROM v) SELECT id FROM v WHERE id < 5"
+      val expected = spark.sql(query).collect()
+      withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+        assert(countRepartitions(query) == 0)
+        checkAnswer(spark.sql(query), expected)
       }
     }
   }
