@@ -56,9 +56,9 @@ from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueEr
 from pyspark.eval_handlers._base import get_eval_type_handler
 from pyspark.eval_handlers.utils import extract_key_value_indexes
 from pyspark.eval_handlers.verification import (
-    verify_iter_result_row_count,
+    _verify_column_schema,
     verify_iterator_exhausted,
-    verify_output_row_limit,
+    verify_pandas_result,
     verify_result_row_count,
     verify_return_type,
     verify_scalar_result,
@@ -150,61 +150,6 @@ def report_metrics(
 def chain(f, g):
     """chain two functions together"""
     return lambda *a: g(f(*a))
-
-
-def _verify_column_schema(
-    actual_names: list, expected_names: list, *, assign_cols_by_name: bool
-) -> None:
-    """Check column names (by-name) or count (by-position) match the expected schema."""
-    if assign_cols_by_name:
-        actual_set = set(actual_names)
-        expected_set = set(expected_names)
-        missing = sorted(expected_set.difference(actual_set))
-        extra = sorted(actual_set.difference(expected_set))
-        if missing or extra:
-            raise PySparkRuntimeError(
-                errorClass="RESULT_COLUMN_NAMES_MISMATCH",
-                messageParameters={
-                    "missing": f" Missing: {', '.join(missing)}." if missing else "",
-                    "extra": f" Unexpected: {', '.join(extra)}." if extra else "",
-                },
-            )
-    elif len(actual_names) != len(expected_names):
-        raise PySparkRuntimeError(
-            errorClass="RESULT_COLUMN_SCHEMA_MISMATCH",
-            messageParameters={
-                "expected": str(len(expected_names)),
-                "actual": str(len(actual_names)),
-            },
-        )
-
-
-def verify_pandas_result(
-    result: Union["pd.DataFrame", "pd.Series"],
-    return_type: DataType,
-    assign_cols_by_name: bool,
-    truncate_return_schema: bool,
-) -> None:
-    import pandas as pd
-
-    if not isinstance(return_type, StructType):
-        verify_return_type(result, pd.Series)
-        return
-
-    verify_return_type(result, pd.DataFrame)
-
-    # Skip schema check on a fully empty result (no rows and no columns).
-    if result.empty and len(result.columns) == 0:
-        return
-
-    field_names = [field.name for field in return_type.fields]
-    actual_names = (
-        list(result.columns[: len(field_names)]) if truncate_return_schema else list(result.columns)
-    )
-    # By-name mode only applies when the result has string column names;
-    # a numeric RangeIndex falls back to a by-position count check.
-    by_name = assign_cols_by_name and any(isinstance(n, str) for n in result.columns)
-    _verify_column_schema(actual_names, field_names, assign_cols_by_name=by_name)
 
 
 def verify_arrow_result(
@@ -1818,8 +1763,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-        PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
@@ -2187,82 +2130,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     pass
 
         return grouped_func, ser
-
-    if eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
-        import pandas as pd
-        import pyarrow as pa
-
-        assert num_udfs == 1, "One MAP_PANDAS_ITER UDF expected here."
-        map_udf, _, _, return_type = udfs[0]
-        output_schema = StructType([StructField("_0", return_type)])
-        iter_type_label = (
-            "pandas.DataFrame" if isinstance(return_type, StructType) else "pandas.Series"
-        )
-        elem_type = pd.DataFrame if isinstance(return_type, StructType) else pd.Series
-
-        def func(
-            split_index: int,
-            data: Iterator[pa.RecordBatch],
-        ) -> Iterator[pa.RecordBatch]:
-            """Apply mapInPandas UDF."""
-
-            def dataframe_iter():
-                # Input batches have a single struct column (see
-                # MapInBatchEvaluatorFactory); convert lazily so peakmem stays
-                # bounded by one batch.
-                for batch in data:
-                    yield ArrowToPandasConversion.to_pandas(
-                        batch,
-                        timezone=runner_conf.timezone,
-                        prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
-                        df_for_struct=True,
-                    )[0]
-
-            result = map_udf(dataframe_iter())
-            # The declared signature is Iterator[...], so a strict iterator is required by
-            # default. With the legacy flag, accept any object Python can iterate over -- via
-            # iter(...), which honors both __iter__ and the sequence protocol (__getitem__) --
-            # by adapting it into an iterator.
-            if runner_conf.map_in_batch_legacy_accept_any_iterable and not isinstance(
-                result, Iterator
-            ):
-                try:
-                    result = iter(result)
-                except TypeError:
-                    pass  # Not iterable; fall through to the UDF_RETURN_TYPE error below.
-            if not isinstance(result, Iterator):
-                raise PySparkTypeError(
-                    errorClass="UDF_RETURN_TYPE",
-                    messageParameters={
-                        "expected": "iterator of {}".format(iter_type_label),
-                        "actual": type(result).__name__,
-                    },
-                )
-
-            for df in result:
-                if not isinstance(df, elem_type):
-                    raise PySparkTypeError(
-                        errorClass="UDF_RETURN_TYPE",
-                        messageParameters={
-                            "expected": "iterator of {}".format(iter_type_label),
-                            "actual": "iterator of {}".format(type(df).__name__),
-                        },
-                    )
-                verify_pandas_result(
-                    df, return_type, assign_cols_by_name=True, truncate_return_schema=True
-                )
-                yield PandasToArrowConversion.from_pandas(
-                    [df],
-                    output_schema,
-                    timezone=runner_conf.timezone,
-                    safecheck=runner_conf.safecheck,
-                    arrow_cast=True,
-                    prefers_large_types=runner_conf.use_large_var_types,
-                    assign_cols_by_name=runner_conf.assign_cols_by_name,
-                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
-                )
-
-        return func, ser
 
     if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         import pandas as pd
@@ -2942,82 +2809,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 verify_iterator_exhausted(flat_args_iter)
 
             yield from process_results()
-
-        return func, ser
-
-    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
-        import pandas as pd
-        import pyarrow as pa
-
-        assert num_udfs == 1, "One SCALAR_PANDAS_ITER UDF expected here."
-        udf_func, args_offsets, kwargs_offsets, return_type = udfs[0]
-
-        # Pre-compute target schema for output coercion
-        return_schema = StructType([StructField("_0", return_type)])
-        expected_iter_type = (
-            Iterator[pd.DataFrame] if isinstance(return_type, StructType) else Iterator[pd.Series]
-        )
-
-        def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-            """Apply scalar pandas iterator UDF"""
-
-            num_input_rows = 0
-
-            def extract_args(batch: pa.RecordBatch):
-                nonlocal num_input_rows
-                # Input: Arrow -> pandas Series (struct columns become DataFrames)
-                pandas_columns = ArrowToPandasConversion.to_pandas(
-                    batch,
-                    timezone=runner_conf.timezone,
-                    struct_in_pandas="dict",
-                    ndarray_as_list=False,
-                    prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
-                    df_for_struct=True,
-                )
-                args = tuple(pandas_columns[o] for o in args_offsets)
-                num_input_rows += batch.num_rows
-                return args[0] if len(args) == 1 else args
-
-            # Extract args from input batches (streaming)
-            args_iter = map(extract_args, data)
-
-            # Call UDF and verify result type (iterator of pd.Series / pd.DataFrame)
-            verified_iter = verify_return_type(udf_func(args_iter), expected_iter_type)
-
-            # Process results: verify each element and convert pandas -> Arrow
-            def process_results():
-                for result in verified_iter:
-                    verify_pandas_result(
-                        result, return_type, assign_cols_by_name=True, truncate_return_schema=True
-                    )
-                    yield PandasToArrowConversion.from_pandas(
-                        [result],
-                        return_schema,
-                        timezone=runner_conf.timezone,
-                        safecheck=runner_conf.safecheck,
-                        arrow_cast=True,
-                        prefers_large_types=runner_conf.use_large_var_types,
-                        assign_cols_by_name=runner_conf.assign_cols_by_name,
-                        int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
-                    )
-
-            # Apply row limit check (fail-fast)
-            limited = verify_output_row_limit(
-                process_results(),
-                lambda: num_input_rows,
-            )
-
-            # Apply row count match check (final)
-            matched = verify_iter_result_row_count(
-                limited,
-                lambda: num_input_rows,
-            )
-
-            # Yield batches
-            yield from matched
-
-            # Verify iterator consumed
-            verify_iterator_exhausted(args_iter)
 
         return func, ser
 
