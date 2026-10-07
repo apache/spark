@@ -27,13 +27,10 @@ Arrow<->pandas conversion.
 
 import os
 import unittest
-from io import BytesIO
 from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import get_eval_type_handler
-from pyspark.serializers import read_int
-from pyspark.sql.pandas.serializers import ArrowStreamSerializer, SpecialLengths
 from pyspark.sql.types import LongType, StringType, StructField, StructType
 from pyspark.testing.utils import (
     have_pandas,
@@ -87,110 +84,6 @@ class PandasEvalTypeHandlerRegistrationTests(unittest.TestCase):
 
 @unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
 class PandasScalarUDFHandlerTests(unittest.TestCase):
-    def test_phase_boundaries_include_arguments_and_validation_but_exclude_iteration(self):
-        now = 0
-        batch = _batch(a=[1, 2])
-
-        def clock():
-            nonlocal now
-            # Each timed block spans one millisecond plus any simulated work inside it.
-            now += 1_000_000
-            return now
-
-        def udf(values):
-            nonlocal now
-            now += 5_000_000
-            return values + 1
-
-        def inputs():
-            nonlocal now
-            for _ in range(2):
-                now += 100_000_000
-                yield batch
-
-        handler = _handler(_udf(udf), _udf(udf))
-        metrics = handler.metrics
-        with patch("pyspark.worker_metrics.time.perf_counter_ns", side_effect=clock):
-            for output in handler.run(0, inputs()):
-                self.assertEqual(output.column(0).to_pylist(), [2, 3])
-                self.assertEqual(output.column(1).to_pylist(), [2, 3])
-                now += 1_000_000_000
-
-        self.assertEqual(
-            metrics.to_dict(),
-            {
-                "pythonDataReadTime": 0,
-                "pythonInputPreparationTime": 6,
-                "pythonUDFExecutionTime": 24,
-                "pythonOutputPreparationTime": 6,
-                "pythonDataWriteTime": 0,
-                "pythonNumTimingReports": 1,
-                "pythonNumTimedBatches": 2,
-            },
-        )
-
-    def test_empty_partition_reports_supported_zero_timings(self):
-        handler = _handler(_udf(lambda values: values))
-        metrics = handler.metrics
-        self.assertEqual(list(handler.run(0, iter(()))), [])
-        self.assertEqual(
-            metrics.to_dict(),
-            {
-                "pythonDataReadTime": 0,
-                "pythonInputPreparationTime": 0,
-                "pythonUDFExecutionTime": 0,
-                "pythonOutputPreparationTime": 0,
-                "pythonDataWriteTime": 0,
-                "pythonNumTimingReports": 1,
-                "pythonNumTimedBatches": 0,
-            },
-        )
-
-    def test_stream_timings_exclude_lazy_udf_execution(self):
-        now = 0
-
-        class TimedStream(BytesIO):
-            elapsed_ns = 0
-
-            def read(self, size=-1):
-                nonlocal now
-                now += 1_000_000
-                self.elapsed_ns += 1_000_000
-                return super().read(size)
-
-            def write(self, data):
-                nonlocal now
-                now += 2_000_000
-                self.elapsed_ns += 2_000_000
-                return super().write(data)
-
-        def udf(values):
-            nonlocal now
-            now += 5_000_000
-            return values + 1
-
-        encoded = BytesIO()
-        ArrowStreamSerializer().dump_stream(iter([_batch(a=[1, 2])]), encoded)
-        input_stream = TimedStream(encoded.getvalue())
-        output_stream = TimedStream()
-        handler = _handler(_udf(udf))
-        serializer = handler.serializer
-        with patch("pyspark.worker_metrics.time.perf_counter_ns", side_effect=lambda: now):
-            serializer.dump_stream(
-                handler.run(0, serializer.load_stream(input_stream)), output_stream
-            )
-
-        metrics = handler.metrics.to_dict()
-        self.assertGreater(metrics["pythonDataReadTime"], 0)
-        self.assertGreater(metrics["pythonDataWriteTime"], 0)
-        self.assertEqual(metrics["pythonDataReadTime"], input_stream.elapsed_ns // 1_000_000)
-        self.assertEqual(metrics["pythonDataWriteTime"], output_stream.elapsed_ns // 1_000_000)
-        self.assertEqual(metrics["pythonUDFExecutionTime"], 5)
-        output_stream.seek(0)
-        self.assertEqual(read_int(output_stream), SpecialLengths.START_ARROW_STREAM)
-        output = list(ArrowStreamSerializer().load_stream(output_stream))
-        self.assertEqual(output[0].column(0).to_pylist(), [2, 3])
-
     def test_invokes_udf_per_batch(self):
         handler = _handler(_udf(lambda s: s + 1))
         out = list(handler.run(0, iter([_batch(a=[1, 2, 3])])))

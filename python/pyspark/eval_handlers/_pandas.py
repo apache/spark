@@ -56,7 +56,6 @@ class PandasScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     ``pyspark.sql.conversion`` directly with the runner_conf-derived parameters."""
 
     eval_type = PythonEvalType.SQL_SCALAR_PANDAS_UDF
-    supports_phase_timing = True
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"
@@ -72,67 +71,53 @@ class PandasScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         import pandas as pd
 
         runner_conf = self._runner_conf
-        input_timer = self._input_preparation_timer
-        udf_timer = self._udf_execution_timer
-        output_timer = self._output_preparation_timer
-        assert input_timer is not None and udf_timer is not None and output_timer is not None
         for input_batch in data:
+            num_rows = input_batch.num_rows
+
             # Input: Arrow -> pandas Series (struct columns become DataFrames).
-            with input_timer:
-                num_rows = input_batch.num_rows
-                results = []
-                pandas_columns = ArrowToPandasConversion.to_pandas(
-                    input_batch,
-                    timezone=runner_conf.timezone,
-                    struct_in_pandas="dict",
-                    ndarray_as_list=False,
-                    prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
-                    df_for_struct=True,
-                )
+            pandas_columns = ArrowToPandasConversion.to_pandas(
+                input_batch,
+                timezone=runner_conf.timezone,
+                struct_in_pandas="dict",
+                ndarray_as_list=False,
+                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                df_for_struct=True,
+            )
 
             # Process: evaluate each UDF column-wise on pandas Series.
+            results = []
             for udf_func, args_offsets, kwargs_offsets, return_type in self._udfs:
-                with input_timer:
-                    args = [pandas_columns[o] for o in args_offsets]
-                    kwargs = {k: pandas_columns[v] for k, v in kwargs_offsets.items()}
-                # Include profiler wrapper work when profiling is enabled.
-                with udf_timer:
-                    result = udf_func(*args, **kwargs)
-                with output_timer:
-                    if not hasattr(result, "__len__"):
-                        pd_type = (
-                            "pandas.DataFrame"
-                            if isinstance(return_type, StructType)
-                            else "pandas.Series"
-                        )
-                        raise PySparkTypeError(
-                            errorClass="UDF_RETURN_TYPE",
-                            messageParameters={
-                                "expected": pd_type,
-                                "actual": type(result).__name__,
-                            },
-                        )
-                    verify_result_row_count(len(result), num_rows)
-                    # struct_in_pandas="dict": UDF must return a DataFrame for struct types.
-                    if isinstance(return_type, StructType) and not isinstance(result, pd.DataFrame):
-                        raise PySparkValueError(
-                            "Invalid return type. Please make sure that the UDF returns a "
-                            "pandas.DataFrame when the specified return type is StructType."
-                        )
-                    results.append(result)
+                result = udf_func(
+                    *[pandas_columns[o] for o in args_offsets],
+                    **{k: pandas_columns[v] for k, v in kwargs_offsets.items()},
+                )
+                if not hasattr(result, "__len__"):
+                    pd_type = (
+                        "pandas.DataFrame"
+                        if isinstance(return_type, StructType)
+                        else "pandas.Series"
+                    )
+                    raise PySparkTypeError(
+                        errorClass="UDF_RETURN_TYPE",
+                        messageParameters={"expected": pd_type, "actual": type(result).__name__},
+                    )
+                verify_result_row_count(len(result), num_rows)
+                # struct_in_pandas="dict": UDF must return a DataFrame for struct types.
+                if isinstance(return_type, StructType) and not isinstance(result, pd.DataFrame):
+                    raise PySparkValueError(
+                        "Invalid return type. Please make sure that the UDF returns a "
+                        "pandas.DataFrame when the specified return type is StructType."
+                    )
+                results.append(result)
 
             # Output: pandas -> Arrow.
-            with output_timer:
-                output_batch = PandasToArrowConversion.from_pandas(
-                    results,
-                    self._return_schema,
-                    timezone=runner_conf.timezone,
-                    safecheck=runner_conf.safecheck,
-                    arrow_cast=True,
-                    prefers_large_types=runner_conf.use_large_var_types,
-                    assign_cols_by_name=runner_conf.assign_cols_by_name,
-                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
-                )
-                self.metrics.increment("pythonNumTimedBatches")
-            # End timing before yielding, since the consumer may pause between batches.
-            yield output_batch
+            yield PandasToArrowConversion.from_pandas(
+                results,
+                self._return_schema,
+                timezone=runner_conf.timezone,
+                safecheck=runner_conf.safecheck,
+                arrow_cast=True,
+                prefers_large_types=runner_conf.use_large_var_types,
+                assign_cols_by_name=runner_conf.assign_cols_by_name,
+                int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+            )

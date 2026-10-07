@@ -35,15 +35,6 @@ trait PythonSQLMetrics { self: SparkPlan =>
   // empty so the shared trait stays minimal; see [[PythonPickleBatchMetrics]].
   protected def additionalMetrics: Map[String, SQLMetric] = Map.empty
 
-  // Register these only for eval types whose handlers report the detailed processing phases.
-  protected def pythonPhaseMetrics: Map[String, SQLMetric] = {
-    PythonSQLMetrics.pythonPhaseTimingMetricsDesc.map { case (k, v) =>
-      k -> SQLMetrics.createTimingMetric(sparkContext, v)
-    } ++ PythonSQLMetrics.pythonPhaseCountMetricsDesc.map { case (k, v) =>
-      k -> SQLMetrics.createMetric(sparkContext, v)
-    }
-  }
-
   override lazy val metrics: Map[String, SQLMetric] = pythonMetrics
 }
 
@@ -66,21 +57,6 @@ object PythonSQLMetrics {
 
   val pythonOtherMetricsDesc: Map[String, String] = {
     Map("pythonNumRowsReceived" -> "number of output rows")
-  }
-
-  val pythonPhaseTimingMetricsDesc: Map[String, String] = {
-    Map(
-      "pythonDataReadTime" -> "time to read and deserialize Python input",
-      "pythonInputPreparationTime" -> "time to prepare Python UDF input",
-      "pythonUDFExecutionTime" -> "time to evaluate Python UDFs",
-      "pythonOutputPreparationTime" -> "time to prepare Python UDF output",
-      "pythonDataWriteTime" -> "time to serialize and write Python output")
-  }
-
-  val pythonPhaseCountMetricsDesc: Map[String, String] = {
-    Map(
-      "pythonNumTimingReports" -> "number of Python tasks with detailed timing",
-      "pythonNumTimedBatches" -> "number of Python batches with detailed timing")
   }
 }
 

@@ -17,13 +17,13 @@
 
 """Base classes and registry for the eval type handlers.
 
-This leaf module has no concrete-handler imports, so the package ``__init__``
-and concrete-handler submodules can both import it.
+This leaf module imports only ``_typing`` and the serializers, so the package
+``__init__`` and the concrete-handler submodules can both import it.
 """
 
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any, ClassVar, ContextManager, Generic, Optional
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Optional
 
 from pyspark.eval_handlers._typing import (
     CoGroupedBatch,
@@ -37,7 +37,6 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamGroupSerializer,
     ArrowStreamSerializer,
 )
-from pyspark.worker_metrics import WorkerMetrics
 
 if TYPE_CHECKING:
     import pyarrow as pa  # noqa: F401  # only in the batch category's forward-ref subscript
@@ -92,9 +91,6 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
 
     # PythonEvalType this handler serves; None on the abstract bases.
     eval_type: ClassVar[Optional[int]] = None
-    # Opt in after run() times its input, UDF, and output phases. Other handlers omit
-    # these metrics so missing instrumentation is not reported as measured zero time.
-    supports_phase_timing: ClassVar[bool] = False
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"
@@ -102,23 +98,6 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         self._udfs = udfs
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
-        # A handler is constructed for each task, including tasks in a reused worker.
-        self.metrics = WorkerMetrics()
-        self._data_read_timer: Optional[ContextManager[None]] = None
-        self._input_preparation_timer: Optional[ContextManager[None]] = None
-        self._udf_execution_timer: Optional[ContextManager[None]] = None
-        self._output_preparation_timer: Optional[ContextManager[None]] = None
-        self._data_write_timer: Optional[ContextManager[None]] = None
-        if self.supports_phase_timing:
-            # Reuse scopes across batches; the serializer borrows the read/write scopes.
-            self._data_read_timer = self.metrics.measure("pythonDataReadTime")
-            self._input_preparation_timer = self.metrics.measure("pythonInputPreparationTime")
-            self._udf_execution_timer = self.metrics.measure("pythonUDFExecutionTime")
-            self._output_preparation_timer = self.metrics.measure("pythonOutputPreparationTime")
-            self._data_write_timer = self.metrics.measure("pythonDataWriteTime")
-            # Advertise coverage even for an empty task; unsupported handlers omit it.
-            self.metrics.set("pythonNumTimingReports", 1)
-            self.metrics.set("pythonNumTimedBatches", 0)
 
     @property
     @abstractmethod
@@ -136,11 +115,7 @@ class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch]):
 
     @property
     def serializer(self) -> Serializer:
-        return ArrowStreamSerializer(
-            write_start_stream=True,
-            read_timer=self._data_read_timer,
-            write_timer=self._data_write_timer,
-        )
+        return ArrowStreamSerializer(write_start_stream=True)
 
 
 class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch]):
@@ -148,11 +123,7 @@ class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch]):
 
     @property
     def serializer(self) -> Serializer:
-        return ArrowStreamGroupSerializer(
-            write_start_stream=True,
-            read_timer=self._data_read_timer,
-            write_timer=self._data_write_timer,
-        )
+        return ArrowStreamGroupSerializer(write_start_stream=True)
 
 
 class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch]):
@@ -160,8 +131,4 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch]):
 
     @property
     def serializer(self) -> Serializer:
-        return ArrowStreamCoGroupSerializer(
-            write_start_stream=True,
-            read_timer=self._data_read_timer,
-            write_timer=self._data_write_timer,
-        )
+        return ArrowStreamCoGroupSerializer(write_start_stream=True)
