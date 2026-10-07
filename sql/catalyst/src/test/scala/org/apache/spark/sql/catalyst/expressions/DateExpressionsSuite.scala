@@ -510,7 +510,20 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DateAdd(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -15910)
     checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, ByteType)
     checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, ShortType)
-    checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, IntegerType)
+    checkConsistencyBetweenInterpretedAndCodegenAllowingException(DateAdd, DateType, IntegerType)
+  }
+
+  test("SPARK-59859: date_add fails on overflow instead of wrapping around") {
+    checkEvaluation(
+      DateAdd(Literal(Date.valueOf("1970-01-01")), Literal(Int.MaxValue)), Int.MaxValue)
+    checkErrorInExpression[SparkArithmeticException](
+      DateAdd(Literal(Date.valueOf("2020-01-01")), Literal(Int.MaxValue)),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" -> "add 2147483647 days to DATE '2020-01-01'"))
+    checkErrorInExpression[SparkArithmeticException](
+      DateAdd(Literal(Date.valueOf("1900-01-01")), Literal(Int.MinValue)),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" -> "add -2147483648 days to DATE '1900-01-01'"))
   }
 
   test("date add interval") {
@@ -571,7 +584,20 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DateSub(Literal(Date.valueOf("2016-02-28")), negativeIntLit), 49628)
     checkConsistencyBetweenInterpretedAndCodegen(DateSub, DateType, ByteType)
     checkConsistencyBetweenInterpretedAndCodegen(DateSub, DateType, ShortType)
-    checkConsistencyBetweenInterpretedAndCodegen(DateSub, DateType, IntegerType)
+    checkConsistencyBetweenInterpretedAndCodegenAllowingException(DateSub, DateType, IntegerType)
+  }
+
+  test("SPARK-59859: date_sub fails on overflow instead of wrapping around") {
+    checkEvaluation(
+      DateSub(Literal(Date.valueOf("1969-12-31")), Literal(Int.MinValue)), Int.MaxValue)
+    checkErrorInExpression[SparkArithmeticException](
+      DateSub(Literal(Date.valueOf("2020-01-01")), Literal(Int.MinValue)),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" -> "subtract -2147483648 days from DATE '2020-01-01'"))
+    checkErrorInExpression[SparkArithmeticException](
+      DateSub(Literal(Date.valueOf("1900-01-01")), Literal(Int.MaxValue)),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" -> "subtract 2147483647 days from DATE '1900-01-01'"))
   }
 
   test("time_add") {
