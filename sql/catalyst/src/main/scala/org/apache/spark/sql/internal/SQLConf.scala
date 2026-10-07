@@ -1982,9 +1982,11 @@ object SQLConf {
         "only for the rows that survived. This is a planning-time decision. " +
         "A filter that is attached also stays in the post-scan filter, the way a pushed data " +
         "filter does, so the reader is free to stop applying it wherever doing so would cost " +
-        "more than it saves, and the answer does not change. The post-scan filter skips it on " +
-        "the rows the reader applied it to, except where one more column would push the scan " +
-        "past spark.sql.codegen.maxFields. A row group where it stops reads " +
+        "more than it saves, and the answer does not change. In a scan that returns columnar " +
+        "batches into whole-stage codegen, the post-scan filter skips it on the rows the reader " +
+        "applied it to, which the reader marks in a column named _tmp_storage_filter_checked. " +
+        "A table with a column of that name is not offered storage filters. A row group where " +
+        "it stops reads " +
         "its key columns twice, which is slower than not pushing the filter. " +
         "Under spark.sql.files.ignoreCorruptFiles the answer can change, because this reader " +
         "reads different pages in a different order than a plain read. Which rows survive a " +
@@ -1994,7 +1996,8 @@ object SQLConf {
         "return rows the filter rejects. Setting " +
         "parquet.filter.columnindex.enabled to false makes the reader fall back to skipping " +
         "whole row groups in which the filter rejects every row. A row group with a surviving " +
-        "row then reads its key columns twice. A file without a page index falls back the same " +
+        "row then reads its key columns twice, and the post-scan filter evaluates the filter " +
+        "on each of its rows. A file without a page index falls back the same " +
         "way. It gains only where a whole row group has no surviving row, a bloom's false " +
         "positives included, and every other row group reads its key columns twice. A read " +
         "with pushed data filters already relies on the page index, and that conf turns it off " +

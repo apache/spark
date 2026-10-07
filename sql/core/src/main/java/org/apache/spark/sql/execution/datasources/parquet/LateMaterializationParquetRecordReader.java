@@ -103,7 +103,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  *   <li>false for a row group or a file the filter was given up on or declined for;</li>
  *   <li>for a file with none of the key columns, true when the constant predicate kept it.</li>
  * </ul>
- * The slot holds a vector of this reader's own, so the file's values never reach it.
+ * The slot holds a vector of this reader's own, and a file column of that name is never read, see
+ * {@link #suppliesOwnVector}.
  *
  * <p>What {@code FileSourceStrategy.storageFiltersFor} and {@code ParquetStorageFilter.create}
  * guarantee is asserted here, since a violation is a planner bug.
@@ -212,6 +213,11 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   private WritableColumnVector[] keyScratchVectors;
   private ColumnarBatch keyScratchBatch;
 
+  /**
+   * The batch slot of the column this reader marks the rows it checked in, or -1 when the scan has
+   * none. Looked up by name, as the base looks up the row-index column.
+   */
+  private int checkedSlot = -1;
   /** What {@link #checkedVector} says for every row of the next batch, see the class javadoc. */
   private boolean rowsChecked;
   /** The vector in the checked column's slot, or null when the scan has no such column. */
@@ -341,7 +347,6 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     for (int i = 0; i < persistentBatchColumns.length; i++) {
       persistentBatchColumns[i] = columnarBatch.column(i);
     }
-    int checkedSlot = storageFilter.checkedColumnIndex();
     if (keyColumns == null && checkedSlot < 0) return;
     spliceBatchColumns = persistentBatchColumns.clone();
     if (checkedSlot >= 0) {
@@ -424,6 +429,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   @Override
   protected void initializeInternal() throws IOException, UnsupportedOperationException {
     super.initializeInternal();
+    checkedSlot = ParquetStorageFilter.checkedColumnIndex(sparkRequestedSchema);
     initializeLateMaterialization();
   }
 
@@ -475,9 +481,13 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     // a file missing every projected non-key leaf, which also covers the row-index column. A struct
     // the file has, but none of whose requested fields it has, counts only under the legacy
     // `returnNullStructIfAllFieldsMissing`, since otherwise the clipped schema reads one of its
-    // other fields to tell a null struct from one whose requested fields are all null.
+    // other fields to tell a null struct from one whose requested fields are all null. The checked
+    // column is left out too, since a file column of its name is never read.
+    String checkedName =
+      checkedSlot >= 0 ? sparkRequestedSchema.fields()[checkedSlot].name() : null;
     List<ColumnDescriptor> nonKey = requestedColumns.stream()
         .filter(column -> !keyTopLevelNames.contains(column.getPath()[0]))
+        .filter(column -> !column.getPath()[0].equalsIgnoreCase(checkedName))
         .toList();
     if (nonKey.stream().noneMatch(column -> fileSchema.containsPath(column.getPath()))) return;
     nonKeyColumns = nonKey;
@@ -645,12 +655,14 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   }
 
   /**
-   * A spliced row group's key slots take their values from the survivor queue at emit, so phase 2
-   * reads no pages for them. Key columns are primitive, which is what the base class asks of a slot
-   * answered true here.
+   * The checked slot always holds this reader's own vector, so a file column of that name, which a
+   * case-insensitive or user-given schema can match, is never decoded into the batch. A spliced row
+   * group's key slots take their values from the survivor queue at emit, so phase 2 reads no pages
+   * for them. Both are primitive, which is what the base class asks of a slot answered true here.
    */
   @Override
   protected boolean suppliesOwnVector(int slot) {
+    if (slot == checkedSlot) return true;
     if (!spliceCurrentRowGroup) return false;
     for (KeyColumn key : keyColumns) {
       if (key.batchSlot() == slot) return true;

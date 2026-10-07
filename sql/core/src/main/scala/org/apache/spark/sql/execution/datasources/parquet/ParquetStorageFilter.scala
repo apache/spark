@@ -117,13 +117,9 @@ object StorageFilterMetrics {
  * columns referenced by the filter. [[preparedPredicate]] expects a row whose fields are those key
  * columns in that order. The predicate's references are rewritten to [[BoundReference]]s pointing
  * at positions 0..(keyColumnIndices.length - 1) when the filter is built.
- *
- * [[checkedColumnIndex]] is the index in that same schema of the column the reader marks the rows
- * it checked in, `FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME`, or -1 when the schema has none.
  */
 class ParquetStorageFilter private (
     val keyColumnIndices: Array[Int],
-    val checkedColumnIndex: Int,
     private var boundExpression: Expression,
     val metrics: StorageFilterMetrics,
     val maxSplicedRowGroupBytes: Long) extends Serializable {
@@ -208,24 +204,27 @@ object ParquetStorageFilter {
         s"${ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME}, because the reader writes row " +
         "indexes over that column, so what it reads back depends on how its row group was read")
 
-    // The column the reader marks the rows it checked in, which the planner adds to every scan it
-    // offers storage filters to. A schema without it, as a test can build, gets no marks.
-    val checkedColumnIndex =
-      requestedSchema.fieldNames.indexOf(FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME)
-    require(checkedColumnIndex < 0 ||
-        requestedSchema.fields(checkedColumnIndex).dataType == BooleanType,
-      s"${FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME} must be a boolean column")
-    require(!originalOrdinals.contains(checkedColumnIndex),
-      s"a storage filter must not read ${FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME}, " +
-        "the column the reader marks the rows it checked in")
 
     val indexMap = originalOrdinals.zipWithIndex.toMap
     val remapped = expr.transform {
       case b: BoundReference => BoundReference(indexMap(b.ordinal), b.dataType, b.nullable)
     }
 
-    new ParquetStorageFilter(originalOrdinals.toArray, checkedColumnIndex, remapped, metrics,
-      maxSplicedRowGroupBytes)
+    new ParquetStorageFilter(originalOrdinals.toArray, remapped, metrics, maxSplicedRowGroupBytes)
+  }
+
+  /**
+   * The index in `schema` of the column the reader marks the rows it checked in, or -1 when the
+   * scan has none, see `FileFormat.buildReaderWithStorageFilters`. The reader looks it up by name,
+   * as it does the row-index column, and writes booleans into it, so another type is a planner bug.
+   */
+  def checkedColumnIndex(schema: StructType): Int = {
+    val index = schema.fieldNames.indexOf(FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME)
+    if (index >= 0 && schema.fields(index).dataType != BooleanType) {
+      internalError(s"${FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME} must be a boolean " +
+        s"column, but it is ${schema.fields(index).dataType.catalogString}")
+    }
+    index
   }
 
   /**
