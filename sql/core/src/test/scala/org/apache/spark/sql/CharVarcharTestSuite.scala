@@ -1200,6 +1200,25 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60036: collation-only LCT copy keeps USER_SPECIFIED_CAST") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // VARCHAR length is unchanged; only the STRING field collation changes, so
+      // changeType uses Cast.copy. Without copying USER_SPECIFIED_CAST, the
+      // VARCHAR(2) field would raise EXCEED_LIMIT_LENGTH instead of truncating.
+      val df = sql(
+        """SELECT coalesce(
+          |  CAST(named_struct('v', 'abcdef', 's', 'foo')
+          |    AS STRUCT<v VARCHAR(2), s STRING>),
+          |  named_struct('v', CAST('xy' AS VARCHAR(2)),
+          |    's', collate('bar', 'UTF8_LCASE'))
+          |) AS c""".stripMargin)
+      assert(df.schema.head.dataType === StructType(Seq(
+        StructField("v", VarcharType(2)),
+        StructField("s", StringType("UTF8_LCASE")))))
+      checkAnswer(df, Row(Row("ab", "foo")))
+    }
+  }
+
   test("SPARK-58799: transforming string functions return STRING") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       assert(sql("SELECT upper(cast('ab' AS CHAR(2))) AS c")
