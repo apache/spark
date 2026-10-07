@@ -16,10 +16,11 @@
 #
 
 
-"""Internal numeric metrics and reusable timers for one Python worker task."""
+"""Shared metrics and reusable timers for a Python worker process."""
 
+import threading
 import time
-from typing import Any, Optional
+from typing import Any, ClassVar, Optional
 
 
 class _WorkerTimer:
@@ -57,32 +58,49 @@ class _WorkerTimer:
 
 
 class WorkerMetrics:
-    """Collect values and duration totals for one worker task.
+    """One collector per Python worker process, reset by the worker before each task.
 
-    set/increment store values in their reporting units: counts, byte counts, or epoch milliseconds.
+    set stores a supplied value; increment adds to a counter.
+    set_current_timestamp reads the clock and stores epoch milliseconds.
     measure creates timer scopes that accumulate nanoseconds in a separate shared dictionary.
     to_dict combines both dictionaries, converting only durations to milliseconds.
     """
 
-    def __init__(self) -> None:
-        """Create fresh task state so a reused worker does not retain the previous totals."""
+    _instance: ClassVar[Optional["WorkerMetrics"]] = None
+    _instance_lock = threading.Lock()
+
+    def __new__(cls) -> "WorkerMetrics":
+        """Return the shared collector without resetting an active task."""
+        instance = cls._instance
+        if instance is None:
+            with cls._instance_lock:
+                instance = cls._instance
+                if instance is None:
+                    instance = super().__new__(cls)
+                    instance.reset()
+                    cls._instance = instance
+        return instance
+
+    def reset(self) -> None:
+        """Start fresh task state while keeping the singleton's identity."""
         # Counters, spill byte counts, and epoch timestamps need no conversion at report time.
         self._values_in_report_units: dict[str, int] = {}
-        # These totals belong to the collector; timer scopes share and update them.
+        # Existing timers keep the old dictionary. A fresh dictionary keeps their
+        # measurements out of the next task's report.
         self._duration_totals_ns: dict[str, int] = {}
 
-    def set(self, name: str, value: int) -> None:
-        """Store a value in its reporting unit, replacing any earlier value.
+    def set_current_timestamp(self, name: str) -> None:
+        """Read the current clock and store its epoch milliseconds under name."""
+        self.set(name, time.time_ns() // 1_000_000)
 
-        Used for initial counter values, epoch timestamps, and final spill byte counts.
-        Elapsed durations are accumulated through measure instead.
-        """
+    def set(self, name: str, value: int) -> None:
+        """Store the supplied value unchanged, replacing any earlier value."""
         self._values_in_report_units[name] = value
 
     def increment(self, name: str, value: int = 1) -> None:
         """Add to a counter in its reporting unit, starting from zero.
 
-        The default increment is one, as used for the number of timed batches.
+        The default increment is one.
         """
         self._values_in_report_units[name] = self._values_in_report_units.get(name, 0) + value
 

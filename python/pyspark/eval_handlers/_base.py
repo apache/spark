@@ -17,8 +17,8 @@
 
 """Base classes and registry for the eval type handlers.
 
-This leaf module has no concrete-handler imports, so the package ``__init__``
-and concrete-handler submodules can both import it.
+This leaf module imports only ``_typing`` and the serializers, so the package
+``__init__`` and the concrete-handler submodules can both import it.
 """
 
 from abc import ABCMeta, abstractmethod
@@ -37,7 +37,6 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamGroupSerializer,
     ArrowStreamSerializer,
 )
-from pyspark.worker_metrics import WorkerMetrics
 
 if TYPE_CHECKING:
     import pyarrow as pa  # noqa: F401  # only in the batch category's forward-ref subscript
@@ -145,8 +144,6 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         self._udfs = udfs
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
-        # A handler is constructed for each task, including tasks in a reused worker.
-        self.metrics = WorkerMetrics()
 
     @property
     @abstractmethod

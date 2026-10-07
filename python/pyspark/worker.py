@@ -25,7 +25,6 @@ import itertools
 import json
 import os
 import sys
-import time
 import warnings
 from collections.abc import Iterator
 from typing import (
@@ -732,9 +731,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             for udf_index, udf_info in enumerate(udf_info_list)
         ]
         handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
-        return handler.run, handler.serializer, handler.metrics
-
-    metrics = WorkerMetrics()
+        return handler.run, handler.serializer
 
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
@@ -852,7 +849,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)
 
-        return func, ser, metrics
+        return func, ser
 
     if (
         eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
@@ -941,7 +938,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
 
-        return func, ser, metrics
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF:
         # This path exchanges data with the JVM over Arrow, so PyArrow is required. Fail with a
@@ -1067,7 +1064,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)
 
-        return func, ser, metrics
+        return func, ser
 
     if eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
@@ -1201,7 +1198,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)
 
-        return func, ser, metrics
+        return func, ser
 
     if eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
@@ -1373,7 +1370,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
             yield from process_results()
 
-        return func, ser, metrics
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         import pandas as pd
@@ -1515,7 +1512,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 )
             )
 
-        return transform_with_state_func, ser, metrics
+        return transform_with_state_func, ser
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF:
         import pandas as pd
@@ -1727,7 +1724,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 )
             )
 
-        return func, ser, metrics
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
         import pandas as pd
@@ -2060,7 +2057,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     pdfs, pdf_data_cnt, return_type, state_pdfs, state_data_cnt
                 )
 
-        return func, ser, metrics
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
         import pyarrow as pa
@@ -2161,7 +2158,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 )
             )
 
-        return func, ser, metrics
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF:
         import pyarrow as pa
@@ -2341,7 +2338,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 )
             )
 
-        return func, ser, metrics
+        return func, ser
 
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
         # Plain Python (pickle) UDFs, the only eval type reaching this branch. read_single_udf
@@ -2358,7 +2355,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 for row in data
             )
 
-        return func, ser, metrics
+        return func, ser
 
     else:
         raise ValueError("Unknown eval type: {}".format(eval_type))
@@ -2373,7 +2370,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     Initialization -> Processing -> Finish/Cleanup
     """
     try:
-        boot_time = time.time()
+        metrics = WorkerMetrics()
+        metrics.reset()
+        metrics.set_current_timestamp("bootTimestampMs")
         # Initialization
         init_message = message_receiver.get_init_message()
         init_info = WorkerInitInfo.from_stream(init_message)
@@ -2405,7 +2404,6 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         # read_single_udf); only the classic RDD command carries a profiler of its own.
         profiler = None
         if eval_type == PythonEvalType.NON_UDF:
-            metrics = WorkerMetrics()
             assert isinstance(init_info.udf_info, (bytes, memoryview))
             func, profiler, deserializer, serializer = read_command(pickleSer, init_info.udf_info)
         else:
@@ -2416,7 +2414,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 PythonEvalType.SQL_ARROW_UDTF,
             )
             read = read_udtf if is_udtf else read_udfs
-            func, serializer, metrics = read(
+            func, serializer = read(
                 pickleSer, init_info.udf_info, eval_type, runner_conf, eval_conf
             )
             deserializer = serializer
@@ -2424,7 +2422,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         split_index = init_info.split_index
         del init_info
 
-        init_time = time.time()
+        metrics.set_current_timestamp("initTimestampMs")
 
         # Processing
 
@@ -2549,11 +2547,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-    finish_time = time.time()
-    # Lifecycle timestamps are epoch milliseconds, matching the JVM's clock for calculations.
-    metrics.set("bootTimestampMs", int(1000 * boot_time))
-    metrics.set("initTimestampMs", int(1000 * init_time))
-    metrics.set("finishTimestampMs", int(1000 * finish_time))
+    metrics.set_current_timestamp("finishTimestampMs")
     # Spill totals are byte counts already expressed in their reporting unit.
     metrics.set("memoryBytesSpilled", shuffle.MemoryBytesSpilled)
     metrics.set("diskBytesSpilled", shuffle.DiskBytesSpilled)

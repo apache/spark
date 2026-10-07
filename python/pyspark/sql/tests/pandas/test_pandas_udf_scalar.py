@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import builtins
 import logging
 import os
 import random
@@ -2098,75 +2097,6 @@ class ScalarPandasUDFTests(ScalarPandasUDFTestsMixin, ReusedSQLTestCase):
             os.environ["TZ"] = cls.tz_prev
         time.tzset()
         ReusedSQLTestCase.tearDownClass()
-
-    def _python_metrics(self, result):
-        plan = result._jdf.queryExecution().executedPlan()
-        while plan.nodeName() != "ArrowEvalPython":
-            self.assertEqual(plan.children().size(), 1)
-            plan = plan.children().apply(0)
-        return plan.metrics()
-
-    def test_scalar_pandas_udf_phase_metrics(self):
-        @pandas_udf("long")
-        def measured(values):
-            time.sleep(0.02)
-            return values + 1
-
-        with self.sql_conf(
-            {
-                "spark.sql.execution.arrow.maxRecordsPerBatch": "2",
-                "spark.sql.adaptive.enabled": "false",
-            }
-        ):
-            # Check worker reuse, then an empty task with one input partition.
-            for num_rows in (6, 6, 0):
-                if num_rows:
-                    data = self.spark.range(num_rows, numPartitions=1)
-                else:
-                    data = self.spark.createDataFrame(self.sc.parallelize([], 1), "id long")
-                result = data.select(measured("id"))
-                self.assertEqual([row[0] for row in result.collect()], list(range(1, num_rows + 1)))
-
-                metrics = self._python_metrics(result)
-                self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
-                self.assertEqual(metrics.apply("pythonNumTimedBatches").value(), num_rows // 2)
-                phases = [
-                    metrics.apply(name).value()
-                    for name in (
-                        "pythonDataReadTime",
-                        "pythonInputPreparationTime",
-                        "pythonUDFExecutionTime",
-                        "pythonOutputPreparationTime",
-                        "pythonDataWriteTime",
-                    )
-                ]
-                self.assertTrue(all(value >= 0 for value in phases))
-                if num_rows:
-                    self.assertGreaterEqual(phases[2], 40)
-                else:
-                    self.assertEqual(phases[2], 0)
-                self.assertLessEqual(
-                    builtins.sum(phases), metrics.apply("pythonProcessingTime").value()
-                )
-
-    def test_scalar_iterator_udf_does_not_register_phase_metrics(self):
-        @pandas_udf("long", PandasUDFType.SCALAR_ITER)
-        def identity(batches):
-            yield from batches
-
-        with self.sql_conf({"spark.sql.adaptive.enabled": "false"}):
-            result = self.spark.range(2, numPartitions=1).select(identity("id"))
-            metrics = self._python_metrics(result)
-            for name in (
-                "pythonDataReadTime",
-                "pythonInputPreparationTime",
-                "pythonUDFExecutionTime",
-                "pythonOutputPreparationTime",
-                "pythonDataWriteTime",
-                "pythonNumTimingReports",
-                "pythonNumTimedBatches",
-            ):
-                self.assertFalse(metrics.contains(name))
 
 
 if __name__ == "__main__":
