@@ -101,11 +101,12 @@ on another thread, such as a pipelined Python worker's writer. Task completion t
 that consumer after the input row it is reading, and waits for it, but not for this
 operator's Python: it releases the buffered rows at once, and the Arrow vectors when Python
 returns. Reading one row can take longer when the input is another in-process UDF, whose
-next row may need a batch of Python, or a blocked upstream operator; task completion waits
-for at most one second, and then leaves the buffered rows to the executor and deletes
-their spill files. The executor then logs "Managed memory leak detected" for the task, or
-fails it if `spark.unsafe.exceptionOnMemoryLeak` is `true`. Each row is copied before it is returned, so it remains valid after the
-task releases them.
+next row may need a batch of Python, or a blocked upstream operator. Task completion then
+waits for at most one second, unless the consumer is buffering a row that waits for memory,
+and then leaves the buffered rows to the executor and deletes their spill files. For a task
+that otherwise succeeds, the executor then logs "Managed memory leak detected", or fails
+the task if `spark.unsafe.exceptionOnMemoryLeak` is `true`. Each row is copied before it is
+returned, so it remains valid after the task releases them.
 
 UDF deserialization uses PySpark's bundled cloudpickle. Each task registers its
 own function instance once and passes a small handle for subsequent batches.

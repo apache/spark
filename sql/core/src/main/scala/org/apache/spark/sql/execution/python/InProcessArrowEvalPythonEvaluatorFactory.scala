@@ -34,6 +34,7 @@ import org.apache.arrow.vector.VectorSchemaRoot
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
+import org.apache.spark.memory.MemoryConsumer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, PythonUDF, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
@@ -141,9 +142,11 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     // Rows are copied out of the queue and Arrow vectors before they are returned, so they
     // remain valid after task completion releases those, on whichever thread consumes them.
     val resultProj = UnsafeProjection.create(output, output)
-    // Spill files go into a directory of the queue's own, created on the first spill, so that
-    // task completion can delete them when it cannot close the queue.
+    // Spill files go into a directory of the queue's own, created with the first disk queue, so
+    // that task completion can delete them when it cannot close the queue.
     @volatile var spillDir: File = null
+    // Guarded by the queue's monitor.
+    var queueAbandoned = false
     val (queue, projection) = joinInput match {
       case Buffered(projection) =>
         val localDir = new File(Utils.getLocalDir(SparkEnv.get.conf))
@@ -158,6 +161,17 @@ class InProcessArrowEvalPythonEvaluatorFactory(
             DiskRowQueue(Files.createTempFile(spillDir.toPath, "buffer", "").toFile,
               childOutput.length, serializerManager)
           }
+
+          // Once task completion leaves the queue to the executor, it must not spill for other
+          // consumers into a directory that nothing deletes.
+          override def spill(size: Long, trigger: MemoryConsumer): Long = synchronized {
+            if (queueAbandoned) 0L else super.spill(size, trigger)
+          }
+
+          // Queues of a task are distinct memory consumers, whatever their case-class fields.
+          override def equals(other: Any): Boolean = this eq other.asInstanceOf[AnyRef]
+          override def hashCode(): Int = System.identityHashCode(this)
+          override def canEqual(other: Any): Boolean = false
         }
         (queue, projection.orNull)
       case ReadBack => (null, null)
@@ -181,12 +195,17 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     }
 
     val resources = new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(
-      // Closing the queue deletes its spill files, which leaves an empty directory.
+      // Closing the queue deletes the spill files it tracks; deleteQuietly also removes any
+      // other, without starting a process or throwing, also on an interrupted thread.
       releaseTaskMemory = () => if (queue != null) {
-        Utils.tryWithSafeFinally(queue.close()) { if (spillDir != null) spillDir.delete() }
+        Utils.tryWithSafeFinally(queue.close())(Utils.deleteQuietly(spillDir))
       },
-      // Neither starts a process nor throws, also on an interrupted thread.
-      abandonTaskMemory = () => if (spillDir != null) Utils.deleteQuietly(spillDir),
+      abandonTaskMemory = () => if (queue != null) {
+        queue.synchronized {
+          queueAbandoned = true
+          Utils.deleteQuietly(spillDir)
+        }
+      },
       releaseOthers = () => {
         if (startedAt != 0L) {
           metrics("pythonTotalTime") += (System.nanoTime() - startedAt) / 1000000
@@ -249,7 +268,8 @@ class InProcessArrowEvalPythonEvaluatorFactory(
         }
       }
 
-      // Runs Python without the lock, unless task completion happened before or meanwhile.
+      // Runs Python without the lock unless task completion already happened, and ends the
+      // input instead of returning the result if it happens meanwhile.
       private def python[T](body: => T): T = {
         if (resources.isClosed) endOfInput
         val result = resources.withoutLock(body)
@@ -258,20 +278,17 @@ class InProcessArrowEvalPythonEvaluatorFactory(
       }
 
       /**
-       * Writes the next input row to the batch, returning false at the end of input. Task
-       * completion can happen while the input is read; then the row is not written.
+       * Writes the next input row to the batch, returning false at the end of input or once
+       * task completion happened. If it happens while the row is read, the row is dropped.
        */
       private def pullRow(): Boolean = rows.hasNext && !resources.isClosed && {
         val row = rows.next()
         if (queue != null) {
-          // Adding can wait for memory beyond the listener's wait. Announce it before the
-          // check, so that either the add is skipped or the listener waits for it.
-          resources.usingTaskMemory = true
           try {
-            if (resources.isClosed) endOfInput
+            if (!resources.enterTaskMemory()) endOfInput
             queue.add(row.asInstanceOf[UnsafeRow])
           } finally {
-            resources.usingTaskMemory = false
+            resources.exitTaskMemory()
           }
         } else if (resources.isClosed) {
           endOfInput
@@ -402,9 +419,10 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
    *
    * Reading one row can take long: the input can be another in-process evaluator, whose next
    * row may need a batch of Python, or an upstream operator that only a later listener
-   * unblocks. So the listener waits for the lock only briefly. Then it leaves the task memory
-   * to the executor, deleting what lives outside it, and the consumer releases the other
-   * resources once its row returns, without touching the task memory again.
+   * unblocks. So the listener waits for the lock only briefly, unless the consumer is adding a
+   * row to the queue, which waits only for memory. Then it leaves the task memory to the
+   * executor, deleting what lives outside it, and the consumer releases the other resources
+   * once its row returns, without touching the task memory again.
    */
   class IteratorResources(
       releaseTaskMemory: () => Unit,
@@ -420,14 +438,25 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
     private var inPython = false
     private var othersReleased = false
 
-    /**
-     * Set by the consumer while it may allocate task memory, e.g. for a queue page, which can
-     * wait for other tasks' memory. The listener then waits for the lock instead of leaving
-     * the task memory to the executor, since that wait never depends on a later listener.
-     */
-    @volatile var usingTaskMemory = false
+    // Set while the consumer adds a row to the queue; see `enterTaskMemory`.
+    @volatile private var usingTaskMemory = false
 
     def isClosed: Boolean = closeRequested
+
+    /**
+     * Starts adding a row to the queue, which may allocate a page and wait for other tasks'
+     * memory; returns false, after which the consumer must not add, once closed. The flag is
+     * set before the check, while `close` sets its own before it reads the flag, so either the
+     * consumer skips the add or the listener waits for it instead of leaving the task memory
+     * to the executor. That wait never depends on a later listener.
+     */
+    def enterTaskMemory(): Boolean = {
+      usingTaskMemory = true
+      !closeRequested
+    }
+
+    /** Ends what `enterTaskMemory` started, whether or not it returned true. */
+    def exitTaskMemory(): Unit = usingTaskMemory = false
 
     /** Locks for a consumer call; returns false, without the lock, once closed. */
     def enter(): Boolean = {
@@ -468,14 +497,13 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
       } else if (Uninterruptibles.tryLockUninterruptibly(
           lock, lockWaitMillis, TimeUnit.MILLISECONDS)) {
         try releaseAll() finally lock.unlock()
-      } else if (usingTaskMemory) {
-        lock.lock()
-        try releaseAll() finally lock.unlock()
-      } else if (taskMemory.compareAndSet(TaskMemoryHeld, TaskMemoryAbandoned)) {
+      } else if (!usingTaskMemory &&
+          taskMemory.compareAndSet(TaskMemoryHeld, TaskMemoryAbandoned)) {
         // The executor frees the task memory, but not what lives outside it, e.g. spill files.
         abandonTaskMemory()
       } else {
-        // The consumer is releasing the task memory; let it finish before the executor does.
+        // The consumer is adding a row or releasing the task memory. Either way, it releases
+        // everything before it unlocks, ahead of the executor.
         lock.lock()
         lock.unlock()
       }
