@@ -2172,7 +2172,7 @@ private[autocdc] object RowInheritanceContext {
  * leaf of the eligible user-data schema.
  *
  * [[valueToInheritIfAny]] is projected into [[valueToInheritIfAnyColName]] so that
- * [[inherits]] and [[valueToInherit]] stay as plain expressions over an ordinary column.
+ * [[valueToInherit]] and [[coalescedValue]] stay as plain expressions over an ordinary column.
  *
  * @param path the leaf's name parts within the row.
  * @param index ordinal used to derive the temporary projected column name.
@@ -2250,9 +2250,6 @@ private[autocdc] object LeafInheritanceContext {
       }
     )
 
-    val rowInheritsLeaf =
-      rowInheritanceContext.isUpsertRepresentingRow && !storedValueIsAuthoritative
-
     LeafInheritanceContext(
       path = path,
       index = index,
@@ -2265,7 +2262,7 @@ private[autocdc] object LeafInheritanceContext {
         rowContributedInheritanceCandidate,
         ignoreNulls = true
       ).over(precedingRowsInKeyWindow),
-      inherits = rowInheritsLeaf
+      inherits = rowInheritanceContext.isUpsertRepresentingRow && !storedValueIsAuthoritative
     )
   }
 
