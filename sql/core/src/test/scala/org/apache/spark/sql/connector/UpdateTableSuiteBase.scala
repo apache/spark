@@ -21,7 +21,9 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{sources, AnalysisException, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
+import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.trees.TreePattern.WITH_EXPRESSION
 import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableChange, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.write.UpdateSummary
@@ -177,6 +179,34 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(1, 100, "invalid") :: Row(2, 200, "software") :: Row(3, 300, "hr") :: Nil)
 
     checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
+  }
+
+  test("SPARK-59962: update with a condition reading a computed value twice") {
+    // BETWEEN reads `salary + pk` twice. The condition keeps no `With`, and the group filter
+    // condition, only evaluated in the runtime group filter, keeps it for that filter to
+    // memoize. One that gains nothing from memoizing is still inlined there, so a
+    // condition that folds to true leaves a true group filter condition.
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    val (cond, groupFilterCond) = executeAndKeepConditions {
+      sql(s"UPDATE $tableNameAsString SET dep = 'x' WHERE (salary + pk) BETWEEN 150 AND 250")
+    }
+    assert(!cond.containsPattern(WITH_EXPRESSION), s"condition: $cond")
+    assert(groupFilterCond.exists(_.containsPattern(WITH_EXPRESSION)),
+      s"group filter condition: $groupFilterCond")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 100, "hr") :: Row(2, 200, "x") :: Row(3, 300, "hr") :: Nil)
+
+    val (_, constantGroupFilterCond) = executeAndKeepConditions {
+      sql(s"UPDATE $tableNameAsString SET dep = 'y' WHERE 1 BETWEEN 0 AND 2")
+    }
+    assert(constantGroupFilterCond.contains(TrueLiteral),
+      s"group filter condition: $constantGroupFilterCond")
   }
 
   test("update with aliases") {

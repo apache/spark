@@ -22,6 +22,7 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
 import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.catalyst.trees.TreePattern.WITH_EXPRESSION
 import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryRowLevelOperationTable, InMemoryTable, InMemoryTruncatableOnlyTable, InMemoryTruncatableOnlyTableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.write.DeleteSummary
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, TruncateTableExec, WriteDeltaExec}
@@ -270,7 +271,16 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         |{ "pk": 4, "id": 10, "dep": "finance" }
         |""".stripMargin)
 
-    sql(s"DELETE FROM $tableNameAsString WHERE (id + pk) BETWEEN 2 AND 4")
+    val (cond, groupFilterCond) = executeAndKeepConditions {
+      sql(s"DELETE FROM $tableNameAsString WHERE (id + pk) BETWEEN 2 AND 4")
+    }
+    // The condition reaches the source inlined. A group-based write also has a group filter
+    // condition, only evaluated in the runtime group filter, which keeps the `With` for that
+    // filter to memoize.
+    assert(!cond.containsPattern(WITH_EXPRESSION), s"condition: $cond")
+    assert(groupFilterCond.isDefined == !deltaDelete, s"group filter condition: $groupFilterCond")
+    assert(groupFilterCond.forall(_.containsPattern(WITH_EXPRESSION)),
+      s"group filter condition: $groupFilterCond")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),

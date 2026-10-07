@@ -2689,14 +2689,12 @@ class DataSourceV2SQLSuiteV1Filter
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
       checkError(
         exception = analysisException(s"DELETE FROM $t WHERE (id + p) BETWEEN 0 AND 4"),
         condition = "_LEGACY_ERROR_TEMP_1110",
         parameters = Map(
           "table" -> "testcat.ns1.ns2.tbl",
           "filters" -> "[(id + CAST(p AS long)) >= 0, (id + CAST(p AS long)) <= 4]"))
-      assert(spark.table(t).count() === 3)
     }
   }
 

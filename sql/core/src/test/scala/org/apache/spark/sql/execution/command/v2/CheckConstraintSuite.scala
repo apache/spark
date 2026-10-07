@@ -147,18 +147,26 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
-  test("SPARK-59962: Predicate of a check reading a computed value twice") {
-    // NULLIF reads `id + 1` twice. The predicate stored in the catalog is built from the check as
-    // the optimizer leaves it, so it must not refer to a column pre-evaluated under the command.
+  test("SPARK-59962: Check added by ALTER TABLE reading a computed value twice") {
+    // NULLIF reads `id + 1` twice. A predicate stored with a column pre-evaluated under the ALTER
+    // TABLE would make every later write fail to resolve it.
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
       sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (nullif(id + 1, 3) > 0)")
-      val constraint = getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl"))
-      assert(constraint.predicateSql() == "nullif(id + 1, 3) > 0")
-      assert(constraint.predicate() != null)
-      val references = constraint.predicate().references().map(_.fieldNames().mkString(".")).toSet
-      assert(references == Set("id"),
-        s"the stored predicate refers to columns other than id: ${constraint.predicate()}")
+      // `nullif(3, 3)` is NULL, which a check accepts.
+      sql(s"INSERT INTO $t VALUES (2, 'a')")
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (-5, 'b')")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "c1",
+          "expression" -> "nullif(id + 1, 3) > 0",
+          "values" -> " - id : -5"))
+      checkAnswer(sql(s"SELECT * FROM $t"), Row(2, "a"))
     }
   }
 

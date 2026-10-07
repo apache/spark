@@ -491,30 +491,31 @@ class RewriteWithExpressionSuite extends PlanTest {
     // The condition is translated into source predicates, not evaluated over the child's rows, so a
     // `Project` under the command would sit where the planner expects the table.
     val condition = With(a + a) { case Seq(ref) => ref < 10 && ref > 0 }
+    val inlined = (a + a) < 10 && (a + a) > 0
     comparePlans(
       Optimizer.execute(DeleteFromTable(testRelation, condition)),
-      DeleteFromTable(testRelation, (a + a) < 10 && (a + a) > 0))
+      DeleteFromTable(testRelation, inlined))
 
     // Nor is one in a conditional branch kept: a `With` translates to no source predicate.
-    val inBranch = If(a > 0, With(a + a) { case Seq(ref) => ref < 10 && ref > 0 }, Literal(false))
     comparePlans(
-      Optimizer.execute(DeleteFromTable(testRelation, inBranch)),
-      DeleteFromTable(testRelation, If(a > 0, (a + a) < 10 && (a + a) > 0, Literal(false))))
+      Optimizer.execute(DeleteFromTable(testRelation, If(a > 0, condition, Literal(false)))),
+      DeleteFromTable(testRelation, If(a > 0, inlined, Literal(false))))
   }
 
   test("SPARK-59962: a nondeterministic definition in a command keeps its With if read twice") {
     // Analysis keeps nondeterministic expressions out of every command but `CreateVariable`, so
     // this only pins that the rule would not read such a definition twice.
     val a = testRelation.output.head
-    val delete = DeleteFromTable(testRelation, With(Rand(Literal(0L)) + a) { case Seq(ref) =>
+    val definition = Rand(Literal(0L)) + a
+    val delete = DeleteFromTable(testRelation, With(definition) { case Seq(ref) =>
       ref < 10 && ref > 0
     })
     assert(Optimizer.execute(delete) == delete)
 
     // Read once, it is inlined as anywhere else.
     assert(Optimizer.execute(DeleteFromTable(testRelation,
-      With(Rand(Literal(0L)) + a) { case Seq(ref) => ref < 10 })) ==
-      DeleteFromTable(testRelation, (Rand(Literal(0L)) + a) < 10))
+      With(definition) { case Seq(ref) => ref < 10 })) ==
+      DeleteFromTable(testRelation, definition < 10))
   }
 
   test("SPARK-59962: a definition in a DECLARE VARIABLE default is not inlined like a command's") {

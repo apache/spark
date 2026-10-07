@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Call, Command, CreateVariable, LogicalPlan, PlanHelper, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Call, Command, CreateVariable, LogicalPlan, PlanHelper, Project, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, CURRENT_LIKE, WITH_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
@@ -32,7 +32,9 @@ import org.apache.spark.util.Utils
  * Rewrites the `With` expressions by adding a `Project` to pre-evaluate the common expressions, or
  * just inline them if they are cheap. In a `Call`, or a command other than `CreateVariable`, whose
  * expressions are not evaluated over its children's rows, every deterministic definition is
- * inlined whatever it costs, and a nondeterministic one read more than once stays a `With`.
+ * inlined whatever it costs, and a nondeterministic one read more than once stays a `With`. The
+ * `groupFilterCondition` of a row-level write keeps the `With`s worth memoizing for the runtime
+ * group filter.
  *
  * Since this rule can introduce new `Project` operators, it is advised to run [[CollapseProject]]
  * after this rule.
@@ -69,26 +71,34 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         // changed anything: `mapExpressions` and `withNewChildren` preserve reference equality when
         // they rewrite nothing, which is what makes this detectable.
         if ((rewrittenAgg eq agg) && (rewrittenProj eq proj)) p else rewrittenProj
+      // A row-level write reads its `groupFilterCondition` only in the runtime group filter, which
+      // puts it in a filter over the table and optimizes it there. A `With` in it is treated as one
+      // in a conditional branch: the definitions that gain nothing from memoizing are inlined, so a
+      // condition that folds to true still injects no filter, and the rest are left for that
+      // filter. Only `condition` is substituted as below.
+      case rd: ReplaceData =>
+        rowLevelConditions(rd.condition, rd.groupFilterCondition).map { case (cond, groupFilter) =>
+          rd.copy(condition = cond, groupFilterCondition = groupFilter)
+        }.getOrElse(rd)
+      case wd: WriteDelta =>
+        rowLevelConditions(wd.condition, wd.groupFilterCondition).map { case (cond, groupFilter) =>
+          wd.copy(condition = cond, groupFilterCondition = groupFilter)
+        }.getOrElse(wd)
       // A command's own expressions are not evaluated over its children's rows: most are stored as
       // metadata or turned into source predicates, neither of which can hold a memoized value, and
       // a `Call` must see foldable arguments over its `ResolvedProcedure` (`InvokeProcedures`). A
       // definition hoisted into a child would leave them reading a column only that `Project`
       // produces, or leave the command over a child its planner, or `InvokeProcedures`, does not
-      // expect, so a deterministic one is substituted whatever it costs. Where the expression is
-      // evaluated after all, as by the runtime group filter of a row-level command, that evaluates
-      // it at every reference, and it duplicates an impure one that declares itself deterministic
-      // (see `canSubstitute`). Analysis lets no command but `CreateVariable` hold a
-      // nondeterministic expression; a `Call` can hold one, as `InvokeProcedures` optimizes it
-      // before analysis checks it, and then rejects it as not foldable. A nondeterministic
+      // expect, so a deterministic one is substituted whatever it costs (see `canSubstitute`).
+      // The copies compound with nesting, as with `spark.sql.alwaysInlineCommonExpr`, and where
+      // the expression is evaluated after all, as a CHECK predicate stored by ALTER TABLE is at
+      // every later write, each copy is evaluated. Analysis lets no command but `CreateVariable`
+      // hold a nondeterministic expression; a `Call` can hold one, as `InvokeProcedures` optimizes
+      // it before analysis checks it, and then rejects it as not foldable. A nondeterministic
       // definition read more than once keeps its `With`. `CreateVariable` is left out: its default
       // is evaluated rather than stored, so a definition there should be memoized.
-      case c @ (_: Command | _: Call) if !c.isInstanceOf[CreateVariable] &&
-          c.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
-        c.mapExpressions(_.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
-          case w: With =>
-            val multiplyReferenced = multiplyReferencedIds(w.child, w.defs)
-            inlineDefs(w)(d => d.child.deterministic || !multiplyReferenced.contains(d.id))
-        })
+      case c @ (_: Command | _: Call) if !c.isInstanceOf[CreateVariable] =>
+        c.mapExpressions(inlineCommandWiths)
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         applyInternal(p)
     }
@@ -232,8 +242,9 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   }
 
   /**
-   * Whether substituting this definition into its references is as good as evaluating it once: it
-   * is referenced at most once anyway, or it is cheap to evaluate twice and deterministic.
+   * Whether this definition may be substituted into its references: it is referenced at most once
+   * anyway, or it is deterministic and, under `requireCheap`, cheap to evaluate twice. With
+   * `requireCheap`, substituting is as good as evaluating it once.
    *
    * `CollapseProject.isCheap` answers what one evaluation costs, not whether a second is allowed --
    * it admits a `PythonUDF`, which may be nondeterministic and is still in the tree here, since
@@ -244,12 +255,18 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
    * as an `aes_encrypt` with no IV still gets substituted and folded per copy. That predates this
    * rule keeping a `With` -- the condition it replaced was no stricter -- and belongs either on
    * those expressions or in one purity predicate shared with `isSafeToDuplicate`.
+   *
+   * Without `requireCheap`, as for a command's expressions (`inlineCommandWiths`), the cost is not
+   * asked, so the gap widens to an impure definition that reads a column, such as an
+   * `aes_encrypt` over one.
    */
   private def canSubstitute(
       child: Expression,
       id: CommonExpressionId,
-      multiplyReferenced: Set[CommonExpressionId]): Boolean = {
-    !multiplyReferenced.contains(id) || (CollapseProject.isCheap(child) && child.deterministic)
+      multiplyReferenced: => Set[CommonExpressionId],
+      requireCheap: Boolean = true): Boolean = {
+    (child.deterministic && (!requireCheap || CollapseProject.isCheap(child))) ||
+      !multiplyReferenced.contains(id)
   }
 
   /**
@@ -274,6 +291,37 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
     })
     counts.filter(_._2 > 1).keys.toSet
   }
+
+  /** `e` with `inlineDefsThatGainNothing` applied to every `With`, bottom-up for nested ones. */
+  private def inlineWithsThatGainNothing(e: Expression): Expression =
+    e.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+      case w: With => inlineDefsThatGainNothing(w)
+    }
+
+  /**
+   * The `condition` and `groupFilterCondition` of a row-level write rewritten as `apply` explains,
+   * or `None` if neither changes.
+   */
+  private def rowLevelConditions(
+      condition: Expression,
+      groupFilter: Option[Expression]): Option[(Expression, Option[Expression])] = {
+    val newCondition = inlineCommandWiths(condition)
+    val newGroupFilter = groupFilter.map(inlineWithsThatGainNothing)
+    val unchanged = (newCondition eq condition) &&
+      newGroupFilter.zip(groupFilter).forall { case (n, o) => n eq o }
+    if (unchanged) None else Some((newCondition, newGroupFilter))
+  }
+
+  /**
+   * `e` with every `With` substituted as a command's expressions need, bottom-up for nested ones:
+   * each deterministic definition whatever it costs, and any read at most once.
+   */
+  private def inlineCommandWiths(e: Expression): Expression =
+    e.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+      case w: With =>
+        lazy val multiplyReferenced = multiplyReferencedIds(w.child, w.defs)
+        inlineDefs(w)(d => canSubstitute(d.child, d.id, multiplyReferenced, requireCheap = false))
+    }
 
   /**
    * `w` with every definition that gains nothing from being memoized inlined into its references:
