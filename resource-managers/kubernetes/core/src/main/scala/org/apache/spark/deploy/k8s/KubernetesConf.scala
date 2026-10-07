@@ -219,7 +219,7 @@ class KubernetesExecutorConf(
     val driverPod: Option[Pod],
     val resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID,
     customAuthSecret: Option[String] = None,
-    val sslRpcPasswordEnvs: Map[String, String] = Map.empty)
+    private[spark] val sslRpcPasswordEnvs: Map[String, String] = Map.empty)
   extends KubernetesConf(sparkConf) with Logging {
 
   /**
