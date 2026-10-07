@@ -23,6 +23,8 @@ import java.util.HashMap
 import java.util.Map
 import javax.net.ssl.SSLContext
 
+import scala.collection.immutable
+
 import org.apache.hadoop.conf.Configuration
 import org.eclipse.jetty.util.ssl.SslContextFactory
 
@@ -355,7 +357,7 @@ private[spark] object SSLOptions extends Logging {
     ENV_RPC_SSL_TRUST_STORE_PASSWORD
   )
 
-  val SPARK_RPC_SSL_PASSWORD_CONFS_BY_ENV: Map[String, String] = Map(
+  val SPARK_RPC_SSL_PASSWORD_CONFS_BY_ENV: immutable.Map[String, String] = immutable.Map(
     ENV_RPC_SSL_KEY_PASSWORD -> SPARK_RPC_SSL_KEY_PASSWORD_CONF,
     ENV_RPC_SSL_PRIVATE_KEY_PASSWORD -> SPARK_RPC_SSL_PRIVATE_KEY_PASSWORD_CONF,
     ENV_RPC_SSL_KEY_STORE_PASSWORD -> SPARK_RPC_SSL_KEY_STORE_PASSWORD_CONF,
