@@ -184,8 +184,9 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   test("SPARK-59962: update with a condition reading a computed value twice") {
     // BETWEEN reads `salary + pk` twice. The condition keeps no `With`, and the group filter
     // condition, only evaluated in the runtime group filter, keeps it for that filter to
-    // memoize. One that gains nothing from memoizing is still inlined there, so a
-    // condition that folds to true leaves a true group filter condition.
+    // memoize; with the filter, a group-based update copies none of the `hr` rows. One that
+    // gains nothing from memoizing is still inlined there, so a condition that folds to true
+    // leaves a true group filter condition.
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
@@ -201,12 +202,16 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, 100, "hr") :: Row(2, 200, "x") :: Row(3, 300, "hr") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
 
     val (_, constantGroupFilterCond) = executeAndKeepConditions {
       sql(s"UPDATE $tableNameAsString SET dep = 'y' WHERE 1 BETWEEN 0 AND 2")
     }
     assert(constantGroupFilterCond.contains(TrueLiteral),
       s"group filter condition: $constantGroupFilterCond")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 100, "y") :: Row(2, 200, "y") :: Row(3, 300, "y") :: Nil)
   }
 
   test("update with aliases") {

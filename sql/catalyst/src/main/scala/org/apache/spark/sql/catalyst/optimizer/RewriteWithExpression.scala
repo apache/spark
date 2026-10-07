@@ -30,11 +30,11 @@ import org.apache.spark.util.Utils
 
 /**
  * Rewrites the `With` expressions by adding a `Project` to pre-evaluate the common expressions, or
- * just inline them if they are cheap. In a `Call`, or a command other than `CreateVariable`, whose
- * expressions are not evaluated over its children's rows, every deterministic definition is
- * inlined whatever it costs, and a nondeterministic one read more than once stays a `With`. The
- * `groupFilterCondition` of a row-level write keeps the `With`s worth memoizing for the runtime
- * group filter.
+ * just inline them if they are cheap. In a command other than `CreateVariable`, whose expressions
+ * are mostly stored or translated rather than evaluated, and in a `Call`, whose arguments must fold
+ * to literals, every deterministic definition is inlined whatever it costs, and a nondeterministic
+ * one read more than once stays a `With`. The `groupFilterCondition` of a row-level write keeps
+ * the `With`s worth memoizing for the runtime group filter.
  *
  * Since this rule can introduce new `Project` operators, it is advised to run [[CollapseProject]]
  * after this rule.
@@ -84,19 +84,21 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         rowLevelConditions(wd.condition, wd.groupFilterCondition).map { case (cond, groupFilter) =>
           wd.copy(condition = cond, groupFilterCondition = groupFilter)
         }.getOrElse(wd)
-      // A command's own expressions are not evaluated over its children's rows: most are stored as
-      // metadata or turned into source predicates, neither of which can hold a memoized value, and
-      // a `Call` must see foldable arguments over its `ResolvedProcedure` (`InvokeProcedures`). A
-      // definition hoisted into a child would leave them reading a column only that `Project`
-      // produces, or leave the command over a child its planner, or `InvokeProcedures`, does not
-      // expect, so a deterministic one is substituted whatever it costs (see `canSubstitute`).
-      // The copies compound with nesting, as with `spark.sql.alwaysInlineCommonExpr`, and where
-      // the expression is evaluated after all, as a CHECK predicate stored by ALTER TABLE is at
-      // every later write, each copy is evaluated. Analysis lets no command but `CreateVariable`
-      // hold a nondeterministic expression; a `Call` can hold one, as `InvokeProcedures` optimizes
-      // it before analysis checks it, and then rejects it as not foldable. A nondeterministic
-      // definition read more than once keeps its `With`. `CreateVariable` is left out: its default
-      // is evaluated rather than stored, so a definition there should be memoized.
+      // A command's own expressions are mostly stored as metadata or turned into source
+      // predicates, which cannot hold a memoized value, and a definition hoisted into a child would
+      // leave them reading a column only that `Project` produces, or leave the command over a child
+      // its planner does not expect. A `Call` evaluates its arguments, but `InvokeProcedures`
+      // needs them to fold to literals over its `ResolvedProcedure`, which neither a `With` nor a
+      // `Project` under it allows. So a deterministic definition is substituted whatever it costs
+      // (see `canSubstitute`), and the copies compound with nesting, as with
+      // `spark.sql.alwaysInlineCommonExpr`. Each copy is evaluated wherever the expression is: a
+      // CHECK predicate stored by ALTER TABLE at every later write, and a `Call` argument when it
+      // is folded, so an impure foldable such as `aes_encrypt` over literals is folded per copy.
+      // Analysis lets no command but `CreateVariable` hold a nondeterministic expression; a `Call`
+      // can hold one, as `InvokeProcedures` optimizes it before analysis checks it, and then
+      // rejects it as not foldable. A nondeterministic definition read more than once keeps its
+      // `With`. `CreateVariable` is left out: its default is evaluated and need not fold, so a
+      // definition there should be memoized.
       case c @ (_: Command | _: Call) if !c.isInstanceOf[CreateVariable] =>
         c.mapExpressions(inlineCommandWiths)
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
@@ -265,8 +267,13 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       id: CommonExpressionId,
       multiplyReferenced: => Set[CommonExpressionId],
       requireCheap: Boolean = true): Boolean = {
-    (child.deterministic && (!requireCheap || CollapseProject.isCheap(child))) ||
-      !multiplyReferenced.contains(id)
+    if (requireCheap) {
+      !multiplyReferenced.contains(id) || (CollapseProject.isCheap(child) && child.deterministic)
+    } else {
+      // Determinism first, so a caller passing the count lazily computes it only once it meets a
+      // nondeterministic definition.
+      child.deterministic || !multiplyReferenced.contains(id)
+    }
   }
 
   /**
