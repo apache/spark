@@ -57,6 +57,9 @@ case class Scd2ForeachBatchHandler(
    * consume. Performs no writes: this is the entire pipeline up to (but excluding) the aux/target
    * merges, factored out of [[execute]] so that both [[execute]] and tests exercise the exact same
    * transform chain (they cannot silently desynchronize).
+   *
+   * Ignore-null coalescing applies only to rows pulled into this reconciliation. Changing the
+   * active selection does not trigger a full-history rewrite.
    */
   private[autocdc] def reconcileMicrobatch(
       batchDf: DataFrame,
