@@ -32,12 +32,12 @@ import scala.collection.mutable
 import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkNumberFormatException, SparkRuntimeException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRow, Hex}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CodegenObjectFactoryMode, DoubleLiteral, GenericRow, Hex, IntegerLiteral, LessThan}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateOffsets, NestedColumnAliasingSuite, RewriteWithExpression}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.{CommandResultExec, OneRowRelationExec, UnionExec}
@@ -5367,6 +5367,55 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       checkAnswer(
         sql("SELECT * FROM (SELECT id FROM range(3) OFFSET 0) ORDER BY id"),
         Seq(Row(0), Row(1), Row(2)))
+    }
+  }
+
+  test("SPARK-30768: inferred inequality chaining does not drop rows with NaN operands") {
+    withTempView("t") {
+      Seq(
+        (1.0, 2.0), // a < b < 3.0 holds; kept, and consistent with inferred a < 3.0
+        (2.9, 3.0), // b < 3.0 is false; dropped by the original predicate
+        (5.0, Double.NaN), // a < b holds (NaN sorts highest) but b < 3.0 is false; dropped
+        (Double.NaN, 10.0), // a < b is false (NaN sorts highest); dropped
+        (Double.NaN, Double.NaN) // a < b is false (NaN == NaN); dropped
+      ).toDF("a", "b").createOrReplaceTempView("t")
+
+      Seq(true, false).foreach { enabled =>
+        withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> enabled.toString) {
+          val df = sql("SELECT a, b FROM t WHERE a < b AND b < 3.0")
+          val hasInferred = df.queryExecution.optimizedPlan.exists {
+            case Filter(cond, _) => cond.exists {
+              case LessThan(a: Attribute, DoubleLiteral(3.0)) => a.name == "_1"
+              case _ => false
+            }
+            case _ => false
+          }
+          assert(hasInferred == enabled)
+          checkAnswer(df, Row(1.0, 2.0))
+        }
+      }
+    }
+  }
+
+  test("SPARK-30768: inferred inequality chaining through a widening cast does not drop rows") {
+    withTempView("x", "y") {
+      Seq((1, 13L)).toDF("key", "b").createOrReplaceTempView("x")
+      Seq((1, 12), (1, 13), (1, 14)).toDF("key", "b").createOrReplaceTempView("y")
+
+      Seq(true, false).foreach { enabled =>
+        withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> enabled.toString) {
+          val df = sql("SELECT y.b FROM x JOIN y ON x.key = y.key AND y.b < x.b WHERE x.b <= 13")
+          val hasInferred = df.queryExecution.optimizedPlan.exists {
+            case Filter(cond, _) => cond.exists {
+              case LessThan(a: Attribute, IntegerLiteral(13)) => a.name == "_2"
+              case _ => false
+            }
+            case _ => false
+          }
+          assert(hasInferred == enabled)
+          checkAnswer(df, Row(12))
+        }
+      }
     }
   }
 }
