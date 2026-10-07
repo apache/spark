@@ -65,4 +65,14 @@ public interface LogicalWriteInfo {
     throw new SparkUnsupportedOperationException(
       "DATA_SOURCE_METADATA_SCHEMA_NOT_IMPLEMENTED", Map.of("class", getClass().getName()));
   }
+
+  /**
+   * the narrow schema for updates. Present only when the connector mixes in
+   * {@link SupportsColumnUpdates}.
+   *
+   * @since 4.3.0
+   */
+  default Optional<StructType> updateSchema() {
+    return Optional.empty();
+  }
 }
