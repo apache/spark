@@ -64,7 +64,9 @@ object PythonSQLMetrics {
   }
 
   val pythonOtherMetricsDesc: Map[String, String] = {
-    Map("pythonNumRowsReceived" -> "number of output rows")
+    Map(
+      "pythonNumRowsReceived" -> "number of output rows",
+      "pythonNumPipelinedTasks" -> "number of pipelined Python worker tasks")
   }
 
   val pythonPhaseTimingMetricsDesc: Map[String, String] = {

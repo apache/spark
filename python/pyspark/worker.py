@@ -4188,6 +4188,8 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     )
 
         is_pipelined = os.environ.get("SPARK_PIPELINED_UDF") == "1"
+        # Pipelined reads can overlap UDF work, so mark these task reports for filtering.
+        metrics.set("pythonNumPipelinedTasks", int(is_pipelined))
         if is_pipelined and hasattr(serializer, "_flush_per_batch"):
             serializer._flush_per_batch = True
         run_process = pipelined_process if is_pipelined else process
