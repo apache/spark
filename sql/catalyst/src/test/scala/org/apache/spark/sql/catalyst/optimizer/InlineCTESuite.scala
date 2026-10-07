@@ -182,12 +182,13 @@ class InlineCTESuite extends PlanTest {
     // Corresponds to: WITH t AS (
     //   SELECT (SELECT v FROM s2 WHERE v < (SELECT c FROM s1 WHERE s1.k = m.a)) AS s
     //   FROM r) SELECT s FROM t, m
-    // `m.a` is two scopes out of the deepest subquery and produced outside the def, so it
-    // escapes the boundary. SQL analysis cannot build this shape (the def body cannot see
-    // `m`), so the def is hand-built with the escape registered only in the deepest subquery's
-    // outer-scope attrs, and the correlation predicate itself is omitted -- otherwise the
-    // direct `OuterReference` check would reject the definition first. Only the nested-wide
-    // outer-scope scan rejects this definition.
+    // `m.a` is three scopes out of the deepest subquery (shallow -> CTE body -> main query)
+    // and produced outside the def, so it escapes the boundary. SQL analysis cannot build this
+    // shape (the def body cannot see `m`), so the def is hand-built with the escape registered
+    // only in the deepest subquery's outer-scope attrs, and the correlation predicate itself is
+    // omitted -- otherwise the direct `OuterReference` check would reject the definition first.
+    // A scan limited to the top-level CTE child would miss the escape; only the outer-scope
+    // scan, which also inspects nested subquery plans, rejects this definition.
     val relation = TestRelation(Seq($"c".int))
     val s2 = TestRelation(Seq($"v".int))
     val outerA = $"m.a".int
