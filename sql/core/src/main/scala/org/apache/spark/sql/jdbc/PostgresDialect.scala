@@ -265,6 +265,10 @@ private case class PostgresDialect()
     exception.getSQLState == "42601"
   }
 
+  // See https://www.postgresql.org/docs/current/errcodes-appendix.html
+  override def isInsufficientPrivilegeException(e: SQLException): Boolean =
+    e.getSQLState == "42501"
+
   // SHOW INDEX syntax
   // https://www.postgresql.org/docs/14/view-pg-indexes.html
   override def indexExists(

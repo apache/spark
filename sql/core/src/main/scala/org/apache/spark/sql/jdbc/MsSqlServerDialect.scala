@@ -297,6 +297,12 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
     exceptionMessage.contains("incorrect syntax") || exceptionMessage.contains("syntax error")
   }
 
+  // scalastyle:off line.size.limit
+  // See https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/database-engine-events-and-errors-0-to-999
+  // scalastyle:on line.size.limit
+  override def isInsufficientPrivilegeException(e: SQLException): Boolean =
+    MsSqlServerDialect.InsufficientPrivilegeErrorCodes.contains(e.getErrorCode)
+
   override def supportsLimit: Boolean = true
 
   override def supportsJoin: Boolean = true
@@ -307,4 +313,7 @@ private object MsSqlServerDialect {
   // https://github.com/microsoft/mssql-jdbc/blob/v9.4.1/src/main/java/microsoft/sql/Types.java
   final val GEOMETRY = -157
   final val GEOGRAPHY = -158
+
+  // Permission denied on object (229, 300), column (230), database (262) or action (297).
+  final val InsufficientPrivilegeErrorCodes: Set[Int] = Set(229, 230, 262, 297, 300)
 }

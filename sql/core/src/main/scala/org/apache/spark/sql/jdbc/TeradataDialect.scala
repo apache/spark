@@ -60,6 +60,12 @@ private case class TeradataDialect() extends JdbcDialect with NoLegacyJDBCError 
     Option(exception.getSQLState).exists(_.startsWith("42"))
   }
 
+  // scalastyle:off line.size.limit
+  // See https://docs.teradata.com/r/Teradata-VantageCloud-Lake-Analytics-Database-Messages/Database-Messages/3523
+  // scalastyle:on line.size.limit
+  override def isInsufficientPrivilegeException(e: SQLException): Boolean =
+    Set(3523, 3524, 5315).contains(e.getErrorCode) // object, database, column
+
   /**
    * The SQL query used to truncate a table. Teradata does not support the 'TRUNCATE' syntax that
    * other dialects use. Instead, we need to use a 'DELETE FROM' statement.

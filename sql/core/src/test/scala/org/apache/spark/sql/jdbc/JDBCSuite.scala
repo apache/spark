@@ -3290,6 +3290,86 @@ class JDBCSuite extends SharedSparkSession {
     assert(!dialect.isSyntaxErrorBestEffort(new SQLException("Connection reset", "08001")))
   }
 
+  test("SPARK-60089: dialects classify remote insufficient-privilege errors") {
+    // (dialect, privilege errors, non-privilege errors)
+    val cases: Seq[(JdbcDialect, Seq[SQLException], Seq[SQLException])] = Seq(
+      (PostgresDialect(),
+        Seq(new SQLException("permission denied for table t", "42501")),
+        Seq(new SQLException("relation does not exist", "42P01"),
+          new SQLException("syntax error", "42601"))),
+      (MySQLDialect(),
+        Seq(1044, 1142, 1143, 1227, 1370).map(code => new SQLException("denied", "42000", code)),
+        Seq(new SQLException("syntax error", "42000", 1064),
+          new SQLException("unknown table", "42S02", 1146))),
+      (MsSqlServerDialect(),
+        Seq(229, 230, 262, 297, 300).map(code => new SQLException("denied", "S0001", code)),
+        Seq(new SQLException("invalid object name", "S0002", 208),
+          new SQLException("incorrect syntax", "S0001", 102))),
+      (OracleDialect(),
+        Seq(new SQLException("ORA-01031: insufficient privileges", "42000", 1031)),
+        Seq(new SQLException("ORA-00942: table or view does not exist", "42000", 942),
+          new SQLException(null: String))),
+      (SnowflakeDialect(),
+        Seq(new SQLException("Insufficient privileges to operate on table", "42501", 3001)),
+        Seq(new SQLException("does not exist or not authorized", "42S02", 2003))),
+      (TeradataDialect(),
+        Seq(3523, 3524, 5315).map(code => new SQLException("no access", "42000", code)),
+        Seq(new SQLException("Object does not exist", "42S02", 3807))),
+      (DB2Dialect(),
+        Seq(new SQLException("SQL0551N", "42501", -551),
+          new SQLException("SQL0552N", "42502", -552)),
+        Seq(new SQLException("SQL0204N", "42704", -204))),
+      (DatabricksDialect(),
+        Seq(new SQLException("[INSUFFICIENT_PERMISSIONS] Insufficient privileges", "42501"),
+          new SQLException("[INSUFFICIENT_PERMISSIONS] Insufficient privileges", "07000")),
+        Seq(new SQLException("[TABLE_OR_VIEW_NOT_FOUND]", "42P01"),
+          new SQLException(null: String))))
+
+    cases.foreach { case (dialect, privilegeErrors, otherErrors) =>
+      privilegeErrors.foreach(e => assert(dialect.isInsufficientPrivilegeException(e), s"$dialect"))
+      (otherErrors :+ new SQLException("connection reset", "08001")).foreach { e =>
+        assert(!dialect.isInsufficientPrivilegeException(e), s"$dialect")
+      }
+    }
+    assert(!H2Dialect().isInsufficientPrivilegeException(new SQLException("denied", "42501")))
+  }
+
+  test("SPARK-60089: schema resolution surfaces insufficient-privilege errors") {
+    // Treat H2 "table not found" as a privilege error. Registering this next to the built-in H2
+    // dialect also covers AggregatedDialect delegation.
+    val testDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+      override def isInsufficientPrivilegeException(e: SQLException): Boolean =
+        Set(42102, 42103, 42104).contains(e.getErrorCode)
+    }
+    JdbcDialects.registerDialect(testDialect)
+    try {
+      val e = intercept[SparkException] {
+        spark.read.jdbc(urlWithUserAndPass, "TEST.NO_SUCH_TABLE", new Properties())
+      }
+      assert(e.getCondition === "JDBC_EXTERNAL_ENGINE_INSUFFICIENT_PRIVILEGE")
+      assert(e.getSqlState === "42501")
+      assert(e.getMessageParameters.get("jdbcQuery").contains("TEST.NO_SUCH_TABLE"))
+    } finally {
+      JdbcDialects.unregisterDialect(testDialect)
+    }
+  }
+
+  test("SPARK-60089: custom dialect without the hook keeps built-in privilege detection") {
+    val customPostgres = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:postgresql")
+    }
+    JdbcDialects.registerDialect(customPostgres)
+    try {
+      val dialect = JdbcDialects.get("jdbc:postgresql://localhost/db")
+      assert(dialect.isInstanceOf[AggregatedDialect])
+      assert(dialect.isInsufficientPrivilegeException(new SQLException("denied", "42501")))
+      assert(!dialect.isInsufficientPrivilegeException(new SQLException("syntax", "42601")))
+    } finally {
+      JdbcDialects.unregisterDialect(customPostgres)
+    }
+  }
+
   test("SPARK-45425: Mapped TINYINT to ShortType for MsSqlServerDialect") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     val metadata = new MetadataBuilder().putLong("scale", 1)

@@ -5779,6 +5779,13 @@
     ],
     "sqlState" : "2200N"
   },
+  "JDBC_EXTERNAL_ENGINE_INSUFFICIENT_PRIVILEGE" : {
+    "message" : [
+      "Insufficient privileges to run the query <jdbcQuery> on the remote JDBC engine. External engine SQLSTATE: <externalEngineSqlState>.",
+      "<externalEngineError>"
+    ],
+    "sqlState" : "42501"
+  },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
       "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. External engine SQLSTATE: <externalEngineSqlState>. <externalEngineError>."

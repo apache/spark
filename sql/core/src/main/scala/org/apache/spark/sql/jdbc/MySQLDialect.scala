@@ -234,6 +234,16 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     "42000".equals(exception.getSQLState)
   }
 
+  // See https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html
+  override def isInsufficientPrivilegeException(e: SQLException): Boolean =
+    Set(
+      1044, // ER_DBACCESS_DENIED_ERROR
+      1142, // ER_TABLEACCESS_DENIED_ERROR
+      1143, // ER_COLUMNACCESS_DENIED_ERROR
+      1227, // ER_SPECIFIC_ACCESS_DENIED_ERROR
+      1370 // ER_PROCACCESS_DENIED_ERROR
+    ).contains(e.getErrorCode)
+
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
   override def getUpdateColumnTypeQuery(
       tableName: String,

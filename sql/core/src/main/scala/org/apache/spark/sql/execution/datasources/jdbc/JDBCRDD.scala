@@ -72,6 +72,16 @@ object JDBCRDD extends Logging {
     try {
       getQueryOutputSchema(fullQuery, options, dialect, conn)
     } catch {
+      // Checked first: some dialects treat any class-42 SQLSTATE as not-found or syntax errors.
+      case e: SQLException if dialect.isInsufficientPrivilegeException(e) =>
+        throw new SparkException(
+          errorClass = "JDBC_EXTERNAL_ENGINE_INSUFFICIENT_PRIVILEGE",
+          messageParameters = Map(
+            "jdbcQuery" -> fullQuery,
+            "externalEngineError" -> e.getMessage.replaceAll("\\.+$", ""),
+            "externalEngineSqlState" -> getSQLState(e)
+          ),
+          cause = e)
       // By checking isObjectNotFoundException before isSyntaxErrorBestEffort, we can reliably
       // distinguish between the case where the table does not exist and other SQL syntax errors.
       // This order is important because when a table does not exist, the exception raised can

@@ -129,6 +129,12 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   }
 
   // scalastyle:off line.size.limit
+  // See https://www.ibm.com/docs/en/db2/11.5.x?topic=SSEPGG_11.5.0%2Fcom.ibm.db2.luw.messages.sql.doc%2Fsql0500-sql0749.htm
+  // scalastyle:on line.size.limit
+  override def isInsufficientPrivilegeException(e: SQLException): Boolean =
+    e.getErrorCode == -551 || e.getErrorCode == -552
+
+  // scalastyle:off line.size.limit
   // See https://www.ibm.com/support/knowledgecenter/en/SSEPGG_11.5.0/com.ibm.db2.luw.sql.ref.doc/doc/r0053474.html
   // scalastyle:on line.size.limit
   override def getTruncateQuery(
