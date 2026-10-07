@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import org.apache.parquet.column.ColumnDescriptor;
+import org.apache.parquet.filter2.columnindex.RowRanges;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -26,23 +27,20 @@ import java.util.PrimitiveIterator;
 
 /**
  * Helper class to store intermediate state while reading a Parquet column chunk.
+ *
+ * <p>There is one subclass per way of saying which rows to include, which is every row of the
+ * chunk, the ranges the caller of the read already held, or the one row index per row that a page
+ * store describes parquet's own filtering with. {@link #forRead} picks between them. Everything
+ * else about a read is the same whichever it is, and lives here.
  */
-final class ParquetReadState {
-  /** A special row range used when there is no row indexes (hence all rows must be included) */
-  private static final RowRange MAX_ROW_RANGE = new RowRange(Long.MIN_VALUE, Long.MAX_VALUE);
-
+abstract class ParquetReadState {
   /**
-   * A special row range used when the row indexes are present AND all the row ranges have been
-   * processed. This serves as a sentinel at the end indicating that all rows come after the last
-   * row range should be skipped.
+   * The current row range, as its bounds rather than as whatever object they were read out of, so
+   * that the check the value readers make per run of levels touches nothing else. Inverted bounds
+   * say every row from here on is to be skipped.
    */
-  private static final RowRange END_ROW_RANGE = new RowRange(Long.MAX_VALUE, Long.MIN_VALUE);
-
-  /** Iterator over all row ranges, only not-null if column index is present */
-  private final Iterator<RowRange> rowRanges;
-
-  /** The current row range */
-  private RowRange currentRange;
+  private long currentRangeStart;
+  private long currentRangeEnd;
 
   /** Maximum repetition level for the Parquet column */
   final int maxRepetitionLevel;
@@ -83,54 +81,53 @@ final class ParquetReadState {
    * levels. */
   boolean shouldSkip;
 
-  ParquetReadState(
-      ColumnDescriptor descriptor,
-      boolean isRequired,
-      PrimitiveIterator.OfLong rowIndexes) {
+  private ParquetReadState(ColumnDescriptor descriptor, boolean isRequired) {
     this.maxRepetitionLevel = descriptor.getMaxRepetitionLevel();
     this.maxDefinitionLevel = descriptor.getMaxDefinitionLevel();
     this.isRequired = isRequired;
-    this.rowRanges = constructRanges(rowIndexes);
-    nextRange();
   }
 
   /**
-   * Construct a list of row ranges from the given `rowIndexes`. For example, suppose the
-   * `rowIndexes` are `[0, 1, 2, 4, 5, 7, 8, 9]`, it will be converted into 3 row ranges:
-   * `[0-2], [4-5], [7-9]`.
+   * The state for reading {@code descriptor}, told which rows to include the best way the caller
+   * can say it.
+   *
+   * <p>{@code rowRanges} is the rows the read was asked for, when whoever asked knew them. A caller
+   * that filtered the rows itself holds their ranges, and every column reader of the row group can
+   * then walk that one list. Null says it does not, and the page store is left to describe its
+   * rows, which it can only do as {@code rowIndexes}, one index per row. No row indexes in turn
+   * means every row of the chunk is included, which is why ranges without them are refused.
    */
-  private Iterator<RowRange> constructRanges(PrimitiveIterator.OfLong rowIndexes) {
-    if (rowIndexes == null) {
-      return null;
-    }
-
-    List<RowRange> rowRanges = new ArrayList<>();
-    long currentStart = Long.MIN_VALUE;
-    long previous = Long.MIN_VALUE;
-
-    while (rowIndexes.hasNext()) {
-      long idx = rowIndexes.nextLong();
-      if (currentStart == Long.MIN_VALUE) {
-        currentStart = idx;
-      } else if (previous + 1 != idx) {
-        RowRange range = new RowRange(currentStart, previous);
-        rowRanges.add(range);
-        currentStart = idx;
+  static ParquetReadState forRead(
+      ColumnDescriptor descriptor,
+      boolean isRequired,
+      RowRanges rowRanges,
+      PrimitiveIterator.OfLong rowIndexes) {
+    ParquetReadState state;
+    if (rowRanges != null) {
+      if (rowIndexes == null) {
+        // Only a store parquet filtered itself indexes its rows, and only its pages carry the first
+        // row index that places them in the row group. Pages read whole would each place their
+        // first row at 0, and the ranges would then select the wrong rows with no error.
+        throw ParquetStorageFilter.internalError(String.format(
+            "Row ranges were given for column %s, but its pages carry no row indexes to find "
+                + "those rows by", descriptor));
       }
-      previous = idx;
+      state = new RangeListState(descriptor, isRequired, rowRanges.getRanges());
+    } else if (rowIndexes == null) {
+      state = new AllRowsState(descriptor, isRequired);
+    } else {
+      state = new RowIndexState(descriptor, isRequired, rowIndexes);
     }
-
-    if (previous != Long.MIN_VALUE) {
-      rowRanges.add(new RowRange(currentStart, previous));
-    }
-
-    return rowRanges.iterator();
+    // Here rather than in the constructors, because reading the first range needs the state each
+    // subclass sets, and a constructor calling `nextRange` would be calling into its own subclass.
+    state.nextRange();
+    return state;
   }
 
   /**
    * Must be called at the beginning of reading a new batch.
    */
-  void resetForNewBatch(int batchSize) {
+  final void resetForNewBatch(int batchSize) {
     this.valueOffset = 0;
     this.levelOffset = 0;
     this.rowsToReadInBatch = batchSize;
@@ -142,7 +139,7 @@ final class ParquetReadState {
   /**
    * Must be called at the beginning of reading a new page.
    */
-  void resetForNewPage(int totalValuesInPage, long pageFirstRowIndex) {
+  final void resetForNewPage(int totalValuesInPage, long pageFirstRowIndex) {
     this.valuesToReadInPage = totalValuesInPage;
     this.rowId = pageFirstRowIndex;
   }
@@ -150,33 +147,110 @@ final class ParquetReadState {
   /**
    * Returns the start index of the current row range.
    */
-  long currentRangeStart() {
-    return currentRange.start;
+  final long currentRangeStart() {
+    return currentRangeStart;
   }
 
   /**
    * Returns the end index of the current row range.
    */
-  long currentRangeEnd() {
-    return currentRange.end;
+  final long currentRangeEnd() {
+    return currentRangeEnd;
   }
 
-  /**
-   * Advance to the next range.
-   */
-  void nextRange() {
-    if (rowRanges == null) {
-      currentRange = MAX_ROW_RANGE;
-    } else if (!rowRanges.hasNext()) {
-      currentRange = END_ROW_RANGE;
-    } else {
-      currentRange = rowRanges.next();
+  /** Advances to the next range of rows to include. */
+  abstract void nextRange();
+
+  final void includeRange(long from, long to) {
+    currentRangeStart = from;
+    currentRangeEnd = to;
+  }
+
+  /** Inverts the bounds, which says that every row from here on is to be skipped. */
+  final void includeNothingMore() {
+    includeRange(Long.MAX_VALUE, Long.MIN_VALUE);
+  }
+
+  /** Every row of the chunk is included, so the range is set once and never moves. */
+  private static final class AllRowsState extends ParquetReadState {
+    AllRowsState(ColumnDescriptor descriptor, boolean isRequired) {
+      super(descriptor, isRequired);
+    }
+
+    @Override
+    void nextRange() {
+      includeRange(Long.MIN_VALUE, Long.MAX_VALUE);
     }
   }
 
   /**
-   * Helper struct to represent a range of row indexes `[start, end]`.
+   * Walks the caller's range list with a cursor, so a range costs one lookup however many rows it
+   * covers, and the list itself is built once for the whole row group.
    */
-  private record RowRange(long start, long end) {
+  private static final class RangeListState extends ParquetReadState {
+    private final List<RowRanges.Range> ranges;
+    private int nextRangeIndex;
+
+    RangeListState(
+        ColumnDescriptor descriptor, boolean isRequired, List<RowRanges.Range> ranges) {
+      super(descriptor, isRequired);
+      this.ranges = ranges;
+    }
+
+    @Override
+    void nextRange() {
+      if (nextRangeIndex == ranges.size()) {
+        includeNothingMore();
+      } else {
+        RowRanges.Range range = ranges.get(nextRangeIndex++);
+        includeRange(range.from, range.to);
+      }
+    }
+  }
+
+  /**
+   * Coalesces the runs of ascending row indexes into one range each, so `[0, 1, 2, 4, 5, 7, 8, 9]`
+   * yields `[0-2]`, `[4-5]` and `[7-9]`. All of them are built up front, then walked in order.
+   * This is the plain read path's route. Coalescing lazily instead measured 2% to 8% slower in
+   * `VectorizedRleValuesReaderBenchmark`.
+   */
+  private static final class RowIndexState extends ParquetReadState {
+    private final Iterator<RowRange> rowRanges;
+
+    RowIndexState(
+        ColumnDescriptor descriptor, boolean isRequired, PrimitiveIterator.OfLong rowIndexes) {
+      super(descriptor, isRequired);
+      List<RowRange> ranges = new ArrayList<>();
+      long currentStart = Long.MIN_VALUE;
+      long previous = Long.MIN_VALUE;
+      while (rowIndexes.hasNext()) {
+        long idx = rowIndexes.nextLong();
+        if (currentStart == Long.MIN_VALUE) {
+          currentStart = idx;
+        } else if (previous + 1 != idx) {
+          ranges.add(new RowRange(currentStart, previous));
+          currentStart = idx;
+        }
+        previous = idx;
+      }
+      if (previous != Long.MIN_VALUE) {
+        ranges.add(new RowRange(currentStart, previous));
+      }
+      this.rowRanges = ranges.iterator();
+    }
+
+    @Override
+    void nextRange() {
+      if (rowRanges.hasNext()) {
+        RowRange range = rowRanges.next();
+        includeRange(range.start(), range.end());
+      } else {
+        includeNothingMore();
+      }
+    }
+
+    /** A range of row indexes `[start, end]`. */
+    private record RowRange(long start, long end) {
+    }
   }
 }
