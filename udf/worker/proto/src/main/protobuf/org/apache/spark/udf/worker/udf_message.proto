@@ -495,7 +495,9 @@ message CancelResponse {
 }
 
 // Per-execution metrics accumulated by one Execute stream, as measured by the
-// worker. Each field is cumulative for the stream. Absence means unavailable;
+// worker. Each field is cumulative for the stream, except
+// [[max_work_wall_nanos]] and [[max_work_cpu_nanos]], which are per-stream
+// maxima. Absence means unavailable;
 // zero means measured zero. "In" counts data the worker received from the
 // engine and "out" counts data it returned. Byte counts are data payload
 // bytes and exclude gRPC, HTTP/2, and TLS framing. Timing values are
@@ -556,6 +558,18 @@ message ExecutionMetrics {
     // [[FinishResponse]] or [[CancelResponse]], such as running the finish
     // callback. Absent if cancellation or an error ended data processing.
     optional uint64 finish_wall_nanos = 13;
+
+    // Wall time of the single longest data unit the worker executed: the
+    // maximum over the stream of the per-unit work time that
+    // [[work_wall_nanos]] totals. Lets the engine surface the slowest unit,
+    // which the summed total cannot. Not cumulative. Absent means unavailable.
+    optional uint64 max_work_wall_nanos = 14;
+
+    // CPU time of the single most CPU-intensive data unit the worker executed:
+    // the maximum over the stream of the per-unit CPU time that
+    // [[work_cpu_nanos]] totals. The CPU counterpart of [[max_work_wall_nanos]].
+    // Not cumulative. Absent means unavailable.
+    optional uint64 max_work_cpu_nanos = 15;
 }
 
 // Worker -> Engine application-level error raised during the

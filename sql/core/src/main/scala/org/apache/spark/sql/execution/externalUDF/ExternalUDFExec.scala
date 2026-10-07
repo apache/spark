@@ -144,12 +144,20 @@ private[externalUDF] object ExternalUDFMetrics {
     "workCpuNanos" -> "external UDF worker CPU time",
     "finishWallNanos" -> "external UDF worker finish time")
 
+  // Per-stream maxima the worker reports rather than totals. Like peakMemory,
+  // these are timing metrics so the figure to read is the per-task max in the
+  // UI's min/med/max breakdown; the aggregated total (a sum of per-task maxima)
+  // is not meaningful on its own.
+  private val peakMetrics = Map(
+    "maxWorkWallNanos" -> "longest data unit executed by the external UDF worker",
+    "maxWorkCpuNanos" -> "most CPU-intensive data unit executed by the external UDF worker")
+
   def create(sc: SparkContext): Map[String, SQLMetric] = {
     sizeMetrics.map { case (name, description) =>
       name -> SQLMetrics.createSizeMetric(sc, description)
     } ++ countMetrics.map { case (name, description) =>
       name -> SQLMetrics.createMetric(sc, description)
-    } ++ timingMetrics.map { case (name, description) =>
+    } ++ (timingMetrics ++ peakMetrics).map { case (name, description) =>
       name -> SQLMetrics.createNanoTimingMetric(sc, description)
     }
   }
@@ -175,5 +183,9 @@ private[externalUDF] object ExternalUDFMetrics {
     updateIfPresent("workWallNanos", reported.hasWorkWallNanos, reported.getWorkWallNanos)
     updateIfPresent("workCpuNanos", reported.hasWorkCpuNanos, reported.getWorkCpuNanos)
     updateIfPresent("finishWallNanos", reported.hasFinishWallNanos, reported.getFinishWallNanos)
+    updateIfPresent(
+      "maxWorkWallNanos", reported.hasMaxWorkWallNanos, reported.getMaxWorkWallNanos)
+    updateIfPresent(
+      "maxWorkCpuNanos", reported.hasMaxWorkCpuNanos, reported.getMaxWorkCpuNanos)
   }
 }
