@@ -190,6 +190,21 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       CsvToStructs(schema, options + ("mode" -> FailFastMode.name), charInput, UTC_OPT),
       "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       Map("badRecord" -> "[1]", "failFastMode" -> "FAILFAST"))
+
+    val commaChar = Literal.create("1,2  ", CharType(5))
+    val twoInts = new StructType().add("a", IntegerType).add("b", IntegerType)
+    val intString = new StructType().add("a", IntegerType).add("b", StringType)
+    checkEvaluation(
+      SchemaOfCsv(Literal.create("1  ", CharType(3)), Map.empty),
+      "STRUCT<_c0: DOUBLE>")
+    checkEvaluation(CsvToStructs(twoInts, Map.empty, commaChar, UTC_OPT), InternalRow(1, null))
+    checkEvaluation(
+      CsvToStructs(intString, Map.empty, Literal.create("1,ab  ", CharType(6)), UTC_OPT),
+      InternalRow(1, UTF8String.fromString("ab  ")))
+    checkEvaluation(
+      CsvToStructs(
+        twoInts, Map("ignoreTrailingWhiteSpace" -> "true"), commaChar, UTC_OPT),
+      InternalRow(1, 2))
   }
 
   test("to_csv - struct") {

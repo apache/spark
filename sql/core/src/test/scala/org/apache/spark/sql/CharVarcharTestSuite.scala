@@ -2694,6 +2694,30 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           sql(s"SELECT schema_of_csv($input, map('delimiter', ' '))"),
           Row("STRUCT<_c0: INT, _c1: STRING>"))
       }
+      // Default comma delimiter: padding lands on the unquoted last field.
+      checkAnswer(
+        sql("SELECT schema_of_csv(CAST('1' AS CHAR(3)))"),
+        Row("STRUCT<_c0: DOUBLE>"))
+      checkAnswer(
+        sql("SELECT from_csv(CAST('1,2' AS CHAR(5)), 'a INT, b INT')"),
+        Row(Row(1, null)))
+      checkAnswer(
+        sql("SELECT from_csv(CAST('1,ab' AS CHAR(6)), 'a INT, b STRING')"),
+        Row(Row(1, "ab  ")))
+      checkAnswer(
+        sql(
+          """SELECT from_csv(
+            |  CAST('1,2' AS CHAR(5)),
+            |  'a INT, b INT',
+            |  map('ignoreTrailingWhiteSpace', 'true'))""".stripMargin),
+        Row(Row(1, 2)))
+      withTable("csv_char_doc") {
+        sql("CREATE TABLE csv_char_doc(c CHAR(5)) USING parquet")
+        sql("INSERT INTO csv_char_doc VALUES ('1,2')")
+        checkAnswer(
+          sql("SELECT from_csv(c, 'a INT, b INT') FROM csv_char_doc"),
+          Row(Row(1, null)))
+      }
 
       val jsonChar = sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
       val jsonCharType = jsonChar.schema.head.dataType.asInstanceOf[StructType]
