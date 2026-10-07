@@ -565,8 +565,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       val left = Literal(convert(7))
       val right = Literal(convert(3))
       checkEvaluation(Pmod(left, right), convert(1))
-      // Negative dividend with a positive divisor exercises the n > 0 fast path for every numeric
-      // type (not just Int), where a negative remainder is folded into [0, n).
+      // Exercises the integral `n > 0` fast path (`Byte`/`Short` via `Int`, and `Long`).
       checkEvaluation(Pmod(Literal(convert(-7)), Literal(convert(3))), convert(2))
       checkEvaluation(Pmod(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Pmod(left, Literal.create(null, right.dataType)), null)
@@ -584,13 +583,16 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Pmod(Literal(convert(-3)), Literal(convert(-5))), convert(-3))
       checkEvaluation(Pmod(Literal(convert(-7)), Literal(convert(-3))), convert(-1))
     }
-    checkEvaluation(Pmod(Literal(-7), Literal(3)), 2)
     checkEvaluation(Pmod(Literal(7.2D), Literal(4.1D)), 3.1000000000000005)
+    checkEvaluation(Pmod(Literal(-1e-20D), Literal(1.0D)), 0.0D)
+    checkEvaluation(Pmod(Literal(-1e-10f), Literal(1.0f)), 0.0f)
     checkEvaluation(Pmod(Literal(Decimal(0.7)), Literal(Decimal(0.2))), Decimal(0.1))
     checkEvaluation(Pmod(Literal(2L), Literal(Long.MaxValue)), 2L)
-    // A negative Long dividend beyond the Int range with a positive divisor, so the Long overload
-    // (rather than a narrowed Int) must handle the fast path. floorMod(-10000000000, 3) == 2.
-    checkEvaluation(Pmod(Literal(-10000000000L), Literal(3L)), 2L)
+    checkEvaluation(Pmod(Literal(-6), Literal(3)), 0)
+    checkEvaluation(Pmod(Literal(-6L), Literal(3L)), 0L)
+    // The remainder is below -2^62, so a wrong shift count or narrowing to Int changes it.
+    checkEvaluation(
+      Pmod(Literal(Long.MinValue / 2 - 1), Literal(Long.MaxValue)), 4611686018427387902L)
     checkEvaluation(Pmod(positiveShort, negativeShort), positiveShort.toShort)
     checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
     checkEvaluation(Pmod(positiveLong, negativeLong), positiveLong)

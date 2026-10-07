@@ -90,16 +90,17 @@ object MathUtils {
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
   // Positive modulo (`pmod`): for `n > 0` the result lies in `[0, n)` (for the float/double
-  // overloads, when both inputs are finite); for `n < 0` it takes the sign of the dividend `a`
-  // (unlike `floorMod`, which takes the sign of `n`). Matches the `pmod` SQL function and
-  // `HashPartitioning`, and is shared by `Pmod`'s eval and codegen so the two never diverge.
+  // overloads, when both inputs are finite); for integral `n < 0` it takes the sign of the
+  // dividend `a` (unlike `floorMod`, which takes the sign of `n`). Matches the `pmod` SQL
+  // function and `HashPartitioning`, and is shared by `Pmod`'s eval and codegen so the two never
+  // diverge.
   //
   // Integral `n > 0` computes `Math.floorMod(a, n)` with a branchless sign fix-up instead of
   // calling it, because `Math.floorMod` adjusts with a data-dependent conditional (SPARK-59696).
   // The `n < 0` path can silently wrap for `Int`/`Long` when `r + n` overflows (large-magnitude
   // negative `n`), e.g. `pmod(-1, Int.MinValue)` returns `Int.MaxValue`; tracked by SPARK-59934.
-  // `Byte`/`Short` delegate to `Int`; the float/double overloads keep `% n` because `r + n` can
-  // round up to exactly `n`.
+  // `Byte`/`Short` delegate to `Int` (too narrow for `r + n` to overflow); the float/double
+  // overloads keep `% n` because `r + n` can round up to exactly `n`.
 
   def pmod(a: Int, n: Int): Int = {
     val r = a % n
