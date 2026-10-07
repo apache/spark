@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
-import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager, TestMemoryManager}
+import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager, TestMemoryConsumer, TestMemoryManager}
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -169,5 +169,70 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
       }
       queue.close()
     }
+  }
+
+  private def addRows(queue: HybridRowQueue, n: Int): Unit = {
+    val row = new UnsafeRow(1)
+    row.pointTo(new Array[Byte](16), 16)
+    (0 until n).foreach { i =>
+      row.setLong(0, i)
+      assert(queue.add(row) === QueueMode.IN_MEMORY)
+    }
+  }
+
+  private def drainAndClose(queue: HybridRowQueue, n: Int): Unit = {
+    (0 until n).foreach { i =>
+      assert(queue.remove().getLong(0) === i)
+    }
+    queue.close()
+  }
+
+  test("hybrid queues with the same fields are distinct memory consumers") {
+    val conf = new SparkConf(false).set(BUFFER_PAGESIZE, 1024L)
+    val serManager = createSerializerManager(conf)
+    val mem = new TestMemoryManager(conf)
+    val taskM = new TaskMemoryManager(mem, 0)
+    val tempDir = Utils.createTempDir().getCanonicalFile
+    val queue1 = HybridRowQueue(taskM, tempDir, 1, serManager)
+    val queue2 = HybridRowQueue(taskM, tempDir, 1, serManager)
+    assert(queue1 != queue2)
+
+    // queue1 is registered first and holds a single page, which it never spills because the
+    // last queue is kept for writing. queue2 holds several pages and can release all but one.
+    addRows(queue1, 1)
+    val n = 150
+    addRows(queue2, n)
+    assert(queue2.numQueues() > 2)
+    val queue2Used = queue2.getUsed
+
+    // Memory pressure from another consumer must be able to spill queue2.
+    mem.limit(0)
+    val consumer = new TestMemoryConsumer(taskM)
+    consumer.use(1024)
+    assert(consumer.getUsed === 1024)
+    assert(queue2.getUsed === 1024)
+    assert(queue2.getUsed < queue2Used)
+    consumer.free(1024)
+
+    drainAndClose(queue1, 1)
+    drainAndClose(queue2, n)
+    assert(taskM.cleanUpAllAllocatedMemory() === 0)
+  }
+
+  test("hybrid queue spills for another queue with the same fields") {
+    val conf = new SparkConf(false).set(BUFFER_PAGESIZE, 1024L)
+    val serManager = createSerializerManager(conf)
+    val taskM = new TaskMemoryManager(new TestMemoryManager(conf), 0)
+    val tempDir = Utils.createTempDir().getCanonicalFile
+    val queue1 = HybridRowQueue(taskM, tempDir, 1, serManager)
+    val queue2 = HybridRowQueue(taskM, tempDir, 1, serManager)
+    val n = 150
+    addRows(queue1, n)
+    assert(queue1.numQueues() > 2)
+    val used = queue1.getUsed
+    assert(queue1.spill(Long.MaxValue, queue2) === used - 1024)
+    assert(queue1.spill(Long.MaxValue, queue1) === 0)
+    drainAndClose(queue1, n)
+    queue2.close()
   }
 }

@@ -181,8 +181,13 @@ private[python] case class DiskRowQueue(
  *
  * HybridRowQueue could be safely appended in one thread, and pulled in another thread in the same
  * time.
+ *
+ * This is intentionally not a case class. As a memory consumer it must use identity equality:
+ * otherwise two queues created with the same arguments in one task are equal, so only one of
+ * them is tracked (and offered for spilling) by the [[TaskMemoryManager]], and each refuses to
+ * spill when the other one triggers it.
  */
-case class HybridRowQueue(
+class HybridRowQueue(
     memManager: TaskMemoryManager,
     tempDir: File,
     numFields: Int,
@@ -212,6 +217,15 @@ case class HybridRowQueue(
 }
 
 object HybridRowQueue {
+  def apply(
+      taskMemoryMgr: TaskMemoryManager,
+      file: File,
+      fields: Int,
+      serMgr: SerializerManager,
+      lockFree: Boolean = false): HybridRowQueue = {
+    new HybridRowQueue(taskMemoryMgr, file, fields, serMgr, lockFree)
+  }
+
   def apply(taskMemoryMgr: TaskMemoryManager, file: File, fields: Int): HybridRowQueue = {
     HybridRowQueue(taskMemoryMgr, file, fields, SparkEnv.get.serializerManager)
   }
