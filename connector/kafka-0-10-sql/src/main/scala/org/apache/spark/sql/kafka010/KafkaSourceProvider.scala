@@ -375,15 +375,15 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       case EarliestOffsetRangeLimit => // good to go
       case LatestOffsetRangeLimit =>
         throw KafkaExceptions.invalidBatchOffset(
-          offsetName = STARTING_OFFSETS_OPTION_KEY,
+          offsetName = "startingOffsets",
           offsetValue = "latest")
       case SpecificOffsetRangeLimit(partitionOffsets, topicOffsets) =>
         (partitionOffsets.map { case (tp, off) => tp.toString -> off } ++ topicOffsets).foreach {
           case (name, off) if off == KafkaOffsetRangeLimit.LATEST =>
             throw KafkaExceptions.invalidBatchOffsetForTopicOrPartition(
-              offsetName = STARTING_OFFSETS_OPTION_KEY,
+              offsetName = "startingOffsets",
               offsetValue = "latest",
-              topicOrPartition = name)
+              topicPartition = name)
           case _ => // ignore
         }
       case _: SpecificTimestampRangeLimit => // good to go
@@ -395,16 +395,16 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit) match {
       case EarliestOffsetRangeLimit =>
         throw KafkaExceptions.invalidBatchOffset(
-          offsetName = ENDING_OFFSETS_OPTION_KEY,
+          offsetName = "endingOffsets",
           offsetValue = "earliest")
       case LatestOffsetRangeLimit => // good to go
       case SpecificOffsetRangeLimit(partitionOffsets, topicOffsets) =>
         (partitionOffsets.map { case (tp, off) => tp.toString -> off } ++ topicOffsets).foreach {
           case (name, off) if off == KafkaOffsetRangeLimit.EARLIEST =>
             throw KafkaExceptions.invalidBatchOffsetForTopicOrPartition(
-              offsetName = ENDING_OFFSETS_OPTION_KEY,
+              offsetName = "endingOffsets",
               offsetValue = "earliest",
-              topicOrPartition = name)
+              topicPartition = name)
           case _ => // ignore
         }
       case _: SpecificTimestampRangeLimit => // good to go

@@ -264,13 +264,13 @@ object KafkaExceptions {
   def invalidBatchOffsetForTopicOrPartition(
       offsetName: String,
       offsetValue: String,
-      topicOrPartition: String): KafkaIllegalArgumentException = {
+      topicPartition: String): KafkaIllegalArgumentException = {
     new KafkaIllegalArgumentException(
       errorClass = "KAFKA_INVALID_BATCH_OFFSET.TOPIC_OR_PARTITION",
       messageParameters = Map(
         "offsetName" -> offsetName,
         "offsetValue" -> offsetValue,
-        "topicOrPartition" -> topicOrPartition))
+        "topicOrPartition" -> topicPartition))
   }
 
   def resolvedStartOffsetGreaterThanEndOffset(
