@@ -29,7 +29,9 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-import org.apache.ivy.core.module.descriptor.MDArtifact
+import org.apache.ivy.core.IvyContext
+import org.apache.ivy.core.module.descriptor.{DependencyDescriptor, MDArtifact}
+import org.apache.ivy.core.resolve.{ResolveData, ResolvedModuleRevision}
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.resolver.{AbstractResolver, ChainResolver, FileSystemResolver, IBiblioResolver}
 import org.scalatest.BeforeAndAfterEach
@@ -58,6 +60,29 @@ class MavenUtilsSuite
       lineBuffer += line
     }
     // scalastyle:on println
+  }
+
+  private def buildTestIvySettings(
+      repo: File,
+      ivyPath: String,
+      resolutionStarted: Option[AtomicBoolean] = None): IvySettings = {
+    val settings = new IvySettings
+    MavenUtils.processIvyPathArg(settings, Some(ivyPath))
+    val resolver = new IBiblioResolver {
+      override def getDependency(
+          descriptor: DependencyDescriptor,
+          data: ResolveData): ResolvedModuleRevision = {
+        resolutionStarted.foreach(_.set(true))
+        super.getDependency(descriptor, data)
+      }
+    }
+    resolver.setM2compatible(true)
+    resolver.setUsepoms(true)
+    resolver.setRoot(repo.toURI.toString)
+    resolver.setName("test-repo")
+    settings.addResolver(resolver)
+    settings.setDefaultResolver(resolver.getName)
+    settings
   }
 
   override def beforeEach(): Unit = {
@@ -348,14 +373,65 @@ class MavenUtilsSuite
     }
   }
 
-  test("dependency not found throws RuntimeException") {
+  test("primary Ivy context is restored after a resolution failure") {
+    val missingRepo = new File(tempIvyPath, "missing-repo")
+    assert(missingRepo.mkdirs())
+    val initialContext = IvyContext.getContext
+
     intercept[RuntimeException] {
       MavenUtils.resolveMavenCoordinates(
-      "a:b:c",
-      MavenUtils.buildIvySettings(None, Some(tempIvyPath)),
+        "a:b:c",
+        buildTestIvySettings(
+          missingRepo,
+          Paths.get(tempIvyPath, "missing-cache").toString),
         transitive = true,
-      isTest = true)
+        isTest = true)
     }
+    assert(IvyContext.getContext eq initialContext)
+
+    val valid = MavenCoordinate("my.context.after.failure", "mylib", "0.1")
+    val validRepo = IvyTestUtils.createLocalRepositoryForTests(
+      valid,
+      dependencies = None,
+      rootDir = Some(new File(tempIvyPath, "valid-repo")))
+    val resolved = MavenUtils.resolveMavenCoordinates(
+      valid.toString,
+      buildTestIvySettings(validRepo, Paths.get(tempIvyPath, "valid-cache").toString),
+      transitive = true,
+      isTest = true)
+    assert(resolved.nonEmpty)
+    assert(IvyContext.getContext eq initialContext)
+  }
+
+  test("no-cache Ivy context is restored after a resolution failure") {
+    val artifact = MavenCoordinate("my.context.no.cache", "mylib", "0.1")
+    val primaryRepo = IvyTestUtils.createLocalRepositoryForTests(
+      artifact,
+      dependencies = None,
+      rootDir = Some(new File(tempIvyPath, "primary-repo")))
+    val jar = new File(
+      IvyTestUtils.pathFromCoordinate(artifact, primaryRepo, "jar", useIvyLayout = false),
+      IvyTestUtils.artifactName(artifact, useIvyLayout = false))
+    assert(jar.delete())
+
+    val noCacheRepo = new File(tempIvyPath, "no-cache-repo")
+    assert(noCacheRepo.mkdirs())
+    val fallbackStarted = new AtomicBoolean(false)
+    val initialContext = IvyContext.getContext
+    intercept[RuntimeException] {
+      MavenUtils.resolveMavenCoordinates(
+        artifact.toString,
+        buildTestIvySettings(
+          primaryRepo,
+          Paths.get(tempIvyPath, "primary-cache").toString),
+        noCacheIvySettings = Some(buildTestIvySettings(
+          noCacheRepo,
+          Paths.get(tempIvyPath, "no-cache").toString,
+          resolutionStarted = Some(fallbackStarted))),
+        transitive = true)
+    }
+    assert(fallbackStarted.get())
+    assert(IvyContext.getContext eq initialContext)
   }
 
   test("neglects Spark and Spark's dependencies") {
