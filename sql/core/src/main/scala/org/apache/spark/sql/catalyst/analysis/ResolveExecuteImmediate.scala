@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.catalog.{SqlScriptingContextManager => SqlScriptingContextManagerTrait}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, ExecuteImmediateCommand, LogicalPlan, SetVariable}
+import org.apache.spark.sql.catalyst.plans.logical.{Call, CompoundBody, ExecuteImmediateCommand, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.EXECUTE_IMMEDIATE
@@ -37,8 +37,9 @@ import org.apache.spark.sql.types.StringType
  * Analysis rule that resolves EXECUTE IMMEDIATE statements during analysis, parsing and analyzing
  * the dynamic SQL and replacing the node with the resolved inner plan: a query is spliced, a
  * command payload is wrapped in [[ExecuteImmediateCommand]] to run at the execution level, and an
- * INTO clause becomes a [[SetVariable]]. Command payloads are not executed during analysis; nodes
- * that execute during analysis, such as CALL, are an exception (see `resolveInnerStatement`).
+ * INTO clause becomes a [[SetVariable]]. Command payloads are not executed during analysis. A CALL
+ * is spliced like a query without INTO (the outer command path runs it); with INTO it is executed
+ * here so its result can be assigned to the target variables (see `resolveInnerStatement`).
  *
  * {{{
  *   EXECUTE IMMEDIATE 'INSERT INTO t VALUES (?)' USING 1  =>  ExecuteImmediateCommand(...)
@@ -118,11 +119,11 @@ object ResolveExecuteImmediate {
 
   /**
    * Parses and analyzes the dynamic SQL and returns the plan that replaces the EXECUTE IMMEDIATE
-   * node. No command payload is executed here: with an INTO clause the analyzed query is returned
-   * for the caller to wrap in [[SetVariable]] (a command is rejected); otherwise a command payload
-   * is wrapped in [[ExecuteImmediateCommand]] to run at the execution level and a query is returned
-   * analyzed for lazy execution. Nodes that execute during analysis, such as CALL, are still run by
-   * the analyzer here (see the branch below).
+   * node. Without INTO, an eager-command payload is wrapped in [[ExecuteImmediateCommand]] to run
+   * at the execution level, while a query -- and a CALL -- is spliced in as-is (the CALL runs at
+   * the execution level via the outer command path, not during analysis). With an INTO clause the
+   * analyzed source is wrapped in [[SetVariable]] by the caller: an eager command is rejected, and
+   * a CALL is executed here so the assignment can resolve against the procedure's real output.
    */
   private def resolveInnerStatement(
       sparkSession: SparkSession,
@@ -154,19 +155,31 @@ object ResolveExecuteImmediate {
     }
 
     if (hasIntoClause) {
-      // If this EXECUTE IMMEDIATE has an INTO clause, commands are not allowed.
-      // The caller wraps the analyzed query in SetVariable.
+      // With an INTO clause, eager commands are rejected; the caller wraps the source in
+      // SetVariable.
       if (QueryExecution.isEagerlyExecutedCommand(analyzed)) {
         throw QueryCompilationErrors.invalidStatementForExecuteInto(sqlString)
       }
-      analyzed
+      analyzed match {
+        // A CALL's result columns are known only after it runs, and the SetVariable assignment
+        // wrapping this source resolves during analysis (unlike the no-INTO case, which splices
+        // the Call for the outer command path). Execute the CALL now and assign from the
+        // resulting CommandResult, which carries the procedure's real output and rows.
+        case c: Call if c.execute =>
+          val classicSession = sparkSession.asInstanceOf[ClassicSparkSession]
+          classicSession.sessionState.executePlan(c).commandExecuted
+        case other => other
+      }
     } else if (QueryExecution.isEagerlyExecutedCommand(analyzed)) {
       // Defer eager-command payloads to the execution level. This matches the shapes
-      // QueryExecution.eagerlyExecuteCommands runs (not just Command). CALL is not among them and
-      // already ran during the analysis above.
+      // QueryExecution.eagerlyExecuteCommands runs via isEagerlyExecutedCommand. A CALL is not
+      // among them: its output is unknown until it runs, so it is spliced by the else branch and
+      // executed by the outer command path rather than deferred as a payload here.
       ExecuteImmediateCommand(analyzed)
     } else {
-      // Splice the query; it executes lazily like any other query.
+      // Splice the analyzed plan in as-is: a query executes lazily like any other query, and a
+      // CALL is run eagerly by the outer command path, which reads its result schema from the
+      // executed plan.
       analyzed
     }
   }
