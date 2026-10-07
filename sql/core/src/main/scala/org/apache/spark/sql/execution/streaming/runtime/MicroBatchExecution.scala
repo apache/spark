@@ -823,10 +823,10 @@ class MicroBatchExecution(
         secondLatestOffsets.foreach { offset =>
           execCtx.startOffsets = offset.toStreamProgress(sources, sourceIdMap)
         }
-
+        val latestCommittedBatch = commitLog.getLatest()
+        val committedBatchId = latestCommittedBatch.map(_._1).getOrElse(-1L)
         // update offset metadata
         nextOffsets.metadataOpt.foreach { metadata =>
-          val committedBatchId = commitLog.getLatestBatchId().getOrElse(-1L)
           val metadataWithRecoveredPartitions = recoverStatefulShufflePartitions(
             metadata, sparkSessionToRunBatches, latestBatchId, committedBatchId)
           OffsetSeqMetadata.setSessionConf(
@@ -836,13 +836,13 @@ class MicroBatchExecution(
             metadataWithRecoveredPartitions.batchTimestampMs,
             sparkSessionToRunBatches.conf)
           watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf, logicalPlan)
-          watermarkTracker.setWatermark(metadata.batchWatermarkMs)
+          watermarkTracker.setWatermark(metadataWithRecoveredPartitions.batchWatermarkMs)
         }
 
         /* identify the current batch id: if commit log indicates we successfully processed the
          * latest batch id in the offset log, then we can safely move to the next batch
          * i.e., committedBatchId + 1 */
-        commitLog.getLatest() match {
+        latestCommittedBatch match {
           case Some((latestCommittedBatchId, commitMetadata)) =>
             commitMetadata.stateUniqueIds.foreach {
               stateUniqueIds => currentStateStoreCkptId ++= stateUniqueIds
@@ -911,66 +911,41 @@ class MicroBatchExecution(
       sparkSessionToRunBatches: SparkSession,
       latestBatchId: Long,
       committedBatchId: Long): OffsetSeqMetadataBase = {
-    if (metadata.version != OffsetSeqLog.VERSION_2) {
+    if (metadata.version != OffsetSeqLog.VERSION_2 ||
+        OffsetSeqMetadata.readValueOpt(
+          metadata, SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL).isDefined ||
+        !containsStatefulOperator(analyzedPlan)) {
       metadata
     } else {
-      val hasStatefulShufflePartitions = OffsetSeqMetadata.readValueOpt(
-        metadata, SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL).isDefined
-      // In old checkpoints, this config may first appear in an offset written by a failed restart.
-      // Re-execution commits that offset without rewriting it, so a missing value in the previous
-      // offset also triggers recovery on the following restart
-      val previousOffsetMissingStatefulShufflePartitions = latestBatchId > 0 &&
-        offsetLog.get(latestBatchId - 1).flatMap(_.metadataOpt)
-          .exists(previous => !previous.conf.contains(SQLConf.SHUFFLE_PARTITIONS.key))
-
-      if (hasStatefulShufflePartitions && !previousOffsetMissingStatefulShufflePartitions) {
-        metadata
-      } else {
-        metadata match {
-          case v2: OffsetSeqMetadataV2 =>
-            val stateCheckpointLocation = new Path(checkpointFile("state")).getParent
-            val stateMetadataBatchId = if (committedBatchId >= 0) {
-              committedBatchId
-            } else {
-              latestBatchId
-            }
-            val numPartitionsOpt = try {
-              val stateMetadataReader = new StateMetadataPartitionReader(
-                stateCheckpointLocation.toString,
-                new SerializableConfiguration(
-                  sparkSessionToRunBatches.sessionState.newHadoopConf()),
-                stateMetadataBatchId)
-              val partitionsOpt = stateMetadataReader.stateStoreNumPartitions
-              // If the query was stateful and we could not get the number of partitions
-              // for any reason, abort the query.
-              if (partitionsOpt.isEmpty && containsStatefulOperator(analyzedPlan)) {
-                throw new IllegalStateException(
-                  s"State metadata at $stateCheckpointLocation did not provide a partition " +
-                    "count for this stateful query.")
-              }
-              partitionsOpt
-            } catch {
-              case NonFatal(e) =>
-                throw new SparkException(
-                  s"Failed to recover the state-store partition count from checkpoint " +
-                    s"metadata at $stateCheckpointLocation. This can happen if the checkpoint " +
-                    "was created using offset log format V2 in an unpatched Spark distribution " +
-                    "and state metadata was subsequently corrupted. Delete the checkpoint and " +
-                    "restart the query to recover.",
-                  e)
-            }
-            // Otherwise we either have the partitions from state or
-            // the query was stateless and session config can be used.
-            numPartitionsOpt.map { numPartitions =>
-              logWarning(log"Recovered state-store partition count " +
-                log"${MDC(CONFIG, SQLConf.SHUFFLE_PARTITIONS.key)}=" +
-                log"${MDC(NUM_PARTITIONS, numPartitions)} " +
-                log"from checkpoint state metadata")
-              OffsetSeqMetadata.withStatefulShufflePartitions(v2, numPartitions)
-            }.getOrElse(metadata)
-          case _ =>
-            metadata
-        }
+      metadata match {
+        case v2: OffsetSeqMetadataV2 =>
+          val stateCheckpointLocation = new Path(checkpointFile("state")).getParent
+          val stateMetadataBatchId = if (committedBatchId >= 0) committedBatchId else latestBatchId
+          val failedRecoveryMessage =
+            s"Failed to recover the state-store partition count from checkpoint " +
+              s"metadata at $stateCheckpointLocation. This can happen if the checkpoint " +
+              "was created using offset log format V2 and state metadata was subsequently " +
+              "corrupted due to a bug. See SPARK-59919 for more details. Delete the " +
+              "checkpoint and restart the query to recover."
+          val numPartitionsOpt = try {
+            val stateMetadataReader = new StateMetadataPartitionReader(
+              stateCheckpointLocation.toString,
+              new SerializableConfiguration(
+                sparkSessionToRunBatches.sessionState.newHadoopConf()),
+              stateMetadataBatchId)
+            stateMetadataReader.stateStoreNumPartitions
+          } catch {
+            case NonFatal(e) => throw new SparkException(failedRecoveryMessage, e)
+          }
+          val numPartitions = numPartitionsOpt.getOrElse {
+            throw new SparkException(failedRecoveryMessage)
+          }
+          logWarning(log"Recovered state-store partition count " +
+            log"${MDC(CONFIG, SQLConf.SHUFFLE_PARTITIONS.key)}=" +
+            log"${MDC(NUM_PARTITIONS, numPartitions)} from checkpoint state metadata")
+          OffsetSeqMetadata.withStatefulShufflePartitions(v2, numPartitions)
+        case _ =>
+          metadata
       }
     }
   }
