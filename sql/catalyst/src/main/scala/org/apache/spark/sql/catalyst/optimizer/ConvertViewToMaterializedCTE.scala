@@ -177,6 +177,8 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
     case SubqueryAlias(_, child) => hasTopLevelSort(child)
     case GlobalLimit(_, child) => hasTopLevelSort(child)
     case LocalLimit(_, child) => hasTopLevelSort(child)
+    // ORDER BY ... OFFSET n wraps the Sort in Offset, possibly under the two limit nodes
+    case Offset(_, child) => hasTopLevelSort(child)
     case _ => false
   }
 
