@@ -33,9 +33,14 @@ import org.apache.spark.sql.internal.SQLConf
  * The rule runs in `FinishAnalysis`, immediately before `EliminateView`: after `EliminateView`
  * no `View` nodes remain and every reference site holds an independent copy of the view's plan.
  *
- * A converted definition always sets `forceSkipInline = true`; otherwise `InlineCTE` would
- * immediately flatten it back into duplicated subtrees (the definition body is deterministic
- * in every case we convert), making the rule a no-op.
+ * A converted definition keeps `forceSkipInline = true` only when at least two references
+ * survive the rewrite; otherwise `InlineCTE` would immediately flatten it back into
+ * duplicated subtrees (the definition body is deterministic in every case we convert),
+ * making the rule a no-op. Definitions with fewer than two surviving references keep the
+ * flag off and are inlined: their occurrences do not all survive the rewrite (a later
+ * occurrence's body is dropped, taking references to nested converted views with it), and
+ * some references may sit inside unreferenced user-written CTEs - materializing either
+ * way would add a shuffle that exchange reuse cannot deduplicate.
  *
  * Only deterministic, batch views are eligible: a multi-reference CTE guarantees that its
  * definition is evaluated exactly once (even for non-deterministic definitions), while
@@ -116,8 +121,9 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
           case None =>
             // First occurrence: consumers above already reference this occurrence's
             // expression ids, which are exactly the definition output, so the bare
-            // reference is output-compatible.
-            val cteDef = CTERelationDef(v.child, forceSkipInline = true)
+            // reference is output-compatible. `forceSkipInline` is decided after the
+            // rewrite, by the number of surviving references.
+            val cteDef = CTERelationDef(v.child)
             defByGroup.put(v.desc.identifier, cteDef)
             cteDefs += cteDef
             CTERelationRef(
@@ -132,8 +138,55 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
     if (cteDefs.isEmpty) {
       plan
     } else {
-      attachDefs(rewritten, cteDefs.toSeq)
+      // Not every occurrence survives the rewrite as a reference: the body of a later
+      // occurrence is dropped (taking references to nested converted views with it), and
+      // some references sit inside unreferenced user-written CTEs. Materializing a
+      // definition with fewer than two live references would add a shuffle that exchange
+      // reuse cannot deduplicate, so re-count after the rewrite and leave such definitions
+      // inlinable - InlineCTE flattens them back into their consumers.
+      val newDefIds = cteDefs.map(_.id).toSet
+      val withDefs = attachDefs(rewritten, cteDefs.toSeq)
+      val liveRefCounts = countLiveRefs(withDefs)
+      withDefs.transformUpWithSubqueries {
+        case d: CTERelationDef if newDefIds.contains(d.id) =>
+          d.copy(forceSkipInline = liveRefCounts.getOrElse(d.id, 0) >= 2)
+      }
     }
+  }
+
+  // Counts, per definition id, the references reachable from the query root: a reference
+  // inside a definition counts only when the definition itself is live, mirroring how
+  // `InlineCTE` discounts references held by unreferenced definitions. Recursive CTEs are
+  // handled by the visited-set worklist.
+  private def countLiveRefs(plan: LogicalPlan): Map[Long, Int] = {
+    // The region of a reference is its innermost enclosing definition's id, or
+    // ROOT_REGION at the query root.
+    val ROOT_REGION = -1L
+    val outgoing = mutable.HashMap.empty[Long, mutable.ArrayBuffer[Long]]
+
+    def walk(p: LogicalPlan, region: Long): Unit = {
+      p match {
+        case d: CTERelationDef => walk(d.child, d.id)
+        case r: CTERelationRef =>
+          outgoing.getOrElseUpdate(region, mutable.ArrayBuffer.empty) += r.cteId
+        case _ => p.children.foreach(walk(_, region))
+      }
+      p.subqueries.foreach(walk(_, region))
+    }
+    walk(plan, ROOT_REGION)
+
+    val liveRefCounts = mutable.HashMap.empty[Long, Int].withDefaultValue(0)
+    val visitedDefs = mutable.HashSet.empty[Long]
+    val pending = mutable.Queue.empty[Long] ++=
+      outgoing.getOrElse(ROOT_REGION, mutable.ArrayBuffer.empty)
+    while (pending.nonEmpty) {
+      val target = pending.dequeue()
+      liveRefCounts(target) += 1
+      if (visitedDefs.add(target)) {
+        pending ++= outgoing.getOrElse(target, mutable.ArrayBuffer.empty)
+      }
+    }
+    liveRefCounts.toMap
   }
 
   // Group by view identity: the rule dedupes references of the SAME view, not distinct
