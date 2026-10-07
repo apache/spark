@@ -28,7 +28,8 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.UpdateFieldsBenchmark._
-import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression, With}
+import org.apache.spark.sql.catalyst.expressions.{GetStructField, InSet, Literal, NamedExpression,
+  UpdateFields, With, WithField}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
@@ -443,6 +444,141 @@ class ColumnExpressionSuite extends SharedSparkSession {
     withSQLConf(
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
       SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY")(f)
+  }
+
+  test("withField should evaluate a nondeterministic struct expression once") {
+    onEachEvalPath {
+      val counter = new java.util.concurrent.atomic.AtomicLong()
+      val nextStruct = udf(() => {
+        val value = counter.getAndIncrement()
+        (value, value)
+      }).asNondeterministic()
+      val structExpr = nextStruct()
+      val df = spark.range(0, 10, 1, 1)
+      df.select(structExpr.withField("copy", structExpr)).collect().foreach { row =>
+        val result = row.getStruct(0)
+        val copy = result.getStruct(2)
+        assert(result.getLong(0) == result.getLong(1))
+        assert(copy.getLong(0) == copy.getLong(1))
+        assert(result.getLong(0) != copy.getLong(0))
+      }
+    }
+  }
+
+  test("withField should evaluate a reused nondeterministic value separately") {
+    onEachEvalPath {
+      val counter = new java.util.concurrent.atomic.AtomicLong()
+      val nextStruct = udf(() => {
+        val value = counter.getAndIncrement()
+        (value, value)
+      }).asNondeterministic()
+      val structExpr = nextStruct().expr
+      val updated = Column(UpdateFields(structExpr,
+        Seq(WithField("copy", GetStructField(structExpr, 0)))))
+      val df = spark.range(0, 10, 1, 1)
+      df.select(updated).collect().foreach { row =>
+        val result = row.getStruct(0)
+        assert(result.getLong(0) == result.getLong(1))
+        assert(result.getLong(0) != result.getLong(2))
+      }
+    }
+  }
+
+  test("withField should evaluate a reused nested update separately") {
+    onEachEvalPath {
+      val counter = new java.util.concurrent.atomic.AtomicLong()
+      val nextStruct = udf(() => {
+        val value = counter.getAndIncrement()
+        (value, value)
+      }).asNondeterministic()
+      val structExpr = nextStruct().expr
+      val nestedUpdate = UpdateFields(structExpr, Seq(WithField("extra", Literal(1))))
+      val updated = Column(UpdateFields(structExpr,
+        Seq(WithField("copy", GetStructField(nestedUpdate, 0)))))
+      val df = spark.range(0, 10, 1, 1)
+      df.select(updated).collect().foreach { row =>
+        val result = row.getStruct(0)
+        assert(result.getLong(0) == result.getLong(1))
+        assert(result.getLong(0) != result.getLong(2))
+      }
+    }
+  }
+
+  test("withField should reuse an updated struct for a nested path") {
+    onEachEvalPath {
+      val counter = new java.util.concurrent.atomic.AtomicLong()
+      val nextStruct = udf(() => {
+        val value = counter.getAndIncrement()
+        ((value, value), value)
+      }).asNondeterministic()
+      val structExpr = nextStruct().expr
+      val baseUpdate = UpdateFields(structExpr, Seq(WithField("extra", Literal(1))))
+      val updated = Column(UpdateFields(baseUpdate, "_1.copy", Literal(1)))
+      val df = spark.range(0, 10, 1, 1)
+      df.select(updated).collect().foreach { row =>
+        val result = row.getStruct(0)
+        val nested = result.getStruct(0)
+        assert(nested.getLong(0) == nested.getLong(1))
+        assert(nested.getLong(0) == result.getLong(1))
+      }
+    }
+  }
+
+  test("withField should preserve a nested path through a later update") {
+    onEachEvalPath {
+      val counter = new java.util.concurrent.atomic.AtomicLong()
+      val nextStruct = udf(() => {
+        val value = counter.getAndIncrement()
+        ((value, value), value)
+      }).asNondeterministic()
+      val structExpr = nextStruct().expr
+      val nestedUpdate = UpdateFields(structExpr, "_1.copy", Literal(1))
+      val updated = Column(UpdateFields(nestedUpdate, Seq(WithField("extra", Literal(1)))))
+      val df = spark.range(0, 10, 1, 1)
+      df.select(updated).collect().foreach { row =>
+        val result = row.getStruct(0)
+        val nested = result.getStruct(0)
+        assert(nested.getLong(0) == nested.getLong(1))
+        assert(nested.getLong(0) == result.getLong(1))
+      }
+    }
+  }
+
+  test("withField should not evaluate a value expression for null structs") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val structType = StructType(Seq(StructField("a", IntegerType, nullable = false)))
+        val df = spark.range(0, 3, 1, 1).select(
+          $"id",
+          when($"id" < 2, lit(null).cast(structType))
+            .otherwise(struct(lit(1)).cast(structType)).as("s"))
+        checkAnswer(
+          df.select($"s".withField("b", lit(1.0) / ($"id" - 1))),
+          Seq(Row(null), Row(null), Row(Row(1, 1.0))))
+      }
+    }
+  }
+
+  test("withField should remain inside a short-circuited branch") {
+    onEachEvalPath {
+      val throwingStruct = udf((id: Long) => {
+        if (id >= 0) throw new IllegalStateException(s"evaluated for $id") else ((id, id), id)
+      })
+      val updated = throwingStruct($"id").withField("_1.extra", lit(1))
+      checkAnswer(
+        Seq((false, 0L), (false, 1L)).toDF("keep", "id")
+          .filter($"keep" && updated.isNotNull).select($"id"),
+        Seq.empty)
+    }
+  }
+
+  test("dropFields should not evaluate omitted CreateNamedStruct fields") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val source = struct((lit(1) / $"id").as("dropped"), lit(1).as("kept"))
+        checkAnswer(spark.range(1).select(source.dropFields("dropped")), Row(Row(1)))
+      }
+    }
   }
 
   test("SPARK-58902: BETWEEN on a nondeterministic input inside a conditional branch") {

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{LeafLike, TreeNodeTag, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -764,11 +764,160 @@ case class DropField(name: String) extends StructFieldsOperation with LeafLike[E
     values.filterNot { case (field, _) => resolver(field.name, name) }
 }
 
+private case class UpdateFieldsExpression(
+    structExpr: Expression,
+    updatedValues: Seq[Expression],
+    // A negative ordinal marks an updated output, in updatedValues order.
+    outputOrdinals: Seq[Int],
+    outputFields: Seq[StructField]) extends Expression {
+
+  override def children: Seq[Expression] = structExpr +: updatedValues
+
+  override def nullable: Boolean = structExpr.nullable
+
+  override lazy val dataType: StructType = {
+    val sourceFields = structExpr.dataType.asInstanceOf[StructType]
+    var updatedIndex = 0
+    StructType(outputOrdinals.zipWithIndex.map { case (sourceOrdinal, index) =>
+      if (sourceOrdinal >= 0) {
+        sourceFields(sourceOrdinal)
+      } else {
+        val updatedValue = updatedValues(updatedIndex)
+        updatedIndex += 1
+        outputFields(index).copy(
+          dataType = updatedValue.dataType,
+          nullable = updatedValue.nullable)
+      }
+    })
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val needsSource = nullable || outputOrdinals.exists(_ >= 0)
+    val sourceRow = if (needsSource) {
+      structExpr.eval(input).asInstanceOf[InternalRow]
+    } else {
+      null
+    }
+    if (sourceRow == null && nullable) {
+      null
+    } else {
+      val values = new Array[Any](outputOrdinals.length)
+      var updatedIndex = 0
+      var i = 0
+      while (i < outputOrdinals.length) {
+        val sourceOrdinal = outputOrdinals(i)
+        if (sourceOrdinal >= 0) {
+          values(i) = if (sourceRow == null) {
+            null
+          } else {
+            sourceRow.get(sourceOrdinal, dataType(i).dataType)
+          }
+        } else {
+          values(i) = updatedValues(updatedIndex).eval(input)
+          updatedIndex += 1
+        }
+        i += 1
+      }
+      new GenericInternalRow(values)
+    }
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): UpdateFieldsExpression =
+    copy(structExpr = newChildren.head, updatedValues = newChildren.tail)
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val rowClass = classOf[GenericInternalRow].getName
+    val values = ctx.freshName("values")
+    val needsSource = nullable || outputOrdinals.exists(_ >= 0)
+    val sourceCode = if (needsSource) Some(structExpr.genCode(ctx)) else None
+    val sourceRow = ctx.freshName("sourceRow")
+
+    val copyValuesCode = if (outputOrdinals.exists(_ >= 0)) {
+      val index = ctx.freshName("i")
+      val sourceOrdinal = ctx.freshName("sourceOrdinal")
+      val sourceOrdinals = ctx.addReferenceObj("sourceOrdinals", outputOrdinals.toArray, "int[]")
+      val fieldTypes = ctx.addReferenceObj(
+        "fieldTypes",
+        dataType.fields.map(_.dataType).toArray,
+        s"${classOf[DataType].getName}[]")
+      s"""
+         |for (int $index = 0; $index < ${outputOrdinals.length}; $index++) {
+         |  int $sourceOrdinal = $sourceOrdinals[$index];
+         |  if ($sourceOrdinal >= 0) {
+         |    $values[$index] = $sourceRow == null ? null :
+         |      $sourceRow.get($sourceOrdinal, $fieldTypes[$index]);
+         |  }
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
+
+    val updatedOutputOrdinals = outputOrdinals.indices.filter(outputOrdinals(_) < 0)
+    assert(updatedOutputOrdinals.length == updatedValues.length)
+    val updatedCodes = updatedValues.zip(updatedOutputOrdinals).map { case (expr, ordinal) =>
+      val eval = expr.genCode(ctx)
+      s"""
+         |${eval.code}
+         |if (${eval.isNull}) {
+         |  $values[$ordinal] = null;
+         |} else {
+         |  $values[$ordinal] = ${eval.value};
+         |}
+       """.stripMargin
+    }
+    val updatedValuesCode = if (updatedCodes.nonEmpty) {
+      ctx.splitExpressionsWithCurrentInputs(
+        expressions = updatedCodes,
+        funcName = "updateFields",
+        extraArguments = "Object[]" -> values :: Nil)
+    } else {
+      ""
+    }
+
+    val outputCode = s"""
+       |Object[] $values = new Object[${outputOrdinals.length}];
+       |${copyValuesCode}
+       |${updatedValuesCode}
+       |${ev.value} = new $rowClass($values);
+       |$values = null;
+       """.stripMargin
+
+    sourceCode match {
+      case Some(source) if nullable =>
+        ev.copy(code = code"""
+          |${source.code}
+          |boolean ${ev.isNull} = ${source.isNull};
+          |InternalRow ${ev.value} = null;
+          |if (!${ev.isNull}) {
+          |  InternalRow $sourceRow = ${source.value};
+          |  $outputCode
+          |}
+        """.stripMargin)
+      case Some(source) =>
+        ev.copy(code = code"""
+          |${source.code}
+          |InternalRow $sourceRow = ${source.value};
+          |${CodeGenerator.javaType(dataType)} ${ev.value};
+          |$outputCode
+        """.stripMargin, isNull = FalseLiteral)
+      case None =>
+        ev.copy(code = code"""
+          |${CodeGenerator.javaType(dataType)} ${ev.value};
+          |$outputCode
+        """.stripMargin, isNull = FalseLiteral)
+    }
+  }
+}
+
 /**
  * Updates fields in a struct.
  */
 case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperation])
   extends Unevaluable {
+
+  private lazy val generatedStructReadOwner = UpdateFields.generatedStructReadOwner(this)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UPDATE_FIELDS)
 
@@ -783,7 +932,7 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
           "inputSql" -> toSQLExpr(structExpr),
           "inputType" -> toSQLType(structExpr.dataType))
       )
-    } else if (newExprs.isEmpty) {
+    } else if (newFieldSources.isEmpty) {
       DataTypeMismatch(
         errorSubClass = "CANNOT_DROP_ALL_FIELDS",
         messageParameters = Map.empty
@@ -806,35 +955,107 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
 
   override def prettyName: String = "update_fields"
 
-  private lazy val newFieldExprs: Seq[(StructField, Expression)] = {
-    def getFieldExpr(i: Int): Expression = structExpr match {
-      case c: CreateNamedStruct => c.valExprs(i)
-      case _ => GetStructField(structExpr, i)
-    }
-    val fieldsWithIndex = structExpr.dataType.asInstanceOf[StructType].fields.zipWithIndex
-    val existingFieldExprs: Seq[(StructField, Expression)] =
-      fieldsWithIndex.map { case (field, i) => (field, getFieldExpr(i)) }.toImmutableArraySeq
-    fieldOps.foldLeft(existingFieldExprs)((exprs, op) => op(exprs))
+  private lazy val newFieldSources: Seq[(StructField, UpdateFields.FieldSource)] =
+    UpdateFields.fieldSources(structExpr.dataType.asInstanceOf[StructType], fieldOps)
+
+  private lazy val newFields: Seq[StructField] = newFieldSources.map(_._1)
+
+  def newExpr(ordinal: Int): Expression = newFieldSources(ordinal)._2 match {
+    case UpdateFields.Original(sourceOrdinal) => getFieldExpr(sourceOrdinal)
+    case UpdateFields.Updated(expr) => expr
   }
 
-  private lazy val newFields: Seq[StructField] = newFieldExprs.map(_._1)
+  private def getFieldExpr(ordinal: Int): Expression = structExpr match {
+    case c: CreateNamedStruct => c.valExprs(ordinal)
+    case _ => UpdateFields.markGeneratedStructRead(
+      GetStructField(structExpr, ordinal), generatedStructReadOwner)
+  }
 
-  lazy val newExprs: Seq[Expression] = newFieldExprs.map(_._2)
-
-  lazy val evalExpr: Expression = {
-    val createNamedStructExpr = CreateNamedStruct(newFieldExprs.flatMap {
-      case (field, expr) => Seq(Literal(field.name), expr)
-    })
-
-    if (structExpr.nullable) {
-      If(IsNull(structExpr), Literal(null, dataType), createNamedStructExpr)
-    } else {
-      createNamedStructExpr
+  lazy val evalExpr: Expression = With(structExpr) { case Seq(structRef) =>
+    // Nested generated reads must use the bound struct, while caller-supplied values stay separate.
+    def replaceStruct(expr: Expression): Expression = expr.transformDown {
+      case field @ GetStructField(child, _, _)
+          if UpdateFields.isGeneratedStructRead(field, generatedStructReadOwner) &&
+            child.eq(structExpr) =>
+        field.copy(child = structRef)
     }
+
+    val updatedValues = ArrayBuffer.empty[Expression]
+    val outputOrdinals = newFieldSources.map { case (_, source) =>
+      source match {
+        case UpdateFields.Original(ordinal) => structExpr match {
+          case namedStruct: CreateNamedStruct =>
+            updatedValues += namedStruct.valExprs(ordinal)
+            -1
+          case _ => ordinal
+        }
+        case UpdateFields.Updated(expr) =>
+          updatedValues += replaceStruct(expr)
+          -1
+      }
+    }
+    UpdateFieldsExpression(structRef, updatedValues.toSeq, outputOrdinals, newFields)
   }
 }
 
 object UpdateFields {
+  private sealed trait FieldSource
+  private case class Original(ordinal: Int) extends FieldSource
+  private case class Updated(expr: Expression) extends FieldSource
+
+  private def fieldSources(
+      structType: StructType,
+      fieldOps: Seq[StructFieldsOperation]): Seq[(StructField, FieldSource)] = {
+    val fields: Seq[(StructField, FieldSource)] = structType.fields.zipWithIndex.map {
+      case (field, ordinal) =>
+      field -> Original(ordinal)
+    }.toImmutableArraySeq
+    fieldOps.foldLeft(fields) {
+      case (current, op: WithField) =>
+        val updated = StructField(op.name, op.valExpr.dataType, op.valExpr.nullable) ->
+          Updated(op.valExpr)
+        val result = ArrayBuffer.empty[(StructField, FieldSource)]
+        var hasMatch = false
+        current.foreach { fieldSource =>
+          if (op.resolver(fieldSource._1.name, op.name)) {
+            hasMatch = true
+            result += updated
+          } else {
+            result += fieldSource
+          }
+        }
+        if (!hasMatch) result += updated
+        result.toSeq
+      case (current, op: DropField) =>
+        current.filterNot { case (field, _) => op.resolver(field.name, op.name) }
+      case (_, op) =>
+        throw SparkException.internalError(
+          s"Unsupported StructFieldsOperation: ${op.getClass.getName}")
+    }
+  }
+
+  private val GENERATED_STRUCT_READ = TreeNodeTag[ExprId]("generatedStructRead")
+  private val GENERATED_STRUCT_READ_OWNER = TreeNodeTag[ExprId]("generatedStructReadOwner")
+
+  private def generatedStructReadOwner(expr: Expression): ExprId = {
+    expr.getTagValue(GENERATED_STRUCT_READ_OWNER).getOrElse {
+      val owner = NamedExpression.newExprId
+      expr.setTagValue(GENERATED_STRUCT_READ_OWNER, owner)
+      owner
+    }
+  }
+
+  private def markGeneratedStructRead[T <: Expression](expr: T, owner: ExprId): T = {
+    expr.setTagValue(GENERATED_STRUCT_READ, owner)
+    expr
+  }
+
+  private def isGeneratedStructRead(expr: Expression, owner: ExprId): Boolean =
+    expr.getTagValue(GENERATED_STRUCT_READ).contains(owner)
+
+  private[catalyst] def isGeneratedStructRead(expr: Expression): Boolean =
+    expr.containsTag(GENERATED_STRUCT_READ)
+
   private def nameParts(fieldName: String): Seq[String] = {
     require(fieldName != null, "fieldName cannot be null")
 
@@ -878,7 +1099,9 @@ object UpdateFields {
         structExpr = newStruct,
         namePartsRemaining = namePartsRemaining.tail,
         valueFunc = valueFunc)
-      UpdateFields(structExpr, WithField(fieldName, newValue) :: Nil)
+      val updated = UpdateFields(structExpr, WithField(fieldName, newValue) :: Nil)
+      markGeneratedStructRead(newStruct, generatedStructReadOwner(updated))
+      updated
     }
   }
 }
