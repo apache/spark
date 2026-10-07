@@ -74,10 +74,11 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
       }
       val resolvedJoin = (matchLeft, matchOp, matchRight) match {
         case (Some(leftExpr), Some(operator), Some(rightExpr)) =>
+          // Include hidden columns, such as the dropped key of a nested USING join.
           AsOfJoinMatchConditionResolution.materialize(
             join = joinBase,
-            leftSet = left.outputSet,
-            rightSet = right.outputSet,
+            leftSet = AttributeSet(left.output ++ left.metadataOutput),
+            rightSet = AttributeSet(right.output ++ right.metadataOutput),
             leftOperand = leftExpr,
             operator = operator,
             rightOperand = rightExpr) match {

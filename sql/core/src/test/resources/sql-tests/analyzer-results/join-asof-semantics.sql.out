@@ -614,3 +614,70 @@ Project [trade_time#x, quote_time#x]
       :  +- LocalRelation [trade_time#x, symbol#x, quantity#x]
       +- SubqueryAlias q
          +- LocalRelation [quote_time#x, symbol#x, quantity#x]
+
+
+-- !query
+SELECT l.lts, r.rts
+FROM (VALUES (1, 10), (2, 20)) AS l(k, lts) ASOF JOIN
+     ((VALUES (1, 5), (8, 15)) AS r(k, rts) LEFT JOIN (VALUES (1)) AS d(k) USING (k))
+  MATCH_CONDITION (l.lts >= d.k)
+-- !query analysis
+Project [lts#x, rts#x]
++- Project [k#x, lts#x, k#x, rts#x]
+   +- AsOfJoin (lts#x >= k#x), Inner
+      :- SubqueryAlias l
+      :  +- Project [col1#x AS k#x, col2#x AS lts#x]
+      :     +- LocalRelation [col1#x, col2#x]
+      +- Project [k#x, rts#x, k#x]
+         +- Join LeftOuter, (k#x = k#x)
+            :- SubqueryAlias r
+            :  +- Project [col1#x AS k#x, col2#x AS rts#x]
+            :     +- LocalRelation [col1#x, col2#x]
+            +- SubqueryAlias d
+               +- Project [col1#x AS k#x]
+                  +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT l.lts, r.rts
+FROM ((VALUES (1, 10), (2, 20), (8, 30)) AS l(k, lts)
+       LEFT JOIN (VALUES (1), (2)) AS d(k) USING (k))
+     ASOF JOIN (VALUES (5), (15)) AS r(rts)
+  MATCH_CONDITION (d.k <= r.rts)
+-- !query analysis
+Project [lts#x, rts#x]
++- Project [k#x, lts#x, rts#x]
+   +- AsOfJoin (k#x <= rts#x), Inner
+      :- Project [k#x, lts#x, k#x]
+      :  +- Join LeftOuter, (k#x = k#x)
+      :     :- SubqueryAlias l
+      :     :  +- Project [col1#x AS k#x, col2#x AS lts#x]
+      :     :     +- LocalRelation [col1#x, col2#x]
+      :     +- SubqueryAlias d
+      :        +- Project [col1#x AS k#x]
+      :           +- LocalRelation [col1#x]
+      +- SubqueryAlias r
+         +- Project [col1#x AS rts#x]
+            +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT l.lts, r.rts
+FROM (VALUES (1, 10), (2, 20)) AS l(k, lts) ASOF JOIN
+     ((VALUES (1, 5), (2, 15)) AS r(k, rts) JOIN (VALUES (1), (2)) AS d(k) USING (k))
+  MATCH_CONDITION (l.lts >= d.k)
+-- !query analysis
+Project [lts#x, rts#x]
++- Project [k#x, lts#x, k#x, rts#x]
+   +- AsOfJoin (lts#x >= k#x), Inner
+      :- SubqueryAlias l
+      :  +- Project [col1#x AS k#x, col2#x AS lts#x]
+      :     +- LocalRelation [col1#x, col2#x]
+      +- Project [k#x, rts#x, k#x]
+         +- Join Inner, (k#x = k#x)
+            :- SubqueryAlias r
+            :  +- Project [col1#x AS k#x, col2#x AS rts#x]
+            :     +- LocalRelation [col1#x, col2#x]
+            +- SubqueryAlias d
+               +- Project [col1#x AS k#x]
+                  +- LocalRelation [col1#x]
