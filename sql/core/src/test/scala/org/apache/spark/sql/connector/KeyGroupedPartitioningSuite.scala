@@ -6575,24 +6575,28 @@ class KeyGroupedPartitioningSuite
     // `t1` reports a transform in the middle, so the leading run of its ordering stops there.
     // `t2` reports a transform key first. Each split holds a single key, so the sort order on `id`
     // after it still holds. `t3` reports no ordering, so the scan derives one from its keys. In
-    // each case a sort on `id` right above the scan needs no `SortExec`.
+    // each case a sort on `id` right above the scan needs no `SortExec`. The query selects `ts`, so
+    // the transform's column stays in the scan output. Otherwise SPARK-59899's pruned-column
+    // handling would give the same orderings even without this fix.
     val table1 = "transform_order_t1"
     val table2 = "transform_order_t2"
     val table3 = "transform_order_t3"
-    def asc(expr: Expression): SortOrder =
-      sort(expr, SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    def asc(expr: Expression): SortOrder = sort(expr, SortDirection.ASCENDING)
     createTable(table1, columns, Array(identity("id")),
       Array(asc(FieldReference("id")), asc(years("ts")), asc(FieldReference("data"))))
     createTable(table2, columns, Array(years("ts"), identity("id")),
       Array(asc(years("ts")), asc(FieldReference("id"))))
     createTable(table3, columns, Array(days("ts"), identity("id")))
-    Seq(table1, table2, table3).foreach { table =>
-      sql(s"INSERT INTO testcat.ns.$table VALUES (1, 'aa', cast('2020-01-01' as timestamp))")
-      val df = sql(s"SELECT id, data, ts FROM testcat.ns.$table")
-      val scan = collectScans(df.queryExecution.executedPlan).head
-      assert(scan.outputOrdering.map(_.child.sql) === Seq("id"), table)
-      val sorted = df.sortWithinPartitions("id").queryExecution.executedPlan
-      assert(collect(sorted) { case s: SortExec => s }.isEmpty, table)
+    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true") {
+      Seq(table1, table2, table3).foreach { table =>
+        sql(s"INSERT INTO testcat.ns.$table VALUES (1, 'aa', cast('2020-01-01' as timestamp))")
+        val df = sql(s"SELECT id, data, ts FROM testcat.ns.$table")
+        val scan = collectScans(df.queryExecution.executedPlan).head
+        assert(scan.output.exists(_.name == "ts"), s"test setup: ts stays in the output of $table")
+        assert(scan.outputOrdering.map(_.child.sql) === Seq("id"), table)
+        val sorted = df.sortWithinPartitions("id").queryExecution.executedPlan
+        assert(collect(sorted) { case s: SortExec => s }.isEmpty, table)
+      }
     }
   }
 
@@ -6600,7 +6604,9 @@ class KeyGroupedPartitioningSuite
    * Inserts three items, two of them with `id` 1 on their own splits, so grouping the splits by
    * `id` coalesces them. Then joins `items` with `purchases` on `joinCondition` and checks that
    * the plan k-way merges over `expectedOrdering`, the columns the scan's ordering keeps before
-   * its transform.
+   * its transform. The query selects `arrive_time`, so the transform's column stays in the scan
+   * output. Otherwise SPARK-59899's pruned-column handling would drop the transform even without
+   * this fix.
    */
   private def checkKWayMergeBeforeTransform(
       joinCondition: String,
@@ -6622,6 +6628,8 @@ class KeyGroupedPartitioningSuite
     val merging = collectAllGroupPartitions(df.queryExecution.executedPlan)
       .filter(_.enableSortedMerge)
     assert(merging.length == 1, "expected one k-way merge")
+    assert(merging.head.child.output.exists(_.name == "arrive_time"),
+      "test setup: arrive_time stays in the scan output")
     assert(merging.head.child.outputOrdering.map(_.child.sql) == expectedOrdering)
     assert(merging.head.execute().isInstanceOf[SortedMergeCoalescedRDD[_]])
   }
@@ -6630,9 +6638,9 @@ class KeyGroupedPartitioningSuite
     // The join on (id, name) needs the merge, since the key ordering on id alone is not enough.
     // The scan reports [id, name, years(arrive_time)] and keeps [id, name].
     val itemOrdering = Array(
-      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
-      sort(FieldReference("name"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
-      sort(years("arrive_time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+      sort(FieldReference("id"), SortDirection.ASCENDING),
+      sort(FieldReference("name"), SortDirection.ASCENDING),
+      sort(years("arrive_time"), SortDirection.ASCENDING))
     createTable(items, itemsColumns, Array(identity("id")), itemOrdering)
     val namedPurchasesColumns = Array(
       Column.create("item_id", LongType),
@@ -6661,6 +6669,7 @@ class KeyGroupedPartitioningSuite
 
     withSQLConf(
         SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
       checkKWayMergeBeforeTransform("p.item_id = i.id", Seq("id"))

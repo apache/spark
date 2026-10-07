@@ -147,11 +147,11 @@ trait DataSourceV2ScanExecBase
    *
    * Either way, a sort order that holds a partition transform is dropped, even on a partition key.
    * In a reported ordering it also ends the leading run, like a sort order over a pruned column.
-   * This loses nothing today, since no operator requires an ordering over a transform. The write
-   * path sorts by the transform's function call instead. Dropping it is also a safe way to handle
-   * a transform Spark cannot evaluate. Keeping it would only add comparisons nobody uses. A sort
-   * order that Spark derives from a transform key is even constant within each partition. Revisit
-   * this if an ordering over a transform becomes a real requirement.
+   * Dropping it loses nothing today when Spark can call the transform's function, since no
+   * operator then requires an ordering over the transform. The write path sorts by the function
+   * call instead. Keeping such a sort order would add comparisons nobody uses. Dropping it also
+   * handles a transform Spark cannot evaluate. Revisit this if an ordering over a transform
+   * becomes a real requirement.
    */
   override def outputOrdering: Seq[SortOrder] = {
     def holdsTransform(e: Expression): Boolean = e.exists(_.isInstanceOf[TransformExpression])

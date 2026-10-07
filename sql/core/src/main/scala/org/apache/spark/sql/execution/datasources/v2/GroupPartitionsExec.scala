@@ -388,11 +388,9 @@ case class GroupPartitionsExec(
       outputPartitioning match {
         case p: Partitioning with Expression
             if reducers.isEmpty && conf.v2BucketingPreserveKeyOrderingOnCoalesceEnabled =>
-          // Without reducers all merged partitions share the same original key value, so the key
-          // expressions remain constant within the output partition. The child's outputOrdering
-          // should already be in sync with the partitioning (either reported by the source or
-          // derived from it in DataSourceV2ScanExecBase), so we only need to keep the sort orders
-          // whose expression is a partition key expression -- all others are lost by concatenation.
+          // Without reducers all merged partitions share the same original key value, so the sort
+          // orders on key expressions still hold. The transform keys match nothing here, since
+          // `DataSourceV2ScanExecBase.outputOrdering` drops every sort order over a transform.
           val keyedPartitionings = p.collect { case k: KeyedPartitioning => k }
           val keyExprs = ExpressionSet(keyedPartitionings.flatMap(_.expressions))
           child.outputOrdering.filter(order => keyExprs.contains(order.child))

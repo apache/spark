@@ -39,6 +39,10 @@ public interface SupportsReportOrdering extends Scan {
    * Spark resolves the column references in these sort orders against the table columns,
    * including columns pruned from the scan output. If any of them cannot be resolved, Spark
    * ignores the whole reported ordering and logs a warning.
+   * <p>
+   * Spark does not use a sort order over a transform such as {@code days(ts)}, whether or not it is
+   * a partition key. It drops that sort order and every one after it, except the sort orders on
+   * partition keys that are not transforms.
    */
   SortOrder[] outputOrdering();
 }

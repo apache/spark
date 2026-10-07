@@ -2592,7 +2592,8 @@ object SQLConf {
         "a V2 data source that reports a KeyedPartitioning but does not report explicit ordering " +
         "via SupportsReportOrdering, or reports one that Spark ignores because it references a " +
         "column that cannot be resolved. Within a single partition all rows share the same key " +
-        s"value, so the data is trivially sorted by those expressions. Requires " +
+        "value, so the data is trivially sorted by those expressions. Partition transforms such " +
+        "as `days(ts)` or `bucket(8, id)` are left out of the ordering. Requires " +
         s"${V2_BUCKETING_ENABLED.key} to be enabled.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)

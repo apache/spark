@@ -708,7 +708,7 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled</code></td>
       <td>true</td>
       <td>
-        When enabled, Spark derives the output ordering of a V2 scan from its partition key expressions, if the source reports a keyed partitioning but no explicit ordering, or an ordering that Spark ignores because it references a column that cannot be resolved. All rows of such a partition share one key value, so the partition is trivially sorted by those expressions, and a sort Spark would otherwise add becomes unnecessary. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+        When enabled, Spark derives the output ordering of a V2 scan from its partition key expressions, if the source reports a keyed partitioning but no explicit ordering, or an ordering that Spark ignores because it references a column that cannot be resolved. All rows of such a partition share one key value, so the partition is trivially sorted by those expressions, and a sort Spark would otherwise add becomes unnecessary. Partition transforms such as <code>days(ts)</code> or <code>bucket(8, id)</code> are left out of the ordering. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
       </td>
       <td>4.2.0</td>
     </tr>

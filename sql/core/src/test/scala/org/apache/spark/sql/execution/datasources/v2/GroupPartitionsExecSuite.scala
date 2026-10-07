@@ -160,14 +160,26 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
   }
 
   test("SPARK-59995: the k-way merge ordering falls back to interpreted evaluation") {
-    // A `TransformExpression` generates no code, while `eval` calls its function. The ordering is
-    // serialized before any comparison, as the RDD ships it. Test sessions run `CODEGEN_ONLY`, so
-    // this sets the production default, `FALLBACK`.
+    // The scan drops every sort order over a transform, so none reaches the merge. Here a transform
+    // only stands in for a sort key without generated code. `TransformExpression` generates none,
+    // while `eval` calls its function. The ordering is serialized before any comparison, as the
+    // RDD ships it.
     val ts = AttributeReference("ts", TimestampType)()
     val ordering = new LazyRowOrdering(
       Seq(SortOrder(TransformExpression(YearsFunction, Seq(ts)), Ascending)), Seq(ts))
     val serializer = new JavaSerializer(new SparkConf()).newInstance()
-    val shipped = serializer.deserialize[LazyRowOrdering](serializer.serialize(ordering))
+    def ship(): LazyRowOrdering =
+      serializer.deserialize[LazyRowOrdering](serializer.serialize(ordering))
+    // Under `CODEGEN_ONLY` the comparator cannot be built, which is the premise of this test.
+    val error = withSQLConf(
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+      intercept[SparkException] {
+        ship().compare(InternalRow(date(2022)), InternalRow(date(2021)))
+      }
+    }
+    assert(error.getMessage.contains("Cannot generate code for expression"))
+    // `FALLBACK` is the production default.
+    val shipped = ship()
     withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.FALLBACK.toString) {
       assert(shipped.compare(InternalRow(date(2022)), InternalRow(date(2021, 6))) > 0)
       // Two timestamps in the same year compare equal, so the year is what is compared.
