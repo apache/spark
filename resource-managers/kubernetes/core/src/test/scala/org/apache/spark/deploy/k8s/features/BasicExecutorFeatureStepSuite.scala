@@ -518,6 +518,52 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
   }
 
+  test("SSL RPC passwords aren't injected when the pod template uses envFrom") {
+    BasicExecutorFeatureStep.sslRpcEnvFromWarned.set(false)
+    val conf = baseConf.clone()
+      .set("spark.ssl.rpc.enabled", "true")
+      .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
+      .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
+
+    val secMgr = new SecurityManager(conf)
+    val executorConf = KubernetesTestConf.createExecutorConf(
+      sparkConf = conf,
+      sslRpcPasswordEnvs = secMgr.getEnvironmentForSslRpcPasswords)
+
+    val templatePod = SparkPod.initialPod()
+    val templateContainer = new ContainerBuilder(templatePod.container)
+      .addNewEnvFrom()
+        .withNewSecretRef()
+          .withName("rpc-secret")
+          .endSecretRef()
+        .endEnvFrom()
+      .build()
+
+    val logAppender = new LogAppender("SSL RPC passwords with envFrom")
+    var executors: Seq[SparkPod] = Seq.empty
+    withLogAppender(logAppender) {
+      executors = Seq.fill(2) {
+        new BasicExecutorFeatureStep(executorConf, defaultProfile)
+          .configurePod(SparkPod(templatePod.pod, templateContainer))
+      }
+    }
+    executors.foreach { executor =>
+      SSLOptions.SPARK_RPC_SSL_PASSWORD_ENVS.foreach { env =>
+        assert(!KubernetesFeaturesTestUtils.containerHasEnvVar(executor.container, env))
+      }
+      assert(executor.container.getEnvFrom.asScala.map(_.getSecretRef.getName) ===
+        Seq("rpc-secret"))
+    }
+    val warnings = logAppender.loggingEvents
+      .map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("envFrom"))
+    assert(warnings.size === 1)
+    assert(warnings.head.contains(SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD))
+    assert(warnings.head.contains(SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD))
+    assert(!warnings.head.contains("keyStorePass"))
+    assert(!warnings.head.contains("trustStorePass"))
+  }
+
   test("SSL RPC passwords inherited from the global spark.ssl.* namespace propagate") {
     val conf = baseConf.clone()
       .set("spark.ssl.enabled", "true")
