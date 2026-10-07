@@ -19,26 +19,23 @@ package org.apache.spark.sql.execution.python
 
 import java.io.File
 import java.util.Properties
-import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import java.util.concurrent.TimeUnit
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContextImpl}
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.internal.config.PLUGINS
-import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
+import org.apache.spark.internal.config.{BUFFER_PAGESIZE, PLUGINS}
+import org.apache.spark.memory.{TaskMemoryManager, TestMemoryConsumer, TestMemoryManager}
 import org.apache.spark.sql.{AnalysisException, Column, QueryTest}
 import org.apache.spark.sql.api.python.PythonSQLUtils
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PythonUDF, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ArrowEvalPython, Filter, LocalLimit}
 import org.apache.spark.sql.execution.{GlobalLimitExec, ProjectExec, SortExec}
-import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, LongType, StructField, StructType}
+import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.Utils
 
 /**
@@ -47,6 +44,7 @@ import org.apache.spark.util.Utils
  */
 class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
 
+  import InProcessEvaluatorTestUtils._
   import testImplicits._
 
   private val plugin = "org.apache.spark.sql.execution.python.InProcessPythonPlugin"
@@ -90,102 +88,6 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
     assert(physical.head.producedAttributes ==
       (physical.head.outputSet -- physical.head.child.outputSet))
     assert(physical.head.missingInput.isEmpty)
-  }
-
-  /** Spill directories of in-process evaluators under the executor's local directory. */
-  private def spillDirs(): Set[String] =
-    Option(new File(Utils.getLocalDir(SparkEnv.get.conf)).listFiles()).toSeq.flatten
-      .map(_.getName).filter(_.startsWith("inprocess-udf-")).toSet
-
-  /**
-   * A Buffered evaluator without UDFs over `rowCount` rows of one long column, whose queue
-   * spills unless `memory` allows otherwise. The input blocks before reading row `blockAt`.
-   */
-  private class BufferedInput(rowCount: Int, spill: Boolean, blockAt: Int = -1) {
-    val memory = new TestMemoryManager(SparkEnv.get.conf)
-    if (spill) memory.limit(0)
-    val taskMemory = new TaskMemoryManager(memory, 0)
-    val context = new TaskContextImpl(0, 0, 0, 0, 0, 1, taskMemory, new Properties, null)
-    val reached = new CountDownLatch(1)
-    val gate = new CountDownLatch(1)
-    val pulled = new AtomicInteger()
-    private val column = AttributeReference("x", LongType)()
-    private val toUnsafe = UnsafeProjection.create(Array[DataType](LongType))
-    val session = new InProcessPythonRuntime.InterpreterSession()
-
-    private val rows: Iterator[InternalRow] = new Iterator[InternalRow] {
-      private def block(): Unit = if (pulled.get == blockAt) {
-        reached.countDown()
-        gate.await(10, TimeUnit.SECONDS)
-      }
-      override def hasNext: Boolean = { block(); pulled.get < rowCount }
-      override def next(): InternalRow = {
-        block()
-        toUnsafe(InternalRow(pulled.incrementAndGet().toLong)).copy()
-      }
-    }
-
-    def iterator(): Iterator[InternalRow] = {
-      val metrics = (PythonSQLMetrics.pythonSizeMetricsDesc ++
-        PythonSQLMetrics.pythonTimingMetricsDesc ++ PythonSQLMetrics.pythonOtherMetricsDesc)
-        .keys.map(_ -> new SQLMetric("sum", 0L)).toMap
-      new InProcessArrowEvalPythonEvaluatorFactory(Seq(column), Seq.empty, Seq(column), 10,
-          0L, "UTC", false, false, false, false, true, metrics) {
-        override private[python] def runtimeSession = session
-      }.evaluateBatches(Seq.empty, Array.empty, rows,
-        StructType(Seq(StructField("x", LongType))), context,
-        InProcessArrowEvalPythonEvaluatorFactory.Buffered(None))
-    }
-  }
-
-  test("buffered rows create a spill directory only when they spill") {
-    val before = spillDirs()
-    val input = new BufferedInput(rowCount = 25, spill = false)
-    try {
-      val iterator = input.iterator()
-      // The first batch is buffered in memory, while the queue is in use.
-      assert(iterator.next().getLong(0) == 1L && spillDirs() == before)
-      assert(iterator.map(_.getLong(0)).toSeq == (2L to 25L) && spillDirs() == before)
-    } finally {
-      input.context.markTaskCompleted(None)
-      input.session.shutdown()
-    }
-  }
-
-  test("buffered rows that spill delete their spill directory at the end of input") {
-    val before = spillDirs()
-    val input = new BufferedInput(rowCount = 25, spill = true)
-    try {
-      val iterator = input.iterator()
-      assert(iterator.next().getLong(0) == 1L && (spillDirs() -- before).size == 1)
-      assert(iterator.map(_.getLong(0)).toSeq == (2L to 25L) && spillDirs() == before)
-    } finally {
-      input.context.markTaskCompleted(None)
-      input.session.shutdown()
-    }
-  }
-
-  test("task completion deletes the spill directory of a queue it leaves to the executor") {
-    val before = spillDirs()
-    val input = new BufferedInput(rowCount = 25, spill = true, blockAt = 5)
-    val iterator = input.iterator()
-    val error = new AtomicReference[Throwable]()
-    val consumer = new Thread(() => {
-      try iterator.next() catch { case t: Throwable => error.set(t) }
-    })
-    consumer.start()
-    try {
-      assert(input.reached.await(10, TimeUnit.SECONDS) && (spillDirs() -- before).size == 1)
-      // The consumer is blocked on its input, so the listener gives up on the lock after 1 s.
-      input.context.markTaskCompleted(None)
-      assert(spillDirs() == before && consumer.isAlive)
-      input.taskMemory.cleanUpAllAllocatedMemory()
-    } finally {
-      input.gate.countDown()
-      consumer.join(10000)
-      input.session.shutdown()
-    }
-    assert(error.get.isInstanceOf[NoSuchElementException] && input.pulled.get == 5)
   }
 
   test("a committed write that invalidates a cached in-process plan does not fail") {
@@ -401,6 +303,110 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  // Evaluator tests without Python, for the Buffered path's queue and spill directory.
+
+  /** Spill directories of in-process evaluators under every local root directory. */
+  private def spillDirs(): Set[String] =
+    Utils.getOrCreateLocalRootDirs(SparkEnv.get.conf).toSeq
+      .flatMap(root => Option(new File(root).listFiles()).toSeq.flatten)
+      .map(_.getAbsolutePath).filter(_.contains("inprocess-udf-")).toSet
+
+  /** A task context whose memory manager has 1 MB pages and limits memory if `spill`. */
+  private class BufferedTask(spill: Boolean) {
+    val memory = new TestMemoryManager(SparkEnv.get.conf.clone.set(BUFFER_PAGESIZE, 1L << 20))
+    if (spill) memory.limit(0)
+    val taskMemory = new TaskMemoryManager(memory, 0)
+    val context = new TaskContextImpl(0, 0, 0, 0, 0, 1, taskMemory, new Properties, null)
+    val session = new InProcessPythonRuntime.InterpreterSession()
+
+    def input(
+        rowCount: Int = 25,
+        blockAt: Int = -1,
+        blockInNext: Boolean = false,
+        batchSize: Int = 10): BlockingInput =
+      new BlockingInput(InProcessArrowEvalPythonEvaluatorFactory.Buffered(None), context,
+        session, rowCount, blockAt, blockInNext, batchSize)
+
+    def close(): Unit = {
+      try context.markTaskCompleted(None) finally session.shutdown()
+    }
+  }
+
+  test("buffered rows create a spill directory only when they spill") {
+    val before = spillDirs()
+    val task = new BufferedTask(spill = false)
+    try {
+      val iterator = task.input().iterator()
+      // The first batch is buffered in memory, while the queue is in use.
+      assert(iterator.next().getLong(0) == 1L && spillDirs() == before)
+      assert(iterator.map(_.getLong(0)).toSeq == (2L to 25L) && spillDirs() == before)
+    } finally {
+      task.close()
+    }
+  }
+
+  test("buffered rows that spill delete their spill directory at the end of input") {
+    val before = spillDirs()
+    val task = new BufferedTask(spill = true)
+    try {
+      val iterator = task.input().iterator()
+      assert(iterator.next().getLong(0) == 1L && (spillDirs() -- before).size == 1)
+      assert(iterator.map(_.getLong(0)).toSeq == (2L to 25L) && spillDirs() == before)
+    } finally {
+      task.close()
+    }
+  }
+
+  /**
+   * Completes the task while the consumer of `input` blocks on its input, which makes the
+   * listener give up on the lock after 1 s, and returns the consumer's failure.
+   */
+  private def abandonWhileBlocked(task: BufferedTask, input: BlockingInput)(
+      whileAbandoned: => Unit): Throwable = {
+    val (consumer, error) = input.nextOnAnotherThread()
+    try {
+      assert(input.reached.await(10, TimeUnit.SECONDS))
+      task.context.markTaskCompleted(None)
+      assert(consumer.isAlive)
+      whileAbandoned
+      task.taskMemory.cleanUpAllAllocatedMemory()
+    } finally {
+      input.gate.countDown()
+      consumer.join(10000)
+      task.session.shutdown()
+    }
+    error()
+  }
+
+  Seq(false, true).foreach { blockInNext =>
+    val where = if (blockInNext) "next" else "hasNext"
+    test(s"task completion deletes the spill directory of an abandoned queue ($where)") {
+      val before = spillDirs()
+      val task = new BufferedTask(spill = true)
+      val input = task.input(blockAt = 5, blockInNext = blockInNext)
+      val error = abandonWhileBlocked(task, input) {
+        assert(spillDirs() == before)
+      }
+      // A row read while completing is dropped, without adding it to the abandoned queue.
+      assert(error.isInstanceOf[NoSuchElementException])
+      assert(error.getMessage == "End of in-process UDF input")
+      assert(input.pulled.get == (if (blockInNext) 6 else 5) && spillDirs() == before)
+    }
+  }
+
+  test("an abandoned queue does not spill for other consumers") {
+    val before = spillDirs()
+    val task = new BufferedTask(spill = false)
+    // Fill several in-memory pages of 1 MB, so that the queue could spill all but the last.
+    val input = task.input(rowCount = 300000, blockAt = 200000, batchSize = 0)
+    abandonWhileBlocked(task, input) {
+      task.memory.limit(0)
+      val other = new TestMemoryConsumer(task.taskMemory)
+      other.use(1L << 20)
+      assert(spillDirs() == before && other.getUsed == 0L)
+    }
+    assert(spillDirs() == before)
+  }
 }
 
 class TunedInProcessPythonPlugin extends InProcessPythonPlugin

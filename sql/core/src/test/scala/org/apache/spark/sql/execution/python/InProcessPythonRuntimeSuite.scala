@@ -28,12 +28,14 @@ import org.apache.spark.api.plugin.PluginContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, SimplePythonFunction}
 import org.apache.spark.internal.config.Python.{IN_PROCESS_PATH_RULE, IN_PROCESS_SITE_PACKAGES}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PythonUDF}
+import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.{LongType, StructField, StructType}
+import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 
 class InProcessPythonRuntimeSuite extends SparkFunSuite {
+  import InProcessEvaluatorTestUtils._
+
   private var runtime: InProcessPythonRuntime.InterpreterSession = _
 
   override def beforeEach(): Unit = {
@@ -44,11 +46,6 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
   override def afterEach(): Unit = {
     try { runtime.shutdown() } finally { super.afterEach() }
   }
-
-  /** Every metric that an evaluator may update, as `PythonSQLMetrics` defines them. */
-  private def allMetrics(): Map[String, SQLMetric] =
-    (PythonSQLMetrics.pythonSizeMetricsDesc ++ PythonSQLMetrics.pythonTimingMetricsDesc ++
-      PythonSQLMetrics.pythonOtherMetricsDesc).keys.map(_ -> new SQLMetric("sum", 0L)).toMap
 
   test("site-packages config validates JEP include paths") {
     val conf = new SparkConf(false)
@@ -196,12 +193,6 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
         lockWaitMillis)
   }
 
-  private def thread(body: => Unit): Thread = {
-    val t = new Thread(() => body)
-    t.start()
-    t
-  }
-
   /**
    * Runs `test` while a consumer on another thread is inside a call, optionally running
    * Python, until `test` returns. The consumer is released and joined even if `test` fails.
@@ -306,47 +297,47 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     assert(releases.taskMemory.get == 1 && releases.others.get == 1)
   }
 
-  /**
-   * An evaluator without UDFs, which reads its single input column back from Arrow, so that
-   * its iterator runs without Python. `rows` blocks on `gate` before reading row `blockAt`.
-   */
-  private class BlockingInput(blockAt: Int) {
-    val reached = new CountDownLatch(1)
-    val gate = new CountDownLatch(1)
-    val pulled = new AtomicInteger()
-    val context = TaskContext.empty()
-    private val column = AttributeReference("x", LongType)()
-
-    val rows: Iterator[InternalRow] = new Iterator[InternalRow] {
-      private def block(): Unit = if (pulled.get == blockAt) {
-        reached.countDown()
-        gate.await(10, TimeUnit.SECONDS)
-      }
-      override def hasNext: Boolean = { block(); true }
-      override def next(): InternalRow = {
-        block()
-        InternalRow(pulled.incrementAndGet().toLong)
+  test("task completion waits for a consumer adding a row instead of abandoning it") {
+    val releases = new Releases
+    val resources = releases.resources(lockWaitMillis = 50L)
+    val adding = new CountDownLatch(1)
+    val finish = new CountDownLatch(1)
+    val consumer = thread {
+      assert(resources.enter())
+      try {
+        assert(resources.enterTaskMemory())
+        try {
+          adding.countDown()
+          finish.await(10, TimeUnit.SECONDS)
+        } finally {
+          resources.exitTaskMemory()
+        }
+      } finally {
+        resources.exit()
       }
     }
-
-    def iterator(): Iterator[InternalRow] = {
-      val metrics = allMetrics()
-      new InProcessArrowEvalPythonEvaluatorFactory(Seq(column), Seq.empty, Seq(column), 10,
-          0L, "UTC", false, false, false, false, true, metrics) {
-        override private[python] def runtimeSession = runtime
-      }.evaluateBatches(Seq.empty, Array.empty, rows,
-        StructType(Seq(StructField("x", LongType))), context,
-        InProcessArrowEvalPythonEvaluatorFactory.ReadBack)
+    var closing: Thread = null
+    try {
+      assert(adding.await(10, TimeUnit.SECONDS))
+      closing = thread(resources.close())
+      closing.join(300)
+      // An add waits only for memory, so the listener keeps waiting past its 50 ms.
+      assert(closing.isAlive && releases.abandoned.get == 0 && releases.taskMemory.get == 0)
+    } finally {
+      finish.countDown()
+      consumer.join(10000)
     }
+    closing.join(10000)
+    assert(!closing.isAlive && releases.abandoned.get == 0)
+    assert(releases.taskMemory.get == 1 && releases.others.get == 1)
   }
 
-  test("task completion stops a batch fill within one input row") {
-    val input = new BlockingInput(blockAt = 3)
-    val iterator = input.iterator()
-    val error = new AtomicReference[Throwable]()
-    val consumer = thread {
-      try iterator.next() catch { case t: Throwable => error.set(t) }
-    }
+  private def readBack(blockAt: Int, blockInNext: Boolean = false): BlockingInput =
+    new BlockingInput(InProcessArrowEvalPythonEvaluatorFactory.ReadBack, TaskContext.empty(),
+      runtime, blockAt = blockAt, blockInNext = blockInNext)
+
+  /** Completes the task while the input blocks, then unblocks it and joins `consumer`. */
+  private def completeWhileBlocked(input: BlockingInput, consumer: Thread): Unit = {
     try {
       assert(input.reached.await(10, TimeUnit.SECONDS))
       val closing = thread(input.context.markTaskCompleted(None))
@@ -359,28 +350,32 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
       input.gate.countDown()
       consumer.join(10000)
     }
-    // The fill stops at the row it was waiting for, without reading it.
-    assert(error.get.isInstanceOf[NoSuchElementException])
-    assert(error.get.getMessage == "End of in-process UDF input" && input.pulled.get == 3)
-    assert(!iterator.hasNext)
+  }
+
+  Seq(false, true).foreach { blockInNext =>
+    val where = if (blockInNext) "next" else "hasNext"
+    test(s"task completion stops a batch fill within one input row (blocked in $where)") {
+      val input = readBack(blockAt = 3, blockInNext = blockInNext)
+      val iterator = input.iterator()
+      val error = new AtomicReference[Throwable]()
+      val consumer = thread {
+        try iterator.next() catch { case t: Throwable => error.set(t) }
+      }
+      completeWhileBlocked(input, consumer)
+      // A row read while completing is dropped, and no later row is read.
+      assert(error.get.isInstanceOf[NoSuchElementException])
+      assert(error.get.getMessage == "End of in-process UDF input")
+      assert(input.pulled.get == (if (blockInNext) 4 else 3))
+      assert(!iterator.hasNext)
+    }
   }
 
   test("hasNext returns false when task completion happens while it reads input") {
-    val input = new BlockingInput(blockAt = 0)
+    val input = readBack(blockAt = 0)
     val iterator = input.iterator()
     val available = new AtomicReference[java.lang.Boolean]()
     val consumer = thread(available.set(iterator.hasNext))
-    try {
-      assert(input.reached.await(10, TimeUnit.SECONDS))
-      val closing = thread(input.context.markTaskCompleted(None))
-      closing.join(200)
-      input.gate.countDown()
-      closing.join(10000)
-      assert(!closing.isAlive)
-    } finally {
-      input.gate.countDown()
-      consumer.join(10000)
-    }
+    completeWhileBlocked(input, consumer)
     assert(available.get == false && input.pulled.get == 0)
   }
 
