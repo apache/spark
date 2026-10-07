@@ -34,6 +34,7 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
     ColumnSelection.ExcludeColumns(columnNames.map(UnqualifiedColumnName(_)))
 
   private def versionMap(entries: (Seq[String], Boolean)*): Map[String, Boolean] =
+    // Construct persisted version-map states directly; Scd2VersionMapSuite tests their production.
     entries.map { case (path, authored) =>
       QuotingUtils.quoteNameParts(path) -> authored
     }.toMap
@@ -271,6 +272,28 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
         Row(1, "source", "keep-2", 20L, 60L, cdcMetadata(20L, unauthoredMap))
       )
     )
+  }
+
+  test("quoted top-level columns coalesce or pass through according to ignore-null selection") {
+    val selected = "selected.with.dot"
+    val unselected = "unselected.with.dot"
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add(selected, StringType)
+      .add(unselected, StringType)
+    val authoredMap = versionMap()
+    val mixedMap = versionMap(
+      Seq(selected) -> false,
+      Seq(unselected) -> true)
+    val input = targetTableOf(schema)(
+      Row(1, "inherit", "keep", 10L, null, cdcMetadata(10L, authoredMap)),
+      Row(1, null, null, 20L, null, cdcMetadata(20L, mixedMap)))
+
+    checkAnswer(
+      coalesce(input, includeColumns(QuotingUtils.quoteIdentifier(selected))),
+      Seq(
+        Row(1, "inherit", "keep", 10L, null, cdcMetadata(10L, authoredMap)),
+        Row(1, "inherit", null, 20L, null, cdcMetadata(20L, mixedMap))))
   }
 
   test("reconstructed nested structs retain schema metadata and nullability") {
@@ -626,12 +649,11 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("a wider affected window corrects stale carry-in after selection changes") {
-    // Demonstrates the "Eventual consistency of the carry-in anchor" contract of
-    // [[Scd2BatchProcessor.coalesceIgnoredNulls]]: a leaf temporarily dropped from the ignore-null
-    // selection is not reconciled, so a later narrow affected window propagates a stale carry-in.
-    // A window that includes the authoring row corrects it; this test constructs that window
-    // directly rather than proving one will occur.
+  test("a wider affected window corrects inherited values after selection changes") {
+    // Rows are reconciled only within the provided affected window. A narrow window can propagate
+    // a previously inherited value when a newer authoring row lies outside it, while a later wider
+    // window containing that row corrects the affected rows. This test constructs both windows
+    // directly; it does not assert that the wider window will be scheduled.
 
     // "other" is authored and non-null in every row, so coalescing never changes it. It exists
     // only so the selection can move off "value" without becoming an (invalid) empty list.
@@ -682,12 +704,11 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
 
     // -- Batch 3 (selection = {value} -- "value" re-added) ----------------------------
     // Seq 4 arrives with an unauthored null. The affected window covers only the rows
-    // touched by this event: seq 3 (the anchor) and seq 4 (the new row). Seq 2, which
+    // touched by this event: seq 3 and seq 4 (the new row). Seq 2, which
     // holds the correct "new", is outside the window.
     //
-    // The carry-in anchor (seq 3) has a stale value: it inherited "old" in batch 1
-    // and was not reconciled while "value" was outside the selection. Seq 4 inherits
-    // this stale "old" rather than the correct "new".
+    // Seq 3 still stores "old" because "value" was not reconciled in batch 2. With no preceding
+    // authoring row in this window, seq 3 supplies "old" and seq 4 inherits it instead of "new".
     val batch3Input = targetTableOf(schema)(
       Row(1, "old", "x", 3L, 4L, cdcMetadata(3L, unauthoredMap)),
       Row(1, null, "x", 4L, null, cdcMetadata(4L, unauthoredMap))
@@ -701,9 +722,9 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
     )
 
     // -- Correction -------------------------------------------------------------------
-    // Suppose a later batch's affected window includes seq 2. Now seq 2 is the first
-    // authored row in the window: its "new" propagates forward and the stale carry-in is
-    // corrected.
+    // Suppose a later batch's affected window includes seq 2. It is now the nearest preceding row
+    // that authored "value", so "new" propagates through seq 3 and seq 4, correcting their
+    // previously inherited values.
     val correctionInput = targetTableOf(schema)(
       Row(1, "new", "x", 2L, 3L, cdcMetadata(2L, emptyMap)),
       Row(1, "old", "x", 3L, 4L, cdcMetadata(3L, unauthoredMap)),
