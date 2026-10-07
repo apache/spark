@@ -47,21 +47,6 @@ if have_pyarrow:
 _RETURN_TYPE = StructType([StructField("x", LongType())])
 
 
-def _table_batch(values):
-    """One input batch whose only column is a TABLE argument (a struct of ``x``)."""
-    inner = pa.RecordBatch.from_arrays([pa.array(values, type=pa.int64())], ["x"])
-    return ArrowBatchTransformer.wrap_struct(inner)
-
-
-def _rows(batches):
-    """The ``x`` values of the handler output, unwrapping the output struct column."""
-    return [
-        v
-        for b in batches
-        for v in ArrowBatchTransformer.flatten_struct(b, column_index=0).column(0).to_pylist()
-    ]
-
-
 class _RecordingUDTF:
     """Arrow UDTF that echoes its TABLE argument and records the lifecycle calls."""
 
@@ -99,8 +84,18 @@ class ArrowUDTFHandlerTests(unittest.TestCase):
 
     def test_eval_terminate_cleanup(self):
         udtf = _RecordingUDTF()
-        out = list(self._handler(udtf).run(0, iter([_table_batch([1, 2]), _table_batch([3])])))
-        self.assertEqual(_rows(out), [1, 2, 3, -1])
+        out = list(
+            self._handler(udtf).run(
+                0,
+                iter(
+                    [
+                        ArrowBatchTransformer.wrap_struct(pa.record_batch({"x": [1, 2]})),
+                        ArrowBatchTransformer.wrap_struct(pa.record_batch({"x": [3]})),
+                    ]
+                ),
+            )
+        )
+        self.assertEqual([r["x"] for b in out for r in b.column(0).to_pylist()], [1, 2, 3, -1])
         self.assertEqual(udtf.calls, ["eval", "eval", "terminate", "cleanup"])
 
     def test_kwargs(self):
@@ -110,10 +105,10 @@ class ArrowUDTFHandlerTests(unittest.TestCase):
 
         out = list(
             self._handler(KwargsUDTF(), args=(), kwargs={"table": 0}).run(
-                0, iter([_table_batch([7])])
+                0, iter([ArrowBatchTransformer.wrap_struct(pa.record_batch({"x": [7]}))])
             )
         )
-        self.assertEqual(_rows(out), [7])
+        self.assertEqual([r["x"] for b in out for r in b.column(0).to_pylist()], [7])
 
     def test_scalar_arg_is_not_flattened(self):
         class ScalarUDTF:
@@ -123,13 +118,19 @@ class ArrowUDTFHandlerTests(unittest.TestCase):
 
         batch = pa.RecordBatch.from_arrays([pa.array([1, 2], type=pa.int64())], ["a"])
         out = list(self._handler(ScalarUDTF(), table_arg_offsets=None).run(0, iter([batch])))
-        self.assertEqual(_rows(out), [10, 20])
+        self.assertEqual([r["x"] for b in out for r in b.column(0).to_pylist()], [10, 20])
 
     def test_skip_rest_of_input_table(self):
         udtf = _RecordingUDTF(skip_after=1)
-        batches = iter([_table_batch([1]), _table_batch([2]), _table_batch([3])])
+        batches = iter(
+            [
+                ArrowBatchTransformer.wrap_struct(pa.record_batch({"x": [1]})),
+                ArrowBatchTransformer.wrap_struct(pa.record_batch({"x": [2]})),
+                ArrowBatchTransformer.wrap_struct(pa.record_batch({"x": [3]})),
+            ]
+        )
         out = list(self._handler(udtf).run(0, batches))
-        self.assertEqual(_rows(out), [1, -1])
+        self.assertEqual([r["x"] for b in out for r in b.column(0).to_pylist()], [1, -1])
         self.assertEqual(udtf.calls, ["eval", "eval", "terminate", "cleanup"])
         # The remaining input is left unconsumed.
         self.assertEqual(len(list(batches)), 1)
@@ -139,9 +140,13 @@ class ArrowUDTFHandlerTests(unittest.TestCase):
             def eval(self, table):
                 return None
 
-        out = list(self._handler(NoneUDTF()).run(0, iter([_table_batch([1])])))
+        out = list(
+            self._handler(NoneUDTF()).run(
+                0, iter([ArrowBatchTransformer.wrap_struct(pa.record_batch({"x": [1]}))])
+            )
+        )
         self.assertEqual(len(out), 1)
-        self.assertEqual(_rows(out), [])
+        self.assertEqual([r["x"] for b in out for r in b.column(0).to_pylist()], [])
 
     def test_errors(self):
         class Raises:
@@ -168,14 +173,23 @@ class ArrowUDTFHandlerTests(unittest.TestCase):
         ]:
             with self.subTest(error_class=error_class):
                 with self.assertRaises(PySparkRuntimeError) as ctx:
-                    list(self._handler(udtf).run(0, iter([_table_batch([1])])))
+                    list(
+                        self._handler(udtf).run(
+                            0,
+                            iter([ArrowBatchTransformer.wrap_struct(pa.record_batch({"x": [1]}))]),
+                        )
+                    )
                 self.assertEqual(ctx.exception.getCondition(), error_class)
 
     def test_cleanup_on_error(self):
         udtf = _RecordingUDTF()
         udtf.eval = lambda table: 1  # not iterable
         with self.assertRaises(PySparkRuntimeError):
-            list(self._handler(udtf).run(0, iter([_table_batch([1])])))
+            list(
+                self._handler(udtf).run(
+                    0, iter([ArrowBatchTransformer.wrap_struct(pa.record_batch({"x": [1]}))])
+                )
+            )
         self.assertEqual(udtf.calls, ["cleanup"])
 
 
