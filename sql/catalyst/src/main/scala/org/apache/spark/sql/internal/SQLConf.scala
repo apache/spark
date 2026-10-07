@@ -1968,8 +1968,9 @@ object SQLConf {
 
   val PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED =
     buildConf("spark.sql.parquet.storageFilterPushdown.enabled")
-      .doc("If true, the vectorized Parquet reader may apply a runtime storage filter, such as a " +
-        "bloom filter from join runtime filtering, while it reads. It reads the columns the " +
+      .doc("If true, the vectorized reader of the V1 Parquet file source may apply a runtime " +
+        "storage filter, such as a bloom filter from join runtime filtering, while it reads. " +
+        "It reads the columns the " +
         "filter needs first, evaluates the filter per row, and then reads the remaining columns " +
         "only for the rows that survived. This is a planning-time decision. " +
         "A filter that is attached also stays in the post-scan filter, the way a pushed data " +

@@ -222,7 +222,7 @@ object StorageFilterPushdownBenchmark extends SqlBasedBenchmark {
       val fingerprinted =
         rows.select(count(lit(1)), bit_xor(xxhash64(rows.columns.map(col).toIndexedSeq: _*)))
       checkedFactScan(fingerprinted, enabled)
-      fingerprinted.head()
+      fingerprinted.collect().head
     }
     val (off, on) = (fingerprint(enabled = false), fingerprint(enabled = true))
     assert(off == on, s"$title: both arms must return the same rows; got $off and $on")

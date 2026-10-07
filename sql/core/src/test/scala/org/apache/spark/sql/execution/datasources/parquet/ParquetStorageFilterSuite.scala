@@ -223,11 +223,6 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  // The native address of an off-heap vector's values, 0 once it is freed. Only for a fixed-width
-  // vector. A string or binary one keeps its bytes in a child and reports 0 even while live.
-  private def address(vector: Any): Long =
-    vector.asInstanceOf[OffHeapColumnVector].valuesNativeAddress()
-
   // Runs `body` as a task under `context`. The block manager has to know the task for a format
   // reader to read its broadcast hadoop conf there.
   private def asTask[T](context: TaskContext)(body: => T): T = {
@@ -263,6 +258,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   private val evaluationGivenUp = "applying it to a row raised an error"
   private val decodingGivenUp = "decoding its key columns raised an error"
 
+  // The native address of an off-heap vector's values, 0 once it is freed. Only for a fixed-width
+  // vector. A string or binary one keeps its bytes in a child and reports 0 even while live.
+  private def address(vector: Any): Long =
+    vector.asInstanceOf[OffHeapColumnVector].valuesNativeAddress()
 
   // The metric map a scan hands the format, for a test that builds a reader by hand.
   private def metricMap(): Map[String, SQLMetric] =
@@ -1167,15 +1166,24 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   }
 
   // The later-set tests' file: twenty string keys, `0001` to `0020` padded with `x` to 1000 bytes,
-  // the last two to `lastTwoBytes`, in one row group. Returns it with the rows `laterSetFilter`
-  // keeps.
-  private def writeLaterSetFile(dir: File, lastTwoBytes: Int): (String, Seq[(String, String)]) = {
-    val df = spark.range(1, 21).selectExpr(
-      "CONCAT(LPAD(CAST(id AS STRING), 4, '0'), " +
-        s"REPEAT('x', IF(id >= 19, ${lastTwoBytes - 4}, 996))) AS k",
-      "CAST(id AS STRING) AS v")
-    val path = writeSingleParquetFile(dir, df, rowGroupSize = 64 * 1024L)
+  // the last two to `lastTwoBytes`, in one row group, dictionary-encoded if `dictionary`. The
+  // writer drops a dictionary whose values are all distinct, so that arm writes each key the
+  // filter rejects three times. Returns the file with the rows `k >= "0015"` keeps.
+  private def writeLaterSetFile(
+      dir: File,
+      lastTwoBytes: Int,
+      dictionary: Boolean = false): (String, Seq[(String, String)]) = {
+    val copies = if (dictionary) "IF(id < 15, 3, 1)" else "1"
+    val df = spark.range(1, 21)
+      .selectExpr("id", s"EXPLODE(SEQUENCE(1, $copies))")
+      .selectExpr(
+        "CONCAT(LPAD(CAST(id AS STRING), 4, '0'), " +
+          s"REPEAT('x', IF(id >= 19, ${lastTwoBytes - 4}, 996))) AS k",
+        "CAST(id AS STRING) AS v")
+    val path = writeSingleParquetFile(dir, df, rowGroupSize = 64 * 1024L, dictionary = dictionary)
     assert(footerOf(path).getBlocks.size == 1, "the fixture must be one row group")
+    assert(encodingsOf(path).exists(_.usesDictionary) == dictionary,
+      s"the fixture's keys must be dictionary-encoded only if asked; got ${encodingsOf(path)}")
     val kept = (15 to 20).map { id =>
       (f"$id%04d" + "x" * ((if (id >= 19) lastTwoBytes else 1000) - 4), id.toString)
     }
@@ -1184,21 +1192,6 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
 
   private val laterSetSchema: StructType = kvSchema(keyType = StringType)
 
-  // `k >= "0015"`, which keeps the last six keys. Over a capacity of 4 that is one set of four,
-  // then two more.
-  private val laterSetFilter: Seq[Expression] = Seq(GreaterThanOrEqual(
-    BoundReference(0, StringType, nullable = true), Literal.create("0015", StringType)))
-
-  // Reads a later-set file over a capacity of 4 under `cap`, and returns the rows.
-  private def readLaterSet(path: String, cap: Long): Seq[(String, String)] = {
-    val (rows, reader) = readAllWith(
-      path, Seq("k", "v"), createFilter(laterSetFilter, laterSetSchema, allMetrics(), cap),
-      (b, i) => (b.column(0).getUTF8String(i).toString, b.column(1).getUTF8String(i).toString),
-      capacity = 4)
-    reader.close()
-    rows
-  }
-
   test("a later accumulator set of a variable-length key is charged per value") {
     // Six survivors over a capacity of 4 fill one set of four 1000-byte keys and a second of two
     // 2000-byte ones. Every set grows as its values arrive, the way the first one does. Each value
@@ -1206,15 +1199,29 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     // So the row group is charged 4 * (4000 + 17) + 2 * (8000 + 17) + 40 = 32142 bytes. A cap of
     // 32142 keeps splicing and one of 32141 gives it up, which a missing or a double charge would
     // each get wrong. And the keys must come back right whichever path the row group took.
-    withTempDir { dir =>
-      val (path, expected) = writeLaterSetFile(dir, lastTwoBytes = 2000)
-      assertSpliceCharge(32142L, rows = 6) { cap =>
-        readUnderCap(path, laterSetSchema, laterSetFilter, cap, batchSize = 4)
-      }
-      Seq(Long.MaxValue, 32142L, 32141L).foreach { cap =>
-        val rows = readLaterSet(path, cap)
-        assert(rows == expected,
-          s"every survivor must come back with its own key under cap $cap; got ${rows.map(_._2)}")
+    //
+    // The same holds for dictionary-encoded keys. Phase 1 decodes those lazily and writes no
+    // lengths of its own, so the charge has to be measured on the copy.
+    // `k >= "0015"` keeps the last six keys. Over a capacity of 4 that is one set of four, then
+    // two.
+    val filter = Seq(GreaterThanOrEqual(
+      BoundReference(0, StringType, nullable = true), Literal.create("0015", StringType)))
+    Seq(false, true).foreach { dictionary =>
+      withTempDir { dir =>
+        val (path, expected) = writeLaterSetFile(dir, lastTwoBytes = 2000, dictionary)
+        assertSpliceCharge(32142L, rows = 6) { cap =>
+          readUnderCap(path, laterSetSchema, filter, cap, batchSize = 4)
+        }
+        Seq(Long.MaxValue, 32142L, 32141L).foreach { cap =>
+          val (rows, reader) = readAllWith(
+            path, Seq("k", "v"), createFilter(filter, laterSetSchema, allMetrics(), cap),
+            (b, i) =>
+              (b.column(0).getUTF8String(i).toString, b.column(1).getUTF8String(i).toString),
+            capacity = 4)
+          reader.close()
+          assert(rows == expected, s"every survivor must come back with its own key under cap " +
+            s"$cap (dictionary = $dictionary); got ${rows.map(_._2)}")
+        }
       }
     }
   }
@@ -1254,17 +1261,26 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
 
   test("two key columns are both charged") {
     // Seven survivors in one range cost 7 * (9 + 9) + 40 = 166 bytes with two long keys. A cap of
-    // 166 keeps splicing and one of 165 gives it up, so charging one key alone would show.
-    withTempDir { dir =>
-      val df = spark.range(1, 401).selectExpr("id AS k", "id AS k2", "CAST(id AS STRING) AS v")
-      val path = writeSingleParquetFile(dir, df, rowGroupSize = 64 * 1024L, pageSize = Some(512L))
-      val schema = StructType(Seq(StructField("k", LongType), StructField("k2", LongType),
-        StructField("v", StringType)))
-      val storageFilters = Seq(And(
-        GreaterThanOrEqual(BoundReference(0, LongType, nullable = true), Literal(394L)),
-        GreaterThanOrEqual(BoundReference(1, LongType, nullable = true), Literal(0L))))
-      assertSpliceCharge(166L, rows = 7) { cap =>
-        readUnderCap(path, schema, storageFilters, cap, batchSize = 16)
+    // 166 keeps splicing and one of 165 gives it up, so charging one key alone would show. Two
+    // 4-byte string keys each cost their fixed part of 17 and four times their 4 bytes per row,
+    // so 7 * (33 + 33) + 40 = 502. That also shows a value charge only one of them adds.
+    Seq(
+      ("id", LongType, Literal(394L), Literal(0L), 166L),
+      ("LPAD(CAST(id AS STRING), 4, '0')", StringType, Literal("0394"), Literal(""), 502L)
+    ).foreach { case (keyExpr, keyType, from, anything, charge) =>
+      withTempDir { dir =>
+        val df = spark.range(1, 401)
+          .selectExpr(s"$keyExpr AS k", s"$keyExpr AS k2", "CAST(id AS STRING) AS v")
+        val path =
+          writeSingleParquetFile(dir, df, rowGroupSize = 64 * 1024L, pageSize = Some(512L))
+        val schema = StructType(Seq(StructField("k", keyType), StructField("k2", keyType),
+          StructField("v", StringType)))
+        val storageFilters = Seq(And(
+          GreaterThanOrEqual(BoundReference(0, keyType, nullable = true), from),
+          GreaterThanOrEqual(BoundReference(1, keyType, nullable = true), anything)))
+        assertSpliceCharge(charge, rows = 7) { cap =>
+          readUnderCap(path, schema, storageFilters, cap, batchSize = 16)
+        }
       }
     }
   }
@@ -1716,28 +1732,20 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       assert(warnings == 1,
         "the read must have discovered the damaged index, or this test proves nothing; got " +
           warnings)
-      // A plain read of the same query is the bar. The filtering one must never hand the post-scan
-      // Filter more rows than that.
+      // A plain read of the same query is the bar. The filtering one returns exactly its rows of
+      // the damaged row group, which comes back whole, and its even ones of the other two, which
+      // keep the storage filter's narrowing. Each once and in file order.
       val plain = read(Nil)
-      assert(filtered.size <= plain.size,
-        s"the filtering read must not read more than a plain one; got ${filtered.size} rows " +
-          s"against ${plain.size}")
-      // The sharp form of the same thing. The last row group's index is intact, so its pages are
-      // still pruned after the retry.
+      assert(filtered == plain.filter(k => (k >= 101L && k <= 200L) || k % 2 == 0),
+        s"the filtering read must return the plain read's rows, narrowed outside the damaged " +
+          s"row group; got $filtered against $plain")
+      // The last row group's index is intact, so its pages are still pruned after the retry.
       assert(filtered.count(_ > 200L) < 100,
         s"the last row group must keep its pruning; got ${filtered.count(_ > 200L)} of its 100")
       // The damaged row group comes back whole, which is the cost that is inherent to it.
       assert((101L to 200L).forall(filtered.contains),
         s"the damaged row group must come back whole; got " +
           s"${filtered.count(k => k > 100L && k <= 200L)} of its 100")
-      // And every row the pushed filter matches is in the output, all three being even.
-      assert(Seq(2L, 102L, 202L).forall(filtered.contains),
-        s"the matching rows must survive; got ${filtered.size} rows")
-      // The row groups around the damaged one keep the storage filter's narrowing too, so they
-      // return even keys alone.
-      val undamaged = filtered.filter(k => k <= 100L || k > 200L)
-      assert(undamaged.nonEmpty && undamaged.forall(_ % 2 == 0),
-        s"the other row groups must still be narrowed; got ${undamaged.filter(_ % 2 != 0)}")
 
       // The WARN is reported once per split, however many row groups it costs.
       val twiceDamaged = writeParquetFileByHand(dir, blocks, (_, _) => true)
@@ -1976,9 +1984,10 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         def column(name: String): Attribute =
           relation.output.find(_.name == name).getOrElse(fail(s"no $name in the relation output"))
 
-        def offered(key: Attribute): Seq[Expression] = {
-          val logical = LogicalFilter(
-            BloomFilterMightContain(bloomLit, new XxHash64(Seq(key))), relation)
+        def offered(keys: Attribute*): Seq[Expression] = {
+          val logical = LogicalFilter(keys
+            .map(key => BloomFilterMightContain(bloomLit, new XxHash64(Seq(key))))
+            .reduce[Expression](And), relation)
           val physical = FileSourceStrategy(logical).headOption
             .getOrElse(fail(s"FileSourceStrategy did not plan $logical"))
           scanOf(physical).storageFilters
@@ -1989,33 +1998,14 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         assert(upperK.size == 1, s"a bloom over `K` must reach the scan; got $upperK")
         assert(upperK.head.references.map(_.name).toSet == Set("k"),
           s"and it must carry the relation's name for the column; got ${upperK.head}")
+        // A conjunct spelled twice is offered once, as `afterScanFilters` takes it once.
+        val twice = offered(column("k"), column("k"))
+        assert(twice.size == 1, s"the repeated conjunct must be offered once; got $twice")
 
         val upperRowIndex =
           offered(column(rowIndexName).withName(rowIndexName.toUpperCase(Locale.ROOT)))
         assert(upperRowIndex.isEmpty,
           s"a bloom over the row-index column must not be offered in any case; got $upperRowIndex")
-      }
-    }
-  }
-
-  test("FileSourceStrategy offers a conjunct that appears twice only once") {
-    // Spelled in two cases, a bloom over `k` normalizes to one conjunct, which the scan then takes
-    // once, as `afterScanFilters` does.
-    withTempDir { dir =>
-      val path = writeSingleParquetFile(dir,
-        spark.range(0, 50).selectExpr("id AS k", "CAST(id AS STRING) AS v"),
-        rowGroupSize = 64 * 1024L)
-      withSQLConf(SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-        val bloomLit = bloomLiteralOf(42L)
-        val relation = spark.read.parquet(path).queryExecution.optimizedPlan
-        val k = relation.output.find(_.name == "k").getOrElse(fail("no k in the relation output"))
-        def bloomOn(key: Attribute): Expression =
-          BloomFilterMightContain(bloomLit, new XxHash64(Seq(key)))
-        val logical = LogicalFilter(And(bloomOn(k), bloomOn(k.withName("K"))), relation)
-        val physical = FileSourceStrategy(logical).headOption
-          .getOrElse(fail(s"FileSourceStrategy did not plan $logical"))
-        val offered = scanOf(physical).storageFilters
-        assert(offered.size == 1, s"the repeated conjunct must be offered once; got $offered")
       }
     }
   }
@@ -2185,7 +2175,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       else Seq(false, true)
     // The byte-array copy and a set's growth go through `putByteArray`, `getBinary` and
     // `reserve`, which off-heap vectors implement apart. So the variable-length types, strings,
-    // binaries and byte-array decimals, run off heap too, over a capacity of 4, so every set's
+    // binaries and byte-array decimals, run off heap too, over a capacity of 4, so a full set's
     // byte child has to grow.
     offHeap <- if (ValueCopier.isVariableLength(dt)) Seq(false, true) else Seq(false)
   } {

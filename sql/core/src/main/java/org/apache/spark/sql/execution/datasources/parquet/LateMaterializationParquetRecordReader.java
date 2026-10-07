@@ -126,8 +126,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
 
   /**
    * The byte child a variable-length vector is allocated with, per row, which is
-   * `WritableColumnVector.DEFAULT_ARRAY_LENGTH`. It is part of `keyFixedBytesPerRow`, counted
-   * twice, for its data byte and its null byte.
+   * `WritableColumnVector.DEFAULT_ARRAY_LENGTH`.
    */
   private static final int DEFAULT_CHILD_BYTES_PER_ROW = 4;
 
@@ -871,9 +870,10 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   /**
    * Allocates a set of accumulators, {@link #capacity} rows each, charged per row as survivors
    * arrive. A later set grows the way the first one does rather than being sized from the set
-   * before it. Sizing would save a long key's byte child its regrowth copies. But the memory it
-   * takes up front is a prediction, and charging it made what a row group is charged depend on the
-   * cap. A larger cap could then give splicing up where a smaller one kept it.
+   * before it. Sizing it from the one before would save a variable-length key with long values its
+   * regrowth copies. But the memory taken up front is a prediction, and charging it would make what
+   * a row group is charged depend on the cap. A larger cap could then give splicing up where a
+   * smaller one keeps it.
    */
   private void allocateKeyAccumulators() {
     // Assigned before the loop, so an allocation failure part way through leaves the vectors
