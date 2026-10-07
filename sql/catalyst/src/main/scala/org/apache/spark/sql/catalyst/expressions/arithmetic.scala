@@ -1239,10 +1239,10 @@ case class Pmod(
            |${ev.isNull} = ${ev.value} == null;
            |""".stripMargin
 
-      // The positive-modulo arithmetic is the same fixed algorithm for every primitive numeric
-      // type, so delegate to the shared MathUtils.pmod helper (also used by the eval path) instead
-      // of emitting the remainder/adjust block inline. byte/short are widened to int by `%`, and
-      // the matching MathUtils.pmod overload narrows the result back.
+      // The positive-modulo arithmetic has the same semantics for every primitive numeric type,
+      // so delegate to the shared MathUtils.pmod helper (also used by the eval path) instead of
+      // emitting the remainder/adjust block inline. The byte/short overloads compute in int and
+      // narrow the result back.
       case _ =>
         s"${ev.value} = $mathUtils.pmod(${eval1.value}, ${eval2.value});"
     }
