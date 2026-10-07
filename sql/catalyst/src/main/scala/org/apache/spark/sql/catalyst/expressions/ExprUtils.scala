@@ -108,7 +108,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
 
   def getDecimalParser(locale: Locale): String => java.math.BigDecimal = {
     if (locale == Locale.US) { // Special handling the default locale for backward compatibility
-      (s: String) => new java.math.BigDecimal(s.replaceAll(",", ""))
+      (s: String) => new java.math.BigDecimal(s.replace(",", ""))
     } else {
       val decimalFormat = new DecimalFormat("", new DecimalFormatSymbols(locale))
       decimalFormat.setParseBigDecimal(true)
