@@ -24,7 +24,6 @@ import inspect
 import json
 import os
 import sys
-import time
 import warnings
 from typing import Any, BinaryIO, Optional
 
@@ -369,7 +368,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     Initialization -> Processing -> Finish/Cleanup
     """
     try:
-        boot_time = time.time()
+        metrics = WorkerMetrics()
+        metrics.reset()
+        metrics.set_current_timestamp("bootTimestampMs")
         # Initialization
         init_message = message_receiver.get_init_message()
         init_info = WorkerInitInfo.from_stream(init_message)
@@ -401,7 +402,6 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         # read_single_udf); only the classic RDD command carries a profiler of its own.
         profiler = None
         if eval_type == PythonEvalType.NON_UDF:
-            metrics = WorkerMetrics()
             assert isinstance(init_info.udf_info, (bytes, memoryview))
             func, profiler, deserializer, serializer = read_command(pickleSer, init_info.udf_info)
         else:
@@ -420,14 +420,13 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     for udf_info in init_info.udf_info
                 ]
             handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
-            metrics = handler.metrics
             func, serializer = handler.run, handler.serializer
             deserializer = serializer
 
         split_index = init_info.split_index
         del init_info
 
-        init_time = time.time()
+        metrics.set_current_timestamp("initTimestampMs")
 
         # Processing
 
@@ -552,11 +551,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-    finish_time = time.time()
-    # Lifecycle timestamps are epoch milliseconds, matching the JVM's clock for calculations.
-    metrics.set("bootTimestampMs", int(1000 * boot_time))
-    metrics.set("initTimestampMs", int(1000 * init_time))
-    metrics.set("finishTimestampMs", int(1000 * finish_time))
+    metrics.set_current_timestamp("finishTimestampMs")
     # Spill totals are byte counts already expressed in their reporting unit.
     metrics.set("memoryBytesSpilled", shuffle.MemoryBytesSpilled)
     metrics.set("diskBytesSpilled", shuffle.DiskBytesSpilled)
