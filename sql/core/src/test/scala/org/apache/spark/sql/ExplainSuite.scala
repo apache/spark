@@ -651,11 +651,17 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
           |""".stripMargin
       val df = sql(query).toDF()
       df.collect()
+      // Under ANSI `id % 10` is non-nullable, so no `isnotnull` is inferred for the join key.
+      val filterCondition = if (conf.ansiEnabled) {
+        "(id#xL > Subquery subquery#x, [id=#x])"
+      } else {
+        "((id#xL > Subquery subquery#x, [id=#x]) AND isnotnull((id#xL % 10)))"
+      }
       checkKeywordsExistsInExplain(df, FormattedMode,
-        """
+        s"""
           |(2) Filter [codegen id : 2]
           |Input [1]: [id#xL]
-          |Condition : (id#xL > Subquery subquery#x, [id=#x])
+          |Condition : $filterCondition
           |""".stripMargin,
         """
           |(6) BroadcastQueryStage
@@ -967,11 +973,15 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         val df = spark.sql("SELECT key1 FROM view1 JOIN skewDataView2 ON key1 = key2")
         df.collect()
 
-        // Verify expected FinalPlan substring including AQEShuffleRead properties
+        // Verify expected FinalPlan substring including AQEShuffleRead properties. Under ANSI the
+        // `%` join keys are non-nullable, so the `isnotnull` Filters are dropped and the node ids
+        // shift.
+        val (coalescedId, skewedId) = if (conf.ansiEnabled) (5, 11) else (6, 13)
         checkKeywordsExistsInExplain(
           df = df,
           mode = ExplainMode.fromString("FORMATTED"),
-          keywords = "AQEShuffleRead (5), coalesced", "AQEShuffleRead (11), coalesced and skewed")
+          keywords = s"AQEShuffleRead ($coalescedId), coalesced",
+          s"AQEShuffleRead ($skewedId), coalesced and skewed")
       }
     }
   }

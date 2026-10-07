@@ -26,7 +26,7 @@ import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, FalseLiteral}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
@@ -944,6 +944,35 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           }
         }
       }
+    }
+  }
+
+  test("SPARK-59639: div/mod/pmod nullability by eval mode") {
+    def ref(dataType: DataType, nullable: Boolean): BoundReference =
+      BoundReference(0, dataType, nullable)
+    type Op = (Expression, Expression, EvalMode.Value) => Expression
+    val divide: Op = (l, r, m) => Divide(l, r, m)
+    val remainder: Op = (l, r, m) => Remainder(l, r, m)
+    val integralDivide: Op = (l, r, m) => IntegralDivide(l, r, m)
+    val pmod: Op = (l, r, m) => Pmod(l, r, m)
+    val decimal = DecimalType(10, 2)
+
+    Seq(DoubleType -> divide, decimal -> divide, IntegerType -> remainder,
+        LongType -> integralDivide, IntegerType -> pmod, decimal -> pmod).foreach { case (dt, op) =>
+      // ANSI: by-zero and overflow throw instead of returning null, so the result is null iff an
+      // input is, and codegen reports a constant-false isNull.
+      val nonNull = op(ref(dt, nullable = false), ref(dt, nullable = false), EvalMode.ANSI)
+      assert(!nonNull.nullable, nonNull)
+      assert(nonNull.genCode(new CodegenContext).isNull == FalseLiteral, nonNull)
+      assert(op(ref(dt, nullable = true), ref(dt, nullable = false), EvalMode.ANSI).nullable)
+      assert(op(ref(dt, nullable = false), ref(dt, nullable = true), EvalMode.ANSI).nullable)
+      // LEGACY: by-zero (and decimal overflow) return null, so the result stays nullable.
+      assert(op(ref(dt, nullable = false), ref(dt, nullable = false), EvalMode.LEGACY).nullable)
+    }
+
+    // try_divide / try_mod run Divide / Remainder in TRY mode, which return null on error.
+    Seq(DoubleType -> divide, IntegerType -> remainder).foreach { case (dt, op) =>
+      assert(op(ref(dt, nullable = false), ref(dt, nullable = false), EvalMode.TRY).nullable)
     }
   }
 
