@@ -159,6 +159,16 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(merged.forall(_.sameOrderExpressions.isEmpty))
   }
 
+  test("SPARK-60044: a merging node is not rebuilt over another child") {
+    // Its frozen ordering was checked against its own child, not against the new one.
+    val leaf = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(1))))
+    assert(GroupPartitionsExec(leaf).withKeyPositionsFor(leaf).isDefined, "test setup")
+    val merging =
+      GroupPartitionsExec(leaf, sortedMergeOrdering = Some(Seq(SortOrder(exprA, Ascending))))
+    assert(merging.withKeyPositionsFor(leaf).isEmpty)
+  }
+
   test("SPARK-59995: the k-way merge ordering falls back to interpreted evaluation") {
     // The scan drops every sort order over a transform, so none reaches the merge. Here a transform
     // only stands in for a sort key without generated code. `TransformExpression` generates none,
@@ -450,7 +460,8 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       // Even though enableSortedMerge = true, the child is not safe for k-way merge,
       // so only key-expression orders survive (non-key exprC is dropped).
-      val ordering = GroupPartitionsExec(child, enableSortedMerge = true).outputOrdering
+      val ordering =
+        GroupPartitionsExec(child, sortedMergeOrdering = Some(child.outputOrdering)).outputOrdering
       assert(ordering.length === 1)
       assert(ordering.head.child === exprA)
     }
@@ -469,7 +480,8 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
 
     assert(!GroupPartitionsExec(child).groupedPartitions.forall(_._2.size <= 1),
       "expected coalescing")
-    assert(GroupPartitionsExec(child, enableSortedMerge = true).outputOrdering === childOrdering)
+    assert(GroupPartitionsExec(child, sortedMergeOrdering = Some(child.outputOrdering))
+      .outputOrdering === childOrdering)
     withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       // Without the flag there is no k-way merge, so only key-expression orders survive simple
       // concatenation and the non-key exprC is dropped.
@@ -493,7 +505,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       withSQLConf(
           SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key ->
             configEnabled.toString) {
-        val flagged = GroupPartitionsExec(child, enableSortedMerge = true)
+        val flagged = GroupPartitionsExec(child, sortedMergeOrdering = Some(child.outputOrdering))
         assert(flagged.outputOrdering === childOrdering,
           s"config=$configEnabled: the flag alone must keep the full ordering")
         val unflagged = GroupPartitionsExec(child)
