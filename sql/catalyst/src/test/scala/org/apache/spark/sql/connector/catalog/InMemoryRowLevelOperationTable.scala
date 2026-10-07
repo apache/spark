@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -47,14 +48,16 @@ class InMemoryRowLevelOperationTable private (
     partitioning: Array[Transform],
     properties: util.Map[String, String],
     constraints: Array[Constraint],
-    tableId: String)
+    tableId: String,
+    schemaAlignmentConfig: SchemaAlignmentConfig)
   extends InMemoryTable(
     name,
     columns,
     partitioning,
     properties,
     constraints,
-    id = tableId)
+    id = tableId,
+    schemaAlignmentConfig = schemaAlignmentConfig)
   with SupportsRowLevelOperations {
 
   def this(
@@ -63,14 +66,16 @@ class InMemoryRowLevelOperationTable private (
       partitioning: Array[Transform],
       properties: util.Map[String, String],
       constraints: Array[Constraint] = Array.empty,
-      tableId: String = java.util.UUID.randomUUID().toString) = {
+      tableId: String = java.util.UUID.randomUUID().toString,
+      schemaAlignmentConfig: SchemaAlignmentConfig = SchemaAlignmentConfig.DEFAULT) = {
     this(
       name = name,
       columns = CatalogV2Util.structTypeToV2Columns(schema),
       partitioning = partitioning,
       properties = properties,
       constraints = constraints,
-      tableId = tableId)
+      tableId = tableId,
+      schemaAlignmentConfig = schemaAlignmentConfig)
   }
 
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)
@@ -106,7 +111,8 @@ class InMemoryRowLevelOperationTable private (
       partitioning = partitioning,
       properties = properties,
       constraints = constraints,
-      tableId = id)
+      tableId = id,
+      schemaAlignmentConfig = schemaAlignmentConfig)
     dataMap.synchronized {
       dataMap.foreach { case (key, splits) =>
         val copiedSplits = splits.map { bufferedRows =>
@@ -373,9 +379,11 @@ object InMemoryRowLevelOperationTable {
       partitioning: Array[Transform],
       properties: util.Map[String, String],
       constraints: Array[Constraint] = Array.empty,
-      tableId: String = java.util.UUID.randomUUID().toString): InMemoryRowLevelOperationTable = {
+      tableId: String = java.util.UUID.randomUUID().toString,
+      schemaAlignmentConfig: SchemaAlignmentConfig = SchemaAlignmentConfig.DEFAULT)
+    : InMemoryRowLevelOperationTable = {
     new InMemoryRowLevelOperationTable(
-      name, columns, partitioning, properties, constraints, tableId)
+      name, columns, partitioning, properties, constraints, tableId, schemaAlignmentConfig)
   }
 }
 
