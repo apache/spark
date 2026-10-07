@@ -1764,9 +1764,10 @@ case class Unpivot(
     ids.exists(_.forall(_.resolved))
 
   def valuesTypeCoercioned: Boolean = canBeCoercioned &&
-    // all inner values at position idx must have the same data type
+    // all inner values at position idx must have exactly the same data type, including nested
+    // nullability, because the value column takes the data type of the first value
     values.get.head.zipWithIndex.forall { case (v, idx) =>
-      values.get.tail.forall(vals => DataTypeUtils.sameType(vals(idx).dataType, v.dataType))
+      values.get.tail.forall(vals => vals(idx).dataType == v.dataType)
     }
 
 }

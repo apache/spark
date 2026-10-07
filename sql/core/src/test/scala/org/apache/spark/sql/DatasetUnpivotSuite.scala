@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.functions.{length, struct, sum}
+import org.apache.spark.sql.functions.{array, explode, length, lit, map, struct, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -665,6 +665,56 @@ class DatasetUnpivotSuite extends SharedSparkSession {
           parameters = Map("names" -> "2"))
       }
     }
+  }
+
+  test("unpivot merges nested nullability of all values") {
+    // jan and feb are NOT NULL, mar and apr are nullable
+    val df = Seq(
+      ("north", 10, 20, Some(30), Option.empty[Int]),
+      ("south", 5, 6, Option.empty[Int], Option.empty[Int])
+    ).toDF("store", "jan", "feb", "mar", "apr")
+    val nullableLoHi = new StructType().add("lo", IntegerType).add("hi", IntegerType)
+
+    Seq(
+      Array[Column]($"h1", $"h2") -> Seq(
+        Row("north", "h1", 10, 20, false), Row("north", "h2", 30, null, true),
+        Row("south", "h1", 5, 6, false), Row("south", "h2", null, null, true)),
+      Array[Column]($"h2", $"h1") -> Seq(
+        Row("north", "h2", 30, null, true), Row("north", "h1", 10, 20, false),
+        Row("south", "h2", null, null, true), Row("south", "h1", 5, 6, false))
+    ).foreach { case (values, expected) =>
+      val unpivoted = df
+        .select(
+          $"store",
+          struct($"jan".as("lo"), $"feb".as("hi")).as("h1"),
+          struct($"mar".as("lo"), $"apr".as("hi")).as("h2"))
+        .unpivot(Array($"store"), values, "half", "b")
+      assert(unpivoted.schema("b").dataType === nullableLoHi)
+      checkAnswer(
+        unpivoted.select($"store", $"half", $"b.lo", $"b.hi", $"b.hi".isNull),
+        expected)
+    }
+
+    val arrays = df
+      .select($"store", array($"jan", $"feb").as("h1"), array($"mar", $"apr").as("h2"))
+      .unpivot(Array($"store"), Array($"h1", $"h2"), "half", "months")
+    assert(arrays.schema("months").dataType === ArrayType(IntegerType, containsNull = true))
+    checkAnswer(
+      arrays.select($"store", $"half", explode($"months").as("m")).select($"half", $"m".isNull),
+      Seq(
+        Row("h1", false), Row("h1", false), Row("h2", false), Row("h2", true),
+        Row("h1", false), Row("h1", false), Row("h2", true), Row("h2", true)))
+
+    val maps = df
+      .select($"store", map(lit("k"), $"jan").as("m1"), map(lit("k"), $"mar").as("m2"))
+      .unpivot(Array($"store"), Array($"m1", $"m2"), "half", "m")
+    assert(maps.schema("m").dataType ===
+      MapType(StringType, IntegerType, valueContainsNull = true))
+    checkAnswer(
+      maps.select($"store", $"half", $"m".getItem("k").isNull),
+      Seq(
+        Row("north", "m1", false), Row("north", "m2", false),
+        Row("south", "m1", false), Row("south", "m2", true)))
   }
 
   test("ORDER BY on a column dropped by UNPIVOT is rejected") {
