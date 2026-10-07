@@ -31,7 +31,6 @@ import pyarrow.compute as pc
 
 from pyspark import cloudpickle
 from pyspark.errors import PySparkRuntimeError
-from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.util import _format_exception
 
 _UDF_TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
@@ -41,6 +40,8 @@ NullChecker = Callable[[pa.Array], None]
 class _Registration(NamedTuple):
     func: Callable[..., pa.Array]
     expected_type: pa.DataType
+    # The expected type as _nullable_type normalizes it, to compare result types with.
+    expected_key: pa.DataType
     checker: NullChecker
     hide_traceback: bool
     simplified_traceback: bool
@@ -74,7 +75,7 @@ def _inprocess_register(
     full_validation: bool = True,
 ) -> None:
     try:
-        require_minimum_pyarrow_version()
+        # The interpreter's bootstrap has checked the PyArrow version once for its lifetime.
         embedded_version = "%d.%d" % sys.version_info[:2]
         if python_version != embedded_version:
             raise PySparkRuntimeError(
@@ -95,6 +96,7 @@ def _inprocess_register(
         _udfs[handle] = _Registration(
             func,
             expected_type,
+            _nullable_type(expected_type),
             checker,
             hide_traceback,
             simplified_traceback,
@@ -454,12 +456,14 @@ def _validate_result(
     expected_type: pa.DataType,
     null_checker: Optional[NullChecker] = None,
     full_validation: bool = True,
+    expected_key: Optional[pa.DataType] = None,
 ) -> pa.Array:
     if not isinstance(result, pa.Array):
         raise TypeError(f"In-process UDF must return a pyarrow.Array, got {type(result).__name__}")
     if len(result) != expected_rows:
         raise ValueError(f"In-process UDF returned {len(result)} rows; expected {expected_rows}")
-    expected_key = _nullable_type(expected_type)
+    if expected_key is None:
+        expected_key = _nullable_type(expected_type)
     convert = _nullable_type(result.type) != expected_key
     if convert and _nullable_type(_canonical_type(result.type)) != expected_key:
         raise TypeError(f"In-process UDF returned {result.type}; expected {expected_type}")
@@ -502,6 +506,7 @@ def _inprocess_invoke(
         (
             udf_func,
             expected_type,
+            expected_key,
             checker,
             hide_traceback,
             simplified_traceback,
@@ -524,7 +529,12 @@ def _inprocess_invoke(
         output = udf_func(*args, **kwargs)
         try:
             result = _validate_result(
-                output, int(expected_rows), expected_type, checker, full_validation
+                output,
+                int(expected_rows),
+                expected_type,
+                checker,
+                full_validation,
+                expected_key,
             )
         except BaseException:
             # The unvalidated result is a local of this and the validating frame. Capturing

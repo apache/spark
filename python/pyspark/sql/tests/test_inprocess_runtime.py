@@ -321,7 +321,7 @@ class InProcessRuntimeTests(unittest.TestCase):
             return pa.array(array)
 
         _udfs["owned"] = _Registration(
-            produce, pa.int64(), lambda array: None, False, False, False, True
+            produce, pa.int64(), pa.int64(), lambda array: None, False, False, False, True
         )
         for batch in range(2):
             array = ffi.new("struct ArrowArray*")
@@ -738,13 +738,11 @@ class InProcessRuntimeTests(unittest.TestCase):
                 wrapper._serialize()
             self.assertIsNone(wrapper._serialized)
 
-    def test_pyarrow_minimum_version_on_driver_and_registration(self):
+    def test_pyarrow_minimum_version_on_driver(self):
+        # Executors check it once, when their interpreter starts.
         with patch.object(pa, "__version__", "1.0.0"):
             with self.assertRaisesRegex(ImportError, "PyArrow.*must be installed"):
                 inprocess_udf(LongType())(lambda x: x)
-            with self.assertRaisesRegex(RuntimeError, "PyArrow.*must be installed"):
-                self.register("old", b"invalid pickle")
-        self.assertNotIn("old", _udfs)
 
     def test_callable_signatures(self):
         class NoArgs:
