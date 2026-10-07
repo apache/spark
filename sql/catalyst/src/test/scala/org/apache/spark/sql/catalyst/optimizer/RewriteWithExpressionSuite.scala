@@ -22,17 +22,17 @@ import java.time.Instant
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, EmptyTableFunctionRegistry, FakeV2SessionCatalog, TempResolvedColumn}
+import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, EmptyTableFunctionRegistry, FakeSystemCatalog, FakeV2SessionCatalog, ResolvedIdentifier, TempResolvedColumn}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.catalog.{DefaultCatalogManager, Identifier}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.DefaultCatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DateType, IntegerType, StringType, TimestampNTZType, TimestampType, TimeType}
 
@@ -484,6 +484,22 @@ class RewriteWithExpressionSuite extends PlanTest {
           condition = Some((a + x) < 10 && (a + x) > 0)
         )
     )
+  }
+
+  test("SPARK-59954: a With in a DECLARE VARIABLE default leaves the variable names alone") {
+    val ident = ResolvedIdentifier(FakeSystemCatalog, Identifier.of(Array("session"), "v"))
+    def declare(default: Expression): CreateVariable =
+      CreateVariable(Seq(ident), DefaultValueExpression(default, "v"), replace = true)
+
+    // The children are the variable names, not rows, so there is no `Project` to pre-evaluate a
+    // definition in. One worth memoizing stays in the default for `CreateVariableExec` to evaluate.
+    val kept = declare(With(Rand(Literal(0L))) { case Seq(ref) => ref * ref })
+    comparePlans(Optimizer.execute(kept), kept)
+
+    // One that gains nothing from memoizing is inlined, as anywhere else.
+    comparePlans(
+      Optimizer.execute(declare(With(Literal(3)) { case Seq(ref) => ref * ref })),
+      declare(Literal(3) * Literal(3)))
   }
 
   test("SPARK-58902: a With left in a conditional branch of an aggregate still converges") {
