@@ -160,39 +160,6 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT count(*) AS cnt
 FROM trades t ASOF JOIN quotes q
-  MATCH_CONDITION (current_timestamp() >= q.quote_time)
-  ON t.symbol = q.symbol
--- !query schema
-struct<cnt:bigint>
--- !query output
-3
-
-
--- !query
-SELECT count(*) AS cnt
-FROM trades t ASOF JOIN quotes q
-  MATCH_CONDITION (t.trade_time >= TIMESTAMP '2026-06-29 10:00:00')
-  ON t.symbol = q.symbol
--- !query schema
-struct<cnt:bigint>
--- !query output
-3
-
-
--- !query
-SELECT count(*) AS cnt
-FROM trades t ASOF JOIN quotes q
-  MATCH_CONDITION (TIMESTAMP '2026-06-29 10:00:00' >= q.quote_time)
-  ON t.symbol = q.symbol
--- !query schema
-struct<cnt:bigint>
--- !query output
-2
-
-
--- !query
-SELECT count(*) AS cnt
-FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (
     date_trunc('hour', t.trade_time) >= date_trunc('hour', q.quote_time))
   ON t.symbol = q.symbol

@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.vectorized;
 
+import java.math.BigDecimal;
+import java.nio.ByteOrder;
+
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
@@ -202,7 +205,12 @@ public class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof Float8Vector float8Vector) {
       accessor = new DoubleAccessor(float8Vector);
     } else if (vector instanceof DecimalVector decimalVector) {
-      accessor = new DecimalAccessor(decimalVector);
+      int precision = decimalVector.getPrecision();
+      if (precision > 0 && precision <= Decimal.MAX_LONG_DIGITS()) {
+        accessor = new SmallDecimalAccessor(decimalVector, ByteOrder.nativeOrder());
+      } else {
+        accessor = new DecimalAccessor(decimalVector);
+      }
     } else if (vector instanceof VarCharVector varCharVector) {
       accessor = new StringAccessor(varCharVector);
     } else if (vector instanceof LargeVarCharVector largeVarCharVector) {
@@ -441,6 +449,37 @@ public class ArrowColumnVector extends ColumnVector {
     @Override
     final double getDouble(int rowId) {
       return accessor.get(rowId);
+    }
+  }
+
+  static class SmallDecimalAccessor extends ArrowVectorAccessor {
+
+    private final DecimalVector accessor;
+    private final int lowWordOffset;
+    private final int highWordOffset;
+
+    SmallDecimalAccessor(DecimalVector vector, ByteOrder byteOrder) {
+      super(vector);
+      this.accessor = vector;
+      this.lowWordOffset = byteOrder == ByteOrder.LITTLE_ENDIAN ? 0 : Long.BYTES;
+      this.highWordOffset = byteOrder == ByteOrder.LITTLE_ENDIAN ? Long.BYTES : 0;
+    }
+
+    @Override
+    final Decimal getDecimal(int rowId, int precision, int scale) {
+      if (isNullAt(rowId)) return null;
+      // Arrow stores Decimal128 values in native byte order.
+      long offset = (long) rowId * DecimalVector.TYPE_WIDTH;
+      ArrowBuf data = accessor.getDataBuffer();
+      long unscaled = data.getLong(offset + lowWordOffset);
+      long high = data.getLong(offset + highWordOffset);
+      // Preserve full-width values even when they exceed the declared source precision.
+      if (high == (unscaled >> 63)) {
+        // Keep BigDecimal-backed Decimal semantics, including checked integral conversions.
+        return Decimal.apply(
+          BigDecimal.valueOf(unscaled, accessor.getScale()), precision, scale);
+      }
+      return Decimal.apply(accessor.getObject(rowId), precision, scale);
     }
   }
 

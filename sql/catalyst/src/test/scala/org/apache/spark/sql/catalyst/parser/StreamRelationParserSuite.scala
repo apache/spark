@@ -184,7 +184,7 @@ class StreamRelationParserSuite extends AnalysisTest {
     assert(cteRelations.size == 1)
 
     // The CTE definition is wrapped in SubqueryAlias
-    val cteDefinition = cteRelations.head._2
+    val cteDefinition = cteRelations.head.plan
     val namedStreamingRelations = cteDefinition.collect {
       case n: NamedStreamingRelation => n
     }

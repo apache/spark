@@ -34,17 +34,20 @@ import com.typesafe.tools.mima.core.*
 object MimaExcludes {
 
   // Exclude rules for 5.0.x from 4.4.0 (add 5.0-specific filters below as needed).
-  lazy val v50excludes: Seq[Problem => Boolean] = v44excludes ++ Seq(
+  lazy val v50excludes: Seq[Problem => Boolean] = v44excludes
+
+  // Exclude rules for 4.4.x from 4.3.0 (add 4.4-specific filters below as needed).
+  lazy val v44excludes: Seq[Problem => Boolean] = v43excludes ++ Seq(
     // [SPARK-58896] Decision tree leaf counts moved behind NodeStats. The old package-private
     // numLeave accessors are removed from concrete models.
     ProblemFilters.exclude[DirectMissingMethodProblem](
       "org.apache.spark.ml.classification.DecisionTreeClassificationModel.numLeave"),
     ProblemFilters.exclude[DirectMissingMethodProblem](
-      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.numLeave")
+      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.numLeave"),
+    // [SPARK-59154] Remove unused prediction variance helper after inlining its implementation.
+    ProblemFilters.exclude[DirectMissingMethodProblem](
+      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.predictVariance")
   )
-
-  // Exclude rules for 4.4.x from 4.3.0 (add 4.4-specific filters below as needed).
-  lazy val v44excludes: Seq[Problem => Boolean] = v43excludes
 
   // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).
   lazy val v43excludes: Seq[Problem => Boolean] = v42excludes ++ Seq(

@@ -151,18 +151,6 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
     udf(raw2prediction _).apply(rawPrediction)
   }
 
-  /**
-   * Returns an expression that produces a predicted label directly from a features column.
-   *
-   * `transform` uses this when [[predictionCol]] is set and [[rawPredictionCol]] is not set.
-   *
-   * @param features input features column
-   * @return prediction column of type `Double`
-   */
-  protected def predictionColumn(features: Column): Column = {
-    udf { value: Any => predict(value.asInstanceOf[FeaturesType]) }.apply(features)
-  }
-
   /** @group setParam */
   def setRawPredictionCol(value: String): M = set(rawPredictionCol, value).asInstanceOf[M]
 

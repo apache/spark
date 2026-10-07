@@ -53,6 +53,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   SpecialFrameBoundary,
   SpecifiedWindowFrame,
   SubtractTimestamps,
+  TimeBucket,
   TimestampAddInterval,
   WindowSpecDefinition
 }
@@ -447,9 +448,13 @@ abstract class TypeCoercionHelper {
           i
         }
 
-      case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
+      case i @ In(_, _) if !haveSameType(i.children.map(_.dataType)) =>
         findWiderCommonType(i.children.map(_.dataType)) match {
-          case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
+          // Only cast the children that are not already of the common type. A redundant Cast
+          // would hide an attribute from rules that match on it, such as the CHAR type padding
+          // in ApplyCharTypePadding.
+          case Some(finalDataType) =>
+            i.withNewChildren(i.children.map(castIfNotSameType(_, finalDataType)))
           case None => i
         }
 
@@ -707,6 +712,16 @@ abstract class TypeCoercionHelper {
           }
           .getOrElse(b) // If there is no applicable conversion, leave expression unchanged.
 
+      case t: TimeBucket =>
+        val children = t.children.zip(t.inputTypes).zipWithIndex.map {
+          case ((in, _), index) if index > 0 && in.dataType.isInstanceOf[TimeType] =>
+            // TIME-to-timestamp depends on CURRENT_DATE, so require an explicit cast.
+            in
+          case ((in, expected), _) =>
+            implicitCast(in, expected).getOrElse(in)
+        }
+        t.withNewChildren(children)
+
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
           case (in, expected) =>
@@ -730,12 +745,12 @@ abstract class TypeCoercionHelper {
 
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do
-        // general implicit casting. Also promote CHAR/VARCHAR to STRING here: these
-        // expressions skip ImplicitCastInputTypes, so without this the length constraint would
-        // remain on the child.
+        // general implicit casting. Also promote CHAR/VARCHAR to STRING here because these
+        // expressions skip ImplicitCastInputTypes.
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
           case (in, expected) =>
-            charVarcharToPlainString(in.dataType, expected)
+            val promotedType = charVarcharToPlainString(in.dataType, expected)
+            promotedType
               .map(dt => if (dt == in.dataType) in else Cast(in, dt))
               .getOrElse {
                 if (in.dataType == NullType && !expected.acceptsType(NullType)) {

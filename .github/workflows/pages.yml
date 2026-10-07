@@ -47,7 +47,7 @@ jobs:
     if: github.repository == 'apache/spark'
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: apache/spark
           ref: 'master'
@@ -57,7 +57,7 @@ jobs:
       - name: Free up disk space
         run: ./dev/free_disk_space_container
       - name: Install Java 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: 17

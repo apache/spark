@@ -2353,6 +2353,55 @@ class SessionCatalog(
   }
 
   /**
+   * Returns whether a temporary SCALAR function with this name exists (ignoring table functions).
+   * The scalar builtin star-handling probe must mirror `resolveScalarFunctionByIdentifier`, which
+   * consults only the scalar registry, so a temp table function of the same name is not a scalar
+   * shadow (its separate effect on ownership is probed via [[isTemporaryTableFunctionVisible]]).
+   */
+  private def isTemporaryScalarFunction(name: FunctionIdentifier): Boolean = {
+    if (name.database.isEmpty) {
+      functionRegistry.functionExists(tempFunctionIdentifier(name.funcName))
+    } else {
+      isTempFunctionIdentifier(name) && functionRegistry.functionExists(name)
+    }
+  }
+
+  /** Counterpart of [[isTemporaryScalarFunction]] for the table-function registry. */
+  private def isTemporaryTableFunction(name: FunctionIdentifier): Boolean = {
+    if (name.database.isEmpty) {
+      tableFunctionRegistry.functionExists(tempFunctionIdentifier(name.funcName))
+    } else {
+      isTempFunctionIdentifier(name) && tableFunctionRegistry.functionExists(name)
+    }
+  }
+
+  /**
+   * Whether a temp function of the given name is visible in the current resolution context,
+   * applying the same stored-view filtering as actual resolution ([[handleViewContext]]) but
+   * WITHOUT its side effect of recording the name as a referred temp function. Inside a stored view
+   * a temp function is visible only if the view captured it.
+   */
+  private def isTempFunctionVisibleInContext(name: FunctionIdentifier): Boolean =
+    AnalysisContext.get.catalogAndNamespace.isEmpty ||
+      AnalysisContext.get.referredTempFunctionNames.contains(name.funcName)
+
+  /**
+   * Whether a temporary scalar function is visible in the current context. Scalar builtin-ownership
+   * probes use this so they agree with `resolveScalarFunctionByIdentifier` on which routine owns a
+   * name.
+   */
+  def isTemporaryScalarFunctionVisible(name: FunctionIdentifier): Boolean =
+    isTemporaryScalarFunction(name) && isTempFunctionVisibleInContext(name)
+
+  /**
+   * Whether a temporary table function is visible in the current context. Builtin-ownership probes
+   * use this to detect that scalar resolution would terminate at this PATH entry with
+   * NOT_A_SCALAR_FUNCTION (a table-only match), so the name never reaches `system.builtin`.
+   */
+  def isTemporaryTableFunctionVisible(name: FunctionIdentifier): Boolean =
+    isTemporaryTableFunction(name) && isTempFunctionVisibleInContext(name)
+
+  /**
    * Return whether this function has been registered in the function registry of the current
    * session. If not existed, return false.
    */
@@ -2397,6 +2446,23 @@ class SessionCatalog(
   def isBuiltinFunction(name: String): Boolean = {
     FunctionRegistry.builtin.functionExists(FunctionIdentifier(name)) ||
       TableFunctionRegistry.builtin.functionExists(FunctionIdentifier(name))
+  }
+
+  /**
+   * Returns whether `system.builtin.<name>` still resolves to Spark's stock built-in, i.e. it has
+   * not been replaced by `SparkSessionExtensions.injectFunction`. The session `functionRegistry` is
+   * a clone of [[FunctionRegistry.builtin]] that shares each builder by reference, while
+   * `injectFunction` installs a fresh builder under the same identifier -- so builder identity
+   * tells them apart. Built-in-only syntax handling (e.g. the routed SQL/JSON direct-star
+   * rejection) must consult this, since resolution routes to the replacement when present.
+   */
+  def isStockBuiltinFunction(name: String): Boolean = {
+    val ident = FunctionRegistry.builtinFunctionIdentifier(name)
+    (functionRegistry.lookupFunctionBuilder(ident),
+        FunctionRegistry.builtin.lookupFunctionBuilder(ident)) match {
+      case (Some(sessionBuilder), Some(stockBuilder)) => sessionBuilder eq stockBuilder
+      case _ => false
+    }
   }
 
   protected[sql] def failFunctionLookup(name: FunctionIdentifier): Nothing = {

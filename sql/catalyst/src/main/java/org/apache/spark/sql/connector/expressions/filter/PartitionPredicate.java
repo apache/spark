@@ -81,6 +81,11 @@ public abstract class PartitionPredicate extends Predicate {
    * The caller must pass the <b>full</b> partition key: one value per partition transform in
    * {@link Table#partitioning()}, in order. A key for only a subset of referenced fields is not
    * supported.
+   * <p>
+   * This method may throw when it cannot evaluate the predicate for the given key, for example on
+   * an ANSI cast failure. Accepting a predicate lets Spark drop the filter it pushed, which leaves
+   * this predicate as the only evaluator, so a caller must let such a failure propagate rather
+   * than treat the partition as matching, and must finish evaluating before it mutates any data.
    *
    * @param partitionKey the full partition key for one partition, ordered according to
    *                     {@link Table#partitioning()}.

@@ -23,8 +23,10 @@ import java.util.concurrent.TimeUnit
 import java.util.jar.{JarEntry, JarOutputStream}
 import java.util.zip.CRC32
 
+import scala.jdk.CollectionConverters._
+
 import com.google.protobuf.ByteString
-import io.grpc.{ManagedChannel, Server}
+import io.grpc.{ManagedChannel, Server, Status}
 import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
 
 import org.apache.spark.connect.proto.AddArtifactsRequest
@@ -32,7 +34,7 @@ import org.apache.spark.network.util.JavaUtils.sha256Hex
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.test.ConnectFunSuite
-import org.apache.spark.util.IvyTestUtils
+import org.apache.spark.util.{IvyTestUtils, SparkFileUtils}
 import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 class ArtifactSuite extends ConnectFunSuite {
@@ -45,6 +47,8 @@ class ArtifactSuite extends ConnectFunSuite {
   private var bstub: CustomSparkConnectBlockingStub = _
   private var stub: CustomSparkConnectStub = _
   private var state: SparkConnectStubState = _
+  private var ivyHome: Path = _
+  private var previousIvyHome: Option[String] = _
 
   private def startDummyServer(): Unit = {
     service = new DummySparkConnectService()
@@ -65,23 +69,39 @@ class ArtifactSuite extends ConnectFunSuite {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+    previousIvyHome = Option(System.getProperty("ivy.home"))
+    ivyHome = Files.createTempDirectory("artifact-suite-ivy")
+    Files.createDirectories(ivyHome.resolve("cache"))
+    Files.createDirectories(ivyHome.resolve("jars"))
+    System.setProperty("ivy.home", ivyHome.toString)
     startDummyServer()
     createArtifactManager()
     client = null
   }
 
   override def afterEach(): Unit = {
-    if (server != null) {
-      server.shutdownNow()
-      assert(server.awaitTermination(5, TimeUnit.SECONDS), "server failed to shutdown")
-    }
+    try {
+      if (server != null) {
+        server.shutdownNow()
+        assert(server.awaitTermination(5, TimeUnit.SECONDS), "server failed to shutdown")
+      }
 
-    if (channel != null) {
-      channel.shutdownNow()
-    }
+      if (channel != null) {
+        channel.shutdownNow()
+      }
 
-    if (client != null) {
-      client.shutdown()
+      if (client != null) {
+        client.shutdown()
+      }
+    } finally {
+      previousIvyHome match {
+        case Some(path) => System.setProperty("ivy.home", path)
+        case None => System.clearProperty("ivy.home")
+      }
+      if (ivyHome != null) {
+        SparkFileUtils.deleteRecursively(ivyHome.toFile)
+      }
+      super.afterEach()
     }
   }
 
@@ -253,6 +273,112 @@ class ArtifactSuite extends ConnectFunSuite {
 
     assertFileDataEquality(artifacts.get(0).getData, Paths.get(file1))
     assertFileDataEquality(artifacts.get(1).getData, Paths.get(file2))
+  }
+
+  test("server-side Maven dependencies preserve artifact order") {
+    val classFile = artifactFilePath.resolve("smallClassFile.class").toUri
+    val ivyUri = URI.create("ivy://my.artifactsuite.lib:mylib:0.1")
+    val jarFile = artifactFilePath.resolve("smallJar.jar").toUri
+
+    artifactManager.addArtifacts(Seq(classFile, ivyUri, jarFile), serverSideMavenArtifacts = true)
+
+    val requests = service.getAndClearLatestAddArtifactRequests()
+    assert(requests.size == 1)
+    val batch = requests.head.getBatch
+    assert(batch.getArtifactsCount == 0)
+    assert(batch.getEntriesCount == 3)
+    assert(batch.getEntries(0).getArtifact.getName == "classes/smallClassFile.class")
+    assert(batch.getEntries(1).getMavenDependency.getUri == ivyUri.toString)
+    assert(batch.getEntries(2).getArtifact.getName == "jars/smallJar.jar")
+  }
+
+  test("server-side Maven mode resolves requested repositories on the client") {
+    val main = new MavenCoordinate("my.artifactsuite.client", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      val classFile = artifactFilePath.resolve("smallClassFile.class").toUri
+      val clientIvyUri = URI.create(s"ivy://${main.toString}?repos=$repo")
+      val serverIvyUri = URI.create("ivy://my.artifactsuite.server:mylib:0.1")
+
+      artifactManager.addArtifacts(
+        Seq(classFile, clientIvyUri, serverIvyUri),
+        serverSideMavenArtifacts = true)
+
+      val requests = service.getAndClearLatestAddArtifactRequests()
+      assert(requests.size == 1)
+      val batch = requests.head.getBatch
+      assert(batch.getEntriesCount == 3)
+      assert(batch.getEntries(0).getArtifact.getName == "classes/smallClassFile.class")
+      assert(
+        batch.getEntries(1).getArtifact.getName.contains("my.artifactsuite.client_mylib-0.1"))
+      assert(batch.getEntries(2).getMavenDependency.getUri == serverIvyUri.toString)
+    }
+  }
+
+  test("Spark Connect uses server-side Maven resolution when advertised") {
+    service.serverCapabilities = Seq(SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY)
+    client = new SparkConnectClient(Configuration(), channel)
+    val ivyUri = URI.create("ivy://my.artifactsuite.lib:mylib:0.1")
+
+    client.addArtifact(ivyUri)
+
+    val requests = service.getAndClearLatestAddArtifactRequests()
+    assert(requests.size == 1)
+    assert(requests.head.getBatch.getEntriesCount == 1)
+    assert(requests.head.getBatch.getEntries(0).getMavenDependency.getUri == ivyUri.toString)
+  }
+
+  test("Spark Connect resolves requested Maven repositories on the client") {
+    val main = new MavenCoordinate("my.artifactsuite.clientcapability", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      service.errorToThrowOnAnalyze = Some(Status.UNAVAILABLE.asRuntimeException())
+      client = new SparkConnectClient(Configuration(), channel)
+
+      client.addArtifact(URI.create(s"ivy://${main.toString}?repos=$repo"))
+
+      assert(service.errorToThrowOnAnalyze.nonEmpty)
+      val requests = service.getAndClearLatestAddArtifactRequests()
+      assert(requests.size == 1)
+      val batch = requests.head.getBatch
+      assert(batch.getArtifactsCount == 1)
+      assert(
+        batch.getArtifacts(0).getName.contains("my.artifactsuite.clientcapability_mylib-0.1"))
+    }
+  }
+
+  test("large Maven entries do not produce empty batches") {
+    val largeUri = URI.create(s"ivy://org.example:${"a" * CHUNK_SIZE}:1.0")
+    val otherUri = URI.create("ivy://org.example:other:1.0")
+
+    artifactManager.addArtifacts(Seq(largeUri, otherUri), serverSideMavenArtifacts = true)
+
+    val requests = service.getAndClearLatestAddArtifactRequests()
+    assert(requests.size == 2)
+    assert(requests.forall(_.getBatch.getEntriesCount == 1))
+    assert(requests.head.getBatch.getEntries(0).getMavenDependency.getUri == largeUri.toString)
+    assert(requests(1).getBatch.getEntries(0).getMavenDependency.getUri == otherUri.toString)
+  }
+
+  test("Spark Connect falls back only when the Maven capability is absent") {
+    val main = new MavenCoordinate("my.artifactsuite.fallback", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      client = new SparkConnectClient(Configuration(), channel)
+
+      client.addArtifact(URI.create(s"ivy://${main.toString}?repos=$repo"))
+
+      val requests = service.getAndClearLatestAddArtifactRequests()
+      assert(requests.nonEmpty)
+      assert(requests.forall(_.getBatch.getEntriesCount == 0))
+      assert(requests.flatMap(_.getBatch.getArtifactsList.asScala).exists { artifact =>
+        artifact.getName.contains("my.artifactsuite.fallback_mylib-0.1")
+      })
+    }
+
+    service.errorToThrowOnAnalyze = Some(Status.UNAVAILABLE.asRuntimeException())
+    client = new SparkConnectClient(Configuration(retryPolicies = Nil), channel)
+    intercept[Exception] {
+      client.addArtifact(URI.create("ivy://my.artifactsuite.fallback:mylib:0.1"))
+    }
+    assert(service.getAndClearLatestAddArtifactRequests().isEmpty)
   }
 
   test("Mix of SingleChunkArtifact and chunked artifact") {

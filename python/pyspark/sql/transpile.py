@@ -35,12 +35,61 @@ keeps the option matrix small; prefer doing so. To bound plan growth,
 functions with more than three untyped parameters only emit the
 all-numeric and all-string variants.
 
+``len(s)`` lowers to Catalyst ``length`` for a string operand (SPARK-55214).
+Other ``len`` arguments (numbers, lists, ...) stay interpreted Python.
+``len(None)`` raises (via ``raise_error`` on NULL), matching CPython.
+
 A lambda is lowered only when its source names it directly and alone: bind it
 to a name (``f = lambda x: x + 1``, annotated if you like) and give it a line
 of its own. Passed straight to ``udf(...)``, wrapped in another call, returned
 by another lambda, or sharing a line with a second lambda, nothing in the
 source read back says which lambda is the UDF, so it falls back to interpreted
 Python rather than risk the wrong body.
+
+A lowered UDF computes each argument it uses once per row (SPARK-58626): the
+argument becomes a column on the operator's input, and however many times the
+body reads that parameter it reads that one column. Two parameters bound to the
+same deterministic argument share the column, so ``f(a + 1, a + 1)`` computes
+``a + 1`` once.
+
+A call inside a higher-order function's lambda is never lowered: Spark already
+applies a Python UDF over the whole array there, and that path is left to it.
+Otherwise a few positions have nowhere to put the column -- under a ``groupBy``,
+in a join condition, in a command such as ``DELETE FROM``, or a draw anywhere
+above a join, where the column would cost the join its condition -- and there a
+body reading the parameter more than once stays an interpreted Python UDF, which
+computes its inputs once, rather than being lowered into an argument evaluated
+per read. One evaluation per parameter per row either way; ``f(rand(), rand())``
+is two parameters and so still two draws::
+
+    body = lambda x: x if x > 0.5 else 0.0
+    clamp = udf(body, "double")
+    df.select(clamp(rand()))  # never a value the body's own condition rejects
+
+Where the column stands it is computed for every row reaching the operator, which
+makes the argument eager even where the call sits in a branch that may not run:
+under ANSI ``when(cond, f(a / b))`` can raise on a row with ``b = 0`` and ``cond``
+false. That is what the interpreted Python UDF does too, evaluating its inputs in
+a projection feeding the worker, below the conditional -- unlike a bare Catalyst
+``when``, which is lazy. Whether such an error surfaces is not a guarantee in
+either direction: an argument left inline, or inlined again by a later rule, is
+lazy once more.
+
+Two arguments no projection can hold count as those positions too: one that is
+itself an aggregate (``f(sum(a))``), and one reading an outer query's column when
+correlated-subquery decorrelation is disabled.
+
+An argument read once gets no column, since one read is one evaluation anyway,
+and neither does one as cheap to repeat as to read -- a bare column or a literal.
+Anything more, arithmetic included, is either computed once or left to
+interpreted Python; a repeated ``a + 1`` gets a column where one fits and stops
+the UDF being lowered where one does not.
+
+That column is what we emit, not what necessarily runs: later optimizer rules may
+inline a deterministic one again where that is faster, as they may for any other
+expression. A draw is never inlined, because those rules check determinism.
+
+An argument the body never reads is not computed at all.
 """
 
 import ast
@@ -51,7 +100,7 @@ import sys
 import textwrap
 import threading
 import warnings
-from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Optional, Tuple, Union
 
 from pyspark.errors import UnsupportedOperationException
 from pyspark.sql.column import Column
@@ -62,6 +111,7 @@ from pyspark.sql.functions import (
     coalesce,
     col,
     concat,
+    length,
     lit,
     pmod,
     raise_error,
@@ -163,10 +213,34 @@ def _is_definitely_boolean(node: ast.AST) -> bool:
             return False
 
 
+def _truthiness_col(cat: Optional[str], c: Column) -> Optional[Column]:
+    """Return a boolean Column expressing Python's ``bool(c)`` for the given category.
+
+    Returns ``None`` for unsupported or unknown categories (caller falls back).
+
+    Semantics (NULL-as-False throughout, matching Python's ``None`` is falsy):
+      "bool"    -> coalesce(c, False)
+      "string"  -> coalesce(length(c) > 0, False)  -- empty string is falsy
+      "numeric" -> coalesce(c != 0, False)           -- zero is falsy
+                   NaN != 0 is True in Spark so float NaN is truthy, matching Python.
+    """
+    if cat == "bool":
+        return coalesce(c, lit(False))
+    if cat == "string":
+        return coalesce(length(c) > lit(0), lit(False))
+    if cat == "numeric":
+        return coalesce(c != lit(0), lit(False))
+    return None
+
+
 class CatalystTranspiler(AbstractTranspiler):
     """Transpiler that attempts to convert a Python UDF into native Spark SQL expressions."""
 
     variety = "catalyst"
+
+    def __init__(self) -> None:
+        self._param_categories: dict[int, str] = {}
+        self._category_cache: dict[int, str] = {}
 
     # TODO (SPARK-55218): handle implicit-None return bodies like
     # ``def f(x): x + x`` -- no return statement means return None;
@@ -235,22 +309,27 @@ class CatalystTranspiler(AbstractTranspiler):
         body_node: Optional[ast.AST],
         else_node: Optional[ast.AST],
     ) -> Column:
-        # We cannot soundly lower a generic Python truthiness test here.
-        # Python truthiness depends on the runtime input type and value:
-        # for example, 0, 0.0, "", empty collections, and None are all
-        # falsy, while most other values are truthy. The transpiler does
-        # not have enough input type information at this point to decide
-        # whether ``test_col`` is a boolean expression or a bare value
-        # whose truthiness would need Python-specific handling. Emitting
-        # ``when(coalesce(test_col, false), ...)`` is therefore unsound:
-        # it can either fail Spark analysis for non-boolean columns or
-        # silently diverge from Python semantics. Fail closed so the UDF
-        # falls back to interpreted Python execution instead.
-        if not _is_definitely_boolean(test_node):
-            raise UnsupportedOperationException(
-                f"bare truthiness tests ({ast.dump(test_node)}) in if-expressions are "
-                " not currently supported by the transpiler"
-            )
+        # Determine the boolean guard for the CASE WHEN.
+        # Two paths:
+        # 1. The test is statically known to be a boolean expression
+        #    (comparison, `not`, boolean op, literal True/False/None):
+        #    wrap with coalesce so NULL is treated as False.
+        # 2. The test is a bare value (parameter name, numeric/string
+        #    constant): lower using Python's type-specific truthiness
+        #    rules (0/""/None are falsy, everything else truthy) based on
+        #    the operand's inferred category.
+        if _is_definitely_boolean(test_node):
+            safe_test = coalesce(test_col, lit(False))
+        else:
+            cat = self._safe_category(params, test_node)
+            _maybe_test = _truthiness_col(cat, test_col)
+            if _maybe_test is None:
+                raise UnsupportedOperationException(
+                    f"bare truthiness test ({ast.dump(test_node)}) in if/ternary: "
+                    "the operand's category is unknown or unsupported, so the "
+                    "transpiler falls back to interpreted Python"
+                )
+            safe_test = _maybe_test
         # When the two branches resolve to concrete but different categories
         # (e.g. numeric vs string), the lowered ``when(...).otherwise(...)`` is a
         # CASE WHEN whose branch values share no common type under ANSI. That node
@@ -267,7 +346,6 @@ class CatalystTranspiler(AbstractTranspiler):
                 f"{else_cat}); the lowered CASE WHEN has no common type under ANSI, "
                 "so the transpiler falls back to interpreted Python"
             )
-        safe_test = coalesce(test_col, lit(False))
         return when(safe_test, body_col).otherwise(else_col)
 
     def _lower_eq(
@@ -382,6 +460,15 @@ class CatalystTranspiler(AbstractTranspiler):
         operands are type-incompatible, so the caller drops that variant and the
         JVM picks another option / falls back to the Python UDF.
         """
+        cache_key = id(node)
+        cached = self._category_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        category = self._category_uncached(params, node)
+        self._category_cache[cache_key] = category
+        return category
+
+    def _category_uncached(self, params: List[str], node: ast.AST) -> str:
         match node:
             case ast.Constant(value=v):
                 # bool subclasses int, so classify it first: int/float -> numeric,
@@ -422,6 +509,15 @@ class CatalystTranspiler(AbstractTranspiler):
                     f"operands of `{type(op).__name__}` are not type-compatible "
                     "for this input-type variant"
                 )
+            case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
+                # ``len(s)`` is an int. Only strings are lowered (SPARK-55214);
+                # other argument categories raise so this variant is dropped.
+                if self._category(params, arg) != "string":
+                    raise UnsupportedOperationException(
+                        "`len` is only lowered for string operands; other "
+                        "types fall back to interpreted Python"
+                    )
+                return "numeric"
             case ast.Return(value=value) if value is not None:
                 return self._category(params, value)
             case ast.IfExp(body=if_body, orelse=if_orelse):
@@ -719,6 +815,26 @@ class CatalystTranspiler(AbstractTranspiler):
                         f"name {name!r} is not in the UDF's parameter list "
                         "and free variables / closures are not supported"
                     )
+            case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
+                # SPARK-55214: Python ``len`` on a str is the number of Unicode
+                # code points; Spark ``length`` on a string column is character
+                # length -- they match for well-formed UTF-8. ``len(None)``
+                # raises TypeError in Python, while Spark ``length(NULL)`` is
+                # NULL, so guard like value comparisons: raise on NULL, else
+                # ``length``. A caller that already proved non-null (``if x is
+                # not None: return len(x)``) takes the otherwise branch.
+                if self._category(params, arg) != "string":
+                    raise UnsupportedOperationException(
+                        "`len` is only lowered for string operands; other "
+                        "types fall back to interpreted Python"
+                    )
+                arg_col = self._convert_chunk(params, arg)
+                err = lit(
+                    "Python UDF transpiler: cannot call len() on NULL; "
+                    "Python would raise TypeError here. Add an "
+                    "`is not None` guard or filter NULLs upstream."
+                )
+                return when(arg_col.isNull(), raise_error(err)).otherwise(length(arg_col))
             case _:
                 raise UnsupportedOperationException(
                     f"AST node {type(body).__name__} is not supported by the "
@@ -740,6 +856,9 @@ class CatalystTranspiler(AbstractTranspiler):
         # Per-variant input-type assumption ({public_param_index -> category}),
         # read by ``_category`` to choose str vs numeric operators.
         self._param_categories = param_categories or {}
+        # Category inference depends on the per-variant assumptions above. Cache
+        # each AST node only for this lowering so recursive conversion stays linear.
+        self._category_cache = {}
         function_body = function_ast.body
         if len(function_body) != 1:
             raise UnsupportedOperationException(
@@ -850,7 +969,8 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
     matrix small) while keeping every typed param pinned.
     """
     n = len(public_params)
-    public_args = function_ast.args.args[len(function_ast.args.args) - n :]
+    all_args = _positional_args(function_ast)
+    public_args = all_args[len(all_args) - n :]
     candidates: List[List[str]] = []
     untyped = 0
     for arg in public_args:
@@ -982,9 +1102,14 @@ def _get_src_ast_from_func(func: Callable) -> Tuple[Optional[str], Optional[ast.
     return src, ast_info
 
 
-def _get_parameter_list(node: ast.FunctionDef) -> list[str]:
-    """Return the positional argument names in order."""
-    return [arg.arg for arg in node.args.args]
+def _positional_args(node: Union[ast.FunctionDef, ast.Lambda]) -> List[ast.arg]:
+    """Return the positional argument nodes in order, positional-only first."""
+    return node.args.posonlyargs + node.args.args
+
+
+def _get_parameter_list(node: Union[ast.FunctionDef, ast.Lambda]) -> list[str]:
+    """Return the positional argument names in order, positional-only first."""
+    return [arg.arg for arg in _positional_args(node)]
 
 
 def _get_function_from_ast(body: ast.AST, held_code: Any) -> Tuple[Optional[ast.FunctionDef], str]:
@@ -1040,7 +1165,7 @@ def _get_function_from_ast(body: ast.AST, held_code: Any) -> Tuple[Optional[ast.
         # be the UDF) from one that RETURNED the lambda we hold, as in the one-line
         # ``make_adder = lambda n: lambda x: x + n`` -- there the outer lambda is
         # located and the inner is held, and lowering the outer would be wrong.
-        located_args = [arg.arg for arg in stmt.args.args]
+        located_args = _get_parameter_list(stmt)
         if located_args != list(held_code.co_varnames[: held_code.co_argcount]):
             return None, (
                 "the lambda defined in the source read for this one takes different "
@@ -1084,7 +1209,7 @@ def _transpile_func(
     session: "SparkSession",
     func: Callable[..., Any],
     returnType: "DataTypeOrString",
-) -> Tuple[List[Column], List[str], List[str], List[List[str]]]:
+) -> Tuple[List[Column], List[str], List[str], List[List[str]], List[str]]:
     """
     An experimental internal function that attempts to transpile a callable function.
 
@@ -1099,6 +1224,9 @@ def _transpile_func(
     list of per-option input-type categories (``"numeric"`` / ``"string"`` per
     public param) -- the JVM picks the option whose categories match the bound
     column types, or falls back to the Python UDF when none match.
+    list of the public parameter names Python forbids calling by keyword
+    (positional-only) -- the caller must NOT resolve a kwarg matching one of these
+    to a position, since Python itself rejects that call.
     """
     try:
         # The transpiler lowers to atomic (numeric/string/boolean/binary)
@@ -1126,6 +1254,7 @@ def _transpile_func(
                 ],
                 [],
                 [],
+                [],
             )
         # A functools.wraps-style decorator makes ``inspect.getsource`` return
         # the WRAPPED function's source (getsource follows ``__wrapped__``),
@@ -1147,22 +1276,23 @@ def _transpile_func(
                 ],
                 [],
                 [],
+                [],
             )
         # Not ``ast``: that name would shadow the module for this whole function.
         src, ast_info = _get_src_ast_from_func(func)
         if ast_info is None:
-            return ([], ["Error getting ast for function, cannot transpile"], [], [])
+            return ([], ["Error getting ast for function, cannot transpile"], [], [], [])
         # Get the lambda body and parameters
         function_ast, extraction_error = _get_function_from_ast(ast_info, _held_code(func))
         if function_ast is None:
-            return ([], [extraction_error], [], [])
-        # Default, variadic (``*args`` / ``**kwargs``), keyword-only, and
-        # positional-only parameters can't be represented by the positional
-        # ``_udf_param_N`` placeholder scheme: a call site may omit a
-        # defaulted argument, leaving the placeholder referencing a position
-        # the call never bound, and ``_get_parameter_list`` only reads
-        # ``args``. Fall back to interpreted Python rather than emit an
-        # invalid plan.
+            return ([], [extraction_error], [], [], [])
+        # Default, variadic (``*args`` / ``**kwargs``) and keyword-only params
+        # can't be represented by the positional ``_udf_param_N`` placeholder
+        # scheme: a call site may omit a defaulted argument, leaving the
+        # placeholder referencing a position the call never bound. A
+        # positional-only param has no such gap -- it is always bound by
+        # position -- so it is not refused here; a DEFAULTED one still hits
+        # ``fn_args.defaults`` above.
         fn_args = function_ast.args
         if (
             fn_args.defaults
@@ -1170,14 +1300,14 @@ def _transpile_func(
             or fn_args.kwonlyargs
             or fn_args.vararg is not None
             or fn_args.kwarg is not None
-            or fn_args.posonlyargs
         ):
             return (
                 [],
                 [
-                    "functions with default, variadic, keyword-only, or "
-                    "positional-only arguments are not supported by the transpiler"
+                    "functions with default, variadic, or keyword-only "
+                    "arguments are not supported by the transpiler"
                 ],
+                [],
                 [],
                 [],
             )
@@ -1217,6 +1347,7 @@ def _transpile_func(
                     ],
                     [],
                     [],
+                    [],
                 )
             spoken_for = int(
                 inspect.isfunction(call_entry) or isinstance(call_entry, classmethod)
@@ -1226,11 +1357,16 @@ def _transpile_func(
             # prepends the class ON TOP of the method's own ``__self__`` -- or one with
             # no parameter to hold it. Python raises for whatever the call site passes,
             # so there is nothing correct to lower.
-            return ([], ["callable leaves no parameter for the call site to bind"], [], [])
+            return ([], ["callable leaves no parameter for the call site to bind"], [], [], [])
         # Caller-facing params: callers match user-supplied kwargs against this,
         # and the receiver is not named at the call site. Everything downstream
         # indexes off THIS list, so the placeholder numbering needs no offset.
         public_params = params[spoken_for:]
+        # Subset of ``public_params`` Python forbids calling by keyword. The
+        # call-site kwargs-to-positional rewrite in ``udf.py`` must not "fix" a
+        # keyword call to one of these, since Python itself would reject it.
+        posonly_names = {arg.arg for arg in function_ast.args.posonlyargs}
+        positional_only_public_params = [p for p in public_params if p in posonly_names]
         transpiled: list[Column] = []
         input_categories: list[list[str]] = []
         errors = []
@@ -1253,9 +1389,15 @@ def _transpile_func(
                         )
                 except Exception as e:
                     errors.append(str(e))
-        return (transpiled, errors, public_params, input_categories)
+        return (
+            transpiled,
+            errors,
+            public_params,
+            input_categories,
+            positional_only_public_params,
+        )
     except Exception as e:
         # Don't re-raise: an inability to transpile must never break a
         # working UDF. The caller treats an empty ``transpiled`` list as a
         # silent fall-back to interpreted Python.
-        return ([], [str(e)], [], [])
+        return ([], [str(e)], [], [], [])

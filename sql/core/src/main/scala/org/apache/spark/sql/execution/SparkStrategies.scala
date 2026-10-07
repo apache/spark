@@ -115,6 +115,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           CollectLimitExec(limit = offset + limit, child = planLater(child), offset = offset)
         case Limit(IntegerLiteral(limit), child) =>
           CollectLimitExec(limit = limit, child = planLater(child))
+        case logical.Offset(IntegerLiteral(0), child) =>
+          // OFFSET 0 is a no-op. It is normally removed by the EliminateOffsets optimizer rule,
+          // but that rule is excludable, so handle it defensively here to avoid constructing a
+          // CollectLimitExec with no limit and a zero offset (which fails its assertion).
+          planLater(child)
         case logical.Offset(IntegerLiteral(offset), child) =>
           CollectLimitExec(child = planLater(child), offset = offset)
         case Tail(IntegerLiteral(limit), child) =>
@@ -341,7 +346,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
       case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
-          if canBroadcastBySize(j.right, conf) =>
+          if canPlanAsBroadcastHashJoin(j, conf) =>
         Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
           None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
@@ -619,7 +624,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             // A Real-Time Mode batch runs until its duration elapses rather than until its input
             // is exhausted, so an aggregation that only emits once the batch ends would hold every
             // result back for the whole batch. Plan the streamline operator instead, which merges
-            // each input row against state and emits immediately.
+            // each input row against state; Update mode can emit an intermediate result per
+            // input.
             if (isRealTimeMode(child) ||
               conf.getConf(SQLConf.STREAMING_USE_STREAMLINE_AGGREGATOR)) {
               AggUtils.planStreamlineStreamingAggregation(
@@ -1137,11 +1143,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.MapInPandasExec(func, output, planLater(child), isBarrier, profile) :: Nil
       case logical.MapInArrow(func, output, child, isBarrier, profile) =>
         execution.python.MapInArrowExec(func, output, planLater(child), isBarrier, profile) :: Nil
+      case logical.ExecuteExternalUDF(udf, resultAttr, child) =>
+        execution.externalUDF.ExecuteExternalUDFExec(
+          udf, resultAttr, planLater(child)) :: Nil
       case logical.MapPartitionsExternalUDF(
-          workerSpec, functionExpr, isBarrier, profile, child) =>
+          functionExpr, isBarrier, profile, child) =>
         execution.externalUDF.MapPartitionsExternalUDFExec(
-          workerSpec, functionExpr,
-          isBarrier, profile, planLater(child)) :: Nil
+          functionExpr, isBarrier, profile, planLater(child)) :: Nil
       case logical.AttachDistributedSequence(attr, child, cache) =>
         execution.python.AttachDistributedSequenceExec(attr, planLater(child), cache) :: Nil
       case logical.PythonWorkerLogs(jsonAttr) =>
@@ -1240,6 +1248,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
         execution.GlobalLimitExec(limit, planLater(child)) :: Nil
+      case logical.Offset(IntegerLiteral(0), child) =>
+        // OFFSET 0 is a no-op; see the note in SpecialLimits. Excluding EliminateOffsets leaves
+        // the Offset node in place, so avoid building a GlobalLimitExec with no limit and a zero
+        // offset (which fails its assertion).
+        planLater(child) :: Nil
       case logical.Offset(IntegerLiteral(offset), child) =>
         GlobalLimitExec(child = planLater(child), offset = offset) :: Nil
       case union: logical.Union =>

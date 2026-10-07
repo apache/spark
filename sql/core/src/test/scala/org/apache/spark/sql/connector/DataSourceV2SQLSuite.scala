@@ -178,6 +178,60 @@ abstract class DataSourceV2SQLSuite
     }
   }
 
+  test("transformed nested partition source does not receive a DPP runtime filter") {
+    val fact = s"${catalogAndNamespace}fact_transformed_nested_runtime_filter"
+    val dim = s"${catalogAndNamespace}dim_transformed_nested_runtime_filter"
+    withTable(fact, dim) {
+      sql(s"CREATE TABLE $fact " +
+        "(id INT, derives STRUCT<toStr: STRING, other: STRING>) USING " +
+        s"$v2Format PARTITIONED BY (truncate(derives.toStr, 1))")
+      sql(s"INSERT INTO $fact VALUES " +
+        "(1, named_struct('toStr', 'AA', 'other', 'a')), " +
+        "(2, named_struct('toStr', 'BB', 'other', 'b')), " +
+        "(3, named_struct('toStr', 'CC', 'other', 'c'))")
+      sql(s"CREATE TABLE $dim (value STRING, selected INT) USING $v2Format")
+      sql(s"INSERT INTO $dim VALUES ('AA', 0), ('BB', 1)")
+
+      withSQLConf(
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+        val df = sql(
+          s"""SELECT f.id FROM $fact f JOIN $dim d
+             |ON f.derives.toStr = d.value WHERE d.selected = 1""".stripMargin)
+        checkAnswer(df, Row(2))
+
+        val factScan = collect(df.queryExecution.executedPlan) {
+          case b: BatchScanExec if b.output.exists(_.name == "derives") => b
+        }.head
+        assert(factScan.runtimeFilters.isEmpty,
+          s"expected no runtime filters on a transform source, got ${factScan.runtimeFilters}")
+        assert(factScan.partitions.size === 3)
+        assert(factScan.filteredPartitions.flatten.size === 3)
+      }
+    }
+  }
+
+  test("filter on transformed partition source remains post-scan") {
+    val table = s"${catalogAndNamespace}transformed_source_filter"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (id INT, part DATE) USING $v2Format " +
+        "PARTITIONED BY (days(part))")
+      sql(s"INSERT INTO $table VALUES " +
+        "(1, DATE '2026-08-01'), (2, DATE '2026-08-02'), (3, DATE '2026-08-03')")
+
+      val df = sql(s"SELECT * FROM $table WHERE " +
+        "part IN (DATE '2026-08-01', DATE '2026-08-03')")
+      checkAnswer(df, Seq(
+        Row(1, java.sql.Date.valueOf("2026-08-01")),
+        Row(3, java.sql.Date.valueOf("2026-08-03"))))
+
+      val scan = collect(df.queryExecution.executedPlan) { case b: BatchScanExec => b }.head
+      assert(scan.partitions.size === 3)
+      assert(scan.filteredPartitions.flatten.size === 3)
+    }
+  }
+
   private def checkExplain(query: String, relationPattern: Regex): Unit = {
     val explain = spark.sql(s"EXPLAIN EXTENDED $query").head().getString(0)
     val relations = explain.split("\n").filter(_.contains("RelationV2"))

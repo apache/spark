@@ -22,7 +22,7 @@ import java.util.{Calendar, Locale, TimeZone}
 
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util._
@@ -169,6 +169,42 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       new SchemaOfCsv(Literal.create("1|abc"), Map("delimiter" -> "|")),
       "STRUCT<_c0: INT, _c1: STRING>")
+  }
+
+  test("SPARK-59917: schema_of_csv and from_csv keep CHAR padding") {
+    val padded = Literal.create("1  ", StringType)
+    val charInput = Literal.create("1  ", CharType(3))
+    val options = Map("delimiter" -> " ")
+    val schema = new StructType().add("_c0", IntegerType)
+
+    checkEvaluation(
+      SchemaOfCsv(padded, options),
+      "STRUCT<_c0: INT, _c1: STRING, _c2: STRING>")
+    checkEvaluation(
+      SchemaOfCsv(charInput, options),
+      "STRUCT<_c0: INT, _c1: STRING, _c2: STRING>")
+    // Extra empty fields from CHAR padding: PERMISSIVE still parses the first token.
+    checkEvaluation(CsvToStructs(schema, options, padded, UTC_OPT), InternalRow(1))
+    checkEvaluation(CsvToStructs(schema, options, charInput, UTC_OPT), InternalRow(1))
+    checkErrorInExpression[SparkException](
+      CsvToStructs(schema, options + ("mode" -> FailFastMode.name), charInput, UTC_OPT),
+      "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      Map("badRecord" -> "[1]", "failFastMode" -> "FAILFAST"))
+
+    val commaChar = Literal.create("1,2  ", CharType(5))
+    val twoInts = new StructType().add("a", IntegerType).add("b", IntegerType)
+    val intString = new StructType().add("a", IntegerType).add("b", StringType)
+    checkEvaluation(
+      SchemaOfCsv(Literal.create("1  ", CharType(3)), Map.empty),
+      "STRUCT<_c0: DOUBLE>")
+    checkEvaluation(CsvToStructs(twoInts, Map.empty, commaChar, UTC_OPT), InternalRow(1, null))
+    checkEvaluation(
+      CsvToStructs(intString, Map.empty, Literal.create("1,ab  ", CharType(6)), UTC_OPT),
+      InternalRow(1, UTF8String.fromString("ab  ")))
+    checkEvaluation(
+      CsvToStructs(
+        twoInts, Map("ignoreTrailingWhiteSpace" -> "true"), commaChar, UTC_OPT),
+      InternalRow(1, 2))
   }
 
   test("to_csv - struct") {

@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkIllegalStateException}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.analysis.{ResolveDeduplicate, V2TableReference}
+import org.apache.spark.sql.catalyst.analysis.{ResolveDeduplicate, V2Reference}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, CurrentTimestampNanos, FileSourceMetadataAttribute, LocalTimestamp, LocalTimestampNanos}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
@@ -247,13 +247,15 @@ class MicroBatchExecution(
       }
     }.getOrElse(streamConf.getConf(SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER))
     val dedupResolver = sparkSessionForStream.sessionState.analyzer.resolver
+    // Recompute streaming subplans for checkpoint compatibility and static subplans so batch
+    // deduplication keeps the same semantics when embedded in a streaming query.
     val planWithDedupKeys = analyzedPlan.transformUp {
-      case d @ Deduplicate(_, child, Some(spec)) =>
-        d.copy(keys =
-          ResolveDeduplicate.computeKeys(child, spec, orderDeterministically, dedupResolver))
-      case d @ DeduplicateWithinWatermark(_, child, Some(spec)) =>
-        d.copy(keys =
-          ResolveDeduplicate.computeKeys(child, spec, orderDeterministically, dedupResolver))
+      case d @ Deduplicate(keys, child, Some(spec)) =>
+        d.copy(keys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
+          keys, child, spec, orderDeterministically, dedupResolver))
+      case d @ DeduplicateWithinWatermark(keys, child, Some(spec)) =>
+        d.copy(keys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
+          keys, child, spec, orderDeterministically, dedupResolver))
     }
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
@@ -428,7 +430,7 @@ class MicroBatchExecution(
             val catalogManager = sparkSessionForStream.sessionState.catalogManager
             val streamingCatalog = catalogManager.catalog(catalog.name)
             val v2Relation = DataSourceV2Relation.create(s, Some(streamingCatalog), Some(ident))
-            V2TableReference.createForWriteTarget(v2Relation)
+            V2Reference.createForWriteTarget(v2Relation)
           case Some((catalog, ident)) =>
             DataSourceV2Relation.create(s, Some(catalog), Some(ident))
           case None => DataSourceV2Relation.create(s, None, None)

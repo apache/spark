@@ -190,10 +190,14 @@
 | org.apache.spark.sql.catalyst.expressions.IsNull | isnull | SELECT isnull(1) | struct<(1 IS NULL):boolean> |
 | org.apache.spark.sql.catalyst.expressions.IsValidUTF8 | is_valid_utf8 | SELECT is_valid_utf8('Spark') | struct<is_valid_utf8(Spark):boolean> |
 | org.apache.spark.sql.catalyst.expressions.JaroWinkler | jaro_winkler_similarity | SELECT jaro_winkler_similarity('MARTHA', 'MARHTA') | struct<jaro_winkler_similarity(MARTHA, MARHTA):double> |
+| org.apache.spark.sql.catalyst.expressions.JsonArrayExpressionBuilder | json_array | SELECT json_array(1, 'x', true) | struct<JSON_ARRAY(1, x, true):string> |
+| org.apache.spark.sql.catalyst.expressions.JsonExistsExpressionBuilder | json_exists | SELECT json_exists('{"a":1}', '$.a') | struct<JSON_EXISTS({"a":1}, '$.a'):boolean> |
 | org.apache.spark.sql.catalyst.expressions.JsonObjectKeys | json_object_keys | SELECT json_object_keys('{}') | struct<json_object_keys({}):array<string>> |
+| org.apache.spark.sql.catalyst.expressions.JsonQueryExpressionBuilder | json_query | SELECT json_query('{"a":[1,2]}', '$.a') | struct<JSON_QUERY({"a":[1,2]}, '$.a'):string> |
 | org.apache.spark.sql.catalyst.expressions.JsonToStructs | from_json | SELECT from_json('{"a":1, "b":0.8}', 'a INT, b DOUBLE') | struct<from_json({"a":1, "b":0.8}):struct<a:int,b:double>> |
 | org.apache.spark.sql.catalyst.expressions.JsonTuple | json_tuple | SELECT json_tuple('{"a":1, "b":2}', 'a', 'b') | struct<c0:string,c1:string> |
 | org.apache.spark.sql.catalyst.expressions.JsonTypeof | json_typeof | SELECT json_typeof('{"a": 1}') | struct<json_typeof({"a": 1}):string> |
+| org.apache.spark.sql.catalyst.expressions.JsonValueExpressionBuilder | json_value | SELECT json_value('{"id":7,"name":"Ada"}', '$.name') | struct<JSON_VALUE({"id":7,"name":"Ada"}, '$.name'):string> |
 | org.apache.spark.sql.catalyst.expressions.KllSketchGetNBigint | kll_sketch_get_n_bigint | SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col)) FROM VALUES (1), (2), (3), (4), (5) tab(col) | struct<kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col)):bigint> |
 | org.apache.spark.sql.catalyst.expressions.KllSketchGetNDouble | kll_sketch_get_n_double | SELECT kll_sketch_get_n_double(kll_sketch_agg_double(col)) FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)), (CAST(4.0 AS DOUBLE)), (CAST(5.0 AS DOUBLE)) tab(col) | struct<kll_sketch_get_n_double(kll_sketch_agg_double(col)):bigint> |
 | org.apache.spark.sql.catalyst.expressions.KllSketchGetNFloat | kll_sketch_get_n_float | SELECT kll_sketch_get_n_float(kll_sketch_agg_float(col)) FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col) | struct<kll_sketch_get_n_float(kll_sketch_agg_float(col)):bigint> |
@@ -279,7 +283,7 @@
 | org.apache.spark.sql.catalyst.expressions.OctetLength | octet_length | SELECT octet_length('Spark SQL') | struct<octet_length(Spark SQL):int> |
 | org.apache.spark.sql.catalyst.expressions.Or | or | SELECT true or false | struct<(true OR false):boolean> |
 | org.apache.spark.sql.catalyst.expressions.Overlay | overlay | SELECT overlay('Spark SQL' PLACING '_' FROM 6) | struct<overlay(Spark SQL, _, 6, -1):string> |
-| org.apache.spark.sql.catalyst.expressions.ParseSql | parse_sql | SELECT parse_sql('SELECT a, b FROM t') | struct<parse_sql(SELECT a, b FROM t):string> |
+| org.apache.spark.sql.catalyst.expressions.ParseSql | parse_sql | SELECT parse_sql('SELECT 1;SELECT 2') | struct<parse_sql(SELECT 1;SELECT 2):string> |
 | org.apache.spark.sql.catalyst.expressions.ParseToDate | to_date | SELECT to_date('2009-07-30 04:17:52') | struct<to_date(2009-07-30 04:17:52):date> |
 | org.apache.spark.sql.catalyst.expressions.ParseToTimestamp | to_timestamp | SELECT to_timestamp('2016-12-31 00:12:00') | struct<to_timestamp(2016-12-31 00:12:00):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.ParseToTimestampLTZExpressionBuilder | to_timestamp_ltz | SELECT to_timestamp_ltz('2016-12-31 00:12:00') | struct<to_timestamp_ltz(2016-12-31 00:12:00):timestamp> |
@@ -580,6 +584,7 @@
 | org.apache.spark.sql.catalyst.expressions.variant.VariantFromEntries | variant_from_entries | SELECT variant_from_entries(array(struct('a', 1), struct('b', 2))) | struct<variant_from_entries(array(struct(a, 1), struct(b, 2))):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantGetExpressionBuilder | variant_get | SELECT variant_get(parse_json('{"a": 1}'), '$.a', 'int') | struct<variant_get(parse_json({"a": 1}), $.a):int> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantInsertExpressionBuilder | variant_insert | SELECT variant_insert(parse_json('{"a": 1}'), '$.b', 2) | struct<variant_insert(parse_json({"a": 1}), $.b, 2):variant> |
+| org.apache.spark.sql.catalyst.expressions.variant.VariantPick | variant_pick | SELECT variant_pick(parse_json('{"a": 1, "b": 2, "c": 3}'), '$.a', '$.c') | struct<variant_pick(parse_json({"a": 1, "b": 2, "c": 3}), $.a, $.c):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantSetExpressionBuilder | variant_set | SELECT variant_set(parse_json('{"a": 1}'), '$.a', 2) | struct<variant_set(parse_json({"a": 1}), $.a, 2, true):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantStripNullsExpressionBuilder | variant_strip_nulls | SELECT variant_strip_nulls(parse_json('{"a": 1, "b": null, "c": 3}')) | struct<variant_strip_nulls(parse_json({"a": 1, "b": null, "c": 3}), true):variant> |
 | org.apache.spark.sql.catalyst.expressions.xml.XPathBoolean | xpath_boolean | SELECT xpath_boolean('<a><b>1</b></a>','a/b') | struct<xpath_boolean(<a><b>1</b></a>, a/b):boolean> |
