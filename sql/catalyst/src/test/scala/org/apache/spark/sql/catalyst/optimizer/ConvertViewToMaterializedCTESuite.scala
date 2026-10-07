@@ -454,7 +454,12 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
 
       val WithCTE(mainPlan, cteDefs) = optimized
       assert(cteDefs.length == 2)
-      assert(cteDefs.forall(_.forceSkipInline))
+      // The outer view is referenced twice and keeps its materialization flag. The inner
+      // view's second reference dies with the dropped second occurrence's body, leaving it
+      // with a single live reference inside the outer definition: materializing it would
+      // add a shuffle that exchange reuse cannot deduplicate, so it stays inlinable.
+      assert(!cteDefs.head.forceSkipInline)
+      assert(cteDefs.last.forceSkipInline)
       // Bottom-up creation order puts the referenced (inner) definition before the
       // definition that references it, so the outer body resolves its inner reference
       // without needing the inner definition to be attached later.
@@ -473,7 +478,7 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
     }
   }
 
-  test("nested view definitions survive the Inline CTE batch") {
+  test("single-reference nested view definition is inlined by the Inline CTE batch") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
       val (v2a, v2b, _) = sameViewTwice(
         "v2", Seq(attr("a", 100), attr("b", 101)),
@@ -482,14 +487,33 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
 
       val optimized = OptimizeWithInlineCTE.execute(query)
 
+      // v1 is referenced once after the rewrite (inside v2's definition), so its converted
+      // definition stays inlinable and InlineCTE flattens it into v2's definition. Only
+      // v2's definition (two references) survives, without a nested definition inside it.
       val defs = optimized.collect { case d: CTERelationDef => d }
-      assert(defs.length == 2, "both nested definitions must survive inlining")
-      // The order follows the bottom-up creation order: the referenced inner view's
-      // definition (a bare body with no references) comes first, and the outer view's
-      // definition wraps a reference to it.
+      assert(defs.length == 1)
+      assert(defs.head.forceSkipInline)
       assert(defs.head.child.collect { case _: CTERelationRef => true }.isEmpty)
-      val innerRefs = defs.last.child.collect { case r: CTERelationRef => r }
-      assert(innerRefs.map(_.cteId) == Seq(defs.head.id))
+      assert(optimized.output == query.output)
+    }
+  }
+
+  test("a reference inside an unreferenced CTE does not force materialization") {
+    withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+      // The dead CTE holds v's second occurrence when the rule runs, but it is itself
+      // unreferenced, so v has a single live reference: its converted definition must be
+      // inlined by InlineCTE (and the dead definition dropped) rather than materialized
+      // behind a shuffle nothing reuses.
+      val (v1, v2, _) = sameViewTwice(
+        "v", Seq(attr("a", 100), attr("b", 101)),
+        (as: Seq[AttributeReference]) => simpleBody(as(0), as(1)))
+      val deadDef = CTERelationDef(Project(Seq(attr("a", 500).as("a")), v2))
+      val query = WithCTE(Filter(v1.output.head > 5, v1), Seq(deadDef))
+
+      val optimized = OptimizeWithInlineCTE.execute(query)
+
+      assert(optimized.collect { case d: CTERelationDef => d }.isEmpty,
+        "the dead definition and the single-reference converted definition must be gone")
       assert(optimized.output == query.output)
     }
   }
