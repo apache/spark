@@ -548,8 +548,9 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     var i = 0
     while (i < len) {
       // Null keys are skipped so this map describes the same key set as the other lookup
-      // paths. Unlike them it is a no-op rather than a fix: a non-null lookup key can never
-      // hash-match a null entry here. See [[LinearExecutor]] for the case that does matter.
+      // paths. Unlike them it is a no-op rather than a fix: a non-null lookup key can share a
+      // bucket with a null entry (HashMap hashes null to 0), but the equality check never
+      // matches the two. See [[LinearExecutor]] for the case that does matter.
       if (!keys.isNullAt(i)) {
         // putIfAbsent preserves first-match semantics for maps with duplicate keys (allowed at
         // the physical level by [[ArrayBasedMapData]]), matching the linear scan path.
@@ -584,8 +585,9 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
       if (!keys.isNullAt(i)) {
         var h = hashKeyOnDriver(keys.get(i, keyType), keyType) & mask
         // Open addressing with linear probing; duplicates take the next free slot so that the
-        // lookup (which stops at the first match) returns the first-inserted index -- matches
-        // [[buildHashIndex]] / [[ArrayBasedMapData]] first-wins semantics.
+        // lookup (which stops at the first match) returns the first-inserted index -- the same
+        // first match that [[buildHashIndex]] and the linear scan return. [[ArrayBasedMapData]]
+        // itself leaves duplicate-key behavior undefined.
         while (buckets(h) != -1) h = (h + 1) & mask
         buckets(h) = i
       }
