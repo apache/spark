@@ -594,6 +594,7 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                         self.assertEqual(plan.children().size(), 1)
                         plan = plan.children().apply(0)
                     metrics = plan.metrics()
+                    self.assertEqual(metrics.apply("pythonNumPipelinedTasks").value(), 0)
                     self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
                     self.assertEqual(
                         metrics.apply("pythonNumTimedBatches").value(), (num_rows + 1) // 2
