@@ -84,7 +84,6 @@ from pyspark.sql.conversion import (
 )
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
-    ArrowStreamCoGroupSerializer,
     ArrowStreamGroupSerializer,
     ArrowStreamSerializer,
 )
@@ -1762,9 +1761,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
@@ -1778,13 +1774,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         if eval_type in (
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
-            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
             PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         ):
             ser = ArrowStreamGroupSerializer(write_start_stream=True)
-        elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
-            ser = ArrowStreamCoGroupSerializer(write_start_stream=True)
         else:
             ser = ArrowStreamSerializer(write_start_stream=True)
     else:
@@ -1971,233 +1963,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 )
 
         return grouped_func, ser
-
-    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-        import pandas as pd
-        import pyarrow as pa
-
-        assert num_udfs == 1, "One GROUPED_MAP_PANDAS UDF expected here."
-        grouped_udf, arg_offsets, return_type, num_udf_args = udfs[0]
-        parsed_offsets = extract_key_value_indexes(arg_offsets)
-        assert len(parsed_offsets) == 1, "Expected one pair of offsets for GROUPED_MAP_PANDAS UDF."
-
-        key_offsets = parsed_offsets[0][0]
-        value_offsets = parsed_offsets[0][1]
-        output_schema = StructType([StructField("_0", return_type)])
-
-        def grouped_func(
-            split_index: int,
-            data: Iterator[Iterator[pa.RecordBatch]],
-        ) -> Iterator[pa.RecordBatch]:
-            """Apply groupBy Pandas UDF (non-iterator variant).
-
-            The explicit ``del`` calls below keep peakmem bounded across
-            groups. Without them, generator locals from the previous
-            iteration stay bound on the frame until each statement in
-            the next iteration rebinds its slot, so the input-side
-            DataFrames overlap with the next group's allocations and
-            the working set grows unbounded on wide-column, large-group
-            inputs. ``del result`` runs on resume from yield, before
-            ``data.__next__()`` is asked for the next group.
-            """
-            for group in data:
-                all_batches = list(group)
-                if all_batches:
-                    table = pa.Table.from_batches(all_batches).combine_chunks()
-                else:
-                    table = pa.table({})
-                all_series = ArrowToPandasConversion.to_pandas(
-                    table,
-                    timezone=runner_conf.timezone,
-                    prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
-                )
-                value_df = pd.concat([all_series[o] for o in value_offsets], axis=1)
-
-                if num_udf_args == 1:
-                    result = grouped_udf(value_df)
-                else:
-                    key = tuple(all_series[o].iloc[0] for o in key_offsets)
-                    result = grouped_udf(key, value_df)
-
-                del all_batches, table, all_series, value_df
-
-                verify_pandas_result(
-                    result,
-                    return_type,
-                    runner_conf.assign_cols_by_name,
-                    truncate_return_schema=False,
-                )
-
-                yield PandasToArrowConversion.from_pandas(
-                    [result],
-                    output_schema,
-                    timezone=runner_conf.timezone,
-                    safecheck=runner_conf.safecheck,
-                    arrow_cast=True,
-                    prefers_large_types=runner_conf.use_large_var_types,
-                    assign_cols_by_name=runner_conf.assign_cols_by_name,
-                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
-                )
-                del result
-
-        # Bound each output RecordBatch toward the byte cap (no limit when unset).
-        max_output_bytes = runner_conf.python_udf_arrow_worker_output_batch_max_bytes
-        if max_output_bytes > 0:
-            inner_grouped_func = grouped_func
-
-            def grouped_func(
-                split_index: int,
-                data: Iterator[Iterator[pa.RecordBatch]],
-            ) -> Iterator[pa.RecordBatch]:
-                return ArrowBatchTransformer.resize_batches(
-                    inner_grouped_func(split_index, data),
-                    max_output_bytes,
-                )
-
-        return grouped_func, ser
-
-    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
-        import pandas as pd
-        import pyarrow as pa
-
-        assert num_udfs == 1, "One GROUPED_MAP_PANDAS_ITER UDF expected here."
-        grouped_udf, arg_offsets, return_type, num_udf_args = udfs[0]
-        parsed_offsets = extract_key_value_indexes(arg_offsets)
-        assert len(parsed_offsets) == 1, (
-            "Expected one pair of offsets for GROUPED_MAP_PANDAS_ITER UDF."
-        )
-
-        key_offsets = parsed_offsets[0][0]
-        value_offsets = parsed_offsets[0][1]
-        output_schema = StructType([StructField("_0", return_type)])
-
-        def grouped_func(
-            split_index: int,
-            data: Iterator[Iterator[pa.RecordBatch]],
-        ) -> Iterator[pa.RecordBatch]:
-            """Apply groupBy Pandas UDF (iterator variant).
-
-            The UDF receives an Iterator[pd.DataFrame] per group and
-            returns an Iterator[pd.DataFrame]. Input batches are
-            converted to pandas lazily so peakmem stays bounded by a
-            single batch rather than the whole group.
-            """
-            for group in data:
-                group_iter = iter(group)
-                # Read the first batch to extract grouping keys.
-                first_series = ArrowToPandasConversion.to_pandas(
-                    next(group_iter),
-                    timezone=runner_conf.timezone,
-                    prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
-                )
-
-                def dataframe_iter():
-                    yield pd.concat([first_series[o] for o in value_offsets], axis=1)
-                    for batch in group_iter:
-                        series = ArrowToPandasConversion.to_pandas(
-                            batch,
-                            timezone=runner_conf.timezone,
-                            prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
-                        )
-                        yield pd.concat([series[o] for o in value_offsets], axis=1)
-
-                if num_udf_args == 1:
-                    result = grouped_udf(dataframe_iter())
-                else:
-                    key = tuple(first_series[o].iloc[0] for o in key_offsets)
-                    result = grouped_udf(key, dataframe_iter())
-
-                for df in result:
-                    verify_pandas_result(
-                        df,
-                        return_type,
-                        runner_conf.assign_cols_by_name,
-                        truncate_return_schema=False,
-                    )
-                    yield PandasToArrowConversion.from_pandas(
-                        [df],
-                        output_schema,
-                        timezone=runner_conf.timezone,
-                        safecheck=runner_conf.safecheck,
-                        arrow_cast=True,
-                        prefers_large_types=runner_conf.use_large_var_types,
-                        assign_cols_by_name=runner_conf.assign_cols_by_name,
-                        int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
-                    )
-
-                # Drain remaining input batches to maintain stream position.
-                for _ in group_iter:
-                    pass
-
-        return grouped_func, ser
-
-    if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
-        import pandas as pd
-        import pyarrow as pa
-
-        assert num_udfs == 1, "One COGROUPED_MAP_PANDAS UDF expected here."
-        cogrouped_udf, arg_offsets, return_type, num_udf_args = udfs[0]
-        parsed_offsets = extract_key_value_indexes(arg_offsets)
-
-        left_key_offsets, left_value_offsets = parsed_offsets[0]
-        right_key_offsets, right_value_offsets = parsed_offsets[1]
-        output_schema = StructType([StructField("_0", return_type)])
-
-        def cogrouped_func(
-            split_index: int,
-            data: Iterator[Tuple[list[pa.RecordBatch], list[pa.RecordBatch]]],
-        ) -> Iterator[pa.RecordBatch]:
-            """Apply cogroupBy Pandas UDF."""
-            for left_batches, right_batches in data:
-                left_table = pa.Table.from_batches(left_batches)
-                right_table = pa.Table.from_batches(right_batches)
-                left_series = ArrowToPandasConversion.to_pandas(
-                    left_table,
-                    timezone=runner_conf.timezone,
-                    prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
-                )
-                right_series = ArrowToPandasConversion.to_pandas(
-                    right_table,
-                    timezone=runner_conf.timezone,
-                    prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
-                )
-                left_df = pd.concat([left_series[o] for o in left_value_offsets], axis=1)
-                right_df = pd.concat([right_series[o] for o in right_value_offsets], axis=1)
-
-                if num_udf_args == 2:
-                    result = cogrouped_udf(left_df, right_df)
-                else:
-                    key_series = (
-                        [left_series[o] for o in left_key_offsets]
-                        if not left_df.empty
-                        else [right_series[o] for o in right_key_offsets]
-                    )
-                    key = tuple(s.iloc[0] for s in key_series)
-                    result = cogrouped_udf(key, left_df, right_df)
-
-                del left_batches, right_batches, left_table, right_table
-                del left_series, right_series, left_df, right_df
-
-                verify_pandas_result(
-                    result,
-                    return_type,
-                    runner_conf.assign_cols_by_name,
-                    truncate_return_schema=False,
-                )
-
-                yield PandasToArrowConversion.from_pandas(
-                    [result],
-                    output_schema,
-                    timezone=runner_conf.timezone,
-                    safecheck=runner_conf.safecheck,
-                    arrow_cast=True,
-                    prefers_large_types=runner_conf.use_large_var_types,
-                    assign_cols_by_name=runner_conf.assign_cols_by_name,
-                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
-                )
-                del result
-
-        return cogrouped_func, ser
 
     if (
         eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
