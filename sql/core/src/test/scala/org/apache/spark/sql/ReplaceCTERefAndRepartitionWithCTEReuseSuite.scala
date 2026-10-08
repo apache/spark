@@ -427,17 +427,17 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
   }
 
   // ---------------------------------------------------------------------------
-  // forcePartitioning is a first-class contract, independent of forceSkipInline
+  // forcePartitioning is honored only together with forceSkipInline
   // ---------------------------------------------------------------------------
 
-  test("forcePartitioning is honored independently of forceSkipInline, preserving numPartitions") {
-    // A CTE pinned with HashPartitioning but forceSkipInline = false still materializes as a
-    // plan-reuse repartition on the pinned keys (sealed for guaranteed reuse), and the exact
-    // requested numPartitions is preserved rather than replaced by the session default.
+  test("forcePartitioning is honored with forceSkipInline, preserving numPartitions") {
+    // A CTE pinned with HashPartitioning and forceSkipInline = true materializes as a plan-reuse
+    // repartition on the pinned keys (sealed for guaranteed reuse), and the exact requested
+    // numPartitions is preserved rather than replaced by the session default.
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val cteBody = LocalRelation(a, b)
-    val cteDef = CTERelationDef(cteBody, forceSkipInline = false,
+    val cteDef = CTERelationDef(cteBody, forceSkipInline = true,
       forcePartitioning = Some(HashPartitioning(Seq(b), 7)))
     val ref1 = CTERelationRef(cteDef.id, _resolved = true, cteBody.output, isStreaming = false)
     val ref2 = CTERelationRef(cteDef.id, _resolved = true, cteBody.output, isStreaming = false)
@@ -446,7 +446,7 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     val result = runReuseRules(plan)
     val reuses = collectCTEReuseRelations(result)
     assert(reuses.nonEmpty,
-      s"Expected CTEReuseRelation for a forcePartitioning CTE with forceSkipInline=false:" +
+      s"Expected CTEReuseRelation for a forcePartitioning + forceSkipInline CTE:" +
         s"\n${result.treeString}")
     reuses.foreach { r =>
       r.partitioning match {
@@ -457,6 +457,24 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
           fail(s"Expected a HashPartitioning on the reuse relation, got $other")
       }
     }
+  }
+
+  test("forcePartitioning is ignored without forceSkipInline") {
+    // forcePartitioning is only honored together with forceSkipInline. A pin on a
+    // non-forceSkipInline definition is not sealed for guaranteed reuse (such a definition may be
+    // inlined by InlineCTE in a full optimizer run), so no CTEReuseRelation is produced.
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val cteBody = LocalRelation(a, b)
+    val cteDef = CTERelationDef(cteBody, forceSkipInline = false,
+      forcePartitioning = Some(HashPartitioning(Seq(b), 7)))
+    val ref1 = CTERelationRef(cteDef.id, _resolved = true, cteBody.output, isStreaming = false)
+    val ref2 = CTERelationRef(cteDef.id, _resolved = true, cteBody.output, isStreaming = false)
+    val plan = WithCTE(Union(Seq(ref1, ref2)), Seq(cteDef))
+
+    val result = runReuseRules(plan)
+    assert(collectCTEReuseRelations(result).isEmpty,
+      s"Expected no CTEReuseRelation when forceSkipInline=false:\n${result.treeString}")
   }
 
   test("forcePartitioning keys survive CTE column pruning") {
