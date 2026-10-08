@@ -227,6 +227,10 @@ object Scd1BatchProcessor {
 
   /**
    * Schema of the CDC metadata struct column for SCD1.
+   *
+   * The CDC metadata of every microbatch, target, and auxiliary-table row represents either a
+   * delete or an upsert, never both: exactly one of its delete and upsert sequences is non-null,
+   * and only an upsert may carry a version map.
    */
   private[pipelines] def cdcMetadataColSchema(sequencingType: DataType): StructType =
     StructType(
@@ -248,7 +252,8 @@ object Scd1BatchProcessor {
 
   /**
    * Construct the CDC metadata struct column for SCD1, following the exact schema and field
-   * ordering defined by [[cdcMetadataColSchema]].
+   * ordering defined by [[cdcMetadataColSchema]]. Values for microbatch, target, and
+   * auxiliary-table rows must uphold its contract.
    */
   private[pipelines] def constructCdcMetadataCol(
       deleteSequence: Column,
