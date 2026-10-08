@@ -19,6 +19,7 @@ import datetime
 import functools
 import io
 import logging
+import os
 import pydoc
 import shutil
 import sys
@@ -30,7 +31,7 @@ from contextlib import redirect_stdout
 from pyspark.errors import AnalysisException, PySparkTypeError, PythonException
 from pyspark.logger import PySparkLogger
 from pyspark.sql import Column, Row, SparkSession
-from pyspark.sql.functions import assert_true, col, lit, rand, udf
+from pyspark.sql.functions import assert_true, col, lit, rand, udf, unix_timestamp
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -43,6 +44,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampType,
     TimestampNTZType,
     VariantType,
     VariantVal,
@@ -808,6 +810,45 @@ class BaseUDFTestsMixin:
             df.selectExpr("assert_true('1970-01-01 00:00:00' == CAST(dt AS STRING))").collect()
             self.assertEqual(df.schema[0].dataType.typeName(), "timestamp_ntz")
             self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
+
+    def test_udf_timestamp_dst_fold_round_trip(self):
+        # SPARK-60081: preserve datetime.fold in the repeated DST hour for Python UDFs.
+        tz = "America/Los_Angeles"
+        tz_prev = os.environ.get("TZ", None)
+        try:
+            os.environ["TZ"] = tz
+            time.tzset()
+            with self.sql_conf(
+                {
+                    "spark.sql.session.timeZone": tz,
+                    "spark.sql.execution.pythonUDF.arrow.enabled": "true",
+                }
+            ):
+                second_fold = self.spark.sql("SELECT timestamp'2021-11-07 09:30:00Z' AS t")
+                first_fold = self.spark.sql("SELECT timestamp'2021-11-07 08:30:00Z' AS t")
+
+                for kwargs in [{}, {"useArrow": False}]:
+                    to_epoch = udf(lambda x: int(x.timestamp()), LongType(), **kwargs)
+                    identity = udf(lambda x: x, TimestampType(), **kwargs)
+
+                    self.assertEqual(1636277400, second_fold.select(to_epoch("t")).first()[0])
+                    self.assertEqual(
+                        1636277400,
+                        second_fold.select(unix_timestamp(identity("t")).alias("epoch")).first()[0],
+                    )
+
+                    # Control case: the first local 01:30 occurrence (fold=0) must stay unchanged.
+                    self.assertEqual(1636273800, first_fold.select(to_epoch("t")).first()[0])
+                    self.assertEqual(
+                        1636273800,
+                        first_fold.select(unix_timestamp(identity("t")).alias("epoch")).first()[0],
+                    )
+        finally:
+            if tz_prev is None:
+                del os.environ["TZ"]
+            else:
+                os.environ["TZ"] = tz_prev
+            time.tzset()
 
     def test_udf_daytime_interval(self):
         # SPARK-37277: Support DayTimeIntervalType in Python UDF

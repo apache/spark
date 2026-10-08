@@ -492,9 +492,7 @@ class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
 
     def toInternal(self, dt: datetime.datetime) -> int:
         if dt is not None:
-            seconds = (
-                calendar.timegm(dt.utctimetuple()) if dt.tzinfo else time.mktime(dt.timetuple())
-            )
+            seconds = calendar.timegm(dt.utctimetuple()) if dt.tzinfo else dt.timestamp()
             return int(seconds) * 1000000 + dt.microsecond
 
     def fromInternal(self, ts: int) -> datetime.datetime:

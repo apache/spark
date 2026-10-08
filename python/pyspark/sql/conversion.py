@@ -1429,7 +1429,7 @@ class ArrowTableToRowsConversion:
                     # lossless path), so drop any sub-microsecond digits to match classic collect().
                     if hasattr(value, "to_pydatetime"):
                         value = value.to_pydatetime(warn=False)
-                    return value.astimezone().replace(tzinfo=None)
+                    return datetime.datetime.fromtimestamp(value.timestamp())
 
             return convert_timestamp
 
