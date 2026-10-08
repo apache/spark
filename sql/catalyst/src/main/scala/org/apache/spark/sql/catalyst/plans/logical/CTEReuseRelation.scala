@@ -58,6 +58,10 @@ case class CTEReuseRelation(
 
   override def computeStats(): Statistics = sharedSubplan.stats
 
+  // `sharedSubplan` is not a child, so the default (any child streaming) would report a reused
+  // streaming subplan as batch and hide it from streaming planning and UnsupportedOperationChecker.
+  override def isStreaming: Boolean = sharedSubplan.isStreaming
+
   // Canonicalization normalizes attribute exprIds against `allAttributes`, which for a LeafNode
   // defaults to the (empty) child outputs -- leaving raw exprIds in `partitioning`'s keys. Expose
   // `sharedSubplan.output` (what those keys reference) so partitionings equal modulo exprIds match,

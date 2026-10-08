@@ -355,7 +355,13 @@ case class CTEReuseQueryStageExec(
   override def outputOrdering: Seq[SortOrder] =
     innerAQE.inputPlan.outputOrdering.map(updateAttr(_).asInstanceOf[SortOrder])
 
-  override def getRuntimeStatistics: Statistics = innerShuffleStage.getRuntimeStatistics
+  // When the inner AQE collapses to an empty relation (e.g. AQEPropagateEmptyRelation), its
+  // executedPlan roots at an EmptyRelationExec rather than a shuffle stage, so report the empty
+  // stats directly instead of asserting a ShuffleQueryStageExec in `innerShuffleStage`.
+  override def getRuntimeStatistics: Statistics = innerAQE.executedPlan match {
+    case e: EmptyRelationExec => e.logical.stats
+    case _ => innerShuffleStage.getRuntimeStatistics
+  }
 
   override def computeStats(): Option[Statistics] = super.computeStats().map { stats =>
     val remapped = AttributeMap(stats.attributeStats.toSeq.map { case (a, s) =>
