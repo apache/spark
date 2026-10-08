@@ -21,6 +21,7 @@ import java.util.Locale
 
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
@@ -332,7 +333,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         }
         if (create.writeOrdering.nonEmpty) {
           throw QueryCompilationErrors
-            .specifyWriteOrderingNotAllowedWhenTableSchemaNotDefinedError()
+            .specifyWriteOrderingNotAllowedWhenTableSchemaNotDefinedError(create.origin)
         }
 
         create
@@ -351,10 +352,12 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
           case other => other
         }
 
-        // Unlike the partitioning, an ordering reference to a missing column is kept as is for
-        // CheckAnalysis to report, and each reference is normalized independently.
+        // Unlike the partitioning, an ordering reference to a missing column, including a path
+        // through a non-struct field, is kept as is for CheckAnalysis to report, and each
+        // reference is normalized independently.
         def normalizeResolvable(ref: NamedReference): NamedReference = {
-          schema.findNestedField(ref.fieldNames().toImmutableArraySeq, resolver = resolver)
+          Try(schema.findNestedField(ref.fieldNames().toImmutableArraySeq, resolver = resolver))
+            .toOption.flatten
             .map { case (path, field) => FieldReference(path :+ field.name) }
             .getOrElse(ref)
         }

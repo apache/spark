@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -28,9 +29,10 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.CreateTable
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, CharVarcharUtils, WriteDistributionAndOrdering}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog, TableCatalogCapability, V1Table, WriteDistributionMode}
+import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogV2Util, Table, TableCatalog, TableCatalogCapability, V1Table, WriteDistributionMode}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, SortOrder}
 import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -132,8 +134,8 @@ case class ShowCreateTableExec(
   /**
    * Emits the table's declared write distribution and ordering as clauses when parsing them in
    * this session declares the same pair. Otherwise the pair is omitted: it has no clause form, or
-   * the catalog does not accept the clauses, or a sort key references a column the table does not
-   * have or does not parse back to the same key.
+   * the catalog does not accept the clauses, or the statement would create a v1 table, or a sort
+   * key references a column the table does not have or does not parse back to the same key.
    */
   private def showTableWriteDistributionAndOrdering(
       resolvedTable: ResolvedTable,
@@ -143,23 +145,35 @@ case class ShowCreateTableExec(
     val writeOrdering = table.writeOrdering().toImmutableArraySeq
     val accepted = resolvedTable.catalog.capabilities().contains(
       TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING)
-    if (accepted &&
-        WriteDistributionAndOrdering.referencesExist(table.columns.asSchema, writeOrdering)) {
+    if (accepted && !createsV1Table(resolvedTable)) {
       WriteDistributionAndOrdering.writeClausesSQL(
         table.writeDistributionMode(),
         writeOrdering,
         table.partitioning.toImmutableArraySeq,
+        table.columns.asSchema,
         replay
       ).foreach(clauses => builder ++= s"$clauses\n")
     }
   }
 
-  // The partitioning only lets the parser accept DISTRIBUTED BY PARTITION; the clauses do not
-  // depend on the rest of the statement.
+  // In the session catalog, a CREATE TABLE whose provider is not a v2 source creates a v1 table,
+  // which cannot record the clauses, so the replay would be rejected.
+  private def createsV1Table(resolvedTable: ResolvedTable): Boolean = {
+    val catalog = resolvedTable.catalog
+    val v1Capable = CatalogV2Util.isSessionCatalog(catalog) && (
+      conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) == "builtin" ||
+        catalog.isInstanceOf[CatalogExtension])
+    v1Capable && {
+      val provider = Option(resolvedTable.table.properties.get(TableCatalog.PROP_PROVIDER))
+        .getOrElse(conf.defaultDataSourceName)
+      !Try(DataSourceV2Utils.getTableProvider(provider, conf)).toOption.flatten.isDefined
+    }
+  }
+
   private def replay(clauses: String): Option[(WriteDistributionMode, Seq[SortOrder])] = {
     try {
       session.sessionState.sqlParser.parsePlan(
-          s"CREATE TABLE t USING foo PARTITIONED BY (p) $clauses") match {
+          WriteDistributionAndOrdering.replayStatement(clauses)) match {
         case c: CreateTable => Some((c.writeDistributionMode, c.writeOrdering))
         case _ => None
       }
