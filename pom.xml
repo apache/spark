@@ -89,6 +89,7 @@
     <module>sql/connect/shims</module>
     <module>core</module>
     <module>graphx</module>
+    <module>graphframes</module>
     <module>mllib</module>
     <module>mllib-local</module>
     <module>tools</module>

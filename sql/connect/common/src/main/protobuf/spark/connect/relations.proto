@@ -24,6 +24,7 @@ import "spark/connect/expressions.proto";
 import "spark/connect/types.proto";
 import "spark/connect/catalog.proto";
 import "spark/connect/common.proto";
+import "spark/connect/graphframes.proto";
 import "spark/connect/ml_common.proto";
 
 option java_multiple_files = true;
@@ -84,6 +85,7 @@ message Relation {
     RelationChanges relation_changes = 46;
     NearestByJoin nearest_by_join = 47;
     Zip zip = 48;
+    spark.connect.graphframes.GraphFramesAPI graph_frames = 49;
 
     // NA functions
     NAFill fill_na = 90;
