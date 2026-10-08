@@ -302,10 +302,12 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
     }
   }
 
-  test("converts views whose body has a non-top-level ORDER BY") {
+  test("does not convert views whose body has a Sort under a Join") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
-      // A Sort nested under an order-destroying operator (a join here) is not
-      // observable across the added shuffle, so the view still converts.
+      // The definition is materialized behind one shuffle, which buries every ordering
+      // the body computes - including one under a Join. A hash join's output order
+      // follows its shuffled inputs, so the reorder is observable through consumers
+      // (e.g. an outer LIMIT), and the view must stay unconverted.
       val a1 = attr("a", 100)
       val b1 = attr("b", 101)
       val a2 = attr("a", 200)
@@ -317,8 +319,7 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
       val query = Join(
         tempView("v", body(a1, b1)), tempView("v", body(a2, b2)),
         Inner, None, JoinHint(None, None))
-      val WithCTE(_, cteDefs) = Optimize.execute(query)
-      assert(cteDefs.length == 1)
+      comparePlans(Optimize.execute(query), query)
     }
   }
 

@@ -221,25 +221,21 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
       v.resolved &&
         v.child.deterministic &&
         !v.child.isStreaming &&
-        !hasTopLevelSort(v.child) &&
+        !hasMainRegionSort(v.child) &&
         v.desc.viewSQLConfigs == first.desc.viewSQLConfigs &&
         schemasAlign(first, v)
     }
   }
 
-  // The per-reference shuffle boundary is added above the definition, so a
-  // top-level ORDER BY in the view body would be destroyed by it.
-  private def hasTopLevelSort(plan: LogicalPlan): Boolean = plan match {
-    case _: Sort => true
-    case Project(_, child) => hasTopLevelSort(child)
-    case Filter(_, child) => hasTopLevelSort(child)
-    case SubqueryAlias(_, child) => hasTopLevelSort(child)
-    case GlobalLimit(_, child) => hasTopLevelSort(child)
-    case LocalLimit(_, child) => hasTopLevelSort(child)
-    // ORDER BY ... OFFSET n wraps the Sort in Offset, possibly under the two limit nodes
-    case Offset(_, child) => hasTopLevelSort(child)
-    case _ => false
-  }
+  // The per-reference shuffle boundary is added above the whole definition, so it buries
+  // every ordering the body computes: not only a top-level ORDER BY, but also sorts
+  // reachable deeper through operator children - under LIMIT/OFFSET, in inner views,
+  // inline subqueries, the WITH clause's re-substituted definitions, and branches of set
+  // operations - whose order consumers observe today. Sorts confined to subquery
+  // expressions cannot affect the body's exposed rows and are skipped: their plans are
+  // not `children`, so plain child traversal never enters them.
+  private def hasMainRegionSort(plan: LogicalPlan): Boolean =
+    plan.isInstanceOf[Sort] || plan.children.exists(hasMainRegionSort)
 
   /**
    * Occurrences of the same view are produced by resolution-time attribute renewal, which
