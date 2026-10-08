@@ -227,9 +227,13 @@ case class DescribeTableExec(
     }
   }
 
-  /** Reports the table's declared write distribution and ordering verbatim. */
+  /**
+   * Reports the table's declared write distribution and ordering, whether or not SHOW CREATE TABLE
+   * can reproduce them.
+   */
   private def addTableWriteDistributionAndOrdering(rows: ArrayBuffer[InternalRow]): Unit = {
-    if (table.writeDistributionMode() != null || table.writeOrdering().nonEmpty) {
+    if (WriteDistributionAndOrdering.isRequested(
+        table.writeDistributionMode(), table.writeOrdering().toImmutableArraySeq)) {
       rows += emptyRow()
       rows += toCatalystRow("# Write Distribution and Ordering", "", "")
       if (table.writeDistributionMode() != null) {
