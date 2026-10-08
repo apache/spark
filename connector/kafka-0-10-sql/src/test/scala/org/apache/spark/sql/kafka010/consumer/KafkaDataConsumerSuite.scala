@@ -116,8 +116,7 @@ class KafkaDataConsumerSuite
       }
     }
     val consumer = new KafkaDataConsumer(
-      Seq(testTopicPartition),
-      isMultiPartition = false,
+      testTopicPartition,
       getKafkaParams(),
       closingConsumerPool,
       fetchedDataPool)
