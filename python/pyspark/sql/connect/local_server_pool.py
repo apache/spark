@@ -681,7 +681,7 @@ class ServerPool:
         """Seconds an unclaimed member may sit before it is retired.
 
         Zero or a negative value disables idle retirement. Read the environment wherever
-        reaping runs so clients and attendants use the same source of truth.
+        reaping runs so clients use the same source of truth.
         """
         try:
             return int(os.environ["SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT"])
@@ -714,6 +714,24 @@ class ServerPool:
         )
 
     @staticmethod
+    def _attendant_alive(pid: int) -> bool:
+        """Treat an unreaped attendant as dead, even where signal 0 sees a zombie."""
+        if not _pid_alive(pid):
+            return False
+        if sys.platform.startswith("linux") or os.name != "posix":
+            return True
+        try:
+            state = subprocess.run(
+                ["ps", "-p", str(pid), "-o", "state="],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return True
+        return state.returncode != 0 or not state.stdout.strip().startswith("Z")
+
+    @staticmethod
     def _attendant_group_alive(pgid: int) -> bool:
         """Whether a recorded attendant process group still has any members."""
         if pgid <= 0 or pgid == os.getpgrp():
@@ -740,7 +758,7 @@ class ServerPool:
             try:
                 if os.getpgid(pid) != pid:
                     return False
-                if leader_may_be_dead and _pid_alive(pid):
+                if leader_may_be_dead and ServerPool._attendant_alive(pid):
                     # The caller observed a dead leader, but this pid now belongs to a live
                     # process. It was reused between checks, so do not signal its group.
                     return False
@@ -881,22 +899,24 @@ class ServerPool:
         if created is not None and created <= now:
             age = now - created
         else:
-            # Malformed or future timestamps are expired immediately, but the file's age
-            # still advances their give-up clock if inspection keeps failing.
             try:
                 file_age = now - os.path.getmtime(path)
             except OSError:
                 file_age = self._RETIRE_GIVE_UP_AFTER_SECONDS + 1
-            if file_age < 0:
-                file_age = self._RETIRE_GIVE_UP_AFTER_SECONDS + 1
-            age = self._LAUNCH_TIMEOUT_SECONDS + 1 + file_age
+            if created is not None:
+                # A backward clock step can put both timestamps in the future.
+                age = max(0, file_age)
+            else:
+                # A malformed timestamp starts expired, but inspection still has a
+                # bounded retry window while the file's age advances.
+                age = self._LAUNCH_TIMEOUT_SECONDS + 1 + max(0, file_age)
         attendant_pid = parsed_pid if parsed_pid is not None else -1
-        attendant_alive = _pid_alive(attendant_pid)
+        attendant_alive = self._attendant_alive(attendant_pid)
         if not attendant_alive:
             self._reap_dead_attendant(uid, attendant_pid, pending is not None, age)
         elif age > self._LAUNCH_TIMEOUT_SECONDS:
             is_attendant = self._is_pool_attendant(attendant_pid, uid)
-            if not _pid_alive(attendant_pid):
+            if not self._attendant_alive(attendant_pid):
                 # The leader can exit between the liveness probe and command inspection.
                 self._reap_dead_attendant(uid, attendant_pid, pending is not None, age)
                 return
@@ -913,25 +933,26 @@ class ServerPool:
                     self._signal(attendant_pid, signal.SIGKILL)
                 # A failed signal or inspection cannot hold a refill slot indefinitely.
                 if age <= self._PENDING_GIVE_UP_AFTER_SECONDS and (
-                    _pid_alive(attendant_pid) or self._attendant_group_alive(attendant_pid)
+                    self._attendant_alive(attendant_pid)
+                    or self._attendant_group_alive(attendant_pid)
                 ):
                     return
             self.abort_launch(uid)
 
     def _reap_dead_attendant(self, uid: str, pid: int, valid_pending: bool, age: float) -> None:
         group_alive = self._attendant_group_alive(pid)
-        if group_alive and age <= self._LAUNCH_TIMEOUT_SECONDS:
-            # The recorded leader may be long gone and its group id reused. Only a recent,
-            # complete record with a known Connect server in that group authorizes killpg.
+        if group_alive:
+            # The recorded leader may be long gone and its group id reused. Only a complete
+            # record with a known Connect server in that group authorizes killpg, at any age.
             if valid_pending and self._recorded_launch_server_in_group(uid, pid):
                 if self._signal_attendant_group(pid, signal.SIGKILL, leader_may_be_dead=True):
                     self.abort_launch(uid)
                     return
-                if _pid_alive(pid):
+                if self._attendant_alive(pid):
                     # A new process acquired the pid after the first liveness probe.
                     self.abort_launch(uid)
                     return
-            if self._attendant_group_alive(pid):
+            if age <= self._LAUNCH_TIMEOUT_SECONDS and self._attendant_group_alive(pid):
                 return
         self.abort_launch(uid)
 
@@ -973,11 +994,12 @@ class ServerPool:
             return
         data = self._directory.read_json(pending_path)
         pending = PendingState.from_data(data)
+        expected_argv = _attendant_command(self._directory.path, uid)[3:]
         if (
             pending is None
             or pending.attendant_pid != os.getpid()
             or os.getpgrp() != os.getpid()
-            or sys.argv[1:] != _attendant_command(self._directory.path, uid)[3:]
+            or sys.argv[1 : 1 + len(expected_argv)] != expected_argv
         ):
             return
         try:
@@ -1171,8 +1193,7 @@ class ServerPool:
         return _PoolStateRecord._positive_pid(discovery.daemon_pid())
 
     def release(self, member: PoolMember) -> None:
-        """Retire this process's claimed member; the shutdown completes in the background,
-        watched by the member's attendant with the janitor as backstop.
+        """Retire this process's claimed member; the janitor can finish its shutdown.
 
         This method acquires the pool-directory lock and must not be called while the same pool
         directory is already locked, including through a different ``PoolDirectory`` instance.

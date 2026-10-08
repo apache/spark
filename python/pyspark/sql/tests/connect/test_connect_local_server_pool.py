@@ -534,6 +534,16 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         finally:
             proc.wait(timeout=10)
 
+    def test_non_linux_attendant_zombie_is_dead(self) -> None:
+        zombie = subprocess.CompletedProcess([], 0, stdout="Z+")
+        with (
+            mock.patch.object(local_server_pool.sys, "platform", "darwin"),
+            mock.patch.object(local_server_pool, "_pid_alive", return_value=True),
+            mock.patch.object(subprocess, "run", return_value=zombie) as ps,
+        ):
+            self.assertFalse(self._pool._attendant_alive(12345))
+        ps.assert_called_once()
+
     def test_fingerprint_identity(self) -> None:
         base = pool_fingerprint("local[*]", {"spark.sql.shuffle.partitions": "4"})
         self.assertEqual(base, pool_fingerprint("local[*]", {"spark.sql.shuffle.partitions": "4"}))
@@ -1047,7 +1057,14 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             mock.patch.object(
                 local_server_pool.sys,
                 "argv",
-                ["local_server_pool.py", *_attendant_command(self._directory.path, uid)[3:]],
+                [
+                    "local_server_pool.py",
+                    *_attendant_command(self._directory.path, uid)[3:],
+                    "--master",
+                    "local[*]",
+                    "--fingerprint",
+                    "fp",
+                ],
             ),
         ):
             with self._directory:
@@ -1055,6 +1072,28 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
 
         self.assertTrue(_wait_proc_dead(server))
         self.assertEqual(set(self._states(uid)), {"member", "retired"})
+
+    def test_abort_launch_does_not_stop_another_attendants_server(self) -> None:
+        server = self._stubborn_process()
+        uid = "b007"
+        self._write_daemon_pid(uid, server.pid)
+        self._write_state(
+            self._directory.pending_path(uid),
+            {"attendant_pid": os.getpid(), "created": time.time(), "fingerprint": "fp"},
+        )
+        with (
+            mock.patch.object(local_server_pool.os, "getpgrp", return_value=os.getpid()),
+            mock.patch.object(local_server_pool.os, "getpgid", return_value=os.getpid()),
+            mock.patch.object(
+                local_server_pool.sys,
+                "argv",
+                ["local_server_pool.py", "--attend", "--pool-dir", "/other", "--uid", uid],
+            ),
+        ):
+            with self._directory:
+                self._pool.abort_launch(uid)
+
+        self.assertIsNone(server.poll())
 
     def test_reap_dead_attendant_kills_its_surviving_launch_group(self) -> None:
         attendant, launch_child_pid = self._attendant_with_launch_child("fade")
@@ -1073,6 +1112,26 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
 
         self.assertTrue(_wait_pid_dead(launch_child_pid))
         self.assertEqual(set(self._states("fade")), {"member", "retired"})
+
+    def test_reap_kills_verified_launch_group_after_launch_timeout(self) -> None:
+        attendant, launch_child_pid = self._attendant_with_launch_child("fade")
+        self._write_daemon_pid("fade", launch_child_pid)
+        self._write_state(
+            self._directory.pending_path("fade"),
+            {
+                "attendant_pid": attendant.pid,
+                "created": time.time() - ServerPool._LAUNCH_TIMEOUT_SECONDS - 1,
+                "fingerprint": "fp",
+            },
+        )
+        attendant.kill()
+        self.assertTrue(_wait_proc_dead(attendant))
+
+        with self._directory:
+            self._pool.reap("fade")
+
+        self.assertTrue(_wait_pid_dead(launch_child_pid))
+        self.assertNotIn("pending", self._states("fade"))
 
     def test_reap_does_not_signal_a_recycled_leaderless_group(self) -> None:
         leader, unrelated_child = self._attendant_with_launch_child("cafe")
@@ -1403,6 +1462,22 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
             self._pool.reap("11ce")
         self.assertIn("pending", self._states("11ce"))
         self.assertIsNone(attendant.poll())
+
+    def test_reap_keeps_live_launch_after_backward_clock_step(self) -> None:
+        attendant, launch_child_pid = self._attendant_with_launch_child("c10c")
+        path = self._directory.pending_path("c10c")
+        future = time.time() + 5
+        self._write_state(
+            path, {"attendant_pid": attendant.pid, "created": future, "fingerprint": "fp"}
+        )
+        os.utime(path, (future, future))
+
+        with self._directory:
+            self.assertFalse(self._pool.reap("c10c"))
+
+        self.assertIsNone(attendant.poll())
+        self.assertTrue(_pid_alive(launch_child_pid))
+        self.assertIn("pending", self._states("c10c"))
 
     def test_reap_server_unreachable_and_idle(self) -> None:
         with self.subTest("unreachable member is retired"):

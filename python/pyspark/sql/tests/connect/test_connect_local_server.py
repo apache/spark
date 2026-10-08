@@ -438,16 +438,16 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             with mock.patch.object(local_server, "_pid_alive", return_value=False):
                 self.assertEqual(local_server._process_command(12345), "")
 
-    def test_non_linux_zombie_is_dead(self) -> None:
+    def test_non_linux_liveness_does_not_run_ps(self) -> None:
         from unittest import mock
 
-        zombie = subprocess.CompletedProcess([], 0, stdout="Z+")
         with (
             mock.patch.object(local_server.sys, "platform", "darwin"),
             mock.patch.object(local_server.os, "kill"),
-            mock.patch.object(subprocess, "run", return_value=zombie),
+            mock.patch.object(subprocess, "run") as ps,
         ):
-            self.assertFalse(local_server._pid_alive(12345))
+            self.assertTrue(local_server._pid_alive(12345))
+        ps.assert_not_called()
 
     def test_server_launcher_binds_to_loopback(self) -> None:
         from unittest import mock
