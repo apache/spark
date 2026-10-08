@@ -1520,6 +1520,21 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-60073: make_timestamp without failOnError returns null for a year outside " +
+      "the timestamp range") {
+    // These years are valid for java.time, but their microseconds since the epoch overflow a
+    // Long, which is what try_make_timestamp and the non-ANSI make_timestamp evaluate.
+    Seq(TimestampType, TimestampNTZType).foreach { dataType =>
+      Seq(999999, -999999).foreach { year =>
+        val makeTimestampExpr = MakeTimestamp(
+          Literal(year), Literal(1), Literal(2), Literal(3), Literal(4),
+          Literal(Decimal(BigDecimal(5), 16, 6)), timezone = Some(Literal("UTC")),
+          failOnError = false, dataType = dataType)
+        checkEvaluation(makeTimestampExpr, null)
+      }
+    }
+  }
+
   test("ISO 8601 week-numbering year") {
     checkEvaluation(YearOfWeek(MakeDate(Literal(2006), Literal(1), Literal(1))), 2005)
     checkEvaluation(YearOfWeek(MakeDate(Literal(2006), Literal(1), Literal(2))), 2006)
