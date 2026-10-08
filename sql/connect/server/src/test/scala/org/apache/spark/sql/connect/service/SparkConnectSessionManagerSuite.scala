@@ -19,10 +19,13 @@ package org.apache.spark.sql.connect.service
 
 import java.util.UUID
 
+import io.grpc.stub.StreamObserver
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkSQLException
+import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
 import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.sql.test.SharedSparkSession
@@ -157,6 +160,87 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
     assert(closedSessionInfo.isDefined)
     assert(closedSessionInfo.get.status == SessionStatus.Closed)
     assert(closedSessionInfo.get.closedTimeMs.isDefined)
+  }
+
+  private def assertSessionClosed(key: SessionKey): Unit = {
+    val ex = intercept[SparkSQLException] {
+      SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    }
+    assert(ex.getCondition == "INVALID_HANDLE.SESSION_CLOSED")
+  }
+
+  private def releaseSession(key: SessionKey, allowReconnect: Boolean): Unit = {
+    val observer = new StreamObserver[proto.ReleaseSessionResponse] {
+      override def onNext(v: proto.ReleaseSessionResponse): Unit = {}
+      override def onError(t: Throwable): Unit = throw t
+      override def onCompleted(): Unit = {}
+    }
+    val request = proto.ReleaseSessionRequest
+      .newBuilder()
+      .setUserContext(proto.UserContext.newBuilder().setUserId(key.userId))
+      .setSessionId(key.sessionId)
+      .setAllowReconnect(allowReconnect)
+      .build()
+    new SparkConnectReleaseSessionHandler(observer).handle(request)
+  }
+
+  test("expired session is tombstoned by default") {
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+
+    SparkConnectService.sessionManager.periodicMaintenance(defaultInactiveTimeoutMs = 0L)
+
+    assertSessionClosed(key)
+  }
+
+  test("expired session that allows reconnect after close can be recreated as a new session") {
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    val oldHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    oldHolder.session.conf.set(Connect.CONNECT_SESSION_ALLOW_RECONNECT_AFTER_CLOSE.key, "true")
+    oldHolder.session.conf.set("spark.sql.shuffle.partitions", "7")
+
+    SparkConnectService.sessionManager.periodicMaintenance(defaultInactiveTimeoutMs = 0L)
+    assert(SparkConnectService.sessionManager.listActiveSessions.isEmpty)
+
+    // The id is reusable, and the recreated session starts from a clean state.
+    val newHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    assert(newHolder.session.conf.get("spark.sql.shuffle.partitions") != "7")
+    // Opting in is per session: the new session is tombstoned again unless it opts in too.
+    SparkConnectService.sessionManager.periodicMaintenance(defaultInactiveTimeoutMs = 0L)
+    assertSessionClosed(key)
+  }
+
+  test("session id stays tombstoned until close completes when reconnect is allowed") {
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    val holder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    holder.session.conf.set(Connect.CONNECT_SESSION_ALLOW_RECONNECT_AFTER_CLOSE.key, "true")
+
+    SparkConnectService.sessionManager.removeSessionHolder(key)
+    // The old session is removed but not closed yet: it must not be recreated in this window.
+    assertSessionClosed(key)
+
+    SparkConnectService.sessionManager.shutdownSessionHolder(holder)
+    SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+  }
+
+  test("ReleaseSession honors allow_reconnect and the session opt-in") {
+    val released = SessionKey("user", UUID.randomUUID().toString)
+    SparkConnectService.sessionManager.getOrCreateIsolatedSession(released, None)
+    releaseSession(released, allowReconnect = false)
+    assertSessionClosed(released)
+
+    val reconnect = SessionKey("user", UUID.randomUUID().toString)
+    SparkConnectService.sessionManager.getOrCreateIsolatedSession(reconnect, None)
+    releaseSession(reconnect, allowReconnect = true)
+    SparkConnectService.sessionManager.getOrCreateIsolatedSession(reconnect, None)
+
+    val optedIn = SessionKey("user", UUID.randomUUID().toString)
+    val optedInHolder =
+      SparkConnectService.sessionManager.getOrCreateIsolatedSession(optedIn, None)
+    optedInHolder.session.conf
+      .set(Connect.CONNECT_SESSION_ALLOW_RECONNECT_AFTER_CLOSE.key, "true")
+    releaseSession(optedIn, allowReconnect = false)
+    SparkConnectService.sessionManager.getOrCreateIsolatedSession(optedIn, None)
   }
 
   test("Pipeline execution cache is cleared when the session holder is closed") {
