@@ -231,6 +231,29 @@ final class ParquetColumnVector {
     }
   }
 
+  void close() {
+    // Calls `ColumnVector.close` for scenarios using `reserveNewColumn`.
+    if (column.variantFileType().isDefined()) {
+      ParquetColumnVector child = children.get(0);
+      child.close();
+      child.vector.close();
+    } else if (isPrimitive) {
+      if (repetitionLevels != null) {
+        repetitionLevels.close();
+      }
+      if (definitionLevels != null) {
+        definitionLevels.close();
+      }
+    } else {
+      for (int i = 0; i < children.size(); i++) {
+        children.get(i).close();
+        if (i >= vector.getNumChildren()) {
+          vector.close();
+        }
+      }
+    }
+  }
+
   /**
    * Returns the {@link ParquetColumn} of this column vector.
    */
