@@ -1024,10 +1024,12 @@ private[spark] class DAGScheduler(
    * `visitor(rdd, enqueue)` where `enqueue` can be called to schedule additional RDDs for
    * traversal. If `visitor` returns `false`, the traversal stops immediately. Returns `true`
    * if the traversal completed normally, `false` if it was terminated early by the visitor.
+   * A supplied visited set lets multiple roots share a search with the same visitor.
    */
   private def traverseRDDGraphUntil(
-      rdd: RDD[_])(visitor: (RDD[_], RDD[_] => Unit) => Boolean): Boolean = {
-    val visited = new HashSet[RDD[_]]
+      rdd: RDD[_],
+      visited: HashSet[RDD[_]] = new HashSet[RDD[_]])(
+      visitor: (RDD[_], RDD[_] => Unit) => Boolean): Boolean = {
     val waitingForVisit = new ListBuffer[RDD[_]]
     waitingForVisit += rdd
     def enqueue(r: RDD[_]): Unit = waitingForVisit.prepend(r)
@@ -1091,11 +1093,14 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Traverses the given RDD and its ancestors within the same stage and checks whether all of the
-   * RDDs satisfy a given predicate.
+   * Traverses unvisited RDDs in the given RDD's within-stage ancestry and checks whether they all
+   * satisfy a given predicate.
    */
-  private def traverseParentRDDsWithinStage(rdd: RDD[_], predicate: RDD[_] => Boolean): Boolean = {
-    traverseRDDGraphUntil(rdd) { (toVisit, enqueue) =>
+  private def traverseParentRDDsWithinStage(
+      rdd: RDD[_],
+      predicate: RDD[_] => Boolean,
+      visited: HashSet[RDD[_]] = new HashSet[RDD[_]]): Boolean = {
+    traverseRDDGraphUntil(rdd, visited) { (toVisit, enqueue) =>
       if (!predicate(toVisit)) {
         false
       } else {
@@ -1466,15 +1471,17 @@ private[spark] class DAGScheduler(
     // Rooting the consumer check at each checkpointed RDD (rather than at the PSD-reading RDD) is
     // what makes it cover a checkpoint anywhere DOWNSTREAM in the consumer stage, not just on the
     // reading RDD itself.
-    def chainHasReliableCheckpoint(root: RDD[_]): Boolean =
-      !traverseParentRDDsWithinStage(root, (r: RDD[_]) =>
-        !r.checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]]))
-    val offending =
-      // CONSUMER side: a checkpointed RDD whose own within-stage chain reads a pipelined shuffle is
-      // inside a consumer member stage (covers a checkpoint anywhere in that stage, not just on the
-      // reading RDD). PRODUCER side: a producer root's within-stage chain carries a checkpoint.
-      reliablyCheckpointed.exists(rddChainReadsPipelinedShuffle) ||
-        producerRoots.exists(chainHasReliableCheckpoint)
+    val offending = reliablyCheckpointed.nonEmpty && {
+      // Shared ancestry is visited once per search, not once per root. The two searches need
+      // separate visited sets because they have different predicates, even when roots overlap.
+      val consumerVisited = new HashSet[RDD[_]]
+      val producerVisited = new HashSet[RDD[_]]
+      reliablyCheckpointed.exists(rdd => rddChainReadsPipelinedShuffle(rdd, consumerVisited)) ||
+        producerRoots.exists { root =>
+          !traverseParentRDDsWithinStage(
+            root, (r: RDD[_]) => !reliablyCheckpointed.contains(r), producerVisited)
+        }
+    }
     if (offending) {
       throw pipelinedUnsupportedError(
         "a reliable RDD checkpoint in a pipelined-group member's within-stage chain")
@@ -1547,10 +1554,10 @@ private[spark] class DAGScheduler(
     }
   }
 
-  /** Whether `rdd`'s within-stage chain (parents, stopping at shuffle boundaries) reads through a
-   *  [[PipelinedShuffleDependency]] -- i.e. `rdd` is inside a pipelined CONSUMER member stage. */
-  private def rddChainReadsPipelinedShuffle(rdd: RDD[_]): Boolean = {
-    !traverseRDDGraphUntil(rdd) { (r, enqueue) =>
+  /** Whether an unvisited RDD in `rdd`'s within-stage ancestry reads a pipelined shuffle. */
+  private def rddChainReadsPipelinedShuffle(
+      rdd: RDD[_], visited: HashSet[RDD[_]] = new HashSet[RDD[_]]): Boolean = {
+    !traverseRDDGraphUntil(rdd, visited) { (r, enqueue) =>
       val readsPipelined = r.dependencies.exists {
         case _: PipelinedShuffleDependency[_, _, _] => true
         case _: ShuffleDependency[_, _, _] => false // regular boundary: not within this stage

@@ -9094,6 +9094,159 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
+  for {
+    roots <- Seq("consumer", "producer", "no-checkpoint")
+    numRoots <- Seq(1, 32)
+  } {
+    test(s"pipelined checkpoint preflight: shared ancestry is visited once " +
+        s"(roots=$roots, numRoots=$numRoots)") {
+      withTempDir { dir =>
+        sc.setCheckpointDir(dir.getCanonicalPath)
+        val edgeReads = Seq.fill(8)(new AtomicInteger)
+        var shared: RDD[(Int, Int)] = new MyRDD(sc, 2, Nil)
+        edgeReads.foreach { counter =>
+          val dependency = new OneToOneDependency(shared) {
+            override def rdd: RDD[(Int, Int)] = {
+              counter.incrementAndGet()
+              super.rdd
+            }
+          }
+          shared = new MyRDD(sc, 2, List(dependency))
+        }
+        val native = if (roots == "consumer") {
+          Seq(new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2)))
+        } else {
+          (0 until numRoots).map { _ =>
+            val producer = new MyRDD(sc, 2, List(new OneToOneDependency(shared)))
+            new PipelinedShuffleDependency(producer, new HashPartitioner(2))
+          }
+        }
+        val checkpoints = roots match {
+          case "consumer" =>
+            (0 until numRoots).map { _ =>
+              new MyCheckpointRDD(sc, 2, List(new OneToOneDependency(shared)))
+            }
+          case "producer" => Seq(new MyCheckpointRDD(sc, 2, Nil))
+          case "no-checkpoint" => Seq.empty[MyCheckpointRDD]
+        }
+        checkpoints.foreach(_.checkpoint())
+        val dependencies = native.toList ++ checkpoints.map(new OneToOneDependency(_)).toList
+        val result = new MyRDD(sc, 2, dependencies)
+        var preflightEdgeReads = Seq.empty[Int]
+        doAnswer { invocation =>
+          if (preflightEdgeReads.isEmpty) {
+            preflightEdgeReads = edgeReads.map(_.get())
+          }
+          invocation.callRealMethod()
+        }.when(scheduler).getShuffleDependenciesAndResourceProfiles(result)
+
+        edgeReads.foreach(_.set(0))
+        submit(result, Array(0, 1))
+        assert(failure === null)
+        // Classification, admission, and group collection each visit once. Only the search
+        // rooted on this shared chain adds a visit, regardless of the number of roots.
+        val expected = if (roots == "no-checkpoint") 3 else 4
+        assert(preflightEdgeReads === Seq.fill(edgeReads.size)(expected))
+        native.foreach { dep =>
+          completeShuffleMapStageSuccessfully(
+            scheduler.shuffleIdToMapStage(dep.shuffleId).id, 0, 2)
+        }
+        complete(taskSets.last, Seq((Success, 42), (Success, 43)))
+        assert(results === Map(0 -> 42, 1 -> 43))
+        assertDataStructuresEmpty()
+      }
+    }
+  }
+
+  for ((reliable, materialized) <- Seq((true, true), (false, false), (false, true))) {
+    test(s"pipelined checkpoint preflight: preserve checkpoint marker semantics " +
+        s"(reliable=$reliable, materialized=$materialized)") {
+      withTempDir { dir =>
+        sc.setCheckpointDir(dir.getCanonicalPath)
+        val producer = new MyCheckpointRDD(sc, 2, Nil)
+        if (reliable) producer.checkpoint() else producer.localCheckpoint()
+        if (materialized) producer.doCheckpoint()
+        assert(producer.isCheckpointed === materialized)
+        val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))
+        val result = new MyRDD(sc, 2, List(dependency))
+        if (reliable) {
+          assertPipelinedUnsupported(
+            submitAndCaptureFailure(result, Array(0, 1)), "reliable RDD checkpoint")
+          assertNoPipelinedStageRegistration(Seq(dependency.shuffleId))
+        } else {
+          submit(result, Array(0, 1))
+          assert(failure === null)
+          completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+          complete(taskSets.last, Seq((Success, 42), (Success, 43)))
+          assert(results === Map(0 -> 42, 1 -> 43))
+        }
+        assertDataStructuresEmpty()
+      }
+    }
+  }
+
+  test("pipelined checkpoint preflight: a regular boundary separates a checkpoint from the group") {
+    withTempDir { dir =>
+      sc.setCheckpointDir(dir.getCanonicalPath)
+      val prefix = new MyCheckpointRDD(sc, 0, Nil)
+      prefix.checkpoint()
+      val regular = new ShuffleDependency(prefix, new HashPartitioner(2))
+      val producer = new MyRDD(sc, 2, List(regular))
+      val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))
+      val result = new MyRDD(sc, 2, List(dependency))
+      submit(result, Array(0, 1))
+      assert(failure === null)
+      assert(!prefix.isCheckpointed)
+      assert(scheduler.shuffleIdToMapStage(regular.shuffleId).isAvailable)
+      assert(taskSets.size === 2)
+      completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+      complete(taskSets.last, Seq((Success, 42), (Success, 43)))
+      assert(results === Map(0 -> 42, 1 -> 43))
+      assertDataStructuresEmpty()
+    }
+  }
+
+  test("pipelined checkpoint preflight: checkpoint facts are local to each submission") {
+    withTempDir { dir =>
+      sc.setCheckpointDir(dir.getCanonicalPath)
+      val producer = new MyCheckpointRDD(sc, 2, Nil)
+      val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))
+      val result = new MyRDD(sc, 2, List(dependency))
+      submit(result, Array(0, 1))
+      completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+      complete(taskSets.last, Seq((Success, 42), (Success, 43)))
+      assertDataStructuresEmpty()
+
+      producer.checkpoint()
+      clearInvocations(scheduler, mapOutputTracker)
+      assertPipelinedUnsupported(
+        submitAndCaptureFailure(result, Array(0, 1)), "reliable RDD checkpoint")
+      verify(scheduler, never()).createShuffleMapStage(any[ShuffleDependency[_, _, _]], any[Int])
+      assertDataStructuresEmpty()
+    }
+  }
+
+  test("pipelined checkpoint preflight: follow checkpoint-truncated dependencies") {
+    withTempDir { dir =>
+      sc.setCheckpointDir(dir.getCanonicalPath)
+      val original = new MyCheckpointRDD(sc, 2, Nil)
+      original.checkpoint()
+      val producer = new MyCheckpointRDD(sc, 2, List(new OneToOneDependency(original)))
+      producer.localCheckpoint()
+      producer.doCheckpoint()
+      assert(producer.isCheckpointed)
+      assert(!producer.dependencies.exists(_.rdd eq original))
+      val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))
+      val result = new MyRDD(sc, 2, List(dependency))
+      submit(result, Array(0, 1))
+      assert(failure === null)
+      completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+      complete(taskSets.last, Seq((Success, 42), (Success, 43)))
+      assert(results === Map(0 -> 42, 1 -> 43))
+      assertDataStructuresEmpty()
+    }
+  }
+
   test("pipelined shuffle: a producer feeding more than one consumer (fan-out) is rejected") {
     // 1:N fan-out is deferred to a later version and rejected up front here. Fan-out is
     // detected at the RDD level -- two DISTINCT RDDs listing the same pipelined shuffle as a
