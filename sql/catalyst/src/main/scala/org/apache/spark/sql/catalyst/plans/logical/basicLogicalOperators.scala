@@ -2922,13 +2922,16 @@ object AsOfJoin {
     }
   }
 
+  /**
+   * Returns the `asOfCondition` and `orderExpression` for one MATCH_CONDITION comparison. The
+   * operands are compared as whole values, so a NULL struct never matches, while a struct whose
+   * fields are all NULL can.
+   */
   private def buildMatchExpressions(
       leftOperand: Expression,
       rightOperand: Expression,
       operator: MatchComparisonOperator): (Expression, Expression) = {
     val orderExpression = buildOrderExpression(leftOperand, rightOperand, operator)
-    // Compare the operands as they are: a comparison already matches struct fields by position,
-    // and a NULL struct stays NULL, so it never matches.
     operator match {
       case GreaterThanOrEqualOp =>
         (GreaterThanOrEqual(leftOperand, rightOperand), orderExpression)
