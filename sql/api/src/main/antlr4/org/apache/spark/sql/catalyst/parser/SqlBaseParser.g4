@@ -1694,6 +1694,7 @@ nonTrivialPrimitiveType
     | TIME (LEFT_PAREN precision=integerValue RIGHT_PAREN)? (withoutTimeZone)?
     | GEOGRAPHY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
     | GEOMETRY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
+    | FILE EXTERNAL
     ;
 
 trivialPrimitiveType
@@ -2269,6 +2270,7 @@ ansiNonReserved
     | EXTERNAL
     | EXTRACT
     | FIELDS
+    | FILE
     | FILEFORMAT
     | FIRST
     | FLOAT
@@ -2711,6 +2713,7 @@ nonReserved
     | FETCH
     | FILTER
     | FIELDS
+    | FILE
     | FILEFORMAT
     | FIRST
     | FLOAT

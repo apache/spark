@@ -88,6 +88,15 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   checkDataType("cHaR(27)", CharType(27))
   checkDataType("BINARY", BinaryType)
   checkDataType("void", NullType)
+  checkDataType("FILE EXTERNAL", FileType)
+  checkDataType("file external", FileType)
+  checkDataType("array<FILE EXTERNAL>", ArrayType(FileType))
+  checkDataType("map<string, FILE EXTERNAL>", MapType(StringType, FileType))
+  checkDataType(
+    "struct<f: FILE EXTERNAL, file: int>",
+    StructType(Seq(StructField("f", FileType), StructField("file", IntegerType))))
+  // EXTERNAL is required when declaring a FILE.
+  unsupported("FILE")
   checkDataType("interval", CalendarIntervalType)
   checkDataType("INTERVAL YEAR TO MONTH", YearMonthIntervalType())
   checkDataType("interval day to second", DayTimeIntervalType())
@@ -672,5 +681,11 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
         fail(s"attempt $attempt: expected the StackOverflowError itself, got $thrown", thrown)
       }
     }
+  }
+
+  test("FILE is a non-reserved keyword and can still be used as an identifier") {
+    assert(CatalystSqlParser.parseTableSchema("file INT, file2 FILE EXTERNAL") ===
+      StructType(Seq(StructField("file", IntegerType), StructField("file2", FileType))))
+    assert(CatalystSqlParser.parseExpression("file").sql === "file")
   }
 }

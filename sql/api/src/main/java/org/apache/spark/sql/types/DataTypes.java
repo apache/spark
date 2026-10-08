@@ -141,6 +141,11 @@ public class DataTypes {
   public static final DataType VariantType = VariantType$.MODULE$;
 
   /**
+   * Gets the FileType object.
+   */
+  public static final DataType FileType = FileType$.MODULE$;
+
+  /**
    * Creates an ArrayType by specifying the data type of elements ({@code elementType}).
    * The field of {@code containsNull} is set to {@code true}.
    */
