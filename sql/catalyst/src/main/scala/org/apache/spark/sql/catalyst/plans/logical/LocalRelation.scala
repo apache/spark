@@ -94,6 +94,8 @@ case class LocalRelation(
     }
   }
 
+  override def isOutputRepeatable: Boolean = !isStreaming
+
   override def computeStats(): Statistics = {
     val rowCount: Option[BigInt] = if (Utils.isTesting &&
       conf.getConfString("spark.sql.test.localRelationRowCount", "false") != "true") {
