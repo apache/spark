@@ -17,27 +17,35 @@
 
 package org.apache.spark.sql.connector
 
+import java.util
+
+import scala.jdk.CollectionConverters._
+
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{sources, Column, Row}
+import org.apache.spark.sql.{sources, Column, DataFrame, Row}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.ResolveSchemaEvolution
 import org.apache.spark.sql.classic.MergeIntoWriter
-import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryBaseTable, InMemoryRowLevelOperationTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Aborted, Column => V2Column, Committed, InMemoryBaseTable, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, TableCapability}
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.catalog.TableCapability.{ACCEPT_ANY_SCHEMA, AUTOMATIC_SCHEMA_EVOLUTION}
 import org.apache.spark.sql.connector.catalog.TableInfo
+import org.apache.spark.sql.connector.distributions.Distribution
+import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
+import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StringType, StructType}
 
 class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(InMemoryBaseTable.ASSIGN_COLUMN_IDS, "true")
+    .set("spark.sql.catalog.non_txn", classOf[NonTransactionalRowLevelOperationCatalog].getName)
 
   import testImplicits._
-
-  private def targetTableCol(colName: String): Column = {
-    col(tableNameAsString + "." + colName)
-  }
 
   test("self merge with transactional checks") {
     // create table
@@ -1188,6 +1196,78 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
   }
 
+  test("schema evolution warns once per write only when both capabilities are present") {
+    val tableName = "non_txn.ns1.test_table"
+    for {
+      command <- Seq("INSERT", "MERGE")
+      (description, capabilities) <- Seq(
+        "neither capability" -> Set.empty[TableCapability],
+        "only ACCEPT_ANY_SCHEMA" -> Set(ACCEPT_ANY_SCHEMA),
+        "only AUTOMATIC_SCHEMA_EVOLUTION" -> Set(AUTOMATIC_SCHEMA_EVOLUTION),
+        "both capabilities" -> Set(AUTOMATIC_SCHEMA_EVOLUTION, ACCEPT_ANY_SCHEMA))
+      evolutionEnabled <- Seq(false, true)
+    } {
+      withClue(s"$command with $description, schema evolution=$evolutionEnabled: ") {
+        withTable(tableName) {
+          val acceptAnySchema = capabilities.contains(ACCEPT_ANY_SCHEMA)
+          val autoSchemaEvolution = capabilities.contains(AUTOMATIC_SCHEMA_EVOLUTION)
+          val warnOnEvolution = evolutionEnabled && acceptAnySchema && autoSchemaEvolution
+          sql(
+            s"""CREATE TABLE $tableName (pk INT) USING foo
+               |TBLPROPERTIES (
+               |  'accept-any-schema' = '$acceptAnySchema',
+               |  'auto-schema-evolution' = '$autoSchemaEvolution')
+               |""".stripMargin)
+          val initial = spark.createDataFrame(
+            Seq(Row(0)).asJava,
+            new StructType().add("pk", IntegerType))
+          val first = spark.createDataFrame(
+            Seq(Row(1, "a", true)).asJava,
+            initial.schema.add("data", StringType).add("active", BooleanType))
+          val next = spark.createDataFrame(
+            Seq(Row(2, "b", false, 2L)).asJava,
+            first.schema.add("score", LongType))
+
+          /** A write matching the table schema does not warn. */
+          checkSchemaEvolutionWriteWithWarning(
+            tableName, command, initial, evolutionEnabled, capabilities,
+            expectWarning = false)
+
+          /** Adding multiple columns emits at most one warning for the entire write. */
+          checkSchemaEvolutionWriteWithWarning(
+            tableName, command, first, evolutionEnabled, capabilities,
+            expectWarning = warnOnEvolution)
+
+          /** A later request adding another column gets its own warning when applicable. */
+          checkSchemaEvolutionWriteWithWarning(
+            tableName, command, next, evolutionEnabled, capabilities,
+            expectWarning = warnOnEvolution)
+
+          /**
+           * Repeating the write does not warn.
+           */
+          checkSchemaEvolutionWriteWithWarning(
+            tableName, command, next, evolutionEnabled, capabilities, expectWarning = false)
+
+          val acceptsWrite = command == "INSERT" && acceptAnySchema
+          val evolvesAndWrites = evolutionEnabled && autoSchemaEvolution && !acceptAnySchema
+          val expectedRows = if (acceptsWrite || evolvesAndWrites) {
+            Seq(
+              Row(0, null, null, null),
+              Row(1, "a", true, null),
+              Row(2, "b", false, 2L),
+              Row(2, "b", false, 2L))
+          } else if (command == "MERGE" && acceptAnySchema) {
+            Nil
+          } else {
+            Seq(Row(0))
+          }
+          checkAnswer(spark.table(tableName), expectedRows)
+        }
+      }
+    }
+  }
+
   test("SPARK-54444: any schema changes after analysis are prohibited") {
     import org.apache.spark.sql.connector.catalog.Column
     val sourceTable = "cat.ns1.source_table"
@@ -1550,5 +1630,116 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
             Row(2, 201, "software")))
       }
     }
+  }
+
+  // Test helpers.
+
+  private def targetTableCol(colName: String): Column = {
+    col(tableNameAsString + "." + colName)
+  }
+
+  private def checkSchemaEvolutionWriteWithWarning(
+      tableName: String,
+      command: String,
+      source: DataFrame,
+      evolutionEnabled: Boolean,
+      capabilities: Set[TableCapability],
+      expectWarning: Boolean): Unit = {
+    val originalSchema = spark.table(tableName).schema
+    val sourceSchema = source.schema.asNullable.toDDL
+    val schemaMatches = originalSchema.asNullable.toDDL == sourceSchema
+    val acceptAnySchema = capabilities.contains(ACCEPT_ANY_SCHEMA)
+    val evolvesSchema = evolutionEnabled &&
+      capabilities.contains(AUTOMATIC_SCHEMA_EVOLUTION) && !schemaMatches
+    val writeSucceeds = if (command == "MERGE" && acceptAnySchema) {
+      false
+    } else {
+      schemaMatches || evolvesSchema || acceptAnySchema
+    }
+    val expectedWarnings = if (expectWarning) {
+      Seq(schemaEvolutionWarning(tableName))
+    } else {
+      Nil
+    }
+    val appender = new LogAppender("schema evolution warning")
+    withLogAppender(
+        appender,
+        loggerNames = Seq(ResolveSchemaEvolution.getClass.getName.stripSuffix("$")),
+        level = Some(Level.WARN)) {
+      if (writeSucceeds) {
+        writeWithSchemaEvolution(tableName, command, source, evolutionEnabled)
+        assert(spark.table(tableName).schema.asNullable.toDDL == sourceSchema)
+      } else {
+        val error = intercept[AnalysisException] {
+          writeWithSchemaEvolution(tableName, command, source, evolutionEnabled)
+        }
+        val expectedError = if (command == "INSERT") {
+          "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS"
+        } else {
+          "UNRESOLVED_COLUMN.WITH_SUGGESTION"
+        }
+        assert(error.getCondition == expectedError)
+        val expectedSchema = if (evolvesSchema) sourceSchema else originalSchema.toDDL
+        assert(spark.table(tableName).schema.toDDL == expectedSchema)
+      }
+    }
+    val warnings = appender.loggingEvents.filter(_.getLevel == Level.WARN)
+      .map(_.getMessage.getFormattedMessage).toSeq
+    assert(warnings == expectedWarnings)
+  }
+
+  private def writeWithSchemaEvolution(
+      tableName: String,
+      command: String,
+      source: DataFrame,
+      evolutionEnabled: Boolean): Unit = {
+    if (command == "INSERT") {
+      val writer = source.write.mode("append")
+      if (evolutionEnabled) {
+        writer.withSchemaEvolution()
+      }
+      writer.insertInto(tableName)
+    } else {
+      // DataFrame columns supply resolved source values; Spark must still resolve target keys.
+      val assignments = source.columns.map(name => name -> source(name)).toMap
+      val writer = source.mergeInto(tableName, lit(false))
+        .whenNotMatched().insert(assignments)
+      if (evolutionEnabled) {
+        writer.withSchemaEvolution()
+      }
+      writer.merge()
+    }
+  }
+
+  private def schemaEvolutionWarning(tableName: String): String = {
+    s"Applying schema evolution to foo table $tableName, which reports both " +
+      "AUTOMATIC_SCHEMA_EVOLUTION and ACCEPT_ANY_SCHEMA capabilities. While " +
+      "AUTOMATIC_SCHEMA_EVOLUTION natively resolves and evolves the schema on a write " +
+      "schema evolution request, ACCEPT_ANY_SCHEMA skips native write schema " +
+      "resolution and alignment. This may cause the write to fail after the table " +
+      "schema has been updated. Consider disabling ACCEPT_ANY_SCHEMA."
+  }
+}
+
+class NonTransactionalRowLevelOperationCatalog extends InMemoryTableCatalog {
+
+  // scalastyle:off argcount
+  override protected def newInMemoryTable(
+      name: String,
+      columns: Array[V2Column],
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint],
+      distribution: Distribution,
+      ordering: Array[SortOrder],
+      requiredNumPartitions: Option[Int],
+      advisoryPartitionSize: Option[Long],
+      distributionStrictlyRequired: Boolean,
+      numRowsPerSplit: Int,
+      id: String,
+      schemaAlignmentConfig: SchemaAlignmentConfig): InMemoryBaseTable = {
+    // scalastyle:on argcount
+    InMemoryRowLevelOperationTable.withColumns(
+      name, columns, partitioning, properties, constraints, id, schemaAlignmentConfig)
   }
 }
