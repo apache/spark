@@ -143,9 +143,15 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
         taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
     fileReader.setRequestedSchema(requestedSchema);
-    String sparkRequestedSchemaString =
-        configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
-    this.sparkRequestedSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
+    // ParquetReadSupport.init has just parsed this schema from the conf; reuse it rather than
+    // parse the JSON again for every split, which is costly when the schema is wide.
+    if (readSupport instanceof ParquetReadSupport parquetReadSupport) {
+      this.sparkRequestedSchema = parquetReadSupport.requestedCatalystSchema();
+    } else {
+      String sparkRequestedSchemaString =
+          configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
+      this.sparkRequestedSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
+    }
     ParquetToSparkSchemaConverter converter = new ParquetToSparkSchemaConverter(configuration);
     this.parquetColumn = converter.convertParquetColumn(requestedSchema,
       Option.apply(this.sparkRequestedSchema));
