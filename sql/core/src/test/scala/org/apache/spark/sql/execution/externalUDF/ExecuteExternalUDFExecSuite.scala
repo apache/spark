@@ -494,8 +494,12 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
   }
 
   test("external UDF preserves missing and measured zero terminal metrics") {
+    // bytesIn exercises a measured zero on the additive path; maxWorkCpuNanos exercises one on the
+    // keep-max path, where only the metric.isZero branch records it (0 never exceeds the unset
+    // value, which reads 0). maxWorkWallNanos stays unset to cover keep-max absence.
     val reported = ExecutionMetrics.newBuilder()
       .setBytesIn(0)
+      .setMaxWorkCpuNanos(0)
       .build()
     val execution = testExecution(
       EchoResponses,
@@ -505,11 +509,13 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
 
     plan.executeCollect()
 
-    assert(plan.metrics("bytesIn").value === 0L)
-    assert(!plan.metrics("bytesIn").isZero)
+    Seq("bytesIn", "maxWorkCpuNanos").foreach { name =>
+      assert(plan.metrics(name).value === 0L)
+      assert(!plan.metrics(name).isZero, s"$name should report measured zero")
+    }
     Seq(
       "bytesOut", "initWallNanos", "processingWallNanos", "receiveWallNanos", "sendWallNanos",
-      "workWallNanos", "workCpuNanos", "finishWallNanos", "maxWorkWallNanos", "maxWorkCpuNanos"
+      "workWallNanos", "workCpuNanos", "finishWallNanos", "maxWorkWallNanos"
     ).foreach { name =>
       assert(plan.metrics(name).isZero, s"$name should be unreported")
     }
