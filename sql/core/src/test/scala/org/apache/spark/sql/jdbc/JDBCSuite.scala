@@ -27,6 +27,7 @@ import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
+import com.teradata.jdbc.jdbc_4.util.ErrorFactory
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -2577,24 +2578,31 @@ class JDBCSuite extends SharedSparkSession {
 
   test("SPARK-59891: TeradataDialect classifies only syntax error codes as syntax errors") {
     val dialect = JdbcDialects.get("jdbc:teradata")
-    def teradataError(code: Int, sqlState: String, message: String): SQLException =
-      new SQLException(s"[Teradata Database] [Error $code] [SQLState $sqlState] $message",
-        sqlState, code)
+    // A Teradata database returns only an error code and a message, and the Teradata JDBC driver
+    // derives the SQLSTATE from the error code. So build the exceptions with the factory that the
+    // driver uses for database errors, to get the same exceptions as from a real database.
+    def teradataError(code: Int, message: String): SQLException =
+      ErrorFactory.makeDatabaseSQLException(message, code)
 
     Seq(
       3706 -> "Syntax error: expected something between the word 'PEOPLE' and the 'FORM' keyword.",
       3707 -> "Syntax error, expected something like a name.",
       3708 -> "Syntax error, 'X' should be deleted.",
       3709 -> "Syntax error, replace 'X'.").foreach { case (code, message) =>
-      assert(dialect.isSyntaxErrorBestEffort(teradataError(code, "42000", message)))
+      val e = teradataError(code, message)
+      assert(e.getSQLState == "42000")
+      assert(dialect.isSyntaxErrorBestEffort(e))
     }
+    // Access errors have the same SQLSTATE as syntax errors.
     Seq(
       (3523, "42000", "The user does not have SELECT access to TEST.PEOPLE."),
       (3524, "42000", "The user does not have SELECT access to database TEST."),
       (3807, "42S02", "Object 'TEST.MISSING' does not exist."),
       (3810, "42S22", "Column/Parameter 'TEST.PEOPLE.MISSING' does not exist.")
     ).foreach { case (code, sqlState, message) =>
-      assert(!dialect.isSyntaxErrorBestEffort(teradataError(code, sqlState, message)))
+      val e = teradataError(code, message)
+      assert(e.getSQLState == sqlState)
+      assert(!dialect.isSyntaxErrorBestEffort(e))
     }
   }
 
