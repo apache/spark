@@ -20,7 +20,7 @@ package org.apache.spark.sql.pipelines.autocdc
 import org.apache.spark.sql.types.{DataType, MapType, StringType}
 
 /**
- * Per-leaf sequencing clocks for SCD1 reconciliation.
+ * Per-leaf authorship sequences for SCD1 reconciliation.
  *
  * An SCD1 target row can combine values authored by different CDC events. The version map records
  * which event currently authors each non-key user-data leaf.
@@ -30,8 +30,8 @@ private[pipelines] object Scd1VersionMap {
   /**
    * Schema of the version map: `Map(String, sequencingType)`.
    *
-   * Each key is the field path of a user-data leaf. Each value is the sequencing value of the
-   * event that authored the leaf, or null if no event has authored it.
+   * Each key is the field path of a user-data leaf. Each value is the leaf's authorship sequence:
+   * the sequencing value of the event that authored the leaf, or null if no event has authored it.
    *
    * @param sequencingType The resolved data type of the flow's sequencing expression.
    */
