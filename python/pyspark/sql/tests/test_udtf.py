@@ -116,9 +116,7 @@ class BaseUDTFTestsMixin:
         if is_remote():
             with self.assertRaises(AnalysisException) as pe:
                 invoke().collect()
-            self.assertEqual(
-                pe.exception.getCondition(), "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON"
-            )
+            self.assertEqual(pe.exception.getCondition(), "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON")
         else:
             with self.assertRaises(PySparkNotImplementedError) as pe:
                 invoke()
