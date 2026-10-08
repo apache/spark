@@ -137,7 +137,9 @@ case class DataSourceV2Relation(
   def withMetadataColumns(): DataSourceV2Relation = {
     val newMetadata = metadataOutput.filterNot(outputSet.contains)
     if (newMetadata.nonEmpty) {
-      copy(output = output ++ newMetadata)
+      val newRelation = copy(output = output ++ newMetadata)
+      newRelation.copyTagsFrom(this)
+      newRelation
     } else {
       this
     }
