@@ -937,6 +937,43 @@ object DecorrelateInnerQuery extends PredicateHelper {
               decorrelate(d.child, parentOuterReferences, aggregated = true, underSetOp)
             (d.copy(child = newChild), joinCond, outerReferenceMap)
 
+          case j: AsOfJoin =>
+            // An ASOF JOIN picks one right row for each left row, so a right row may only match
+            // left rows of the same outer row. Unlike a regular join:
+            // - The left input always carries the outer references, including those of the
+            //   right input, so the join can match both inputs on them.
+            // - The right input is decorrelated as if it were aggregated. Its correlated
+            //   predicates either stay below the join or come back as matching conditions.
+            // - Correlated ON predicates limit which right rows can match, so they stay in the
+            //   join instead of moving up to the outer query.
+            assert(!j.expressions.filterNot(j.condition.contains).exists(containsOuter),
+              s"Correlated column is only allowed in the ON condition of an ASOF join: $j")
+            val outerReferences = collectOuterReferences(j.expressions)
+            if (!SQLConf.get.getConf(SQLConf.DECORRELATE_JOIN_PREDICATE_ENABLED)) {
+              assert(outerReferences.isEmpty, s"Correlated column is not allowed in join: $j")
+            }
+            val (newLeft, leftJoinCond, leftOuterReferenceMap) = decorrelate(
+              j.left,
+              parentOuterReferences ++ outerReferences ++ collectOuterReferencesInPlanTree(j.right),
+              aggregated,
+              underSetOp)
+            val (newRight, rightJoinCond, rightOuterReferenceMap) =
+              if (hasOuterReferences(j.right)) {
+                decorrelate(j.right, AttributeSet.empty, aggregated = true, underSetOp)
+              } else {
+                (j.right, Nil, AttributeMap.empty[Attribute])
+              }
+            val matchingConditions = leftOuterReferenceMap.flatMap {
+              case (outer, inner) => rightOuterReferenceMap.get(outer).map(EqualNullSafe(inner, _))
+            }
+            val newCondition =
+              (j.condition.map(replaceOuterReference(_, leftOuterReferenceMap)).toSeq ++
+                matchingConditions).reduceOption(And)
+            val newJoin = j.copy(left = newLeft, right = newRight, condition = newCondition)
+            // Prefer the left mapping: a LEFT ASOF JOIN can return NULL right columns.
+            val newOuterReferenceMap = rightOuterReferenceMap ++ leftOuterReferenceMap
+            (newJoin, leftJoinCond ++ rightJoinCond, newOuterReferenceMap)
+
           case j @ Join(left, right, joinType, condition, _) =>
             // Given 'condition', computes the tuple of
             // (correlated, uncorrelated, equalityCond, predicates, equivalences).

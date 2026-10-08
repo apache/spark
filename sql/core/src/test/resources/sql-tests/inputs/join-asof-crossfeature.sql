@@ -111,3 +111,125 @@ FROM first_match fm ASOF JOIN
             (TIMESTAMP '2026-06-29 10:00:08', 2.0) AS e(ts, extra_val)
   MATCH_CONDITION (fm.trade_time >= e.ts)
 ORDER BY fm.trade_time;
+
+-- FVT-ASOF-9-011: scalar subquery, outer reference in the left input
+SELECT s.symbol,
+  (SELECT max(q.bid_price)
+   FROM (SELECT * FROM trades t WHERE t.symbol = s.symbol) t
+   ASOF JOIN quotes q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS max_bid
+FROM VALUES ('AAPL'), ('GOOG'), ('MSFT') AS s(symbol)
+ORDER BY s.symbol;
+
+-- FVT-ASOF-9-012: scalar subquery, outer reference in the right input
+SELECT o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM trades t
+   ASOF JOIN (SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS total_bid
+FROM VALUES (180.12), (500.00) AS o(max_bid)
+ORDER BY o.max_bid;
+
+-- FVT-ASOF-9-013: scalar subquery, outer reference in the ON condition
+SELECT o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM trades t ASOF JOIN quotes q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol AND q.bid_price <= o.max_bid) AS total_bid
+FROM VALUES (180.12), (500.00) AS o(max_bid)
+ORDER BY o.max_bid;
+
+-- FVT-ASOF-9-014: outer references in both inputs
+SELECT o.symbol, o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM (SELECT * FROM trades t WHERE t.symbol = o.symbol) t
+   ASOF JOIN (SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS total_bid
+FROM VALUES ('AAPL', 180.12), ('AAPL', 500.00), ('MSFT', 180.12) AS o(symbol, max_bid)
+ORDER BY o.symbol, o.max_bid;
+
+-- FVT-ASOF-9-015: IN subquery, outer reference in the left input
+SELECT t0.trade_time, t0.symbol,
+  t0.quantity IN (
+    SELECT t.quantity
+    FROM (SELECT * FROM trades t WHERE t.symbol = t0.symbol) t
+    ASOF JOIN quotes q
+      MATCH_CONDITION (t.trade_time >= q.quote_time)
+      ON t.symbol = q.symbol) AS has_quote
+FROM trades t0
+ORDER BY t0.trade_time;
+
+-- FVT-ASOF-9-016: EXISTS subquery, outer reference in the right input
+SELECT o.max_bid
+FROM VALUES (100.00), (180.17), (500.00) AS o(max_bid)
+WHERE EXISTS (
+  SELECT 1
+  FROM trades t
+  ASOF JOIN (SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid) q
+    MATCH_CONDITION (t.trade_time >= q.quote_time)
+    ON t.symbol = q.symbol
+  WHERE q.bid_price = 180.15)
+ORDER BY o.max_bid;
+
+-- FVT-ASOF-9-017: LEFT ASOF JOIN, outer reference in the left input
+SELECT s.symbol,
+  (SELECT count(*)
+   FROM (SELECT * FROM trades t WHERE t.symbol = s.symbol) t
+   LEFT ASOF JOIN quotes q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS trade_count
+FROM VALUES ('AAPL'), ('GOOG'), ('MSFT') AS s(symbol)
+ORDER BY s.symbol;
+
+-- FVT-ASOF-9-018: LEFT ASOF JOIN rejects an outer reference in the right input, like LEFT JOIN
+SELECT o.max_bid,
+  (SELECT count(*)
+   FROM trades t
+   LEFT ASOF JOIN (SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS trade_count
+FROM VALUES (180.12) AS o(max_bid);
+
+-- FVT-ASOF-9-019: MATCH_CONDITION rejects an outer reference
+SELECT o.lag,
+  (SELECT count(*)
+   FROM trades t ASOF JOIN quotes q
+     MATCH_CONDITION (t.trade_time >= q.quote_time + o.lag)
+     ON t.symbol = q.symbol) AS matched
+FROM VALUES (INTERVAL '1' SECOND) AS o(lag);
+
+-- FVT-ASOF-9-020: NULL outer value, outer reference in the right input
+SELECT o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM trades t
+   ASOF JOIN (SELECT * FROM quotes q WHERE o.max_bid IS NULL OR q.bid_price <= o.max_bid) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS total_bid
+FROM VALUES (180.12), (NULL) AS o(max_bid)
+ORDER BY o.max_bid;
+
+-- FVT-ASOF-9-021: outer reference below an aggregate in the right input
+SELECT o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM trades t
+   ASOF JOIN (SELECT symbol, max(quote_time) AS quote_time, max(bid_price) AS bid_price
+              FROM quotes WHERE bid_price <= o.max_bid
+              GROUP BY symbol) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS total_bid
+FROM VALUES (180.12), (500.00) AS o(max_bid)
+ORDER BY o.max_bid;
+
+-- FVT-ASOF-9-022: outer reference below a LIMIT in the right input
+SELECT o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM trades t
+   ASOF JOIN (SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid
+              ORDER BY q.quote_time LIMIT 2) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS total_bid
+FROM VALUES (180.12), (500.00) AS o(max_bid)
+ORDER BY o.max_bid;

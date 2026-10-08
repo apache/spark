@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   WindowExpression
 }
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
+import org.apache.spark.sql.catalyst.expressions.SubExprUtils.{containsOuter, stripOuterReference}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.MatchComparisonOperator
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan, Project}
@@ -184,12 +185,14 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
 
     val leftRefs = leftExpr.references
     val rightRefs = rightExpr.references
-    if (referencesBothJoinSides(leftRefs) || referencesBothJoinSides(rightRefs)) {
+    // A column of the outer query belongs to neither join input.
+    if (referencesBothJoinSides(leftRefs) || referencesBothJoinSides(rightRefs) ||
+        containsOuter(leftExpr) || containsOuter(rightExpr)) {
       join.failAnalysis(
         errorClass = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
         messageParameters = Map(
-          "refs1" -> toSQLExpr(leftExpr),
-          "refs2" -> toSQLExpr(rightExpr)))
+          "refs1" -> toSQLExpr(stripOuterReference(leftExpr)),
+          "refs2" -> toSQLExpr(stripOuterReference(rightExpr))))
     }
   }
 
