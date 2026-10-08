@@ -241,6 +241,20 @@ class StateMetadataPartitionReader(
     }
   }
 
+  private[sql] def stateStoreNumPartitions: Option[Int] = {
+    allOperatorStateMetadata
+      .flatMap(_.stateStoresMetadata.map(_.numPartitions))
+      .distinct
+      .toSeq match {
+      case Seq() => None
+      case Seq(numPartitions) => Some(numPartitions)
+      case values =>
+        throw new IllegalStateException(
+          s"Found conflicting state-store partition counts in checkpoint: " +
+            values.mkString("[", ", ", "]"))
+    }
+  }
+
   // From v2, we also need to populate the operatorProperties and stateSchemaFilePath fields
   // for use with the state data source reader
   private[sql] lazy val stateMetadata: Iterator[StateMetadataTableEntry] = {
