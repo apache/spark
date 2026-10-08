@@ -1656,6 +1656,10 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         "from bf2 join (select c3 from bf3 limit 5) t on bf2.c2 = t.c3)"
       assertNoBloomFilters(failing)
       assert(hintWarnings(failing).count(_.contains("is not supported")) == 1)
+      val ambiguous = "select * from bf1 where bf1.c1 in " +
+        "(select /*+ RUNTIME_FILTER(bf2, bf3) */ bf2.c2 from bf2 join bf3 on bf2.c2 = bf3.c3)"
+      assert(hintWarnings(ambiguous).count(
+        _.contains("the runtime filter source is ambiguous")) == 1)
     }
   }
 
@@ -1675,6 +1679,27 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       assertNoBloomFilters(applicationKey)
       assertHintNotApplied(applicationKey,
         "the join key may take different values when evaluated again")
+    }
+  }
+
+  test("RUNTIME_FILTER hint rejects a DPP pruning key that may take different values") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.SUBQUERY_REUSE_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // Without subquery reuse, the scan filter and join evaluate the sampled key independently.
+      val sample = "coalesce((select max(c2) from bf2 tablesample (50 percent)), 0)"
+      Seq("bf5part join bf2", "bf2 join bf5part").foreach { join =>
+        val query = s"select /*+ RUNTIME_FILTER(bf2) */ * from $join " +
+          s"on bf5part.f5 + $sample = bf2.c2"
+        assert(!hasDynamicPruning(query))
+        assertNoBloomFilters(query)
+        assertHintNotApplied(query, "the join key may take different values when evaluated again")
+        // A seeded sample over a scan is repeatable, so the computed partition key is accepted.
+        val repeatable = query.replace("(50 percent)", "(50 percent) repeatable (42)")
+        assert(hasDynamicPruning(repeatable))
+        assertNoBloomFilters(repeatable)
+      }
     }
   }
 
