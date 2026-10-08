@@ -33,8 +33,6 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
   private val preserveOrderConfs =
     Seq(SQLConf.SCHEMA_EVOLUTION_PRESERVE_COLUMN_ORDER.key -> "true")
 
-  // New source column in the middle of the schema is inserted at its source position
-  // instead of being appended at the end.
   testEvolution("preserve order - extra source column in the middle")(
     targetData = Seq(
       (1, 100, "hr"),
@@ -67,7 +65,6 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     confs = preserveOrderConfs
   )
 
-  // With the flag off, the same column is appended at the end.
   testEvolution("preserve order off - extra source column in the middle appends at end")(
     targetData = Seq(
       (1, 100, "hr"),
@@ -97,7 +94,6 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
       (3, 250, "dummy")).toDF("pk", "salary", "dep")
   )
 
-  // A new column at index 0 of the source schema becomes the first column.
   testEvolution("preserve order - extra source column first")(
     targetData = Seq(
       (1, 100, "hr"),
@@ -128,8 +124,8 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     confs = preserveOrderConfs
   )
 
-  // Consecutive new columns chain their positions: each anchors after the preceding
-  // source sibling even though that sibling is itself being added.
+  // Each added column anchors after a preceding source sibling that is itself being
+  // added earlier in the same change list.
   testEvolution("preserve order - consecutive new source columns")(
     targetData = Seq(
       (1, 100, "hr"),
@@ -162,8 +158,6 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     confs = preserveOrderConfs
   )
 
-  // New columns keep source order even when the insert assignment list does not follow
-  // the source column order.
   testEvolution("preserve order - insert assignments in a different order")(
     targetData = Seq(
       (1, 100, "hr"),
@@ -194,7 +188,6 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     confs = preserveOrderConfs
   )
 
-  // A single extra column assigned explicitly (non-star) keeps its source position.
   testEvolution("preserve order - extra column with explicit assignments")(
     targetData = Seq(
       (1, 100, "hr"),
@@ -224,7 +217,6 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     confs = preserveOrderConfs
   )
 
-  // New nested struct field keeps its position inside the parent struct.
   testNestedStructsEvolution("preserve order - extra nested struct field in the middle")(
     target = Seq(
       """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
@@ -248,7 +240,7 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
       StructField("pk", IntegerType, nullable = false),
       StructField("info", StructType(Seq(
         StructField("salary", IntegerType),
-        StructField("bonus", IntegerType), // extra field in the middle of the struct
+        StructField("bonus", IntegerType),
         StructField("status", StringType)
       ))),
       StructField("dep", StringType)
@@ -274,7 +266,6 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     confs = preserveOrderConfs
   )
 
-  // With the flag off, a new nested struct field is appended at the end of the struct.
   testNestedStructsEvolution("preserve order off - extra nested field appends at end")(
     target = Seq(
       """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
@@ -323,8 +314,6 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     expectErrorWithoutEvolutionContains = "Cannot write extra fields"
   )
 
-  // A new nested field added through an explicit leaf assignment keeps its source
-  // position inside the parent struct.
   testNestedStructsEvolution("preserve order - nested leaf assignment in the middle")(
     target = Seq(
       """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
@@ -346,7 +335,7 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
       StructField("pk", IntegerType, nullable = false),
       StructField("info", StructType(Seq(
         StructField("salary", IntegerType),
-        StructField("bonus", IntegerType), // extra field in the middle of the struct
+        StructField("bonus", IntegerType),
         StructField("status", StringType)
       ))),
       StructField("dep", StringType)
@@ -370,7 +359,6 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     confs = preserveOrderConfs
   )
 
-  // The anchor for a new field resolves case-insensitively to the target field name.
   testEvolution("preserve order - anchor matches target field case")(
     targetData = Seq(
       (1, 100, "hr"),
@@ -455,7 +443,6 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     confs = preserveOrderConfs
   )
 
-  // A whole new struct column keeps its position among top-level columns.
   testNestedStructsEvolution("preserve order - new struct column in the middle")(
     target = Seq(
       """{ "pk": 1, "dep": "hr" }""",

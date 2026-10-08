@@ -1284,9 +1284,8 @@ object MergeIntoTable {
     val preserveColumnOrder = SQLConf.get.schemaEvolutionPreserveColumnOrder
     val resolver = SQLConf.get.resolver
 
-    // Field paths already scheduled for addition. Used to anchor a new field after a
-    // preceding source sibling that is itself being added, and to avoid emitting a
-    // second add for a field that was already scheduled.
+    // Field paths already scheduled for addition: they anchor positioned adds that
+    // follow a source sibling which is itself being added, and are skipped as repeats.
     val addedFieldPaths = mutable.ArrayBuffer.empty[Seq[String]]
 
     def isAlreadyAdded(fieldPath: Seq[String]): Boolean = {
@@ -1296,11 +1295,9 @@ object MergeIntoTable {
       }
     }
 
-    // Returns the position of the new field at fieldPath among its siblings, so that it
-    // retains its source order: after the nearest preceding source sibling that exists
-    // in the target or that is itself being added earlier in this change list, or first
-    // when there is no such sibling. Returns null to keep the default append behavior
-    // when the source position cannot be determined.
+    // Positions the new field as in the source: after the nearest preceding source
+    // sibling that exists in the target or is itself added earlier, or first when
+    // none exists. Returns null when the source position cannot be determined.
     def addedColumnPosition(fieldPath: Seq[String]): TableChange.ColumnPosition = {
       val parentPath = fieldPath.init
 
