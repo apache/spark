@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DeleteFromTable, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{DefaultCatalogManager, Identifier}
@@ -484,6 +484,50 @@ class RewriteWithExpressionSuite extends PlanTest {
           condition = Some((a + x) < 10 && (a + x) > 0)
         )
     )
+  }
+
+  test("SPARK-59962: a With in a command's condition is inlined instead of hoisted") {
+    val a = testRelation.output.head
+    // The condition is translated into source predicates, not evaluated over the child's rows, so a
+    // `Project` under the command would sit where the planner expects the table.
+    val condition = With(a + a) { case Seq(ref) => ref < 10 && ref > 0 }
+    val inlined = (a + a) < 10 && (a + a) > 0
+    comparePlans(
+      Optimizer.execute(DeleteFromTable(testRelation, condition)),
+      DeleteFromTable(testRelation, inlined))
+
+    // Nor is one in a conditional branch kept: a `With` translates to no source predicate.
+    comparePlans(
+      Optimizer.execute(DeleteFromTable(testRelation, If(a > 0, condition, Literal(false)))),
+      DeleteFromTable(testRelation, If(a > 0, inlined, Literal(false))))
+  }
+
+  test("SPARK-59962: a nondeterministic definition in a command keeps its With if read twice") {
+    // Analysis keeps nondeterministic expressions out of every command but `CreateVariable`, so
+    // this only pins that the rule would not read such a definition twice.
+    val a = testRelation.output.head
+    val definition = Rand(Literal(0L)) + a
+    val delete = DeleteFromTable(testRelation, With(definition) { case Seq(ref) =>
+      ref < 10 && ref > 0
+    })
+    assert(Optimizer.execute(delete) == delete)
+
+    // Read once, it is inlined as anywhere else.
+    assert(Optimizer.execute(DeleteFromTable(testRelation,
+      With(definition) { case Seq(ref) => ref < 10 })) ==
+      DeleteFromTable(testRelation, definition < 10))
+  }
+
+  test("SPARK-59962: a definition in a DECLARE VARIABLE default is not inlined like a command's") {
+    // The default is evaluated rather than stored, so a definition there that is worth memoizing
+    // stays in its `With` rather than being substituted at each of its references as a command's.
+    val ident = ResolvedIdentifier(FakeSystemCatalog, Identifier.of(Array("session"), "v"))
+    // Deterministic but not cheap: the command case would inline it.
+    val plusOne = ScalaUDF((i: Int) => i + 1, IntegerType, Seq(Literal(1)), udfName = Some("f"))
+    val declare = CreateVariable(
+      Seq(ident), DefaultValueExpression(With(plusOne) { case Seq(ref) => ref * ref }, "v"),
+      replace = true)
+    comparePlans(Optimizer.execute(declare), declare)
   }
 
   test("SPARK-59954: a With in a DECLARE VARIABLE default leaves the variable names alone") {
