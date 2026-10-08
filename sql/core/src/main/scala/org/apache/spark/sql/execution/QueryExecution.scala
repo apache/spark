@@ -823,10 +823,13 @@ object QueryExecution {
     adaptiveExecutionRule.toSeq ++
     Seq(
       CoalesceBucketsInJoin,
-      PlanDynamicPruningFilters(sparkSession),
-      // Unwrap CTEReuseExchange nodes early in the pipeline (AQE off). Runs in both main and
-      // subquery passes so CTE references inside subqueries are also unwrapped.
+      // Unwrap CTEReuseExchange nodes early in the pipeline (AQE off), before
+      // `PlanDynamicPruningFilters`: a `DynamicPruningSubquery` inside a force-materialized CTE
+      // body is only planned if the body is already exposed from the leaf, otherwise it is left
+      // unplanned and fails at execution. Runs in both main and subquery passes so CTE references
+      // inside subqueries are also unwrapped.
       UnwrapCTEReuseExchange,
+      PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
       EnsureRequirements(),
