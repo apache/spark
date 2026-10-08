@@ -30,7 +30,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{TaskContext, TaskContextImpl}
+import org.apache.spark.{SparkConf, TaskContext, TaskContextImpl}
 import org.apache.spark.kafka010.KafkaDelegationTokenTest
 import org.apache.spark.sql.kafka010.{KafkaIllegalStateException, KafkaTestUtils, RecordBuilder}
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.CacheKey
@@ -99,6 +99,40 @@ class KafkaDataConsumerSuite
       consumer.invokePrivate(throwOnDataLoss(0L, 1L, topicPartition, groupId, cause))
     }
     assert(e.getCause === cause)
+  }
+
+  test("reacquire consumer before recovering from an out-of-range offset") {
+    val testTopic = "out-of-range-recovery-topic-" + Random.nextInt()
+    val testTopicPartition = new TopicPartition(testTopic, 0)
+    testUtils.createTopic(testTopic, 1)
+    testUtils.sendMessages(Seq(new RecordBuilder(testTopic, "value").build()))
+
+    // Closing a consumer as soon as it is returned deterministically reproduces an eviction
+    // racing with the out-of-range recovery path.
+    val closingConsumerPool = new InternalKafkaConsumerPool(new SparkConf()) {
+      override def returnObject(consumer: InternalKafkaConsumer): Unit = {
+        super.returnObject(consumer)
+        reset()
+      }
+    }
+    val consumer = new KafkaDataConsumer(
+      Seq(testTopicPartition),
+      isMultiPartition = false,
+      getKafkaParams(),
+      closingConsumerPool,
+      fetchedDataPool)
+
+    try {
+      val originalConsumer = consumer.getOrRetrieveConsumer()
+      // The only record is at offset 0, so requesting offset 1 triggers out-of-range recovery.
+      val record = consumer.get(1, 2, 1000, failOnDataLoss = false)
+
+      assert(record === null)
+      assert(consumer._consumer.exists(_.ne(originalConsumer)))
+    } finally {
+      consumer.release()
+      closingConsumerPool.close()
+    }
   }
 
   test("new KafkaDataConsumer instance in case of Task retry") {

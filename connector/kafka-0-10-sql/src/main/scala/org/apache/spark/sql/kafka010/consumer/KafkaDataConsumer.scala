@@ -406,7 +406,7 @@ private[kafka010] class KafkaDataConsumer(
     require(offset < untilOffset,
       s"offset must always be less than untilOffset [offset: $offset, untilOffset: $untilOffset]")
 
-    val consumer = getOrRetrieveConsumer()
+    var consumer = getOrRetrieveConsumer()
     val fetchedData = getOrRetrieveFetchedData(offset)
 
     logDebug(s"Get $groupId $topicPartition nextOffset ${fetchedData.nextOffsetInFetchedData} " +
@@ -450,6 +450,9 @@ private[kafka010] class KafkaDataConsumer(
             throwOnDataLoss(toFetchOffset, untilOffset, topicPartition, groupId, e)
           } else {
             logOnDataLoss(topicPartition, groupId, s"Cannot fetch offset $toFetchOffset", e)
+            // The consumer was released while handling the out-of-range offset, so reacquire it
+            // before recovery.
+            consumer = getOrRetrieveConsumer()
           }
 
           val oldToFetchOffsetd = toFetchOffset
