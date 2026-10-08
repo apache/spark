@@ -42,8 +42,91 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
     )
   }
 
-  test("SPARK-59683: TRANSFORM view keeps bound CHAR/VARCHAR mode") {
+  // Nested complex TRANSFORM output is JSON without SerDe. Hive sessions default to
+  // LazySimpleSerDe, so keep these no-SerDe JSON cases in the Spark suite.
+  test("SPARK-60090: TRANSFORM nested CHAR/VARCHAR assignment via Project") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      checkAnswer(
+        sql(
+          """
+            |SELECT TRANSFORM(value)
+            |USING 'cat' AS (value ARRAY<CHAR(4)>)
+            |FROM VALUES ('["ab"]') t(value)
+            |""".stripMargin),
+        Row(Seq("ab  ")))
+      checkAnswer(
+        sql(
+          """
+            |SELECT TRANSFORM(value)
+            |USING 'cat' AS (value ARRAY<VARCHAR(4)>)
+            |FROM VALUES ('["xy"]') t(value)
+            |""".stripMargin),
+        Row(Seq("xy")))
+      checkAnswer(
+        sql(
+          """
+            |SELECT TRANSFORM(value)
+            |USING 'cat' AS (value STRUCT<value: CHAR(5)>)
+            |FROM VALUES ('{"value":"xy"}') t(value)
+            |""".stripMargin),
+        Row(Row("xy   ")))
+      checkAnswer(
+        sql(
+          """
+            |SELECT TRANSFORM(value)
+            |USING 'cat' AS (value MAP<STRING, CHAR(4)>)
+            |FROM VALUES ('{"k":"ab"}') t(value)
+            |""".stripMargin),
+        Row(Map("k" -> "ab  ")))
+      checkAnswer(
+        sql(
+          """
+            |SELECT TRANSFORM(value)
+            |USING 'cat' AS (value MAP<CHAR(4), INT>)
+            |FROM VALUES ('{"ab":1}') t(value)
+            |""".stripMargin),
+        Row(Map("ab  " -> 1)))
+      checkAnswer(
+        sql(
+          """
+            |SELECT TRANSFORM(value)
+            |USING 'cat' AS (value ARRAY<CHAR(4)>)
+            |FROM VALUES ('[null]') t(value)
+            |""".stripMargin),
+        Row(Seq(null)))
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-60090: TRANSFORM nested CHAR/VARCHAR overflow via Project") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq(
+        """
+          |SELECT TRANSFORM(value)
+          |USING 'cat' AS (value ARRAY<CHAR(4)>)
+          |FROM VALUES ('["abcdef"]') t(value)
+          |""".stripMargin,
+        """
+          |SELECT TRANSFORM(value)
+          |USING 'cat' AS (value STRUCT<value: VARCHAR(4)>)
+          |FROM VALUES ('{"value":"abcdef"}') t(value)
+          |""".stripMargin,
+        """
+          |SELECT TRANSFORM(value)
+          |USING 'cat' AS (value MAP<STRING, CHAR(4)>)
+          |FROM VALUES ('{"k":"abcdef"}') t(value)
+          |""".stripMargin).foreach { query =>
+        checkExceedLimitLength(intercept[Exception](sql(query).collect()), "4")
+      }
+    }
+  }
+
+  test("SPARK-60090: TRANSFORM view keeps CHAR/VARCHAR Project assignment") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    // The Project with stringLengthCheck is baked into the parsed view plan, so a later
+    // session conf change cannot drop pad / EXCEED_LIMIT_LENGTH.
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       withView("v") {
         sql(
@@ -62,34 +145,9 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
             |SELECT TRANSFORM('abcdef') USING 'cat' AS (c CHAR(4))
             |FROM VALUES (1) input(dummy)""".stripMargin)
         withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
-          val exception = intercept[Exception] {
-            sql("SELECT * FROM v_overflow").collect()
-          }
-          val runtimeException = exception match {
-            case s: org.apache.spark.SparkRuntimeException => s
-            case other =>
-              other.getCause.asInstanceOf[org.apache.spark.SparkRuntimeException]
-          }
-          checkError(
-            exception = runtimeException,
-            condition = "EXCEED_LIMIT_LENGTH",
-            parameters = Map("limit" -> "4"))
-        }
-      }
-    }
-    withSQLConf(
-        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
-      withView("v_disabled") {
-        sql(
-          """CREATE VIEW v_disabled AS
-            |SELECT TRANSFORM('ab') USING 'cat' AS (c CHAR(4))
-            |FROM VALUES (1) input(dummy)""".stripMargin)
-        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-          val exception = intercept[Exception] {
-            sql("SELECT * FROM v_disabled").collect()
-          }
-          checkTransformWithoutSerdeUnsupportedType(exception, "\"CHAR(4)\"")
+          checkExceedLimitLength(
+            intercept[Exception](sql("SELECT * FROM v_overflow").collect()),
+            "4")
         }
       }
     }

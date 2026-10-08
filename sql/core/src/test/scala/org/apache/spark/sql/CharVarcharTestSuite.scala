@@ -3265,7 +3265,8 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
 
   test("SPARK-58794: EXTERNAL TABLE CHAR/VARCHAR pad, assignment, and oversize") {
     // External file tables use the same store assignment on write and pad +
-    // length-check on scan. Hive TRANSFORM is out of scope for this epic.
+    // length-check on scan. Hive TRANSFORM uses the same assignment via Project
+    // (SPARK-60090); covered in BaseScriptTransformationSuite.
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath

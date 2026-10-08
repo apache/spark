@@ -63,6 +63,26 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
+   * Like [[replaceCharVarcharWithStringInSchema]], but always rewrites the physical type to
+   * unbounded STRING even when first-class CHAR/VARCHAR is enabled. Hive TRANSFORM script I/O
+   * is STRING-on-the-wire; callers apply [[stringLengthCheck]] in a Project when standard
+   * semantics are enabled.
+   */
+  def replaceCharVarcharWithStringInSchemaAlways(st: StructType): StructType = {
+    StructType(st.map { field =>
+      if (hasCharVarchar(field.dataType)) {
+        val metadata = new MetadataBuilder().withMetadata(field.metadata)
+          .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, field.dataType.catalogString).build()
+        field.copy(
+          dataType = replaceCharVarcharWithStringAlways(field.dataType),
+          metadata = metadata)
+      } else {
+        field
+      }
+    })
+  }
+
+  /**
    * Replaces CharType with VarcharType recursively in the given data type.
    */
   def replaceCharWithVarchar(dt: DataType): DataType = dt match {
