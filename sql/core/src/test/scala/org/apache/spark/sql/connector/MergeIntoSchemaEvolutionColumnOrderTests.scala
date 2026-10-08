@@ -33,7 +33,8 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
   private val preserveOrderConfs =
     Seq(SQLConf.SCHEMA_EVOLUTION_PRESERVE_COLUMN_ORDER.key -> "true")
 
-  testEvolution("preserve order - extra source column in the middle")(
+  testEvolution("preserve order - extra source column in the middle shifts " +
+      "partition column position")(
     targetData = Seq(
       (1, 100, "hr"),
       (2, 200, "software")
@@ -60,8 +61,7 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
       (1, 100, "hr"),
       (2, 150, "dummy"),
       (3, 250, "dummy")).toDF("pk", "salary", "dep"),
-    // Keep the default partitionCols = Seq("dep"): the new column is inserted before
-    // the partition column, shifting its stored index.
+    partitionCols = Seq("dep"),
     confs = preserveOrderConfs
   )
 
@@ -124,9 +124,7 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     confs = preserveOrderConfs
   )
 
-  // Each added column anchors after a preceding source sibling that is itself being
-  // added earlier in the same change list.
-  testEvolution("preserve order - consecutive new source columns")(
+  testEvolution("preserve order - consecutive new source columns anchor on each other")(
     targetData = Seq(
       (1, 100, "hr"),
       (2, 200, "software")
@@ -390,9 +388,8 @@ trait MergeIntoSchemaEvolutionColumnOrderTests extends MergeIntoSchemaEvolutionS
     confs = preserveOrderConfs
   )
 
-  // A top-level column added before an existing struct column shifts the struct's
-  // stored position while the struct itself gains a nested field.
-  testNestedStructsEvolution("preserve order - top-level add before an evolving struct")(
+  testNestedStructsEvolution("preserve order - top-level add before an evolving " +
+      "struct shifts its stored position")(
     target = Seq(
       """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
       """{ "pk": 2, "info": { "salary": 200, "status": "inactive" }, "dep": "software" }"""
