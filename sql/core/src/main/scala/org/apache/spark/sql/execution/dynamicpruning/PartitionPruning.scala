@@ -380,12 +380,14 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             // otherwise the pruning will not trigger
             var filterableScan = getFilterableTableScan(l, left)
             if (filterableScan.isDefined && canPruneLeft(joinType) && !pruneRightHinted &&
+                (!pruneLeftHinted || isRepeatableJoinKey(l)) &&
                 hasPartitionPruningFilter(right, pruneLeftHinted, r)) {
               newLeft = insertPredicate(
                 l, newLeft, Seq(r), right, rightKeys, filterableScan.get, pruneLeftHinted)
             } else {
               filterableScan = getFilterableTableScan(r, right)
               if (filterableScan.isDefined && canPruneRight(joinType) && !pruneLeftHinted &&
+                  (!pruneRightHinted || isRepeatableJoinKey(r)) &&
                   hasPartitionPruningFilter(left, pruneRightHinted, l)) {
                 newRight = insertPredicate(
                   r, newRight, Seq(l), left, leftKeys, filterableScan.get, pruneRightHinted)
