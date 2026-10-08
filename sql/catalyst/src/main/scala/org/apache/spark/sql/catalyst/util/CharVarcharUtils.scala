@@ -63,6 +63,26 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
+   * Like [[replaceCharVarcharWithStringInSchema]], but always rewrites the physical type to
+   * unbounded STRING even when first-class CHAR/VARCHAR is enabled. STRING-on-the-wire sources
+   * such as JSON and Hive TRANSFORM apply [[stringLengthCheck]] after parse when standard
+   * semantics are enabled.
+   */
+  def replaceCharVarcharWithStringInSchemaAlways(st: StructType): StructType = {
+    StructType(st.map { field =>
+      if (hasCharVarchar(field.dataType)) {
+        val metadata = new MetadataBuilder().withMetadata(field.metadata)
+          .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, field.dataType.catalogString).build()
+        field.copy(
+          dataType = replaceCharVarcharWithStringAlways(field.dataType),
+          metadata = metadata)
+      } else {
+        field
+      }
+    })
+  }
+
+  /**
    * Replaces CharType with VarcharType recursively in the given data type.
    */
   def replaceCharWithVarchar(dt: DataType): DataType = dt match {
@@ -206,6 +226,18 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       dt,
       charFuncName = Some("charTypeWriteSideCheck"),
       varcharFuncName = Some("varcharTypeWriteSideCheck"))
+  }
+
+  /**
+   * Applies write-side CHAR/VARCHAR assignment to a value parsed as unbounded STRING.
+   * No-op when standard semantics are off or `targetType` has no CHAR/VARCHAR.
+   */
+  def assignAfterParse(expr: Expression, targetType: DataType): Expression = {
+    if (SQLConf.get.charVarcharStandardSemantics && hasCharVarchar(targetType)) {
+      stringLengthCheck(expr, targetType)
+    } else {
+      expr
+    }
   }
 
   private def processStringForCharVarchar(
