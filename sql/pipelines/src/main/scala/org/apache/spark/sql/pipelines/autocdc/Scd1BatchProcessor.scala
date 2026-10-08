@@ -91,7 +91,7 @@ case class Scd1BatchProcessor(
       .reduce(_ && _)
 
     val incomingRowRepresentsDeleteEvent =
-      Scd1BatchProcessor.representsDelete(incomingDelete, incomingUpsert)
+      incomingDelete.isNotNull && (incomingUpsert.isNull || incomingDelete > incomingUpsert)
 
     reducedMicrobatch
       .mergeInto(auxIdentQuoted, doKeysMatch)
@@ -224,13 +224,6 @@ object Scd1BatchProcessor {
   /** Project the upsert sequence out of the CDC metadata column. */
   private[autocdc] def upsertSequenceOf(cdcMetadataCol: Column): Column =
     cdcMetadataCol.getField(cdcUpsertSequenceFieldName)
-
-  /**
-   * Whether CDC metadata carrying these sequences represents a delete event. A delete wins only
-   * when it is sequenced strictly after the upsert, so upserts win sequencing ties.
-   */
-  private[autocdc] def representsDelete(deleteSequence: Column, upsertSequence: Column): Column =
-    deleteSequence.isNotNull && (upsertSequence.isNull || deleteSequence > upsertSequence)
 
   /**
    * Schema of the CDC metadata struct column for SCD1.

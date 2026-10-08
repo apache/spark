@@ -42,13 +42,29 @@ private[autocdc] sealed trait Scd1FieldToReconcile {
   def leafPaths: Seq[Seq[String]]
 
   /**
-   * The sequence at which an upsert authors this field, or null if the upsert leaves it
-   * unauthored.
+   * When this field was last authored, according to a row's CDC metadata. A field was last
+   * authored at the greatest sequence at which any of its leaves was authored. A delete authors
+   * every leaf at its delete sequence.
    *
-   * @param upsertSequence The event's upsert sequence, or null if the event isn't an upsert.
-   * @param versionMap The upsert's version map, or null if the upsert authors every leaf.
+   * @param cdcMetadata The row's CDC metadata.
+   * @return The sequence at which the row last authored this field, or null if the row leaves it
+   *         unauthored.
    */
-  def upsertAuthorshipSequence(upsertSequence: Column, versionMap: Column): Column
+  final def lastAuthoredIn(cdcMetadata: Column): Column = {
+    val deleteSequence = Scd1BatchProcessor.deleteSequenceOf(cdcMetadata)
+    val upsertSequence = Scd1BatchProcessor.upsertSequenceOf(cdcMetadata)
+    val versionMap = cdcMetadata.getField(Scd1BatchProcessor.versionMapFieldName)
+
+    val greatestLeafSequence = leafPaths
+      .map(leafPath => versionMap(Scd1VersionMap.serializeKey(leafPath)))
+      .reduceOption(F.greatest(_, _))
+      // A field without leaves, such as an empty struct, has no version-map entries.
+      .getOrElse(upsertSequence)
+
+    F.when(deleteSequence.isNotNull, deleteSequence)
+      .when(versionMap.isNull, upsertSequence)
+      .otherwise(greatestLeafSequence)
+  }
 }
 
 private[autocdc] object Scd1FieldToReconcile {
@@ -59,10 +75,6 @@ private[autocdc] object Scd1FieldToReconcile {
    */
   case class IgnoreNullLeaf(path: Seq[String], field: StructField) extends Scd1FieldToReconcile {
     override def leafPaths: Seq[Seq[String]] = Seq(path)
-
-    override def upsertAuthorshipSequence(upsertSequence: Column, versionMap: Column): Column =
-      F.when(versionMap.isNull, upsertSequence)
-        .otherwise(versionMap(Scd1VersionMap.serializeKey(path)))
   }
 
   /**
@@ -76,9 +88,6 @@ private[autocdc] object Scd1FieldToReconcile {
       case struct: StructType => AutoCdcSchemaUtils.flattenStructFieldPaths(struct).map(path ++ _)
       case _ => Seq(path)
     }
-
-    override def upsertAuthorshipSequence(upsertSequence: Column, versionMap: Column): Column =
-      upsertSequence
   }
 
   /**
