@@ -2605,9 +2605,10 @@ object SQLConf {
       .doc("When enabled, Spark preserves sort orders over partition key expressions when " +
         "GroupPartitionsExec coalesces multiple input partitions into one output partition. " +
         "Because all merged partitions share the same partition key value, sort orders over " +
-        "those key expressions remain valid after the merge. This applies to both key-derived " +
-        "ordering (from SupportsReportOrdering) and ordering derived from " +
-        s"${V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key}. Requires " +
+        "those key expressions remain valid after the merge. This applies to both the ordering " +
+        "reported via SupportsReportOrdering and the ordering derived from " +
+        s"${V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key}. Sort orders over partition " +
+        "transforms such as `days(ts)` or `bucket(8, id)` are left out. Requires " +
         s"${V2_BUCKETING_ENABLED.key} to be enabled.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)

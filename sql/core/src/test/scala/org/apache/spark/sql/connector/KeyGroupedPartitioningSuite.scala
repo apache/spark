@@ -6575,9 +6575,10 @@ class KeyGroupedPartitioningSuite
     // `t1` reports a transform in the middle, so the leading run of its ordering stops there.
     // `t2` reports a transform key first. Each split holds a single key, so the sort order on `id`
     // after it still holds. `t3` reports no ordering, so the scan derives one from its keys. In
-    // each case a sort on `id` right above the scan needs no `SortExec`. The query selects `ts`, so
-    // the transform's column stays in the scan output. Otherwise SPARK-59899's pruned-column
-    // handling would give the same orderings even without this fix.
+    // each case a sort on `id` right above the scan needs no `SortExec`. A `GROUP BY id` plans a
+    // `SortAggregateExec`. The query selects `ts`, so the transform's column stays in the scan
+    // output. Otherwise SPARK-59899's pruned-column handling would give the same orderings even
+    // without this fix.
     val table1 = "transform_order_t1"
     val table2 = "transform_order_t2"
     val table3 = "transform_order_t3"
@@ -6587,7 +6588,9 @@ class KeyGroupedPartitioningSuite
     createTable(table2, columns, Array(years("ts"), identity("id")),
       Array(asc(years("ts")), asc(FieldReference("id"))))
     createTable(table3, columns, Array(days("ts"), identity("id")))
-    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true") {
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
+        SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "true") {
       Seq(table1, table2, table3).foreach { table =>
         sql(s"INSERT INTO testcat.ns.$table VALUES (1, 'aa', cast('2020-01-01' as timestamp))")
         val df = sql(s"SELECT id, data, ts FROM testcat.ns.$table")
@@ -6596,6 +6599,9 @@ class KeyGroupedPartitioningSuite
         assert(scan.outputOrdering.map(_.child.sql) === Seq("id"), table)
         val sorted = df.sortWithinPartitions("id").queryExecution.executedPlan
         assert(collect(sorted) { case s: SortExec => s }.isEmpty, table)
+        val aggregated = sql(s"SELECT id, max(ts) FROM testcat.ns.$table GROUP BY id")
+          .queryExecution.executedPlan
+        assert(collect(aggregated) { case a: SortAggregateExec => a }.nonEmpty, table)
       }
     }
   }
@@ -6656,11 +6662,11 @@ class KeyGroupedPartitioningSuite
   }
 
   test("SPARK-59995: k-way merge over an ordering derived from a partition transform key") {
-    // The scan reports no ordering, so it derives [id, days(arrive_time)] from its keys and keeps
-    // [id]. The merge must not call the transform's function. Spark cannot call this `days` at
-    // all, since `DaysFunction` implements neither `invoke` nor `produceResult`. The join on id
-    // projects the keys to id. With preserveKeyOrderingOnCoalesce off, the coalesced partitions
-    // keep no ordering on id unless they are merged.
+    // The scan reports no ordering, so it derives [id] from its keys, leaving out
+    // days(arrive_time). The merge must not call the transform's function. Spark cannot call this
+    // `days` at all, since `DaysFunction` implements neither `invoke` nor `produceResult`. The join
+    // on id projects the keys to id. With preserveKeyOrderingOnCoalesce off, the coalesced
+    // partitions keep no ordering on id unless they are merged.
     createTable(items, itemsColumns, Array(identity("id"), days("arrive_time")))
     createTable(purchases, purchasesColumns, Array(identity("item_id")))
     sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
