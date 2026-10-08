@@ -66,6 +66,7 @@ from pyspark.sql.types import (
     StructType,
     VariantVal,
 )
+from pyspark.sql.utils import is_remote
 from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -75,7 +76,6 @@ from pyspark.testing.utils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.sql.utils import is_remote
 from pyspark.util import PythonEvalType, is_remote_only
 
 
