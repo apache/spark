@@ -55,40 +55,43 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
     case WithCTE(child, cteDefs) =>
       cteDefs.foreach { cteDef =>
         val inlined = replaceWithRepartition(cteDef.child, cteMap)
-        val withRepartition = cteDef.forcePartitioning match {
-          case Some(h: HashPartitioning) =>
+        // `forcePartitioning` is only honored together with `forceSkipInline`. A pin requests a
+        // sealed, guaranteed-reuse materialization, which only applies to definitions `InlineCTE`
+        // keeps (i.e. `forceSkipInline`). A pin on a non-`forceSkipInline` definition is ignored
+        // here, because such a definition may be inlined by `InlineCTE` before this rule runs, so
+        // honoring the pin would be inconsistent with the inlining decision.
+        val withRepartition = (cteDef.forceSkipInline, cteDef.forcePartitioning) match {
+          case (true, Some(h: HashPartitioning)) =>
             // A pinned partitioning materializes the CTE as a plan-reuse RepartitionByExpression
-            // on the pinned expressions, so guaranteed CTE reuse can pick it up. This is an
-            // explicit producer contract, honored independently of forceSkipInline, and it takes
+            // on the pinned expressions, so guaranteed CTE reuse can pick it up. It takes
             // precedence over `canSkipExtraRepartition` -- the pin states the exact partitioning
             // (keys and number of partitions) we must produce.
             RepartitionByExpression(
               h.expressions, inlined, optNumPartitions = Some(h.numPartitions))
               .addRepartitionId(reassign = true)
-          case Some(other) =>
+          case (true, Some(other)) =>
             // forcePartitioning is an internal dev API; only HashPartitioning is supported
             // today (see CTERelationDef.forcePartitioning).
             throw new UnsupportedOperationException(
               s"CTERelationDef.forcePartitioning supports only HashPartitioning, but got " +
                 s"${other.getClass.getSimpleName}")
-          case None =>
-            if (cteDef.forceSkipInline) {
-              if (canSkipExtraRepartition(inlined) || cteDef.underSubquery) {
-                // If the CTE definition plan itself is a repartition operation or if it hosts a
-                // merged scalar subquery, we do not need to add an extra repartition shuffle.
-                inlined
-              } else {
-                RepartitionByExpression(Seq.empty, inlined, None)
-                  .addRepartitionId(reassign = true)
-              }
+          case (true, None) =>
+            if (canSkipExtraRepartition(inlined) || cteDef.underSubquery) {
+              // If the CTE definition plan itself is a repartition operation or if it hosts a
+              // merged scalar subquery, we do not need to add an extra repartition shuffle.
+              inlined
             } else {
-              // Non-forceSkipInline CTEs keep the original OSS behavior: a plain repartition that
-              // is not sealed for guaranteed reuse (no repartitionId).
-              if (canSkipExtraRepartition(inlined) || cteDef.underSubquery) {
-                inlined
-              } else {
-                RepartitionByExpression(Seq.empty, inlined, None)
-              }
+              RepartitionByExpression(Seq.empty, inlined, None)
+                .addRepartitionId(reassign = true)
+            }
+          case _ =>
+            // Non-forceSkipInline CTEs keep the original OSS behavior: a plain repartition that
+            // is not sealed for guaranteed reuse (no repartitionId). Any forcePartitioning pin is
+            // ignored in this branch.
+            if (canSkipExtraRepartition(inlined) || cteDef.underSubquery) {
+              inlined
+            } else {
+              RepartitionByExpression(Seq.empty, inlined, None)
             }
         }
         cteMap.put(cteDef.id, withRepartition)
