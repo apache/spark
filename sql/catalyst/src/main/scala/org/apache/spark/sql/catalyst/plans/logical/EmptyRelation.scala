@@ -27,6 +27,8 @@ case class EmptyRelation(logical: LogicalPlan) extends LeafNode {
 
   override def output: Seq[Attribute] = logical.output
 
+  override def isOutputRepeatable: Boolean = true
+
   override def computeStats(): Statistics = Statistics(sizeInBytes = 0, rowCount = Some(0))
 
   override def maxRows: Option[Long] = Some(0)
