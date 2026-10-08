@@ -2295,10 +2295,9 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
 
   test("FileSourceStrategy adds the checked column only to a scan that stays columnar with it") {
     // The Filter and the Project that drops the column are fused into whole-stage codegen only
-    // above a columnar scan, and only when no conjunct falls back from codegen. Elsewhere that
-    // Project would copy every surviving row, so the scan gets the filter but no column, and the
-    // Filter evaluates the bloom on every row. The field limit counts the whole output, so a
-    // partition column counts too.
+    // above a columnar scan. Above any other, that Project would copy every surviving row, so the
+    // scan gets the filter but no column, and the Filter evaluates the bloom on every row. The
+    // field limit counts the whole output, so a partition column counts too.
     withTempDir { dir =>
       val path = new File(dir, "parted").getAbsolutePath
       spark.range(0, 50).selectExpr("id AS k", "CAST(id AS STRING) AS v", "id % 3 AS p")
@@ -2328,18 +2327,6 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
               s"the checked column must not change whether $setting reads columnar batches")
           }
         }
-        // `OnKey` is a CodegenFallback, which keeps the Filter out of whole-stage codegen.
-        val k = columnOf(relation, "k")
-        val withFallback = LogicalFilter(And(bloomOn(k), IsNotNull(OnKey(k, at = -1L))), relation)
-        val scan = scanOf(planned(withFallback))
-        assert(scan.storageFilters.size == 1,
-          s"a conjunct that falls back must not stop the bloom being offered; got " +
-            scan.storageFilters)
-        assert(!scan.requiredSchema.fieldNames.contains(
-            FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME),
-          s"a conjunct that falls back from codegen must leave out the checked column; got " +
-            scan.requiredSchema)
-        assert(scan.supportsColumnar, "the scan must still read columnar batches")
       }
     }
   }

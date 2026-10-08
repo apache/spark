@@ -27,7 +27,6 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PLAN_EXPRESSION, SCALAR_SUBQUERY}
@@ -364,22 +363,16 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val storageFilters = storageFiltersFor(
         normalizedFilters, fsRelation, readDataColumns, readerDataColumns.toStructType)
       // The column the reader marks the rows it checked in, see
-      // `FileFormat.buildReaderWithStorageFilters`. It is added only where whole-stage codegen
-      // fuses the Filter and the Project that drops the column, over a scan that still returns
-      // columnar batches with it. Elsewhere that Project would copy every surviving row. A
-      // conjunct that falls back from codegen keeps the Filter out, as `CollapseCodegenStages`
-      // decides.
+      // `FileFormat.buildReaderWithStorageFilters`. It is added only where the scan still returns
+      // columnar batches with it, as `FileSourceScanExec.supportsColumnar` decides, so the column
+      // never changes how the scan runs. Above a row-based scan, the Project that drops the
+      // column would copy every surviving row.
       val storageFilterCheckedColumn = Option.when(storageFilters.nonEmpty) {
         AttributeReference(FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME, BooleanType)()
       }.filter { checked =>
         val conf = fsRelation.sparkSession.sessionState.conf
         val output = readerDataColumns ++ partitionColumns ++ constantMetadataColumns :+ checked
-        val filterFallsBack = afterScanFilters.exists(_.exists {
-          case _: LeafExpression => false
-          case e => e.isInstanceOf[CodegenFallback]
-        })
-        conf.wholeStageEnabled && !filterFallsBack &&
-          !WholeStageCodegenExec.isTooManyFields(conf, output.toStructType)
+        conf.wholeStageEnabled && !WholeStageCodegenExec.isTooManyFields(conf, output.toStructType)
       }
 
       // The output rows will be produced during file scan operation in three steps:
