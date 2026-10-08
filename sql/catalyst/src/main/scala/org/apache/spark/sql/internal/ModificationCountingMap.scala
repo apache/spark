@@ -24,9 +24,10 @@ import java.util.function.{BiConsumer, BiFunction, Function => JFunction}
  * A thread-safe map of [[SQLConf]] settings that counts the mutating calls on it, so values
  * derived from its entries can be reused while [[modificationCount]] is unchanged.
  *
- * Like the `java.util.Collections.synchronizedMap` it replaces, every method synchronizes on the
- * map itself, so a caller iterating the map must hold its monitor. Unlike it, the key, value, and
- * entry views are read-only, so every mutation goes through a method that advances the count.
+ * Like the `java.util.Collections.synchronizedMap` it replaces, every method of the map
+ * synchronizes on the map itself, so a caller iterating the map must hold its monitor. Unlike it,
+ * the key, value, and entry views are read-only, so every mutation goes through a method that
+ * advances the count, and unsynchronized, so a caller must hold the monitor while using them.
  */
 private[sql] final class ModificationCountingMap extends util.Map[String, String] {
 
