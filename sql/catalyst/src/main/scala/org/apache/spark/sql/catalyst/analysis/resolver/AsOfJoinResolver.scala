@@ -214,7 +214,6 @@ class AsOfJoinResolver(
       case (Some(unresolvedLeftOperand), Some(operator), Some(unresolvedRightOperand)) =>
         val leftOperand = resolveExpressionInJoin(unresolvedAsOfJoin, unresolvedLeftOperand)
         val rightOperand = resolveExpressionInJoin(unresolvedAsOfJoin, unresolvedRightOperand)
-        // Include hidden columns, such as the dropped key of a nested USING join.
         AsOfJoinMatchConditionResolution.materialize(
           join = partiallyResolved,
           leftSet = AttributeSet(leftNameScope.output ++ leftNameScope.hiddenOutput),

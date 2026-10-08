@@ -112,9 +112,7 @@ trait RetainsOriginalJoinOutput {
    * [[Project]] on top of the outer [[Join]] even though its output has changed.
    *
    * The above example also holds true for cases when there is a [[Project]], [[Aggregate]] or
-   * [[Filter]] node on top of a [[Join]]. An [[AsOfJoin]] is handled the same way, because
-   * [[AddMetadataColumns]] also adds the [[Project]] when its ON condition or a MATCH_CONDITION
-   * operand references a hidden column.
+   * [[Filter]] node on top of a [[Join]] or an [[AsOfJoin]].
    */
   def retainOriginalJoinOutput(
       plan: LogicalPlan,
