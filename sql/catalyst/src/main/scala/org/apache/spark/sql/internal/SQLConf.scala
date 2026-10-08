@@ -8751,6 +8751,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SCHEMA_EVOLUTION_PRESERVE_COLUMN_ORDER =
+    buildConf("spark.sql.schemaEvolution.preserveColumnOrder")
+      .internal()
+      .doc("When true, fields added to a table by schema evolution (MERGE INTO or " +
+        "INSERT INTO ... WITH SCHEMA EVOLUTION) keep the position they occupy in the " +
+        "source schema instead of being appended at the end. This applies to top-level " +
+        "columns and to nested struct fields.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val TIME_TYPE_ENABLED =
     buildConf("spark.sql.timeType.enabled")
       .internal()
@@ -10246,6 +10257,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def coerceMergeNestedTypes: Boolean =
     getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)
+
+  def schemaEvolutionPreserveColumnOrder: Boolean =
+    getConf(SQLConf.SCHEMA_EVOLUTION_PRESERVE_COLUMN_ORDER)
 
   def coerceInsertNestedTypes: Boolean =
     getConf(SQLConf.INSERT_INTO_NESTED_TYPE_COERCION_ENABLED)
