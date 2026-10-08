@@ -32,6 +32,7 @@ from pyspark.sql.types import (
     DataType,
     StringType,
     StructType,
+    _check_no_char_varchar,
     _parse_datatype_string,
 )
 from pyspark.sql.utils import get_active_spark_context
@@ -213,12 +214,18 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
+        if isinstance(returnType, DataType):
+            # Constrained SQL strings are rejected at construction. Eval-type Arrow/Pandas
+            # conversion stays on ``returnType`` so unrelated types fail only when consumed.
+            _check_no_char_varchar(returnType, "Python UDF return types")
         # Schema of the intermediate aggregation buffer, set only for an incremental Python
         # aggregator (see :class:`pyspark.sql.aggregator.Aggregator`); ``None`` otherwise. It is a
         # first-class field so it survives reconstruction paths such as ``_wrapped()``,
         # ``asNondeterministic()`` and ``spark.udf.register``, and is threaded to the JVM in
         # ``_create_judf`` so ``PythonAggregate`` can plan the two-stage aggregation.
         self.bufferSchema = bufferSchema
+        if bufferSchema is not None:
+            _check_no_char_varchar(bufferSchema, "Python UDAF buffer schemas")
         # Extract Python UDF details if transpilation is enabled.
         self.transpiled: list = []
         self._transpiled_param_names: list[str] = []
@@ -306,6 +313,10 @@ class UserDefinedFunction:
                 if not self.transpiled:
                     detail = f": {errors}" if errors else ""
                     warnings.warn(f"Unable to transpile UDF {func}{detail}")
+        except PySparkNotImplementedError:
+            # ``self.returnType`` parses DDL and rejects CHAR/VARCHAR. That is
+            # not a transpilation failure; do not swallow it as a warning.
+            raise
         except Exception as e:
             # An inability to transpile must never break a working UDF -- fall
             # back to interpreted Python execution and surface the failure as a
@@ -321,6 +332,7 @@ class UserDefinedFunction:
 
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
+        _check_no_char_varchar(returnType, "Python UDF return types")
         if evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF:
             try:
                 to_arrow_type(returnType, timezone="UTC")

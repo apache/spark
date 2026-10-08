@@ -3231,6 +3231,19 @@ def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
         return False
 
 
+def _check_no_char_varchar(dt: DataType, feature: str) -> None:
+    """Reject CHAR/VARCHAR at Python/Arrow host boundaries.
+
+    CHAR/VARCHAR are SQL types. Host APIs must declare STRING instead.
+    Nested struct/array/map and UDT storage types are included.
+    """
+    if _has_type(dt, (CharType, VarcharType)):
+        raise PySparkNotImplementedError(
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={"feature": feature, "data_type": dt.simpleString()},
+        )
+
+
 def _first_timestamp_nanos_map_key_type(dt: DataType) -> Optional["DataType"]:
     """Return the key type of the first map (depth-first) whose key carries a nanosecond timestamp
     type, or ``None`` if ``dt`` contains no such map.
