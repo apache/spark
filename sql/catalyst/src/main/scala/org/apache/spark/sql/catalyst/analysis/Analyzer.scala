@@ -1782,6 +1782,10 @@ class Analyzer(
           }
           expanded
         }
+      // If the pivot aggregate function argument contains Stars, expand it, e.g. count(*) to
+      // count(1), as for Aggregate.
+      case p: Pivot if containsStar(p.aggregates) =>
+        p.copy(aggregates = p.aggregates.map(expandStarExpression(_, p.child)))
       case c: CollectMetrics if containsStar(c.metrics) =>
         c.copy(metrics = buildExpandedProjectList(c.metrics, c.child))
       case g: Generate if containsStar(g.generator.children) =>
