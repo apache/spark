@@ -26,7 +26,7 @@ import org.json4s.jackson.JsonMethods._
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.{SparkException, TaskContext, TestUtils}
+import org.apache.spark.{SparkException, SparkThrowable, TaskContext, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -69,6 +69,23 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
       output: Seq[Attribute],
       child: SparkPlan,
       ioschema: ScriptTransformationIOSchema): BaseScriptTransformationExec
+
+  protected def checkTransformWithoutSerdeUnsupportedType(
+      exception: Throwable,
+      sqlType: String): Unit = {
+    val err = Iterator.iterate[Throwable](exception)(_.getCause)
+      .takeWhile(_ != null)
+      .collectFirst {
+        case t: SparkThrowable
+            if t.getCondition == "UNSUPPORTED_FEATURE.TRANSFORM_WITHOUT_SERDE_TYPE" => t
+      }.getOrElse {
+        fail(s"expected TRANSFORM_WITHOUT_SERDE_TYPE, got $exception")
+      }
+    checkError(
+      exception = err,
+      condition = "UNSUPPORTED_FEATURE.TRANSFORM_WITHOUT_SERDE_TYPE",
+      parameters = Map("dataType" -> sqlType))
+  }
 
   protected def checkExceedLimitLength(exception: Throwable, limit: String): Unit = {
     val runtimeException = Iterator.iterate[Throwable](exception)(_.getCause)
@@ -202,6 +219,28 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
       checkAnswer(query, Seq(Row("ab"), Row("abcdef")))
     }
     assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-60090: hand-built CHAR/VARCHAR script output stays unsupported without SerDe") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    // SQL AS (c CHAR(...)) is rewritten to STRING before the exec. A hand-built plan
+    // that still puts CharType/VarcharType on script output must fail.
+    val input = Seq("ab").toDF("c")
+    Seq(
+      AttributeReference("c", CharType(4))() -> "\"CHAR(4)\"",
+      AttributeReference("v", VarcharType(5))() -> "\"VARCHAR(5)\"").foreach {
+        case (attr, sqlType) =>
+          val exception = intercept[Exception] {
+            QueryTest.executePlan(
+              createScriptTransformationExec(
+                script = "cat",
+                output = Seq(attr),
+                child = input.queryExecution.sparkPlan,
+                ioschema = defaultIOSchema),
+              spark.sqlContext)
+          }
+          checkTransformWithoutSerdeUnsupportedType(exception, sqlType)
+      }
   }
 
   test("script transformation should not swallow errors from upstream operators (no serde)") {
