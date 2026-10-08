@@ -22,15 +22,16 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.{functions => F, AnalysisException, Row}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.util.QuotingUtils
+import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 /**
- * Tests for [[Scd1BatchProcessor]] methods that perform a `MERGE INTO` against a registered
- * v2 table. These tests require a v2 catalog that supports row-level operations
- * (set up by [[AutoCdcCatalogExecutionTestBase]]) and run actual writes through Catalyst's
- * row-level-operations machinery, so they are kept separate from the pure-DataFrame-transform
- * tests in [[Scd1RowLevelReconciliationSuite]].
+ * Tests for [[Scd1BatchProcessor]] methods and [[Scd1LeafLevelTargetMerge]], which perform a
+ * `MERGE INTO` against a registered v2 table. These tests require a v2 catalog that supports
+ * row-level operations (set up by [[AutoCdcCatalogExecutionTestBase]]) and run actual writes
+ * through Catalyst's row-level-operations machinery, so they are kept separate from the
+ * pure-DataFrame-transform tests in [[Scd1RowLevelReconciliationSuite]].
  */
 class Scd1BatchProcessorMergeSuite
     extends QueryTest
@@ -68,6 +69,32 @@ class Scd1BatchProcessorMergeSuite
     ),
     resolvedSequencingType = LongType
   )
+
+  private val leafChangeArgs: ChangeArgs = processor.changeArgs.copy(
+    ignoreNullSelection = Some(ColumnSelection.ExcludeColumns(Seq.empty)))
+
+  private val leafTargetSchema: StructType = new StructType()
+    .add("id", IntegerType)
+    .add("left", StringType)
+    .add("right", StringType)
+    .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
+
+  private def versionMap(entries: (Seq[String], Long)*): Map[String, Long] =
+    entries.map { case (path, sequence) => Scd1VersionMap.serializeKey(path) -> sequence }.toMap
+
+  private def unauthoredVersionMap(paths: Seq[String]*): Map[String, java.lang.Long] =
+    paths.map(path => Scd1VersionMap.serializeKey(path) -> null).toMap
+
+  /** Merges `microbatch` onto the target table at [[defaultTargetTableIdentifier]] per leaf. */
+  private def mergeMicrobatchOntoTargetPerLeaf(
+      microbatch: DataFrame,
+      changeArgs: ChangeArgs = leafChangeArgs): Unit =
+    new Scd1LeafLevelTargetMerge(
+      changeArgs = changeArgs,
+      resolvedSequencingType = LongType,
+      reconciledMicrobatchDf = microbatch,
+      targetTableIdentifier = defaultTargetTableIdentifier
+    ).merge()
 
   /** Create the auxiliary table using [[minimalSchema]], optionally seeded with `seedRows`. */
   private def createAuxTable(seedRows: Row*): Unit =
@@ -534,5 +561,364 @@ class Scd1BatchProcessorMergeSuite
     processor.mergeMicrobatchOntoTarget(microbatch, defaultTargetTableIdentifier)
     val targetTableAfterSecondMerge = spark.read.table(defaultTargetTableIdentifier.quotedString)
     checkAnswer(targetTableAfterSecondMerge, expectedAfterMerge)
+  }
+
+  // =============== Scd1LeafLevelTargetMerge tests ===============
+
+  test("per-leaf target merge independently selects incoming and target leaf authorships") {
+    createTable(
+      defaultTargetIdent,
+      defaultTargetTableIdentifier,
+      leafTargetSchema,
+      Row(1, "old-left", "newer-right", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(30L),
+        versionMap = versionMap(Seq("left") -> 10L, Seq("right") -> 30L)))
+    )
+    val microbatch = microbatchOf(leafTargetSchema)(
+      Row(1, "new-left", "stale-right", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(40L),
+        versionMap = versionMap(Seq("left") -> 40L, Seq("right") -> 20L)))
+    )
+
+    mergeMicrobatchOntoTargetPerLeaf(microbatch)
+
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "new-left", "newer-right",
+        Row(null, 40L, versionMap(Seq("left") -> 40L, Seq("right") -> 30L))))
+  }
+
+  test("per-leaf target merge advances the upsert sequence when no incoming leaf is authored") {
+    val targetVersionMap = versionMap(Seq("left") -> 10L, Seq("right") -> 10L)
+    createTable(
+      defaultTargetIdent,
+      defaultTargetTableIdentifier,
+      leafTargetSchema,
+      Row(1, "old-left", "old-right", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(10L),
+        versionMap = targetVersionMap))
+    )
+    val microbatch = microbatchOf(leafTargetSchema)(
+      Row(1, null, null,
+        Row(null, 20L, unauthoredVersionMap(Seq("left"), Seq("right"))))
+    )
+
+    mergeMicrobatchOntoTargetPerLeaf(microbatch)
+
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "old-left", "old-right", Row(null, 20L, targetVersionMap)))
+  }
+
+  test("per-leaf target merge handles legacy and schema-evolved target version maps") {
+    createTable(
+      defaultTargetIdent,
+      defaultTargetTableIdentifier,
+      leafTargetSchema,
+      Row(1, "legacy-left", "legacy-right",
+        cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L))),
+      Row(2, "newer-left", null, cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(30L),
+        versionMap = versionMap(Seq("left") -> 30L)))
+    )
+    val microbatch = microbatchOf(leafTargetSchema)(
+      Row(1, "tied-left", "stale-right", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(10L),
+        versionMap = versionMap(Seq("left") -> 10L, Seq("right") -> 5L))),
+      Row(2, "stale-left", "new-right", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(20L),
+        versionMap = versionMap(Seq("left") -> 20L, Seq("right") -> 1L)))
+    )
+
+    mergeMicrobatchOntoTargetPerLeaf(microbatch)
+
+    checkAnswer(spark.read.table(defaultTargetTableIdentifier.quotedString), Seq(
+      Row(1, "tied-left", "legacy-right",
+        Row(null, 10L, versionMap(Seq("left") -> 10L, Seq("right") -> 10L))),
+      Row(2, "newer-left", "new-right",
+        Row(null, 30L, versionMap(Seq("left") -> 30L, Seq("right") -> 1L)))
+    ))
+  }
+
+  test("per-leaf target merge authors nulls without allowing deletes to win ties") {
+    createTable(
+      defaultTargetIdent,
+      defaultTargetTableIdentifier,
+      leafTargetSchema,
+      Row(1, "delete-me", "preserve-me", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(30L),
+        versionMap = versionMap(Seq("left") -> 10L, Seq("right") -> 30L))),
+      Row(2, "tie-left", "tie-right", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(10L),
+        versionMap = versionMap(Seq("left") -> 10L, Seq("right") -> 10L)))
+    )
+    val microbatch = microbatchOf(leafTargetSchema)(
+      // A net upsert at 40 whose `left` a delete at 20 authored null, and which leaves `right`
+      // unauthored.
+      Row(1, null, null, cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(40L),
+        versionMap = versionMap(Seq("left") -> 20L))),
+      // A net delete tied with the target row's upsert.
+      Row(2, null, null, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None))
+    )
+
+    mergeMicrobatchOntoTargetPerLeaf(microbatch)
+
+    checkAnswer(spark.read.table(defaultTargetTableIdentifier.quotedString), Seq(
+      Row(1, null, "preserve-me",
+        Row(null, 40L, versionMap(Seq("left") -> 20L, Seq("right") -> 30L))),
+      Row(2, "tie-left", "tie-right",
+        Row(null, 10L, versionMap(Seq("left") -> 10L, Seq("right") -> 10L)))
+    ))
+  }
+
+  test("per-leaf target merge authors nulls for leaves won by an older net delete") {
+    createTable(
+      defaultTargetIdent,
+      defaultTargetTableIdentifier,
+      leafTargetSchema,
+      Row(1, "delete-me", "preserve-me", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(30L),
+        versionMap = versionMap(Seq("left") -> 10L, Seq("right") -> 30L)))
+    )
+    // A net delete at 20 carries the values of its delete event. It is older than the target
+    // row, so it only authors `left`, as null.
+    val microbatch = microbatchOf(leafTargetSchema)(
+      Row(1, "delete-left", "delete-right", cdcMetadataRow(deleteSeq = Some(20L), upsertSeq = None))
+    )
+
+    mergeMicrobatchOntoTargetPerLeaf(microbatch)
+
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, null, "preserve-me",
+        Row(null, 30L, versionMap(Seq("left") -> 20L, Seq("right") -> 30L))))
+  }
+
+  test("per-leaf target merge gives target upserts priority over tied persisted tombstones") {
+    createTable(
+      defaultTargetIdent,
+      defaultTargetTableIdentifier,
+      leafTargetSchema,
+      Row(1, "target-left", "target-right", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(20L),
+        versionMap = versionMap(Seq("left") -> 20L, Seq("right") -> 20L)))
+    )
+    // This row represents an ignore-null upsert at 30 reconciled with a persisted tombstone at
+    // 20. The tombstone authors `left` as null, but does not appear in the row-wide delete
+    // sequence; the upsert authors `right`.
+    val microbatch = microbatchOf(leafTargetSchema)(
+      Row(1, null, "new-right", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(30L),
+        versionMap = versionMap(Seq("left") -> 20L, Seq("right") -> 30L)))
+    )
+
+    mergeMicrobatchOntoTargetPerLeaf(microbatch)
+
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "target-left", "new-right",
+        Row(null, 30L, versionMap(Seq("left") -> 20L, Seq("right") -> 30L))))
+  }
+
+  test("per-leaf target merge lets only deletes author a whole column the microbatch omits") {
+    val targetVersionMap = versionMap(Seq("left") -> 20L, Seq("right") -> 20L)
+    val tiedVersionMap = versionMap(Seq("left") -> 30L, Seq("right") -> 30L)
+    createTable(
+      defaultTargetIdent,
+      defaultTargetTableIdentifier,
+      leafTargetSchema,
+      Row(1, "target-left", "target-right", cdcMetadataRow(
+        deleteSeq = None, upsertSeq = Some(20L), versionMap = targetVersionMap)),
+      Row(2, "target-left", "target-right", cdcMetadataRow(
+        deleteSeq = None, upsertSeq = Some(20L), versionMap = targetVersionMap)),
+      Row(3, "target-left", "target-right", cdcMetadataRow(
+        deleteSeq = None, upsertSeq = Some(20L), versionMap = targetVersionMap)),
+      Row(4, "target-left", "target-right", cdcMetadataRow(
+        deleteSeq = None, upsertSeq = Some(30L), versionMap = tiedVersionMap))
+    )
+    // Only `right` is selected for ignore-null, so `left` is a whole column. These net upserts at
+    // 30 come from a microbatch that omits `left`, so only a delete or tombstone authors it: none
+    // for key 1, a tombstone tied with the target's authorship for key 2, a newer delete for key 3,
+    // and for key 4 a tombstone at the net upsert's own sequence, tied with the target's
+    // authorship.
+    val changeArgs = leafChangeArgs.copy(ignoreNullSelection =
+      Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("right")))))
+    val microbatch = microbatchOf(leafTargetSchema)(
+      Row(1, null, "new-right", cdcMetadataRow(
+        deleteSeq = None, upsertSeq = Some(30L), versionMap = versionMap(Seq("right") -> 30L))),
+      Row(2, null, "new-right", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(30L),
+        versionMap = versionMap(Seq("left") -> 20L, Seq("right") -> 30L))),
+      Row(3, null, "new-right", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(30L),
+        versionMap = versionMap(Seq("left") -> 25L, Seq("right") -> 30L))),
+      Row(4, null, null, cdcMetadataRow(
+        deleteSeq = None, upsertSeq = Some(30L), versionMap = tiedVersionMap))
+    )
+
+    mergeMicrobatchOntoTargetPerLeaf(microbatch, changeArgs)
+
+    checkAnswer(spark.read.table(defaultTargetTableIdentifier.quotedString), Seq(
+      Row(1, "target-left", "new-right",
+        Row(null, 30L, versionMap(Seq("left") -> 20L, Seq("right") -> 30L))),
+      Row(2, "target-left", "new-right",
+        Row(null, 30L, versionMap(Seq("left") -> 20L, Seq("right") -> 30L))),
+      Row(3, null, "new-right",
+        Row(null, 30L, versionMap(Seq("left") -> 25L, Seq("right") -> 30L))),
+      Row(4, "target-left", "target-right", Row(null, 30L, tiedVersionMap))
+    ))
+  }
+
+  test("per-leaf target merge deletes rows and inserts net upserts") {
+    createTable(
+      defaultTargetIdent,
+      defaultTargetTableIdentifier,
+      leafTargetSchema,
+      Row(1, "remove", "row", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(10L),
+        versionMap = versionMap(Seq("left") -> 10L, Seq("right") -> 10L)))
+    )
+    val insertedVersionMap = versionMap(Seq("left") -> 30L, Seq("right") -> 30L)
+    val microbatch = microbatchOf(leafTargetSchema)(
+      Row(1, null, null, cdcMetadataRow(deleteSeq = Some(20L), upsertSeq = None)),
+      Row(2, "inserted", "row", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(30L),
+        versionMap = insertedVersionMap)),
+      Row(3, null, null, cdcMetadataRow(deleteSeq = Some(40L), upsertSeq = None))
+    )
+
+    mergeMicrobatchOntoTargetPerLeaf(microbatch)
+
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(2, "inserted", "row", Row(null, 30L, insertedVersionMap)))
+  }
+
+  test("per-leaf target merge materializes a nullable struct when an incoming child wins") {
+    val detailsType = new StructType().add("first", StringType).add("second", StringType)
+    val nestedSchema = new StructType()
+      .add("id", IntegerType)
+      .add("details", detailsType)
+      .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
+    createTable(
+      defaultTargetIdent,
+      defaultTargetTableIdentifier,
+      nestedSchema,
+      Row(1, null, cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(10L),
+        versionMap = versionMap(
+          Seq("details", "first") -> 10L,
+          Seq("details", "second") -> 10L)))
+    )
+    val microbatch = microbatchOf(nestedSchema)(
+      Row(1, Row("new-first", null), cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(20L),
+        versionMap = versionMap(Seq("details", "first") -> 20L)))
+    )
+
+    mergeMicrobatchOntoTargetPerLeaf(microbatch)
+
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, Row("new-first", null), Row(null, 20L, versionMap(
+        Seq("details", "first") -> 20L,
+        Seq("details", "second") -> 10L))))
+  }
+
+  test("per-leaf target merge rebuilds structs whose leaves a tombstone authored null") {
+    val locationType = new StructType().add("city", StringType).add("zip", StringType)
+    val profileType = new StructType().add("location", locationType).add("name", StringType)
+    val nestedSchema = new StructType()
+      .add("id", IntegerType)
+      .add("profile", profileType)
+      .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
+    val city = Seq("profile", "location", "city")
+    val zip = Seq("profile", "location", "zip")
+    val name = Seq("profile", "name")
+    val targetVersionMap = versionMap(city -> 10L, zip -> 10L, name -> 10L)
+    createTable(
+      defaultTargetIdent,
+      defaultTargetTableIdentifier,
+      nestedSchema,
+      Row(1, Row(Row("SF", "94107"), "Ada"), cdcMetadataRow(
+        deleteSeq = None, upsertSeq = Some(10L), versionMap = targetVersionMap)),
+      Row(2, Row(Row("SF", "94107"), "Ada"), cdcMetadataRow(
+        deleteSeq = None, upsertSeq = Some(10L), versionMap = targetVersionMap))
+    )
+    // Net upserts at 30 whose leaves a tombstone at 20 authored null: the location leaves for key
+    // 1, which leaves `name` to the target, and every leaf for key 2.
+    val microbatch = microbatchOf(nestedSchema)(
+      Row(1, null, cdcMetadataRow(
+        deleteSeq = None, upsertSeq = Some(30L), versionMap = versionMap(city -> 20L, zip -> 20L))),
+      Row(2, null, cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(30L),
+        versionMap = versionMap(city -> 20L, zip -> 20L, name -> 20L)))
+    )
+
+    mergeMicrobatchOntoTargetPerLeaf(microbatch)
+
+    checkAnswer(spark.read.table(defaultTargetTableIdentifier.quotedString), Seq(
+      Row(1, Row(Row(null, null), "Ada"),
+        Row(null, 30L, versionMap(city -> 20L, zip -> 20L, name -> 10L))),
+      Row(2, Row(Row(null, null), null),
+        Row(null, 30L, versionMap(city -> 20L, zip -> 20L, name -> 20L)))
+    ))
+  }
+
+  test("per-leaf target merge keeps nulls authored before a column joins the selection") {
+    val detailsType = new StructType().add("first", StringType).add("second", StringType)
+    val nestedSchema = new StructType()
+      .add("id", IntegerType)
+      .add("details", detailsType)
+      .add("value", StringType)
+      .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
+    val first = Seq("details", "first")
+    val second = Seq("details", "second")
+    val value = Seq("value")
+    // Written while only `value` was selected, so the upsert at 30 authored the null `details`
+    // whole, while `value` kept its value from 10.
+    createTable(
+      defaultTargetIdent,
+      defaultTargetTableIdentifier,
+      nestedSchema,
+      Row(1, null, "old-value", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(30L),
+        versionMap = versionMap(first -> 30L, second -> 30L, value -> 10L)))
+    )
+    // A late upsert at 20 once `details` is selected too.
+    val microbatch = microbatchOf(nestedSchema)(
+      Row(1, Row("late-first", null), "new-value", cdcMetadataRow(
+        deleteSeq = None,
+        upsertSeq = Some(20L),
+        versionMap = versionMap(first -> 20L, value -> 20L)))
+    )
+
+    mergeMicrobatchOntoTargetPerLeaf(microbatch)
+
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, Row(null, null), "new-value",
+        Row(null, 30L, versionMap(first -> 30L, second -> 30L, value -> 20L))))
   }
 }

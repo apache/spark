@@ -93,8 +93,11 @@ trait AutoCdcCatalogExecutionTestBase {
    * Build a [[Row]] matching the [[AutoCdcReservedNames.cdcMetadataColName]] struct's three fields,
    * in the order produced by [[Scd1BatchProcessor.constructCdcMetadataCol]]:
    */
-  protected def cdcMetadataRow[T](deleteSeq: Option[T], upsertSeq: Option[T]): Row =
-    Row(deleteSeq.getOrElse(null), upsertSeq.getOrElse(null), null)
+  protected def cdcMetadataRow[T](
+      deleteSeq: Option[T],
+      upsertSeq: Option[T],
+      versionMap: Map[String, T] = null): Row =
+    Row(deleteSeq.getOrElse(null), upsertSeq.getOrElse(null), versionMap)
 
   /**
    * Create a table in the test catalog under the given DSv2 [[Identifier]] using `schema`,
