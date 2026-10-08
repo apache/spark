@@ -1814,11 +1814,12 @@ class AstBuilder extends DataTypeAstBuilder
     if (transformClause.setQuantifier != null) {
       throw QueryParsingErrors.transformNotSupportQuantifierError(transformClause.setQuantifier)
     }
-    // Create the attributes.
+    // Create the attributes. Script I/O is always unbounded STRING (Hive wire format), with
+    // the declared CHAR/VARCHAR kept in metadata for optional assignment below.
     val (attributes, schemaLess) = if (transformClause.colTypeList != null) {
       // Typed return columns.
       val schema = createSchema(transformClause.colTypeList)
-      val replacedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
+      val replacedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchemaAlways(schema)
       (DataTypeUtils.toAttributes(replacedSchema), false)
     } else if (transformClause.identifierSeq != null) {
       // Untyped return columns.
@@ -1843,7 +1844,7 @@ class AstBuilder extends DataTypeAstBuilder
       isDistinct = false,
       isPipeOperatorSelect = false)
 
-    ScriptTransformation(
+    val scriptTransform = ScriptTransformation(
       string(visitStringLit(transformClause.script)),
       attributes,
       plan,
@@ -1856,6 +1857,21 @@ class AstBuilder extends DataTypeAstBuilder
         schemaLess
       )
     )
+    // Under standard semantics, assign declared CHAR/VARCHAR (pad / length check) in a
+    // Project so the query result type matches AS (...). Flag off and preserve-only keep
+    // the historical STRING result with no pad and no EXCEED_LIMIT_LENGTH.
+    if (conf.charVarcharStandardSemantics &&
+        attributes.exists(a => CharVarcharUtils.getRawType(a.metadata).isDefined)) {
+      Project(
+        attributes.map { a =>
+          Alias(
+            CharVarcharUtils.stringLengthCheck(a, a),
+            a.name)(explicitMetadata = Some(CharVarcharUtils.cleanMetadata(a.metadata)))
+        },
+        scriptTransform)
+    } else {
+      scriptTransform
+    }
   }
 
   /**
@@ -2050,8 +2066,7 @@ class AstBuilder extends DataTypeAstBuilder
       inSerdeClass, outSerdeClass,
       inSerdeProps, outSerdeProps,
       reader, writer,
-      schemaLess,
-      conf.charVarcharStandardSemantics)
+      schemaLess)
   }
 
   /**
