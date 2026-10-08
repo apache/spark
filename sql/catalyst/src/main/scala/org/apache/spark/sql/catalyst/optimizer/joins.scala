@@ -811,6 +811,7 @@ private[optimizer] object RuntimeFilterSourceAnalysis extends AliasHelper {
     // projections and filters that keep both, is repeatable. A predicate with a subquery is not
     // such a filter, as its plan may differ between the two evaluations.
     case s: Sample =>
+      @tailrec
       def isOrderPreservingScan(p: LogicalPlan): Boolean = p match {
         case Project(projectList, child) if projectList.forall(_.deterministic) =>
           isOrderPreservingScan(child)
@@ -889,6 +890,7 @@ private[optimizer] object RuntimeFilterSourceAnalysis extends AliasHelper {
    * Whether `sortKeys` cover a key of `plan` that is proven unique, so that sorting on them is a
    * total order. The only uniqueness Catalyst can establish is an aggregate's grouping keys.
    */
+  @tailrec
   private def sortedOnUniqueKey(plan: LogicalPlan, sortKeys: Seq[Expression]): Boolean = {
     plan match {
       case p: Project =>
