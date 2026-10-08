@@ -30,8 +30,14 @@ import org.apache.spark.sql.internal.SQLConf
  * `CTERelationRef`s, so that the view's underlying plan is computed once (through exchange
  * reuse at the physical layer) instead of once per reference.
  *
- * The rule runs in `FinishAnalysis`, immediately before `EliminateView`: after `EliminateView`
- * no `View` nodes remain and every reference site holds an independent copy of the view's plan.
+ * The rule runs first in `FinishAnalysis`, before `EliminateResolvedHint`,
+ * `EliminateSubqueryAliases` and `EliminatePipeOperators` strip analysis-only nodes from
+ * the plan. Those rules are applied to the main plan before its subquery plans, so a
+ * definition body taken from a first-visited subquery occurrence may still hold such
+ * nodes; running the conversion first lets the cleanup rules reach the body at the top
+ * level, wherever it was taken from. `EliminateView` runs after the cleanup rules: no
+ * `View` nodes remain and every reference site holds an independent copy of the view's
+ * plan.
  *
  * A converted definition keeps `forceSkipInline = true` only when at least two references
  * survive the rewrite; otherwise `InlineCTE` would immediately flatten it back into
