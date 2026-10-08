@@ -449,6 +449,8 @@ class PlanMergingSuite extends SharedSparkSession
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
         SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true",
         SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true",
+        // ObjectSerializerPruning produces different scan shapes depending on whether a Filter is
+        // present. Disabling the rule makes both scans identical so PlanMerger can merge them.
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
           "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning") {
         val df = sql(

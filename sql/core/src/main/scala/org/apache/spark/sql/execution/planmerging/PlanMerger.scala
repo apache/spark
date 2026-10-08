@@ -311,8 +311,11 @@ class PlanMerger(
    * @param newPlanFilter A boolean [[Attribute]] in the merged plan that encodes the filter
    *                      condition from the new plan's side, to be applied as an aggregate
    *                      `FILTER (WHERE ...)` clause when the propagation reaches an enclosing
-   *                      [[Aggregate]] node. `None` when no differing filter was propagated.
-   * @param cachedPlanFilter Like `newPlanFilter` but for the cached plan's side.
+   *                      [[Aggregate]] node. It can be an alias reused from a previous merge
+   *                      round. Such an alias may be missing from an enclosing [[Project]], which
+   *                      then has to append it. `None` when no differing filter was propagated.
+   * @param cachedPlanFilter Like `newPlanFilter` but for the cached plan's side. Always a freshly
+   *                         created alias when present, never a reused one.
    * @param dsv2Merged Whether an (equal-strict) DSv2 scan merge occurred anywhere in this merged
    *                   subtree. Unlike `dsv2DeferredScan` (consumed at the enclosing Filter that
    *                   builds the scan), this fact is propagated all the way up: it lets a Filter
@@ -538,9 +541,12 @@ class PlanMerger(
                         npFilter.fold(mappedNPCondition)(And(_, mappedNPCondition))
                       // If newNPCondition is already aliased in the child Project (e.g. a third
                       // subplan whose filter matches one from a previous merge round), reuse the
-                      // existing attribute instead of creating a redundant alias.
+                      // existing attribute instead of creating a redundant alias. Only the aliases
+                      // the OR condition references are filter sides. A computed column with the
+                      // same expression is not one, because the OR doesn't keep its rows.
                       val existingNPFilter = childProject.projectList.collectFirst {
-                        case a: Alias if a.child.canonicalized == newNPCondition.canonicalized =>
+                        case a: Alias if cp.condition.references.contains(a.toAttribute) &&
+                            a.child.canonicalized == newNPCondition.canonicalized =>
                           a.toAttribute
                       }
                       val (newProjectList, newCondition, newNPFilterOut) =
@@ -1040,10 +1046,11 @@ class PlanMerger(
   // non-matching expression from one side evaluates to null for rows that belong to the other side,
   // which is safe for aggregate FILTER (WHERE ...) semantics and avoids computing values for
   // irrelevant rows. The filter attributes themselves are appended to the merged expression list so
-  // they remain visible to the enclosing Aggregate that will consume them, unless the list already
-  // outputs them. A filter reused from a previous merge round can already be in the list. It can
-  // also be missing, because an earlier round may have folded it into another filter alias and
-  // carried only that alias up.
+  // they remain visible to the enclosing Aggregate that will consume them. A newPlanFilter reused
+  // from a previous merge round can already be in the list, so it is appended only when missing.
+  // It can be missing, because an earlier round may have folded it into another filter alias and
+  // carried only that alias up. A cachedPlanFilter is always a fresh alias, so it is always
+  // appended.
   private def mergeNamedExpressions(
       newPlanExpressions: Seq[NamedExpression],
       cachedPlanExpressions: Seq[NamedExpression],
@@ -1098,9 +1105,10 @@ class PlanMerger(
       }
     }
 
-    (newPlanFilter ++ cachedPlanFilter).foreach { f =>
+    newPlanFilter.foreach { f =>
       if (!mergedExpressions.exists(_.exprId == f.exprId)) mergedExpressions += f
     }
+    cachedPlanFilter.foreach(mergedExpressions += _)
 
     (mergedExpressions.toSeq, newNPMapping)
   }
