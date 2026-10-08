@@ -1982,11 +1982,13 @@ object SQLConf {
         "only for the rows that survived. This is a planning-time decision. " +
         "A filter that is attached also stays in the post-scan filter, the way a pushed data " +
         "filter does, so the reader is free to stop applying it wherever doing so would cost " +
-        "more than it saves, and the answer does not change. In a scan that returns columnar " +
-        "batches into whole-stage codegen, the post-scan filter skips it on the rows the reader " +
-        "applied it to, which the reader marks in a column named _tmp_storage_filter_checked. " +
-        "A table with a column of that name is not offered storage filters. A row group where " +
-        "it stops reads " +
+        "more than it saves, and the answer does not change. Where whole-stage codegen fuses " +
+        "the post-scan filter with a scan that returns columnar batches, the post-scan filter " +
+        "skips it on the rows the reader applied it to, which the reader marks in a column " +
+        "named _tmp_storage_filter_checked. " +
+        "A table with a column of that name is not offered storage filters, and a file holding " +
+        "one outside the table's schema is not supported. A row group where " +
+        "the reader stops applying the filter reads " +
         "its key columns twice, which is slower than not pushing the filter. " +
         "Under spark.sql.files.ignoreCorruptFiles the answer can change, because this reader " +
         "reads different pages in a different order than a plain read. Which rows survive a " +

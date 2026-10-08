@@ -42,6 +42,7 @@ import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.expressions.BasePredicate;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.execution.datasources.FileFormat;
 import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
@@ -103,8 +104,9 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  *   <li>false for a row group or a file the filter was given up on or declined for;</li>
  *   <li>for a file with none of the key columns, true when the constant predicate kept it.</li>
  * </ul>
- * The slot holds a vector of this reader's own, and a file column of that name is never read, see
- * {@link #suppliesOwnVector}.
+ * The slot holds a vector of this reader's own. A file holding a column of that name outside the
+ * relation's schema is not supported, see {@code FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME}. A
+ * primitive one is still never decoded, see {@link #suppliesOwnVector}.
  *
  * <p>What {@code FileSourceStrategy.storageFiltersFor} and {@code ParquetStorageFilter.create}
  * guarantee is asserted here, since a violation is a planner bug.
@@ -482,9 +484,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     // the file has, but none of whose requested fields it has, counts only under the legacy
     // `returnNullStructIfAllFieldsMissing`, since otherwise the clipped schema reads one of its
     // other fields to tell a null struct from one whose requested fields are all null. The checked
-    // column is left out too, since a file column of its name is never read.
-    String checkedName =
-      checkedSlot >= 0 ? sparkRequestedSchema.fields()[checkedSlot].name() : null;
+    // column is left out too, since a file column of its name is never decoded.
+    String checkedName = checkedSlot >= 0 ? FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME() : null;
     List<ColumnDescriptor> nonKey = requestedColumns.stream()
         .filter(column -> !keyTopLevelNames.contains(column.getPath()[0]))
         .filter(column -> !column.getPath()[0].equalsIgnoreCase(checkedName))
@@ -655,8 +656,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   }
 
   /**
-   * The checked slot always holds this reader's own vector, so a file column of that name, which a
-   * case-insensitive or user-given schema can match, is never decoded into the batch. A spliced row
+   * The checked slot always holds this reader's own vector, so a primitive file column of that
+   * name, which a case-insensitive or user-given schema can match, is never decoded. A spliced row
    * group's key slots take their values from the survivor queue at emit, so phase 2 reads no pages
    * for them. Both are primitive, which is what the base class asks of a slot answered true here.
    */

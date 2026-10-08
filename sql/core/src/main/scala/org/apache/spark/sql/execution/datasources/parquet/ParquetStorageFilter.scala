@@ -203,7 +203,10 @@ object ParquetStorageFilter {
       "a storage filter must not have a key column named " +
         s"${ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME}, because the reader writes row " +
         "indexes over that column, so what it reads back depends on how its row group was read")
-
+    require(!keyFields.exists(f => f.name == FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME),
+      "a storage filter must not have a key column named " +
+        s"${FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME}, because the reader writes the rows " +
+        "it checked over that column")
 
     val indexMap = originalOrdinals.zipWithIndex.toMap
     val remapped = expr.transform {

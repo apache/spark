@@ -178,7 +178,8 @@ trait FileFormat {
    * optimization rather than a wrong answer.
    *
    * The `Filter` can skip them on the rows the reader says it has checked. The planner asks for
-   * that only where the scan returns columnar batches into whole-stage codegen. `requiredSchema`
+   * that only where whole-stage codegen fuses the `Filter` with a scan that returns columnar
+   * batches. `requiredSchema`
    * then ends with a nullable boolean column named
    * [[FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME]], which is not a column of the relation, and
    * the `Filter` evaluates each storage filter as `IF(checked, true, filter)`.
@@ -359,7 +360,9 @@ object FileFormat {
 
   /**
    * The column a reader that applies storage filters marks the rows it has checked in. See
-   * [[FileFormat.buildReaderWithStorageFilters]].
+   * [[FileFormat.buildReaderWithStorageFilters]]. The name is reserved, as the row-index metadata
+   * column's is. A relation with a column of that name is offered no storage filters, and a file
+   * holding one outside the relation's schema is not supported.
    */
   val STORAGE_FILTER_CHECKED_COLUMN_NAME = "_tmp_storage_filter_checked"
 
