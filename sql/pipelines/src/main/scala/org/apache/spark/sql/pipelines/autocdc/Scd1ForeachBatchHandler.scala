@@ -50,6 +50,7 @@ case class Scd1ForeachBatchHandler(
     // event, while leaf-level reconciliation combines its events field by field.
     val reconciledMicrobatch = batchProcessor.reconcileMicrobatch(
       validatedBatchDf = batchDf,
+      targetTableIdentifier = targetTableIdentifier,
       // Aux holds at most one row per currently-active tombstone (revived keys are GC'd
       // by mergeMicrobatchOntoAuxiliaryTable), so it generally stays small enough for a broadcast
       // join. Future optimizations: key-pruned reads, table format-aware clustering and tombstone

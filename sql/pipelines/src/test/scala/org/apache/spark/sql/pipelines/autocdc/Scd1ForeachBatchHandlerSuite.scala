@@ -599,6 +599,7 @@ class Scd1ForeachBatchHandlerSuite
     val batch = microbatchOf(sourceSchema)(Row(1, "revived", 20L, false))
     val reconciled = processor.reconcileMicrobatch(
       validatedBatchDf = batch,
+      targetTableIdentifier = defaultTargetTableIdentifier,
       auxiliaryTableDf = spark.read.table(defaultAuxTableIdentifier.quotedString))
 
     // Simulate a crash after the target merge commits but before the auxiliary merge starts.

@@ -37,16 +37,38 @@ case class Scd1BatchProcessor(
     changeArgs: ChangeArgs,
     resolvedSequencingType: DataType) {
 
-  /** Reconciles a validated CDC microbatch into the form consumed by the table merges. */
+  /**
+   * Reconciles a validated CDC microbatch into the form consumed by the table merges.
+   *
+   * @param validatedBatchDf The validated CDC microbatch.
+   * @param targetTableIdentifier The identifier of the target table. Leaf-level reconciliation
+   *                              aligns the microbatch to its schema.
+   * @param auxiliaryTableDf A snapshot of the auxiliary table.
+   */
   private[autocdc] def reconcileMicrobatch(
       validatedBatchDf: DataFrame,
-      auxiliaryTableDf: DataFrame): DataFrame =
-    Scd1RowLevelReconciliation.reconcileMicrobatch(
-      changeArgs = changeArgs,
-      resolvedSequencingType = resolvedSequencingType,
-      validatedBatchDf = validatedBatchDf,
-      auxiliaryTableDf = auxiliaryTableDf
-    )
+      targetTableIdentifier: TableIdentifier,
+      auxiliaryTableDf: DataFrame): DataFrame = {
+    changeArgs.ignoreNullSelection match {
+      case None =>
+        Scd1RowLevelReconciliation.reconcileMicrobatch(
+          changeArgs = changeArgs,
+          resolvedSequencingType = resolvedSequencingType,
+          validatedBatchDf = validatedBatchDf,
+          auxiliaryTableDf = auxiliaryTableDf
+        )
+      case Some(_) =>
+        Scd1LeafLevelReconciliation.reconcileMicrobatch(
+          changeArgs = changeArgs,
+          resolvedSequencingType = resolvedSequencingType,
+          validatedBatchDf = validatedBatchDf,
+          targetTableIdentifier = targetTableIdentifier,
+          targetTableDf =
+            validatedBatchDf.sparkSession.read.table(targetTableIdentifier.quotedString),
+          auxiliaryTableDf = auxiliaryTableDf
+        )
+    }
+  }
 
   /**
    * Merge the reconciled (deduplicated per key) microbatch onto the auxiliary table,
@@ -113,8 +135,9 @@ case class Scd1BatchProcessor(
    *
    * Microbatch invariants:
    *   - Exactly one of {upsert, delete} version is non-null, the other is null.
-   *   - There is at most one event per key, representing the latest known event for the key
-   *     across the microbatch and auxiliary table.
+   *   - There is at most one row per key, representing the key's net change across the
+   *     microbatch and auxiliary table: its latest event under row-level reconciliation, or a
+   *     synthetic row combining its events under leaf-level reconciliation.
    *
    * Target table invariants:
    *   - Target table only contains live rows; delete sequence is always null, upsert sequence
@@ -127,11 +150,22 @@ case class Scd1BatchProcessor(
       reconciledMicrobatchDf: DataFrame,
       targetTableIdentifier: TableIdentifier
   ): Unit = {
-    new Scd1RowLevelTargetMerge(
-      changeArgs = changeArgs,
-      reconciledMicrobatchDf = reconciledMicrobatchDf,
-      targetTableIdentifier = targetTableIdentifier
-    ).merge()
+    val mergeStrategy = changeArgs.ignoreNullSelection match {
+      case None =>
+        new Scd1RowLevelTargetMerge(
+          changeArgs = changeArgs,
+          reconciledMicrobatchDf = reconciledMicrobatchDf,
+          targetTableIdentifier = targetTableIdentifier
+        )
+      case Some(_) =>
+        new Scd1LeafLevelTargetMerge(
+          changeArgs = changeArgs,
+          resolvedSequencingType = resolvedSequencingType,
+          reconciledMicrobatchDf = reconciledMicrobatchDf,
+          targetTableIdentifier = targetTableIdentifier
+        )
+    }
+    mergeStrategy.merge()
   }
 }
 
