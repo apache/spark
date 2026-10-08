@@ -18,8 +18,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, DynamicPruningSubquery}
 import org.apache.spark.sql.catalyst.plans.logical.CTERelationDef
-import org.apache.spark.sql.execution.{BaseSubqueryExec, ReusedSubqueryExec}
+import org.apache.spark.sql.execution.{BaseSubqueryExec, FileSourceScanExec, ReusedSubqueryExec}
 import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -468,6 +469,51 @@ class CTEReuseWithoutAQESuite
           }
           assert(e.getMessage.contains("Guaranteed CTE shuffle reuse (AQE off) failed"),
             s"Expected the fail-on-reuse internal error, got:\n${e.getMessage}")
+        }
+      }
+    }
+  }
+
+  test("dynamic partition pruning inside a force-materialized CTE body is planned (AQE off)") {
+    withCTEReuseNoAQE {
+      // Force subquery-based DPP (not broadcast reuse) so a DynamicPruningSubquery is inserted over
+      // the partitioned fact scan. That scan lives inside a force-materialized CTE, so in AQE-off
+      // mode the body must be unwrapped before PlanDynamicPruningFilters; otherwise the subquery is
+      // left unplanned and the query fails at execution.
+      withSQLConf(
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+        withTable("dpp_fact", "dpp_dim") {
+          sql("CREATE TABLE dpp_fact (date_id INT, store_id INT) " +
+            "USING parquet PARTITIONED BY (store_id)")
+          sql("INSERT INTO dpp_fact VALUES (1000, 1), (1010, 2), (1020, 2), (1100, 3), (1200, 4)")
+          sql("CREATE TABLE dpp_dim (store_id INT, country STRING) USING parquet")
+          sql("INSERT INTO dpp_dim VALUES (1, 'NL'), (2, 'NL'), (3, 'DE'), (4, 'US')")
+
+          val df = sqlWithForcedCTEReuse(
+            """WITH cte AS (SELECT date_id, store_id FROM dpp_fact)
+              |SELECT c.date_id, c.store_id FROM cte c
+              |JOIN dpp_dim d ON c.store_id = d.store_id AND d.country = 'NL'
+              |""".stripMargin)
+          val prepared = df.queryExecution.executedPlan
+
+          // The dynamic-pruning filter over the CTE body's partitioned scan must be planned as a
+          // DynamicPruningExpression partition filter, with no raw (unevaluable)
+          // DynamicPruningSubquery left behind.
+          val dppFilters = prepared.collectWithSubqueries {
+            case s: FileSourceScanExec => s
+          }.flatMap(_.partitionFilters.collect { case d: DynamicPruningExpression => d })
+          assert(dppFilters.nonEmpty,
+            s"Expected a planned dynamic partition-pruning filter over the CTE scan:\n" +
+              prepared.treeString)
+          val unplanned = prepared.collectWithSubqueries {
+            case p if p.expressions.exists(_.exists(_.isInstanceOf[DynamicPruningSubquery])) => p
+          }
+          assert(unplanned.isEmpty,
+            s"Unexpected unplanned DynamicPruningSubquery remaining:\n${prepared.treeString}")
+
+          checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
         }
       }
     }
