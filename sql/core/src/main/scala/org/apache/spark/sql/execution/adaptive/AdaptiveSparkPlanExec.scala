@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
@@ -310,22 +310,35 @@ case class AdaptiveSparkPlanExec(
    */
   def materialize(): Future[Any] = materializeFuture
 
+  /**
+   * Runs [[withFinalPlanUpdate]] (skipping the result stage) on the CTE materialization pool.
+   *
+   * The pool thread does not inherit the initiating query's thread-locals, so
+   * [[SQLExecution.withThreadLocalCaptured]] captures them on the thread that first forces this
+   * lazy val (carrying the execution id, job group, scheduler properties, and artifact state) and
+   * forwards them to the pool thread, mirroring subquery execution (see
+   * [[org.apache.spark.sql.execution.SubqueryExec]]), so the inner CTE jobs stay attributed to the
+   * query and reachable by its cancellation instead of running with an absent or stale context.
+   * The returned `CompletableFuture` is adapted to a Scala `Future`.
+   */
   @transient private lazy val materializeFuture: Future[Any] = {
-    // The inner AQE runs on a reused pool thread that does not inherit the initiating query's
-    // thread-locals. Capture them on the thread that first forces this lazy val (the outer AQE's
-    // stage-materialization thread, which carries the execution id, job group, scheduler
-    // properties, and artifact state) and forward them exactly as subquery execution does (see
-    // `SubqueryExec`), so the inner CTE jobs stay attributed to the query and reachable by its
-    // cancellation instead of running with an absent or stale execution context.
-    val executionId = context.session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    val threadLocals = SQLExecution.captureThreadLocals(context.session)
-    Future {
-      threadLocals.runWith {
-        SQLExecution.withExecutionId(context.session, executionId) {
-          withFinalPlanUpdate((_: SparkPlan) => (), skipResultStage = true)
-        }
+    val javaFuture = SQLExecution.withThreadLocalCaptured(
+        context.session, AdaptiveSparkPlanExec.cteExecutionContext) {
+      withFinalPlanUpdate((_: SparkPlan) => (), skipResultStage = true)
+    }
+    val scalaPromise: Promise[Any] = Promise()
+    javaFuture.whenComplete { (result: Any, exception: Throwable) =>
+      if (exception != null) {
+        scalaPromise.failure(exception match {
+          case completionException: java.util.concurrent.CompletionException =>
+            completionException.getCause
+          case ex => ex
+        })
+      } else {
+        scalaPromise.success(result)
       }
-    }(AdaptiveSparkPlanExec.cteExecutionContext)
+    }
+    scalaPromise.future
   }
 
   def withFinalPlanUpdate[T](
