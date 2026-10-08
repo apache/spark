@@ -28,7 +28,7 @@ import org.apache.spark.connect.proto.Expression
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.{AnalysisException, Column, Observation, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnresolvedInSubqueryPlanId, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Deduplicate, DeduplicateWithinWatermark, Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -973,6 +973,51 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(
       connectTestRelation.withColumns(Map("id" -> 1024, "col_not_exist" -> 2048)),
       sparkTestRelation.withColumns(Map("id" -> lit(1024), "col_not_exist" -> lit(2048))))
+  }
+
+  test("SPARK-60096: IN-subquery with an unattached plan id is a user-facing resolution error") {
+    // A Connect `col.isin(<subquery>)` inside `when(...)` whose plan id is not attached by any
+    // WithRelations leaves an UnresolvedInSubqueryPlanId in the plan.
+    val unattachedPlanId = 42L
+    val inSubquery = Expression
+      .newBuilder()
+      .setSubqueryExpression(
+        proto.SubqueryExpression
+          .newBuilder()
+          .setPlanId(unattachedPlanId)
+          .setSubqueryType(proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_IN)
+          .addInSubqueryValues("id".protoAttr))
+      .build()
+    val caseWhen = Expression
+      .newBuilder()
+      .setUnresolvedFunction(
+        Expression.UnresolvedFunction
+          .newBuilder()
+          .setFunctionName("when")
+          .addArguments(inSubquery)
+          .addArguments(Expression.newBuilder().setLiteral(toLiteralProto(1)).build())
+          .addArguments(Expression.newBuilder().setLiteral(toLiteralProto(0)).build()))
+      .build()
+    val connectPlan = connectTestRelation.select(caseWhen.as("x"))
+
+    val transformed = transform(connectPlan)
+
+    // The planner leaves an UnresolvedInSubqueryPlanId in the tree: no analyzer rule resolves
+    // it (plan-id references are wired up only at proto-transform time via WithRelations).
+    val survivingInSubqueries = transformed.collect { case plan =>
+      plan.expressions.flatMap(_.collect { case u: UnresolvedInSubqueryPlanId => u })
+    }.flatten
+    assert(survivingInSubqueries.map(_.planId) == Seq(unattachedPlanId))
+    assert(!transformed.resolved)
+
+    // CheckAnalysis now rejects the surviving plan-id subquery with a user-facing resolution
+    // error instead of the previous INTERNAL_ERROR / XX000 "Found the unresolved operator".
+    checkError(
+      exception = intercept[AnalysisException] {
+        analyzePlan(transformed)
+      },
+      condition = "CANNOT_RESOLVE_DATAFRAME_SUBQUERY",
+      parameters = Map("planId" -> unattachedPlanId.toString))
   }
 
   test("Test cast") {
