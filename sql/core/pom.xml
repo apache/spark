@@ -428,7 +428,7 @@
                   <artifactId>snowflake-jdbc</artifactId>
                   <version>${snowflake.jdbc.version}</version>
                   <outputDirectory>${project.build.directory}/test-classpath</outputDirectory>
-                  <destFileName>snowflake-jdbc-original.jar</destFileName>
+                  <destFileName>snowflake-jdbc-${snowflake.jdbc.version}-original.jar</destFileName>
                 </artifactItem>
               </artifactItems>
             </configuration>
@@ -447,8 +447,8 @@
             </goals>
             <configuration>
               <target>
-                <zip destfile="${project.build.directory}/test-classpath/snowflake-jdbc-no-stax-services.jar">
-                  <zipfileset src="${project.build.directory}/test-classpath/snowflake-jdbc-original.jar"
+                <zip destfile="${project.build.directory}/test-classpath/snowflake-jdbc-${snowflake.jdbc.version}-no-stax-services.jar">
+                  <zipfileset src="${project.build.directory}/test-classpath/snowflake-jdbc-${snowflake.jdbc.version}-original.jar"
                               excludes="META-INF/services/javax.xml.stream.XMLInputFactory,META-INF/services/javax.xml.stream.XMLOutputFactory,META-INF/services/javax.xml.stream.XMLEventFactory"/>
                 </zip>
               </target>
@@ -477,7 +477,12 @@
             <configuration>
               <scripts>
                 <script><![CDATA[
-                  def stripped = new File(project.build.directory, "test-classpath/snowflake-jdbc-no-stax-services.jar")
+                  def version = project.properties.getProperty("snowflake.jdbc.version")
+                  if (version == null) {
+                    throw new IllegalStateException("snowflake.jdbc.version is not set")
+                  }
+                  def strippedName = "snowflake-jdbc-" + version + "-no-stax-services.jar"
+                  def stripped = new File(project.build.directory, "test-classpath/" + strippedName)
                   def artifact = project.artifacts.find { it.groupId == "net.snowflake" && it.artifactId == "snowflake-jdbc" }
                   if (artifact == null) {
                     throw new IllegalStateException("snowflake-jdbc is not resolved")

@@ -731,6 +731,8 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("scalar external UDF returns rows from a direct gRPC worker process") {
+    assume(EchoGrpcWorkerMain.udsTransportAvailable,
+      "Netty UDS native transport (epoll on Linux or kqueue on macOS) is required")
     val runner = ProcessCallable.newBuilder()
       .addCommand(Paths.get(System.getProperty("java.home"), "bin", "java").toString)
       .addCommand("-cp")
