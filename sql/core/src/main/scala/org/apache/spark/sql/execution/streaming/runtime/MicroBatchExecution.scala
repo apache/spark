@@ -45,8 +45,9 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, RealTimeTrigger, Sink, Source, StreamingQueryPlanTraverseHelper}
-import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitLog, CommitMetadataV3, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2, SinkMetadataInfo}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitLog, CommitMetadataV3, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase, OffsetSeqMetadataV2, SinkMetadataInfo}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
@@ -55,7 +56,7 @@ import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.PartitionOffsetWithIndex
 import org.apache.spark.sql.streaming.Trigger
-import org.apache.spark.util.{Clock, Utils}
+import org.apache.spark.util.{Clock, SerializableConfiguration, Utils}
 
 class MicroBatchExecution(
     sparkSession: SparkSession,
@@ -569,22 +570,6 @@ class MicroBatchExecution(
 
   private def disableAQESupportInStatelessIfUnappropriated(
       sparkSessionToRunBatches: SparkSession): Unit = {
-    def containsStatefulOperator(p: LogicalPlan): Boolean = {
-      p.exists {
-        case node: Aggregate if node.isStreaming => true
-        case node: Deduplicate if node.isStreaming => true
-        case node: DeduplicateWithinWatermark if node.isStreaming => true
-        case node: Distinct if node.isStreaming => true
-        case node: Join if node.left.isStreaming && node.right.isStreaming => true
-        case node: FlatMapGroupsWithState if node.isStreaming => true
-        case node: FlatMapGroupsInPandasWithState if node.isStreaming => true
-        case node: TransformWithState if node.isStreaming => true
-        case node: TransformWithStateInPySpark if node.isStreaming => true
-        case node: GlobalLimit if node.isStreaming => true
-        case _ => false
-      }
-    }
-
     if (trigger.isInstanceOf[RealTimeTrigger]) {
       logWarning(log"Disabling AQE since AQE is not supported for Real-time Mode.")
       sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
@@ -592,6 +577,22 @@ class MicroBatchExecution(
       // SPARK-53941: We disable AQE for stateful workloads as of now.
       logWarning(log"Disabling AQE since AQE is not supported in stateful workloads.")
       sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+    }
+  }
+
+  private def containsStatefulOperator(p: LogicalPlan): Boolean = {
+    p.exists {
+      case node: Aggregate if node.isStreaming => true
+      case node: Deduplicate if node.isStreaming => true
+      case node: DeduplicateWithinWatermark if node.isStreaming => true
+      case node: Distinct if node.isStreaming => true
+      case node: Join if node.left.isStreaming && node.right.isStreaming => true
+      case node: FlatMapGroupsWithState if node.isStreaming => true
+      case node: FlatMapGroupsInPandasWithState if node.isStreaming => true
+      case node: TransformWithState if node.isStreaming => true
+      case node: TransformWithStateInPySpark if node.isStreaming => true
+      case node: GlobalLimit if node.isStreaming => true
+      case _ => false
     }
   }
 
@@ -757,20 +758,26 @@ class MicroBatchExecution(
         secondLatestOffsets.foreach { offset =>
           execCtx.startOffsets = offset.toStreamProgress(sources, sourceIdMap)
         }
-
+        val latestCommittedBatch = commitLog.getLatest()
+        val committedBatchId = latestCommittedBatch.map(_._1).getOrElse(-1L)
         // update offset metadata
         nextOffsets.metadataOpt.foreach { metadata =>
-          OffsetSeqMetadata.setSessionConf(metadata, sparkSessionToRunBatches.sessionState.conf)
+          val metadataWithRecoveredPartitions = recoverStatefulShufflePartitions(
+            metadata, sparkSessionToRunBatches, latestBatchId, committedBatchId)
+          OffsetSeqMetadata.setSessionConf(
+            metadataWithRecoveredPartitions, sparkSessionToRunBatches.sessionState.conf)
           execCtx.offsetSeqMetadata = OffsetSeqMetadata(
-            metadata.batchWatermarkMs, metadata.batchTimestampMs, sparkSessionToRunBatches.conf)
+            metadataWithRecoveredPartitions.batchWatermarkMs,
+            metadataWithRecoveredPartitions.batchTimestampMs,
+            sparkSessionToRunBatches.conf)
           watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf, logicalPlan)
-          watermarkTracker.setWatermark(metadata.batchWatermarkMs)
+          watermarkTracker.setWatermark(metadataWithRecoveredPartitions.batchWatermarkMs)
         }
 
         /* identify the current batch id: if commit log indicates we successfully processed the
          * latest batch id in the offset log, then we can safely move to the next batch
          * i.e., committedBatchId + 1 */
-        commitLog.getLatest() match {
+        latestCommittedBatch match {
           case Some((latestCommittedBatchId, commitMetadata)) =>
             commitMetadata.stateUniqueIds.foreach {
               stateUniqueIds => currentStateStoreCkptId ++= stateUniqueIds
@@ -831,6 +838,50 @@ class MicroBatchExecution(
         logInfo(s"Starting new streaming query.")
         execCtx.batchId = 0
         watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf, logicalPlan)
+    }
+  }
+
+  private def recoverStatefulShufflePartitions(
+      metadata: OffsetSeqMetadataBase,
+      sparkSessionToRunBatches: SparkSession,
+      latestBatchId: Long,
+      committedBatchId: Long): OffsetSeqMetadataBase = {
+    if (metadata.version != OffsetSeqLog.VERSION_2 ||
+        OffsetSeqMetadata.readValueOpt(
+          metadata, SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL).isDefined ||
+        !containsStatefulOperator(analyzedPlan)) {
+      metadata
+    } else {
+      metadata match {
+        case v2: OffsetSeqMetadataV2 =>
+          val stateCheckpointLocation = new Path(checkpointFile("state")).getParent
+          val stateMetadataBatchId = if (committedBatchId >= 0) committedBatchId else latestBatchId
+          val failedRecoveryMessage =
+            s"Failed to recover the state-store partition count from checkpoint " +
+              s"metadata at $stateCheckpointLocation. This can happen if the checkpoint " +
+              "was created using offset log format V2 and state metadata was subsequently " +
+              "corrupted due to a bug. See SPARK-59919 for more details. Delete the " +
+              "checkpoint and restart the query to recover."
+          val numPartitionsOpt = try {
+            val stateMetadataReader = new StateMetadataPartitionReader(
+              stateCheckpointLocation.toString,
+              new SerializableConfiguration(
+                sparkSessionToRunBatches.sessionState.newHadoopConf()),
+              stateMetadataBatchId)
+            stateMetadataReader.stateStoreNumPartitions
+          } catch {
+            case NonFatal(e) => throw new SparkException(failedRecoveryMessage, e)
+          }
+          val numPartitions = numPartitionsOpt.getOrElse {
+            throw new SparkException(failedRecoveryMessage)
+          }
+          logWarning(log"Recovered state-store partition count " +
+            log"${MDC(CONFIG, SQLConf.SHUFFLE_PARTITIONS.key)}=" +
+            log"${MDC(NUM_PARTITIONS, numPartitions)} from checkpoint state metadata")
+          OffsetSeqMetadata.withStatefulShufflePartitions(v2, numPartitions)
+        case _ =>
+          metadata
+      }
     }
   }
 
