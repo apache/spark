@@ -212,6 +212,76 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
     }
   }
 
+  test("a Sort buried in the body's main plan region is not converted") {
+    // The shuffle boundary added above the definition buries every ordering the body
+    // computes, not only a top-level ORDER BY: an inner view's ORDER BY, a DISTINCT or
+    // LIMIT over it, ordering inside the WITH clause's own definitions, and branches of
+    // set operations all expose their sort to consumers today, and the shuffle changes
+    // their observed rows. Sorts confined to subquery expressions cannot reach the
+    // exposed rows and must not block conversion (pinned by the next test).
+    withTable("t") {
+      sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 100)")
+      withTempView("v1") {
+        sql("CREATE TEMP VIEW v1 AS SELECT id FROM t ORDER BY id DESC")
+        val bodies = Seq(
+          "SELECT id FROM v1",
+          "SELECT DISTINCT id FROM v1",
+          "SELECT id FROM v1 LIMIT 3",
+          "(SELECT id FROM t ORDER BY id DESC) UNION ALL (SELECT id FROM t ORDER BY id DESC)",
+          "WITH c AS (SELECT id FROM t) SELECT id FROM c ORDER BY id DESC",
+          "WITH c AS (SELECT id FROM t ORDER BY id DESC) SELECT id FROM c",
+          "SELECT v1.id FROM v1 JOIN t ON v1.id = t.id")
+        bodies.foreach { body =>
+          withTempView("v") {
+            sql(s"CREATE TEMP VIEW v AS $body")
+            val query = "SELECT t1.id FROM v t1 JOIN v t2 ON t1.id = t2.id LIMIT 3"
+            val expected = spark.sql(query).collect()
+            withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+              assert(countRepartitions(query) == 0, s"should not convert: $body")
+              checkAnswer(spark.sql(query), expected)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("a TABLESAMPLE over a sorted inner view is not converted") {
+    // Rows of a sample body cannot be pinned (sampling without REPEATABLE is not
+    // guaranteed to select the same rows across executions), so the rejection is
+    // checked on the plan only.
+    withTable("t") {
+      sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 100)")
+      withTempView("v1", "v") {
+        sql("CREATE TEMP VIEW v1 AS SELECT id FROM t ORDER BY id DESC")
+        sql("CREATE TEMP VIEW v AS SELECT id FROM v1 TABLESAMPLE(50 PERCENT)")
+        val query = "SELECT t1.id FROM v t1 JOIN v t2 ON t1.id = t2.id LIMIT 3"
+        withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+          assert(countRepartitions(query) == 0)
+        }
+      }
+    }
+  }
+
+  test("a Sort confined to a subquery expression does not block conversion") {
+    // The IN-subquery's ORDER BY cannot affect the body's exposed row order, so v
+    // still converts: one shuffle boundary per reference site, deduplicated by
+    // exchange reuse, with identical results to conversion off.
+    withTable("t") {
+      sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 100)")
+      withTempView("v") {
+        sql("CREATE TEMP VIEW v AS " +
+          "SELECT id, k FROM t WHERE id IN (SELECT id FROM t ORDER BY id DESC LIMIT 5)")
+        val query = "SELECT t1.id FROM v t1 JOIN v t2 ON t1.id = t2.id LIMIT 5"
+        val expected = spark.sql(query).collect()
+        withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+          assert(countRepartitions(query) == 2)
+          checkAnswer(spark.sql(query), expected)
+        }
+      }
+    }
+  }
+
   test("insert into a table selecting from a repeatedly referenced view") {
     withTable("dest") {
       withSelfJoinedView {
