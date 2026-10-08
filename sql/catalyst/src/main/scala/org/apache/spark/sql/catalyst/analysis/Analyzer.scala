@@ -319,18 +319,15 @@ object AnalysisContext {
 }
 
 object Analyzer {
-  // Configs with bindingPolicy SESSION or NOT_APPLICABLE are retained when resolving views and
-  // SQL UDFs, so that their values propagate from the active session rather than falling back to
-  // Spark defaults. Entries from lazily-loaded modules are recognized once registered.
+  // Overlays the session-following configs of `existingConf` onto `newConf`, a conf built to
+  // resolve a view or SQL function body, so their values come from the active session rather
+  // than Spark defaults. See `SQLConf.filterRetainedResolutionConfigs` for which configs are
+  // retained; they are memoized on `existingConf`.
   def retainResolutionConfigsForAnalysis(
       newConf: SQLConf,
       existingConf: SQLConf,
       createSparkVersion: String = ""): Unit = {
-    existingConf.getAllConfs.foreach { case (key, value) =>
-      if (key.startsWith("spark.sql.catalog.") || SQLConf.isSessionBindingPolicy(key)) {
-        newConf.settings.put(key, value)
-      }
-    }
+    newConf.settings.putAll(existingConf.retainedResolutionConfigs)
 
     trySetAnsiValue(newConf, createSparkVersion)
   }
