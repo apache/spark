@@ -588,7 +588,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             notAppliedReason.getOrElse("no runtime filter could be built from the hinted side"))
         }
         val result = join.withNewChildren(Seq(newLeft, newRight))
-        if (hinted) result.setTagValue(HINT_DECIDED, ())
+        if (hasRuntimeFilterHint(hint)) result.setTagValue(HINT_DECIDED, ())
         result
       case join @ Join(_, _, _, _, hint) if hasRuntimeFilterHint(hint) =>
         // A runtime filter is built from the join keys, so a join without equi-join keys has
