@@ -930,7 +930,9 @@ private[spark] class ExecutorAllocationManager(
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       val taskIndex = taskEnd.taskInfo.index
       allocationManager.synchronized {
-        if (stageAttemptToNumRunningTask.contains(stageAttempt)) {
+        // Resubmitted revokes a completed shuffle map output; no running attempt has ended.
+        if (taskEnd.reason != Resubmitted &&
+            stageAttemptToNumRunningTask.contains(stageAttempt)) {
           stageAttemptToNumRunningTask(stageAttempt) -= 1
           if (stageAttemptToNumRunningTask(stageAttempt) == 0) {
             stageAttemptToNumRunningTask -= stageAttempt
@@ -946,10 +948,24 @@ private[spark] class ExecutorAllocationManager(
             if (taskEnd.taskInfo.speculative) {
               stageAttemptToSuccessfulSpeculativeTaskIndices.get(stageAttempt)
                 .foreach(_ += taskIndex)
+              // The regular attempt may already have failed or been killed.
+              stageAttemptToTaskIndices.get(stageAttempt).foreach(_ += taskIndex)
             }
             // Remove pending speculative task in case the normal task
             // is finished before starting the speculative task
             stageAttemptToPendingSpeculativeTasks.get(stageAttempt).foreach(_.remove(taskIndex))
+            if (taskEnd.taskInfo.speculative && !hasPendingTasks) {
+              allocationManager.onSchedulerQueueEmpty()
+            }
+          case Resubmitted =>
+            // A lost shuffle map output must be recomputed, even if its successful attempt
+            // was speculative. Forget that success before a regular attempt ends or retries.
+            stageAttemptToSuccessfulSpeculativeTaskIndices.get(stageAttempt)
+              .foreach(_.remove(taskIndex))
+            if (!hasPendingTasks) {
+              allocationManager.onSchedulerBacklogged()
+            }
+            stageAttemptToTaskIndices.get(stageAttempt).foreach(_.remove(taskIndex))
           case _: TaskKilled =>
             if (stageAttemptToNumTasks.contains(stageAttempt) &&
                 !taskEnd.taskInfo.speculative &&

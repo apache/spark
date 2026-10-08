@@ -980,6 +980,82 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 0)
   }
 
+  Seq(TaskKilled("test"), UnknownReason).foreach { reason =>
+    test(s"stop counting a task as pending when speculation succeeds after $reason") {
+      val manualClock = new ManualClock()
+      val manager = createManager(createConf(0, 10, 0), manualClock)
+      val regular = createTaskInfo(0, 0, executorId = "executor-1")
+      val speculative = createTaskInfo(1, 0, executorId = "executor-2", speculative = true)
+
+      post(SparkListenerStageSubmitted(createStageInfo(0, 1)))
+      post(SparkListenerTaskStart(0, 0, regular))
+      post(speculativeTaskSubmitEventFromTaskIndex(0, taskIndex = 0))
+      post(SparkListenerTaskStart(0, 0, speculative))
+      post(SparkListenerTaskEnd(
+        0, 0, null, reason, regular, new ExecutorMetrics, null))
+      assert(manager.listener.pendingTasksPerResourceProfile(defaultProfile.id) === 1)
+      assert(addTime(manager) !== NOT_SET)
+
+      post(SparkListenerTaskEnd(
+        0, 0, null, Success, speculative, new ExecutorMetrics, null))
+      assert(manager.listener.pendingTasksPerResourceProfile(defaultProfile.id) === 0)
+      assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 0)
+      assert(addTime(manager) === NOT_SET)
+    }
+  }
+
+  Seq(true, false).foreach { regularEndsBeforeResubmission =>
+    test("count a resubmitted speculative success as pending after a retry fails " +
+        s"(regular ends before resubmission: $regularEndsBeforeResubmission)") {
+      val manualClock = new ManualClock()
+      val manager = createManager(createConf(0, 10, 0), manualClock)
+      val regular = createTaskInfo(0, 0, executorId = "executor-1")
+      val speculative = createTaskInfo(1, 0, executorId = "executor-2", speculative = true)
+      val retry = createTaskInfo(2, 0, executorId = "executor-3")
+      val regularKilled = SparkListenerTaskEnd(
+        0, 0, null, TaskKilled("test"), regular, new ExecutorMetrics, null)
+
+      post(SparkListenerStageSubmitted(createStageInfo(0, 1)))
+      post(SparkListenerTaskStart(0, 0, regular))
+      post(speculativeTaskSubmitEventFromTaskIndex(0, taskIndex = 0))
+      post(SparkListenerTaskStart(0, 0, speculative))
+      post(SparkListenerTaskEnd(
+        0, 0, null, Success, speculative, new ExecutorMetrics, null))
+      if (regularEndsBeforeResubmission) {
+        post(regularKilled)
+      }
+      assert(manager.listener.pendingTasksPerResourceProfile(defaultProfile.id) === 0)
+      assert(addTime(manager) === NOT_SET)
+
+      // Losing the successful speculative output revokes the success without ending a task.
+      post(SparkListenerTaskEnd(
+        0, 0, null, Resubmitted, speculative, new ExecutorMetrics, null))
+      assert(manager.listener.pendingTasksPerResourceProfile(defaultProfile.id) === 1)
+      assert(totalRunningTasksPerResourceProfile(manager) ===
+        (if (regularEndsBeforeResubmission) 0 else 1))
+      assert(addTime(manager) ===
+        manualClock.nanoTime() + TimeUnit.SECONDS.toNanos(schedulerBacklogTimeout))
+      if (!regularEndsBeforeResubmission) {
+        post(regularKilled)
+      }
+      assert(totalRunningTasksPerResourceProfile(manager) === 0)
+      assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
+
+      post(SparkListenerTaskStart(0, 0, retry))
+      assert(manager.listener.pendingTasksPerResourceProfile(defaultProfile.id) === 0)
+      assert(addTime(manager) === NOT_SET)
+      post(SparkListenerTaskEnd(
+        0, 0, null, UnknownReason, retry, new ExecutorMetrics, null))
+      assert(manager.listener.pendingTasksPerResourceProfile(defaultProfile.id) === 1)
+      assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
+      assert(addTime(manager) ===
+        manualClock.nanoTime() + TimeUnit.SECONDS.toNanos(schedulerBacklogTimeout))
+      manualClock.advance(schedulerBacklogTimeout * 1000 + 1)
+      schedule(manager)
+      assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    }
+  }
+
   test("do not restart add timer for a killed task from a completed stage") {
     val manualClock = new ManualClock()
     val manager = createManager(createConf(0, 10, 0), manualClock)
