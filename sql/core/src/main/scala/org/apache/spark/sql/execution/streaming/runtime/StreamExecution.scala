@@ -376,11 +376,6 @@ abstract class StreamExecution(
           e
         }
 
-        errorClassOpt = e match {
-          case t: SparkThrowable => Option(t.getCondition)
-          case _ => None
-        }
-
         try {
           streamDeathCause = new StreamingQueryException(
             toDebugString(includeLogicalPlan = isInitialized),
@@ -407,6 +402,11 @@ abstract class StreamExecution(
             if (!NonFatal(buildFailure)) {
               throw buildFailure
             }
+        }
+
+        errorClassOpt = e match {
+          case t: SparkThrowable => Option(t.getCondition)
+          case _ => None
         }
 
         logError(log"Query ${MDC(PRETTY_ID_STRING, prettyIdString)} terminated with error", e)

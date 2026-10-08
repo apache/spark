@@ -490,13 +490,14 @@ class StreamSuite extends StreamTest {
     }
   }
 
-  test("query failure is reported when building the detailed exception fails") {
+  test("SPARK-60091: query failure is reported when building the detailed exception fails") {
     val (_, uncaught) =
       failWhileBuildingQueryException(new IllegalStateException("source toString failed"))
     assert(uncaught.isEmpty)
   }
 
-  test("query failure is reported when building the detailed exception fails fatally") {
+  test("SPARK-60091: query failure is reported when building the detailed exception fails " +
+      "fatally") {
     val buildFailure = new StackOverflowError("source toString failed")
     val (_, uncaught) = failWhileBuildingQueryException(buildFailure)
     assert(uncaught.contains(buildFailure))
