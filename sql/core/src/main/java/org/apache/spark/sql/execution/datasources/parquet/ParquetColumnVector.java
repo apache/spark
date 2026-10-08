@@ -246,9 +246,10 @@ final class ParquetColumnVector {
       }
     } else {
       for (int i = 0; i < children.size(); i++) {
-        children.get(i).close();
+        ParquetColumnVector child = children.get(i);
+        child.close();
         if (i >= vector.getNumChildren()) {
-          vector.close();
+          child.vector.close();
         }
       }
     }
