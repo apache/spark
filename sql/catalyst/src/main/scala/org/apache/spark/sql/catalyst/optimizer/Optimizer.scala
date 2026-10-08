@@ -350,10 +350,15 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // However, because we also use the analyzer to canonicalized queries (for view definition),
     // we do not eliminate subqueries or compute current time in the analyzer.
     private val rules = Seq(
+      // Convert before the cleanup rules below: FinishAnalysis runs on the main plan
+      // before its subquery plans, so a definition body taken from a first-visited
+      // subquery occurrence still holds SubqueryAlias/ResolvedHint nodes; running the
+      // conversion first lets the cleanup rules reach it at the top level wherever it
+      // came from.
+      ConvertViewToMaterializedCTE,
       EliminateResolvedHint,
       EliminateSubqueryAliases,
       EliminatePipeOperators,
-      ConvertViewToMaterializedCTE,
       EliminateView,
       EliminateSQLFunctionNode,
       ReplaceExpressions,

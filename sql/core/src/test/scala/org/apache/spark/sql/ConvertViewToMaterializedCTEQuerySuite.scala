@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.plans.logical.RepartitionByExpression
+import org.apache.spark.sql.catalyst.plans.logical.{RepartitionByExpression, ResolvedHint}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.functions.rand
@@ -146,6 +146,45 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
       withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
         assert(countRepartitions(query) == 0)
         checkAnswer(spark.sql(query), expected)
+      }
+    }
+  }
+
+  test("converted definition picked from a subquery occurrence is cleaned") {
+    // FinishAnalysis runs its rules on the main plan before any subquery plan, so a
+    // definition whose body is taken from a first-visited subquery occurrence still holds
+    // analysis-only nodes (the table's SubqueryAlias). Moving that body into a top-level
+    // WithCTE after the cleanup rules ran must not leak them to the planner.
+    withTable("t") {
+      sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 20)")
+      withTempView("v") {
+        sql("CREATE TEMP VIEW v AS SELECT id, k FROM t WHERE k < 4")
+        val query = "SELECT (SELECT count(*) FROM v) AS c, (SELECT max(id) FROM v) AS m"
+        val expected = spark.sql(query).collect()
+        withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+          checkAnswer(spark.sql(query), expected)
+        }
+      }
+    }
+  }
+
+  test("converted definition picked from a subquery occurrence drops view hints") {
+    // Same leak scenario as above with a hint in the body. The hint resolves onto the
+    // table reference, so the leaked body holds ResolvedHint ABOVE the same SubqueryAlias;
+    // the planner hits the deeper node first and the crash alone cannot single out the
+    // hint, so pin it on the optimized plan instead: no ResolvedHint may survive.
+    withTable("t") {
+      sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 20)")
+      withTempView("v") {
+        sql("CREATE TEMP VIEW v AS SELECT /*+ BROADCAST(t) */ id, k FROM t WHERE k < 4")
+        val query = "SELECT (SELECT count(*) FROM v) AS c, (SELECT max(id) FROM v) AS m"
+        val expected = spark.sql(query).collect()
+        withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+          val optimizedPlan = spark.sql(query).queryExecution.optimizedPlan
+          assert(optimizedPlan.collect { case _: ResolvedHint => true }.isEmpty,
+            s"ResolvedHint survived the conversion: $optimizedPlan")
+          checkAnswer(spark.sql(query), expected)
+        }
       }
     }
   }
