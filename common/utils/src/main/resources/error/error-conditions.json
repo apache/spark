@@ -904,6 +904,12 @@
     ],
     "sqlState" : "42704"
   },
+  "CANNOT_RESOLVE_DATAFRAME_SUBQUERY" : {
+    "message" : [
+      "Cannot resolve the DataFrame subquery referenced by plan id <planId>. It's probably because of an illegal subquery reference, such as using a subquery DataFrame that is not part of the current query."
+    ],
+    "sqlState" : "42704"
+  },
   "CANNOT_RESOLVE_STAR_EXPAND" : {
     "message" : [
       "Cannot resolve <targetString>.* given input columns <columns>. Please check that the specified table or struct exists and is accessible in the input columns."
