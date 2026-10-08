@@ -27,11 +27,13 @@ stays importable and its handlers register without pyarrow installed.
 
 from __future__ import annotations
 
+from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable, Iterator
-from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional, Tuple
 
 from pyspark.errors import PySparkRuntimeError
-from pyspark.eval_handlers._base import BatchEvalTypeHandler
+from pyspark.eval_handlers._base import BatchEvalTypeHandler, EvalTypeHandler
+from pyspark.eval_handlers._typing import InputBatch, OutputBatch
 from pyspark.eval_handlers.utils import wrap_kwargs_support
 from pyspark.sql.conversion import ArrowBatchTransformer
 from pyspark.sql.functions import SkipRestOfInputTableException
@@ -45,7 +47,56 @@ if TYPE_CHECKING:
     from pyspark.worker_util import EvalConf, RunnerConf
 
 
-class UDTFWithPartitions:
+class PartitionedUDTF(metaclass=ABCMeta):
+    """
+    Base for the wrappers that implement TABLE argument PARTITION BY semantics on top of a UDTF.
+
+    A wrapper owns one UDTF instance per partition: when ``eval`` sees a new partition it calls
+    ``terminate`` on the current instance and replaces it with a fresh one. A
+    ``SkipRestOfInputTableException`` from ``eval`` skips the rest of the current partition only.
+    """
+
+    def __init__(self, create_udtf: Callable, partition_child_indexes: list):
+        self._create_udtf: Callable = create_udtf
+        self._udtf = create_udtf()
+        self._partition_child_indexes: list = partition_child_indexes
+        self._eval_raised_skip_rest_of_input_table: bool = False
+
+    @abstractmethod
+    def eval(self, *args: Any, **kwargs: Any) -> Iterator:
+        """Evaluate the input, calling the per-partition UDTF once per partition it covers."""
+
+    def terminate(self) -> Iterator:
+        if hasattr(self._udtf, "terminate"):
+            return self._udtf.terminate()
+        return iter(())
+
+    def cleanup(self) -> None:
+        if hasattr(self._udtf, "cleanup"):
+            self._udtf.cleanup()
+
+    def _start_next_partition(self) -> Iterator:
+        """Terminate the current partition's UDTF, yielding its results, and start a new one."""
+        if hasattr(self._udtf, "terminate"):
+            result = self._udtf.terminate()
+            if result is not None:
+                yield from result
+        self._udtf = self._create_udtf()
+        self._eval_raised_skip_rest_of_input_table = False
+
+    def _eval_partition(self, *args: Any, **kwargs: Any) -> Iterator:
+        """Call the current partition's UDTF ``eval``, yielding its results."""
+        try:
+            result = self._udtf.eval(*args, **kwargs)
+            if result is not None:
+                yield from result
+        except SkipRestOfInputTableException:
+            # Skip the rest of the rows in the current partition: callers stop calling 'eval'
+            # until they see a change in the partition boundaries.
+            self._eval_raised_skip_rest_of_input_table = True
+
+
+class UDTFWithPartitions(PartitionedUDTF):
     """
     This implements the logic of a UDTF that accepts an input TABLE argument with one or more
     PARTITION BY expressions.
@@ -77,48 +128,20 @@ class UDTFWithPartitions:
             the UDTF class instance and then destroy it and create a new one to implement the
             desired partitioning semantics.
         """
-        self._create_udtf: Callable = create_udtf
-        self._udtf = create_udtf()
+        super().__init__(create_udtf, partition_child_indexes)
         self._prev_arguments: list = list()
-        self._partition_child_indexes: list = partition_child_indexes
-        self._eval_raised_skip_rest_of_input_table: bool = False
 
     def eval(self, *args: Any, **kwargs: Any) -> Iterator:
         changed_partitions = self._check_partition_boundaries(list(args) + list(kwargs.values()))
         if changed_partitions:
-            if hasattr(self._udtf, "terminate"):
-                result = self._udtf.terminate()
-                if result is not None:
-                    for row in result:
-                        yield row
-            self._udtf = self._create_udtf()
-            self._eval_raised_skip_rest_of_input_table = False
+            yield from self._start_next_partition()
         if self._udtf.eval is not None and not self._eval_raised_skip_rest_of_input_table:
             # Filter the arguments to exclude projected PARTITION BY values added by Catalyst.
             filtered_args = [self._remove_partition_by_exprs(arg) for arg in args]
             filtered_kwargs = {
                 key: self._remove_partition_by_exprs(value) for (key, value) in kwargs.items()
             }
-            try:
-                result = self._udtf.eval(*filtered_args, **filtered_kwargs)
-                if result is not None:
-                    for row in result:
-                        yield row
-            except SkipRestOfInputTableException:
-                # If the 'eval' method raised this exception, then we should skip the rest of
-                # the rows in the current partition. Set this field to True here and then for
-                # each subsequent row in the partition, we will skip calling the 'eval' method
-                # until we see a change in the partition boundaries.
-                self._eval_raised_skip_rest_of_input_table = True
-
-    def terminate(self) -> Iterator:
-        if hasattr(self._udtf, "terminate"):
-            return self._udtf.terminate()
-        return iter(())
-
-    def cleanup(self) -> None:
-        if hasattr(self._udtf, "cleanup"):
-            self._udtf.cleanup()
+            yield from self._eval_partition(*filtered_args, **filtered_kwargs)
 
     def _check_partition_boundaries(self, arguments: list) -> bool:
         result = False
@@ -150,7 +173,7 @@ class UDTFWithPartitions:
             return arg
 
 
-class ArrowUDTFWithPartition:
+class ArrowUDTFWithPartition(PartitionedUDTF):
     """
     Implements logic for an Arrow UDTF (SQL_ARROW_UDTF) that accepts a TABLE argument
     with one or more PARTITION BY expressions.
@@ -205,12 +228,9 @@ class ArrowUDTFWithPartition:
             Zero-based indexes of input-table columns that contain projected
             partitioning expressions.
         """
-        self._create_udtf: Callable = create_udtf
-        self._udtf = create_udtf()
-        self._partition_child_indexes: list = partition_child_indexes
+        super().__init__(create_udtf, partition_child_indexes)
         # Track last partition key from previous batch
         self._last_partition_key: Optional[Tuple[Any, ...]] = None
-        self._eval_raised_skip_rest_of_input_table: bool = False
 
     def eval(self, *args: Any, **kwargs: Any) -> Iterator:
         """Handle partitioning logic for Arrow UDTFs that receive RecordBatch objects."""
@@ -312,14 +332,8 @@ class ArrowUDTFWithPartition:
             )
 
             if is_new_partition:
-                # Previous partition ended, call terminate
-                if hasattr(self._udtf, "terminate"):
-                    terminate_result = self._udtf.terminate()
-                    if terminate_result is not None:
-                        yield from terminate_result
-                # Create new UDTF instance for new partition
-                self._udtf = self._create_udtf()
-                self._eval_raised_skip_rest_of_input_table = False
+                # Previous partition ended: terminate it and start a new UDTF instance
+                yield from self._start_next_partition()
 
             # Slice the filtered batch for this partition
             partition_batch = filtered_batch.slice(start_idx, end_idx - start_idx)
@@ -344,24 +358,11 @@ class ArrowUDTFWithPartition:
 
             # Call the UDTF with this partition's data
             if not self._eval_raised_skip_rest_of_input_table:
-                try:
-                    result = self._udtf.eval(*partition_filtered_args, **partition_filtered_kwargs)
-                    if result is not None:
-                        yield from result
-                except SkipRestOfInputTableException:
-                    # Skip remaining rows in this partition
-                    self._eval_raised_skip_rest_of_input_table = True
+                yield from self._eval_partition(
+                    *partition_filtered_args, **partition_filtered_kwargs
+                )
 
         # Don't terminate here - let the next batch or final terminate handle it
-
-    def terminate(self) -> Iterator:
-        if hasattr(self._udtf, "terminate"):
-            return self._udtf.terminate()
-        return iter(())
-
-    def cleanup(self) -> None:
-        if hasattr(self._udtf, "cleanup"):
-            self._udtf.cleanup()
 
     def _get_table_arg(self, inputs: list) -> Optional[pa.RecordBatch]:
         """Get the table argument (RecordBatch) from the inputs list.
@@ -469,12 +470,63 @@ class ArrowUDTFWithPartition:
         return arg
 
 
-class ArrowUDTFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
+class UDTFEvalTypeHandler(EvalTypeHandler[InputBatch, OutputBatch]):
+    """Base for the UDTF eval types.
+
+    ``run`` calls ``_eval_batch`` per input batch, then ``_eval_terminate`` once at the end (also
+    when ``eval`` raised ``SkipRestOfInputTableException``), and always calls the UDTF's
+    ``cleanup``. Subclasses implement the two hooks and pick the serializer.
+    """
+
+    # Wraps the UDTF when its TABLE argument has PARTITION BY expressions; see read_single_udtf.
+    partition_wrapper: ClassVar[type[PartitionedUDTF]] = UDTFWithPartitions
+
+    def __init__(
+        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
+    ) -> None:
+        super().__init__(udfs, runner_conf, eval_conf)
+        assert len(udfs) == 1, "One UDTF expected here."
+        udtf, args_offsets, kwargs_offsets, self._return_type = udfs[0]
+        self._eval_method, self._args_kwargs_offsets = wrap_kwargs_support(
+            getattr(udtf, "eval"), args_offsets, kwargs_offsets
+        )
+        self._terminate_method = getattr(udtf, "terminate", None)
+        self._cleanup_method = getattr(udtf, "cleanup", None)
+
+    @abstractmethod
+    def _eval_batch(self, batch: InputBatch) -> Iterator[OutputBatch]:
+        """Call the UDTF's ``eval`` on one input batch and yield the converted results."""
+
+    @abstractmethod
+    def _eval_terminate(self) -> Iterator[OutputBatch]:
+        """Call the UDTF's ``terminate`` and yield the converted results."""
+
+    def run(self, split_index: int, data: Iterator[InputBatch]) -> Iterator[OutputBatch]:
+        terminate = self._terminate_method
+        cleanup = self._cleanup_method
+        try:
+            for batch in data:
+                yield from self._eval_batch(batch)
+            if terminate is not None:
+                yield from self._eval_terminate()
+        except SkipRestOfInputTableException:
+            if terminate is not None:
+                yield from self._eval_terminate()
+        finally:
+            if cleanup is not None:
+                cleanup()
+
+
+class ArrowUDTFHandler(
+    BatchEvalTypeHandler["pa.RecordBatch"],
+    UDTFEvalTypeHandler["pa.RecordBatch", "pa.RecordBatch"],
+):
     """SQL_ARROW_UDTF: the UDTF's ``eval`` receives ``pa.Array`` arguments, with TABLE
     arguments flattened into ``pa.RecordBatch``, and returns an iterable of
     ``pa.Table``/``pa.RecordBatch``, coerced to the declared schema."""
 
     eval_type = PythonEvalType.SQL_ARROW_UDTF
+    partition_wrapper = ArrowUDTFWithPartition
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
@@ -482,20 +534,11 @@ class ArrowUDTFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         import pyarrow as pa
 
         super().__init__(udfs, runner_conf, eval_conf)
-        assert len(udfs) == 1, "One ARROW_UDTF expected here."
-        udtf, args_offsets, kwargs_offsets, return_type = udfs[0]
-
         arrow_return_type = to_arrow_type(
-            return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
+            self._return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
         )
-        self._return_type_size = len(return_type)
+        self._return_type_size = len(self._return_type)
         self._target_schema = pa.schema(list(arrow_return_type))
-
-        self._eval_method, self._args_kwargs_offsets = wrap_kwargs_support(
-            getattr(udtf, "eval"), args_offsets, kwargs_offsets
-        )
-        self._terminate = getattr(udtf, "terminate", None)
-        self._cleanup = getattr(udtf, "cleanup", None)
 
         self._table_arg_offsets = (
             set(eval_conf.table_arg_offsets) if eval_conf.table_arg_offsets else set()
@@ -565,33 +608,23 @@ class ArrowUDTFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             )
             yield ArrowBatchTransformer.wrap_struct(coerced)
 
-    def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-        """Apply Arrow UDTF"""
+    def _eval_batch(self, batch: pa.RecordBatch) -> Iterator[pa.RecordBatch]:
+        # Pre-processing: for each column, flatten struct columns at
+        # table_arg_offsets into RecordBatch, keep other columns as Array.
         table_arg_offsets = self._table_arg_offsets
-        args_kwargs_offsets = self._args_kwargs_offsets
-        terminate = self._terminate
-        cleanup = self._cleanup
-        try:
-            for batch in data:
-                # Pre-processing: for each column, flatten struct columns at
-                # table_arg_offsets into RecordBatch, keep other columns as Array.
-                columns = [
-                    (
-                        ArrowBatchTransformer.flatten_struct(batch, column_index=i)
-                        if i in table_arg_offsets
-                        else batch.column(i)
-                    )
-                    for i in range(batch.num_columns)
-                ]
-                # For PyArrow UDTFs, pass RecordBatches directly (no row conversion needed)
-                yield from self._evaluate(
-                    self._eval_method, *[columns[o] for o in args_kwargs_offsets]
-                )
-            if terminate is not None:
-                yield from self._evaluate(terminate)
-        except SkipRestOfInputTableException:
-            if terminate is not None:
-                yield from self._evaluate(terminate)
-        finally:
-            if cleanup is not None:
-                cleanup()
+        columns = [
+            (
+                ArrowBatchTransformer.flatten_struct(batch, column_index=i)
+                if i in table_arg_offsets
+                else batch.column(i)
+            )
+            for i in range(batch.num_columns)
+        ]
+        # For PyArrow UDTFs, pass RecordBatches directly (no row conversion needed)
+        yield from self._evaluate(
+            self._eval_method, *[columns[o] for o in self._args_kwargs_offsets]
+        )
+
+    def _eval_terminate(self) -> Iterator[pa.RecordBatch]:
+        assert self._terminate_method is not None
+        yield from self._evaluate(self._terminate_method)

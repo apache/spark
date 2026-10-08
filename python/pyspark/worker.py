@@ -54,7 +54,7 @@ from pyspark.accumulators import (
 )
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import get_eval_type_handler
-from pyspark.eval_handlers._udtf import ArrowUDTFWithPartition, UDTFWithPartitions
+from pyspark.eval_handlers._udtf import UDTFEvalTypeHandler, UDTFWithPartitions
 from pyspark.eval_handlers.utils import extract_key_value_indexes, wrap_kwargs_support
 from pyspark.eval_handlers.verification import (
     verify_iter_result_row_count,
@@ -561,11 +561,12 @@ def build_null_checker(return_type: StructType) -> Optional[Callable[[Any], None
 
 
 # Read a serialized user-defined table function (UDTF) and prepare it for evaluation: wrap
-# the constructor to receive the AnalyzeResult, instantiate the UDTF (wrapped for PARTITION BY
-# when needed), and check the 'eval' signature against the call arguments. Returns the same
+# the constructor to receive the AnalyzeResult, instantiate the UDTF (wrapped in
+# partition_wrapper when its TABLE argument has PARTITION BY expressions), and check the 'eval'
+# signature against the call arguments. Returns the same
 # (func, args_offsets, kwargs_offsets, return_type) shape as read_single_udf, with the UDTF
 # instance in the func slot.
-def read_single_udtf(pickleSer, udtf_info, eval_type, runner_conf):
+def read_single_udtf(pickleSer, udtf_info, partition_wrapper):
     if udtf_info.pickled_analyze_result is not None:
         pickled_analyze_result = pickleSer.loads(udtf_info.pickled_analyze_result)
     else:
@@ -613,12 +614,7 @@ def read_single_udtf(pickleSer, udtf_info, eval_type, runner_conf):
     # Instantiate the UDTF class.
     try:
         if len(udtf_info.partition_child_indexes) > 0:
-            # Determine if this is an Arrow UDTF
-            is_arrow_udtf = eval_type == PythonEvalType.SQL_ARROW_UDTF
-            if is_arrow_udtf:
-                udtf = ArrowUDTFWithPartition(handler, udtf_info.partition_child_indexes)
-            else:
-                udtf = UDTFWithPartitions(handler, udtf_info.partition_child_indexes)
+            udtf = partition_wrapper(handler, udtf_info.partition_child_indexes)
         else:
             udtf = handler()
     except Exception as e:
@@ -657,7 +653,8 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
     # provides both the function and the serializer.
     handler_cls = get_eval_type_handler(eval_type)
     if handler_cls is not None:
-        udfs = [read_single_udtf(pickleSer, udtf_info, eval_type, runner_conf)]
+        assert issubclass(handler_cls, UDTFEvalTypeHandler)
+        udfs = [read_single_udtf(pickleSer, udtf_info, handler_cls.partition_wrapper)]
         handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
         return handler.run, handler.serializer
 
@@ -671,7 +668,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
         ser = BatchedSerializer(CPickleSerializer(), 1)
 
     udtf, args_offsets, kwargs_offsets, return_type = read_single_udtf(
-        pickleSer, udtf_info, eval_type, runner_conf
+        pickleSer, udtf_info, UDTFWithPartitions
     )
 
     check_output_row_against_schema = build_null_checker(return_type)

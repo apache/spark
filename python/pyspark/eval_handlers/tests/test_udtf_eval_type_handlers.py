@@ -40,7 +40,12 @@ with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
 if have_pyarrow:
     import pyarrow as pa
 
-    from pyspark.eval_handlers._udtf import ArrowUDTFHandler
+    from pyspark.eval_handlers._udtf import (
+        ArrowUDTFHandler,
+        ArrowUDTFWithPartition,
+        UDTFEvalTypeHandler,
+        UDTFWithPartitions,
+    )
     from pyspark.sql.conversion import ArrowBatchTransformer
 
 
@@ -81,6 +86,37 @@ class ArrowUDTFHandlerTests(unittest.TestCase):
     def test_registered(self):
         self.assertIs(get_eval_type_handler(PythonEvalType.SQL_ARROW_UDTF), ArrowUDTFHandler)
         self.assertIsInstance(self._handler(_RecordingUDTF()).serializer, ArrowStreamSerializer)
+
+    def test_partition_wrapper(self):
+        self.assertIs(UDTFEvalTypeHandler.partition_wrapper, UDTFWithPartitions)
+        self.assertIs(ArrowUDTFHandler.partition_wrapper, ArrowUDTFWithPartition)
+
+    def test_partitioned_terminate_per_partition(self):
+        # Column 1 is the projected PARTITION BY key; the UDTF only sees column 0.
+        created = []
+
+        def create_udtf():
+            created.append(_RecordingUDTF(skip_after=1))
+            return created[-1]
+
+        udtf = ArrowUDTFWithPartition(create_udtf, [1])
+        batches = [
+            ArrowBatchTransformer.wrap_struct(pa.record_batch({"x": [1, 2, 3], "k": [0, 0, 1]})),
+            ArrowBatchTransformer.wrap_struct(pa.record_batch({"x": [4, 5], "k": [1, 2]})),
+        ]
+        out = list(self._handler(udtf).run(0, iter(batches)))
+        # Partition k=1 spans both batches; its second eval call is skipped.
+        self.assertEqual(
+            [r["x"] for b in out for r in b.column(0).to_pylist()], [1, 2, -1, 3, -1, 5, -1]
+        )
+        self.assertEqual(
+            [u.calls for u in created],
+            [
+                ["eval", "terminate"],
+                ["eval", "eval", "terminate"],
+                ["eval", "terminate", "cleanup"],
+            ],
+        )
 
     def test_eval_terminate_cleanup(self):
         udtf = _RecordingUDTF()
