@@ -1865,36 +1865,38 @@ root = Module(
 )
 
 
-def pyspark_modules_missing_base() -> list[str]:
+def transitive_dependencies(module: Module) -> list[Module]:
     """
-    Return PySpark modules that do not depend on `pyspark-base`.
+    Return all modules that `module` depends on, directly or transitively.
+
+    The module itself is not included. Results are sorted by module name.
+    Callers declare only direct dependencies; this walks the rest.
+
+    >>> [dependency.name for dependency in transitive_dependencies(pyspark_logger)]
+    ['pyspark-base']
 
     Every `pyspark-*` module except `pyspark-base` itself must reach it,
-    directly or transitively. That is what makes a shared Python test-environment
-    change rerun the module. CI selects these modules by the same name prefix.
+    so a shared Python test-environment change reruns that module. CI selects
+    these modules by the same name prefix:
 
-    >>> pyspark_modules_missing_base()
+    >>> [
+    ...     module.name
+    ...     for module in all_modules
+    ...     if module.name.startswith("pyspark-")
+    ...     and module is not pyspark_base
+    ...     and pyspark_base not in transitive_dependencies(module)
+    ... ]
     []
     """
-    missing = []
-    for module in all_modules:
-        if not module.name.startswith("pyspark-") or module is pyspark_base:
+    seen = set()
+    pending = list(module.dependencies)
+    while pending:
+        dependency = pending.pop()
+        if dependency in seen or dependency is module:
             continue
-        seen = set()
-        pending = list(module.dependencies)
-        reaches_base = False
-        while pending:
-            dependency = pending.pop()
-            if dependency in seen:
-                continue
-            seen.add(dependency)
-            if dependency is pyspark_base:
-                reaches_base = True
-                break
-            pending.extend(dependency.dependencies)
-        if not reaches_base:
-            missing.append(module.name)
-    return missing
+        seen.add(dependency)
+        pending.extend(dependency.dependencies)
+    return sorted(seen)
 
 
 def _test():
