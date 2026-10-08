@@ -35,6 +35,11 @@ public interface SupportsReportOrdering extends Scan {
 
   /**
    * Returns the order in each partition of this data source scan.
+   * <p>
+   * Spark currently does not rely on a sort order over a transform such as {@code days(ts)} to
+   * avoid a sort, whether or not it is a partition key. Nor does it rely on the sort orders after
+   * it. The exception is a sort order on a partition key that is not a transform, when Spark uses
+   * the reported {@code KeyGroupedPartitioning}.
    */
   SortOrder[] outputOrdering();
 }
