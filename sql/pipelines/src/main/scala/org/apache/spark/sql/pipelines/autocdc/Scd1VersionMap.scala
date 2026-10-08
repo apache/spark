@@ -28,7 +28,12 @@ import org.apache.spark.sql.types.{DataType, MapType, StringType}
 private[pipelines] object Scd1VersionMap {
 
   /**
-   * The version map's Spark data type.
+   * Schema of the version map: `Map(String, sequencingType)`.
+   *
+   * Each key is the field path of a user-data leaf. Each value is the sequencing value of the
+   * event that authored the leaf, or null if no event has authored it.
+   *
+   * @param sequencingType The resolved data type of the flow's sequencing expression.
    */
   def mapType(sequencingType: DataType): MapType =
     MapType(StringType, sequencingType, valueContainsNull = true)
