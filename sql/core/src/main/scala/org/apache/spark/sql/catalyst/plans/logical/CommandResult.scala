@@ -38,6 +38,8 @@ case class CommandResult(
     @transient rows: Seq[InternalRow]) extends LeafNode {
   override def innerChildren: Seq[QueryPlan[_]] = Seq(commandLogicalPlan)
 
+  override def isOutputRepeatable: Boolean = true
+
   override def computeStats(): Statistics =
     Statistics(sizeInBytes = EstimationUtils.getSizePerRow(output) * rows.length)
 }

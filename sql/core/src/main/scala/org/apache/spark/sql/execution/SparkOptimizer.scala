@@ -72,12 +72,6 @@ class SparkOptimizer(
       // twice which may break some optimizer rules that can only be applied once. The rule below
       // only invokes `OptimizeSubqueries` to optimize newly added subqueries.
       new RowLevelOperationRuntimeGroupFiltering(OptimizeSubqueries)),
-    Batch("InjectRuntimeFilter", FixedPoint(1),
-      InjectRuntimeFilter),
-    Batch("MergeSubplans", Once,
-      MergeSubplans,
-      CombineApproximatePercentiles,
-      RewriteDistinctAggregates),
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates),
     Batch("Cleanup filters that cannot be pushed down", Once,
@@ -85,6 +79,16 @@ class SparkOptimizer(
       // cleanup the unnecessary TrueLiteral predicates
       BooleanSimplification,
       PruneFilters),
+    // Runs after the DPP filters are final, so it sees only the ones that survived pushdown and
+    // cleanup when deciding whether a key is already pruned.
+    Batch("InjectRuntimeFilter", FixedPoint(1),
+      InjectRuntimeFilter),
+    Batch("MergeSubplans", Once,
+      MergeSubplans,
+      CombineApproximatePercentiles,
+      RewriteDistinctAggregates),
+    Batch("Pushdown Runtime Filters", fixedPoint,
+      PushDownPredicates),
     postHocOptimizationBatches,
     Batch("Extract UDFs", Once,
       ExtractPythonUDFFromJoinCondition,

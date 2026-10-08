@@ -285,6 +285,10 @@ case class DataSourceV2ScanRelation(
     s"RelationV2$outputString $nameWithTimeTravelSpec"
   }
 
+  // The scan is planned once, and each of its executions reads what that plan describes, as the
+  // two sides of a self-join do.
+  override def isOutputRepeatable: Boolean = true
+
   override def computeStats(): Statistics = {
     if (conf.cboEnabled || conf.planStatsEnabled) {
       computeFullStats()

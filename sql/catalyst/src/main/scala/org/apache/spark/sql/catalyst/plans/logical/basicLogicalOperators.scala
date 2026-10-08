@@ -1158,6 +1158,8 @@ case class Range(
     s"Range ($start, $end, step=$step$splits)"
   }
 
+  override def isOutputRepeatable: Boolean = !isStreaming
+
   override def maxRows: Option[Long] = {
     if (numElements.isValidLong) {
       Some(numElements.toLong)
@@ -2402,6 +2404,7 @@ case class RebalancePartitions(
 case class OneRowRelation() extends LeafNode {
   override def maxRows: Option[Long] = Some(1)
   override def output: Seq[Attribute] = Nil
+  override def isOutputRepeatable: Boolean = true
   override def computeStats(): Statistics = Statistics(sizeInBytes = 1)
 
   /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */

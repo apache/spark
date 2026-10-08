@@ -237,6 +237,14 @@ object LogicalPlan {
 trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
   override def producedAttributes: AttributeSet = outputSet
 
+  /**
+   * Whether evaluating this leaf again returns the same rows, so that a plan over it can be
+   * evaluated more than once with consistent results. False unless the leaf can promise it: a
+   * batch scan of a table or of local rows can, an RDD whose lineage is opaque cannot unless it
+   * is checkpointed, and a streaming leaf never can.
+   */
+  def isOutputRepeatable: Boolean = false
+
   /** Leaf nodes that can survive analysis must define their own statistics. */
   def computeStats(): Statistics =
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3114")
@@ -274,7 +282,7 @@ private[sql] trait MaterializedLeafNode extends LeafNode {
     mayHaveUsableMaterializedStats && materializedMetadata.exists(_.statsAvailable)
 
   /** Whether scanning the materialized output again returns the same rows. */
-  def isOutputRepeatable: Boolean = materializedMetadata.exists(_.isOutputRepeatable)
+  override def isOutputRepeatable: Boolean = materializedMetadata.exists(_.isOutputRepeatable)
 
   /** Whether the original plan contains a predicate that is likely to be selective. */
   def hasSelectivePredicate: Boolean

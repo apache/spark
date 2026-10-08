@@ -78,10 +78,9 @@ object ResolveHints {
    * is not aliased differently), subquery, or common table expression that match the specified
    * name.
    *
-   * [[RuntimeFilterHint]] is resolved here too. It takes the same per-relation form, e.g.
-   * "RUNTIME_FILTER(a)", and applies to a join side, so it shares this rule's relation matching
-   * and lands on the same [[HintInfo]] -- which is what lets it accompany a join strategy hint on
-   * a relation instead of displacing one.
+   * [[RuntimeFilterHint]] takes the same per-relation form, e.g. "RUNTIME_FILTER(a)", and is
+   * resolved here too, onto the same [[HintInfo]] as a join strategy hint on that relation, so
+   * the two can accompany each other.
    *
    * The hint resolution works by recursively traversing down the query plan to find a relation or
    * subquery that matches one of the specified relation aliases. The traversal does not go past
