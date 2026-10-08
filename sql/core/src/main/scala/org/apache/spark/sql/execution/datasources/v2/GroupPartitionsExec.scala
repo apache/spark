@@ -24,7 +24,6 @@ import org.apache.spark.{Partition, SparkException}
 import org.apache.spark.rdd.{CoalescedRDD, PartitionCoalescer, PartitionGroup, RDD, SortedMergeCoalescedRDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{IdentityReducer, KeyedPartitioning, KeyLayout, KeyReducer, Partitioning, PartitioningCollection, REPLICATED_FOR_JOIN, UngroupingOrigin, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
@@ -277,8 +276,8 @@ case class GroupPartitionsExec(
   }
 
   /**
-   * The ordering used by the k-way merge in [[SortedMergeCoalescedRDD]]. The generated comparator
-   * ([[GenerateOrdering]]) only needs each [[SortOrder]]'s sort key (child, direction, null
+   * The ordering used by the k-way merge in [[SortedMergeCoalescedRDD]]. The comparator that
+   * [[RowOrdering]] builds only needs each [[SortOrder]]'s sort key (child, direction, null
    * ordering), so `sameOrderExpressions` -- planner-only metadata that would otherwise be
    * serialized with the RDD in every task -- is dropped.
    */
@@ -345,7 +344,7 @@ case class GroupPartitionsExec(
       sparkContext.emptyRDD
     } else if (usesSortedMerge) {
       val partitionCoalescer = new GroupedPartitionCoalescer(groupedPartitions.map(_._2))
-      val rowOrdering = new LazyCodeGenOrdering(kWayMergeOrdering, child.output)
+      val rowOrdering = new LazyRowOrdering(kWayMergeOrdering, child.output)
       new SortedMergeCoalescedRDD[InternalRow](
         child.execute(),
         groupedPartitions.size,
@@ -399,11 +398,9 @@ case class GroupPartitionsExec(
       outputPartitioning match {
         case p: Partitioning with Expression
             if reducers.isEmpty && conf.v2BucketingPreserveKeyOrderingOnCoalesceEnabled =>
-          // Without reducers all merged partitions share the same original key value, so the key
-          // expressions remain constant within the output partition. The child's outputOrdering
-          // should already be in sync with the partitioning (either reported by the source or
-          // derived from it in DataSourceV2ScanExecBase), so we only need to keep the sort orders
-          // whose expression is a partition key expression -- all others are lost by concatenation.
+          // Without reducers all merged partitions share the same original key value, so the sort
+          // orders on key expressions still hold. The transform keys match nothing here, since
+          // `DataSourceV2ScanExecBase.outputOrdering` drops every sort order over a transform.
           val keyedPartitionings = p.collect { case k: KeyedPartitioning => k }
           val keyExprs = ExpressionSet(keyedPartitionings.flatMap(_.expressions))
           child.outputOrdering.filter(order => keyExprs.contains(order.child))
@@ -820,15 +817,15 @@ class GroupedPartitionCoalescer(
 }
 
 /**
- * A serializable [[Ordering]] for [[InternalRow]] that generates code-compiled comparison logic
- * lazily on first use. The [[SortOrder]] expressions and output schema are serialized with the
- * RDD; the generated comparator is rebuilt on the executor on first comparison via
- * [[GenerateOrdering]].
+ * A serializable [[Ordering]] for [[InternalRow]]. The [[SortOrder]] expressions and output schema
+ * are serialized with the RDD. The comparator is built on the executor, at the first comparison.
+ * [[RowOrdering]] builds it, as for `SortExec`. It tries generated code first and falls back to
+ * interpreted evaluation when that fails.
  */
-private class LazyCodeGenOrdering(
+private class LazyRowOrdering(
     sortOrders: Seq[SortOrder],
     schema: Seq[Attribute]) extends Ordering[InternalRow] with Serializable {
-  @transient private lazy val generated: Ordering[InternalRow] =
-    GenerateOrdering.generate(sortOrders, schema)
-  override def compare(x: InternalRow, y: InternalRow): Int = generated.compare(x, y)
+  @transient private lazy val ordering: Ordering[InternalRow] =
+    RowOrdering.create(sortOrders, schema)
+  override def compare(x: InternalRow, y: InternalRow): Int = ordering.compare(x, y)
 }
