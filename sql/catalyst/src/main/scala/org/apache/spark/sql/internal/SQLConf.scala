@@ -8759,6 +8759,7 @@ object SQLConf {
         "source schema instead of being appended at the end. This applies to top-level " +
         "columns and to nested struct fields.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
