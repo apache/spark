@@ -313,6 +313,10 @@ class UserDefinedFunction:
                 if not self.transpiled:
                     detail = f": {errors}" if errors else ""
                     warnings.warn(f"Unable to transpile UDF {func}{detail}")
+        except PySparkNotImplementedError:
+            # ``self.returnType`` parses DDL and rejects CHAR/VARCHAR. That is
+            # not a transpilation failure; do not swallow it as a warning.
+            raise
         except Exception as e:
             # An inability to transpile must never break a working UDF -- fall
             # back to interpreted Python execution and surface the failure as a
