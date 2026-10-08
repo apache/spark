@@ -1865,19 +1865,17 @@ root = Module(
 )
 
 
-def transitive_dependencies(module: Module) -> list[Module]:
+def transitive_dependencies(module: Module) -> set[Module]:
     """
     Return all modules that `module` depends on, directly or transitively.
+    The module itself is not included.
+    
+    `utils-java` is an indirect dependency of `unsafe`:
 
-    The module itself is not included. Results are sorted by module name.
-    Callers declare only direct dependencies; this walks the rest.
+    >>> sorted(dependency.name for dependency in transitive_dependencies(unsafe))
+    ['tags', 'utils', 'utils-java']
 
-    >>> [dependency.name for dependency in transitive_dependencies(pyspark_logger)]
-    ['pyspark-base']
-
-    Every `pyspark-*` module except `pyspark-base` itself must reach it,
-    so a shared Python test-environment change reruns that module. CI selects
-    these modules by the same name prefix:
+    Every `pyspark-*` module must depend on `pyspark-base`:
 
     >>> [
     ...     module.name
@@ -1896,7 +1894,7 @@ def transitive_dependencies(module: Module) -> list[Module]:
             continue
         seen.add(dependency)
         pending.extend(dependency.dependencies)
-    return sorted(seen)
+    return seen
 
 
 def _test():
