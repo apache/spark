@@ -210,14 +210,7 @@ private[pipelines] object Scd1RowLevelReconciliation extends Scd1ReconciliationS
 }
 
 /** Leaf-level SCD1 reconciliation. */
-private[pipelines] object Scd1LeafLevelReconciliation extends Scd1ReconciliationStrategy {
-
-  override def reconcileMicrobatch(
-      changeArgs: ChangeArgs,
-      resolvedSequencingType: DataType,
-      batchDf: DataFrame,
-      auxiliaryTableDf: DataFrame): DataFrame =
-    throw new NotImplementedError("SCD1 leaf-level reconciliation is not implemented")
+private[pipelines] object Scd1LeafLevelReconciliation {
 
   /**
    * Aligns microbatch rows with the persisted target schema without adding target rows.
