@@ -77,6 +77,25 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-60028: do not simplify 'prefix%suffix' over a nondeterministic input") {
+    // The replacement reads the input three times, and each read could see a different value.
+    val input = Uuid(Some(0L))
+    val originalQuery = testRelation.where(input like "abc%def").analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+
+    // A replacement that reads the input once is still made.
+    comparePlans(
+      Optimize.execute(testRelation.where(input like "abc%").analyze),
+      testRelation.where(StartsWith(input, "abc")).analyze)
+
+    // The three-read replacement is still made for a deterministic input, even one not cheap.
+    val substr = $"a".substring(1, 5)
+    comparePlans(
+      Optimize.execute(testRelation.where(substr like "abc%def").analyze),
+      testRelation.where(OctetLength(substr) >= 6 &&
+        (StartsWith(substr, "abc") && EndsWith(substr, "def"))).analyze)
+  }
+
   test("simplify Like into Contains") {
     val originalQuery =
       testRelation
