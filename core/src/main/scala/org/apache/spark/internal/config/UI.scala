@@ -142,6 +142,7 @@ private[spark] object UI {
         "'#' (a character that thread names contain). This is a kill switch to restore the " +
         "old link if building the file in the browser causes a regression.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
