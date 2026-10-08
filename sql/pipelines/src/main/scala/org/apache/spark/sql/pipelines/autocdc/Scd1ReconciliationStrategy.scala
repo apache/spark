@@ -331,12 +331,11 @@ private[pipelines] object Scd1LeafLevelReconciliation {
    * @param resolvedSequencingType The resolved type of CDC sequencing values.
    * @param microbatchDf Microbatch rows whose CDC metadata and version maps have already been
    *                     populated. Version-map keys must match the DataFrame's column names.
-   * @return One row per key, representing either an upsert or a delete as determined by
-   *         [[Scd1BatchProcessor.representsDelete]] on the key's greatest delete and upsert
-   *         sequences. An upsert row carries its greatest upsert sequence and an entry for every
-   *         user-data leaf in the aggregated version map, with a null delete sequence. A delete
-   *         row carries only its greatest delete sequence, with a null upsert sequence and
-   *         version map.
+   * @return One row per key, representing a delete if the key's greatest delete sequence is
+   *         greater than its greatest upsert sequence, and an upsert otherwise. An upsert row
+   *         carries its greatest upsert sequence and an entry for every user-data leaf in the
+   *         aggregated version map, with a null delete sequence. A delete row carries only its
+   *         greatest delete sequence, with a null upsert sequence and version map.
    */
   private[autocdc] def collapseMicrobatchRowsPerKey(
       changeArgs: ChangeArgs,
@@ -388,11 +387,12 @@ private[pipelines] object Scd1LeafLevelReconciliation {
     }
     val collapsedFieldsByTopLevelName = collapsedFields.groupBy(_.path.head)
 
-    // Whether each collapsed row represents the key's net delete rather than its net upsert.
+    // Whether each collapsed row represents the key's net delete rather than its net upsert. A
+    // delete wins only when it is sequenced strictly after the upsert, so upserts win ties.
     val aggregatedDeleteSequence = F.col(aggregatedDeleteSequenceColName)
     val aggregatedUpsertSequence = F.col(aggregatedUpsertSequenceColName)
-    val collapsedRowRepresentsDelete =
-      Scd1BatchProcessor.representsDelete(aggregatedDeleteSequence, aggregatedUpsertSequence)
+    val collapsedRowRepresentsDelete = aggregatedDeleteSequence.isNotNull &&
+      (aggregatedUpsertSequence.isNull || aggregatedDeleteSequence > aggregatedUpsertSequence)
 
     // Reconstruct the `microbatchDf` but using the aggregated results per key. The resulting
     // dataframe has the same shape as the `microbatchDf`, but a single row per key, representing
