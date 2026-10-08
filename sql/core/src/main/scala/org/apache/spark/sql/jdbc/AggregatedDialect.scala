@@ -66,8 +66,8 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
     dialects.head.isSyntaxErrorBestEffort(exception)
   }
 
-  // Any dialect may recognize the error, so a custom dialect that does not override this does not
-  // hide the detection of a built-in one.
+  // Ask every dialect, so that a registered dialect that doesn't override this method can't hide
+  // detection by a built-in one.
   override def isInsufficientPrivilegeException(e: SQLException): Boolean = {
     dialects.exists(_.isInsufficientPrivilegeException(e))
   }

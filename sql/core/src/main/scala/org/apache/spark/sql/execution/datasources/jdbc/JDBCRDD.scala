@@ -72,7 +72,8 @@ object JDBCRDD extends Logging {
     try {
       getQueryOutputSchema(fullQuery, options, dialect, conn)
     } catch {
-      // Checked first: some dialects treat any class-42 SQLSTATE as not-found or syntax errors.
+      // This must come before the checks below, because some dialects treat any class-42
+      // SQLSTATE as object-not-found or as a syntax error.
       case e: SQLException if dialect.isInsufficientPrivilegeException(e) =>
         throw new SparkException(
           errorClass = "JDBC_EXTERNAL_ENGINE_INSUFFICIENT_PRIVILEGE",
