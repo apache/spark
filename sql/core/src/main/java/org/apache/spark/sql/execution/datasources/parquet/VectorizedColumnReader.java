@@ -104,9 +104,8 @@ public class VectorizedColumnReader {
   private final ParsedVersion writerVersion;
 
   /**
-   * A reader of the rows the store names, as {@code rowRanges = null} below. Nothing in Spark
-   * calls it. It is kept for code outside Spark that builds a column reader with the constructor
-   * that predates the ranges.
+   * A reader of the rows the store names, as {@code rowRanges = null} below. Kept for code outside
+   * Spark that uses the constructor that predates the ranges.
    */
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,

@@ -168,52 +168,33 @@ trait FileFormat {
   }
 
   /**
-   * Like [[buildReaderWithPartitionValues]] but additionally accepts a sequence of storage filters:
-   * Catalyst expressions that the storage layer may evaluate to prune the IO of the columns they do
-   * not reference, by reading and evaluating the ones they do first (e.g. late materialization with
-   * a runtime bloom filter).
+   * Like [[buildReaderWithPartitionValues]], but also takes storage filters. These are Catalyst
+   * expressions a reader may evaluate on the columns they reference first, to skip reading the
+   * other columns of the rows they reject, e.g. a runtime bloom filter.
    *
-   * Honoring them is optional, here and in a reader that does implement them, because the planner
-   * leaves every one of them in the post-scan `Filter` as well, so ignoring one is a missed
-   * optimization rather than a wrong answer.
+   * Applying them is optional, since the planner also leaves each in the post-scan `Filter`. A
+   * storage filter is evaluated without the conjuncts that precede it in the plan, so it can raise
+   * an error on a row a plain scan never evaluates it on. A reader must not fail the query for
+   * that. It gives the filter up there and lets the `Filter` decide.
    *
    * The `Filter` can skip them on the rows the reader says it has checked. The planner asks for
    * that only where the scan returns columnar batches. `requiredSchema` then ends with a nullable
    * boolean column named [[FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME]], which is not a column
    * of the relation, and the `Filter` evaluates each storage filter as `IF(checked, true, filter)`.
    *  - True says every storage filter was evaluated on the row and kept it.
-   *  - False or null says the row was not checked, and the `Filter` decides it as if the column
-   *    were not there. So a reader that does not know the column, and reads it as missing from
-   *    the file, is still right.
+   *  - False or null says the row was not checked. So a reader that does not know the column, and
+   *    reads it as missing from the file, is still right.
    * A reader that marks rows writes the column itself rather than decoding it from the file. A file
    * holding a column of that name is not supported, see
    * [[FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME]]. The column is in the `requiredSchema` of the
    * ordinary reader too, the one the caller builds when this returns `None`, so that reader has to
    * read it as missing or mark it as well.
    *
-   * Being optional is also an obligation. A storage filter is evaluated out of the plan's order,
-   * without the conjuncts that precede it, so it can raise an error on a row those conjuncts would
-   * have rejected, which is an error a plain scan never raises. A reader must not fail the query
-   * for that. It gives the filter up for as much of the read as it needs to and lets the post-scan
-   * `Filter` decide, in its own order.
-   *
-   * A format that does not apply storage filters returns `None`, which is the default, and the
-   * caller then builds an ordinary reader. Returning an `Option` rather than delegating from here
-   * is what keeps the two builders from being able to call each other.
-   *
-   * Scalar subqueries inside `storageFilters` are expected to have been materialized before this
-   * method is called, so that the returned reader can be safely serialized to executors.
-   *
-   * They also arrive bound to `requiredSchema`, as `BoundReference`s over the row a reader
-   * assembles from it, so that the reader evaluates one per row without resolving anything by name.
-   * `supportsStorageFilter` is asked about the unbound expression instead, where the names and the
-   * metadata are still there, so that is where a format decides what it can evaluate.
-   *
-   * `storageFilterMetrics` is the SQL metrics the reader updates during execution, keyed the way
-   * this format's own `storageFilterMetrics` created them, since that is where a scan gets them. A
-   * format is free to ignore them, and free to require its own, so a caller that passes anything
-   * else is a caller of the wrong format. The scan is expected to expose them via its `metrics`
-   * field so they show up in the SQL UI.
+   * A format that does not apply storage filters returns `None`, the default, and the caller then
+   * builds an ordinary reader. `storageFilters` arrive with their scalar subqueries materialized,
+   * bound to `requiredSchema`, while [[supportsStorageFilter]] is asked about the unbound
+   * expression. `storageFilterMetrics` are the ones this format's [[storageFilterMetrics]] created,
+   * which the scan shows in the SQL UI.
    */
   def buildReaderWithStorageFilters(
       sparkSession: SparkSession,
@@ -228,32 +209,22 @@ trait FileFormat {
     ): Option[PartitionedFile => Iterator[InternalRow]] = None
 
   /**
-   * Whether this format applies storage filters in this session at all, which is also where the
-   * conf that enables them belongs, since a format's own conf should not decide for another format.
-   * Asked once per scan, before anything per conjunct, so a format that answers false costs one
-   * call.
+   * Whether this format applies storage filters in this session at all. The conf that enables them
+   * belongs here, so one format's conf does not decide for another. Asked once per scan.
    */
   def supportsStorageFilterPushdown(sparkSession: SparkSession): Boolean = false
 
   /**
    * The SQL metrics this format's reader updates while it applies storage filters, keyed the way
-   * the scan then exposes them. Asked once per scan, and only for a scan that has storage filters.
-   *
-   * It belongs to the format for the same reason the conf does, that what there is to count is the
-   * format's own vocabulary. Row groups and page filtering are Parquet's words, and another format
-   * measures what it avoided differently.
+   * the scan exposes them. Asked once per scan, and only for a scan that has storage filters.
    */
   def storageFilterMetrics(sparkContext: SparkContext): Map[String, SQLMetric] = Map.empty
 
   /**
    * Whether this format's reader can evaluate `expr` as a storage filter, i.e. whether the planner
-   * may offer it to [[buildReaderWithStorageFilters]].
-   *
-   * The planner decides what it can see from the plan, that the conjunct is deterministic and
-   * references only projected data columns. It asks this for everything else, so the expression
-   * shapes and column types a reader supports stay in that reader's own package. Answering true
-   * says the reader can evaluate the expression, not that it will, since the conjunct stays in the
-   * post-scan `Filter`, so a reader is free to give a file up.
+   * may offer it to [[buildReaderWithStorageFilters]]. The planner itself checks that the conjunct
+   * is deterministic and references only projected data columns. True says the reader can evaluate
+   * it, not that it will.
    */
   def supportsStorageFilter(expr: Expression): Boolean = false
 
