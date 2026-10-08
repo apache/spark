@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.plans.logical.CTERelationDef
 import org.apache.spark.sql.execution.{BaseSubqueryExec, ReusedSubqueryExec}
 import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, Exchange, ReusedExchangeExec}
@@ -446,6 +447,27 @@ class CTEReuseWithoutAQESuite
             // VerifyCTEReuse ran with the fail flag off, so the query runs without throwing.
             df.collect()
           }
+        }
+      }
+    }
+  }
+
+  test("exchange reuse disabled: fail-on policy raises the documented internal error") {
+    withCTEReuseNoAQE {
+      // withCTEReuseNoAQE leaves FAIL_ON_CTE_REUSE_WITHOUT_AQE enabled. With exchange reuse off the
+      // two CTE shuffles sharing one cteId stay un-deduplicated, so VerifyCTEReuse must raise the
+      // documented internal error instead of silently running with multiple live CTE shuffles.
+      withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+        withReuseSrc {
+          val df = sqlWithForcedCTEReuse(
+            """WITH cte AS (SELECT id, v, rand() as r FROM reuse_src)
+              |SELECT c1.id, c2.v FROM cte c1 JOIN cte c2 ON c1.id = c2.id
+              |""".stripMargin)
+          val e = intercept[SparkException] {
+            df.queryExecution.executedPlan
+          }
+          assert(e.getMessage.contains("Guaranteed CTE shuffle reuse (AQE off) failed"),
+            s"Expected the fail-on-reuse internal error, got:\n${e.getMessage}")
         }
       }
     }
