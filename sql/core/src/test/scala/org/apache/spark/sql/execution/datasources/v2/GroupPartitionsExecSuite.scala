@@ -53,8 +53,8 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
         .withLayout(_.copy(isCollapsed = childCollapsed))
       GroupPartitionsExec(DummySparkPlan(outputPartitioning = childKp), joinKeyPositions,
         expected.map(_.map { case (key, numSplits) =>
-          key -> ExpectedKeyMode(numSplits, distribute)
-        }), ungroupingOrigin = Option.when(distribute)(SPLIT_FOR_JOIN))
+          key -> ExpectedKeyMode(numSplits, Option.when(distribute)(SPLIT_FOR_JOIN))
+        }))
         .outputPartitioning.asInstanceOf[KeyedPartitioning]
     }
     def keyOf(a: Int): InternalRowComparableWrapper =
@@ -336,7 +336,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       InternalRowComparableWrapper(row(a), Seq(exprA))
     val gpe = GroupPartitionsExec(child,
       expectedPartitionKeys = Some(Seq(
-        keyOf(1) -> ExpectedKeyMode(1, false), keyOf(2) -> ExpectedKeyMode(1, false))))
+        keyOf(1) -> ExpectedKeyMode(1, None), keyOf(2) -> ExpectedKeyMode(1, None))))
     assert(gpe.groupedPartitions.size === 2, "the trailing key 3 is dropped")
     gpe.outputPartitioning match {
       case u: UnknownPartitioning =>
@@ -625,10 +625,9 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(2))))
     val gpe = GroupPartitionsExec(child,
       expectedPartitionKeys = Some(Seq(
-        keyOf(1) -> ExpectedKeyMode(1, true),
-        keyOf(2) -> ExpectedKeyMode(3, true),
-        keyOf(3) -> ExpectedKeyMode(1, true))),
-      ungroupingOrigin = Some(SPLIT_FOR_JOIN))
+        keyOf(1) -> ExpectedKeyMode(1, Some(SPLIT_FOR_JOIN)),
+        keyOf(2) -> ExpectedKeyMode(3, Some(SPLIT_FOR_JOIN)),
+        keyOf(3) -> ExpectedKeyMode(1, Some(SPLIT_FOR_JOIN)))))
     gpe.execute()
 
     assert(gpe.metrics("numInputPartitions").value === 3)
@@ -649,24 +648,24 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       InternalRowComparableWrapper(row(a), Seq(exprA))
     val child = ExecutableKeyedLeaf(
       KeyedPartitioning(Seq(exprA), Seq(row(1), row(1), row(2)))
-        .withLayout(_.copy(ungroupingOrigin = Some(SPLIT_FOR_JOIN))))
+        .withLayout(_.copy(ungroupingOrigins =
+          Some(Seq.fill(3)(SPLIT_FOR_JOIN)))))
 
     val grouped = GroupPartitionsExec(child)
     val groupedOut = grouped.outputPartitioning.asInstanceOf[KeyedPartitioning]
-    assert(groupedOut.isGrouped && groupedOut.ungroupingOrigin.isEmpty)
+    assert(groupedOut.isGrouped && groupedOut.ungroupingOrigins.isEmpty)
     assert(groupedOut.partitionKeys.map(_.row) == Seq(row(1), row(2)))
 
-    // A stamped node stamps its own output whatever the child claimed, and its routing follows
-    // the per-key modes: a repeating side groups first.
+    // A node claims what it was handed whatever the child claimed, and its routing follows the
+    // role it was handed: a repeating side groups first.
     val restamped = GroupPartitionsExec(child,
       expectedPartitionKeys = Some(Seq(
-        keyOf(1) -> ExpectedKeyMode(2, distribute = false),
-        keyOf(2) -> ExpectedKeyMode(1, distribute = false))),
-      ungroupingOrigin = Some(REPLICATED_FOR_JOIN))
+        keyOf(1) -> ExpectedKeyMode(2, Some(REPLICATED_FOR_JOIN)),
+        keyOf(2) -> ExpectedKeyMode(1, Some(REPLICATED_FOR_JOIN)))))
     assert(!restamped.distributePartitions, "a repeating side groups first")
     val restampedOut = restamped.outputPartitioning.asInstanceOf[KeyedPartitioning]
     assert(!restampedOut.isGrouped)
-    assert(restampedOut.ungroupingOrigin.contains(REPLICATED_FOR_JOIN))
+    assert(restampedOut.ungroupingOrigins === Some(Seq.fill(3)(REPLICATED_FOR_JOIN)))
   }
 
   test("SPARK-59671: an alignment that settles every key spends its stamp") {
@@ -678,13 +677,13 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2))))
     val gpe = GroupPartitionsExec(child,
       expectedPartitionKeys = Some(Seq(
-        keyOf(1) -> ExpectedKeyMode(1, distribute = true),
-        keyOf(2) -> ExpectedKeyMode(1, distribute = true))),
-      ungroupingOrigin = Some(SPLIT_FOR_JOIN))
-    assert(gpe.ungroupingOrigin.contains(SPLIT_FOR_JOIN),
-      "the node keeps the stamp it was handed, and the routing it derives")
+        keyOf(1) -> ExpectedKeyMode(1, Some(SPLIT_FOR_JOIN)),
+        keyOf(2) -> ExpectedKeyMode(1, Some(SPLIT_FOR_JOIN)))))
+    assert(gpe.expectedKeyModes.get.map(_.origin) ===
+      Seq(Some(SPLIT_FOR_JOIN), Some(SPLIT_FOR_JOIN)),
+      "each key is reserved one slot, named the spread side")
     val out = gpe.outputPartitioning.asInstanceOf[KeyedPartitioning]
-    assert(out.isGrouped && out.ungroupingOrigin.isEmpty)
+    assert(out.isGrouped && out.ungroupingOrigins.isEmpty)
     withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
       assert(out.satisfies(OrderedDistribution(Seq(SortOrder(exprA, Ascending)))),
         "a grouped layout keeps its ordering claim")
@@ -701,7 +700,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(2))))
     val gpe = GroupPartitionsExec(child,
       expectedPartitionKeys = Some(Seq(
-        keyOf(1) -> ExpectedKeyMode(1, false), keyOf(3) -> ExpectedKeyMode(2, false))))
+        keyOf(1) -> ExpectedKeyMode(1, None), keyOf(3) -> ExpectedKeyMode(2, None))))
     gpe.execute()
 
     assert(gpe.metrics("numInputPartitions").value === 3)
@@ -722,7 +721,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       InternalRowComparableWrapper(row(a), Seq(exprA))
     val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(1))))
     val gpe = GroupPartitionsExec(child,
-      expectedPartitionKeys = Some(Seq(keyOf(1) -> ExpectedKeyMode(2, false))))
+      expectedPartitionKeys = Some(Seq(keyOf(1) -> ExpectedKeyMode(2, None))))
     gpe.execute()
 
     assert(gpe.metrics("numInputPartitions").value === 2)
@@ -827,7 +826,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       InternalRowComparableWrapper(row(a), Seq(exprA))
     val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(1))))
     val gpe = GroupPartitionsExec(child,
-      expectedPartitionKeys = Some(Seq(keyOf(1) -> ExpectedKeyMode(1, true))))
+      expectedPartitionKeys = Some(Seq(keyOf(1) -> ExpectedKeyMode(1, Some(SPLIT_FOR_JOIN)))))
     gpe.execute()
 
     assert(gpe.metrics("numPartitions").value === 1)
@@ -848,7 +847,8 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       InternalRowComparableWrapper(row(a), Seq(exprA))
     val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(1), row(1))))
     val gpe = GroupPartitionsExec(child,
-      expectedPartitionKeys = Some(Seq(keyOf(1) -> ExpectedKeyMode(2, true, skewed = true))))
+      expectedPartitionKeys = Some(Seq(
+        keyOf(1) -> ExpectedKeyMode(2, Some(SPLIT_FOR_JOIN), skewed = true))))
     gpe.execute()
 
     assert(gpe.metrics("numPartitions").value === 2)
@@ -866,8 +866,8 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(1), row(2))))
     val gpe = GroupPartitionsExec(child,
       expectedPartitionKeys = Some(Seq(
-        keyOf(1) -> ExpectedKeyMode(2, true, skewed = true),
-        keyOf(2) -> ExpectedKeyMode(2, false))))
+        keyOf(1) -> ExpectedKeyMode(2, Some(SPLIT_FOR_JOIN), skewed = true),
+        keyOf(2) -> ExpectedKeyMode(2, Some(REPLICATED_FOR_JOIN)))))
     gpe.execute()
 
     // Key 1 spreads its 2 splits over its 2 expected partitions; key 2 replicates its single

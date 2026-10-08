@@ -25,7 +25,7 @@ import org.apache.spark.rdd.{CoalescedRDD, PartitionCoalescer, PartitionGroup, R
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.{IdentityReducer, KeyedPartitioning, KeyLayout, KeyReducer, Partitioning, PartitioningCollection, UngroupingOrigin, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{IdentityReducer, KeyedPartitioning, KeyLayout, KeyReducer, Partitioning, PartitioningCollection, REPLICATED_FOR_JOIN, UngroupingOrigin, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.execution.{SafeForKWayMerge, SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -63,15 +63,13 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  *                         is not join-specific.
  * @param expectedKeyModes The alignment's per-key reservation, one entry per expected key in the
  *                         order the planner listed them. The keys themselves live in `grouping`,
- *                         so this carries no second copy of them.
+ *                         so this carries no second copy of them, and the roles are what the layout
+ *                         this node reports is stamped with, one per partition. See
+ *                         [[ExpectedKeyMode]].
  * @param reducers Optional reducers to apply to partition keys for grouping compatibility. Kept as
  *                 reducers rather than as their display names. A name embeds the exprId of the
  *                 attribute it transforms, so it would break canonical equality the same way the
  *                 reducers do. See `doCanonicalize`.
- * @param ungroupingOrigin Why this node's output is left ungrouped on purpose, stamped into
- *                         the layout it reports. The routing is not read off it: each expected
- *                         key carries its own mode in `expectedKeyModes`, which a skew split sets
- *                         per key. See [[UngroupingOrigin]].
  * @param enableSortedMerge When true, uses [[SortedMergeCoalescedRDD]] to perform a k-way merge
  *                          of the coalesced partitions, preserving the child's output ordering
  *                          end-to-end. Set by [[EnsureRequirements]] when a parent operator
@@ -89,9 +87,15 @@ case class GroupPartitionsExec(
     @transient joinKeyPositions: Option[Seq[Int]],
     @transient expectedKeyModes: Option[Seq[ExpectedKeyMode]],
     @transient reducers: Option[Seq[Option[KeyReducer]]],
-    @transient ungroupingOrigin: Option[UngroupingOrigin],
     @transient enableSortedMerge: Boolean
   ) extends UnaryExecNode {
+
+  /**
+   * Whether each key's splits are distributed across its expected slots, or grouped into one
+   * partition per key first. Derived from the roles of the per-key reservations; see
+   * `ExpectedKeyMode`.
+   */
+  def distributePartitions: Boolean = expectedKeyModes.exists(_.exists(_.distribute))
 
   /**
    * The layout this node was planned to produce, but only while its child still reports the one it
@@ -154,12 +158,6 @@ case class GroupPartitionsExec(
   def groupedPartitions: Seq[(InternalRowComparableWrapper, Seq[Int])] = grouping.partitions
 
   @transient private lazy val hasCoalescing: Boolean = groupedPartitions.exists(_._2.size > 1)
-
-  // Whether any expected key puts this side in the distribute mode, for the plan summary and for
-  // tests that ask the node which role it took. Reads the constructor field only, like
-  // `planSummaryParts`. Without expected keys nothing aligns, so nothing spreads.
-  @transient lazy val distributePartitions: Boolean =
-    expectedKeyModes.exists(_.exists(_.distribute))
 
   // All values are computed on the driver by `grouping`, so they are reported through
   // `sendDriverMetrics` rather than task-side accumulators. Registration reads constructor
@@ -467,14 +465,14 @@ case class GroupPartitionsExec(
         }
         val positions = joinKeyPositions.fold(plannedInNewChild)(_.map(plannedInNewChild))
         // Only a grouping node reaches here today: the one caller (`CombineAdjacentAggregation`)
-        // regroups the node between two aggregates, which is built unstamped, so forwarding the
-        // origin preserves rather than claims. A stamped node would also need its expected slots
-        // re-derived, which this path does not do.
+        // regroups the node between two aggregates. The rebuilt node carries no reservations, so
+        // it claims nothing on its own, which is the answer for the unaligned grouping that path
+        // builds. An aligned node would also need its expected slots re-derived, which this path
+        // does not do.
         val regrouped = GroupPartitionsExec(
           child = newChild,
           joinKeyPositions = Option.when(positions != newChildKp.expressions.indices)(positions),
           reducers = reducers,
-          ungroupingOrigin = ungroupingOrigin,
           enableSortedMerge = enableSortedMerge)
         regrouped.copyTagsFrom(this)
         Some(regrouped)
@@ -543,19 +541,26 @@ private[sql] case class PartitionGrouping(
  * `grouping`.
  *
  * @param numSplits The number of output partitions reserved for the key, the same on both sides.
- * @param distribute This side's mode for the key. In the distribute mode (`true`), the side's
- *                   splits for the key are spread across the expected partitions, one split per
- *                   partition while the slots suffice and in contiguous chunks otherwise, padded
- *                   with empty ones; a single expected partition concatenates them instead, like
- *                   the other mode. In the replicate mode (`false`), all splits are concatenated
- *                   into one group and re-read by every expected partition. A partial clustering
- *                   sets this side-wide; a skew split sets it per key, which no side-wide flag
- *                   can express once both features spread on one side.
- * @param skewed Whether the count and mode of this key came from the skew-split decision, which
+ * @param origin Why this side's partitions for the key are left ungrouped, stamped into the layout
+ *               the node reports, or `None` where no producer aligned the key and the plain
+ *               grouping stands. The two spread roles leave the key's splits apart and the
+ *               repeating one groups them first, so the mode below follows from the role rather
+ *               than being carried beside it, which is what keeps a node's routing and its claim
+ *               from disagreeing. A partial clustering sets the side-wide role; a skew split sets
+ *               it per key, which no side-wide role can express once both features spread on one
+ *               side.
+ * @param skewed Whether the count and origin of this key came from the skew-split decision, which
  *               is what the skew metrics of [[GroupPartitionsExec]] count. The spreads the other
  *               producers reserve are not skew and leave it false.
  */
-case class ExpectedKeyMode(numSplits: Int, distribute: Boolean, skewed: Boolean = false)
+case class ExpectedKeyMode(
+    numSplits: Int,
+    origin: Option[UngroupingOrigin],
+    skewed: Boolean = false) {
+
+  /** Whether this side spreads the key's splits over its slots, rather than grouping them first. */
+  def distribute: Boolean = origin.exists(_ != REPLICATED_FOR_JOIN)
+}
 
 private[sql] object GroupPartitionsExec {
 
@@ -565,8 +570,7 @@ private[sql] object GroupPartitionsExec {
    * **Both are derived, and neither `copy` nor the generated `apply` re-derives them**, so a change
    * to `child`, `joinKeyPositions`, `expectedPartitionKeys` or `reducers` has to come back through
    * here. `enableSortedMerge` is not an input to either, which is why `tryEnableSortedMerge` may
-   * `copy` it. `ungroupingOrigin` is an input to the grouping, not to either of the two, since it
-   * is stamped into the layout as it stands.
+   * `copy` it.
    *
    * Two other `copy` calls in this file are deliberate. `withNewChildInternal` carries both fields
    * over a child rewrite, and a child that turns out to report something else is what
@@ -579,7 +583,6 @@ private[sql] object GroupPartitionsExec {
       joinKeyPositions: Option[Seq[Int]] = None,
       expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, ExpectedKeyMode)]] = None,
       reducers: Option[Seq[Option[KeyReducer]]] = None,
-      ungroupingOrigin: Option[UngroupingOrigin] = None,
       enableSortedMerge: Boolean = false): GroupPartitionsExec = {
     // There must be a `KeyedPartitioning` in the child's output partitioning, as a
     // `GroupPartitionsExec` node is added to a plan only in that case.
@@ -590,13 +593,13 @@ private[sql] object GroupPartitionsExec {
     // `representativeOf` found one, so the partitioning is an expression tree.
     val childExpr = childPartitioning.asInstanceOf[Partitioning with Expression]
     val grouping = computeGrouping(
-      childKp, joinKeyPositions, expectedPartitionKeys, reducers, ungroupingOrigin)
+      childKp, joinKeyPositions, expectedPartitionKeys, reducers)
     // The node persists the reservations without their keys: every consumer of the stored copy
-    // asks a count or a mode, and the keys are already in `grouping`.
+    // asks a count or a role, and the keys are already in `grouping`.
     val expectedKeyModes = expectedPartitionKeys.map(_.map(_._2))
     GroupPartitionsExec(child, grouping,
       computeOutputPartitioning(childExpr, grouping, joinKeyPositions, reducers), childPartitioning,
-      joinKeyPositions, expectedKeyModes, reducers, ungroupingOrigin, enableSortedMerge)
+      joinKeyPositions, expectedKeyModes, reducers, enableSortedMerge)
   }
 
   /**
@@ -670,8 +673,11 @@ private[sql] object GroupPartitionsExec {
   /**
    * Aligns partitions based on `expectedPartitionKeys` and per-key mode.
    *
-   * Returns the aligned groups, whether their keys ended up unique, and two counts, both in
-   * input partition reads relative to the baseline of every input being read exactly once.
+   * Returns the aligned groups, the role each of them is held in, whether their keys ended up
+   * unique, and two counts, both in input partition reads relative to the baseline of every input
+   * being read exactly once. The roles are one per group, taken as the groups are emitted, since a
+   * key's role covers exactly the slots emitted for it. They are `None` where any expected key
+   * carries no role, as a layout is one side of an alignment only as a whole.
    * The pruned count is the reads that never happen: inputs of a key the alignment never
    * references. The join proved such keys cannot produce output, e.g. an inner join keeps
    * only the intersection. Which keys are expected is orthogonal to the mode: an
@@ -691,8 +697,13 @@ private[sql] object GroupPartitionsExec {
     // Splits the alignment references, accumulated over the expected keys. Every producer of
     // `expectedPartitionKeys` deduplicates the keys, so no split is counted twice here.
     var numMatchedPartitions = 0
-    val alignedPartitions = expectedPartitionKeys.flatMap {
-      case (key, ExpectedKeyMode(numSplits, distribute, _)) =>
+    // The groups and the ungrouping origin each of them is held in come out of one walk: a key's
+    // origin covers exactly the slots emitted for it, so the claim lines up with the partitions
+    // position by position rather than being expanded from the modes a second time. One key the
+    // planner left without an origin leaves the node claiming nothing, since a layout is one side
+    // of an alignment only as a whole.
+    val (alignedPartitions, ungroupingOrigins) = expectedPartitionKeys.flatMap { case (key, mode) =>
+      val numSplits = mode.numSplits
       // Every producer derives the split counts from a `groupBy` size or the literal 1; a
       // non-positive count would emit a different partition count for the key than the other
       // side expects, breaking the pairing this alignment exists for.
@@ -700,7 +711,7 @@ private[sql] object GroupPartitionsExec {
       if (numSplits > 1) isGrouped = false
       val splits = keyMap.getOrElse(key, Seq.empty)
       numMatchedPartitions += splits.size
-      if (distribute) {
+      val groups = if (mode.distribute) {
         if (numSplits == 1) {
           // A single expected partition leaves nothing to spread over: the splits concatenate
           // into it, the same shape the replicate mode produces for the key.
@@ -721,11 +732,14 @@ private[sql] object GroupPartitionsExec {
         // Replicate all splits to each expected partition
         Seq.fill(numSplits)((key, splits))
       }
-    }
+      groups.map(group => group -> mode.origin)
+    }.unzip
     // The keyMap's groups partition the input indices between them, so the pruned inputs are the
     // total minus the matched.
     val numPrunedPartitions = numInputPartitions - numMatchedPartitions
-    (alignedPartitions, isGrouped, numPrunedPartitions, numReplicatedPartitionReads)
+    (alignedPartitions,
+      Option.when(ungroupingOrigins.forall(_.isDefined))(ungroupingOrigins.flatten),
+      isGrouped, numPrunedPartitions, numReplicatedPartitionReads)
   }
 
   /**
@@ -743,8 +757,7 @@ private[sql] object GroupPartitionsExec {
       childKp: KeyedPartitioning,
       joinKeyPositions: Option[Seq[Int]],
       expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, ExpectedKeyMode)]],
-      reducers: Option[Seq[Option[KeyReducer]]],
-      ungroupingOrigin: Option[UngroupingOrigin]): PartitionGrouping = {
+      reducers: Option[Seq[Option[KeyReducer]]]): PartitionGrouping = {
     // Project partition keys if join key positions are specified
     val (projectedDataTypes, projectedKeys) =
       joinKeyPositions.fold(
@@ -757,8 +770,8 @@ private[sql] object GroupPartitionsExec {
 
     val keyToPartitionIndices = reducedKeys.zipWithIndex.groupMap(_._1)(_._2)
 
-    val (partitions, isGrouped, numPrunedPartitions, numReplicatedPartitionReads) =
-      expectedPartitionKeys match {
+    val (partitions, ungroupingOrigins, isGrouped, numPrunedPartitions,
+        numReplicatedPartitionReads) = expectedPartitionKeys match {
         case Some(expected) =>
           alignToExpectedKeys(keyToPartitionIndices, expected, childKp.numPartitions)
         case None =>
@@ -768,7 +781,7 @@ private[sql] object GroupPartitionsExec {
           val keyOrdering = KeyedPartitioning.groupedKeyRowOrdering(reducedDataTypes)
           val sorted = keyToPartitionIndices.toSeq
             .sorted(keyOrdering.on((t: (InternalRowComparableWrapper, _)) => t._1.row))
-          (sorted, true, 0, 0)
+          (sorted, None, true, 0, 0)
       }
 
     // A projection that only reorders the key columns merges no key, but it still re-labels the
@@ -804,12 +817,10 @@ private[sql] object GroupPartitionsExec {
         case _ => false
       }
     // A `copy` of the child's layout rather than a fresh one, so the marker and anything the
-    // layout grows later are carried without this having to name them. The origin is the one
-    // field not carried: the output claims what this node's own producer stamped, never what
-    // the child's claimed, and only while the shape holds the claim -- a grouping that settles
-    // every key leaves nothing repeating, so it spends the claim the way `toGrouped` does.
-    // Built here, where the child is in scope, so `computeOutputPartitioning` has nothing left
-    // to re-apply.
+    // layout grows later are carried without this having to name them. The claim is the one field
+    // not carried: the output claims what this node's own producer stamped, never what the child's
+    // claimed, and only while the shape holds it -- a grouping that settles every key leaves
+    // nothing repeating, so it spends the claim the way `toGrouped` does.
     PartitionGrouping(
       partitions,
       childKp.layout.copy(
@@ -817,7 +828,7 @@ private[sql] object GroupPartitionsExec {
         dataTypes = reducedDataTypes,
         isGrouped = isGrouped,
         isCollapsed = isCollapsed,
-        ungroupingOrigin = if (isGrouped) None else ungroupingOrigin),
+        ungroupingOrigins = if (isGrouped) None else ungroupingOrigins),
       isIdentity, numPrunedPartitions, numReplicatedPartitionReads)
   }
 }

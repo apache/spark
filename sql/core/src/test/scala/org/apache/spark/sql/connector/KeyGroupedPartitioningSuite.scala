@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference,
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN}
+import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN, UngroupingOrigin}
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryBaseTable, InMemoryCatalystRuntimeFilterCatalog, InMemoryTable, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions._
@@ -8758,7 +8758,7 @@ class KeyGroupedPartitioningSuite
         g.expectedKeyModes.get.map(e => (e.numSplits, e.distribute, e.skewed))
       })
       assert(splitsAndModes ==
-          Seq(Seq((8, true, true), (1, false, false)), Seq((8, false, true), (1, false, false))),
+          Seq(Seq((8, true, true), (1, true, false)), Seq((8, false, true), (1, false, false))),
         s"left/right splits, modes and skew marks: $splitsAndModes")
 
       val expected = (1 to 8).map(n => Row(1, s"n$n", 42.0)) ++ Seq(Row(2, "cc", 11.0))
@@ -8809,7 +8809,7 @@ class KeyGroupedPartitioningSuite
         g.expectedKeyModes.get.map(e => (e.numSplits, e.distribute, e.skewed))
       })
       assert(splitsAndModes ==
-          Seq(Seq((8, true, true), (1, false, false)), Seq((8, false, true), (1, false, false))),
+          Seq(Seq((8, true, true), (1, true, false)), Seq((8, false, true), (1, false, false))),
         s"left/right splits, modes and skew marks: $splitsAndModes")
       assert(sides(1).head.metrics("numReplicatedPartitionReads").value === 7)
       assert(ValidateRequirements.validate(joins.head),
@@ -8840,7 +8840,7 @@ class KeyGroupedPartitioningSuite
           g.expectedKeyModes.get.map(e => (e.numSplits, e.distribute, e.skewed))
         })
         assert(splitsAndModes ==
-            Seq(Seq((3, true, true), (1, false, false)),
+            Seq(Seq((3, true, true), (1, true, false)),
               Seq((3, false, true), (1, false, false))),
           s"left/right splits, modes and skew marks: $splitsAndModes")
         assert(sides(1).head.metrics("numReplicatedPartitionReads").value === 2)
@@ -8939,6 +8939,73 @@ class KeyGroupedPartitioningSuite
       assert(groupings.size == 4, s"two aligned groupings per join:\n$plan")
       assert(groupings.forall(_.expectedKeyModes.exists(_.exists(_.skewed))),
         s"both joins re-split the skewed key on both sides:\n$plan")
+    }
+  }
+
+  test("SPARK-59436: a split join's per-key roles carry into a second join") {
+    // join -> join, with the skew pulling the other way for each of two keys: the lower join
+    // spreads key 1 on its left and key 2 on its right, so neither of its sides takes one role
+    // as a whole, and the second join re-aligns that layout against a third table. The roles are
+    // what the pairing is judged on, read off the finished plan index by index.
+    createTable(items, itemsColumns, Array(identity("id"), identity("name")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      (1 to 8).map(n => s"(1, 'n$n', ${40.0 + n}, cast('2020-01-01' as timestamp))")
+        .mkString("", ", ", ", ") +
+      s"(2, 'cc', 10.0, cast('2020-01-01' as timestamp))")
+
+    // The mirror of the left side: one split for key 1 and eight for key 2.
+    createTable(purchases, purchasesColumns, Array(identity("item_id"), identity("price")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      (1 to 8).map(n => s"(2, $n.0, cast('2020-01-01' as timestamp))").mkString(", "))
+
+    val others = "others"
+    createTable(others,
+      Array(Column.create("item_id", LongType), Column.create("tag", StringType)),
+      Array(identity("item_id")))
+    sql(s"INSERT INTO testcat.ns.$others VALUES (1, 'x'), (2, 'y')")
+
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false",
+        // Group counts: [9, 9], median 9, so the threshold is max(4, 9 * 0.5) = 4 and both keys
+        // are skewed, each from its own side.
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD.key -> "4",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key -> "0.5") {
+      val df = sql(s"SELECT /*+ MERGE(p), MERGE(o) */ i.id, i.name, p.price, o.tag " +
+        s"FROM testcat.ns.$items i " +
+        s"JOIN testcat.ns.$purchases p ON p.item_id = i.id " +
+        s"JOIN testcat.ns.$others o ON o.item_id = i.id")
+      val expected = (1 to 8).map(n => Row(1, s"n$n", 42.0, "x")) ++
+        (1 to 8).map(n => Row(2, "cc", n.toDouble, "y"))
+      checkAnswer(df, expected)
+
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val joins = collect(plan) { case j: ShuffledJoin => j }
+      assert(joins.size == 2, s"expected two joins in\n$plan")
+      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
+      assert(collectAllGroupPartitions(plan).forall(
+        _.expectedKeyModes.exists(_.exists(_.skewed))),
+        s"both joins re-split a skewed key on both sides:\n$plan")
+
+      // The lower join reads the tables, and its sides take a different role per key: the left
+      // spreads key 1 and repeats key 2, the right the other way round, so neither side is one
+      // role throughout.
+      def rolesOf(side: SparkPlan): Seq[UngroupingOrigin] =
+        keyedPartitioningsOf(Seq(side)).headOption.flatMap(_.ungroupingOrigins).getOrElse(
+          fail(s"expected a layout stamped with roles on\n${side.treeString}"))
+      val lower = joins.find(j => !j.children.exists(_.exists(_.isInstanceOf[ShuffledJoin])))
+        .getOrElse(fail(s"expected the join over the tables in\n$plan"))
+      val leftRoles = rolesOf(lower.left)
+      val rightRoles = rolesOf(lower.right)
+      assert(leftRoles.distinct.length == 2,
+        s"the left spreads one key and repeats the other, got $leftRoles")
+      assert(leftRoles.zip(rightRoles).forall { case (l, r) =>
+        Set(l, r) == Set(SPLIT_FOR_JOIN, REPLICATED_FOR_JOIN) },
+        s"one side spreads each key and the other repeats it, got $leftRoles against $rightRoles")
     }
   }
 
@@ -9173,7 +9240,7 @@ class KeyGroupedPartitioningSuite
         g.expectedKeyModes.get.map(e => (e.numSplits, e.distribute, e.skewed))
       })
       assert(splitsAndModes ==
-          Seq(Seq((8, true, true), (1, false, false), (1, false, false)),
+          Seq(Seq((8, true, true), (1, true, false), (1, true, false)),
             Seq((8, false, true), (1, false, false), (1, false, false))),
         s"left/right splits, modes and skew marks: $splitsAndModes")
     }
@@ -9199,7 +9266,7 @@ class KeyGroupedPartitioningSuite
         g.expectedKeyModes.get.map(e => (e.numSplits, e.distribute, e.skewed))
       })
       assert(splitsAndModes ==
-          Seq(Seq((8, true, true), (1, false, false), (1, false, false)),
+          Seq(Seq((8, true, true), (1, true, false), (1, true, false)),
             Seq((8, false, true), (1, false, false), (1, false, false))),
         s"left/right splits, modes and skew marks: $splitsAndModes")
     }
@@ -9308,7 +9375,7 @@ class KeyGroupedPartitioningSuite
         g.expectedKeyModes.get.map(e => (e.numSplits, e.distribute, e.skewed))
       })
       assert(splitsAndModes ==
-          Seq(Seq((8, false, true), (1, false, false), (1, false, false)),
+          Seq(Seq((8, false, true), (1, true, false), (1, true, false)),
             Seq((8, true, true), (1, false, false), (1, false, false))),
         s"left/right splits, modes and skew marks: $splitsAndModes")
       assert(sides(0).head.metrics("numReplicatedPartitionReads").value === 7)
@@ -10756,9 +10823,12 @@ class KeyGroupedPartitioningSuite
       // below it hold the two complementary stamps.
       val joins = collect(plan) { case j: ShuffledJoin => j }
       assert(joins.nonEmpty, s"test setup: a storage-partitioned chain:\n$plan")
-      assert(joins.forall(j => keyedPartitioningsOf(Seq(j)).forall(_.ungroupingOrigin.isEmpty)),
+      assert(joins.forall(j => keyedPartitioningsOf(Seq(j)).forall(_.ungroupingOrigins.isEmpty)),
         s"a zipped pair reports no claim of its own:\n$plan")
-      val origins = collectAllGroupPartitions(plan).flatMap(_.ungroupingOrigin).distinct
+      val origins = collectAllGroupPartitions(plan)
+        .flatMap(g => PartitioningCollection.representativeOf(g.outputPartitioning)
+          .flatMap(_.ungroupingOrigins).getOrElse(Nil))
+        .distinct
       assert(origins.contains(SPLIT_FOR_JOIN) && origins.contains(REPLICATED_FOR_JOIN),
         s"one side spreads and the other repeats, got $origins:\n$plan")
       assert(collect(df.queryExecution.executedPlan) { case r: AQEShuffleReadExec => r }
@@ -10932,12 +11002,12 @@ class KeyGroupedPartitioningSuite
       val joins = collect(plan) { case j: ShuffledJoin => j }
       assert(joins.size == 1, s"test setup: one storage-partitioned join:\n$plan")
       assert(keyedPartitioningsOf(Seq(joins.head)).exists(k =>
-        !k.isGrouped && k.ungroupingOrigin.contains(SPLIT_FOR_JOIN)),
+        !k.isGrouped && k.ungroupingOrigins.exists(_.contains(SPLIT_FOR_JOIN))),
         s"test setup: the join reports its spread side verbatim:\n$plan")
       assert(collectAllGroupPartitions(plan).exists(g =>
         g.child.collectFirst { case _: SortMergeJoinExec => () }.isDefined &&
           (g.outputPartitioning match {
-            case k: KeyedPartitioning => k.isGrouped && k.ungroupingOrigin.isEmpty
+            case k: KeyedPartitioning => k.isGrouped && k.ungroupingOrigins.isEmpty
             case _ => false
           })),
         s"the aggregate's side is grouped over the join:\n$plan")

@@ -1070,10 +1070,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: KeyedPartitioning, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _), _),
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, right: KeyedPartitioning, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _), _),
             _) =>
           assert(left.expressions === Seq(bucket(4, exprB), bucket(8, exprC)))
           assert(right.expressions === Seq(bucket(4, exprC), bucket(8, exprB)))
@@ -1094,10 +1094,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: PartitioningCollection, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _), _),
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, right: KeyedPartitioning, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _), _),
             _) =>
           assert(left.partitionings.length == 2)
           assert(left.partitionings.head.isInstanceOf[KeyedPartitioning])
@@ -1129,10 +1129,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: PartitioningCollection, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _), _),
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, right: PartitioningCollection, _, _),
-                _, _, _, _, _, _, _, _), _),
+                _, _, _, _, _, _, _), _),
             _) =>
           assert(left.partitionings.length == 2)
           assert(left.partitionings.head.isInstanceOf[KeyedPartitioning])
@@ -2053,8 +2053,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         s"the unsorted keys are spread into order, got ${newChild.getClass.getSimpleName} " +
           s"with ${groupings.size} grouping nodes")
       assert(groupings.head.distributePartitions)
-      assert(groupings.head.ungroupingOrigin == Some(SPLIT_FOR_ORDERING))
       val layout = newChild.outputPartitioning.asInstanceOf[KeyedPartitioning]
+      assert(layout.ungroupingOrigins.exists(_.forall(_ == SPLIT_FOR_ORDERING)),
+        "every partition of the spread serves the ordering")
       assert(!layout.isGrouped)
       assert(layout.partitionKeys.map(_.row.getInt(0)) == Seq(1, 1, 2))
       // The spread serves the ordering it was built for...
@@ -2491,7 +2492,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       KeyedPartitioning(Seq(exprA, exprB), Seq(InternalRow(1, 1), InternalRow(1, 1))))
     val aligned = GroupPartitionsExec(leaf, expectedPartitionKeys = Some(Seq(
       InternalRowComparableWrapper(InternalRow(1, 1), Seq(exprA, exprB)) ->
-        ExpectedKeyMode(2, distribute = false))))
+        ExpectedKeyMode(2, None))))
     assert(aligned.expectedKeyModes.isDefined, "test setup: this is an aligned node")
 
     EnsureRequirements.withJoinKeyPositions(aligned, Seq(0)) match {
@@ -2529,7 +2530,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val leaf = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(1))))
     val inner = GroupPartitionsExec(leaf, expectedPartitionKeys = Some(Seq(
-      InternalRowComparableWrapper(InternalRow(1), Seq(exprA)) -> ExpectedKeyMode(2, false))))
+      InternalRowComparableWrapper(InternalRow(1), Seq(exprA)) -> ExpectedKeyMode(2, None))))
     assert(!inner.outputPartitioning.asInstanceOf[KeyedPartitioning].isGrouped,
       "precondition: the inner grouping reports a non-grouped partitioning")
     val ordering = Seq(SortOrder(exprA, Ascending))
@@ -2582,7 +2583,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         val gpe = GroupPartitionsExec(leaf,
           expectedPartitionKeys = Some(Seq(
             InternalRowComparableWrapper(InternalRow(1), Seq(expr)) ->
-              ExpectedKeyMode(splits, false))))
+              ExpectedKeyMode(splits, None))))
         SortExec(Seq(SortOrder(expr, Ascending)), global = false, gpe)
       }
       flags(SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None,
@@ -2631,14 +2632,14 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // `logicalLink`, which forces the fallback). A join type may duplicate one side, both, or
     // neither, and the stamps follow: a side that may not repeat groups instead, and a join type
     // that may repeat neither side builds no spread pair at all.
-    def stampsOf(smj: SparkPlan): Seq[(Option[UngroupingOrigin], Boolean)] =
+    def stampsOf(smj: SparkPlan): Seq[(Option[Seq[UngroupingOrigin]], Boolean)] =
       withSQLConf(
           SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
         EnsureRequirements.apply(smj).children.map { child =>
-          val gpe = child.collectFirst { case g: GroupPartitionsExec => g }.get
-          (gpe.ungroupingOrigin,
-            gpe.outputPartitioning.asInstanceOf[KeyedPartitioning].isGrouped)
+          val layout = child.collectFirst { case g: GroupPartitionsExec => g }.get
+            .outputPartitioning.asInstanceOf[KeyedPartitioning]
+          (layout.ungroupingOrigins.map(_.distinct), layout.isGrouped)
         }
       }
     def smj(joinType: JoinType, leftKeys: Seq[InternalRow],
@@ -2653,9 +2654,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // either side and a left outer join the right one, so both get one spread and one repeating
     // side.
     assert(stampsOf(smj(Inner, threeSplits, twoKeys)) ===
-      Seq((Some(SPLIT_FOR_JOIN), false), (Some(REPLICATED_FOR_JOIN), false)))
+      Seq((Some(Seq(SPLIT_FOR_JOIN)), false), (Some(Seq(REPLICATED_FOR_JOIN)), false)))
     assert(stampsOf(smj(LeftOuter, threeSplits, twoKeys)) ===
-      Seq((Some(SPLIT_FOR_JOIN), false), (Some(REPLICATED_FOR_JOIN), false)))
+      Seq((Some(Seq(SPLIT_FOR_JOIN)), false), (Some(Seq(REPLICATED_FOR_JOIN)), false)))
 
     // The mirrored left outer join picks the left side, which it may not duplicate: the spread
     // is skipped and both sides group.
@@ -2701,6 +2702,12 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
   // The split counts, per-key modes and skew marks both sides' `GroupPartitionsExec`s were
   // planned with, in merged key order.
+  /** The roles the aligned side over `child` reports, one per partition. */
+  private def rolesOf(child: SparkPlan): Option[Seq[UngroupingOrigin]] =
+    PartitioningCollection.representativeOf(child.outputPartitioning)
+      .getOrElse(fail(s"expected a keyed layout in\n${child.treeString}"))
+      .ungroupingOrigins
+
   private def splitsAndModes(child: SparkPlan): Seq[(Int, Boolean, Boolean)] = {
     val gpe = child.collectFirst { case g: GroupPartitionsExec => g }
       .getOrElse(fail(s"expected a GroupPartitionsExec in\n${child.treeString}"))
@@ -2782,7 +2789,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       val Seq(newLeft, newRight) = skewJoin(Inner,
         leftKeys = Seq.fill(10)(InternalRow(1)) ++ Seq(InternalRow(2)),
         rightKeys = Seq(InternalRow(1), InternalRow(2)))
-      assert(splitsAndModes(newLeft) === Seq((10, true, true), (1, false, false)))
+      assert(splitsAndModes(newLeft) === Seq((10, true, true), (1, true, false)))
       assert(splitsAndModes(newRight) === Seq((10, false, true), (1, false, false)))
       checkAlignedPair(newLeft, newRight)
     }
@@ -2801,7 +2808,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       val Seq(newLeft, newRight) = skewJoin(Inner,
         leftKeys = Seq.fill(10)(InternalRow(1)) ++ Seq(InternalRow(2)),
         rightKeys = Seq(InternalRow(1), InternalRow(2)))
-      assert(splitsAndModes(newLeft) === Seq((4, true, true), (1, false, false)))
+      assert(splitsAndModes(newLeft) === Seq((4, true, true), (1, true, false)))
       assert(splitsAndModes(newRight) === Seq((4, false, true), (1, false, false)))
       checkAlignedPair(newLeft, newRight)
     }
@@ -2841,7 +2848,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       val Seq(newLeft, newRight) = skewJoin(Inner,
         leftKeys = Seq(InternalRow(1), InternalRow(2)),
         rightKeys = Seq.fill(10)(InternalRow(1)) ++ Seq(InternalRow(2)))
-      assert(splitsAndModes(newLeft) === Seq((10, false, true), (1, false, false)))
+      assert(splitsAndModes(newLeft) === Seq((10, false, true), (1, true, false)))
       assert(splitsAndModes(newRight) === Seq((10, true, true), (1, false, false)))
       checkAlignedPair(newLeft, newRight)
     }
@@ -2891,15 +2898,13 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-59436: a skew split stamps one side of each role, so the pair validates") {
+  test("SPARK-59436: a skew split pairs per key, so a pair spreading opposite ways validates") {
     // The validator admits a deliberately ungrouped layout only through the pairing its
-    // producer's stamp vouches for, so a split pair owes one `SPLIT_FOR_JOIN` and one
-    // `REPLICATED_FOR_JOIN` side. Which side spreads can differ per key: here the left holds
-    // key 1's splits and the right key 2's, so the routing is per key while the stamp is one
-    // per node. The pairing reads the two stamps as a set, and the pair is sound for a key
-    // whichever side spreads it.
-    def originOf(side: SparkPlan): Option[UngroupingOrigin] =
-      side.collectFirst { case g: GroupPartitionsExec => g }.get.ungroupingOrigin
+    // producer's stamp vouches for, and the stamp is held per partition: here the left holds key
+    // 1's splits and the right key 2's, so each side spreads one key and repeats the other. A
+    // single role per node cannot describe that, and a pair read as one role per side would be
+    // refused as two spread sides; per key the roles are one of each, which is the soundness the
+    // pairing asks for.
     withSQLConf(
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> "true",
@@ -2914,16 +2919,20 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         .getOrElse(fail(s"expected the join back:\n${plan.treeString}"))
       val Seq(newLeft, newRight) = join.children
 
-      // Key 1 spreads on the left and key 2 on the right, so neither node routes one way.
+      // Key 1 spreads on the left and key 2 on the right, so neither node routes one way, and
+      // neither takes one role. Key 3's single slot is not skewed: it follows the side-wide
+      // alignment, which for a pair the skew split alone built names the left the spread side.
       assert(splitsAndModes(newLeft) ===
-        Seq((10, true, true), (10, false, true), (1, false, false)))
+        Seq((10, true, true), (10, false, true), (1, true, false)))
       assert(splitsAndModes(newRight) ===
         Seq((10, false, true), (10, true, true), (1, false, false)))
       checkAlignedPair(newLeft, newRight)
-
-      // The stamps, though, are one per node and pair the two sides.
-      assert(originOf(newLeft) === Some(SPLIT_FOR_JOIN))
-      assert(originOf(newRight) === Some(REPLICATED_FOR_JOIN))
+      assert(rolesOf(newLeft) === Some(
+        Seq.fill(10)(SPLIT_FOR_JOIN) ++ Seq.fill(10)(REPLICATED_FOR_JOIN) ++ Seq(SPLIT_FOR_JOIN)),
+        "the left spreads key 1, repeats key 2, and takes the side-wide role for key 3")
+      assert(rolesOf(newRight) === Some(
+        Seq.fill(10)(REPLICATED_FOR_JOIN) ++ Seq.fill(10)(SPLIT_FOR_JOIN) ++
+          Seq(REPLICATED_FOR_JOIN)))
       assert(ValidateRequirements.validate(plan),
         s"a split pair that agrees on its keys is accepted:\n${plan.treeString}")
     }
@@ -3046,7 +3055,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None,
           firstPass.head, firstPass(1))).children
       checkAlignedPair(firstPass.head, firstPass(1))
-      assert(splitsAndModes(secondLeft) === Seq((10, true, true), (1, false, false)))
+      assert(splitsAndModes(secondLeft) === Seq((10, true, true), (1, true, false)))
       assert(splitsAndModes(secondRight) === Seq((10, false, true), (1, false, false)))
       // The arrived groupings must be replaced, not stacked: the pair check allows exactly one
       // GroupPartitionsExec per side.
@@ -3063,7 +3072,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       val distributedSide = skewJoin(Inner,
         leftKeys = Seq.fill(10)(InternalRow(1)) ++ Seq(InternalRow(2)),
         rightKeys = Seq(InternalRow(1), InternalRow(2))).head
-      assert(splitsAndModes(distributedSide) === Seq((10, true, true), (1, false, false)),
+      assert(splitsAndModes(distributedSide) === Seq((10, true, true), (1, true, false)),
         "test setup: the left side holds the split")
 
       val distribution = ClusteredDistribution(Seq(exprA))
@@ -3226,8 +3235,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       outputPartitioning = KeyedPartitioning(
         Seq(exprA), Seq(InternalRow(1), InternalRow(1), InternalRow(2))))
     val keys = Seq(
-      InternalRowComparableWrapper(InternalRow(1), Seq(exprA)) -> ExpectedKeyMode(2, false),
-      InternalRowComparableWrapper(InternalRow(2), Seq(exprA)) -> ExpectedKeyMode(1, false))
+      InternalRowComparableWrapper(InternalRow(1), Seq(exprA)) -> ExpectedKeyMode(2, None),
+      InternalRowComparableWrapper(InternalRow(2), Seq(exprA)) -> ExpectedKeyMode(1, None))
     val gpe = GroupPartitionsExec(leaf, expectedPartitionKeys = Some(keys))
     assert(!gpe.outputPartitioning.asInstanceOf[KeyedPartitioning].isGrouped,
       "precondition: a partially clustered GroupPartitionsExec is not grouped")

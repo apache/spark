@@ -501,14 +501,20 @@ case object SPLIT_FOR_ORDERING extends UngroupingOrigin
  *                                 one, clears the markers first. That is precision, not the
  *                                 guarantee: without it the merge would spread the spurious
  *                                 marker onto the accurate side.
- * @param ungroupingOrigin Why the keys repeat on purpose, when a producer built them that way
- *                         rather than leaving them for the grouping node that would settle them.
- *                         A clustering refuses an ungrouped layout whatever this says: on its
- *                         own such a layout never holds a key's rows together. The two
- *                         alignment roles are read only where a pair is judged
- *                         (`KeyedPartitioning.pairsUngrouped`). An ordering pairs nothing,
- *                         which `None` and [[SPLIT_FOR_ORDERING]] answer.
- *                         See [[UngroupingOrigin]].
+ * @param ungroupingOrigins Why each partition's keys repeat on purpose, when a producer built
+ *                          them that way rather than leaving them for the grouping node that
+ *                          would settle them. One role per partition, aligned with
+ *                          `partitionKeys`. Per partition rather than per layout because a
+ *                          producer that spreads one key and repeats another is one side of one
+ *                          alignment in neither role as a whole: which side spreads a key is the
+ *                          alignment's per-key decision, and the pairing is judged index by
+ *                          index, so the role is held where it is read.
+ *                          A clustering refuses an ungrouped layout whatever this says: on its
+ *                          own such a layout never holds a key's rows together. The two
+ *                          alignment roles are read only where a pair is judged
+ *                          (`KeyedPartitioning.pairsUngrouped`, `rolesPair`). An ordering pairs
+ *                          nothing, which an empty claim and [[SPLIT_FOR_ORDERING]] answer.
+ *                          See [[UngroupingOrigin]].
  */
 
 case class KeyLayout(
@@ -517,7 +523,13 @@ case class KeyLayout(
     isGrouped: Boolean,
     isCollapsed: Boolean,
     mayContainUnknownPartitionKeys: Boolean = false,
-    ungroupingOrigin: Option[UngroupingOrigin] = None) {
+    ungroupingOrigins: Option[Seq[UngroupingOrigin]] = None) {
+
+  // The roles are read position by position against the keys, so a claim of another length
+  // would be one read past its end.
+  require(ungroupingOrigins.forall(_.length == partitionKeys.length),
+    s"A KeyLayout's ungroupingOrigins (${ungroupingOrigins.map(_.length)}) must hold one role " +
+      s"per partition key (${partitionKeys.length})")
 
   // The rows carry the types they are compared at, so the pair is checked against itself rather
   // than argued about. One row is enough: a layout's rows come from one wrapper factory, and the
@@ -707,7 +719,7 @@ case class KeyedPartitioning(
   def isGrouped: Boolean = layout.isGrouped
   def isCollapsed: Boolean = layout.isCollapsed
   def mayContainUnknownPartitionKeys: Boolean = layout.mayContainUnknownPartitionKeys
-  def ungroupingOrigin: Option[UngroupingOrigin] = layout.ungroupingOrigin
+  def ungroupingOrigins: Option[Seq[UngroupingOrigin]] = layout.ungroupingOrigins
 
   /** This partitioning over a changed layout, e.g. `withLayout(_.copy(isGrouped = false))`. */
   def withLayout(f: KeyLayout => KeyLayout): KeyedPartitioning = copy(layout = f(layout))
@@ -723,11 +735,13 @@ case class KeyedPartitioning(
    * and a partitioning can hold one key per split. And `dataTypes` has its naming erased, so
    * printing it would put a struct field name into a plan that appears nowhere in the query. A
    * field the layout grows is therefore a decision here, and the default is to print it: the plan
-   * string is the only place a reader sees why a marked partitioning still shuffles.
+   * string is the only place a reader sees why a marked partitioning still shuffles. The roles
+   * are one per partition, so they print as a `Seq` arg, which `maxFields` truncates, as the
+   * partition keys do.
    */
   override protected def stringArgs: Iterator[Any] =
     Iterator(expressions, partitionKeys, isGrouped, isCollapsed,
-      mayContainUnknownPartitionKeys) ++ ungroupingOrigin
+      mayContainUnknownPartitionKeys) ++ ungroupingOrigins.getOrElse(Nil)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): KeyedPartitioning =
@@ -828,7 +842,7 @@ case class KeyedPartitioning(
     val uniqueKeys = if (isGrouped) partitionKeys else partitionKeys.distinct
     // The keys are unique afterwards, so a reason to be ungrouped has been spent.
     withLayout(_.copy(partitionKeys = uniqueKeys.sorted(keyOrdering), isGrouped = true,
-      ungroupingOrigin = None))
+      ungroupingOrigins = None))
   }
 
   /**
@@ -929,10 +943,13 @@ case class KeyedPartitioning(
     // asks: an ungrouped layout answers it on the keys alone, whether a producer stamped it for
     // the ordering or nothing stamped it at all. The keys, though, have to ascend, and no
     // producer vouches for that on an unstamped layout, so the check is here. The two pairing
-    // roles answer no: they were built for a clustering, not for an ordering.
+    // roles answer no, whichever partitions of the layout carry them: they were built for a
+    // clustering, not for an ordering.
     case o: OrderedDistribution =>
       super.satisfies0(o) ||
-        (ungroupingOrigin.forall(_ == SPLIT_FOR_ORDERING) &&
+        // An unclaimed layout answers here too: a grouped one has an ordering of its own, and
+        // the keys are checked against the ordering below.
+        (layout.ungroupingOrigins.forall(_.forall(_ == SPLIT_FOR_ORDERING)) &&
           keysSatisfy(o) && keysSortedFor(o))
     // A clustering asks that rows sharing a cluster key share a partition, which an ungrouped
     // layout never gives on its own. Not even an alignment side: its claim is about the pair it
@@ -942,16 +959,18 @@ case class KeyedPartitioning(
   }
 
   /**
-   * Whether this layout may pair as it stands despite being ungrouped: a producer stamped it as
-   * one side of an alignment, and the pairing being judged is the one the stamp vouches for. The
-   * caller holds the other side, and `KeyedShuffleSpec.isCompatibleWith` is where the two roles
-   * are asked to complement. `satisfies` refuses this layout, and rightly so: on its own it does
-   * not hold a key's rows together, so every consumer but that pairing needs the node that
-   * settles it. The count is asked here as it is asked there, since this is an admission of the
-   * member as it stands.
+   * Whether this layout may pair as it stands despite being ungrouped: a producer stamped every
+   * partition of it with one of the two join roles, so the keys repeat for a pairing rather than
+   * for want of a grouping node. A partly stamped layout is not one side: the keys it leaves
+   * unclaimed are ones no producer vouched for, and the pairing asks each side position by
+   * position. The caller holds the other side, and `KeyedShuffleSpec.isCompatibleWith` is where
+   * the two sides' roles are asked to complement each other, index by index. `satisfies` refuses
+   * such a layout, and rightly so: on its own it does not hold a key's rows together, so every
+   * consumer but that pairing needs the node that settles it. The count is asked here as it is
+   * asked there, since this is an admission of the member as it stands.
    */
   private[sql] def pairsUngrouped(required: ClusteredDistribution): Boolean =
-    ungroupingOrigin.exists(r => r == SPLIT_FOR_JOIN || r == REPLICATED_FOR_JOIN) &&
+    ungroupingOrigins.exists(_.forall(r => r == SPLIT_FOR_JOIN || r == REPLICATED_FOR_JOIN)) &&
       required.requiredNumPartitions.forall(_ == numPartitions) &&
       keysSatisfy(required)
 
@@ -1192,9 +1211,14 @@ object KeyedPartitioning {
    */
   def concat(kps: Seq[KeyedPartitioning]): KeyedPartitioning = {
     val concatenatedKeys = kps.flatMap(_.partitionKeys)
-    val ungroupingOrigin = PartitioningCollection.concatUngrouping(kps.map(_.ungroupingOrigin))
+    // The merged layout describes more partitions than any member does, so only a role every
+    // member held throughout has anywhere to go, and it goes over the merged keys.
+    val ungroupingOrigins = PartitioningCollection
+      .concatUngrouping(kps.map(_.ungroupingOrigins.map(_.distinct)))
+      .filter(_.length == 1)
+      .map(roles => Seq.fill(concatenatedKeys.length)(roles.head))
     kps.head.withLayout(_.copy(
-      ungroupingOrigin = ungroupingOrigin,
+      ungroupingOrigins = ungroupingOrigins,
       partitionKeys = concatenatedKeys,
       // A child that has duplicates of its own puts them in the concatenation too, which answers
       // this without walking the keys.
@@ -1512,14 +1536,20 @@ object PartitioningCollection {
     representativeOf(partitioning).map(_.numPartitions)
 
   /**
-   * The origin every one of `origins` carries, for a carrier merging them into one layout: the
-   * claim survives a merge only where all members make the same one. A disagreement, or no member
-   * at all, agrees on nothing.
+   * The claim every one of `claims` makes, for a carrier merging them into one layout: the claim
+   * survives a merge only where all members make the same one. A disagreement, or no member at
+   * all, agrees on nothing.
+   *
+   * What a member's claim is, the caller decides. `fromPartitionings` merges layouts that describe
+   * the same partitions and hands the roles over as they stand, so a claim that shifts between
+   * keys is one no other member shares. `KeyedPartitioning.concat` merges layouts into a longer
+   * one and hands over the roles each member uses, since there only a role the member held
+   * throughout can be held again, and the members need not hold it over as many partitions.
    */
   private[sql] def concatUngrouping(
-      origins: Seq[Option[UngroupingOrigin]]): Option[UngroupingOrigin] =
-    origins.distinct match {
-      case Seq(role) => role
+      claims: Seq[Option[Seq[UngroupingOrigin]]]): Option[Seq[UngroupingOrigin]] =
+    claims.distinct match {
+      case Seq(claim) => claim
       case _ => None
     }
 
@@ -1640,15 +1670,15 @@ object PartitioningCollection {
     // joins) O(1) per level.
     // Interning below retypes the members that disagree with the agreed origin, and a retyped
     // claim would be one nothing built.
-    val concatUngrouping =
-      PartitioningCollection.concatUngrouping(representatives.map(_.layout.ungroupingOrigin))
+    val agreedUngroupingOrigins =
+      PartitioningCollection.concatUngrouping(representatives.map(_.layout.ungroupingOrigins))
     val canonicalLayout = representatives.map(_.layout)
       .find(l => l.isCollapsed == anyCollapsed &&
         l.mayContainUnknownPartitionKeys == anyUnknownKeys &&
-        l.ungroupingOrigin == concatUngrouping)
+        l.ungroupingOrigins == agreedUngroupingOrigins)
       .orElse(representatives.headOption.map(_.layout.copy(
         isCollapsed = anyCollapsed, mayContainUnknownPartitionKeys = anyUnknownKeys,
-        ungroupingOrigin = concatUngrouping)))
+        ungroupingOrigins = agreedUngroupingOrigins)))
       .orNull
 
     def intern(p: Partitioning): Partitioning = representativeOf(p) match {
@@ -2169,11 +2199,11 @@ case class KeyedShuffleSpec(
     // Here we check:
     //  1. both distributions have the same number of clustering keys
     //  2. both partitioning have the same number of partitions
-    //  3. where either side is ungrouped on purpose, the pair is one of each: the side that
-    //     spreads a key's splits (`SPLIT_FOR_JOIN`) and the side that repeats the group
-    //     (`REPLICATED_FOR_JOIN`). An unstamped ungrouped layout serves no clustering, so only
-    //     `compatibleAsIs` can offer one here, and its builder settles the side with a grouping
-    //     node.
+    //  3. where either side is ungrouped on purpose, the pair is one of each at every index: the
+    //     side that spreads that key's splits (`SPLIT_FOR_JOIN`) and the side that repeats its
+    //     group (`REPLICATED_FOR_JOIN`). An unstamped ungrouped layout serves no clustering, so
+    //     only `compatibleAsIs` can offer one here, and its builder settles the side with a
+    //     grouping node.
     //  4. partition expressions from both sides are compatible, which means:
     //    4.1 both sides have the same number of partition expressions
     //    4.2 for each pair of partition expressions at the same index, the corresponding
@@ -2187,10 +2217,11 @@ case class KeyedShuffleSpec(
     case otherSpec @ KeyedShuffleSpec(otherPartitioning, otherDistribution, _) =>
       distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == otherSpec.numPartitions &&
-        ((partitioning.ungroupingOrigin, otherPartitioning.ungroupingOrigin) match {
+        ((partitioning.ungroupingOrigins, otherPartitioning.ungroupingOrigins) match {
           case (None, None) => true
-          case (Some(l), Some(r)) =>
+          case (Some(left), Some(right)) => left.zip(right).forall { case (l, r) =>
             Set(l, r) == Set(SPLIT_FOR_JOIN, REPLICATED_FOR_JOIN)
+          }
           case _ => false
         }) &&
         areKeysCompatible(otherSpec, allowReduce = false) &&
