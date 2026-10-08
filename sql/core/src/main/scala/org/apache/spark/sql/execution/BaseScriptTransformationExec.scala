@@ -31,10 +31,28 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, JsonToStructs, Literal, StructsToJson, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{
+  Attribute,
+  AttributeSet,
+  BoundReference,
+  Cast,
+  Expression,
+  GenericInternalRow,
+  JsonToStructs,
+  Literal,
+  StructsToJson,
+  UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{
+  ArrayBasedMapBuilder,
+  ArrayData,
+  CharVarcharCodegenUtils,
+  CharVarcharUtils,
+  DateTimeUtils,
+  GenericArrayData,
+  IntervalUtils,
+  MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -61,6 +79,11 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   override def producedAttributes: AttributeSet = outputSet -- inputSet
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  // Bound at parse into the I/O schema under the query or persisted-view SQLConf.
+  // Do not re-read SQLConf: planning and task conf can differ from that captured mode.
+  private def standardCharVarcharSemantics: Boolean =
+    ioschema.standardCharVarcharSemantics
 
   override def doExecute(): RDD[InternalRow] = {
     val broadcastedHadoopConf =
@@ -201,7 +224,20 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   private lazy val outputFieldWriters: Seq[String => Any] = output.map { attr =>
     val converter = CatalystTypeConverters.createToCatalystConverter(attr.dataType)
     attr.dataType match {
-      case StringType => wrapperConvertException(data => data, converter)
+      case dt @ (_: CharType | _: VarcharType) =>
+        // Without standard semantics, no-SerDe scalar CHAR/VARCHAR stays unsupported
+        // (they extend StringType, so this case must come before `_: StringType`).
+        if (!standardCharVarcharSemantics) {
+          throw QueryExecutionErrors.scriptTransformWithoutSerdeUnsupportedTypeError(dt)
+        }
+        // Do not use the SerDe null-on-error wrapper; that would hide EXCEED_LIMIT_LENGTH.
+        (data: String) =>
+          if (data == ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
+            null
+          } else {
+            converter(data)
+          }
+      case _: StringType => wrapperConvertException(data => data, converter)
       case BooleanType => wrapperConvertException(data => data.toBoolean, converter)
       case ByteType => wrapperConvertException(data => data.toByte, converter)
       case BinaryType =>
@@ -241,6 +277,34 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         data => IntervalUtils.microsToDuration(
           IntervalUtils.castStringToDTInterval(UTF8String.fromString(data), start, end)),
         converter)
+      case dt @ (_: ArrayType | _: MapType | _: StructType)
+          if standardCharVarcharSemantics && CharVarcharUtils.hasCharVarchar(dt) =>
+        val physicalType = ScriptTransformationIOSchema.toUnboundedStringType(dt)
+        // JSON object keys are strings. Restore non-string keys inside the malformed
+        // wrapper, then apply CHAR/VARCHAR (and CHAR/VARCHAR map-key dedup) outside it.
+        val jsonType = ScriptTransformationIOSchema.toJsonMapKeyType(physicalType)
+        val tz = Some(conf.sessionLocalTimeZone)
+        val complexTypeFactory = JsonToStructs(
+          jsonType,
+          ioschema.outputSerdeProps.toMap,
+          Literal(null),
+          tz)
+        val restoreJsonKeys = if (jsonType.sameType(physicalType)) {
+          identity[Any] _
+        } else {
+          ScriptTransformationIOSchema.makeJsonToTargetRestorer(
+            jsonType, physicalType, tz)
+        }
+        val toDeclaredType = ScriptTransformationIOSchema.makeJsonToTargetRestorer(
+          physicalType, dt, tz)
+        val parser = wrapperConvertException(
+          data => restoreJsonKeys(
+            complexTypeFactory.nullSafeEval(UTF8String.fromString(data))),
+          identity)
+        (data: String) => {
+          val parsed = parser(data)
+          if (parsed == null) null else toDeclaredType(parsed)
+        }
       case _: ArrayType | _: MapType | _: StructType =>
         val complexTypeFactory = JsonToStructs(attr.dataType,
           ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
@@ -249,11 +313,11 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
       case dt =>
-        throw QueryExecutionErrors.outputDataTypeUnsupportedByNodeWithoutSerdeError(nodeName, dt)
+        throw QueryExecutionErrors.scriptTransformWithoutSerdeUnsupportedTypeError(dt)
     }
   }
 
-  // Keep consistent with Hive `LazySimpleSerde`, when there is a type case error, return null
+  // Match Hive `LazySimpleSerDe`: return null when a type cast fails.
   private val wrapperConvertException: (String => Any, Any => Any) => String => Any =
     (f: String => Any, converter: Any => Any) =>
       (data: String) => converter {
@@ -368,7 +432,8 @@ case class ScriptTransformationIOSchema(
     outputSerdeProps: Seq[(String, String)],
     recordReaderClass: Option[String],
     recordWriterClass: Option[String],
-    schemaLess: Boolean) extends Serializable {
+    schemaLess: Boolean,
+    standardCharVarcharSemantics: Boolean = false) extends Serializable {
   import ScriptTransformationIOSchema._
 
   val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
@@ -376,13 +441,115 @@ case class ScriptTransformationIOSchema(
 }
 
 object ScriptTransformationIOSchema {
+  private[sql] def toUnboundedStringType(dataType: DataType): DataType = {
+    dataType.transformRecursively {
+      case c: CharType => c.toStringType
+      case v: VarcharType => v.toStringType
+    }
+  }
+
+  // JSON object keys are always strings. Rewrite every map key, including nested maps.
+  // `transformRecursively` would stop at the first matching MapType and skip children.
+  private[sql] def toJsonMapKeyType(dataType: DataType): DataType = dataType match {
+    case ArrayType(et, n) => ArrayType(toJsonMapKeyType(et), n)
+    case MapType(kt, vt, n) =>
+      val jsonKey = if (kt.isInstanceOf[StringType]) kt else StringType
+      MapType(jsonKey, toJsonMapKeyType(vt), n)
+    case StructType(fields) =>
+      StructType(fields.map(f => f.copy(dataType = toJsonMapKeyType(f.dataType))))
+    case other => other
+  }
+
+  /**
+   * Convert a Catalyst value from `sourceType` to `targetType`. `sourceType` is
+   * the parsed Catalyst type (unbounded STRING in place of CHAR/VARCHAR, and
+   * STRING map keys where JSON cannot preserve the declared key type).
+   * CHAR/VARCHAR leaves use write-side length checks. Maps rebuild through a
+   * fresh [[ArrayBasedMapBuilder]] when the source and target map types differ
+   * or the target contains CHAR/VARCHAR, so CHAR/VARCHAR key collisions follow
+   * MAP_KEY_DEDUP_POLICY. Same-typed maps without CHAR/VARCHAR are unchanged.
+   */
+  private[sql] def makeJsonToTargetRestorer(
+      sourceType: DataType,
+      targetType: DataType,
+      timeZoneId: Option[String]): Any => Any = {
+
+    def make(jt: DataType, tt: DataType): Any => Any = {
+      if (jt.sameType(tt) && !CharVarcharUtils.hasCharVarchar(tt)) {
+        identity
+      } else (jt, tt) match {
+        case (_, c: CharType) =>
+          (input: Any) =>
+            CharVarcharCodegenUtils.charTypeWriteSideCheck(
+              input.asInstanceOf[UTF8String], c.length)
+        case (_, v: VarcharType) =>
+          (input: Any) =>
+            CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
+              input.asInstanceOf[UTF8String], v.length)
+        case (ArrayType(jet, _), ArrayType(tet, _)) =>
+          val elem = make(jet, tet)
+          (input: Any) => {
+            val arr = input.asInstanceOf[ArrayData]
+            val n = arr.numElements()
+            val out = new Array[Any](n)
+            var i = 0
+            while (i < n) {
+              out(i) = if (arr.isNullAt(i)) null
+                else elem(arr.get(i, jet))
+              i += 1
+            }
+            new GenericArrayData(out)
+          }
+        case (MapType(jkt, jvt, _), MapType(tkt, tvt, _)) =>
+          val keyConvert = make(jkt, tkt)
+          val valRestore = make(jvt, tvt)
+          (input: Any) => {
+            val map = input.asInstanceOf[MapData]
+            val n = map.numElements()
+            val builder = new ArrayBasedMapBuilder(tkt, tvt)
+            var i = 0
+            while (i < n) {
+              val k = keyConvert(map.keyArray().get(i, jkt))
+              val v = if (map.valueArray().isNullAt(i)) null
+                else valRestore(map.valueArray().get(i, jvt))
+              builder.put(k, v)
+              i += 1
+            }
+            builder.build()
+          }
+        case (js: StructType, ts: StructType) =>
+          val restorers = js.fields.zip(ts.fields).map {
+            case (jf, tf) => make(jf.dataType, tf.dataType)
+          }
+          (input: Any) => {
+            val row = input.asInstanceOf[InternalRow]
+            val out = new GenericInternalRow(ts.length)
+            var i = 0
+            while (i < ts.length) {
+              if (row.isNullAt(i)) out.setNullAt(i)
+              else out.update(i,
+                restorers(i)(row.get(i, js(i).dataType)))
+              i += 1
+            }
+            out
+          }
+        case _ if !jt.sameType(tt) =>
+          val c = Cast(BoundReference(0, jt, nullable = false), tt, timeZoneId)
+          (input: Any) => c.eval(InternalRow(input))
+        case _ => identity
+      }
+    }
+
+    make(sourceType, targetType)
+  }
+
   val defaultFormat = Map(
     ("TOK_TABLEROWFORMATFIELD", "\u0001"),
     ("TOK_TABLEROWFORMATLINES", "\n"),
     ("TOK_TABLEROWFORMATNULL" -> "\\N")
   )
 
-  val defaultIOSchema = ScriptTransformationIOSchema(
+  def defaultIOSchema: ScriptTransformationIOSchema = ScriptTransformationIOSchema(
     inputRowFormat = Seq.empty,
     outputRowFormat = Seq.empty,
     inputSerdeClass = None,
@@ -391,7 +558,8 @@ object ScriptTransformationIOSchema {
     outputSerdeProps = Seq.empty,
     recordReaderClass = None,
     recordWriterClass = None,
-    schemaLess = false
+    schemaLess = false,
+    standardCharVarcharSemantics = SQLConf.get.charVarcharStandardSemantics
   )
 
   def apply(input: ScriptInputOutputSchema): ScriptTransformationIOSchema = {
@@ -404,6 +572,7 @@ object ScriptTransformationIOSchema {
       input.outputSerdeProps,
       input.recordReaderClass,
       input.recordWriterClass,
-      input.schemaLess)
+      input.schemaLess,
+      input.standardCharVarcharSemantics)
   }
 }

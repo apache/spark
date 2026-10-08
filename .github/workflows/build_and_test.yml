@@ -1222,6 +1222,7 @@ jobs:
           # https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories
           cpus: 2
           memory: 6144m
+          addons: metrics-server
       - name: Print K8S pods and nodes info
         run: |
           kubectl get pods -A

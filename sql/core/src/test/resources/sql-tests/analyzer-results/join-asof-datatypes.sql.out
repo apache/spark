@@ -225,7 +225,7 @@ ASOF JOIN (
   MATCH_CONDITION (t.k >= r.k)
 -- !query analysis
 Project [k#x.tag AS tag#x, k#x.inner_seq AS inner_seq#x]
-+- AsOfJoin (named_struct(inner_ts, k#x.inner_ts, inner_seq, k#x.inner_seq, tag, k#x.tag) >= named_struct(inner_ts, k#x.inner_ts, inner_seq, k#x.inner_seq, tag, k#x.tag)), Inner
++- AsOfJoin (k#x >= k#x), Inner
    :- SubqueryAlias t
    :  +- LocalRelation [k#x]
    +- SubqueryAlias r
@@ -241,7 +241,7 @@ ASOF JOIN VALUES (named_struct('x', 1, 'y', 9)) AS r(k)
   MATCH_CONDITION (t.k >= r.k)
 -- !query analysis
 Project [k#x.y AS matched#x]
-+- AsOfJoin (named_struct(a, k#x.a, b, k#x.b) >= named_struct(x, k#x.x, y, k#x.y)), Inner
++- AsOfJoin (k#x >= k#x), Inner
    :- SubqueryAlias t
    :  +- LocalRelation [k#x]
    +- SubqueryAlias r
@@ -257,7 +257,7 @@ ASOF JOIN VALUES
   MATCH_CONDITION (t.k >= r.k)
 -- !query analysis
 Project [k#x.a AS matched#xL]
-+- AsOfJoin (cast(named_struct(a, k#x.a) as struct<a:bigint>) >= named_struct(a, k#x.a)), Inner
++- AsOfJoin (cast(k#x as struct<a:bigint>) >= k#x), Inner
    :- SubqueryAlias t
    :  +- LocalRelation [k#x]
    +- SubqueryAlias r
