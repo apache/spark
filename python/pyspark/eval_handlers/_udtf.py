@@ -38,7 +38,7 @@ from pyspark.eval_handlers.utils import wrap_kwargs_support
 from pyspark.sql.conversion import ArrowBatchTransformer
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.types import Row, _create_row
+from pyspark.sql.types import ArrayType, DataType, MapType, Row, StructType, _create_row
 from pyspark.util import PythonEvalType
 
 if TYPE_CHECKING:
@@ -468,6 +468,110 @@ class ArrowUDTFWithPartition(PartitionedUDTF):
 
         # For non-RecordBatch arguments (like scalar pa.Arrays), return unchanged
         return arg
+
+
+def build_null_checker(return_type: StructType) -> Optional[Callable[[Any], None]]:
+    def raise_(result_column_index: int) -> None:
+        raise PySparkRuntimeError(
+            errorClass="UDTF_EXEC_ERROR",
+            messageParameters={
+                "method_name": "eval' or 'terminate",
+                "error": f"Column {result_column_index} within a returned row had a "
+                + "value of None, either directly or within array/struct/map "
+                + "subfields, but the corresponding column type was declared as "
+                + "non-nullable; please update the UDTF to return a non-None value at "
+                + "this location or otherwise declare the column type as nullable.",
+            },
+        )
+
+    def checker(data_type: DataType, result_column_index: int) -> Optional[Callable[[Any], None]]:
+        if isinstance(data_type, ArrayType):
+            element_checker = checker(data_type.elementType, result_column_index)
+            contains_null = data_type.containsNull
+
+            if element_checker is None and contains_null:
+                return None
+
+            def check_array(arr: Any) -> None:
+                if isinstance(arr, list):
+                    for e in arr:
+                        if e is None:
+                            if not contains_null:
+                                raise_(result_column_index)
+                        elif element_checker is not None:
+                            element_checker(e)
+
+            return check_array
+
+        elif isinstance(data_type, MapType):
+            key_checker = checker(data_type.keyType, result_column_index)
+            value_checker = checker(data_type.valueType, result_column_index)
+            value_contains_null = data_type.valueContainsNull
+
+            if value_checker is None and value_contains_null:
+
+                def check_map(map: Any) -> None:
+                    if isinstance(map, dict):
+                        for k, v in map.items():
+                            if k is None:
+                                raise_(result_column_index)
+                            elif key_checker is not None:
+                                key_checker(k)
+
+            else:
+
+                def check_map(map: Any) -> None:
+                    if isinstance(map, dict):
+                        for k, v in map.items():
+                            if k is None:
+                                raise_(result_column_index)
+                            elif key_checker is not None:
+                                key_checker(k)
+                            if v is None:
+                                if not value_contains_null:
+                                    raise_(result_column_index)
+                            elif value_checker is not None:
+                                value_checker(v)
+
+            return check_map
+
+        elif isinstance(data_type, StructType):
+            field_checkers = [checker(f.dataType, result_column_index) for f in data_type]
+            nullables = [f.nullable for f in data_type]
+
+            if all(c is None for c in field_checkers) and all(nullables):
+                return None
+
+            def check_struct(struct: Any) -> None:
+                if isinstance(struct, tuple):
+                    for value, checker, nullable in zip(struct, field_checkers, nullables):
+                        if value is None:
+                            if not nullable:
+                                raise_(result_column_index)
+                        elif checker is not None:
+                            checker(value)
+
+            return check_struct
+
+        else:
+            return None
+
+    field_checkers = [checker(f.dataType, result_column_index=i) for i, f in enumerate(return_type)]
+    nullables = [f.nullable for f in return_type]
+
+    if all(c is None for c in field_checkers) and all(nullables):
+        return None
+
+    def check(row: Any) -> None:
+        if isinstance(row, tuple):
+            for i, (value, checker, nullable) in enumerate(zip(row, field_checkers, nullables)):
+                if value is None:
+                    if not nullable:
+                        raise_(i)
+                elif checker is not None:
+                    checker(value)
+
+    return check
 
 
 class UDTFEvalTypeHandler(EvalTypeHandler[InputBatch, OutputBatch]):
