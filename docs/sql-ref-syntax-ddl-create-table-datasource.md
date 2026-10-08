@@ -38,7 +38,8 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ COMMENT table_comment ]
     [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
     [ DISTRIBUTED BY PARTITION ]
-    [ [ LOCALLY ] ORDERED BY ( write_order_field [ , ... ] ) | UNORDERED ]
+    [ [ LOCALLY ] ORDERED BY { ( write_order_field [ , ... ] ) | write_order_field [ , ... ] }
+        | UNORDERED ]
     [ AS select_statement ]
 ```
 
@@ -108,8 +109,9 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
 * **DISTRIBUTED BY PARTITION**
 
-    Requests that every write to the table be clustered by the table's partitioning, so each
-    partition is written by a single task rather than by every task that holds rows for it.
+    Requests that every write to the table be clustered by the table's partitioning, so the rows
+    of each partition are written by as few tasks as possible rather than by every task that holds
+    rows for it.
 
     Requires the table to actually be partitioned, with `PARTITIONED BY` or with
     `CLUSTERED BY ... INTO ... BUCKETS`. Note that `CLUSTER BY` -- a different clause from
@@ -134,10 +136,10 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
     no schema.
 
     The distribution decides how far the order reaches, and this clause picks one when
-    `DISTRIBUTED BY PARTITION` is absent: a bare `ORDERED BY` range-partitions each write, so the
-    order holds across the tasks of a write, not only within one, while `LOCALLY ORDERED BY` asks
-    for it to hold within each write task only, without a shuffle. `UNORDERED` on its own asks for
-    no distribution either.
+    `DISTRIBUTED BY PARTITION` is absent: a bare `ORDERED BY` asks for each write to be
+    range-partitioned, so that the order holds across the tasks of a write, not only within one,
+    while `LOCALLY ORDERED BY` asks for it to hold within each write task only, without a shuffle.
+    `UNORDERED` on its own asks for no distribution either.
 
     When `DISTRIBUTED BY PARTITION` is given it decides the distribution instead, and the order then
     holds within each write task. `LOCALLY` therefore adds nothing beside it, and `UNORDERED` beside

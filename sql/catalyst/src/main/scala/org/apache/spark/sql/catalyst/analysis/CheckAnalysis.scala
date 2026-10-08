@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
+import scala.util.Try
 
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonEvalType
@@ -991,12 +992,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                   "cols" -> badReferences.map(r => toSQLId(r)).mkString(", ")))
             }
 
-            // PreprocessTableCreation keeps an unresolvable ordering reference as is, so this is
-            // the only check that rejects it, also for analyzers that do not run that rule.
+            // PreprocessTableCreation keeps a reference to a missing column as is, so this is the
+            // only check that rejects it, also for analyzers that do not run that rule. A path
+            // through a non-struct field is missing too, although findNestedField throws for it.
             val badOrderingReferences = create.writeOrdering
               .flatMap(_.expression().references().map(_.fieldNames().toImmutableArraySeq))
               .distinct
-              .filter(create.tableSchema.findNestedField(_).isEmpty)
+              .filter(c => Try(create.tableSchema.findNestedField(c)).toOption.flatten.isEmpty)
 
             if (badOrderingReferences.nonEmpty) {
               create.failAnalysis(

@@ -96,11 +96,12 @@ public class TableInfo {
    * same capability and delivered the same way as {@link #writeDistributionMode()}.
    * <p>
    * A plain column is a {@link org.apache.spark.sql.connector.expressions.NamedReference}; any
-   * other key is a {@link Transform}, such as {@code bucket(16, id)}. Spark checks that each
-   * referenced column exists in the table schema, and the parser checks the arguments of
-   * {@code bucket}, {@code years}, {@code months}, {@code days} and {@code hours}. Spark does not
-   * check that a key is orderable or that any other transform accepts its arguments, so a catalog
-   * must reject a key it cannot honor.
+   * other key is a {@link Transform}, such as {@code bucket(16, id)}. Spark checks that each column
+   * a key references exists in the table schema, and the parser checks the argument kinds of the
+   * lowercase {@code bucket}, {@code years}, {@code months}, {@code days} and {@code hours}. It
+   * does not check that a key is orderable, that a bucket count is positive or that it lists a
+   * column, or the arguments of any other transform, so a catalog must reject a key it cannot
+   * honor.
    *
    * @since 4.4.0
    */
