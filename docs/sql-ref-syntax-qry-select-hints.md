@@ -174,35 +174,20 @@ SELECT /*+ BROADCAST(t1), MERGE(t1, t2) */ * FROM t1 INNER JOIN t2 ON t1.key = t
 
 ### Runtime Filter Hints
 
-A runtime filter prunes one side of a join using the join key values found on the other side, so
-rows that cannot match are discarded early. Spark decides on its own whether such a filter is worth
-building, based on estimates of how much data it would save. Runtime filter hints let users make
-that decision instead, for the cases where the estimates are unavailable or wrong.
+Runtime filter hints allow users to suggest which side of a join Spark should build a runtime
+filter from, to prune the other side. Spark decides on its own whether a runtime filter is worth
+building, based on statistics; the hint overrides that decision, but not the requirements that make
+the filter correct, so Spark is not guaranteed to follow it and issues a warning when it cannot.
 
 #### Runtime Filter Hints Types
 
 * **RUNTIME_FILTER**
 
     Suggests that Spark build a runtime filter from the hinted relation and use it to prune the
-    other side of the join. Use it when the hinted side is known to match only a small fraction
-    of the other side, but Spark does not choose a runtime filter on its own, typically because
-    table statistics are missing or misleading. The hinted side may be any relation or subquery,
-    and is never itself pruned. The hint does not choose how the pruning is done; Spark picks the
-    mechanism. `RUNTIME_FILTER` can be combined with a join strategy hint.
-
-The hint overrides Spark's cost estimates, but not the requirements that make a runtime filter
-correct, so Spark is not guaranteed to follow it. A side that join semantics forbid pruning is
-never pruned, e.g. the left side of a `LEFT OUTER` join, whose rows must all appear in the output.
-The hinted side must produce the same rows each time it is evaluated, since building the filter
-may evaluate it separately from the join; a side whose rows or join keys depend on evaluation
-order, such as a `LIMIT` without a unique ordering, a `TABLESAMPLE` without `REPEATABLE`, or a
-key computed by `first` or `last`, does not qualify. Building the filter may evaluate the hinted
-side once more, which is the cost the hint asks Spark to spend. A hint that cannot be applied does
-not make Spark build a filter in the opposite direction instead.
-
-Spark issues a warning with the reason when it cannot apply the hint. Hinting both sides of a join
-is ambiguous, since each side would then have to be built from the other; Spark warns and ignores
-the hint.
+    other side of the join. Use it when the hinted side matches only a small fraction of the other
+    side but Spark does not choose a runtime filter on its own, e.g. because table statistics are
+    missing or misleading. The hinted side must produce the same rows and join keys whenever it is
+    evaluated. `RUNTIME_FILTER` can be combined with a join strategy hint.
 
 #### Examples
 
