@@ -81,6 +81,20 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(scan(limited).getMetaData()("PushedLimit") == "LIMIT 2")
   }
 
+  test("tables in a catalog") {
+    withTable("columnar_range") {
+      sql(s"CREATE TABLE columnar_range USING $format OPTIONS (end 3, table 'catalog_write')")
+      // The options of the table are used by the scans of the table, unless a scan sets them.
+      checkAnswer(spark.table("columnar_range"), (0L until 3L).map(id => Row(id, s"name$id")))
+      checkAnswer(
+        spark.read.option("END", "2").table("columnar_range"),
+        (0L until 2L).map(id => Row(id, s"name$id")))
+
+      sql("INSERT INTO columnar_range VALUES (1, 'a')")
+      assert(TestColumnarSink.rows("catalog_write") == Seq((1L, "a")))
+    }
+  }
+
   test("batch write") {
     withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "3") {
       val table = "batch_write"
@@ -140,7 +154,7 @@ class TestRangeProvider extends TableProvider with DataSourceRegister {
       schema: StructType,
       partitioning: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    new ColumnarTable(shortName(), schema, new TestRangeDataSource(_))
+    new ColumnarTable(shortName(), schema, properties, new TestRangeDataSource(_))
   }
 
   override def supportsExternalMetadata(): Boolean = true

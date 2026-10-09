@@ -59,7 +59,8 @@ class NativeDataSourceV2 extends NamedTableProvider {
       partitioning: Array[Transform],
       properties: util.Map[String, String]): Table = {
     val (name, pkg) = resolved
-    new ColumnarTable(shortName, schema, options => new NativeDataSource(pkg, name, options))
+    new ColumnarTable(
+      shortName, schema, properties, options => new NativeDataSource(pkg, name, options))
   }
 
   override def supportsExternalMetadata(): Boolean = true

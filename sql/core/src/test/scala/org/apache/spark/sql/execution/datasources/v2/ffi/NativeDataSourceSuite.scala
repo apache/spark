@@ -366,6 +366,28 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }.toSet)
   }
 
+  nativeTest("tables in a catalog") {
+    val session = newSession(defaultPackage)
+    val dir = Utils.createTempDir()
+    try {
+      session.sql("CREATE TABLE native_range_table USING native_range OPTIONS (end 3)")
+      checkRows(session.table("native_range_table"), (0L until 3L).map(expectedRow))
+      checkRows(
+        session.read.option("end", "2").table("native_range_table"),
+        (0L until 2L).map(expectedRow))
+
+      session.sql("CREATE TABLE native_sink_table (id BIGINT, name STRING) USING native_sink " +
+        s"OPTIONS (path '${dir.getPath}')")
+      session.sql("INSERT INTO native_sink_table VALUES (1, 'a'), (2, 'b')")
+      val written = dir.listFiles().filter(_.getName.startsWith("part-"))
+        .flatMap(file => Files.readAllLines(file.toPath).asScala)
+      assert(written.toSet == Set("1,a", "2,b"))
+    } finally {
+      session.sql("DROP TABLE IF EXISTS native_range_table")
+      session.sql("DROP TABLE IF EXISTS native_sink_table")
+    }
+  }
+
   nativeTest("abort a failed write") {
     val session = newSession(defaultPackage)
     val dir = Utils.createTempDir()
