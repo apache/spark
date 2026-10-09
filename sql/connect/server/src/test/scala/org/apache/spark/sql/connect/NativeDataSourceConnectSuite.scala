@@ -54,15 +54,30 @@ class NativeDataSourceConnectSuite extends SparkConnectServerTest {
       assert(df.select("id").collect().map(_.getLong(0)).sorted.toSeq == Seq(0L, 1L, 2L))
 
       val dir = Utils.createTempDir()
-      session.range(2).selectExpr("id", "concat('v', id) AS name")
-        .write.format("native_sink").option("path", dir.getPath).mode("append").save()
-      assert(dir.listFiles().filter(_.getName.startsWith("part-"))
-        .flatMap(file => Files.readAllLines(file.toPath).asScala).toSet == Set("0,v0", "1,v1"))
+      session
+        .range(2)
+        .selectExpr("id", "concat('v', id) AS name")
+        .write
+        .format("native_sink")
+        .option("path", dir.getPath)
+        .mode("append")
+        .save()
+      assert(
+        dir
+          .listFiles()
+          .filter(_.getName.startsWith("part-"))
+          .flatMap(file => Files.readAllLines(file.toPath).asScala)
+          .toSet == Set("0,v0", "1,v1"))
 
       try {
         session.sql("CREATE TABLE native_connect_table USING native_range OPTIONS (end 2)")
-        assert(session.sql("SELECT id FROM native_connect_table").collect()
-          .map(_.getLong(0)).sorted.toSeq == Seq(0L, 1L))
+        assert(
+          session
+            .sql("SELECT id FROM native_connect_table")
+            .collect()
+            .map(_.getLong(0))
+            .sorted
+            .toSeq == Seq(0L, 1L))
       } finally {
         session.sql("DROP TABLE IF EXISTS native_connect_table")
       }
