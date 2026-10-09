@@ -23,8 +23,9 @@ import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskContext, Ta
 import org.apache.spark.executor.Executor
 import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
 import org.apache.spark.sql.catalyst.expressions.{And, BasePredicate, BloomFilterMightContain, BoundReference, Expression, Predicate}
+import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
 import org.apache.spark.util.Utils
 
 /**
@@ -202,6 +203,10 @@ object ParquetStorageFilter {
       "a storage filter must not have a key column named " +
         s"${ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME}, because the reader writes row " +
         "indexes over that column, so what it reads back depends on how its row group was read")
+    require(!keyFields.exists(f => f.name == FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME),
+      "a storage filter must not have a key column named " +
+        s"${FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME}, because the reader writes the rows " +
+        "it checked over that column")
 
     val indexMap = originalOrdinals.zipWithIndex.toMap
     val remapped = expr.transform {
@@ -209,6 +214,20 @@ object ParquetStorageFilter {
     }
 
     new ParquetStorageFilter(originalOrdinals.toArray, remapped, metrics, maxSplicedRowGroupBytes)
+  }
+
+  /**
+   * The index in `schema` of the column the reader marks the rows it checked in, or -1 when the
+   * scan has none, see `FileFormat.buildReaderWithStorageFilters`. The reader looks it up by name,
+   * as it does the row-index column, and writes booleans into it, so another type is a planner bug.
+   */
+  def checkedColumnIndex(schema: StructType): Int = {
+    val index = schema.fieldNames.indexOf(FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME)
+    if (index >= 0 && schema.fields(index).dataType != BooleanType) {
+      internalError(s"${FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME} must be a boolean " +
+        s"column, but it is ${schema.fields(index).dataType.catalogString}")
+    }
+    index
   }
 
   /**

@@ -42,10 +42,12 @@ import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.expressions.BasePredicate;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.execution.datasources.FileFormat;
 import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
@@ -92,6 +94,19 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  * The slots are swapped rather than copied into the persistent vectors on purpose. A copy would
  * pay a second value copy per surviving row, a byte copy for a variable-length key, where the
  * swap is one array write per key column per batch.
+ *
+ * <p>When the scan has the column {@code FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME}, this
+ * reader fills it, so the post-scan Filter skips the storage filter on the rows it checked. A batch
+ * never spans two row groups, so one value covers each batch:
+ * <ul>
+ *   <li>true for a row group the filter was applied to, whose rows are then exactly its survivors,
+ *       spliced or not;</li>
+ *   <li>false for a row group or a file the filter was given up on or declined for;</li>
+ *   <li>for a file with none of the key columns, true when the constant predicate kept it.</li>
+ * </ul>
+ * The slot holds a vector of this reader's own. A file holding a column of that name outside the
+ * relation's schema is not supported, see {@code FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME}. A
+ * primitive one is still never decoded, see {@link #suppliesOwnVector}.
  *
  * <p>What {@code FileSourceStrategy.storageFiltersFor} and {@code ParquetStorageFilter.create}
  * guarantee is asserted here, since a violation is a planner bug.
@@ -176,9 +191,10 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   /**
    * Whether {@code parquet.filter.columnindex.enabled} is false, so this file's page index must not
    * be used. That turns off phase 0 and every partial read. A wrong index would pair a row's key
-   * with another row's values, which the post-scan Filter cannot catch. Parquet's partial read does
-   * not check the conf itself. Read off {@link #readOptions}, so it agrees with the row count
-   * {@link #fileReader} reported.
+   * with another row's values, or return rows the filter rejects once splicing is given up. The
+   * post-scan Filter catches neither, since it takes the reader's mark on those rows. Parquet's
+   * partial read does not check the conf itself. Read off {@link #readOptions}, so it agrees with
+   * the row count {@link #fileReader} reported.
    */
   private boolean pageIndexDisabled;
 
@@ -198,6 +214,16 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   private boolean allKeysMissing;
   private WritableColumnVector[] keyScratchVectors;
   private ColumnarBatch keyScratchBatch;
+
+  /**
+   * The batch slot of the column this reader marks the rows it checked in, or -1 when the scan has
+   * none. Looked up by name, as the base looks up the row-index column.
+   */
+  private int checkedSlot = -1;
+  /** What {@link #checkedVector} says for every row of the next batch, see the class javadoc. */
+  private boolean rowsChecked;
+  /** The vector in the checked column's slot, or null when the scan has no such column. */
+  private WritableColumnVector checkedVector;
 
   /**
    * Splicing state. Phase 1 keeps the surviving key values it decoded, and the emit path splices
@@ -255,14 +281,22 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
       try {
         if (persistentBatchColumns != null) {
           // Through the persistent vectors rather than the emitted batch, whose key slots may hold
-          // survivor vectors the splicing state closes instead. Super then has no batch to close.
+          // survivor vectors the splicing state closes instead, and whose checked slot holds this
+          // reader's own vector. Super then has no batch to close.
           columnarBatch = null;
           closeAll(persistentBatchColumns);
           persistentBatchColumns = null;
           spliceBatchColumns = null;
         }
       } finally {
-        closeSplicingState();
+        try {
+          closeSplicingState();
+        } finally {
+          if (checkedVector != null) {
+            checkedVector.close();
+            checkedVector = null;
+          }
+        }
       }
     } finally {
       try {
@@ -299,23 +333,30 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   }
 
   /**
-   * Takes the vectors of the batch super built. For a file the filter is applied to row by row, it
-   * then hands out a batch of its own over a copy of that array, whose key slots the emit path
-   * rewrites in place, and allocates phase 1's key vectors. {@link ColumnarBatch} holds the array
-   * by reference, its staging row included, so rewriting a slot is what publishes it.
+   * Takes the vectors of the batch super built. For a file the filter is applied to row by row, or
+   * a scan with the checked column, it then hands out a batch of its own over a copy of that array.
+   * The emit path rewrites that batch's key slots in place, and its checked slot holds
+   * {@link #checkedVector}. Phase 1's key vectors are allocated only for a file the filter is
+   * applied to row by row. {@link ColumnarBatch} holds the array by reference, its staging row
+   * included, so rewriting a slot is what publishes it.
    *
    * <p>Every slot got a vector, key columns included. A spliced row group leaves a key slot's
-   * vector unused, and a row group that gave splicing up reads into it.
+   * vector unused, and a row group that gave splicing up reads into it. The checked slot's vector
+   * from super stays unused.
    */
   private void takeOverBatch() {
     persistentBatchColumns = new ColumnVector[columnarBatch.numCols()];
     for (int i = 0; i < persistentBatchColumns.length; i++) {
       persistentBatchColumns[i] = columnarBatch.column(i);
     }
-    if (keyColumns == null) return;
+    if (keyColumns == null && checkedSlot < 0) return;
     spliceBatchColumns = persistentBatchColumns.clone();
+    if (checkedSlot >= 0) {
+      checkedVector = newVector(DataTypes.BooleanType);
+      spliceBatchColumns[checkedSlot] = checkedVector;
+    }
     columnarBatch = new ColumnarBatch(spliceBatchColumns);
-    allocateKeyScratch();
+    if (keyColumns != null) allocateKeyScratch();
   }
 
   /**
@@ -324,7 +365,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
    *
    * <p>False skips the file, which then yields no rows. True, or an error, reads it the way a plain
    * scan would, under the same fail-open rule as a row's value, since the constant can be one the
-   * predicate throws on.
+   * predicate throws on. An error leaves the rows unchecked.
    */
   private void decideAllKeysMissingFile() {
     // Not closed, and must not be, since the vectors in it belong to the batch this reader emits.
@@ -334,6 +375,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     boolean keep;
     try {
       keep = predicate.eval(keyRow.getRow(0));
+      rowsChecked = keep;
     } catch (Throwable t) {
       giveUpOnError(t, FILE_GIVEN_UP_ON_EVALUATION, false);
       keep = true;
@@ -349,7 +391,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
    * plain reader does, and then points the emitted batch's key slots at this batch's vectors. A
    * spliced row group takes them from the head of the survivor queue, and any other row group from
    * the persistent vectors, which is what a row group following a spliced one needs. Non-key slots
-   * keep {@link #initBatch}'s vectors for the reader's life.
+   * keep {@link #initBatch}'s vectors for the reader's life. Last, it marks the batch's rows in the
+   * checked column.
    *
    * <p>The row-index column the base fills is never a key column, since
    * {@code ParquetStorageFilter.create} rejects its name. So it always lands in a persistent
@@ -379,12 +422,16 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
             publishedKeyVectors != null ? publishedKeyVectors[k] : persistentBatchColumns[slot];
       }
     }
+    if (checkedVector != null) {
+      checkedVector.putBooleans(0, columnarBatch.numRows(), rowsChecked);
+    }
     return true;
   }
 
   @Override
   protected void initializeInternal() throws IOException, UnsupportedOperationException {
     super.initializeInternal();
+    checkedSlot = ParquetStorageFilter.checkedColumnIndex(sparkRequestedSchema);
     initializeLateMaterialization();
   }
 
@@ -436,9 +483,12 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     // a file missing every projected non-key leaf, which also covers the row-index column. A struct
     // the file has, but none of whose requested fields it has, counts only under the legacy
     // `returnNullStructIfAllFieldsMissing`, since otherwise the clipped schema reads one of its
-    // other fields to tell a null struct from one whose requested fields are all null.
+    // other fields to tell a null struct from one whose requested fields are all null. The checked
+    // column is left out too, since a file column of its name is never decoded.
+    String checkedName = checkedSlot >= 0 ? FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME() : null;
     List<ColumnDescriptor> nonKey = requestedColumns.stream()
         .filter(column -> !keyTopLevelNames.contains(column.getPath()[0]))
+        .filter(column -> !column.getPath()[0].equalsIgnoreCase(checkedName))
         .toList();
     if (nonKey.stream().noneMatch(column -> fileSchema.containsPath(column.getPath()))) return;
     nonKeyColumns = nonKey;
@@ -595,6 +645,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
         m.rowsExcludedWithinRowGroup().add(baselineRows - finalRowCount);
       }
 
+      // The rows phase 2 read are exactly the survivors unless the filter was given up.
+      rowsChecked = !filterGivenUp;
       // Phase 2 read exactly these rows, so its readers are handed the ranges rather than left to
       // rebuild them from the store's one row index per row.
       installRowGroup(dataPages, readerRangesFor(finalRanges, finalRowCount, blockRowCount));
@@ -604,12 +656,14 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   }
 
   /**
-   * A spliced row group's key slots take their values from the survivor queue at emit, so phase 2
-   * reads no pages for them. Key columns are primitive, which is what the base class asks of a slot
-   * answered true here.
+   * The checked slot always holds this reader's own vector, so a primitive file column of that
+   * name, which a case-insensitive or user-given schema can match, is never decoded. A spliced row
+   * group's key slots take their values from the survivor queue at emit, so phase 2 reads no pages
+   * for them. Both are primitive, which is what the base class asks of a slot answered true here.
    */
   @Override
   protected boolean suppliesOwnVector(int slot) {
+    if (slot == checkedSlot) return true;
     if (!spliceCurrentRowGroup) return false;
     for (KeyColumn key : keyColumns) {
       if (key.batchSlot() == slot) return true;
@@ -694,7 +748,10 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   /**
    * Evaluates the storage filter over every row of a key-only {@link PageReadStore}, in
    * capacity-sized chunks, and returns the surviving rows as {@link RowRanges} in block-row
-   * coordinates. The result is a subset of {@code pushedFilterRanges}.
+   * coordinates. The result is exactly the rows the filter kept, within
+   * {@code pushedFilterRanges}. The checked column marks every row read over it true (see
+   * {@link #loadNextRowGroup}), so ranges that also covered rejected rows would need a mark per
+   * row.
    *
    * <p>While splicing, each survivor's key values are appended to the accumulators for the emit
    * path to splice, until the buffer passes its cap.
@@ -833,7 +890,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     // the vectors allocated so far reachable for `close()`, which walks this array element-wise.
     keyScratchVectors = new WritableColumnVector[keyColumns.length];
     for (int i = 0; i < keyColumns.length; i++) {
-      keyScratchVectors[i] = newKeyVector(i);
+      keyScratchVectors[i] = newVector(keyColumns[i].type());
     }
     // Missing key columns keep their batch vectors (see `keyVectorsFromBatch`), which the emitted
     // batch owns.
@@ -859,9 +916,8 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     return vectors;
   }
 
-  /** A capacity-sized vector for the i-th key column this file has, in the reader's memory mode. */
-  private WritableColumnVector newKeyVector(int keyIdx) {
-    DataType dt = keyColumns[keyIdx].type();
+  /** A capacity-sized vector in the reader's memory mode, like the rest of the batch. */
+  private WritableColumnVector newVector(DataType dt) {
     return MEMORY_MODE == MemoryMode.OFF_HEAP
         ? new OffHeapColumnVector(capacity, dt)
         : new OnHeapColumnVector(capacity, dt);
@@ -880,7 +936,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     // allocated so far reachable for `abandonSplicing`.
     currentKeyAccumulators = new WritableColumnVector[keyColumns.length];
     for (int i = 0; i < keyColumns.length; i++) {
-      currentKeyAccumulators[i] = newKeyVector(i);
+      currentKeyAccumulators[i] = newVector(keyColumns[i].type());
     }
   }
 
