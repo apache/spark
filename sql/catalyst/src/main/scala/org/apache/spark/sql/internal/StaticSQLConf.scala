@@ -464,6 +464,18 @@ object StaticSQLConf {
       .checkValue(_ >= 0, "The maximum total size must not be negative.")
       .createWithDefault(128 * 1024) // 128 KiB
 
+  val NATIVE_DATA_SOURCE_ENABLED =
+    buildStaticConf("spark.sql.dataSource.native.enabled")
+      .doc("When true, Spark finds and loads native data sources: data sources implemented in " +
+        "native code such as Rust or C++, and distributed as native data source packages " +
+        "(.sparkpkg files). A package is found when it is added with spark.addArtifact, or when " +
+        "it is under spark.sql.dataSource.native.paths. Loading a native data source runs its " +
+        "native code in the driver and executor processes.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val KAFKA_DISALLOWED_OPTIONS =
     buildStaticConf("spark.sql.kafka.disallowedOptions")
       .internal()

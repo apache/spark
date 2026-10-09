@@ -105,6 +105,18 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
                 messageParameters={"normalized_path": pyfile_path},
             )
 
+    def test_add_native_data_source_package(self):
+        # A new session, so that the package does not affect the other tests.
+        spark = self.spark.newSession()
+        with tempfile.TemporaryDirectory(prefix="test_add_native_data_source_package") as d:
+            package_path = os.path.join(d, "my_source.sparkpkg")
+            with open(package_path, "wb") as f:
+                f.write(b"package")
+            spark.addArtifact(package_path)
+            packages = spark._jsparkSession.artifactManager().getNativeDataSourcePackages()._1()
+            self.assertEqual(packages.size(), 1)
+            self.assertEqual(packages.head().getName(), "my_source.sparkpkg")
+
     def test_add_zipped_package(self):
         self.check_add_zipped_package(self.spark)
 

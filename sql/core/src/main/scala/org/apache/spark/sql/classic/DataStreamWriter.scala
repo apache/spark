@@ -40,8 +40,7 @@ import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldRefe
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
-import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2, NamedTableProvider}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.runtime.RealTimeModeAllowlist
 import org.apache.spark.sql.execution.streaming.sources._
@@ -283,7 +282,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
           None
         }
         provider match {
-          case p: PythonDataSourceV2 => p.setShortName(source)
+          case p: NamedTableProvider => p.setShortName(source)
           case _ =>
         }
         val table = DataSourceV2Utils.getTableFromProvider(
