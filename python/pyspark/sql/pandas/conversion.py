@@ -58,6 +58,25 @@ if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
 
+def _create_array_from_pandas(
+    series: "pd.Series",
+    arrow_type: Optional["pa.DataType"],
+    *,
+    mask: Optional["pd.Series"],
+    safecheck: bool,
+) -> Union["pa.Array", "pa.ChunkedArray"]:
+    import pyarrow as pa
+
+    if mask is None:
+        # The Arrow-array protocol can ignore type or force safe casts. Extract its
+        # result first, then cast explicitly to honor both the type and safecheck.
+        result = pa.Array.from_pandas(series, safe=safecheck)
+        if arrow_type is not None and result.type != arrow_type:
+            result = result.cast(arrow_type, safe=safecheck)
+        return result
+    return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
+
+
 def create_arrow_array_from_pandas(
     series: "pd.Series",
     spark_type: Optional[DataType],
@@ -65,7 +84,7 @@ def create_arrow_array_from_pandas(
     timezone: Optional[str] = None,
     safecheck: bool = False,
     prefers_large_types: bool = False,
-) -> "pa.Array":
+) -> Union["pa.Array", "pa.ChunkedArray"]:
     """
     Create an Arrow Array from the given pandas.Series and Spark type.
 
@@ -84,12 +103,10 @@ def create_arrow_array_from_pandas(
 
     Returns
     -------
-    pyarrow.Array
+    pyarrow.Array or pyarrow.ChunkedArray
     """
     import pandas as pd
-    import pyarrow as pa
 
-    from pyspark.loose_version import LooseVersion
     from pyspark.sql.pandas.types import _create_converter_from_pandas, to_arrow_type
 
     if isinstance(series.dtype, pd.CategoricalDtype):
@@ -115,23 +132,7 @@ def create_arrow_array_from_pandas(
     else:
         mask = series.isnull()
     try:
-        result = pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
-        # SPARK-46776: pyarrow < 19.0.0 ignores the requested ``type`` in the
-        # ``__arrow_array__`` protocol used by pyarrow-backed extension dtypes, so a
-        # ``string[pyarrow]`` series (backed by ``large_string`` since pandas 2.2.0) can
-        # come back as ``large_string`` even when ``string`` was requested, silently
-        # corrupting data on the JVM side. Cast back only for this exact (large_)string /
-        # (large_)binary offset-width mismatch; pyarrow >= 19.0.0 already honors the type.
-        if (
-            arrow_type is not None
-            and LooseVersion(pa.__version__) < LooseVersion("19.0.0")
-            and (
-                (pa.types.is_large_string(result.type) and pa.types.is_string(arrow_type))
-                or (pa.types.is_large_binary(result.type) and pa.types.is_binary(arrow_type))
-            )
-        ):
-            result = result.cast(arrow_type)
-        return result
+        return _create_array_from_pandas(series, arrow_type, mask=mask, safecheck=safecheck)
     except TypeError as e:
         error_msg = (
             "Exception thrown when converting pandas.Series (%s) "
