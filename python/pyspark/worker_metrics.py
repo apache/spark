@@ -27,8 +27,11 @@ class _WorkerTimer:
     """Measure one named duration and add each interval to the collector's task total.
 
     The collector owns the duration dictionary. This scope keeps a reference to it and a
-    start time for its current with block. Reuse the scope across sequential batches.
-    Nested scopes measure inclusive time, including their children.
+    start time for its current with block. Nested scopes measure inclusive time.
+
+    Repeatedly entering and exiting this context is costly: every interval reads the
+    clock twice and updates the duration dictionary. In a hot batch loop, accumulate
+    locally and call add_duration_ns once instead of entering this context per batch.
 
     Pipelined reads can overlap UDF work on another thread. An additive phase breakdown
     for that mode would require tracking those overlapping intervals.
@@ -55,6 +58,14 @@ class _WorkerTimer:
         self._block_start_ns = None
         self._shared_duration_totals_ns[self._metric_name] += elapsed_ns
         # Python supplies the exception arguments; returning None lets the error propagate.
+
+    def add_duration_ns(self, duration_ns: int) -> None:
+        """Flush a duration accumulated in local variables across a hot loop.
+
+        This updates the task-bound dictionary once when the loop ends, rather than
+        calling a timer scope and updating the dictionary for every batch.
+        """
+        self._shared_duration_totals_ns[self._metric_name] += duration_ns
 
 
 class WorkerMetrics:
@@ -105,7 +116,7 @@ class WorkerMetrics:
         self._values_in_report_units[name] = self._values_in_report_units.get(name, 0) + value
 
     def measure(self, name: str) -> _WorkerTimer:
-        """Create a named timing scope; entering it starts the clock."""
+        """Create a task-bound duration handle for with or add_duration_ns."""
         # Register zero so an empty supported task can still report this timing.
         self._duration_totals_ns.setdefault(name, 0)
         return _WorkerTimer(self._duration_totals_ns, name)
