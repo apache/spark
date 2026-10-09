@@ -162,6 +162,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.columnar.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.classic.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.datasource.*"), // Native data sources
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.jdbc.*"),

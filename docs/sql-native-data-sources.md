@@ -155,6 +155,7 @@ jni = "0.21"
 
 `src/lib.rs`:
 
+{% raw %}
 ```rust
 //! A native data source for Apache Spark, written in Rust. It reads the numbers [0, end) as a
 //! column `id`, in two partitions. The option `end` defaults to 10.
@@ -318,6 +319,7 @@ pub extern "system" fn Java_org_apache_spark_sql_datasource_NativeBridge_read(
     })
 }
 ```
+{% endraw %}
 
 Build the library, and package it:
 
@@ -340,6 +342,7 @@ EOF
 The same data source in C++, with [Arrow C++](https://arrow.apache.org/docs/cpp/), which exports
 schemas and streams with `arrow::ExportSchema` and `arrow::ExportRecordBatchReader`:
 
+{% raw %}
 ```cpp
 // A native data source for Apache Spark, written in C++ with Arrow C++. It reads the numbers
 // [0, end) as a column `id`, in two partitions. The option `end` defaults to 10.
@@ -463,6 +466,7 @@ SPARK_JNI(void, read)(JNIEnv* env, jclass, jbyteArray, jbyteArray partition,
   });
 }
 ```
+{% endraw %}
 
 Build the library, here on macOS with Arrow C++ 24, which requires C++20, and package it as above:
 
