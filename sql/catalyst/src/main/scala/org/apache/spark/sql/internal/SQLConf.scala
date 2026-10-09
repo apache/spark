@@ -2957,6 +2957,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val DATAFRAME_PIVOT_COLLAPSE_NON_MATCHING_ENABLED =
+    buildConf("spark.sql.pivot.collapseNonMatchingValues.enabled")
+      .doc("When true, the fast-path pivot (PivotFirst) collapses non-matching " +
+        "pivot column values into a single null group in the first aggregate, " +
+        "reducing the number of groups from O(distinct values) to O(1) per " +
+        "group-by key. Disable this if the child is already partitioned by the " +
+        "pivot column and the extra shuffle outweighs the group reduction.")
+      .version("5.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val DATAFRAME_PIVOT_MAX_VALUES = buildConf("spark.sql.pivotMaxValues")
     .doc("When doing a pivot without specifying values for the pivot column this is the maximum " +
       "number of (distinct) values that will be collected without error.")
@@ -9601,6 +9612,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
   def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
+
+  def dataFramePivotCollapseNonMatchingEnabled: Boolean =
+    getConf(DATAFRAME_PIVOT_COLLAPSE_NON_MATCHING_ENABLED)
 
   def dataFramePivotMaxValues: Int = getConf(DATAFRAME_PIVOT_MAX_VALUES)
 

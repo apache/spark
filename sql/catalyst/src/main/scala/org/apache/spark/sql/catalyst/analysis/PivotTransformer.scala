@@ -121,47 +121,61 @@ object PivotTransformer extends AliasHelper with SQLConfHelper {
         case _ =>
           newAlias(pivotColumn, Some("__pivot_col"))
       }
-      // SPARK-55569: Collapse non-matching pivot column values to null so the firstAgg produces
-      // at most one group per (groupBy-key, null) instead of one group per distinct non-matching
-      // value. PivotFirst ignores the null group, but the groupBy key is preserved in secondAgg,
-      // keeping the semantics identical to the un-optimized plan. This reduces the number of
-      // groups when the table has many distinct values outside the pivot IN list.
-      // Skip when the pivot column contains an aggregate (SPARK-24722) or when a NULL pivot
-      // value is present (non-matching rows would merge with legitimate null rows).
-      val hasNullPivotValue =
-        evalPivotValues.contains(null)
+      // SPARK-55569: Collapse non-matching pivot column values to null so
+      // the firstAgg produces at most one group per (groupBy-key, null)
+      // instead of one group per distinct non-matching value. PivotFirst
+      // ignores the null group, but the groupBy key is preserved in
+      // secondAgg, keeping the semantics identical to the un-optimized
+      // plan. The firstAgg aggregate inputs are also masked to null for
+      // non-matching rows, preventing overflow in the discarded null
+      // group under ANSI mode.
+      //
+      // Skip when: the config is disabled, the pivot column contains an
+      // aggregate (SPARK-24722), a NULL pivot value is present
+      // (non-matching rows would merge with legitimate null rows), or a
+      // NaN pivot value is present (In uses != which is always false for
+      // NaN, but PivotFirst uses EqualNullSafe which matches NaN).
       val canCollapse =
+        conf.dataFramePivotCollapseNonMatchingEnabled &&
         !pivotColumn.exists(_.isInstanceOf[AggregateFunction]) &&
-        !hasNullPivotValue
-      val effectivePivotCol = if (canCollapse) {
-        val castPivotExprs = pivotValues.map { value =>
-          Cast(value, pivotColumn.dataType,
+        !evalPivotValues.contains(null) &&
+        !evalPivotValues.exists {
+          case d: Double => d.isNaN
+          case f: Float => f.isNaN
+          case _ => false
+        }
+      val (effectivePivotCol, effectiveAggExps) = if (canCollapse) {
+        val matchesPivotValue = In(pivotColumn, pivotValues.map { v =>
+          Cast(v, pivotColumn.dataType,
             Some(conf.sessionLocalTimeZone))
-        }
-        val nonNullExprs = castPivotExprs
-          .zip(evalPivotValues)
-          .collect { case (expr, v) if v != null => expr }
-        val matchesPivotValue = if (nonNullExprs.nonEmpty) {
-          In(pivotColumn, nonNullExprs)
-        } else {
-          Literal.FalseLiteral
-        }
-        newAlias(
+        })
+        val collapsedCol = newAlias(
           If(matchesPivotValue, pivotColumn,
             Literal(null, pivotColumn.dataType)),
-          Some(namedPivotCol match {
-            case ne: NamedExpression => ne.name
-            case _ => "__pivot_col"
-          }))
+          Some(namedPivotCol.name))
+        // Mask aggregate inputs to null for non-matching rows so the
+        // merged null group never aggregates real measure values.
+        // This prevents ANSI overflow in the discarded group.
+        val maskedAggs = namedAggExps.map { namedAgg =>
+          val masked = namedAgg.transformDown {
+            case af: AggregateFunction =>
+              af.withNewChildren(af.children.map { c =>
+                If(matchesPivotValue, c, Literal(null, c.dataType))
+              })
+          }
+          newAlias(masked, Some(namedAgg.asInstanceOf[Alias]
+            .child.sql))
+        }
+        (collapsedCol, maskedAggs)
       } else {
-        namedPivotCol
+        (namedPivotCol, namedAggExps)
       }
       val extendedGroupingExpressions =
         groupByExpressions :+ effectivePivotCol
       val firstAgg =
         Aggregate(extendedGroupingExpressions,
-          extendedGroupingExpressions ++ namedAggExps, child)
-      val pivotAggregates = namedAggExps.map { a =>
+          extendedGroupingExpressions ++ effectiveAggExps, child)
+      val pivotAggregates = effectiveAggExps.map { a =>
         newAlias(
           PivotFirst(effectivePivotCol.toAttribute,
             a.toAttribute, evalPivotValues)
