@@ -198,6 +198,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
+  def pythonUDFRowSizeExceededError(
+      maxRowSize: Long, actualRowSize: Long): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UDF_LIMITS.ROW_SIZE",
+      messageParameters = Map(
+        "maxRowSize" -> maxRowSize.toString,
+        "actualRowSize" -> actualRowSize.toString))
+  }
+
   def divideByZeroError(context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
@@ -2450,14 +2459,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = cause)
   }
 
-  def outputDataTypeUnsupportedByNodeWithoutSerdeError(
-      nodeName: String, dt: DataType): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2265",
-      messageParameters = Map(
-        "nodeName" -> nodeName,
-        "dt" -> dt.getClass.getSimpleName),
-      cause = null)
+  def scriptTransformWithoutSerdeUnsupportedTypeError(
+      dt: DataType): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.TRANSFORM_WITHOUT_SERDE_TYPE",
+      messageParameters = Map("dataType" -> toSQLType(dt)))
   }
 
   def invalidStartIndexError(

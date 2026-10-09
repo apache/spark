@@ -853,6 +853,28 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
       s"missing class declaration:\n$wrapped")
   }
 
+  // ---------------- forEachJavaSpan ----------------
+
+  test("forEachJavaSpan: the spans of generated Java cover it, literals and comments apart") {
+    import CodeCompiler.JavaSpan.{Code, Comment, Literal => Quoted}
+    def spans(source: String): Seq[(CodeCompiler.JavaSpan, String)] = {
+      val found = scala.collection.mutable.ArrayBuffer.empty[(CodeCompiler.JavaSpan, String)]
+      CodeCompiler.forEachJavaSpan(source) { (kind, s, e) =>
+        found += ((kind, source.substring(s, e)))
+      }
+      assert(found.map(_._2).mkString === source)
+      found.toSeq
+    }
+    assert(spans("a(\"x\\\"/*\", '\\'') // c\nb /* d */ e") === Seq(
+      (Code, "a("), (Quoted, "\"x\\\"/*\""), (Code, ", "), (Quoted, "'\\''"), (Code, ") "),
+      (Comment, "// c"), (Code, "\nb "), (Comment, "/* d */"), (Code, " e")))
+    // Unterminated spans run to the end.
+    assert(spans("a /* b").map(_._1) === Seq(Code, Comment))
+    assert(spans("a \"b").map(_._1) === Seq(Code, Quoted))
+    assert(spans("a // b").map(_._1) === Seq(Code, Comment))
+    assert(spans("") === Nil)
+  }
+
   // ---------------- rewriteInnerClassRefs ----------------
 
   // Classloader used to resolve candidate type references in the tests below.

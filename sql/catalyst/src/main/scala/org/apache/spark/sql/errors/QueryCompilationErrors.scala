@@ -84,6 +84,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def charVarcharNotSupportedInPython(feature: String, dataType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+      messageParameters = Map("feature" -> feature, "data_type" -> dataType))
+  }
+
   def positionalAndNamedArgumentDoubleReference(
       routineName: String, parameterName: String): Throwable = {
     val errorClass =
@@ -1447,7 +1453,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def resourceTypeNotSupportedError(resourceType: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1079",
+      errorClass = "UNSUPPORTED_RESOURCE_TYPE_FOR_FUNCTION",
       messageParameters = Map("resourceType" -> resourceType))
   }
 

@@ -1047,6 +1047,12 @@
     },
     "sqlState" : "XX000"
   },
+  "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON" : {
+    "message" : [
+      "CHAR/VARCHAR is not supported in <feature>. Use STRING in the declaration. Data type: <data_type>."
+    ],
+    "sqlState" : "0A000"
+  },
   "CHECKPOINT_DIRECTORY_NOT_SET" : {
     "message" : [
       "Cannot checkpoint because no checkpoint directory is configured.",
@@ -8379,6 +8385,19 @@
     ],
     "sqlState" : "54011"
   },
+  "UDF_LIMITS" : {
+    "message" : [
+      "A UDF resource limit was exceeded."
+    ],
+    "subClass" : {
+      "ROW_SIZE" : {
+        "message" : [
+          "The projected input row size <actualRowSize> bytes exceeds the maximum allowed size <maxRowSize> bytes."
+        ]
+      }
+    },
+    "sqlState" : "54000"
+  },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
       "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF.",
@@ -9454,6 +9473,11 @@
           "TRANSFORM with SERDE is only supported in hive mode."
         ]
       },
+      "TRANSFORM_WITHOUT_SERDE_TYPE" : {
+        "message" : [
+          "TRANSFORM without SERDE does not support the output data type <dataType>."
+        ]
+      },
       "TRIM_COLLATION" : {
         "message" : [
           "TRIM specifier in the collation."
@@ -9647,6 +9671,12 @@
   "UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND" : {
     "message" : [
       "'<command>' is not supported in spark.sql(\"...\") API in Spark Declarative Pipeline."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_RESOURCE_TYPE_FOR_FUNCTION" : {
+    "message" : [
+      "Unsupported resource type '<resourceType>' for a function."
     ],
     "sqlState" : "0A000"
   },
@@ -10401,11 +10431,6 @@
   "_LEGACY_ERROR_TEMP_1072" : {
     "message" : [
       "Only the tables/views belong to the same database can be retrieved. Querying tables/views are <qualifiedTableNames>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1079" : {
-    "message" : [
-      "Resource Type '<resourceType>' is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_1080" : {
@@ -11752,11 +11777,6 @@
   "_LEGACY_ERROR_TEMP_2264" : {
     "message" : [
       "Subprocess exited with status <exitCode>. Error: <stderrBuffer>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2265" : {
-    "message" : [
-      "<nodeName> without serde does not support <dt> as output data type."
     ]
   },
   "_LEGACY_ERROR_TEMP_2266" : {
