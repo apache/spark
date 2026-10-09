@@ -197,6 +197,30 @@ class DirectGrpcDispatcherIntegrationSuite
     }
   }
 
+  test("SIGKILL of the forwarding launcher stops the inner worker") {
+    val launcher = ProcessCallable.newBuilder()
+      .addCommand(javaExecutable)
+      .addCommand("-cp")
+      .addCommand(javaClasspath)
+      .addCommand(classOf[ForwardingWorkerMain.type].getName.stripSuffix("$"))
+      .addAllCommand(echoRunner.getCommandList)
+      .build()
+    dispatcher = new DirectGrpcDispatcher(workerSpec(launcher))
+    val session = dispatcher.createSession(None)
+    val process = workerProcess(session)
+    val workers = process.process.descendants().iterator().asScala.toList
+    assert(workers.size == 1, s"the launcher should start one worker, got $workers")
+    val worker = workers.head
+    try {
+      session.init(basicInit)
+      process.process.destroyForcibly()
+      worker.onExit().get(10, TimeUnit.SECONDS)
+      assert(!worker.isAlive, s"SIGKILL of the launcher should stop worker ${worker.pid}")
+    } finally {
+      session.close(emptyCancel)
+    }
+  }
+
   test("the channel overrides the authority derived from the socket path") {
     dispatcher = new DirectGrpcDispatcher(workerSpec())
     val session = dispatcher.createSession(None)
