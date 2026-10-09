@@ -663,21 +663,7 @@ private[spark] class DAGScheduler(
       firstJobId: Int): ShuffleMapStage = {
     shuffleIdToMapStage.get(shuffleDep.shuffleId) match {
       case Some(stage) =>
-        // A pipelined shuffle is transient: it is a once-through live stream with no retained,
-        // addressable output, so reusing its producer stage across jobs is unsound (there is no
-        // durable output for a second job to read). Reuse must be prevented explicitly -- from the
-        // scheduler's view a shuffle-map stage can be reused unless something forbids it. If a
-        // pipelined dependency's shuffleId is already bound to a stage from a different job, that
-        // is the forbidden cross-job reuse; fail fast. (Within the same job the cached stage is the
-        // one we just created, so returning it is correct and not reuse.)
-        if (shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]] &&
-            !stage.jobIds.contains(firstJobId)) {
-          throw new SparkException(
-            errorClass = "PIPELINED_SHUFFLE_CROSS_JOB_REUSE",
-            messageParameters = scala.collection.immutable.Map(
-              "shuffleId" -> shuffleDep.shuffleId.toString),
-            cause = null)
-        }
+        checkPipelinedShuffleOwnership(shuffleDep, stage, firstJobId)
         stage
 
       case None =>
@@ -695,6 +681,27 @@ private[spark] class DAGScheduler(
         // Finally, create a stage for the given shuffle dependency.
         createShuffleMapStage(shuffleDep, firstJobId)
     }
+  }
+
+  private def checkPipelinedShuffleOwnership(
+      shuffleDep: ShuffleDependency[_, _, _], stage: ShuffleMapStage, jobId: Int): Unit = {
+    // A pipelined shuffle has no retained output for a second job to read. Returning a stage
+    // already owned by this job is safe, but availability cannot authorize cross-job reuse.
+    if (shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]] &&
+        !stage.jobIds.contains(jobId)) {
+      throw new SparkException(
+        errorClass = "PIPELINED_SHUFFLE_CROSS_JOB_REUSE",
+        messageParameters = scala.collection.immutable.Map(
+          "shuffleId" -> shuffleDep.shuffleId.toString),
+        cause = null)
+    }
+  }
+
+  private def checkBarrierStage(
+      rdd: RDD[_], resourceProfile: ResourceProfile, numTasks: => Int): Unit = {
+    checkBarrierStageWithDynamicAllocation(rdd)
+    checkBarrierStageWithNumSlots(rdd, resourceProfile)
+    checkBarrierStageWithRDDChainPattern(rdd, numTasks)
   }
 
   /**
@@ -724,9 +731,7 @@ private[spark] class DAGScheduler(
     val rdd = shuffleDep.rdd
     val (shuffleDeps, resourceProfiles) = getShuffleDependenciesAndResourceProfiles(rdd)
     val resourceProfile = mergeResourceProfilesForStage(resourceProfiles)
-    checkBarrierStageWithDynamicAllocation(rdd)
-    checkBarrierStageWithNumSlots(rdd, resourceProfile)
-    checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
+    checkBarrierStage(rdd, resourceProfile, rdd.getNumPartitions)
     checkPipelinedProducerSupported(shuffleDep)
     // Resolve the tracker that owns this shuffle's output, by dependency type (see
     // outputTrackerMaster). Resolve it up front, BEFORE any stage-map mutation below, so that a
@@ -819,8 +824,8 @@ private[spark] class DAGScheduler(
     new PipelinedShuffleUnsupportedException(reason)
 
   /**
-   * Fail-fast on producer-side idioms a pipelined shuffle cannot support, checked when the producer
-   * stage is created. A pipelined shuffle runs its producer and consumer stages concurrently over a
+   * Fail-fast on producer-side idioms a pipelined shuffle cannot support, checked before job
+   * registration and again at stage creation. A pipelined shuffle runs its member stages over a
    * transient, once-through stream that a group never recomputes in isolation (any failure aborts
    * the whole group), so mechanisms that recompute/roll back a single stage are moot, and features
    * that expose output only after a global barrier are incompatible with
@@ -830,7 +835,7 @@ private[spark] class DAGScheduler(
    * Group-level idioms are handled elsewhere, since they are properties of the group rather than a
    * single producer stage: fan-out (a producer with more than one consumer) and a group with a
    * non-default resource profile are rejected up front at job submission by
-   * `checkPipelinedGroupsSupportedInRDDGraph` (before any stage is created). A regular shuffle
+   * `checkPipelinedJobSupported` (before any stage is created). A regular shuffle
    * internal to a group does not arise for the all-pipelined job shape (groups are split at
    * regular-shuffle boundaries) and so is not checked.
    */
@@ -868,7 +873,7 @@ private[spark] class DAGScheduler(
       throw pipelinedUnsupportedError("push-based shuffle merge as a pipelined shuffle")
     }
     // A reliable RDD checkpoint in a member's within-stage chain (producer OR consumer side) is
-    // rejected in checkPipelinedGroupsSupportedInRDDGraph, at job submission before any stage is
+    // rejected in checkPipelinedJobSupported, at job submission before any stage is
     // created -- so a reject leaves no partial stage state and both chain sides are covered.
   }
 
@@ -980,9 +985,7 @@ private[spark] class DAGScheduler(
       callSite: CallSite): ResultStage = {
     val (shuffleDeps, resourceProfiles) = getShuffleDependenciesAndResourceProfiles(rdd)
     val resourceProfile = mergeResourceProfilesForStage(resourceProfiles)
-    checkBarrierStageWithDynamicAllocation(rdd)
-    checkBarrierStageWithNumSlots(rdd, resourceProfile)
-    checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
+    checkBarrierStage(rdd, resourceProfile, partitions.toSet.size)
     val parents = getOrCreateParentStages(shuffleDeps, jobId)
     val id = nextStageId.getAndIncrement()
     val stage = new ResultStage(id, rdd, func, partitions, parents, jobId,
@@ -1021,10 +1024,12 @@ private[spark] class DAGScheduler(
    * `visitor(rdd, enqueue)` where `enqueue` can be called to schedule additional RDDs for
    * traversal. If `visitor` returns `false`, the traversal stops immediately. Returns `true`
    * if the traversal completed normally, `false` if it was terminated early by the visitor.
+   * A supplied visited set lets multiple roots share a search with the same visitor.
    */
   private def traverseRDDGraphUntil(
-      rdd: RDD[_])(visitor: (RDD[_], RDD[_] => Unit) => Boolean): Boolean = {
-    val visited = new HashSet[RDD[_]]
+      rdd: RDD[_],
+      visited: HashSet[RDD[_]] = new HashSet[RDD[_]])(
+      visitor: (RDD[_], RDD[_] => Unit) => Boolean): Boolean = {
     val waitingForVisit = new ListBuffer[RDD[_]]
     waitingForVisit += rdd
     def enqueue(r: RDD[_]): Unit = waitingForVisit.prepend(r)
@@ -1040,17 +1045,19 @@ private[spark] class DAGScheduler(
     true
   }
 
-  /** Find ancestor shuffle dependencies that are not registered in shuffleIdToMapStage yet */
+  /** Find ancestor shuffle dependencies for which no stage has been registered or planned. */
   private def getMissingAncestorShuffleDependencies(
-      rdd: RDD[_]): ListBuffer[ShuffleDependency[_, _, _]] = {
+      rdd: RDD[_],
+      isRegistered: Int => Boolean = shuffleIdToMapStage.contains):
+      ListBuffer[ShuffleDependency[_, _, _]] = {
     val ancestors = new ListBuffer[ShuffleDependency[_, _, _]]
     traverseRDDGraph(rdd) { (toVisit, enqueue) =>
       val (shuffleDeps, _) = getShuffleDependenciesAndResourceProfiles(toVisit)
       shuffleDeps.foreach { shuffleDep =>
-        if (!shuffleIdToMapStage.contains(shuffleDep.shuffleId)) {
+        if (!isRegistered(shuffleDep.shuffleId)) {
           ancestors.prepend(shuffleDep)
           enqueue(shuffleDep.rdd)
-        } // Otherwise, the dependency and its ancestors have already been registered.
+        } // Otherwise, the dependency and its ancestors have already been registered or planned.
       }
     }
     ancestors
@@ -1086,11 +1093,14 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Traverses the given RDD and its ancestors within the same stage and checks whether all of the
-   * RDDs satisfy a given predicate.
+   * Traverses unvisited RDDs in the given RDD's within-stage ancestry and checks whether they all
+   * satisfy a given predicate.
    */
-  private def traverseParentRDDsWithinStage(rdd: RDD[_], predicate: RDD[_] => Boolean): Boolean = {
-    traverseRDDGraphUntil(rdd) { (toVisit, enqueue) =>
+  private def traverseParentRDDsWithinStage(
+      rdd: RDD[_],
+      predicate: RDD[_] => Boolean,
+      visited: HashSet[RDD[_]] = new HashSet[RDD[_]]): Boolean = {
+    traverseRDDGraphUntil(rdd, visited) { (toVisit, enqueue) =>
       if (!predicate(toVisit)) {
         false
       } else {
@@ -1368,15 +1378,15 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Reject group-level idioms a pipelined group cannot support, checked against the RDD graph
-   * BEFORE any stage is created -- so a rejection fails the job up front (via handleJobSubmitted's
+   * Reject unsupported producer, ownership, and group-level idioms for a pipelined result job.
+   * Checked against the RDD graph before any stage is created, so a rejection fails the job
+   * up front (via handleJobSubmitted's
    * listener.jobFailed) without leaving partial scheduler state behind, exactly like the
    * speculation check.
    *
    * Call only for a job that has a pipelined dependency (handleJobSubmitted gates on
    * hasPipelined): the resource-profile check below is not keyed on a pipelined dependency, so on a
-   * regular job it would reject an ordinary RDD.withResources(...) use. Throws
-   * PIPELINED_SHUFFLE_UNSUPPORTED on violation. Enforces:
+   * regular job it would reject an ordinary RDD.withResources(...) use. Enforces:
    *  - Fan-out: a pipelined producer feeding more than one consumer. 1:N is a supported model not
    *    yet built (it needs multicast to N live readers), so it is rejected for now. A
    *    PipelinedShuffleDependency's producer is `dep.rdd`; a "consumer" is any RDD that lists that
@@ -1396,10 +1406,14 @@ private[spark] class DAGScheduler(
    * (The remaining group-level case -- a regular shuffle internal to a group -- is a structural
    * invariant that does not arise for the prefix -> pipelined-group -> suffix shapes targeted here:
    * groups are split at regular-shuffle boundaries. The producer-side idioms -- barrier, DRA,
-   * indeterminate, checksum, push-merge -- are rejected in checkPipelinedProducerSupported at stage
-   * creation, where a producer-only throw leaves no partial state.)
+   * indeterminate, checksum, push-merge -- and existing-stage ownership are checked after these
+   * group-level restrictions, without registering any stages.)
+   *
+   * @throws PipelinedShuffleUnsupportedException for an unsupported pipelined idiom
+   * @throws SparkException for cross-job reuse or an invalid barrier stage
    */
-  private def checkPipelinedGroupsSupportedInRDDGraph(finalRDD: RDD[_]): Unit = {
+  private def checkPipelinedJobSupported(
+      finalRDD: RDD[_], partitions: Array[Int], jobId: Int): Unit = {
     // Walk the whole RDD graph once, collecting for each pipelined shuffleId the distinct consumer
     // RDDs that read it (for the fan-out check), the producer RDDs that write it (roots of producer
     // member stages), and every reliably-checkpointed RDD (to locate ones inside a member stage).
@@ -1457,25 +1471,93 @@ private[spark] class DAGScheduler(
     // Rooting the consumer check at each checkpointed RDD (rather than at the PSD-reading RDD) is
     // what makes it cover a checkpoint anywhere DOWNSTREAM in the consumer stage, not just on the
     // reading RDD itself.
-    def chainHasReliableCheckpoint(root: RDD[_]): Boolean =
-      !traverseParentRDDsWithinStage(root, (r: RDD[_]) =>
-        !r.checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]]))
-    val offending =
-      // CONSUMER side: a checkpointed RDD whose own within-stage chain reads a pipelined shuffle is
-      // inside a consumer member stage (covers a checkpoint anywhere in that stage, not just on the
-      // reading RDD). PRODUCER side: a producer root's within-stage chain carries a checkpoint.
-      reliablyCheckpointed.exists(rddChainReadsPipelinedShuffle) ||
-        producerRoots.exists(chainHasReliableCheckpoint)
+    val offending = reliablyCheckpointed.nonEmpty && {
+      // Shared ancestry is visited once per search, not once per root. The two searches need
+      // separate visited sets because they have different predicates, even when roots overlap.
+      val consumerVisited = new HashSet[RDD[_]]
+      val producerVisited = new HashSet[RDD[_]]
+      reliablyCheckpointed.exists(rdd => rddChainReadsPipelinedShuffle(rdd, consumerVisited)) ||
+        producerRoots.exists { root =>
+          !traverseParentRDDsWithinStage(
+            root, (r: RDD[_]) => !reliablyCheckpointed.contains(r), producerVisited)
+        }
+    }
     if (offending) {
       throw pipelinedUnsupportedError(
         "a reliable RDD checkpoint in a pipelined-group member's within-stage chain")
     }
+    checkPipelinedStageCreation(finalRDD, partitions, jobId)
   }
 
-  /** Whether `rdd`'s within-stage chain (parents, stopping at shuffle boundaries) reads through a
-   *  [[PipelinedShuffleDependency]] -- i.e. `rdd` is inside a pipelined CONSUMER member stage. */
-  private def rddChainReadsPipelinedShuffle(rdd: RDD[_]): Boolean = {
-    !traverseRDDGraphUntil(rdd) { (r, enqueue) =>
+  /** Validate the stages a native result job would create, without registering them. */
+  private def checkPipelinedStageCreation(
+      finalRDD: RDD[_], partitions: Array[Int], jobId: Int): Unit = {
+    val checkedShuffleIds = new HashSet[Int]
+    val pending = new ListBuffer[() => Unit]
+
+    def isRegistered(shuffleId: Int): Boolean =
+      checkedShuffleIds.contains(shuffleId) || shuffleIdToMapStage.contains(shuffleId)
+
+    def checkStage(rdd: RDD[_], numTasks: => Int): HashSet[ShuffleDependency[_, _, _]] = {
+      val (parents, profiles) = getShuffleDependenciesAndResourceProfiles(rdd)
+      val profile = mergeResourceProfilesForStage(profiles)
+      checkBarrierStage(rdd, profile, numTasks)
+      parents
+    }
+
+    def enqueueParents(parents: HashSet[ShuffleDependency[_, _, _]]): Unit = {
+      parents.toSeq.reverseIterator.foreach { dep =>
+        pending.prepend(() => checkShuffle(dep))
+      }
+    }
+
+    def checkNewStage(dep: ShuffleDependency[_, _, _]): Unit = {
+      val parents = checkStage(dep.rdd, dep.rdd.getNumPartitions)
+      checkPipelinedProducerSupported(dep)
+      outputTrackerMaster(dep)
+      pending.prepend(() => {
+        // Warm regular ancestors too, so native determinism does not recurse through a cold
+        // materialized prefix. This must happen after the parents have been checked.
+        dep.rdd.outputDeterministicLevel
+        checkedShuffleIds += dep.shuffleId
+        ()
+      })
+      enqueueParents(parents)
+    }
+
+    def checkShuffle(dep: ShuffleDependency[_, _, _]): Unit = {
+      if (!checkedShuffleIds.contains(dep.shuffleId)) {
+        shuffleIdToMapStage.get(dep.shuffleId) match {
+          case Some(stage) =>
+            checkPipelinedShuffleOwnership(dep, stage, jobId)
+          case None =>
+            pending.prepend(() => checkNewStage(dep))
+            val ancestors = getMissingAncestorShuffleDependencies(dep.rdd, isRegistered)
+            ancestors.reverseIterator.foreach { ancestor =>
+              pending.prepend(() => {
+                if (!isRegistered(ancestor.shuffleId)) {
+                  checkNewStage(ancestor)
+                }
+              })
+            }
+        }
+      }
+    }
+
+    // Preserve construction order: result barrier checks first, cached-stage ownership at the
+    // lookup frontier, then missing ancestors before descendants. In particular, checking a
+    // descendant's lazy determinism first could recursively evaluate an unwarmed shuffle chain.
+    // The explicit worklist also avoids recursive validation of shared shuffle ancestors.
+    enqueueParents(checkStage(finalRDD, partitions.toSet.size))
+    while (pending.nonEmpty) {
+      pending.remove(0)()
+    }
+  }
+
+  /** Whether an unvisited RDD in `rdd`'s within-stage ancestry reads a pipelined shuffle. */
+  private def rddChainReadsPipelinedShuffle(
+      rdd: RDD[_], visited: HashSet[RDD[_]] = new HashSet[RDD[_]]): Boolean = {
+    !traverseRDDGraphUntil(rdd, visited) { (r, enqueue) =>
       val readsPipelined = r.dependencies.exists {
         case _: PipelinedShuffleDependency[_, _, _] => true
         case _: ShuffleDependency[_, _, _] => false // regular boundary: not within this stage
@@ -2475,8 +2557,7 @@ private[spark] class DAGScheduler(
     }
     var finalStage: ResultStage = null
     try {
-      // Reject group-level unsupported pipelined idioms (e.g. fan-out, a non-default resource
-      // profile, a reliable checkpoint in a member stage) from the RDD graph, up front -- before
+      // Reject unsupported pipelined idioms and cross-job reuse from the RDD graph, before
       // any stage is created, so a rejection leaves no partial scheduler state. Gated on
       // hasPipelined: every idiom this checks concerns a pipelined group, so it must not run for a
       // job with no pipelined dependency (the resource-profile check in particular is not keyed on
@@ -2484,7 +2565,7 @@ private[spark] class DAGScheduler(
       // non-default profile via RDD.withResources). Inside this try so any incidental exception
       // from the graph walk is handled by the same listener.jobFailed path as stage creation.
       if (hasPipelined) {
-        checkPipelinedGroupsSupportedInRDDGraph(finalRDD)
+        checkPipelinedJobSupported(finalRDD, partitions, jobId)
       }
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
@@ -2527,7 +2608,7 @@ private[spark] class DAGScheduler(
         }
 
       case e: PipelinedShuffleUnsupportedException =>
-        // An up-front idiom rejection (checkPipelinedGroupsSupportedInRDDGraph / a producer-side
+        // An up-front idiom rejection (checkPipelinedJobSupported / a producer-side
         // check in createShuffleMapStage), not a stage-creation failure. Log it as such (the
         // generic "Creating new stage failed" message below would be misleading). Matched by TYPE,
         // not by the error-condition string, so a rename or a wrapped cause cannot misroute it.
@@ -2725,7 +2806,7 @@ private[spark] class DAGScheduler(
               // check here -- that would re-measure capacity against a mid-flight snapshot and is
               // unnecessary once admission is decided up front (gang admission). Group-level
               // idiom rejection (fan-out, internal regular shuffle) already happened at job
-              // submission (checkPipelinedGroupsSupportedInRDDGraph + the all-pipelined check).
+              // submission (checkPipelinedJobSupported + the all-pipelined check).
               logInfo(log"Submitting ${MDC(STAGE, stage)} concurrently with its running " +
                 log"pipelined producer(s) ${MDC(MISSING_PARENT_STAGES, pipelinedMissing)}")
               // Record that this stage is co-scheduled with still-running pipelined producers,
