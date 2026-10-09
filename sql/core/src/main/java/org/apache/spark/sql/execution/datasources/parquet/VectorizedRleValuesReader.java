@@ -62,6 +62,9 @@ public final class VectorizedRleValuesReader extends ValuesReader
   private int bytesWidth;
   private BytePacker packer;
 
+  // True if the page has no data at all, not even the bit width of its dictionary ids.
+  private boolean emptyPage;
+
   // Current decoding mode and values
   private MODE mode;
   private int currentCount;
@@ -96,6 +99,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
     this.in = in;
+    this.emptyPage = false;
     if (fixedWidth) {
       // Initialize for repetition and definition levels
       if (readLength) {
@@ -121,6 +125,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       } else {
         // No encoded values (e.g. an all-null page). Do not treat this as a bit width of 0,
         // which would decode every value as 0; any read fails in `readNextGroup` instead.
+        this.emptyPage = true;
         this.currentCount = 0;
         return;
       }
@@ -1000,6 +1005,10 @@ public final class VectorizedRleValuesReader extends ValuesReader
    */
   private void readNextGroup() {
     do {
+      if (emptyPage) {
+        throw new ParquetDecodingException(
+          "Corrupted RLE data: the page has no data, not even the bit width");
+      }
       if (bitWidth == 0 || in.available() <= 0) {
         throw new ParquetDecodingException(
           "Corrupted RLE data: reading past the end of the encoded values");

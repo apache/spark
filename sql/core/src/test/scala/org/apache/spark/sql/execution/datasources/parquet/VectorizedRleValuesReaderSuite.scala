@@ -435,20 +435,26 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
     val c = new OnHeapColumnVector(5, IntegerType)
     reader.readIntegers(0, c, 0)
     reader.skipIntegers(0)
-    interceptCorrupted(PastEnd)(reader.readIntegers(5, c, 0))
+    interceptCorrupted("the page has no data, not even the bit width") {
+      reader.readIntegers(5, c, 0)
+    }
   }
 
   test("SPARK-59832: runs of length 0 are skipped") {
     // [bit width 4][RLE run of 0 x 7][bit-packed run of 0 groups][RLE run of 5 x 3]
     val page = Array[Byte](4, 0, 7, 1, 10, 3)
-    val r1 = new VectorizedRleValuesReader()
-    r1.initFromPage(5, ByteBufferInputStream.wrap(ByteBuffer.wrap(page)))
-    assert((0 until 5).map(_ => r1.readInteger()) == Seq.fill(5)(3))
-    val r2 = new VectorizedRleValuesReader()
-    r2.initFromPage(5, ByteBufferInputStream.wrap(ByteBuffer.wrap(page)))
-    val c = new OnHeapColumnVector(5, IntegerType)
-    r2.readIntegers(5, c, 0)
-    assert((0 until 5).map(c.getInt) == Seq.fill(5)(3))
+    streams(page).foreach { in =>
+      val reader = new VectorizedRleValuesReader()
+      reader.initFromPage(5, in())
+      assert((0 until 5).map(_ => reader.readInteger()) == Seq.fill(5)(3))
+    }
+    streams(page).foreach { in =>
+      val reader = new VectorizedRleValuesReader()
+      reader.initFromPage(5, in())
+      val c = new OnHeapColumnVector(5, IntegerType)
+      reader.readIntegers(5, c, 0)
+      assert((0 until 5).map(c.getInt) == Seq.fill(5)(3))
+    }
   }
 
   test("SPARK-59832: reads that end exactly at the end of the encoded values succeed") {

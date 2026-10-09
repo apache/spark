@@ -28,6 +28,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.primitives.UnsignedLong
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 import org.apache.parquet.bytes.BytesUtils
@@ -2509,11 +2510,9 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
       val file = dir.listFiles().filter(_.getName.endsWith(".parquet")).head
       val bytes = Files.readAllBytes(file.toPath)
       val section = Array[Byte](3, 0, 0, 0, 0xC8.toByte, 0x01, 1)
-      val offsets = bytes.indices.filter { i =>
-        bytes.slice(i, i + section.length).sameElements(section)
-      }
-      assert(offsets.size == 1)
-      corrupt(bytes, offsets.head)
+      val offset = bytes.indexOfSlice(section)
+      assert(offset >= 0 && bytes.indexOfSlice(section, offset + 1) < 0)
+      corrupt(bytes, offset)
       Files.write(file.toPath, bytes)
       dir.listFiles().filter(_.getName.endsWith(".crc")).foreach(_.delete())
 
@@ -2530,7 +2529,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   }
 
   private def causes(e: Throwable): Seq[Throwable] =
-    Iterator.iterate(e)(_.getCause).takeWhile(_ != null).toSeq
+    ExceptionUtils.getThrowableList(e).asScala.toSeq
 
   /** Sets the 4-byte length at `offset` to Int.MaxValue, far more than the rest of the page. */
   private def setMaxLength(bytes: Array[Byte], offset: Int): Unit =
