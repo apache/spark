@@ -18,9 +18,11 @@
 package org.apache.spark.sql.execution.window
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Lag, Literal, MutableProjection, NamedExpression, NthValue, OffsetWindowFunction, SortOrder, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, GenericInternalRow, Lag, Literal, MutableProjection, NamedExpression, NthValue, OffsetWindowFunction, SortOrder, SpecificInternalRow, UnsafeProjection}
+import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
  * Tests for the window partition-size guard. Most frames track the per-row index and window
@@ -119,6 +121,49 @@ class WindowFunctionFrameSuite extends SparkFunSuite {
     // A single unsupported frame alongside supported ones is enough to reject.
     intercept[SparkException] {
       factory.check(maxRows + 1, lagFrame, unboundedPrecedingNthValueFrame)
+    }
+  }
+
+  /** A LAG(v, 1) frame whose cursor a test can move, to reach positions it cannot iterate to. */
+  private class SeekableLagFrame(result: SpecificInternalRow)
+    extends FrameLessOffsetWindowFunctionFrame(
+      result,
+      ordinal = 0,
+      Array[OffsetWindowFunction](Lag(attr, Literal(1), Literal(null, IntegerType), false)),
+      Seq[Attribute](attr),
+      newProjection,
+      offset = -1) {
+
+    def startCursorAt(index: Int): Unit = {
+      inputIndex = index
+    }
+  }
+
+  test("LAG keeps returning real rows when its cursor crosses Int.MaxValue") {
+    // `OffsetWindowFunctionFrameBase.inputIndex` is a `Long`. As an `Int` it would wrap negative
+    // after Int.MaxValue rows, `inputIndex >= 0` would turn false, and every later row would
+    // silently get the default value (NULL) instead of the lagged value. A partition that large
+    // cannot be built in a unit test, so use a small array that reports a length above
+    // Int.MaxValue and start the cursor just below the boundary.
+    val values = Seq(10, 20, 30, 40, 50)
+    val toUnsafeRow = UnsafeProjection.create(Array[DataType](IntegerType))
+    val rows = new ExternalAppendOnlyUnsafeRowArray(
+      null, null, null, null, 1024, 1L, 100, Long.MaxValue, 100, Long.MaxValue) {
+      override def length: Long = maxRows + 10
+    }
+    values.foreach(v => rows.add(toUnsafeRow(new GenericInternalRow(Array[Any](v)))))
+
+    val result = target
+    val frame = new SeekableLagFrame(result)
+    frame.prepare(rows)
+    frame.startCursorAt(Int.MaxValue - 1)
+
+    // The cursor is at Int.MaxValue - 1, Int.MaxValue, Int.MaxValue + 1 and Int.MaxValue + 2 for
+    // these four writes; the last two are past the boundary.
+    values.take(4).zipWithIndex.foreach { case (expected, i) =>
+      frame.write(i, InternalRow.empty)
+      assert(!result.isNullAt(0), s"write $i returned the default value")
+      assert(result.getInt(0) == expected, s"write $i")
     }
   }
 }
