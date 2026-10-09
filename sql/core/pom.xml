@@ -315,6 +315,19 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-udf-worker-grpc_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-udf-worker-grpc_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
@@ -386,6 +399,97 @@
               <sources>
                 <source>src/test/gen-java</source>
               </sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <!--
+        snowflake-jdbc 4.4.0 shades Woodstox and registers it as a StAX factory.
+        ScalaTest's forked JVM uses Maven's test classpath, so XMLInputFactory
+        then parses sql XML tests with Woodstox. Nested arrays come back with
+        _corrupt_record, and numeric inference changes. Point the test artifact
+        at a jar with those factory registrations removed. Shaded Woodstox
+        classes stay for Snowflake.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-snowflake-jdbc-for-stax-strip</id>
+            <phase>generate-test-resources</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>net.snowflake</groupId>
+                  <artifactId>snowflake-jdbc</artifactId>
+                  <version>${snowflake.jdbc.version}</version>
+                  <outputDirectory>${project.build.directory}/test-classpath</outputDirectory>
+                  <destFileName>snowflake-jdbc-${snowflake.jdbc.version}-original.jar</destFileName>
+                </artifactItem>
+              </artifactItems>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>strip-snowflake-stax-services</id>
+            <phase>generate-test-resources</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <target>
+                <zip destfile="${project.build.directory}/test-classpath/snowflake-jdbc-${snowflake.jdbc.version}-no-stax-services.jar">
+                  <zipfileset src="${project.build.directory}/test-classpath/snowflake-jdbc-${snowflake.jdbc.version}-original.jar"
+                              excludes="META-INF/services/javax.xml.stream.XMLInputFactory,META-INF/services/javax.xml.stream.XMLOutputFactory,META-INF/services/javax.xml.stream.XMLEventFactory"/>
+                </zip>
+              </target>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.gmavenplus</groupId>
+        <artifactId>gmavenplus-plugin</artifactId>
+        <version>4.2.0</version>
+        <dependencies>
+          <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy</artifactId>
+            <version>4.0.28</version>
+          </dependency>
+        </dependencies>
+        <executions>
+          <execution>
+            <id>use-stripped-snowflake-jar</id>
+            <phase>process-test-resources</phase>
+            <goals>
+              <goal>execute</goal>
+            </goals>
+            <configuration>
+              <scripts>
+                <script><![CDATA[
+                  def version = project.properties.getProperty("snowflake.jdbc.version")
+                  if (version == null) {
+                    throw new IllegalStateException("snowflake.jdbc.version is not set")
+                  }
+                  def strippedName = "snowflake-jdbc-" + version + "-no-stax-services.jar"
+                  def stripped = new File(project.build.directory, "test-classpath/" + strippedName)
+                  def artifact = project.artifacts.find { it.groupId == "net.snowflake" && it.artifactId == "snowflake-jdbc" }
+                  if (artifact == null) {
+                    throw new IllegalStateException("snowflake-jdbc is not resolved")
+                  }
+                  artifact.file = stripped
+                ]]></script>
+              </scripts>
             </configuration>
           </execution>
         </executions>
