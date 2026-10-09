@@ -363,4 +363,95 @@ class AutoCdcReservedColumnMaterializationSuite
       )
     )
   }
+
+  test("an already-materialized target's reserved-column nested casing is preserved for a " +
+    "case-sensitive downstream SELECT *") {
+    // Upgrade path at the nested level: the target already carries the reserved metadata column
+    // with its nested fields declared upper-cased (allowed under case-insensitive AUTO CDC).
+    // evolveTable merges that existing spelling in, so the read path must report the same nested
+    // casing, otherwise a case-sensitive downstream `SELECT *` plans the canonical lower-case
+    // nested names and cannot resolve the upper-case fields the target actually has.
+    val meta = AutoCdcReservedNames.cdcMetadataColName
+    val upperDel = Scd1BatchProcessor.cdcDeleteSequenceFieldName.toUpperCase(Locale.ROOT)
+    val upperUps = Scd1BatchProcessor.cdcUpsertSequenceFieldName.toUpperCase(Locale.ROOT)
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, " +
+      s"$meta STRUCT<$upperDel:BIGINT,$upperUps:BIGINT> NOT NULL)")
+
+    val metadataType = new StructType().add(upperDel, LongType).add(upperUps, LongType)
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType, nullable = false)
+      .add(meta, metadataType, nullable = false)
+
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 5L))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+        keys = Seq("id"), sequencing = functions.col("version")))
+      registerMaterializedView("copy", catalog = Some(catalog), database = Some(namespace),
+        sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "true"),
+        query = readFlowFunc(s"$catalog.$namespace.target"))
+    }
+    runPipeline(ctx)
+
+    def nestedNames(table: String): Seq[String] =
+      spark.table(table).schema(meta).dataType.asInstanceOf[StructType].fieldNames.toSeq
+    val targetNested = nestedNames(s"$catalog.$namespace.target")
+    val copyNested = nestedNames(s"$catalog.$namespace.copy")
+    assert(targetNested == Seq(upperDel, upperUps),
+      s"target should keep the declared upper-case nested names, got ${targetNested.mkString(",")}")
+    assert(copyNested == targetNested,
+      s"downstream copy nested ${copyNested.mkString(",")} should match " +
+        s"target ${targetNested.mkString(",")}")
+  }
+
+  test("an already-materialized target with upper-cased reserved nested fields rejects a " +
+    "data-only declaration that omits the metadata column") {
+    // Upgrade path, the omitted-declaration case at the nested level: the target already carries
+    // the reserved metadata column with upper-cased nested fields. The user adopts a data-only
+    // declaration and drops the column, so this run resolves the nested fields to their canonical
+    // lower-case names while the incremental merge keeps the existing upper-case ones. A
+    // case-sensitive downstream `SELECT *` could not match the two, so the run is rejected up front
+    // with the same actionable error used for the outer column.
+    val meta = AutoCdcReservedNames.cdcMetadataColName
+    val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
+    val upperDel = del.toUpperCase(Locale.ROOT)
+    val upperUps = Scd1BatchProcessor.cdcUpsertSequenceFieldName.toUpperCase(Locale.ROOT)
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, " +
+      s"$meta STRUCT<$upperDel:BIGINT,$upperUps:BIGINT> NOT NULL)")
+
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType, nullable = false)
+
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 5L))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+        keys = Seq("id"), sequencing = functions.col("version")))
+    }
+
+    val ex = intercept[RuntimeException] { runPipeline(ctx) }
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "AUTOCDC_INVALID_STATE.RESERVED_METADATA_COLUMN_CASING_DRIFT",
+      sqlState = Some("42000"),
+      parameters = Map(
+        "tableName" ->
+          fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)).unquotedString,
+        "existingColumnName" -> s"$meta.$upperDel",
+        "resolvedColumnName" -> s"$meta.$del"
+      )
+    )
+  }
 }

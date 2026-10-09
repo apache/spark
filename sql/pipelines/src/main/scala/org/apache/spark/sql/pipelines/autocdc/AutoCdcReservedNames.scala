@@ -104,7 +104,7 @@ private[pipelines] object AutoCdcReservedNames {
         engineReserved.find(ef => resolver(df.name, ef.name)) match {
           case Some(ef) =>
             usedEngineNames += ef.name
-            ef.copy(name = df.name)
+            reconcileReservedField(df, ef, resolver)
           case None => df
         }
       } else {
@@ -115,6 +115,48 @@ private[pipelines] object AutoCdcReservedNames {
     // Append engine-owned reserved fields the declaration omitted, in canonical form.
     val appended = engineReserved.filterNot(ef => usedEngineNames.contains(ef.name))
     StructType(rebuilt ++ appended)
+  }
+
+  /**
+   * Reconcile a declared reserved field against its engine-owned counterpart: keep the declared
+   * spelling, take the engine field's type and nullability. When both are structs -- the AUTO CDC
+   * metadata column is one -- recurse so the declared nested spelling and ordering are kept too,
+   * with the engine's nested types and nullability, mirroring the outer-column policy one level
+   * down.
+   */
+  private def reconcileReservedField(
+      declared: StructField,
+      engine: StructField,
+      resolver: Resolver): StructField =
+    (declared.dataType, engine.dataType) match {
+      case (declaredStruct: StructType, engineStruct: StructType) =>
+        engine.copy(
+          name = declared.name,
+          dataType = reconcileReservedStruct(declaredStruct, engineStruct, resolver))
+      case _ =>
+        engine.copy(name = declared.name)
+    }
+
+  /**
+   * Rebuild `engine`'s struct with the declared nested spelling and ordering: each engine nested
+   * field takes a matching declared field's name (recursively), and engine nested fields the
+   * declaration omitted are appended in canonical form. A declared nested field with no engine
+   * counterpart is kept as-is, as at the outer level.
+   */
+  private def reconcileReservedStruct(
+      declared: StructType,
+      engine: StructType,
+      resolver: Resolver): StructType = {
+    val usedEngineNames = scala.collection.mutable.Set.empty[String]
+    val rebuilt = declared.fields.map { df =>
+      engine.fields.find(ef => resolver(df.name, ef.name)) match {
+        case Some(ef) =>
+          usedEngineNames += ef.name
+          reconcileReservedField(df, ef, resolver)
+        case None => df
+      }
+    }
+    StructType(rebuilt ++ engine.fields.filterNot(ef => usedEngineNames.contains(ef.name)))
   }
 
   /**
@@ -130,12 +172,37 @@ private[pipelines] object AutoCdcReservedNames {
   private[pipelines] def reservedFieldCasingDrifts(
       existingSchema: StructType,
       desiredSchema: StructType,
-      resolver: Resolver): Seq[(String, String)] = {
+      resolver: Resolver): Seq[(String, String)] =
     reservedFields(existingSchema, resolver).flatMap { existingField =>
       desiredSchema.fields
         .find(desiredField => resolver(desiredField.name, existingField.name))
-        .filter(_.name != existingField.name)
-        .map(desiredField => (existingField.name, desiredField.name))
+        .toSeq
+        .flatMap(desiredField => fieldCasingDrifts(existingField, desiredField, resolver))
     }
+
+  /**
+   * Case-only spelling differences between `existing` and `desired` for a reserved field and,
+   * recursively, its nested struct fields, as `(existingName, desiredName)` pairs. Nested names are
+   * qualified by their parent, e.g. `__spark_autocdc_metadata.DELETESEQUENCE`, so the same drift
+   * policy covers the metadata column's nested fields as well as the column itself.
+   */
+  private def fieldCasingDrifts(
+      existing: StructField,
+      desired: StructField,
+      resolver: Resolver): Seq[(String, String)] = {
+    val outer =
+      if (existing.name != desired.name) Seq((existing.name, desired.name)) else Seq.empty
+    val nested = (existing.dataType, desired.dataType) match {
+      case (existingStruct: StructType, desiredStruct: StructType) =>
+        existingStruct.fields.toSeq.flatMap { existingNested =>
+          desiredStruct.fields
+            .find(f => resolver(f.name, existingNested.name))
+            .toSeq
+            .flatMap(desiredNested => fieldCasingDrifts(existingNested, desiredNested, resolver))
+            .map { case (e, r) => (s"${existing.name}.$e", s"${desired.name}.$r") }
+        }
+      case _ => Seq.empty
+    }
+    outer ++ nested
   }
 }
