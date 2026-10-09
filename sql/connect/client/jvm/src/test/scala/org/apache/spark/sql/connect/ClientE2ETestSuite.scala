@@ -677,6 +677,10 @@ class ClientE2ETestSuite
     }
   }
 
+  test("SPARK-35198: Dataset debugCodegen") {
+    testCapturedStdOut(spark.range(10).debugCodegen(), "WholeStageCodegen subtrees.")
+  }
+
   test("Dataset explain") {
     val df = spark.range(10)
     val simpleExplainFragments = Seq("== Physical Plan ==")

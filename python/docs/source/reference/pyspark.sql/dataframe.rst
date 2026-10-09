@@ -47,6 +47,7 @@ DataFrame
     DataFrame.crossJoin
     DataFrame.crosstab
     DataFrame.cube
+    DataFrame.debugCodegen
     DataFrame.describe
     DataFrame.distinct
     DataFrame.drop
