@@ -7211,8 +7211,9 @@ object SQLConf {
     .doc("Comma-separated list of native data source packages (.sparkpkg files), and of " +
       "directories that contain them, on the local file system of the driver. Spark adds a " +
       "package to the artifacts of the session when one of its data sources is used, so that " +
-      "the executors get it too. Packages can also be added with spark.addArtifact. See " +
-      "spark.sql.dataSource.native.enabled.")
+      "the executors get it too. Packages can also be added with spark.addArtifact. These " +
+      "packages take precedence over the ones installed in the native-datasources directory " +
+      "of SPARK_HOME. See spark.sql.dataSource.native.enabled.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .stringConf

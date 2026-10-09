@@ -107,17 +107,26 @@ named `spark-native-datasource.json`, and the library built for one or more plat
 - `libraries` maps each platform, `<os>-<arch>` with an `os` of `linux`, `osx` or `windows` and an
   `arch` of `x86_64` or `aarch64`, to the path of the library in the package.
 
-Add a package to a session with `spark.addArtifact`, which works in Scala, Java and Python, and with
-Spark Connect:
+Spark finds packages in three places, and the executors get them automatically:
 
-```python
-spark.addArtifact("/path/to/rust_range.sparkpkg")
-spark.read.format("rust_range").option("end", 100).load().show()
-```
+- **Installed packages**: like the Python data sources installed in the Python path, the packages in
+  the `native-datasources` directory of `SPARK_HOME` are found automatically, without any
+  configuration. With PySpark installed by pip, `SPARK_HOME` is the directory of the `pyspark`
+  package.
+- **Artifacts of a session**: `spark.addArtifact` adds a package to a session, in Scala, Java and
+  Python, and with Spark Connect:
 
-Spark can also find packages under `spark.sql.dataSource.native.paths`, for example in a container
-image. In both cases, the executors get the package automatically. Give packages distinct file
-names, for example with their version: sessions that are not isolated share the files they add.
+  ```python
+  spark.addArtifact("/path/to/rust_range.sparkpkg")
+  spark.read.format("rust_range").option("end", 100).load().show()
+  ```
+
+- **Configured paths**: the packages listed in `spark.sql.dataSource.native.paths`, or in the
+  directories it lists, for example in a container image.
+
+The packages of a session, added as artifacts or configured, take precedence over the installed
+ones. Give packages distinct file names, for example with their version: sessions that are not
+isolated share the files they add.
 
 A Java data source with the same name takes precedence over a native one, and so does a Python
 data source.
@@ -472,7 +481,7 @@ statically, or install them on the nodes.
 | Property Name | Default | Meaning |
 |---------------|---------|---------|
 | `spark.sql.dataSource.native.enabled` | true | Whether Spark loads native data sources. It is a static configuration, so it can only be set when the Spark application starts. |
-| `spark.sql.dataSource.native.paths` | (none) | Comma-separated list of native data source packages, and of directories that contain them, on the local file system of the driver. |
+| `spark.sql.dataSource.native.paths` | (none) | Comma-separated list of native data source packages, and of directories that contain them, on the local file system of the driver. They take precedence over the packages installed in `SPARK_HOME`. |
 
 ## Security
 
