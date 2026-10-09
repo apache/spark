@@ -561,31 +561,37 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
   }
 
   /** Log entry to log debug information about the internal state of the accumulator. */
-  def logAccumulatorState: LogEntry = try {
-    log"""LastAttemptAccumulator id=${MDC(LogKeys.ACCUMULATOR_ID, accumulatorId)}:
-    |Invalidated: ${MDC(LogKeys.LAST_ATTEMPT_ACC_INVALIDATE, lastAttemptAccumulatorInvalid)}.
-    |Direct driver value: ${MDC(logKeyAccumulatorState, lastAttemptDirectDriverValue)}.
-    |Value: ${MDC(logKeyAccumulatorState, value)}.
-    |lastAttemptRddsMap:
-    |${MDC(logKeyAccumulatorState, lastAttemptRddsMap)}."""
-      .stripMargin
-  } catch {
-    case NonFatal(e) =>
-      logWarning(log"Unexpected exception in logAccumulatorState", e)
-      log"<Unexpected exception in logAccumulatorState>"
+  def logAccumulatorState: LogEntry = LogEntry.from {
+    // The formatting runs when the entry is read, so the try goes inside the by-name argument.
+    try {
+      log"""LastAttemptAccumulator id=${MDC(LogKeys.ACCUMULATOR_ID, accumulatorId)}:
+      |Invalidated: ${MDC(LogKeys.LAST_ATTEMPT_ACC_INVALIDATE, lastAttemptAccumulatorInvalid)}.
+      |Direct driver value: ${MDC(logKeyAccumulatorState, lastAttemptDirectDriverValue)}.
+      |Value: ${MDC(logKeyAccumulatorState, value)}.
+      |lastAttemptRddsMap:
+      |${MDC(logKeyAccumulatorState, lastAttemptRddsMap)}."""
+        .stripMargin
+    } catch {
+      case NonFatal(e) =>
+        logWarning(log"Unexpected exception in logAccumulatorState", e)
+        log"<Unexpected exception in logAccumulatorState>"
+    }
   }
 
   private def logAccumulatorUpdate(
       newAccumPartialValue: Option[AccumulatorPartialVal[PARTIAL]] = None,
-      oldAccumPartialValue: Option[AccumulatorPartialVal[PARTIAL]] = None): LogEntry = try {
-    log"""Old partial RDD value: ${MDC(logKeyAccumulatorState, oldAccumPartialValue)}.
-    |New partial RDD value: ${MDC(logKeyAccumulatorState, newAccumPartialValue)}."""
-      .stripMargin
-  } catch {
-    case NonFatal(e) =>
-      logWarning(log"Unexpected exception in logAccumulatorUpdate", e)
-      log"<Unexpected exception in logAccumulatorUpdate>"
-  }
+      oldAccumPartialValue: Option[AccumulatorPartialVal[PARTIAL]] = None): LogEntry =
+    LogEntry.from {
+      try {
+        log"""Old partial RDD value: ${MDC(logKeyAccumulatorState, oldAccumPartialValue)}.
+        |New partial RDD value: ${MDC(logKeyAccumulatorState, newAccumPartialValue)}."""
+          .stripMargin
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Unexpected exception in logAccumulatorUpdate", e)
+          log"<Unexpected exception in logAccumulatorUpdate>"
+      }
+    }
 
   private def unexpectedLastAttemptMetricUpdate(
       invalidate: Boolean,
