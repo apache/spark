@@ -198,6 +198,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
+  def pythonUDFRowSizeExceededError(
+      maxRowSize: Long, actualRowSize: Long): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UDF_LIMITS.ROW_SIZE",
+      messageParameters = Map(
+        "maxRowSize" -> maxRowSize.toString,
+        "actualRowSize" -> actualRowSize.toString))
+  }
+
   def divideByZeroError(context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
