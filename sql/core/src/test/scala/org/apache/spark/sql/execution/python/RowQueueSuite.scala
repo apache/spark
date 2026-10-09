@@ -18,6 +18,9 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.File
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+
+import scala.concurrent.duration._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
@@ -26,7 +29,7 @@ import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.unsafe.memory.{MemoryAllocator, MemoryBlock}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
 
@@ -234,5 +237,53 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
     assert(queue1.spill(Long.MaxValue, queue1) === 0)
     drainAndClose(queue1, n)
     queue2.close()
+  }
+
+  test("closing a hybrid queue does not deadlock with a concurrent spill of it") {
+    val conf = new SparkConf(false).set(BUFFER_PAGESIZE, 1024L)
+    val serManager = createSerializerManager(conf)
+    val closeFreeingPage = new CountDownLatch(1)
+    val spillHoldingTaskMemoryManager = new CountDownLatch(1)
+    @volatile var closingThread: Thread = null
+    val taskM = new TaskMemoryManager(new TestMemoryManager(conf), 0) {
+      override def freePage(page: MemoryBlock, consumer: MemoryConsumer): Unit = {
+        if (Thread.currentThread() eq closingThread) {
+          // Pause close() at its first page free until the spilling thread holds this
+          // TaskMemoryManager's monitor, so the two lock orders are forced to overlap.
+          closeFreeingPage.countDown()
+          spillHoldingTaskMemoryManager.await(10, TimeUnit.SECONDS)
+        }
+        super.freePage(page, consumer)
+      }
+    }
+    val tempDir = Utils.createTempDir().getCanonicalFile
+    val queue1 = HybridRowQueue(taskM, tempDir, 1, serManager)
+    val queue2 = HybridRowQueue(taskM, tempDir, 1, serManager)
+    addRows(queue2, 150)
+    assert(queue2.numQueues() > 2)
+
+    val pool = ThreadUtils.newDaemonFixedThreadPool(2, "row-queue-close-spill")
+    try {
+      val closing = pool.submit[Unit](() => {
+        closingThread = Thread.currentThread()
+        queue2.close()
+      })
+      // Mimic TaskMemoryManager.acquireExecutionMemory, which holds its monitor while it asks
+      // another consumer to spill.
+      val spilling = pool.submit[Long](() => {
+        assert(closeFreeingPage.await(10, TimeUnit.SECONDS))
+        taskM.synchronized {
+          spillHoldingTaskMemoryManager.countDown()
+          queue2.spill(Long.MaxValue, queue1)
+        }
+      })
+      ThreadUtils.awaitResult(closing, 10.seconds)
+      ThreadUtils.awaitResult(spilling, 10.seconds)
+    } finally {
+      pool.shutdownNow()
+    }
+    assert(queue2.getUsed === 0)
+    queue1.close()
+    assert(taskM.cleanUpAllAllocatedMemory() === 0)
   }
 }

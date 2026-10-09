@@ -171,10 +171,17 @@ abstract class HybridQueue[T, Q <: Queue[T]](
       reading.close()
       reading = null.asInstanceOf[Q]
     }
-    synchronized {
-      while (!queues.isEmpty) {
-        queues.remove().close()
-      }
+    // Detach the queues under the lock but close them (which frees their pages through the
+    // TaskMemoryManager) after releasing it. `spill` is called with the TaskMemoryManager's
+    // monitor held and then takes this queue's lock, so freeing pages while holding this lock
+    // could deadlock with a concurrent spill of this queue triggered from another thread.
+    val detached = synchronized {
+      val current = queues
+      queues = new java.util.LinkedList[Q]()
+      current
+    }
+    while (!detached.isEmpty) {
+      detached.remove().close()
     }
   }
 
