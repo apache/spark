@@ -187,41 +187,6 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
     assert(slam.lastAttemptValueForAllRDDs() === Some(60))
   }
 
-  test("logAccumulatorState formats lazily and catches formatting failures") {
-    var failFormatting = false
-    var logStateEvaluations = 0
-    val slam = new SQLLastAttemptMetric(SQLMetrics.SUM_METRIC) {
-      override protected def logKeyAccumulatorState: LogKey = {
-        logStateEvaluations += 1
-        if (failFormatting) {
-          throw new IllegalStateException("state formatting failure")
-        }
-        super.logKeyAccumulatorState
-      }
-    }
-    slam.register(sc, name = Some("test SLAM state logging"), countFailedValues = false)
-    slam.initializeLastAttemptAccumulator()
-    val acc = slam.copy()
-    setMockAttempt(rddId = 1, partitionId = 0)
-    acc.set(10)
-    slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 0, 0, mockProperties)
-    assert(slam.lastAttemptValueForRDDId(1) === Some(10))
-
-    logStateEvaluations = 0
-    val entry = slam.logAccumulatorState
-    assert(logStateEvaluations === 0)
-    assert(entry.message.contains("Direct driver QE values"))
-    assert(logStateEvaluations > 0)
-
-    failFormatting = true
-    assert(slam.logAccumulatorState.message.contains(
-      "<Unexpected exception in logAccumulatorState>"))
-    // A driver-side set after task updates is an unexpected update, which logs the state. It
-    // must still invalidate the accumulator when formatting the state fails.
-    slam.set(5)
-    assert(slam.lastAttemptValueForRDDId(1) === None)
-  }
-
   test("compact storage: per-component override arrays allocated only when component diverges") {
     val slam = SQLLastAttemptMetrics.createMetric(sc, "test SLAM")
     val acc = slam.copy()
@@ -322,5 +287,40 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
     val sIds4 = overrideStageIdsFld.get(rddVals).asInstanceOf[Array[Int]]
     assert(sIds4(0) === 12)
     assert(slam.lastAttemptValueForRDDId(1) === Some(105)) // 40 + 15 + 30 + 10*2
+  }
+
+  test("logAccumulatorState formats lazily and catches formatting failures") {
+    var failFormatting = false
+    var logStateEvaluations = 0
+    val slam = new SQLLastAttemptMetric(SQLMetrics.SUM_METRIC) {
+      override protected def logKeyAccumulatorState: LogKey = {
+        logStateEvaluations += 1
+        if (failFormatting) {
+          throw new IllegalStateException("state formatting failure")
+        }
+        super.logKeyAccumulatorState
+      }
+    }
+    slam.register(sc, name = Some("test SLAM state logging"), countFailedValues = false)
+    slam.initializeLastAttemptAccumulator()
+    val acc = slam.copy()
+    setMockAttempt(rddId = 1, partitionId = 0)
+    acc.set(10)
+    slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 0, 0, mockProperties)
+    assert(slam.lastAttemptValueForRDDId(1) === Some(10))
+
+    logStateEvaluations = 0
+    val entry = slam.logAccumulatorState
+    assert(logStateEvaluations === 0)
+    assert(entry.message.contains("Direct driver QE values"))
+    assert(logStateEvaluations > 0)
+
+    failFormatting = true
+    assert(slam.logAccumulatorState.message.contains(
+      "<Unexpected exception in logAccumulatorState>"))
+    // A driver-side set after task updates is an unexpected update, which logs the state. It
+    // must still invalidate the accumulator when formatting the state fails.
+    slam.set(5)
+    assert(slam.lastAttemptValueForRDDId(1) === None)
   }
 }

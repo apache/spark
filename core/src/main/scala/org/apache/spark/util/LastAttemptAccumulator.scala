@@ -582,6 +582,7 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
       newAccumPartialValue: Option[AccumulatorPartialVal[PARTIAL]] = None,
       oldAccumPartialValue: Option[AccumulatorPartialVal[PARTIAL]] = None): LogEntry =
     LogEntry.from {
+      // The formatting runs when the entry is read, so the try goes inside the by-name argument.
       try {
         log"""Old partial RDD value: ${MDC(logKeyAccumulatorState, oldAccumPartialValue)}.
         |New partial RDD value: ${MDC(logKeyAccumulatorState, newAccumPartialValue)}."""
