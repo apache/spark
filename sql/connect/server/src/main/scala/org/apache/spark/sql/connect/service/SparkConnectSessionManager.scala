@@ -225,43 +225,39 @@ class SparkConnectSessionManager extends Logging {
   }
 
   // Removes session from sessionStore and returns it.
-  private def removeSessionHolder(
-      key: SessionKey,
-      allowReconnect: Boolean = false): Option[SessionHolder] = {
-    var sessionHolder: Option[SessionHolder] = None
-
-    // The session holder should remain in the session store until it is added to the closed session
-    // cache, because of a subtle data race: a new session with the same key can be created if the
-    // closed session cache does not contain the key right after the key has been removed from the
-    // session store.
-    sessionHolder = Option(sessionStore.get(key))
-
+  private[service] def removeSessionHolder(key: SessionKey): Option[SessionHolder] = {
+    // The session is always tombstoned before it is removed from the session store, and the
+    // tombstone is kept until shutdownSessionHolder has finished closing it. Otherwise a session
+    // with the same key could be created right after removal, or while the old session is still
+    // closing, and the key-based cleanup in SessionHolder.close() would tear it down.
+    val sessionHolder = Option(sessionStore.get(key))
     sessionHolder.foreach { s =>
-      if (!allowReconnect) {
-        // Put into closedSessionsCache to prevent the same session from being recreated by
-        // getOrCreateIsolatedSession when reconnection isn't allowed.
-        closedSessionsCache.put(s.key, s.getSessionHolderInfo)
-      }
-
-      // Then, remove the session holder from the session store.
+      closedSessionsCache.put(s.key, s.getSessionHolderInfo)
       sessionStore.remove(key)
     }
     sessionHolder
   }
 
   // Shuts down the session after removing.
-  private def shutdownSessionHolder(
+  private[service] def shutdownSessionHolder(
       sessionHolder: SessionHolder,
       allowReconnect: Boolean = false): Unit = {
-    sessionHolder.close()
-    if (!allowReconnect) {
-      // Update in closedSessionsCache: above it wasn't updated with closedTime etc. yet.
-      closedSessionsCache.put(sessionHolder.key, sessionHolder.getSessionHolderInfo)
+    val dropTombstone = allowReconnect || sessionHolder.allowReconnectAfterClose
+    try {
+      sessionHolder.close()
+    } finally {
+      if (dropTombstone) {
+        // Close has finished, so the session id can now be reused for a new, empty session.
+        closedSessionsCache.invalidate(sessionHolder.key)
+      } else {
+        // Update in closedSessionsCache: above it wasn't updated with closedTime etc. yet.
+        closedSessionsCache.put(sessionHolder.key, sessionHolder.getSessionHolderInfo)
+      }
     }
   }
 
   def closeSession(key: SessionKey, allowReconnect: Boolean = false): Unit = {
-    val sessionHolder = removeSessionHolder(key, allowReconnect)
+    val sessionHolder = removeSessionHolder(key)
     // Rest of the cleanup: the session cannot be accessed anymore by getOrCreateIsolatedSession.
     sessionHolder.foreach(shutdownSessionHolder(_, allowReconnect))
   }

@@ -150,6 +150,18 @@ object Connect {
       .intConf
       .createWithDefaultString("1000")
 
+  val CONNECT_SESSION_ALLOW_RECONNECT_AFTER_CLOSE =
+    buildConf("spark.connect.session.allowReconnectAfterClose")
+      .doc(
+        "When true, the session id is not tombstoned when this session is closed, for example " +
+          "on inactivity expiry, so a client can create a new, empty session with the same " +
+          "session id afterwards. Only set this when the client does not depend on server-side " +
+          "session state, such as temporary views, temporary functions, cached data or the " +
+          "current catalog, surviving a close.")
+      .version("5.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL =
     buildStaticConf("spark.connect.session.manager.maintenanceInterval")
       .internal()
