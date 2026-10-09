@@ -51,6 +51,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
+import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
 import org.apache.spark.sql.streaming.util.{BlockOnStopSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 import org.apache.spark.tags.SlowSQLTest
@@ -470,23 +471,36 @@ class StreamSuite extends StreamTest {
     val df = Dataset[Int](
       sqlContext.sparkSession,
       StreamingExecutionRelation(source, sqlContext.sparkSession))
-    val query = df.writeStream.format("noop").start()
-    val queryThread = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.queryExecutionThread
     val uncaught = new AtomicReference[Throwable]()
-    queryThread.setUncaughtExceptionHandler((_: Thread, e: Throwable) => uncaught.set(e))
+    // Installed on the stream thread before `start()` returns, so an early fatal error reaches it.
+    val listener = new StreamingQueryListener {
+      override def onQueryStarted(event: QueryStartedEvent): Unit =
+        Thread.currentThread.setUncaughtExceptionHandler(
+          (_: Thread, e: Throwable) => uncaught.set(e))
+      override def onQueryProgress(event: QueryProgressEvent): Unit = {}
+      override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
+    }
+    spark.streams.addListener(listener)
     try {
-      val e = intercept[StreamingQueryException] {
-        query.awaitTermination(streamingTimeout.toMillis)
+      val query = df.writeStream.format("noop").start()
+      val queryThread =
+        query.asInstanceOf[StreamingQueryWrapper].streamingQuery.queryExecutionThread
+      try {
+        val e = intercept[StreamingQueryException] {
+          query.awaitTermination(streamingTimeout.toMillis)
+        }
+        queryThread.join(streamingTimeout.toMillis)
+        assert(!queryThread.isAlive)
+        assert(query.exception.contains(e))
+        assert(e.cause.getMessage == "getBatch failed")
+        assert(e.getSuppressed.toSeq == Seq(buildFailure))
+        assert(e.getCondition == "STREAM_FAILED")
+        (e, Option(uncaught.get()))
+      } finally {
+        query.stop()
       }
-      queryThread.join(streamingTimeout.toMillis)
-      assert(!queryThread.isAlive)
-      assert(query.exception.contains(e))
-      assert(e.cause.getMessage == "getBatch failed")
-      assert(e.getSuppressed.toSeq == Seq(buildFailure))
-      assert(e.getCondition == "STREAM_FAILED")
-      (e, Option(uncaught.get()))
     } finally {
-      query.stop()
+      spark.streams.removeListener(listener)
     }
   }
 
