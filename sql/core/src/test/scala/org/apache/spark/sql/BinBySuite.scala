@@ -498,6 +498,14 @@ class BinBySuite extends QueryTest with SharedSparkSession {
       originSql = "TIMESTAMP_NTZ '1969-12-31 23:59:59.999999'")
   }
 
+  test("BIN BY raises DATETIME_OVERFLOW when a multi-day bin boundary overflows") {
+    checkBinByDatetimeOverflow(
+      rangeStart = ntz("2020-01-01 00:00:00"),
+      rangeEnd = ntz("2020-01-02 00:00:00"),
+      binWidthSql = "INTERVAL '106751990' DAY",
+      originSql = "TIMESTAMP_NTZ '2000-01-01 00:00:00'")
+  }
+
   test("BIN BY raises BIN_BY_INVALID_RANGE for an inverted range") {
     withSQLConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
