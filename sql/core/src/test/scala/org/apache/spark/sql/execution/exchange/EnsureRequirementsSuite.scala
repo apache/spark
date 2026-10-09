@@ -1467,9 +1467,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         KeyedPartitioning(Seq(id, t1), keys))))
     val unpartitioned = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
 
+    // The coarse member covers only `id`, so the co-partition key requirement is turned off.
     withSQLConf(
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
       val smj = SortMergeJoinExec(Seq(id, t1), Seq(id, t1), Inner, None, keyed, unpartitioned)
       val planned = EnsureRequirements.apply(smj).asInstanceOf[SortMergeJoinExec]
 
@@ -1610,9 +1612,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val hashed = DummySparkPlan(outputPartitioning = HashPartitioning(Seq(id, t1), 3))
     val distribution = ClusteredDistribution(Seq(id, t1))
 
+    // The coarse member covers only `id`, so the co-partition key requirement is turned off.
     withSQLConf(
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
       // Pin the premise, ordered: the coarse member really is the one a head read would take.
       val memberPartitions = keyed.outputPartitioning.createShuffleSpec(distribution)
         .flatten.map(_.numPartitions)

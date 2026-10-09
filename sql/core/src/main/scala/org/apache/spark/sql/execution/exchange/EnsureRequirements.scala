@@ -1142,18 +1142,13 @@ case class EnsureRequirements(
       // The config requires all the cluster keys to be covered by the partition keys, to avoid
       // the skew of joining on keys that are coarser than the join keys. Key order and duplicated
       // cluster keys don't matter.
-      def allClusterKeysCovered: Boolean =
-        // Only an expression over a single column covers that column. One over several, e.g.
-        // `b + c`, maps to no position (`KeyedShuffleSpec.keyPositions`). The spec turns it away
-        // or projects it away, so its columns are not covered.
-        distribution.allClusterKeysAmong(
-          partitioning.expressions.filter(_.references.size == 1).flatMap(_.references))
-
+      //
       // The coverage requirement is a comparison of expressions, while `keysMaySatisfy` can end in
       // a projection of the partition keys, so the cheap question is asked first. The requirement
       // is on by default and turns most members away.
       if ((!SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION) ||
-            allClusterKeysCovered) && partitioning.keysMaySatisfy(distribution)) {
+            partitioning.referencesAllClusterKeys(distribution)) &&
+          partitioning.keysMaySatisfy(distribution)) {
         // `toGrouped` both dedups and sorts, and only a `GroupPartitionsExec` performs either. A
         // source that already reports one partition per key gets no node, so its own key order is
         // what the join will see and claiming the sorted one would be a lie. This is the whole

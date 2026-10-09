@@ -705,6 +705,31 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-59971: canCreatePartitioning: KeyedShuffleSpec requires all the cluster keys") {
+    val a = $"a".int
+    val b = $"b".int
+    val distribution = ClusteredDistribution(Seq(a, b))
+    def spec(expressions: Expression*): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(expressions, Seq(InternalRow.fromSeq(expressions.map(_ => 1)))),
+      distribution)
+    val bucketA = TransformExpression(TestBucketFunction, Seq(a), Some(4))
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true") {
+      // Key order does not matter, and a transform covers the column it is over.
+      Seq(spec(a, b), spec(b, a), spec(bucketA, b)).foreach { s =>
+        assert(s.canCreatePartitioning, s"${s.partitioning.expressions} covers [a, b]")
+      }
+      Seq(spec(a), spec(bucketA)).foreach { s =>
+        assert(!s.canCreatePartitioning, s"${s.partitioning.expressions} does not cover b")
+      }
+      withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        assert(spec(a).canCreatePartitioning)
+      }
+    }
+  }
+
   test("SPARK-59120: createShuffleSpec sorts the projected keys at their built-with types") {
     val a = $"a".timestamp
     val b = $"b".int

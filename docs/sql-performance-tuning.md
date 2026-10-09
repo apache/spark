@@ -684,7 +684,7 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.sources.v2.bucketing.shuffle.enabled</code></td>
       <td>false</td>
       <td>
-        When enabled, try to avoid shuffle on one side of the join, by recognizing the partitioning reported by a V2 data source on the other side.
+        When enabled, try to avoid shuffle on one side of the join, by recognizing the partitioning reported by a V2 data source on the other side. With <code>spark.sql.requireAllClusterKeysForCoPartition</code> on, the partition keys must cover every join key.
       </td>
       <td>4.0.0</td>
     </tr>
