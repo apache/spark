@@ -292,7 +292,7 @@ public final class UnsafeInMemorySorter {
     }
 
     @Override
-    public int getNumRecords() {
+    public long getNumRecords() {
       return numRecords;
     }
 

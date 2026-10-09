@@ -23,7 +23,7 @@ import java.util.PriorityQueue;
 
 final class UnsafeSorterSpillMerger {
 
-  private int numRecords = 0;
+  private long numRecords = 0;
   private final PriorityQueue<UnsafeSorterIterator> priorityQueue;
 
   UnsafeSorterSpillMerger(
@@ -66,7 +66,7 @@ final class UnsafeSorterSpillMerger {
       private UnsafeSorterIterator spillReader;
 
       @Override
-      public int getNumRecords() {
+      public long getNumRecords() {
         return numRecords;
       }
 

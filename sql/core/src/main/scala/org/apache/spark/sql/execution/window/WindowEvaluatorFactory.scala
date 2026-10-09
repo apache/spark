@@ -115,8 +115,8 @@ class WindowEvaluatorFactory(
             fetchNextRow()
           }
 
-          // Fail fast if the partition has more rows than window execution can handle.
-          checkPartitionSizeLimit(buffer.length)
+          // Fail fast if the partition has more rows than its frames can handle.
+          checkPartitionSizeLimit(buffer.length, frames)
 
           // Setup the frames.
           var i = 0
