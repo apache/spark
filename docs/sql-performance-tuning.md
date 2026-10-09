@@ -697,6 +697,14 @@ The following SQL properties enable Storage Partition Join in different join que
       <td>4.4.0</td>
     </tr>
     <tr>
+      <td><code>spark.sql.sources.v2.bucketing.forceOptimizeSkewedJoin</code></td>
+      <td>false</td>
+      <td>
+        When true, keep a skewed key group's split where an operator above the join needs the join's keys grouped, instead of standing the split down for it. The operator then re-partitions the join's output by its own keys, which is the extra shuffle standing the split down avoids, and every key keeps the parallelism the split gave it. Which answer is cheaper depends on how much of the data the skewed keys hold: the counts this optimization reads say how many partitions a key has, not how large they are. Takes effect only when <code>spark.sql.sources.v2.bucketing.skewJoin.enabled</code> is true.
+      </td>
+      <td>4.4.0</td>
+    </tr>
+    <tr>
       <td><code>spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled</code></td>
       <td>false</td>
       <td>

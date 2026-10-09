@@ -176,10 +176,10 @@ case class EnsureRequirements(
             // to coalesce duplicate partition keys, to project the partition keys down to the
             // cluster keys, or both. The positions to project to come from whichever member
             // of the child's partitioning leaves the most partitions. A child that is a join
-            // split for skew asks for that wrap precisely to coalesce the split away, so the
-            // split stands down there first. See `unskewJoinForParent`.
+            // split for skew asks for that wrap precisely to coalesce the split away, which is
+            // one of two answers to it. See `unskewJoinForParent`.
             case (_, scala.Right((_, positions))) =>
-              unskewJoinForParent(child, distribution, positions)
+              unskewJoinForParent(child, distribution, positions, shuffleOrigin)
           }
 
         case None =>
@@ -284,23 +284,48 @@ case class EnsureRequirements(
   }
 
   /**
-   * The `ClusteredDistribution`-answering wrap of [[resolveChild]], standing the child's skew
-   * split down first where that wrap would collapse it. A split join reports its spread keys
-   * repeated on purpose, so any parent clustering on the join's keys finds the child ungrouped
-   * and would stack a grouping that coalesces every spread key back into one partition: the
-   * replicated reads of the other side remain, while the spread partitions execute sequentially
-   * inside the one consumer task, buying nothing. The split stands down there, and only a pair
-   * that still wants a wrapper gets one.
+   * The node [[resolveChild]] answers a `ClusteredDistribution` with, for a child whose skew
+   * split that answer would collapse. A split join reports its spread keys repeated on purpose,
+   * so any parent clustering on the join's keys finds the child ungrouped and would stack a
+   * grouping that coalesces every spread key back into one partition: the replicated reads of
+   * the other side remain, while the spread partitions execute sequentially inside the one
+   * consumer task, buying nothing. Two answers avoid that, and the split's own keys decide
+   * neither:
+   *
+   *  - The default stands the split down: the pair is re-decided without it, and its grouped
+   *    answer serves the parent as it stands, so nothing is shuffled at all. Every key's work,
+   *    the join's and the parent's, then runs in one task.
+   *  - `spark.sql.sources.v2.bucketing.forceOptimizeSkewedJoin` keeps the split and
+   *    re-partitions the child onto the parent's keys, which groups the spread partitions back
+   *    together while every key keeps the parallelism the split gave it.
+   *
+   * Which is cheaper is the workload's to say: the counts this optimization reads say how many
+   * partitions a key holds, not how large they are, so a split that looks worth keeping may be
+   * worth nothing. See the config's own documentation.
    */
   private def unskewJoinForParent(
       child: SparkPlan,
       distribution: Distribution,
-      positions: Option[Seq[Int]]): SparkPlan = {
-    val plan = standDownSplitJoin(child).getOrElse(child)
-    // The caller is here because the child does not answer the distribution as it stands, so the
-    // question left is whether standing its split down did.
-    if (plan.outputPartitioning.satisfies(distribution)) plan
-    else GroupPartitionsExec(plan, joinKeyPositions = positions)
+      positions: Option[Seq[Int]],
+      shuffleOrigin: ShuffleOrigin): SparkPlan = {
+    val unskewed = standDownSplitJoin(child)
+    if (unskewed.isDefined && conf.v2BucketingForceOptimizeSkewedJoin) {
+      // What reached this branch is a keyed child that serves the distribution only through a
+      // grouping node, and the distribution is the clustering that grouping would answer: the
+      // parent's own keys re-partition the child, which is the shuffle the alignment otherwise
+      // saves it.
+      ShuffleExchangeExec(
+        distribution.createPartitioning(
+          distribution.requiredNumPartitions.getOrElse(conf.numShufflePartitions)),
+        child,
+        shuffleOrigin)
+    } else {
+      // The caller is here because the child does not answer the distribution as it stands, so
+      // the question left is whether standing its split down did.
+      val plan = unskewed.getOrElse(child)
+      if (plan.outputPartitioning.satisfies(distribution)) plan
+      else GroupPartitionsExec(plan, joinKeyPositions = positions)
+    }
   }
 
   /**

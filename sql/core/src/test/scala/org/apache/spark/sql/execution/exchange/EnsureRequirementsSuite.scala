@@ -3173,6 +3173,51 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59436: forceOptimizeSkewedJoin keeps the split for the parent instead") {
+    // The same join -> agg shape as the stand-down test, with the config that answers the
+    // parent's grouping with a shuffle: the split stands, so the skewed key keeps the
+    // parallelism the split bought it, and the parent's own keys re-partition the child, which
+    // groups the spread partitions back together. The counts the optimization reads cannot say
+    // which of the two answers is cheaper, so the choice is the user's.
+    withSkewGroupSplit {
+      withSQLConf(SQLConf.V2_BUCKETING_FORCE_OPTIMIZE_SKEWED_JOIN.key -> "true") {
+        val aligned = skewJoin(Inner,
+          leftKeys = Seq.fill(10)(InternalRow(1)) ++ Seq(InternalRow(2)),
+          rightKeys = Seq(InternalRow(1), InternalRow(2)))
+        val distribution = ClusteredDistribution(Seq(exprA))
+        def parentOf(child: SparkPlan): DummySparkPlan = DummySparkPlan(
+          children = Seq(child),
+          requiredChildDistribution = Seq(distribution),
+          requiredChildOrdering = Seq(Nil))
+        val join = SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None, aligned.head, aligned(1))
+        Seq(
+          join -> "the join itself",
+          FilterExec(LessThan(exprA, Literal(1)), join) ->
+            "the join under a unary node that hands its layout through")
+          .foreach { case (child, shape) =>
+          val newChild = EnsureRequirements.apply(parentOf(child)).children.head
+          assert(newChild.outputPartitioning.satisfies(distribution),
+            s"$shape: the parent's requirement must be met:\n${newChild.treeString}")
+          assert(newChild.collect { case s: ShuffleExchangeExec => s }.size == 1,
+            s"$shape: and met by a shuffle of the child:\n${newChild.treeString}")
+          assert(newChild.collect { case g: GroupPartitionsExec => g }
+            .forall(g => !g.exists(_.isInstanceOf[SortMergeJoinExec])),
+            s"$shape: no grouping may coalesce the join from above:\n${newChild.treeString}")
+          // The split stands: the pair below is the one that arrived, not a re-decided one.
+          val newJoin = newChild.collectFirst { case j: SortMergeJoinExec => j }
+            .getOrElse(fail(s"$shape: expected the join back:\n${newChild.treeString}"))
+          val sideModes = Seq(newJoin.left, newJoin.right).map { side =>
+            side.collect { case g: GroupPartitionsExec => g }
+              .flatMap(_.expectedKeyModes.getOrElse(Nil))
+          }
+          assert(sideModes.flatten.exists(m => m.skewed && m.numSplits > 1),
+            s"$shape: the skewed key keeps the split a re-decided pair would drop:\n" +
+              newChild.treeString)
+        }
+      }
+    }
+  }
+
   test("SPARK-59436: skewed group split stands down over reducers, and a re-run keeps them") {
     // A reducer regroups the keys the split counts would key on, so the optimization stands
     // down. The re-run is the arm that matters: both sides then report the same reduced keys, so

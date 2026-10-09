@@ -8911,6 +8911,41 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59436: forceOptimizeSkewedJoin keeps the split under an aggregate, at a shuffle") {
+    // The mirror of the stand-down test above, with the config on: the aggregate's grouping is
+    // answered by shuffling the join's output instead, so the skewed key keeps the parallelism
+    // the split bought and the whole output is re-partitioned once. Rows are the same either
+    // way; what differs is where the skewed key's work runs.
+    withSkewSplitTables(withUnmatched = false) {
+      withSQLConf(SQLConf.V2_BUCKETING_FORCE_OPTIMIZE_SKEWED_JOIN.key -> "true") {
+        val df = sql(s"${selectWithMergeJoinHint("i", "p")} i.id, count(*), sum(p.price) " +
+          s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id " +
+          s"GROUP BY i.id")
+        checkAnswer(df, Seq(Row(1, 8, 336.0), Row(2, 1, 11.0)))
+
+        val plan = stripAQEPlan(df.queryExecution.executedPlan)
+        val joins = collect(plan) { case j: ShuffledJoin => j }
+        assert(joins.size == 1, s"expected one join in\n$plan")
+        // One shuffle, and it is the parent's: the join itself still aligns without one.
+        val shuffles = collectAllShuffles(plan)
+        assert(shuffles.size == 1, s"one shuffle for the aggregate:\n$plan")
+        assert(shuffles.head.child.exists(_.isInstanceOf[ShuffledJoin]),
+          s"the shuffle re-partitions the join's output:\n$plan")
+        // The split stands: no grouping coalesces the join from above, and the sides keep the
+        // split the skew decision made, replication reads and all.
+        val groupings = collectAllGroupPartitions(plan)
+        assert(groupings.forall(g => !g.exists(_.isInstanceOf[ShuffledJoin])),
+          s"no grouping may coalesce the split join from above:\n$plan")
+        val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
+        assert(sides.flatten.flatMap(_.expectedKeyModes.getOrElse(Nil))
+          .exists(m => m.skewed && m.numSplits > 1),
+          s"the skewed key keeps its split:\n$plan")
+        assert(sides.flatten.exists(_.metrics.contains("numReplicatedPartitionReads")),
+          s"the other side still pays to repeat the group:\n$plan")
+      }
+    }
+  }
+
   test("SPARK-59436: skewed group split survives a second join over the first") {
     // join -> join: the second join reads the first one's output, whose split key repeats in
     // the reported layout. It must re-align that layout against the third table, re-splitting

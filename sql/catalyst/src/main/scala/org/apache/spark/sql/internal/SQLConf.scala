@@ -2776,6 +2776,20 @@ object SQLConf {
         "advisoryInputPartitionsPerOutputPartition must be positive")
       .createWithDefault(1)
 
+  val V2_BUCKETING_FORCE_OPTIMIZE_SKEWED_JOIN =
+    buildConf("spark.sql.sources.v2.bucketing.forceOptimizeSkewedJoin")
+      .doc("When true, keep a skewed key group's split where an operator above the join needs " +
+        "the join's keys grouped, instead of standing the split down for it. The operator then " +
+        "re-partitions the join's output by its own keys, which is the extra shuffle standing " +
+        "the split down avoids, and every key keeps the parallelism the split gave it. Which " +
+        "answer is cheaper depends on how much of the data the skewed keys hold: the counts " +
+        "this optimization reads say how many partitions a key has, not how large they are. " +
+        s"Requires ${V2_BUCKETING_SKEW_JOIN_ENABLED.key} to be enabled.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed.")
     .version("2.4.0")
@@ -9717,6 +9731,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def v2BucketingAdvisoryInputPartitionsPerOutputPartition: Int =
     getConf(SQLConf.V2_BUCKETING_ADVISORY_INPUT_PARTITIONS_PER_OUTPUT_PARTITION)
+
+  def v2BucketingForceOptimizeSkewedJoin: Boolean =
+    getConf(SQLConf.V2_BUCKETING_FORCE_OPTIMIZE_SKEWED_JOIN)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
