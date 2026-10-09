@@ -54,6 +54,9 @@ object EchoGrpcWorkerMain {
       throw new IllegalArgumentException("--connection <uds-path> is required"))
     val workerId = parsed.getOrElse("id", "<unknown>")
 
+    // Captured before any blocking work. A launcher that dies during startup is
+    // still this handle, so its onExit callback runs even if it is already gone.
+    val launcher = ProcessHandle.current().parent()
     val transport = UnixDomainSocketTransport.detect()
     val sockFile = Paths.get(socketPath)
     val cleanupStarted = new AtomicBoolean(false)
@@ -125,7 +128,11 @@ object EchoGrpcWorkerMain {
 
       server.start()
       stderrln(s"listening on $socketPath (transport=${transport.name})")
-      // Park until the shutdown hook fires.
+      // SIGKILL skips JVM shutdown hooks. Register before parking so a parent
+      // that has already exited still runs cleanup and unblocks the wait below.
+      if (launcher.isPresent) {
+        launcher.get().onExit().thenRun(() => cleanup())
+      }
       server.awaitTermination()
     } catch {
       case NonFatal(e) =>
