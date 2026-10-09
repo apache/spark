@@ -259,6 +259,19 @@ object StaticSQLConf {
       .checkValue(thres => thres > 0 && thres <= 1024, "The threshold must be in (0,1024].")
       .createWithDefault(1024)
 
+  val CTE_MATERIALIZATION_MAX_THREAD_THRESHOLD =
+    buildStaticConf("spark.sql.cteMaterialization.maxThreadThreshold")
+      .internal()
+      .doc("The size of the AdaptiveSparkPlanExec thread pool used for CTE materialization " +
+        "and reuse. This pool is isolated from the main QueryStageCreator thread pool. A " +
+        "relatively large default size of 1024 is chosen to minimize the risk of deadlocks " +
+        "caused by deeply nested CTEs exhausting the available threads.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(thres => thres > 0 && thres <= 1024, "The threshold must be in (0,1024].")
+      .createWithDefault(1024)
+
   val SQL_EVENT_TRUNCATE_LENGTH = buildStaticConf("spark.sql.event.truncate.length")
     .doc("Threshold of SQL length beyond which it will be truncated before adding to " +
       "event. Defaults to no truncation. If set to 0, callsite will be logged instead.")
