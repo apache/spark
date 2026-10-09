@@ -35,6 +35,7 @@ import scala.util.control.NonFatal
  *   java -cp <classpath> ...ForwardingWorkerMain <worker command...>
  *     --id <id> --connection <uds-path>
  *
+ * The inner worker exits when this launcher exits, including by `SIGKILL`.
  * `SIGTERM` stops the inner worker with `SIGTERM` and waits for it.
  */
 object ForwardingWorkerMain {
@@ -54,7 +55,7 @@ object ForwardingWorkerMain {
     // scalastyle:off runtimeaddshutdownhook
     Runtime.getRuntime.addShutdownHook(new Thread(() => {
       worker.destroy()
-      if (!worker.waitFor(10, TimeUnit.SECONDS)) worker.destroyForcibly()
+      if (!worker.waitFor(2, TimeUnit.SECONDS)) worker.destroyForcibly()
       Files.deleteIfExists(Paths.get(innerPath))
     }, "forwarding-worker-shutdown"))
     // scalastyle:on runtimeaddshutdownhook
