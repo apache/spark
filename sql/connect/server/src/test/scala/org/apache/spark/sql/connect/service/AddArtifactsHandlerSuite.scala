@@ -453,10 +453,9 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
             .addEntries(
               proto.AddArtifactsRequest.ArtifactEntry
                 .newBuilder()
-                .setMavenDependency(
-                  proto.AddArtifactsRequest.MavenDependency
-                    .newBuilder()
-                    .setUri(s"ivy://${mavenCoordinate.toString}"))))
+                .setMavenDependency(proto.AddArtifactsRequest.MavenDependency
+                  .newBuilder()
+                  .setUri(s"ivy://${mavenCoordinate.toString}"))))
         .build()
 
       handler.onNext(request)
@@ -491,17 +490,15 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
         .setBatch(
           proto.AddArtifactsRequest.Batch
             .newBuilder()
-            .addEntries(
-              uploadedArtifactEntry(
-                "classes/smallClassFile.class",
-                inputFilePath.resolve("smallClassFile.class")))
+            .addEntries(uploadedArtifactEntry(
+              "classes/smallClassFile.class",
+              inputFilePath.resolve("smallClassFile.class")))
             .addEntries(
               proto.AddArtifactsRequest.ArtifactEntry
                 .newBuilder()
-                .setMavenDependency(
-                  proto.AddArtifactsRequest.MavenDependency
-                    .newBuilder()
-                    .setUri("ivy://invalid-coordinate"))))
+                .setMavenDependency(proto.AddArtifactsRequest.MavenDependency
+                  .newBuilder()
+                  .setUri("ivy://invalid-coordinate"))))
         .build()
 
       handler.onNext(request)
