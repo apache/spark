@@ -73,8 +73,8 @@ trait SparkCharVarcharUtils {
 
   /**
    * Always replaces CharType/VarcharType with unbounded StringType, including when first-class
-   * CHAR/VARCHAR types are enabled. Used when a format stores CHAR/VARCHAR as STRING on the wire,
-   * for example JSON parsing.
+   * CHAR/VARCHAR types are enabled. Used when a format stores CHAR/VARCHAR as STRING on the wire
+   * (Hive TRANSFORM, JSON, and similar).
    */
   def replaceCharVarcharWithStringAlways(dt: DataType): DataType = dt match {
     case ArrayType(et, nullable) =>

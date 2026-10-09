@@ -27,7 +27,7 @@ import com.fasterxml.jackson.core.json.JsonReadFeature
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, GetJsonObject}
-import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonGenerator, JacksonParser, JsonInferSchema, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonGenerator, JacksonParser, JsonInferSchema, JSONOptions, JsonParseAssignment}
 import org.apache.spark.sql.catalyst.util.{ArrayData, FailFastMode, FailureSafeParser, MapData, PermissiveMode}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructField, StructType, VariantType}
@@ -149,11 +149,17 @@ case class JsonToStructsEvaluator(
         (StructType(Array(StructField("value", other))), other)
     }
 
-    val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false)
+    val rawParser = new JacksonParser(
+      JsonParseAssignment.parserSchema(actualSchema),
+      parsedOptions,
+      allowArrayAsStructs = false)
     val createParser = CreateJacksonParser.utf8String _
 
     new FailureSafeParser[UTF8String](
-      input => rawParser.parse(input, createParser, identity[UTF8String]),
+      input => JsonParseAssignment.parse(
+        rawParser.parse(input, createParser, identity[UTF8String]),
+        actualSchema,
+        () => input),
       mode,
       parserSchema,
       parsedOptions.columnNameOfCorruptRecord)

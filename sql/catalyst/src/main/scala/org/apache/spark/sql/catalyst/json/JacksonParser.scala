@@ -60,64 +60,11 @@ class JacksonParser(
   // to a value in a field for `InternalRow`.
   private type ValueConverter = JsonParser => AnyRef
 
-  // CHAR/VARCHAR is STRING-on-the-wire in JSON. Parse as unbounded STRING, then assign.
-  private val physicalSchema: DataType =
-    CharVarcharUtils.replaceCharVarcharWithStringAlways(schema)
-
   // `ValueConverter`s for the root schema for all fields in the schema
-  private val rootConverter = makeRootConverter(physicalSchema)
+  private val rootConverter = makeRootConverter(schema)
 
   // Lazy: a schema that is not a struct never reaches either top-level-array path.
-  private lazy val arrayElementConverter = makeConverter(physicalSchema)
-
-  private val assignExpr: Expression =
-    CharVarcharUtils.assignAfterParse(
-      BoundReference(0, physicalSchema, nullable = true),
-      schema)
-
-  private val needsAssignment =
-    SQLConf.get.charVarcharStandardSemantics &&
-      CharVarcharUtils.hasCharVarchar(schema)
-
-  /**
-   * Pad CHAR / length-check VARCHAR / rewrite CHAR map keys on a row parsed as STRING.
-   * No-op when standard semantics are off. `DUPLICATED_MAP_KEY` from key assignment is
-   * left unwrapped so it fails the query even under PERMISSIVE, matching XML maps.
-   */
-  private def applyAssignment(row: InternalRow): InternalRow = {
-    if (!needsAssignment) {
-      row
-    } else {
-      schema match {
-        case _: StructType =>
-          assignExpr.eval(InternalRow(row)).asInstanceOf[InternalRow]
-        case _ =>
-          assignWrappedValue(row.get(0, physicalSchema))
-      }
-    }
-  }
-
-  private def assignWrappedValue(value: Any): InternalRow = {
-    if (!needsAssignment) {
-      InternalRow(value)
-    } else {
-      InternalRow(assignExpr.eval(InternalRow(value)))
-    }
-  }
-
-  /**
-   * Apply assignment to a partial payload. Overflow follows whole-value parse mode
-   * (empty partial -> PERMISSIVE null). Duplicate keys stay query-fatal.
-   */
-  private def assignedPartialResults(compute: => Array[InternalRow]): Array[InternalRow] = {
-    try {
-      compute
-    } catch {
-      case e: SparkUpgradeException => throw e
-      case DuplicateMapKeyUtils(e) => throw e
-      case NonFatal(_) => Array.empty
-    }
-  }
+  private lazy val arrayElementConverter = makeConverter(schema)
 
   private val factory = options.buildJsonFactory()
 
@@ -208,24 +155,7 @@ class JacksonParser(
   private def makeStructRootConverter(st: StructType): JsonParser => Iterable[InternalRow] = {
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
     val jsonFilters = if (SQLConf.get.jsonFilterPushDown) {
-      // Assignment can change CHAR padding, VARCHAR length, and constrained map keys.
-      // Keep pushdown for independent fields; leave assignment-sensitive predicates residual.
-      val pushed = if (!needsAssignment) {
-        filters
-      } else {
-        schema match {
-          case orig: StructType =>
-            filters.filterNot { f =>
-              f.references.exists { name =>
-                orig.getFieldIndex(name).exists { i =>
-                  CharVarcharUtils.hasCharVarchar(orig.fields(i).dataType)
-                }
-              }
-            }
-          case _ => Seq.empty
-        }
-      }
-      new JsonFilters(pushed, st)
+      new JsonFilters(filters, st)
     } else {
       new NoopFilters
     }
@@ -252,7 +182,7 @@ class JacksonParser(
         if (array.numElements() == 0) {
           Array.empty[InternalRow]
         } else {
-          array.toArray[InternalRow](physicalSchema)
+          array.toArray[InternalRow](schema)
         }
       case START_ARRAY =>
         throw JsonArraysAsStructsException()
@@ -378,7 +308,7 @@ class JacksonParser(
           }
       }
 
-    case dt: StringType => (parser: JsonParser) => {
+    case _: StringType => (parser: JsonParser) => {
       // This must be enabled if we will retrieve the bytes directly from the raw content:
       val oldFeature = parser.getFeatureMask
       val featureToAdd = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION.getMask
@@ -712,15 +642,8 @@ class JacksonParser(
       }
     }
 
-    // Value conversion can fail after the key is recorded. Do not build MapData from
-    // unpaired buffers: ArrayBasedMapData would throw a cardinality error and hide
-    // the original conversion failure (for example EXCEED_LIMIT_LENGTH).
-    if (keys.length != values.length) {
-      throw badRecordException.get
-    }
-
-    // Preserve every parsed JSON key/value pair, including exact duplicate names.
-    // ArrayBasedMapData is used directly to retain this historical behavior.
+    // The JSON map will never have null or duplicated map keys, it's safe to create a
+    // ArrayBasedMapData directly here.
     val mapData = ArrayBasedMapData(keys.toArray, values.toArray)
 
     if (badRecordException.isEmpty) {
@@ -788,25 +711,21 @@ class JacksonParser(
         wrappedCharException.initCause(e)
         BadRecordException(recordLiteral, () => Array.empty, wrappedCharException)
       case PartialResultException(row, cause) =>
-        val assigned = assignedPartialResults(Array(applyAssignment(row)))
         BadRecordException(
           recordLiteral,
-          () => assigned,
+          () => Array(row),
           convertCauseForPartialResult(cause))
       case PartialResultArrayException(rows, cause) =>
-        val assigned = assignedPartialResults(rows.map(applyAssignment))
-        BadRecordException(recordLiteral, () => assigned, cause)
+        BadRecordException(recordLiteral, () => rows, cause)
       case PartialArrayDataResultException(arrayData, cause) =>
-        val assigned = assignedPartialResults(Array(assignWrappedValue(arrayData)))
         BadRecordException(
           recordLiteral,
-          () => assigned,
+          () => Array(InternalRow(arrayData)),
           convertCauseForPartialResult(cause))
       case PartialMapDataResultException(mapData, cause) =>
-        val assigned = assignedPartialResults(Array(assignWrappedValue(mapData)))
         BadRecordException(
           recordLiteral,
-          () => assigned,
+          () => Array(InternalRow(mapData)),
           convertCauseForPartialResult(cause))
       case e => BadRecordException(recordLiteral, () => Array.empty, e)
     }
@@ -829,13 +748,12 @@ class JacksonParser(
           case null => None
           case _ => rootConverter.apply(parser) match {
             case null => throw QueryExecutionErrors.rootConverterReturnNullError()
-            case rows => rows.toSeq.map(applyAssignment)
+            case rows => rows.toSeq
           }
         }
       }
     } catch {
       case e: SparkUpgradeException => throw e
-      case DuplicateMapKeyUtils(e) => throw e
       case e: CharConversionException if options.encoding.isEmpty =>
         throw badRecord(e, () => recordLiteral(record))
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
@@ -855,7 +773,6 @@ class JacksonParser(
       createParser(factory, record)
     } catch {
       case e: SparkUpgradeException => throw e
-      case DuplicateMapKeyUtils(e) => throw e
       case e: CharConversionException if options.encoding.isEmpty =>
         throw badRecord(e, () => recordLiteral(record))
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
@@ -891,9 +808,6 @@ class JacksonParser(
     def handleFailure[R](elementStart: Option[JsonToken])(operation: => R): R = {
       try operation catch {
         case e: SparkUpgradeException => fail(e)
-        case DuplicateMapKeyUtils(e) =>
-          closeParser()
-          throw e
         case e: CharConversionException if options.encoding.isEmpty => fail(e)
         case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
             _: PartialResultException | _: PartialResultArrayException |
@@ -949,16 +863,7 @@ class JacksonParser(
                 nextRow = handleFailure(Some(elementStart)) {
                   val row = arrayElementConverter(jsonParser).asInstanceOf[InternalRow]
                   if (row == null) throw QueryExecutionErrors.rootConverterReturnNullError()
-                  // Converter already consumed the element. Surface assignment failures as
-                  // PartialResultException so resumableAfter can keep later array elements.
-                  try {
-                    applyAssignment(row)
-                  } catch {
-                    case e: SparkUpgradeException => throw e
-                    case DuplicateMapKeyUtils(e) => throw e
-                    case e: RuntimeException =>
-                      throw PartialResultException(row, e)
-                  }
+                  row
                 }
                 prepared = true
             }
@@ -973,7 +878,7 @@ class JacksonParser(
         val rows = handleFailure(elementStart = None) {
           val parsed = rootConverter(jsonParser)
           if (parsed == null) throw QueryExecutionErrors.rootConverterReturnNullError()
-          parsed.map(applyAssignment)
+          parsed
         }
         closeParser()
         rows.iterator

@@ -103,10 +103,10 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
 
     (file: PartitionedFile) => {
       def parser() = new JacksonParser(
-        actualSchema,
+        JsonParseAssignment.parserSchema(actualSchema),
         parsedOptions,
         allowArrayAsStructs = true,
-        filters)
+        JsonParseAssignment.pushedFilters(actualSchema, filters))
       if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
         JsonDataSource(parsedOptions).readArchive(
           broadcastedHadoopConf.value.value, file, () => parser(), requiredSchema,

@@ -36,7 +36,7 @@ import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
-import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JsonInferSchema, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JsonInferSchema, JSONOptions, JsonParseAssignment}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -72,6 +72,11 @@ abstract class JsonDataSource extends Serializable with Logging with SupportsArc
     in: InputStream,
     parser: JacksonParser,
     schema: StructType): Iterator[InternalRow]
+
+  // Scan schema may still be CHAR/VARCHAR. The parser is given STRING; assignment is after parse.
+  protected def jsonDeclaredSchema(parser: JacksonParser, schema: StructType): DataType = {
+    StructType(schema.filterNot(_.name == parser.options.columnNameOfCorruptRecord))
+  }
 
   /**
    * Streams a tar archive (`.tar`/`.tar.gz`/`.tgz`) entry by entry through the JSON parser without
@@ -218,8 +223,12 @@ object TextInputJsonDataSource extends JsonDataSource {
         parser.options.legacyCodingErrorAction, _: JsonFactory, _: Text))
       .getOrElse(CreateJacksonParser.text(_: JsonFactory, _: Text))
 
+    val declared = jsonDeclaredSchema(parser, schema)
     val safeParser = new FailureSafeParser[Text](
-      input => parser.parse(input, textParser, textToUTF8String),
+      input => JsonParseAssignment.parse(
+        parser.parse(input, textParser, textToUTF8String),
+        declared,
+        () => textToUTF8String(input)),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
@@ -235,8 +244,12 @@ object TextInputJsonDataSource extends JsonDataSource {
         parser.options.legacyCodingErrorAction, _: JsonFactory, _: Text))
       .getOrElse(CreateJacksonParser.text(_: JsonFactory, _: Text))
 
+    val declared = jsonDeclaredSchema(parser, schema)
     val safeParser = new FailureSafeParser[Text](
-      input => parser.parse(input, textParser, textToUTF8String),
+      input => JsonParseAssignment.parse(
+        parser.parse(input, textParser, textToUTF8String),
+        declared,
+        () => textToUTF8String(input)),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
@@ -412,8 +425,12 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .map(enc => CreateJacksonParser.inputStream(enc, _: JsonFactory, _: InputStream))
       .getOrElse(CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream))
 
+    val declared = jsonDeclaredSchema(parser, schema)
     val safeParser = new FailureSafeParser[InputStream](
-      input => parser.parse[InputStream](input, streamParser, partitionedFileString),
+      input => JsonParseAssignment.parse(
+        parser.parse[InputStream](input, streamParser, partitionedFileString),
+        declared,
+        () => partitionedFileString(input)),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
@@ -422,7 +439,10 @@ object MultiLineJsonDataSource extends JsonDataSource {
     if (parser.options.streamMultilineTopLevelArray) {
       safeParser.parseIterator(
         input,
-        input => parser.parseIterator[InputStream](input, streamParser, partitionedFileString))
+        input => JsonParseAssignment.parseIterator(
+          parser.parseIterator[InputStream](input, streamParser, partitionedFileString),
+          declared,
+          () => partitionedFileString(input)))
     } else {
       safeParser.parse(input)
     }
@@ -440,8 +460,12 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .map(enc => CreateJacksonParser.inputStream(enc, _: JsonFactory, _: InputStream))
       .getOrElse(CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream))
 
+    val declared = jsonDeclaredSchema(parser, schema)
     val safeParser = new FailureSafeParser[InputStream](
-      input => parser.parse[InputStream](input, streamParser, _ => documentLiteral),
+      input => JsonParseAssignment.parse(
+        parser.parse[InputStream](input, streamParser, _ => documentLiteral),
+        declared,
+        () => documentLiteral),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
@@ -450,8 +474,11 @@ object MultiLineJsonDataSource extends JsonDataSource {
     if (parser.options.streamMultilineTopLevelArray) {
       safeParser.parseIterator(
         input,
-        input => parser.parseIterator[InputStream](
-          input, streamParser, _ => documentLiteral))
+        input => JsonParseAssignment.parseIterator(
+          parser.parseIterator[InputStream](
+            input, streamParser, _ => documentLiteral),
+          declared,
+          () => documentLiteral))
     } else {
       safeParser.parse(input)
     }

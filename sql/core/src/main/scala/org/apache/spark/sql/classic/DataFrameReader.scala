@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.{RelationChanges, UnresolvedRelati
 import org.apache.spark.sql.catalyst.analysis.ChangelogContextUtils
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions, JsonParseAssignment}
 import org.apache.spark.sql.catalyst.plans.logical.UnresolvedDataSource
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
@@ -188,9 +188,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
 
     val createParser = CreateJacksonParser.string _
     val parsed = jsonDataset.rdd.mapPartitions { iter =>
-      val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = true)
+      val rawParser = new JacksonParser(
+        JsonParseAssignment.parserSchema(actualSchema),
+        parsedOptions,
+        allowArrayAsStructs = true)
       val parser = new FailureSafeParser[String](
-        input => rawParser.parse(input, createParser, UTF8String.fromString),
+        input => JsonParseAssignment.parse(
+          rawParser.parse(input, createParser, UTF8String.fromString),
+          actualSchema,
+          () => UTF8String.fromString(input)),
         parsedOptions.parseMode,
         schema,
         parsedOptions.columnNameOfCorruptRecord)
