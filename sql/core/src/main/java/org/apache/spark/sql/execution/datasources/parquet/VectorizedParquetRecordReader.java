@@ -231,6 +231,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   @Override
   public void close() throws IOException {
+    if (columnVectors != null) {
+      for (ParquetColumnVector columnVector : columnVectors) {
+        columnVector.close();
+      }
+      columnVectors = null;
+    }
     if (columnarBatch != null) {
       columnarBatch.close();
       columnarBatch = null;
