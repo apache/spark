@@ -948,13 +948,15 @@ private[spark] class ExecutorAllocationManager(
             if (taskEnd.taskInfo.speculative) {
               stageAttemptToSuccessfulSpeculativeTaskIndices.get(stageAttempt)
                 .foreach(_ += taskIndex)
-              // The regular attempt may already have failed or been killed.
-              stageAttemptToTaskIndices.get(stageAttempt).foreach(_ += taskIndex)
             }
+            // Any successful attempt completes the index, including after resubmission.
+            val completedPending =
+              stageAttemptToTaskIndices.get(stageAttempt).exists(_.add(taskIndex))
             // Remove pending speculative task in case the normal task
             // is finished before starting the speculative task
-            stageAttemptToPendingSpeculativeTasks.get(stageAttempt).foreach(_.remove(taskIndex))
-            if (taskEnd.taskInfo.speculative && !hasPendingTasks) {
+            val completedPendingSpeculative =
+              stageAttemptToPendingSpeculativeTasks.get(stageAttempt).exists(_.remove(taskIndex))
+            if ((completedPending || completedPendingSpeculative) && !hasPendingTasks) {
               allocationManager.onSchedulerQueueEmpty()
             }
           case Resubmitted =>
