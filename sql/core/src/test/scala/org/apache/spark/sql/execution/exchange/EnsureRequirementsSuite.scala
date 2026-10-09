@@ -2920,6 +2920,19 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60044: pushing join key positions into a merging node keeps its ordering") {
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2))
+    val leaf = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA, exprB), keys))
+    val frozen = Seq(SortOrder(exprA, Ascending), SortOrder(exprB, Ascending))
+    val merging = GroupPartitionsExec(leaf, sortedMergeOrdering = Some(frozen))
+    assert(leaf.outputOrdering.isEmpty, "test setup: the child reports no ordering now")
+    EnsureRequirements.withJoinKeyPositions(merging, Seq(0)) match {
+      case g: GroupPartitionsExec => assert(g.sortedMergeOrdering.contains(frozen))
+      case other => fail(s"expected a rebuilt GroupPartitionsExec, got $other")
+    }
+  }
+
   test("SPARK-59289: pushing join key positions into a node re-derives its grouping") {
     // The positions are an input to the node's grouping, so `withJoinKeyPositions` rebuilds through
     // the factory. A `copy` would keep the grouping the old positions produced, and nothing about
