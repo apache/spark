@@ -742,6 +742,49 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
     }
   }
 
+  test("SPARK-60002: Hive text table respects ROW FORMAT DELIMITED NULL DEFINED AS") {
+    def createTable(location: File): Unit = {
+      sql(
+        s"""
+           |CREATE TABLE t (id INT, region STRING)
+           |ROW FORMAT DELIMITED FIELDS TERMINATED BY '|' NULL DEFINED AS 'NA'
+           |STORED AS TEXTFILE
+           |LOCATION '${location.toURI}'
+         """.stripMargin)
+    }
+
+    // The null format in the data file is read as NULL.
+    withTempDir { dir =>
+      Files.writeString(new File(dir, "data").toPath, "1|east\n2|NA\n3|west\n")
+      withTable("t") {
+        createTable(dir)
+        checkAnswer(spark.table("t"), Seq(Row(1, "east"), Row(2, null), Row(3, "west")))
+      }
+    }
+
+    // NULL is written as the null format instead of the default \N.
+    withTempDir { dir =>
+      withTable("t") {
+        createTable(dir)
+        sql("INSERT INTO t VALUES (1, 'east'), (2, NULL)")
+        checkAnswer(spark.read.text(dir.getCanonicalPath), Seq(Row("1|east"), Row("2|NA")))
+      }
+    }
+  }
+
+  test("SPARK-60002: INSERT OVERWRITE LOCAL DIRECTORY respects NULL DEFINED AS") {
+    withTempDir { dir =>
+      sql(
+        s"""
+           |INSERT OVERWRITE LOCAL DIRECTORY '${dir.toURI.getPath}'
+           |ROW FORMAT DELIMITED FIELDS TERMINATED BY '|' NULL DEFINED AS 'NA'
+           |STORED AS TEXTFILE
+           |SELECT * FROM VALUES (1, 'east'), (2, CAST(NULL AS STRING)) AS t(id, region)
+         """.stripMargin)
+      checkAnswer(spark.read.text(dir.getCanonicalPath), Seq(Row("1|east"), Row("2|NA")))
+    }
+  }
+
   test("insert overwrite to dir from temp table") {
     withTempView("test_insert_table") {
       spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
