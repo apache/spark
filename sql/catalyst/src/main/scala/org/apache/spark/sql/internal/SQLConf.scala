@@ -1007,9 +1007,10 @@ object SQLConf {
         "into a single materialized CTE definition with multiple references, so the " +
         "view's underlying plan is computed once (through exchange reuse) instead of " +
         "once per reference. Views that contain non-deterministic expressions, " +
-        "streaming sources, or a top-level ORDER BY (whose ordering would be lost " +
-        "across the added shuffle boundary, the same as MATERIALIZED CTEs) are never " +
-        "converted, as the conversion would change their semantics. Note that each " +
+        "streaming sources, or an ORDER BY outside subquery expressions (its order " +
+        "would be lost across the added shuffle boundary, the same as MATERIALIZED " +
+        "CTEs) are never converted, as the conversion would change their semantics. " +
+        "Note that each " +
         "reference site gains a shuffle boundary, so this helps only when the view " +
         "subtree is expensive relative to a shuffle of its output.")
       .version("4.4.0")
