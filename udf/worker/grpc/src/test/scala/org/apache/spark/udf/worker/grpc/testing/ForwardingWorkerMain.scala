@@ -35,8 +35,10 @@ import scala.util.control.NonFatal
  *   java -cp <classpath> ...ForwardingWorkerMain <worker command...>
  *     --id <id> --connection <uds-path>
  *
- * The inner worker exits when this launcher exits, including by `SIGKILL`.
- * `SIGTERM` stops the inner worker with `SIGTERM` and waits for it.
+ * On `SIGTERM`, the shutdown hook sends `SIGTERM` to the inner worker, waits
+ * up to 2 seconds, and then kills it with `SIGKILL`. A `SIGKILL` of this
+ * launcher runs no hook, so the inner worker must watch its parent and exit
+ * on its own. `EchoGrpcWorkerMain` does this.
  */
 object ForwardingWorkerMain {
 

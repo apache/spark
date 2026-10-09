@@ -17,7 +17,7 @@
 package org.apache.spark.udf.worker.grpc
 
 import java.io.File
-import java.nio.file.Paths
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.{Callable, TimeUnit}
 
 import scala.jdk.CollectionConverters._
@@ -192,8 +192,7 @@ class DirectGrpcDispatcherIntegrationSuite
 
     assert(processes.forall(!_.process.isAlive), "session close should terminate the launcher")
     workers.foreach { worker =>
-      worker.onExit().get(10, TimeUnit.SECONDS)
-      assert(!worker.isAlive, s"session close should stop the launched worker ${worker.pid}")
+      assertWorkerStopped(worker, "session close should stop the launched worker")
     }
   }
 
@@ -214,10 +213,37 @@ class DirectGrpcDispatcherIntegrationSuite
     try {
       session.init(basicInit)
       process.process.destroyForcibly()
-      worker.onExit().get(10, TimeUnit.SECONDS)
-      assert(!worker.isAlive, s"SIGKILL of the launcher should stop worker ${worker.pid}")
+      assertWorkerStopped(worker, "SIGKILL of the launcher should stop worker")
     } finally {
       session.close(emptyCancel)
+    }
+  }
+
+  // An orphaned worker is reparented, and an unreaped zombie stays isAlive
+  // until PID 1 reaps it. State Z in /proc means the worker has already exited.
+  private def assertWorkerStopped(worker: ProcessHandle, what: String): Unit = {
+    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+    while (System.nanoTime() < deadline && !hasExited(worker)) {
+      Thread.sleep(50)
+    }
+    if (!hasExited(worker)) {
+      worker.destroyForcibly()
+      fail(s"$what ${worker.pid}")
+    }
+  }
+
+  private def hasExited(worker: ProcessHandle): Boolean = {
+    !worker.isAlive || linuxState(worker.pid).contains('Z')
+  }
+
+  private def linuxState(pid: Long): Option[Char] = {
+    val stat = Paths.get(s"/proc/$pid/stat")
+    if (!Files.isRegularFile(stat)) {
+      None
+    } else {
+      val text = Files.readString(stat)
+      val close = text.lastIndexOf(')')
+      if (close < 0 || close + 2 >= text.length) None else Some(text.charAt(close + 2))
     }
   }
 
