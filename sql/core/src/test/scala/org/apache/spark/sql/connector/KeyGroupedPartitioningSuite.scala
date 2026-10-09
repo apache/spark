@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.{
   SortExec,
   SparkPlan,
   UnionExec}
+import org.apache.spark.sql.execution.aggregate.SortAggregateExec
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
@@ -5538,6 +5539,119 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
           }
         }
       }
+    }
+  }
+
+  test("SPARK-59995: a scan's output ordering drops sort orders that hold a partition transform") {
+    // `t1` reports a transform in the middle, so the leading run of its ordering stops there.
+    // `t2` reports a transform key first. Each split holds a single key, so the sort order on `id`
+    // after it still holds. `t3` reports no ordering, so the scan derives one from its keys. In
+    // each case a sort on `id` right above the scan needs no `SortExec`. A `GROUP BY id` plans a
+    // `SortAggregateExec`. The query selects `ts`, so the transform's column stays in the scan
+    // output. Otherwise SPARK-59899's pruned-column handling would give the same orderings even
+    // without this fix.
+    val table1 = "transform_order_t1"
+    val table2 = "transform_order_t2"
+    val table3 = "transform_order_t3"
+    def asc(expr: Expression): SortOrder = sort(expr, SortDirection.ASCENDING)
+    createTable(table1, columns, Array(identity("id")),
+      Array(asc(FieldReference("id")), asc(years("ts")), asc(FieldReference("data"))))
+    createTable(table2, columns, Array(years("ts"), identity("id")),
+      Array(asc(years("ts")), asc(FieldReference("id"))))
+    createTable(table3, columns, Array(days("ts"), identity("id")))
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
+        SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "true") {
+      Seq(table1, table2, table3).foreach { table =>
+        sql(s"INSERT INTO testcat.ns.$table VALUES (1, 'aa', cast('2020-01-01' as timestamp))")
+        val df = sql(s"SELECT id, data, ts FROM testcat.ns.$table")
+        val scan = collectScans(df.queryExecution.executedPlan).head
+        assert(scan.output.exists(_.name == "ts"), s"test setup: ts stays in the output of $table")
+        assert(scan.outputOrdering.map(_.child.sql) === Seq("id"), table)
+        val sorted = df.sortWithinPartitions("id").queryExecution.executedPlan
+        assert(collect(sorted) { case s: SortExec => s }.isEmpty, table)
+        val aggregated = sql(s"SELECT id, max(ts) FROM testcat.ns.$table GROUP BY id")
+          .queryExecution.executedPlan
+        assert(collect(aggregated) { case a: SortAggregateExec => a }.nonEmpty, table)
+      }
+    }
+  }
+
+  /**
+   * Inserts three items, two of them with `id` 1 on their own splits, so grouping the splits by
+   * `id` coalesces them. Then joins `items` with `purchases` on `joinCondition` and checks that
+   * the plan k-way merges over `expectedOrdering`, the columns the scan's ordering keeps before
+   * its transform. The query selects `arrive_time`, so the transform's column stays in the scan
+   * output. Otherwise SPARK-59899's pruned-column handling would drop the transform even without
+   * this fix.
+   */
+  private def checkKWayMergeBeforeTransform(
+      joinCondition: String,
+      expectedOrdering: Seq[String]): Unit = {
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 10.0, cast('2021-01-01' as timestamp)), " +
+      "(1, 'ab', 11.0, cast('2022-01-01' as timestamp)), " +
+      "(2, 'bb', 20.0, cast('2021-01-01' as timestamp))")
+    val df = sql(
+      s"""
+         |${selectWithMergeJoinHint("i", "p")}
+         |i.id, i.name, i.arrive_time
+         |FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON $joinCondition
+         |""".stripMargin)
+    checkAnswer(df, Seq(
+      Row(1, "aa", Timestamp.valueOf("2021-01-01 00:00:00")),
+      Row(1, "ab", Timestamp.valueOf("2022-01-01 00:00:00")),
+      Row(2, "bb", Timestamp.valueOf("2021-01-01 00:00:00"))))
+    val merging = collectAllGroupPartitions(df.queryExecution.executedPlan)
+      .filter(_.enableSortedMerge)
+    assert(merging.length == 1, "expected one k-way merge")
+    assert(merging.head.child.output.exists(_.name == "arrive_time"),
+      "test setup: arrive_time stays in the scan output")
+    assert(merging.head.child.outputOrdering.map(_.child.sql) == expectedOrdering)
+    assert(merging.head.execute().isInstanceOf[SortedMergeCoalescedRDD[_]])
+  }
+
+  test("SPARK-59995: k-way merge over a reported ordering with a partition transform") {
+    // The join on (id, name) needs the merge, since the key ordering on id alone is not enough.
+    // The scan reports [id, name, years(arrive_time)] and keeps [id, name].
+    val itemOrdering = Array(
+      sort(FieldReference("id"), SortDirection.ASCENDING),
+      sort(FieldReference("name"), SortDirection.ASCENDING),
+      sort(years("arrive_time"), SortDirection.ASCENDING))
+    createTable(items, itemsColumns, Array(identity("id")), itemOrdering)
+    val namedPurchasesColumns = Array(
+      Column.create("item_id", LongType),
+      Column.create("name", StringType))
+    createTable(purchases, namedPurchasesColumns, Array(identity("item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES (1, 'aa'), (1, 'ab'), (2, 'bb')")
+
+    withSQLConf(
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      checkKWayMergeBeforeTransform("p.item_id = i.id AND p.name = i.name", Seq("id", "name"))
+    }
+  }
+
+  test("SPARK-59995: k-way merge over an ordering derived from a partition transform key") {
+    // The scan reports no ordering, so it derives [id] from its keys, leaving out
+    // days(arrive_time). The merge must not call the transform's function. Spark cannot call this
+    // `days` at all, since `DaysFunction` implements neither `invoke` nor `produceResult`. The join
+    // on id projects the keys to id. With preserveKeyOrderingOnCoalesce off, the coalesced
+    // partitions keep no ordering on id unless they are merged. Before Spark 4.4, a join on a
+    // subset of the partition keys also needs requireAllClusterKeysForCoPartition off.
+    createTable(items, itemsColumns, Array(identity("id"), days("arrive_time")))
+    createTable(purchases, purchasesColumns, Array(identity("item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 10.0, cast('2021-01-01' as timestamp)), " +
+      "(2, 20.0, cast('2021-01-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
+      checkKWayMergeBeforeTransform("p.item_id = i.id", Seq("id"))
     }
   }
 
