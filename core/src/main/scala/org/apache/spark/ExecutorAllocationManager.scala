@@ -989,7 +989,7 @@ private[spark] class ExecutorAllocationManager(
             if (!taskEnd.taskInfo.speculative &&
                 !stageAttemptToSuccessfulSpeculativeTaskIndices.get(stageAttempt)
                   .exists(_.contains(taskIndex))) {
-              // An unsuccessful regular task remains pending until another attempt starts.
+              // The index stays pending until a regular attempt starts or any attempt succeeds.
               stageAttemptToTaskIndices.get(stageAttempt).foreach {_.remove(taskIndex)}
             }
         }
