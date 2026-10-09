@@ -107,6 +107,9 @@ class JacksonParser(
 
   private val enablePartialResults = SQLConf.get.jsonEnablePartialResults
 
+  // CHAR/VARCHAR JSON map keys are length-checked without pad or trim under this flag.
+  private val charVarcharStandardSemantics = SQLConf.get.charVarcharStandardSemantics
+
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema. This is a wrapper for the method
@@ -192,7 +195,7 @@ class JacksonParser(
   private def makeMapRootConverter(mt: MapType): JsonParser => Iterable[InternalRow] = {
     val fieldConverter = makeConverter(mt.valueType)
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, mt) {
-      case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter)))
+      case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter, mt.keyType)))
     }
   }
 
@@ -485,7 +488,7 @@ class JacksonParser(
     case mt: MapType =>
       val valueConverter = makeConverter(mt.valueType)
       (parser: JsonParser) => parseJsonToken[MapData](parser, dataType) {
-        case START_OBJECT => convertMap(parser, valueConverter)
+        case START_OBJECT => convertMap(parser, valueConverter, mt.keyType)
       }
 
     case udt: UserDefinedType[_] =>
@@ -619,25 +622,54 @@ class JacksonParser(
 
   /**
    * Parse an object as a Map, preserving all fields.
+   *
+   * JSON object names used as CHAR/VARCHAR keys are length-checked without rewriting:
+   * CHAR keys must already be exactly n characters, and VARCHAR keys must already be
+   * at most n characters. Padding, trimming, and mapKeyDedupPolicy are not applied.
+   * Exact repeated names last-win for CHAR/VARCHAR keys; STRING keys keep every pair.
    */
   private def convertMap(
       parser: JsonParser,
-      fieldConverter: ValueConverter): MapData = {
+      fieldConverter: ValueConverter,
+      keyType: DataType): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
+    val lastWinCharVarcharKeys = charVarcharStandardSemantics && {
+      keyType match {
+        case _: CharType | _: VarcharType => true
+        case _ => false
+      }
+    }
 
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      keys += UTF8String.fromString(parser.currentName)
+      val key = convertJsonMapKey(parser.currentName, keyType)
+      val existing = if (lastWinCharVarcharKeys) keys.indexWhere(_ == key) else -1
       try {
-        values += fieldConverter.apply(parser)
+        val value = fieldConverter.apply(parser)
+        if (existing >= 0) {
+          values(existing) = value
+        } else {
+          keys += key
+          values += value
+        }
       } catch {
         case err: PartialValueException if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(err.cause))
-          values += err.partialResult
+          if (existing >= 0) {
+            values(existing) = err.partialResult
+          } else {
+            keys += key
+            values += err.partialResult
+          }
         case NonFatal(e) if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(e))
           parser.skipChildren()
+          // Record the key without a value so the unpaired-buffer check below
+          // rethrows EXCEED_LIMIT_LENGTH instead of returning an empty map.
+          if (existing < 0) {
+            keys += key
+          }
       }
     }
 
@@ -648,14 +680,30 @@ class JacksonParser(
       throw badRecordException.get
     }
 
-    // Preserve every parsed JSON key/value pair, including exact duplicate names.
-    // ArrayBasedMapData is used directly to retain this historical behavior.
+    // STRING keys keep every parsed pair, including exact duplicate names.
+    // CHAR/VARCHAR keys last-win on exact names.
     val mapData = ArrayBasedMapData(keys.toArray, values.toArray)
 
     if (badRecordException.isEmpty) {
       mapData
     } else {
       throw PartialMapDataResultException(mapData, badRecordException.get)
+    }
+  }
+
+  private def convertJsonMapKey(rawName: String, keyType: DataType): UTF8String = {
+    val key = UTF8String.fromString(rawName)
+    if (!charVarcharStandardSemantics) {
+      key
+    } else {
+      keyType match {
+        case c: CharType =>
+          CharVarcharCodegenUtils.charTypeJsonMapKeyCheck(key, c.length)
+        case v: VarcharType =>
+          CharVarcharCodegenUtils.varcharTypeJsonMapKeyCheck(key, v.length)
+        case _ =>
+          key
+      }
     }
   }
 

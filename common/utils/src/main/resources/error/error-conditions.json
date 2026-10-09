@@ -9605,6 +9605,13 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY" : {
+    "message" : [
+      "JSON map keys of CHAR or VARCHAR cannot be padded or trimmed.",
+      "The key <key> is not valid for type <dataType>."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_MERGE_CONDITION" : {
     "message" : [
       "MERGE operation contains unsupported <condName> condition."

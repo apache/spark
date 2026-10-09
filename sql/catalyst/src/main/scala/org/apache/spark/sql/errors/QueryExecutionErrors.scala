@@ -2739,6 +2739,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  def unsupportedJsonCharVarcharMapKey(
+      key: UTF8String, dataType: DataType): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY",
+      messageParameters = Map(
+        "key" -> toSQLValue(key, StringType),
+        "dataType" -> toSQLType(dataType)))
+  }
+
   def timestampAddOverflowError(micros: Long, amount: Long, unit: String): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",

@@ -1044,6 +1044,29 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       parameters = Map("limit" -> expectedLimit))
   }
 
+  private def assertUnsupportedJsonMapKey(
+      query: String, key: String, dataTypeSql: String): Unit = {
+    assertUnsupportedJsonMapKeyError(sql(query).collect(), key, dataTypeSql)
+  }
+
+  private def assertUnsupportedJsonMapKeyError(
+      body: => Any, key: String, dataTypeSql: String): Unit = {
+    val e = intercept[SparkException] { body }
+    val cause = e.getCause match {
+      case r: SparkRuntimeException => r
+      case other =>
+        Option(other).flatMap(t => Option(t.getCause)).getOrElse(other) match {
+          case r: SparkRuntimeException => r
+          case _ => fail(s"expected UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY cause, got: $e")
+        }
+    }
+    checkError(
+      exception = cause,
+      condition = "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY",
+      sqlState = "0A000",
+      parameters = Map("key" -> s"'$key'", "dataType" -> s""""$dataTypeSql""""))
+  }
+
   private def assertDuplicateMapKey(query: String, expectedKey: String = "a "): Unit = {
     assertDuplicateMapKeyError(sql(query).collect(), expectedKey)
   }
@@ -3069,6 +3092,67 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                |  map('attributePrefix', '', 'mode', 'FAILFAST'))""".stripMargin,
             expectedLimit = "2")
         }
+    }
+  }
+
+  test("SPARK-60108: JSON CHAR/VARCHAR map keys are not padded or trimmed") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      checkAnswer(
+        sql("""SELECT from_json('{"ab ": 1}', 'MAP<CHAR(3), INT>')"""),
+        Row(Map("ab " -> 1)))
+      checkAnswer(
+        sql("""SELECT from_json('{"ab": 1}', 'MAP<VARCHAR(3), INT>')"""),
+        Row(Map("ab" -> 1)))
+      checkAnswer(
+        sql("""SELECT map_entries(from_json('{"ab": 1, "ab ": 2}', 'MAP<VARCHAR(3), INT>'))"""),
+        Row(Seq(Row("ab", 1), Row("ab ", 2))))
+      checkAnswer(
+        sql("""SELECT size(from_json('{"abc": 1, "abc": 2}', 'MAP<CHAR(3), INT>'))"""),
+        Row(1))
+      checkAnswer(
+        sql("""SELECT from_json('{"abc": 1, "abc": 2}', 'MAP<CHAR(3), INT>')"""),
+        Row(Map("abc" -> 2)))
+      checkAnswer(
+        sql("""SELECT from_json('{"outer": {"xy ": 1}}',
+          |  'MAP<STRING, MAP<CHAR(3), INT>>')""".stripMargin),
+        Row(Map("outer" -> Map("xy " -> 1))))
+
+      // Too-short CHAR, CHAR overflow, and VARCHAR overflow are not EXCEED_LIMIT_LENGTH.
+      checkAnswer(sql("""SELECT from_json('{"a": 1}', 'MAP<CHAR(3), INT>')"""), Row(null))
+      checkAnswer(sql("""SELECT from_json('{"abcd": 1}', 'MAP<CHAR(3), INT>')"""), Row(null))
+      checkAnswer(sql("""SELECT from_json('{"abcd": 1}', 'MAP<VARCHAR(3), INT>')"""), Row(null))
+      checkAnswer(sql("""SELECT from_json('{"ab ": 1}', 'MAP<VARCHAR(2), INT>')"""), Row(null))
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"a": 1}', 'MAP<CHAR(3), INT>', map('mode', 'FAILFAST'))""",
+        key = "a",
+        dataTypeSql = "CHAR(3)")
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"abcd": 1}', 'MAP<CHAR(3), INT>', map('mode', 'FAILFAST'))""",
+        key = "abcd",
+        dataTypeSql = "CHAR(3)")
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"abcd": 1}', 'MAP<VARCHAR(3), INT>', map('mode', 'FAILFAST'))""",
+        key = "abcd",
+        dataTypeSql = "VARCHAR(3)")
+
+      withTempPath { path =>
+        Seq("""{"m":{"ab ":1}}""", """{"m":{"a":1}}""").toDS()
+          .repartition(1)
+          .write.text(path.getCanonicalPath)
+        val schema = "m MAP<CHAR(3), INT>"
+        val permissive = spark.read.schema(schema).json(path.getCanonicalPath)
+        checkAnswer(permissive, Seq(Row(Map("ab " -> 1)), Row(null)))
+        val failFast = spark.read.option("mode", "FAILFAST").schema(schema)
+          .json(path.getCanonicalPath)
+        assertUnsupportedJsonMapKeyError(failFast.collect(), key = "a", dataTypeSql = "CHAR(3)")
+      }
+
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.EXCEPTION.toString) {
+        checkAnswer(
+          sql("""SELECT from_json('{"abc": 1, "abc": 2}', 'MAP<VARCHAR(3), INT>')"""),
+          Row(Map("abc" -> 2)))
+      }
     }
   }
 
