@@ -4792,6 +4792,128 @@ class DataFrameAggregateSuite extends SharedSparkSession
     assert(estimateResult == 2.0)
   }
 
+  private val intersectionSketchFunctions = Map(
+    "theta_intersection_agg" ->
+      ("theta_sketch_agg(id)", "theta_intersection_agg", "theta_sketch_estimate"),
+    "tuple_intersection_agg_double" ->
+      ("tuple_sketch_agg_double(id, 1.0D)",
+        "tuple_intersection_agg_double", "tuple_sketch_estimate_double"),
+    "tuple_intersection_agg_integer" ->
+      ("tuple_sketch_agg_integer(id, 1)",
+        "tuple_intersection_agg_integer", "tuple_sketch_estimate_integer")
+  )
+
+  namedGridTest(
+    "SPARK-59975: intersection returns an empty sketch for all-null input")(
+    intersectionSketchFunctions) {
+    case (_, intersection, estimate) =>
+      val rows = spark.sparkContext.parallelize(Seq.fill(4)(Row(null)), 2)
+      val schema = new StructType().add("sketch", BinaryType)
+      withTempView("intersection_null_inputs") {
+        spark.createDataFrame(rows, schema).createOrReplaceTempView("intersection_null_inputs")
+        checkAnswer(
+          sql(s"""
+            |SELECT CAST($estimate($intersection(sketch)) AS DOUBLE)
+            |FROM intersection_null_inputs
+            |""".stripMargin),
+          Row(0.0))
+      }
+  }
+
+  namedGridTest(
+    "SPARK-59975: intersection skips null-only partials for mixed groups")(
+    intersectionSketchFunctions) {
+    case (buildSketch, intersection, estimate) =>
+      val sketch = sql(s"SELECT $buildSketch FROM range(1, 3)").head().getAs[Array[Byte]](0)
+      // Group 0 is all-null. Group 1 has a null-only partial and a populated partial.
+      val partitions = Seq(
+        Seq(Row(0, null), Row(1, null)),
+        Seq(Row(0, null), Row(1, sketch)))
+      val rows = spark.sparkContext.parallelize(partitions, partitions.size).flatMap(_.iterator)
+      val schema = new StructType().add("group_id", IntegerType).add("sketch", BinaryType)
+      withTempView("intersection_mixed_inputs") {
+        spark.createDataFrame(rows, schema).createOrReplaceTempView("intersection_mixed_inputs")
+        checkAnswer(
+          sql(s"""
+            |SELECT group_id, CAST($estimate($intersection(sketch)) AS DOUBLE)
+            |FROM intersection_mixed_inputs
+            |GROUP BY group_id
+            |""".stripMargin),
+          Seq(Row(0, 0.0), Row(1, 2.0)))
+      }
+  }
+
+  namedGridTest(
+    "SPARK-59975: intersection skips empty partitions in a global aggregate")(
+    intersectionSketchFunctions) {
+    case (buildSketch, intersection, estimate) =>
+      val sketch = sql(s"SELECT $buildSketch FROM range(1, 3)").head().getAs[Array[Byte]](0)
+      // The first partition is empty, but a global aggregate still emits and serializes
+      // a default partial buffer for it.
+      val rows = spark.sparkContext.parallelize(Seq(Row(sketch)), 2)
+      val schema = new StructType().add("sketch", BinaryType)
+      withTempView("intersection_empty_partition") {
+        spark.createDataFrame(rows, schema).createOrReplaceTempView("intersection_empty_partition")
+        checkAnswer(
+          sql(s"""
+            |SELECT CAST($estimate($intersection(sketch)) AS DOUBLE)
+            |FROM intersection_empty_partition
+            |""".stripMargin),
+          Row(2.0))
+        // Zero input rows return an empty sketch.
+        checkAnswer(
+          sql(s"""
+            |SELECT CAST($estimate($intersection(sketch)) AS DOUBLE)
+            |FROM intersection_empty_partition
+            |WHERE false
+            |""".stripMargin),
+          Row(0.0))
+      }
+  }
+
+  namedGridTest(
+    "SPARK-59975: intersection with multiple DISTINCT aggregates")(
+    intersectionSketchFunctions) {
+    case (buildSketch, intersection, estimate) =>
+      val sketch = sql(s"SELECT $buildSketch FROM range(1, 3)").head().getAs[Array[Byte]](0)
+      withTempView("intersection_distinct_inputs") {
+        Seq((1, 10, sketch), (2, 20, sketch)).toDF("a", "b", "sketch")
+          .createOrReplaceTempView("intersection_distinct_inputs")
+        // RewriteDistinctAggregates sets the intersection input to NULL on the expanded rows
+        // of each DISTINCT group, so the intersection sees all-NULL groups.
+        val df = sql(s"""
+          |SELECT
+          |  CAST($estimate($intersection(sketch)) AS DOUBLE),
+          |  count(DISTINCT a),
+          |  count(DISTINCT b)
+          |FROM intersection_distinct_inputs
+          |""".stripMargin)
+        assert(df.queryExecution.optimizedPlan.collectFirst { case e: Expand => e }.nonEmpty)
+        checkAnswer(df, Row(2.0, 2L, 2L))
+      }
+  }
+
+  namedGridTest(
+    "SPARK-59975: intersection window aggregate over a frame with only null sketches")(
+    intersectionSketchFunctions) {
+    case (buildSketch, intersection, estimate) =>
+      val sketch = sql(s"SELECT $buildSketch FROM range(1, 3)").head().getAs[Array[Byte]](0)
+      withTempView("intersection_window_inputs") {
+        Seq[(Int, Array[Byte])]((1, null), (2, sketch)).toDF("id", "sketch")
+          .createOrReplaceTempView("intersection_window_inputs")
+        // A window aggregate evaluates the frame buffer directly, without serializing it.
+        checkAnswer(
+          sql(s"""
+            |SELECT
+            |  id,
+            |  CAST($estimate($intersection(sketch) OVER (
+            |    ORDER BY id ROWS BETWEEN CURRENT ROW AND CURRENT ROW)) AS DOUBLE)
+            |FROM intersection_window_inputs
+            |""".stripMargin),
+          Seq(Row(1, 0.0), Row(2, 2.0)))
+      }
+  }
+
   test("SPARK-54179: tuple_sketch_agg + operations + estimate comprehensive test - double") {
     val df1 = Seq((1, "a", 1.0), (1, "a", 2.0), (1, "b", 3.0), (1, "c", 4.0))
       .toDF("id", "key", "summary")
