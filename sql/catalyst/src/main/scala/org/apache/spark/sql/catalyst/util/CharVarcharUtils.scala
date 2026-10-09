@@ -64,9 +64,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   /**
    * Like [[replaceCharVarcharWithStringInSchema]], but always rewrites the physical type to
-   * unbounded STRING even when first-class CHAR/VARCHAR is enabled. STRING-on-the-wire sources
-   * such as JSON and Hive TRANSFORM apply [[stringLengthCheck]] after parse when standard
-   * semantics are enabled.
+   * unbounded STRING even when first-class CHAR/VARCHAR is enabled. STRING-on-the-wire
+   * parsers apply [[stringLengthCheck]] after parse when standard semantics are enabled.
    */
   def replaceCharVarcharWithStringInSchemaAlways(st: StructType): StructType = {
     StructType(st.map { field =>

@@ -81,8 +81,8 @@ class JacksonParser(
 
   /**
    * Pad CHAR / length-check VARCHAR / rewrite CHAR map keys on a row parsed as STRING.
-   * `DUPLICATED_MAP_KEY` from key assignment is left unwrapped so it fails the query
-   * even under PERMISSIVE, matching XML constrained maps.
+   * No-op when standard semantics are off. `DUPLICATED_MAP_KEY` from key assignment is
+   * left unwrapped so it fails the query even under PERMISSIVE, matching XML maps.
    */
   private def applyAssignment(row: InternalRow): InternalRow = {
     if (!needsAssignment) {
@@ -92,16 +92,30 @@ class JacksonParser(
         case _: StructType =>
           assignExpr.eval(InternalRow(row)).asInstanceOf[InternalRow]
         case _ =>
-          InternalRow(assignExpr.eval(InternalRow(row.get(0, physicalSchema))))
+          assignWrappedValue(row.get(0, physicalSchema))
       }
     }
   }
 
-  private def tryAssignPartial(row: InternalRow): InternalRow = {
+  private def assignWrappedValue(value: Any): InternalRow = {
+    if (!needsAssignment) {
+      InternalRow(value)
+    } else {
+      InternalRow(assignExpr.eval(InternalRow(value)))
+    }
+  }
+
+  /**
+   * Apply assignment to a partial payload. Overflow follows whole-value parse mode
+   * (empty partial -> PERMISSIVE null). Duplicate keys stay query-fatal.
+   */
+  private def assignedPartialResults(compute: => Array[InternalRow]): Array[InternalRow] = {
     try {
-      applyAssignment(row)
+      compute
     } catch {
-      case NonFatal(_) => row
+      case e: SparkUpgradeException => throw e
+      case DuplicateMapKeyUtils(e) => throw e
+      case NonFatal(_) => Array.empty
     }
   }
 
@@ -193,9 +207,25 @@ class JacksonParser(
 
   private def makeStructRootConverter(st: StructType): JsonParser => Iterable[InternalRow] = {
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
-    val jsonFilters = if (SQLConf.get.jsonFilterPushDown &&
-        !CharVarcharUtils.hasCharVarchar(schema)) {
-      new JsonFilters(filters, st)
+    val jsonFilters = if (SQLConf.get.jsonFilterPushDown) {
+      // Assignment can change CHAR padding, VARCHAR length, and constrained map keys.
+      // Keep pushdown for independent fields; leave assignment-sensitive predicates residual.
+      val pushed = if (!needsAssignment) {
+        filters
+      } else {
+        schema match {
+          case orig: StructType =>
+            filters.filterNot { f =>
+              f.references.exists { name =>
+                orig.getFieldIndex(name).exists { i =>
+                  CharVarcharUtils.hasCharVarchar(orig.fields(i).dataType)
+                }
+              }
+            }
+          case _ => Seq.empty
+        }
+      }
+      new JsonFilters(pushed, st)
     } else {
       new NoopFilters
     }
@@ -758,21 +788,25 @@ class JacksonParser(
         wrappedCharException.initCause(e)
         BadRecordException(recordLiteral, () => Array.empty, wrappedCharException)
       case PartialResultException(row, cause) =>
+        val assigned = assignedPartialResults(Array(applyAssignment(row)))
         BadRecordException(
           recordLiteral,
-          () => Array(tryAssignPartial(row)),
+          () => assigned,
           convertCauseForPartialResult(cause))
       case PartialResultArrayException(rows, cause) =>
-        BadRecordException(recordLiteral, () => rows, cause)
+        val assigned = assignedPartialResults(rows.map(applyAssignment))
+        BadRecordException(recordLiteral, () => assigned, cause)
       case PartialArrayDataResultException(arrayData, cause) =>
+        val assigned = assignedPartialResults(Array(assignWrappedValue(arrayData)))
         BadRecordException(
           recordLiteral,
-          () => Array(InternalRow(arrayData)),
+          () => assigned,
           convertCauseForPartialResult(cause))
       case PartialMapDataResultException(mapData, cause) =>
+        val assigned = assignedPartialResults(Array(assignWrappedValue(mapData)))
         BadRecordException(
           recordLiteral,
-          () => Array(InternalRow(mapData)),
+          () => assigned,
           convertCauseForPartialResult(cause))
       case e => BadRecordException(recordLiteral, () => Array.empty, e)
     }
@@ -915,7 +949,16 @@ class JacksonParser(
                 nextRow = handleFailure(Some(elementStart)) {
                   val row = arrayElementConverter(jsonParser).asInstanceOf[InternalRow]
                   if (row == null) throw QueryExecutionErrors.rootConverterReturnNullError()
-                  applyAssignment(row)
+                  // Converter already consumed the element. Surface assignment failures as
+                  // PartialResultException so resumableAfter can keep later array elements.
+                  try {
+                    applyAssignment(row)
+                  } catch {
+                    case e: SparkUpgradeException => throw e
+                    case DuplicateMapKeyUtils(e) => throw e
+                    case e: RuntimeException =>
+                      throw PartialResultException(row, e)
+                  }
                 }
                 prepared = true
             }

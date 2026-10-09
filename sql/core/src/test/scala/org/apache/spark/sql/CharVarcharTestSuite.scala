@@ -3125,6 +3125,97 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59722: JSON assignment failures do not expose physical STRING") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // Parser mismatch plus CHAR overflow: do not return the raw overlength STRING.
+      checkAnswer(
+        sql("""SELECT from_json('{"a":"x","b":"abcdef"}', 'a INT, b CHAR(2)')"""),
+        Row(Row(null, null)))
+
+      // Map and array roots assign after parse; overflow is whole-value null.
+      checkAnswer(
+        sql("""SELECT from_json('{"a":"ab"}', 'MAP<CHAR(4), CHAR(4)>')"""),
+        Row(Map("a   " -> "ab  ")))
+      checkAnswer(
+        sql("""SELECT from_json('{"a":"abcdef"}', 'MAP<STRING, CHAR(2)>')"""),
+        Row(null))
+      checkAnswer(
+        sql("""SELECT from_json('["ab","c"]', 'ARRAY<CHAR(4)>')"""),
+        Row(Seq("ab  ", "c   ")))
+      checkAnswer(
+        sql("""SELECT from_json('["ok","abcdef"]', 'ARRAY<CHAR(2)>')"""),
+        Row(null))
+    }
+  }
+
+  test("SPARK-59722: streamed JSON array resumes after assignment overflow") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
+      withTempPath { path =>
+        Seq("""[{"c":"abcdef","id":1},{"c":"ok","id":2}]""")
+          .toDS().write.text(path.getCanonicalPath)
+        val schema = "c CHAR(2), id INT"
+        Seq("json", "").foreach { useV1 =>
+          withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1) {
+            withClue(s"useV1=$useV1") {
+              val permissive = spark.read
+                .option("multiLine", true)
+                .schema(schema)
+                .json(path.getCanonicalPath)
+              checkAnswer(permissive, Seq(Row(null, null), Row("ok", 2)))
+              val dropMalformed = spark.read
+                .option("multiLine", true)
+                .option("mode", "DROPMALFORMED")
+                .schema(schema)
+                .json(path.getCanonicalPath)
+              checkAnswer(dropMalformed, Seq(Row("ok", 2)))
+              val failFast = spark.read
+                .option("multiLine", true)
+                .option("mode", "FAILFAST")
+                .schema(schema)
+                .json(path.getCanonicalPath)
+              assertParseExceedLimitError(failFast.collect(), expectedLimit = "2")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59722: JSON datasource CHAR filters stay residual") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTempPath { path =>
+        Seq(
+          """{"id":1,"c":"ab"}""",
+          """{"id":2,"c":"xy"}""",
+          """{"id":3,"c":"ab"}""")
+          .toDS().repartition(1).write.text(path.getCanonicalPath)
+        val schema = "id INT, c CHAR(4)"
+        Seq("json", "").foreach { useV1 =>
+          Seq(true, false).foreach { pushdown =>
+            withSQLConf(
+                SQLConf.USE_V1_SOURCE_LIST.key -> useV1,
+                SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> pushdown.toString) {
+              withClue(s"useV1=$useV1 pushdown=$pushdown") {
+                val df = spark.read.schema(schema).json(path.getCanonicalPath)
+                checkAnswer(df, Seq(Row(1, "ab  "), Row(2, "xy  "), Row(3, "ab  ")))
+                // Independent INT predicate.
+                checkAnswer(df.where($"id" === 1), Seq(Row(1, "ab  ")))
+                // Assigned CHAR value; raw "ab" must not match.
+                checkAnswer(df.where($"c" === "ab  "), Seq(Row(1, "ab  "), Row(3, "ab  ")))
+                checkAnswer(df.where($"c" === "ab"), Seq.empty)
+                checkAnswer(
+                  df.where($"id" > 1 && $"c" === "ab  "),
+                  Seq(Row(3, "ab  ")))
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-59274: pretty-printed XML map failures preserve parser position") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       val overflowQueries = Seq("CHAR(5)", "VARCHAR(5)").map { valueType =>
