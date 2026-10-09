@@ -38,6 +38,14 @@ trait Queue[T] {
   def add(item: T): Boolean
   def remove(): T
   def close(): Unit
+
+  /**
+   * Releases any resources the queue only needs while it is being written to, after which the
+   * queue accepts no further items but can still be read. Called once a queue is known to be
+   * complete, so that a disk-backed queue does not hold an output stream and its buffer open
+   * until its first read. The default is a no-op, for queues that hold nothing write-only.
+   */
+  def closeOutputStream(): Unit = {}
 }
 
 /**
@@ -91,6 +99,11 @@ abstract class HybridQueue[T, Q <: Queue[T]](
           }
           released += getPageSize(queue)
           queue.close()
+          // This queue is complete: nothing more will ever be written to it, since only the
+          // last queue is written to. Release its output stream now rather than holding it,
+          // and its buffer, until the first read -- with N spilled queues those would
+          // otherwise all be open at once, exactly when memory is scarce.
+          diskQueue.closeOutputStream()
           diskQueue
         } else {
           queue
