@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{BadRecordException, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{EqualTo, Filter, StringStartsWith}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -413,5 +414,26 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       parameters = Map(
         "c" -> "n",
         "pattern" -> "invalid"))
+  }
+
+  test("SPARK-60102: CHAR assignment after parse skips filter pushdown") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val schema = StructType.fromDDL("c CHAR(4)")
+      val options = new CSVOptions(Map.empty[String, String], false, "UTC")
+      val parser = new UnivocityParser(
+        schema,
+        schema,
+        options,
+        Seq(EqualTo("c", UTF8String.fromString("ab  "))))
+      assert(parser.parse("ab") === Some(InternalRow(UTF8String.fromString("ab  "))))
+
+      val overflow = intercept[BadRecordException] {
+        new UnivocityParser(schema, options).parse("abcdef")
+      }
+      checkError(
+        exception = overflow.getCause.asInstanceOf[SparkRuntimeException],
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "4"))
+    }
   }
 }

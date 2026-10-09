@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -68,6 +69,26 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         val metadata = new MetadataBuilder().withMetadata(field.metadata)
           .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, field.dataType.catalogString).build()
         field.copy(dataType = replaceCharVarcharWithString(field.dataType), metadata = metadata)
+      } else {
+        field
+      }
+    })
+  }
+
+  /**
+   * Like [[replaceCharVarcharWithStringInSchema]], but always rewrites the physical type to
+   * unbounded STRING even when first-class CHAR/VARCHAR is enabled. STRING-on-the-wire sources
+   * such as JSON, CSV, and Hive TRANSFORM apply [[stringLengthCheck]] after parse when standard
+   * semantics are enabled.
+   */
+  def replaceCharVarcharWithStringInSchemaAlways(st: StructType): StructType = {
+    StructType(st.map { field =>
+      if (hasCharVarchar(field.dataType)) {
+        val metadata = new MetadataBuilder().withMetadata(field.metadata)
+          .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, field.dataType.catalogString).build()
+        field.copy(
+          dataType = replaceCharVarcharWithStringAlways(field.dataType),
+          metadata = metadata)
       } else {
         field
       }
@@ -218,6 +239,43 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       dt,
       charFuncName = Some("charTypeWriteSideCheck"),
       varcharFuncName = Some("varcharTypeWriteSideCheck"))
+  }
+
+  /**
+   * Applies write-side CHAR/VARCHAR assignment to a value parsed as unbounded STRING.
+   * No-op when standard semantics are off or `targetType` has no CHAR/VARCHAR.
+   */
+  def assignAfterParse(expr: Expression, targetType: DataType): Expression = {
+    if (SQLConf.get.charVarcharStandardSemantics && hasCharVarchar(targetType)) {
+      stringLengthCheck(expr, targetType)
+    } else {
+      expr
+    }
+  }
+
+  /**
+   * Applies [[assignAfterParse]] to a value already parsed as `physicalType` (CHAR/VARCHAR
+   * replaced by unbounded STRING). Returns a value of `targetType`. Callers wrap or unwrap
+   * [[InternalRow]] themselves; this helper is not JSON-specific.
+   */
+  def assignParsedValue(
+      parsed: Any,
+      physicalType: DataType,
+      targetType: DataType): Any = {
+    assignParsedValue(
+      parsed,
+      assignAfterParse(BoundReference(0, physicalType, nullable = true), targetType))
+  }
+
+  /**
+   * Same as [[assignParsedValue]] with a prebuilt assignment expression, so parsers can
+   * construct [[assignAfterParse]] once.
+   */
+  def assignParsedValue(parsed: Any, assignExpr: Expression): Any = {
+    assignExpr match {
+      case _: BoundReference => parsed
+      case e => e.eval(InternalRow(parsed))
+    }
   }
 
   private def processStringForCharVarchar(

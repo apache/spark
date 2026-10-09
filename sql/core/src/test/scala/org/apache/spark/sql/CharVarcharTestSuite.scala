@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
 import org.apache.spark.sql.catalyst.expressions.{
@@ -31,7 +32,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{
   Aggregate, Filter, LogicalPlan, OneRowRelation, Project
 }
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GenericArrayData}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
@@ -2874,6 +2875,49 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           "STRUCT<a: BIGINT>").foreach { case (expression, expected) =>
         checkAnswer(sql(s"SELECT $expression"), Row(expected))
       }
+    }
+  }
+
+  test("SPARK-60102: CSV CHAR/VARCHAR assignment runs after STRING parse") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val csvChar = sql("SELECT from_csv('str', 'a CHAR(5)')")
+      assert(csvChar.schema.head.dataType.asInstanceOf[StructType].head.dataType ===
+        CharType(5))
+      checkAnswer(csvChar, Row(Row("str  ")))
+      checkAnswer(sql("SELECT from_csv('ab', 'a VARCHAR(5)')"), Row(Row("ab")))
+
+      Seq("CHAR(2)", "VARCHAR(2)").foreach { dataType =>
+        withClue(dataType) {
+          // Assignment is whole-row: PERMISSIVE does not keep the sibling field.
+          checkAnswer(
+            sql(s"SELECT from_csv('abcdef,keep', 'a $dataType, b STRING')"),
+            Row(Row(null, null)))
+          assertParseExceedLimit(
+            s"SELECT from_csv('abcdef,keep', 'a $dataType, b STRING', " +
+              "map('mode', 'FAILFAST'))",
+            expectedLimit = "2")
+        }
+      }
+
+      withTempPath { path =>
+        Seq("ab", "xy").toDS().repartition(1).write.text(path.getCanonicalPath)
+        val padded = spark.read.schema("c CHAR(4)").csv(path.getCanonicalPath)
+        checkAnswer(
+          padded.selectExpr("concat('<', c, '>')"),
+          Seq(Row("<ab  >"), Row("<xy  >")))
+        checkAnswer(padded.filter($"c" === "ab  "), Row("ab  "))
+      }
+
+      // CSV is a flat format; nested CHAR/VARCHAR still goes through assignParsedValue.
+      val physical = StructType.fromDDL("s STRUCT<c: STRING>, a ARRAY<STRING>")
+      val target = StructType.fromDDL("s STRUCT<c: CHAR(4)>, a ARRAY<CHAR(3)>")
+      val parsed = InternalRow(
+        InternalRow(UTF8String.fromString("ab")),
+        new GenericArrayData(Array[Any](UTF8String.fromString("x"))))
+      val assigned = CharVarcharUtils.assignParsedValue(parsed, physical, target)
+        .asInstanceOf[InternalRow]
+      assert(assigned.getStruct(0, 1).getUTF8String(0).toString === "ab  ")
+      assert(assigned.getArray(1).getUTF8String(0).toString === "x  ")
     }
   }
 
