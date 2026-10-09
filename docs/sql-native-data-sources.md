@@ -26,10 +26,10 @@ license: |
 
 A native data source is a data source implemented in native code, such as Rust or C++, without
 any JVM code. It is a shared library that implements the
-[`NativeBridge`](api/java/org/apache/spark/sql/datasource/NativeBridge.html) binary interface, and
-it is distributed as a native data source package: a single file that Spark loads when a query
-uses the data source. Spark adapts it to [Data Source V2](sql-v2-data-sources.html), so it
-supports:
+[`NativeBridge`](api/java/org/apache/spark/sql/datasource/NativeBridge.html) binary interface.
+Spark finds the library automatically when it is installed like other native libraries, or when a
+session adds it in a package, and loads it when a query uses the data source. Spark adapts it to
+[Data Source V2](sql-v2-data-sources.html), so it supports:
 
 - batch and micro-batch streaming reads,
 - batch and streaming writes, appending to or overwriting the existing data,
@@ -84,19 +84,63 @@ The [Javadoc of `NativeBridge`](api/java/org/apache/spark/sql/datasource/NativeB
 specifies each function, including the ownership of the Arrow structs and the JSON format of the
 pushed predicates.
 
-## Packages
+## Finding Native Data Sources
 
-A native data source package is a zip file with the extension `.sparkpkg`. It contains a manifest
-named `spark-native-datasource.json`, and the library built for one or more platforms:
+When no Java or Python data source has the name that a query uses, Spark looks for a native data
+source with that name: in the packages of the session, and then in the installed libraries. A Java
+data source with the same name takes precedence over a native one, and so does a Python data
+source.
+
+### Installed Libraries
+
+Like a Python data source installed in the Python path, a native data source library installed
+like other native libraries is found automatically, without any configuration. The library is
+named after the data source, in lower case, with the prefix `spark_datasource_`: the library of
+`rust_range` is `libspark_datasource_rust_range.so` on Linux,
+`libspark_datasource_rust_range.dylib` on macOS and `spark_datasource_rust_range.dll` on Windows.
+Spark passes the name of the data source to `createDataSource`. A library that implements several
+data sources is installed under each of their names, for example with symbolic links.
+
+Spark looks for the library in the native library path, which consists of, in order:
+
+1. the directories of `java.library.path`, where the JVM finds native libraries. They include
+   `LD_LIBRARY_PATH` on Linux, `DYLD_LIBRARY_PATH` on macOS and `PATH` on Windows, which also
+   contain the directories set with `spark.driver.extraLibraryPath` and
+   `spark.executor.extraLibraryPath`.
+2. the `lib` directory of each installation prefix in `PATH`: `<prefix>/lib` for each directory
+   `<prefix>/bin` in `PATH`.
+
+So Spark finds the libraries where native libraries are usually installed:
+
+- `/usr/local/lib`, the default directory of `make install`, CMake (`cmake --install`) and
+  [cargo-c](https://github.com/lu-zero/cargo-c) (`cargo cinstall`), and of Homebrew on Intel macs;
+- `/opt/homebrew/lib`, for Homebrew on Apple silicon;
+- `$CONDA_PREFIX/lib` and `$VIRTUAL_ENV/lib`, in an activated conda environment or Python virtual
+  environment;
+- `/usr/lib`, for the packages of a Linux distribution.
+
+Cargo does not install libraries: copy the library that `cargo build --release` builds into one of
+these directories. A library in any other directory is found with `LD_LIBRARY_PATH`, or with
+`spark.driver.extraLibraryPath` and `spark.executor.extraLibraryPath`.
+
+The executors load the library from the same path as the driver, or else find it in their own
+native library path, so install it on every node, for example in the container image of the
+cluster.
+
+### Packages
+
+A native data source package distributes a library with a session, for one or more platforms. It
+is a zip file with the extension `.sparkpkg`, which contains a manifest named
+`spark-native-datasource.json` and the libraries:
 
 ```json
 {
   "abiVersion": 1,
   "dataSources": ["rust_range"],
   "libraries": {
-    "linux-x86_64": "linux-x86_64/librust_range.so",
-    "linux-aarch64": "linux-aarch64/librust_range.so",
-    "osx-aarch64": "osx-aarch64/librust_range.dylib"
+    "linux-x86_64": "linux-x86_64/libspark_datasource_rust_range.so",
+    "linux-aarch64": "linux-aarch64/libspark_datasource_rust_range.so",
+    "osx-aarch64": "osx-aarch64/libspark_datasource_rust_range.dylib"
   }
 }
 ```
@@ -107,12 +151,8 @@ named `spark-native-datasource.json`, and the library built for one or more plat
 - `libraries` maps each platform, `<os>-<arch>` with an `os` of `linux`, `osx` or `windows` and an
   `arch` of `x86_64` or `aarch64`, to the path of the library in the package.
 
-Spark finds packages in three places, and the executors get them automatically:
+A session finds the packages in two places, and the executors get them automatically:
 
-- **Installed packages**: like the Python data sources installed in the Python path, the packages in
-  the `native-datasources` directory of `SPARK_HOME` are found automatically, without any
-  configuration. With PySpark installed by pip, `SPARK_HOME` is the directory of the `pyspark`
-  package.
 - **Artifacts of a session**: `spark.addArtifact` adds a package to a session, in Scala, Java and
   Python, and with Spark Connect:
 
@@ -122,21 +162,19 @@ Spark finds packages in three places, and the executors get them automatically:
   ```
 
 - **Configured paths**: the packages listed in `spark.sql.dataSource.native.paths`, or in the
-  directories it lists, for example in a container image.
+  directories it lists, on the driver.
 
-The packages of a session, added as artifacts or configured, take precedence over the installed
-ones. Give packages distinct file names, for example with their version: sessions that are not
-isolated share the files they add.
-
-A Java data source with the same name takes precedence over a native one, and so does a Python
-data source.
+The packages of a session take precedence over the installed libraries. Give packages distinct
+file names, for example with their version: sessions that are not isolated share the files they
+add.
 
 ## Example in Rust
 
 This data source reads the numbers `[0, end)` as a column `id`, in two partitions. It uses the
 [`jni`](https://crates.io/crates/jni) crate, and the `arrow-array` and `arrow-schema` crates of
 [arrow-rs](https://github.com/apache/arrow-rs), which export schemas and streams with
-`FFI_ArrowSchema` and `FFI_ArrowArrayStream`. `Cargo.toml`:
+`FFI_ArrowSchema` and `FFI_ArrowArrayStream`. `Cargo.toml`, where the name of the library is the
+name that Spark finds when it is installed:
 
 ```toml
 [package]
@@ -145,6 +183,7 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
+name = "spark_datasource_rust_range"
 crate-type = ["cdylib"]
 
 [dependencies]
@@ -321,17 +360,29 @@ pub extern "system" fn Java_org_apache_spark_sql_datasource_NativeBridge_read(
 ```
 {% endraw %}
 
-Build the library, and package it:
+Build the library, here on macOS, and install it:
 
 ```bash
 cargo build --release
+cp target/release/libspark_datasource_rust_range.dylib /usr/local/lib/
+```
+
+Spark then finds the data source `rust_range` automatically:
+
+```python
+spark.read.format("rust_range").option("end", 100).load().show()
+```
+
+Or package it, to add it to a session with `spark.addArtifact`:
+
+```bash
 mkdir -p package/osx-aarch64
-cp target/release/librust_range.dylib package/osx-aarch64/
+cp target/release/libspark_datasource_rust_range.dylib package/osx-aarch64/
 cat > package/spark-native-datasource.json <<EOF
 {
   "abiVersion": 1,
   "dataSources": ["rust_range"],
-  "libraries": {"osx-aarch64": "osx-aarch64/librust_range.dylib"}
+  "libraries": {"osx-aarch64": "osx-aarch64/libspark_datasource_rust_range.dylib"}
 }
 EOF
 (cd package && zip -r ../rust_range.sparkpkg .)
@@ -468,13 +519,15 @@ SPARK_JNI(void, read)(JNIEnv* env, jclass, jbyteArray, jbyteArray partition,
 ```
 {% endraw %}
 
-Build the library, here on macOS with Arrow C++ 24, which requires C++20, and package it as above:
+Build the library, here on macOS with Arrow C++ 24, which requires C++20, and install it, or
+package it as above:
 
 ```bash
 c++ -std=c++20 -O2 -shared -fPIC \
   -I"$JAVA_HOME/include" -I"$JAVA_HOME/include/darwin" \
   -I"$ARROW_HOME/include" -L"$ARROW_HOME/lib" -larrow \
-  -o libcpp_range.dylib cpp_range.cc
+  -o libspark_datasource_cpp_range.dylib cpp_range.cc
+cp libspark_datasource_cpp_range.dylib /usr/local/lib/
 ```
 
 A library loaded by Spark must find its dependencies, such as `libarrow`, on every node: link them
@@ -485,11 +538,12 @@ statically, or install them on the nodes.
 | Property Name | Default | Meaning |
 |---------------|---------|---------|
 | `spark.sql.dataSource.native.enabled` | true | Whether Spark loads native data sources. It is a static configuration, so it can only be set when the Spark application starts. |
-| `spark.sql.dataSource.native.paths` | (none) | Comma-separated list of native data source packages, and of directories that contain them, on the local file system of the driver. They take precedence over the packages installed in `SPARK_HOME`. |
+| `spark.sql.dataSource.native.paths` | (none) | Comma-separated list of native data source packages, and of directories that contain them, on the local file system of the driver. They take precedence over the installed libraries. |
 
 ## Security
 
 A native data source runs native code in the driver and executor processes, with their
-privileges, and is not sandboxed. Only add packages that you trust. Set
+privileges, and is not sandboxed. Only install libraries and add packages that you trust, and do
+not let untrusted users write to the directories of the native library path. Set
 `spark.sql.dataSource.native.enabled` to false to prevent loading native data sources, for example
 on a server shared by several users.

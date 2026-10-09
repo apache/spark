@@ -467,9 +467,12 @@ object StaticSQLConf {
   val NATIVE_DATA_SOURCE_ENABLED =
     buildStaticConf("spark.sql.dataSource.native.enabled")
       .doc("When true, Spark finds and loads native data sources: data sources implemented in " +
-        "native code such as Rust or C++, and distributed as native data source packages " +
-        "(.sparkpkg files). A package is found when it is installed in the native-datasources " +
-        "directory of SPARK_HOME, when it is added with spark.addArtifact, or when it is under " +
+        "native code such as Rust or C++. The library of a data source, such as my_source, is " +
+        "found when it is installed in the native library path as spark_datasource_my_source, " +
+        "for example libspark_datasource_my_source.so in /usr/local/lib on Linux. The native " +
+        "library path consists of the directories of java.library.path, and the lib directory " +
+        "of each installation prefix in PATH. Libraries can also be distributed in native data " +
+        "source packages (.sparkpkg files), added with spark.addArtifact or under " +
         "spark.sql.dataSource.native.paths. Loading a native data source runs its native code " +
         "in the driver and executor processes.")
       .version("4.4.0")

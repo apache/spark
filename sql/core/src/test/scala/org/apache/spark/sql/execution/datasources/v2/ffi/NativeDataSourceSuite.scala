@@ -16,18 +16,16 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.ffi
 
-import java.io.{File, FileOutputStream}
+import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
-import java.util.concurrent.atomic.AtomicInteger
-import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkConf, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkClassNotFoundException, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, LiteralValue}
@@ -43,56 +41,15 @@ import org.apache.spark.util.Utils
 
 /**
  * Tests native data sources with the library in `native-datasource/test_native_datasource.cc`,
- * compiled with the C++ compiler of the machine. The tests that load a library are skipped when
- * there is no C++ compiler or no JNI headers.
+ * compiled with the C++ compiler of the machine by [[NativeDataSourceTestUtils]]. The tests that
+ * load a library are skipped when there is no C++ compiler or no JNI headers.
  */
 class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
+  import NativeDataSourceTestUtils._
 
-  private lazy val buildDir = Utils.createTempDir(namePrefix = "native-datasource-test")
-
-  // The SPARK_HOME of the suite, where packages are installed in INSTALLED_PACKAGES_DIR.
-  private lazy val installedSparkHome = Utils.createTempDir(namePrefix = "spark-home")
-
-  override protected def sparkConf: SparkConf = {
-    super.sparkConf.set("spark.home", installedSparkHome.getPath)
-  }
-
-  // The executors store the files of the sessions that are not isolated in the same directory,
-  // and jobs outside of SQL executions get the files of all the sessions. Each package has its
-  // own name, and the sessions are kept until the end of the suite, so that none of their
-  // artifacts is removed while another test runs.
-  private val packageCount = new AtomicInteger()
+  // Jobs outside of SQL executions get the files of all the sessions, so the sessions are kept
+  // until the end of the suite: none of their artifacts is removed while another test runs.
   private val sessions = ArrayBuffer.empty[SparkSession]
-
-  // The C++ compiler and the JNI include directories, if available.
-  private lazy val toolchain: Option[(String, Seq[String])] = {
-    val include = new File(System.getProperty("java.home"), "include")
-    val platformInclude = Option(include.listFiles()).toSeq.flatten
-      .find(dir => new File(dir, "jni_md.h").isFile)
-    val compiler = Seq("c++", "g++", "clang++").find(Utils.checkCommandAvailable)
-    for {
-      compiler <- compiler
-      platformInclude <- platformInclude
-      if new File(include, "jni.h").isFile
-    } yield (compiler, Seq(include.getPath, platformInclude.getPath))
-  }
-
-  private def compile(name: String, defines: String*): File = {
-    val (compiler, includes) = toolchain.get
-    val source = new File(buildDir, "test_native_datasource.cc")
-    if (!source.exists()) {
-      val in = getClass.getClassLoader
-        .getResourceAsStream("native-datasource/test_native_datasource.cc")
-      Utils.tryWithResource(in)(Files.copy(_, source.toPath))
-    }
-    val library = new File(buildDir, System.mapLibraryName(name))
-    val command = Seq(compiler, "-std=c++17", "-O1", "-shared", "-fPIC") ++
-      includes.map("-I" + _) ++ defines ++ Seq("-o", library.getPath, source.getPath)
-    val process = new ProcessBuilder(command: _*).redirectErrorStream(true).start()
-    val output = new String(process.getInputStream.readAllBytes(), UTF_8)
-    assert(process.waitFor() == 0, s"Failed to compile the test library: $output")
-    library
-  }
 
   // The test library and its variants, each implementing differently named data sources.
   private lazy val library = compile("test_native_datasource")
@@ -106,49 +63,6 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     compile("test_native_datasource_installed", "-DNAME_PREFIX=\"installed_\"")
   private lazy val installedNegatingLibrary = compile(
     "test_native_datasource_installed_b", "-DNAME_PREFIX=\"installed_\"", "-DID_SIGN=-1")
-
-  private def dataSources(prefix: String): Seq[String] =
-    Seq("native_range", "native_sink", "native_counter").map(prefix + _)
-
-  private def manifestJson(
-      dataSources: Seq[String],
-      libraries: Map[String, String],
-      abiVersion: Int = 1): String = {
-    val names = dataSources.map(n => "\"" + n + "\"").mkString(", ")
-    val paths = libraries.map { case (p, path) => "\"" + p + "\": \"" + path + "\"" }
-      .mkString(", ")
-    s"""{"abiVersion": $abiVersion, "dataSources": [$names], "libraries": {$paths}}"""
-  }
-
-  private def createZip(dir: File, fileName: String, entries: (String, Array[Byte])*): File = {
-    dir.mkdirs()
-    val file = new File(dir, fileName)
-    Utils.tryWithResource(new ZipOutputStream(new FileOutputStream(file))) { zip =>
-      entries.foreach { case (path, bytes) =>
-        zip.putNextEntry(new ZipEntry(path))
-        zip.write(bytes)
-        zip.closeEntry()
-      }
-    }
-    file
-  }
-
-  /** Creates a package with the library built for this platform. */
-  private def createPackage(
-      library: File,
-      dataSources: Seq[String],
-      dir: File = Utils.createTempDir(),
-      fileName: String = s"test-${packageCount.incrementAndGet()}.sparkpkg",
-      abiVersion: Int = 1,
-      platform: String = NativePlatform.current): File = {
-    val path = s"$platform/${library.getName}"
-    createZip(
-      dir,
-      fileName,
-      NativeDataSourcePackage.MANIFEST_NAME ->
-        manifestJson(dataSources, Map(platform -> path), abiVersion).getBytes(UTF_8),
-      path -> Files.readAllBytes(library.toPath))
-  }
 
   private lazy val defaultPackage = createPackage(library, dataSources(""))
 
@@ -231,6 +145,19 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       System.getProperty("os.name"), System.getProperty("os.arch")))
   }
 
+  test("native library path") {
+    def path(directories: String*): String = directories.mkString(File.pathSeparator)
+    // The directories of java.library.path, and then the lib directory of each installation
+    // prefix in PATH. Relative and duplicate directories are ignored.
+    assert(NativeDataSourceRegistry.librarySearchPath(
+      path("/opt/native", "", "relative", "/usr/lib"),
+      path("/usr/local/bin", "/home/user/.venv/bin", "/usr/sbin", "relative/bin", "/usr/local/bin")
+    ) == Seq("/opt/native", "/usr/lib", "/usr/local/lib", "/home/user/.venv/lib").map(new File(_)))
+    assert(NativeDataSourceRegistry.librarySearchPath(null, null).isEmpty)
+    assert(NativeDataSourceRegistry.libraryFileName("My_Source") ==
+      System.mapLibraryName("spark_datasource_my_source"))
+  }
+
   test("encode predicates as JSON") {
     def predicate(name: String, children: Expression*): Predicate = {
       new Predicate(name, children.toArray)
@@ -276,7 +203,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(literal(Array(1), ArrayType(IntegerType)).isEmpty)
   }
 
-  test("disable native data sources") {
+  nativeTest("disable native data sources") {
     val conf = new SQLConf
     conf.setConf(SQLConf.NATIVE_DATA_SOURCE_PATHS, Seq(defaultPackage.getPath))
     conf.setConf(StaticSQLConf.NATIVE_DATA_SOURCE_ENABLED, false)
@@ -548,25 +475,51 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(distributed.artifactUUID == otherArtifactUUID)
   }
 
-  nativeTest("find installed packages automatically") {
-    val installDir =
-      new File(installedSparkHome, NativeDataSourceRegistry.INSTALLED_PACKAGES_DIR)
-    val installed = createPackage(installedLibrary, dataSources("installed_"), dir = installDir)
-    try {
-      assert(NativeDataSourceRegistry.installedPackageFiles() == Seq(installed))
-      // The session neither adds the package nor configures a path.
+  nativeTest("find installed libraries automatically") {
+    val dir = Utils.createTempDir()
+    val installed = installLibrary(installedLibrary, "installed_native_range", dir)
+    // A library that implements several data sources is installed under each of their names.
+    Files.createSymbolicLink(
+      new File(dir, NativeDataSourceRegistry.libraryFileName("installed_native_sink")).toPath,
+      installed.toPath)
+    withLibraryPath(dir) {
+      // The session neither adds a package nor configures a path. The name is case-insensitive.
+      val session = newSession()
       checkRows(
-        newSession().read.format("installed_native_range").option("end", "3").load().select("id"),
+        session.read.format("Installed_Native_Range").option("end", "3").load().select("id"),
         Seq(Row(0L), Row(1L), Row(2L)))
+      val output = Utils.createTempDir()
+      session.range(2).selectExpr("id", "concat('v', id) AS name")
+        .write.format("installed_native_sink").option("path", output.getPath).mode("append").save()
+      assert(output.listFiles().filter(_.getName.startsWith("part-"))
+        .flatMap(file => Files.readAllLines(file.toPath).asScala).toSet == Set("0,v0", "1,v1"))
 
-      // A package of the session takes precedence over an installed one.
-      val session = newSession(createPackage(installedNegatingLibrary, dataSources("installed_")))
+      // A package of the session takes precedence over an installed library.
+      val other = newSession(createPackage(installedNegatingLibrary, dataSources("installed_")))
       checkRows(
-        session.read.format("installed_native_range").option("end", "3").load().select("id"),
+        other.read.format("installed_native_range").option("end", "3").load().select("id"),
         Seq(Row(0L), Row(-1L), Row(-2L)))
-    } finally {
-      installed.delete()
+
+      // An executor finds the library in its native library path, if it is not where the driver
+      // found it.
+      val elsewhere = new File(Utils.createTempDir(), installed.getName).getPath
+      assert(NativeLibraries.get(InstalledNativeLibrary(elsewhere)) eq
+        NativeLibraries.get(InstalledNativeLibrary(installed.getPath)))
     }
+
+    val missing = new File(Utils.createTempDir(), installed.getName).getPath
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        NativeLibraries.get(InstalledNativeLibrary(missing))
+      },
+      condition = "NATIVE_DATA_SOURCE_LIBRARY_NOT_FOUND",
+      parameters = Map("fileName" -> installed.getName, "path" -> missing))
+    checkError(
+      exception = intercept[SparkClassNotFoundException] {
+        newSession().read.format("installed_native_range").load()
+      },
+      condition = "DATA_SOURCE_NOT_FOUND",
+      parameters = Map("provider" -> "installed_native_range"))
   }
 
   nativeTest("find packages in directories") {
@@ -654,5 +607,28 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       condition = "INVALID_NATIVE_DATA_SOURCE_PACKAGE.UNSUPPORTED_ABI_VERSION",
       parameters = Map(
         "path" -> mismatchedAbi.getCanonicalPath, "version" -> "2", "supported" -> "1"))
+  }
+
+  nativeTest("invalid installed libraries") {
+    val dir = Utils.createTempDir()
+    val notALibrary = new File(dir, NativeDataSourceRegistry.libraryFileName("not_a_library"))
+    Files.writeString(notALibrary.toPath, "not a library")
+    val newerAbi = installLibrary(abiV2Library, "v2_native_range", dir)
+    withLibraryPath(dir) {
+      val e = intercept[SparkRuntimeException](newSession().read.format("not_a_library").load())
+      assert(e.getCondition == "INVALID_NATIVE_DATA_SOURCE_LIBRARY.CANNOT_LOAD")
+      assert(e.getMessageParameters.get("path") == notALibrary.getCanonicalPath)
+
+      // The library stays loaded, and the error is the same when it is used again.
+      (1 to 2).foreach { _ =>
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            newSession().read.format("v2_native_range").load()
+          },
+          condition = "INVALID_NATIVE_DATA_SOURCE_LIBRARY.UNSUPPORTED_ABI_VERSION",
+          parameters = Map(
+            "path" -> newerAbi.getCanonicalPath, "version" -> "2", "supported" -> "1"))
+      }
+    }
   }
 }
