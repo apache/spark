@@ -324,7 +324,8 @@ class VariantUtils:
             )
         else:
             raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-        return decimal.Decimal(unscaled) * (decimal.Decimal(10) ** (-scale))
+        sign, digits, _ = decimal.Decimal(unscaled).as_tuple()
+        return decimal.Decimal((sign, digits, -scale))
 
     @classmethod
     def _get_binary(cls, value: bytes, pos: int) -> bytes:
