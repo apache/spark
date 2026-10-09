@@ -182,10 +182,8 @@ private[python] case class DiskRowQueue(
  * HybridRowQueue could be safely appended in one thread, and pulled in another thread in the same
  * time.
  *
- * This is intentionally not a case class. As a memory consumer it must use identity equality:
- * otherwise two queues created with the same arguments in one task are equal, so only one of
- * them is tracked (and offered for spilling) by the [[TaskMemoryManager]], and each refuses to
- * spill when the other one triggers it.
+ * This is not a case class: it is a memory consumer with identity equality (see [[HybridQueue]]),
+ * so copying or destructuring it by its constructor arguments would be meaningless.
  */
 class HybridRowQueue(
     memManager: TaskMemoryManager,
@@ -214,6 +212,12 @@ class HybridRowQueue(
 
   override protected def isInMemoryQueue(queue: RowQueue): Boolean =
     queue.isInstanceOf[InMemoryRowQueue]
+
+  // Shown in the per-consumer memory usage breakdown and TaskMemoryManager logs. The identity
+  // hash tells apart queues created with the same arguments.
+  override def toString: String =
+    s"HybridRowQueue(numFields=$numFields, lockFree=$lockFree)@" +
+      Integer.toHexString(System.identityHashCode(this))
 }
 
 object HybridRowQueue {

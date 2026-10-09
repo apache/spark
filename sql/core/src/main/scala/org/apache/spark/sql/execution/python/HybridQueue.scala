@@ -62,6 +62,16 @@ abstract class HybridQueue[T, Q <: Queue[T]](
   // exposed for testing
   private[python] def numQueues(): Int = queues.size()
 
+  // A memory consumer must use identity equality. TaskMemoryManager tracks consumers in a
+  // HashSet, so two queues that compare equal would be tracked (and offered for spilling) as one.
+  // These are final so that no subclass, including a case class, can switch to value equality.
+  final override def equals(other: Any): Boolean = other match {
+    case ref: AnyRef => this eq ref
+    case _ => false
+  }
+
+  final override def hashCode(): Int = System.identityHashCode(this)
+
   protected def createDiskQueue(): Q
   protected def createInMemoryQueue(page: MemoryBlock): Q
   protected def getRequiredSize(item: T): Long
@@ -70,7 +80,7 @@ abstract class HybridQueue[T, Q <: Queue[T]](
   protected def isReadingFromDiskQueue: Boolean = !isInMemoryQueue(reading)
 
   def spill(size: Long, trigger: MemoryConsumer): Long = {
-    if (trigger == this) {
+    if (trigger eq this) {
       // When it's triggered by itself, it should write upcoming elements into disk instead of
       // copying the elements already in the queue.
       return 0L
