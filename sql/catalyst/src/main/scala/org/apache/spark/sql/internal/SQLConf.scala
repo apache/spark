@@ -2591,7 +2591,9 @@ object SQLConf {
       .doc("During a storage-partitioned join, whether to allow to shuffle only one side. " +
         "When only one side is KeyedPartitioning, if the conditions are met, spark will " +
         "only shuffle the other side. This optimization will reduce the amount of data that " +
-        s"needs to be shuffle. This config requires ${V2_BUCKETING_ENABLED.key} to be enabled")
+        s"needs to be shuffle. With ${REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} on, the " +
+        "partition keys must cover every join key. " +
+        s"This config requires ${V2_BUCKETING_ENABLED.key} to be enabled")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
