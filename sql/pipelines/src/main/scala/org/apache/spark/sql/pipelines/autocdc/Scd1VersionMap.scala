@@ -35,9 +35,9 @@ import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType}
  * 2. A non-null entry is the sequencing clock of the event that authored the leaf's current stored
  *    value. A delete authors a null value until a later upsert reauthors the leaf.
  * 3. A null entry means the leaf has no authored value.
- * 4. A leaf absent from the map implies it was added through later schema evolution. It is treated
- *    as unauthored, as in (3), until the map is next rewritten; then a null entry is explicitly
- *    materialized.
+ * 4. A leaf absent from the map was not in the row when the map was written, such as a leaf added
+ *    through later schema evolution. It is treated as unauthored, as in (3), until the map is next
+ *    rewritten; then a null entry is explicitly materialized.
  *
  * Unlike the SCD2 version map, the SCD1 version map is mutable reconciliation state. When a newer
  * CDC event authors a leaf, reconciliation updates that leaf's stored value and advances its
