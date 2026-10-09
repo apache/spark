@@ -26,7 +26,8 @@ import org.json4s.jackson.JsonMethods._
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.{SparkException, SparkThrowable, TaskContext, TestUtils}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkThrowable, TaskContext,
+    TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -91,8 +92,7 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     val runtimeException = Iterator.iterate[Throwable](exception)(_.getCause)
       .takeWhile(_ != null)
       .collectFirst {
-        case s: org.apache.spark.SparkRuntimeException
-            if s.getCondition == "EXCEED_LIMIT_LENGTH" => s
+        case s: SparkRuntimeException if s.getCondition == "EXCEED_LIMIT_LENGTH" => s
       }.getOrElse {
         fail(s"expected EXCEED_LIMIT_LENGTH, got $exception")
       }
@@ -203,7 +203,7 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("SPARK-60090: preserve-only TRANSFORM CHAR/VARCHAR has no assignment") {
+  test("SPARK-60090: preserve-only TRANSFORM CHAR/VARCHAR still assigns") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withSQLConf(
         SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
@@ -212,13 +212,39 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
         """
           |SELECT TRANSFORM(c)
           |USING 'cat' AS (c CHAR(4))
-          |FROM VALUES ('ab'), ('abcdef') t(c)
+          |FROM VALUES ('ab') t(c)
           |""".stripMargin)
-      // Script I/O is STRING-shaped; preserve-only does not add pad / EXCEED_LIMIT_LENGTH.
-      assert(query.schema.map(_.dataType) === Seq(StringType))
-      checkAnswer(query, Seq(Row("ab"), Row("abcdef")))
+      // First-class types keep CHAR in the result; assignment still pads / length-checks.
+      assert(query.schema.map(_.dataType) === Seq(CharType(4)))
+      checkAnswer(query, Seq(Row("ab  ")))
+      checkExceedLimitLength(
+        intercept[Exception] {
+          sql(
+            """
+              |SELECT TRANSFORM(c)
+              |USING 'cat' AS (c CHAR(4))
+              |FROM VALUES ('abcdef') t(c)
+              |""".stripMargin).collect()
+        },
+        "4")
     }
     assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-60090: unreferenced CHAR overflow is pruned like scans") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // Assignment lives in a Project, so count(*) can skip the overflowing column.
+      checkAnswer(
+        sql(
+          """
+            |SELECT count(*) FROM (
+            |  SELECT TRANSFORM(c) USING 'cat' AS (c CHAR(4))
+            |  FROM VALUES ('abcdef') t(c)
+            |)
+            |""".stripMargin),
+        Row(1))
+    }
   }
 
   test("SPARK-60090: hand-built CHAR/VARCHAR script output stays unsupported without SerDe") {
@@ -228,7 +254,8 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     val input = Seq("ab").toDF("c")
     Seq(
       AttributeReference("c", CharType(4))() -> "\"CHAR(4)\"",
-      AttributeReference("v", VarcharType(5))() -> "\"VARCHAR(5)\"").foreach {
+      AttributeReference("v", VarcharType(5))() -> "\"VARCHAR(5)\"",
+      AttributeReference("a", ArrayType(CharType(4)))() -> "\"ARRAY<CHAR(4)>\"").foreach {
         case (attr, sqlType) =>
           val exception = intercept[Exception] {
             QueryTest.executePlan(

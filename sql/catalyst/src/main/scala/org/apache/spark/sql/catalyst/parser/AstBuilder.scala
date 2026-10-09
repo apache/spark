@@ -1814,22 +1814,23 @@ class AstBuilder extends DataTypeAstBuilder
     if (transformClause.setQuantifier != null) {
       throw QueryParsingErrors.transformNotSupportQuantifierError(transformClause.setQuantifier)
     }
-    // Create the attributes. Script I/O is always unbounded STRING (Hive wire format), with
-    // the declared CHAR/VARCHAR kept in metadata for optional assignment below.
-    val (attributes, schemaLess) = if (transformClause.colTypeList != null) {
+    // Create the attributes. Script I/O is always unbounded STRING (Hive wire format).
+    // Declared CHAR/VARCHAR types are assigned in a Project below when first-class types
+    // are enabled, using the original schema so quoted field names are not re-parsed.
+    val (attributes, schema, schemaLess) = if (transformClause.colTypeList != null) {
       // Typed return columns.
-      val schema = createSchema(transformClause.colTypeList)
-      val replacedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchemaAlways(schema)
-      (DataTypeUtils.toAttributes(replacedSchema), false)
+      val origSchema = createSchema(transformClause.colTypeList)
+      val replacedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchemaAlways(origSchema)
+      (DataTypeUtils.toAttributes(replacedSchema), origSchema, false)
     } else if (transformClause.identifierSeq != null) {
       // Untyped return columns.
       val attrs = visitIdentifierSeq(transformClause.identifierSeq).map { name =>
         AttributeReference(name, StringType, nullable = true)()
       }
-      (attrs, false)
+      (attrs, StructType(Nil), false)
     } else {
       (Seq(AttributeReference("key", StringType)(),
-        AttributeReference("value", StringType)()), true)
+        AttributeReference("value", StringType)()), StructType(Nil), true)
     }
 
     val plan = visitCommonSelectQueryClausePlan(
@@ -1857,16 +1858,21 @@ class AstBuilder extends DataTypeAstBuilder
         schemaLess
       )
     )
-    // Under standard semantics, assign declared CHAR/VARCHAR (pad / length check) in a
-    // Project so the query result type matches AS (...). Flag off and preserve-only keep
-    // the historical STRING result with no pad and no EXCEED_LIMIT_LENGTH.
-    if (conf.charVarcharStandardSemantics &&
-        attributes.exists(a => CharVarcharUtils.getRawType(a.metadata).isDefined)) {
+    // First-class CHAR/VARCHAR (standard semantics or preserveCharVarcharTypeInfo):
+    // assign declared types in a Project so the result matches AS (...). Flag off keeps
+    // the historical STRING result with no pad and no EXCEED_LIMIT_LENGTH. The check can
+    // be pruned like scan-side assignment when the column is unreferenced.
+    if (conf.charVarcharFirstClassTypes &&
+        schema.exists(f => CharVarcharUtils.hasCharVarchar(f.dataType))) {
       Project(
-        attributes.map { a =>
-          Alias(
-            CharVarcharUtils.stringLengthCheck(a, a),
-            a.name)(explicitMetadata = Some(CharVarcharUtils.cleanMetadata(a.metadata)))
+        attributes.zip(schema).map { case (a, field) =>
+          if (CharVarcharUtils.hasCharVarchar(field.dataType)) {
+            Alias(
+              CharVarcharUtils.stringLengthCheck(a, field.dataType),
+              a.name)(explicitMetadata = Some(CharVarcharUtils.cleanMetadata(a.metadata)))
+          } else {
+            a
+          }
         },
         scriptTransform)
     } else {
