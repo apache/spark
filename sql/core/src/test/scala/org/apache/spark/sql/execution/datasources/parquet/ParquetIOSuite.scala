@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.File
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.{LocalDateTime, LocalTime}
 import java.util.Locale
@@ -28,12 +29,16 @@ import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.primitives.UnsignedLong
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
+import org.apache.hadoop.mapred.FileSplit
+import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext, TaskAttemptID}
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.column.ParquetProperties.WriterVersion.PARQUET_1_0
 import org.apache.parquet.example.data.Group
 import org.apache.parquet.example.data.simple.{SimpleGroup, SimpleGroupFactory}
 import org.apache.parquet.hadoop._
+import org.apache.parquet.hadoop.api.InitContext
+import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
@@ -52,6 +57,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
  * A test suite that tests basic Parquet I/O.
@@ -1766,6 +1772,42 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("VectorizedParquetRecordReader reuses the requested schema its read support parsed") {
+    withTempPath { dir =>
+      Seq((1, "a"), (2, "b")).toDF("i", "s").repartition(1).write.parquet(dir.getCanonicalPath)
+      val file = new File(TestUtils.listDirectory(dir).head)
+      val requested = new StructType().add("s", StringType)
+      // What `ParquetFileFormat` sets up for the read, down to what the schema converter needs.
+      val conf = spark.sessionState.newHadoopConf()
+      conf.set(ParquetInputFormat.READ_SUPPORT_CLASS,
+        classOf[RecordingParquetReadSupport].getName)
+      conf.set(ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA, requested.json)
+      Seq(SQLConf.CASE_SENSITIVE, SQLConf.PARQUET_BINARY_AS_STRING,
+          SQLConf.PARQUET_INT96_AS_TIMESTAMP, SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED,
+          SQLConf.LEGACY_PARQUET_NANOS_AS_LONG).foreach { entry =>
+        conf.set(entry.key, spark.sessionState.conf.getConfString(entry.key))
+      }
+      val split = new FileSplit(new Path(file.getPath), 0, file.length(), Array.empty[String])
+      val context = new TaskAttemptContextImpl(conf, new TaskAttemptID())
+      class SchemaExposingReader extends VectorizedParquetRecordReader(false, 4096) {
+        def requestedSparkSchema: StructType = sparkRequestedSchema
+      }
+      RecordingParquetReadSupport.lastInitialized = null
+      try {
+        Utils.tryWithResource(new SchemaExposingReader) { reader =>
+          reader.initialize(split, context)
+          val readSupport = RecordingParquetReadSupport.lastInitialized
+          assert(readSupport != null, "the reader did not initialize the configured read support")
+          assert(reader.requestedSparkSchema == requested)
+          assert(reader.requestedSparkSchema eq readSupport.requestedCatalystSchema,
+            "the reader parsed the requested schema again instead of reusing the read support's")
+        }
+      } finally {
+        RecordingParquetReadSupport.lastInitialized = null
+      }
+    }
+  }
+
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
     withSQLConf(
       SQLConf.PARQUET_COMPRESSION.key -> ParquetCompressionCodec.SNAPPY.lowerCaseName()) {
@@ -2496,6 +2538,18 @@ class TaskCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAtt
   override def commitTask(context: TaskAttemptContext): Unit = {
     sys.error("Intentional exception for testing purposes")
   }
+}
+
+/** Remembers the last instance whose `init` ran, which a reader creates for itself by name. */
+class RecordingParquetReadSupport extends ParquetReadSupport {
+  override def init(context: InitContext): ReadContext = {
+    RecordingParquetReadSupport.lastInitialized = this
+    super.init(context)
+  }
+}
+
+object RecordingParquetReadSupport {
+  @volatile var lastInitialized: RecordingParquetReadSupport = _
 }
 
 case class VerifyNoAdditionalScanOutputExec(override val child: SparkPlan) extends UnaryExecNode {
