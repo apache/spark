@@ -16,9 +16,11 @@
  */
 package org.apache.spark.udf.worker.grpc
 
-import java.io.File
-import java.nio.file.Paths
+import java.io.{File, IOException}
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.{Callable, TimeUnit}
+
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 import org.scalatest.BeforeAndAfterEach
@@ -31,7 +33,7 @@ import org.apache.spark.udf.worker.{Cancel, DataRequest, DirectWorker, Finish, I
   WorkerConnectionSpec}
 import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerSession}
 import org.apache.spark.udf.worker.core.direct.{DirectWorkerProcess, DirectWorkerTimeoutException}
-import org.apache.spark.udf.worker.grpc.testing.EchoGrpcWorkerMain
+import org.apache.spark.udf.worker.grpc.testing.{EchoGrpcWorkerMain, ForwardingWorkerMain}
 
 /**
  * End-to-end coverage for the integration points unique to [[DirectGrpcDispatcher]]:
@@ -119,6 +121,36 @@ class DirectGrpcDispatcherIntegrationSuite
       case other => fail(s"Expected GrpcWorkerChannel, got ${other.getClass.getSimpleName}")
     }
 
+  // An orphaned worker is reparented, and an unreaped zombie stays isAlive
+  // until PID 1 reaps it. State Z in /proc means the worker has already exited.
+  private def assertWorkerStopped(worker: ProcessHandle, what: String): Unit = {
+    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+    while (System.nanoTime() < deadline && !hasExited(worker)) {
+      Thread.sleep(50)
+    }
+    if (!hasExited(worker)) {
+      worker.destroyForcibly()
+      fail(s"$what ${worker.pid}")
+    }
+  }
+
+  private def hasExited(worker: ProcessHandle): Boolean = {
+    !worker.isAlive || linuxState(worker.pid).contains('Z')
+  }
+
+  private def linuxState(pid: Long): Option[Char] = {
+    val stat = Paths.get(s"/proc/$pid/stat")
+    val text = try {
+      if (Files.isRegularFile(stat)) Some(Files.readString(stat)) else None
+    } catch {
+      case _: IOException => None
+    }
+    text.flatMap { raw =>
+      val close = raw.lastIndexOf(')')
+      if (close < 0 || close + 2 >= raw.length) None else Some(raw.charAt(close + 2))
+    }
+  }
+
   test("event-loop threads are named daemons and terminate on shutdown") {
     val eventLoopGroup = UnixDomainSocketTransport.detect().newEventLoopGroup()
     try {
@@ -158,6 +190,63 @@ class DirectGrpcDispatcherIntegrationSuite
     dispatcher.close()
     dispatcher = null
     assert(!socketDir.exists(), "dispatcher close should remove its socket directory")
+  }
+
+  test("a launcher command that forwards the connection serves sessions") {
+    val launcher = ProcessCallable.newBuilder()
+      .addCommand(javaExecutable)
+      .addCommand("-cp")
+      .addCommand(javaClasspath)
+      .addCommand(classOf[ForwardingWorkerMain.type].getName.stripSuffix("$"))
+      .addAllCommand(echoRunner.getCommandList)
+      .build()
+    dispatcher = new DirectGrpcDispatcher(workerSpec(launcher))
+    val sessions = Seq.fill(2)(dispatcher.createSession(None))
+    val processes = sessions.map(workerProcess)
+    val workers = processes.flatMap(_.process.descendants().iterator().asScala)
+    val payloads = Seq(
+      ByteString.copyFrom(Array.fill[Byte](5 * 1024 * 1024)(3)),
+      ByteString.copyFromUtf8("small"))
+
+    try {
+      assert(workers.size == 2, s"each launcher should start one worker, got $workers")
+      sessions.zip(payloads).foreach { case (session, payload) =>
+        session.init(basicInit)
+        val input = DataRequest.newBuilder().setData(payload).build()
+        assert(session.process(Iterator.single(input), emptyFinish).map(_.getData).toList ==
+          List(payload))
+      }
+    } finally {
+      sessions.foreach(_.close(emptyCancel))
+    }
+
+    assert(processes.forall(!_.process.isAlive), "session close should terminate the launcher")
+    workers.foreach { worker =>
+      assertWorkerStopped(worker, "session close should stop the launched worker")
+    }
+  }
+
+  test("SIGKILL of the forwarding launcher stops the inner worker") {
+    val launcher = ProcessCallable.newBuilder()
+      .addCommand(javaExecutable)
+      .addCommand("-cp")
+      .addCommand(javaClasspath)
+      .addCommand(classOf[ForwardingWorkerMain.type].getName.stripSuffix("$"))
+      .addAllCommand(echoRunner.getCommandList)
+      .build()
+    dispatcher = new DirectGrpcDispatcher(workerSpec(launcher))
+    val session = dispatcher.createSession(None)
+    val process = workerProcess(session)
+    val workers = process.process.descendants().iterator().asScala.toList
+    assert(workers.size == 1, s"the launcher should start one worker, got $workers")
+    val worker = workers.head
+    try {
+      session.init(basicInit)
+      process.process.destroyForcibly()
+      assertWorkerStopped(worker, "SIGKILL of the launcher should stop worker")
+    } finally {
+      session.close(emptyCancel)
+    }
   }
 
   test("the channel overrides the authority derived from the socket path") {
