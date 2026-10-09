@@ -3154,6 +3154,26 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           Row(Map("abc" -> 2)))
       }
     }
+
+    // Flag off is unchanged: write-side pad/trim still apply to keys, and the new
+    // UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY check is not used.
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      checkAnswer(
+        sql("""SELECT from_json('{"a": 1}', 'MAP<CHAR(3), INT>')"""),
+        Row(Map("a  " -> 1)))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql(
+            """SELECT from_json(
+              |  '{"abcd": 1}',
+              |  'MAP<VARCHAR(3), INT>',
+              |  map('mode', 'FAILFAST'))""".stripMargin).collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+    }
   }
 
   test("SPARK-59274: JSON map value overflow keeps EXCEED_LIMIT_LENGTH") {
