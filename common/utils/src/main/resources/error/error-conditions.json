@@ -8148,9 +8148,9 @@
   },
   "TABLES_OR_VIEWS_NOT_IN_SAME_DATABASE" : {
     "message" : [
-      "Cannot retrieve tables or views that do not belong to the same database. Requested: <qualifiedTableNames>."
+      "Retrieving tables or views from more than one database is not supported. Requested: <qualifiedTableNames>."
     ],
-    "sqlState" : "0A000"
+    "sqlState" : "0AKD0"
   },
   "TABLE_LOCATION_URI_NOT_SPECIFIED" : {
     "message" : [
