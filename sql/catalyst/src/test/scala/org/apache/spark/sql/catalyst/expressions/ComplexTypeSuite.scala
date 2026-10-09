@@ -23,7 +23,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateMutableProjection}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.internal.SQLConf
@@ -364,6 +364,106 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(GetMapValue(structMap, Literal.create(create_row(1, 1), structType)), 10)
         checkEvaluation(GetMapValue(structMap, Literal.create(create_row(2, 2), structType)), 20)
         checkEvaluation(GetMapValue(structMap, Literal.create(create_row(3, 3), structType)), null)
+      }
+    }
+  }
+
+  Seq(
+    (FloatType, (0 until 1000).map(i => i.toFloat: Any), "dense Float keys"),
+    (DoubleType, (0 until 1000).map(i => i.toDouble: Any), "dense Double keys"),
+    (DoubleType, (0 until 1000).map { i =>
+      // Distinct values whose high and low words XOR to the same value. Mixing only that
+      // folded value cannot improve their distribution; hashing must use both words.
+      java.lang.Double.longBitsToDouble(((0x3ff00000L ^ i) << 32) | i): Any
+    }, "Double keys with identical folded hashes")
+  ).foreach { case (keyType, keys, name) =>
+    test(s"Generated floating-point map lookup distributes $name") {
+      withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "1000") {
+        val map = Literal.create(
+          new ArrayBasedMapData(
+            new GenericArrayData(keys.toArray), new GenericArrayData(keys.indices.toArray)),
+          MapType(keyType, IntegerType))
+        val lookup = GetMapValue(map, BoundReference(0, keyType, nullable = false))
+        assert(lookup.usesFoldableHashLookup)
+        val ctx = new CodegenContext
+        lookup.genCode(ctx)
+        val bucketArrays = ctx.references.collect { case buckets: Array[Int] => buckets }
+        assert(bucketArrays.size == 1)
+        val buckets = bucketArrays.head
+        assert(buckets.count(_ >= 0) == keys.size)
+
+        // Start at an empty bucket so a cluster spanning the end of the array is counted once.
+        val empty = buckets.indexOf(-1)
+        assert(empty >= 0)
+        var longestCluster = 0
+        var cluster = 0
+        (1 to buckets.length).foreach { offset =>
+          if (buckets((empty + offset) % buckets.length) >= 0) {
+            cluster += 1
+            longestCluster = math.max(longestCluster, cluster)
+          } else {
+            cluster = 0
+          }
+        }
+        // Avoid a timing assertion or an exact hash layout. The old hash clusters all 1000 keys.
+        assert(longestCluster < keys.size / 10,
+          s"$name formed a cluster of $longestCluster entries")
+      }
+    }
+  }
+
+  Seq(FloatType, DoubleType).foreach { keyType =>
+    test(s"Generated floating-point map lookup preserves results for $keyType") {
+      val toKey: Double => Any = keyType match {
+        case FloatType => value => value.toFloat
+        case DoubleType => value => value
+      }
+      val (nan, otherNaN, subnormal) = keyType match {
+        case FloatType =>
+          (java.lang.Float.intBitsToFloat(0x7fc00001): Any,
+            java.lang.Float.intBitsToFloat(0x7fc00002): Any,
+            java.lang.Float.intBitsToFloat(1): Any)
+        case DoubleType =>
+          (java.lang.Double.longBitsToDouble(0x7ff8000000000001L): Any,
+            java.lang.Double.longBitsToDouble(0x7ff8000000000002L): Any,
+            java.lang.Double.longBitsToDouble(1L): Any)
+      }
+      Seq(0, Int.MaxValue).foreach { threshold =>
+        withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> threshold.toString) {
+          Seq(0.0, -0.0).foreach { storedZero =>
+            val denseKeys = (1 to 1000).map(i => toKey(i.toDouble))
+            val keys = denseKeys ++ Seq(toKey(storedZero), nan,
+              toKey(Double.PositiveInfinity), toKey(Double.NegativeInfinity), subnormal,
+              toKey(-2.5), toKey(-1.0))
+            val values = keys.indices.map { i => if (i == keys.size - 1) null else i: Any }
+            val map = Literal.create(
+              new ArrayBasedMapData(
+                new GenericArrayData(keys.toArray), new GenericArrayData(values.toArray)),
+              MapType(keyType, IntegerType))
+            val key = BoundReference(0, keyType, nullable = true)
+            val expressions: Seq[GetMapValueUtil] = Seq(GetMapValue(map, key), ElementAt(map, key))
+            expressions.foreach { expression =>
+              assert(expression.usesFoldableHashLookup == (threshold == 0))
+            }
+            // Reuse generated projections with runtime keys. Interpreted hash lookup has a
+            // separate signed-zero discrepancy; these tests cover the generated hash change.
+            val projection = GenerateMutableProjection.generate(expressions)
+            val lookups = keys.zip(values) ++ Seq(
+              toKey(-storedZero) -> values(denseKeys.size),
+              otherNaN -> values(denseKeys.size + 1),
+              toKey(Double.NaN) -> values(denseKeys.size + 1),
+              toKey(1001.0) -> null,
+              (null, null))
+            lookups.foreach { case (lookupKey, expected) =>
+              val result = projection(create_row(lookupKey))
+              expressions.indices.foreach { index =>
+                withClue(s"$keyType, threshold=$threshold, zero=$storedZero, key=$lookupKey: ") {
+                  assert(result.get(index, IntegerType) == expected)
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
