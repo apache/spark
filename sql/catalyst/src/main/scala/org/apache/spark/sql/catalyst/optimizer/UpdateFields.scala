@@ -68,7 +68,9 @@ object OptimizeUpdateFields extends Rule[LogicalPlan] {
       val newWithFields = newNames.map(n => WithField(nameMap(n), newValues(n)))
       UpdateFields(structExpr, newWithFields.toSeq)
 
-    case UpdateFields(UpdateFields(struct, fieldOps1), fieldOps2) =>
+    // Flattening would separate a nested field read from the struct it reads.
+    case UpdateFields(UpdateFields(struct, fieldOps1), fieldOps2)
+        if !(fieldOps1 ++ fieldOps2).exists(_.exists(UpdateFields.isGeneratedStructRead)) =>
       UpdateFields(struct, fieldOps1 ++ fieldOps2)
   }
 
