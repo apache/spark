@@ -235,6 +235,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       for (ParquetColumnVector columnVector : columnVectors) {
         columnVector.close();
       }
+      columnVectors = null;
     }
     if (columnarBatch != null) {
       columnarBatch.close();
