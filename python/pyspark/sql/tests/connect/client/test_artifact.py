@@ -447,6 +447,21 @@ class ArtifactTests(ArtifactTestsMixin, ReusedConnectTestCase):
         self.assertEqual(actualHash, expected_hash)
         self.assertEqual(self.artifact_manager.is_cached_artifact(expected_hash), True)
 
+    def test_native_data_source_package(self):
+        with tempfile.TemporaryDirectory(prefix="test_native_data_source_package") as d:
+            package_path = os.path.join(d, "my_source.sparkpkg")
+            with open(package_path, "wb") as f:
+                f.write(b"package")
+            requests = list(
+                self.artifact_manager._create_requests(
+                    package_path, pyfile=False, archive=False, file=False
+                )
+            )
+            self.assertEqual(len(requests), 1)
+            artifacts = requests[0].batch.artifacts
+            self.assertEqual(len(artifacts), 1)
+            self.assertEqual(artifacts[0].name, os.path.join("files", "my_source.sparkpkg"))
+
     def test_add_not_existing_artifact(self):
         with tempfile.TemporaryDirectory(prefix="test_add_not_existing_artifact") as d:
             with self.assertRaises(FileNotFoundError):

@@ -2020,6 +2020,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       cause = Some(cause))
   }
 
+  def nativeDataSourcePackageConflictError(name: String, packages: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "NATIVE_DATA_SOURCE_PACKAGE_CONFLICT",
+      messageParameters = Map("name" -> name, "packages" -> packages.mkString(", ")))
+  }
+
   def findMultipleDataSourceError(provider: String, sourceNames: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "MULTIPLE_DATA_SOURCES",

@@ -4792,6 +4792,34 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_NATIVE_DATA_SOURCE_PACKAGE" : {
+    "message" : [
+      "Invalid native data source package <path>:"
+    ],
+    "subClass" : {
+      "INVALID_LIBRARY" : {
+        "message" : [
+          "Cannot load the library <library>: <reason>"
+        ]
+      },
+      "INVALID_MANIFEST" : {
+        "message" : [
+          "<reason>"
+        ]
+      },
+      "UNSUPPORTED_ABI_VERSION" : {
+        "message" : [
+          "It requires version <version> of the native data source interface, but Spark supports version <supported>."
+        ]
+      },
+      "UNSUPPORTED_PLATFORM" : {
+        "message" : [
+          "It has no library for the platform <platform>. It has libraries for: <platforms>."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -6261,6 +6289,24 @@
       "Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
     ],
     "sqlState" : "0A000"
+  },
+  "NATIVE_DATA_SOURCE_ERROR" : {
+    "message" : [
+      "Failed to <action> native data source <name>: <msg>"
+    ],
+    "sqlState" : "38000"
+  },
+  "NATIVE_DATA_SOURCE_PACKAGE_CONFLICT" : {
+    "message" : [
+      "More than one native data source package provides the data source <name>: <packages>. Remove all but one of them."
+    ],
+    "sqlState" : "42710"
+  },
+  "NATIVE_DATA_SOURCE_PACKAGE_NOT_FOUND" : {
+    "message" : [
+      "Cannot find the native data source package <fileName> with the SHA-256 checksum <checksum>. Add the package with `spark.addArtifact`, or install the same package under `spark.sql.dataSource.native.paths` on every node."
+    ],
+    "sqlState" : "42K02"
   },
   "NEAREST_BY_JOIN" : {
     "message" : [

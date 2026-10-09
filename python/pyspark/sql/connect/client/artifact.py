@@ -237,7 +237,8 @@ class ArtifactManager:
                     name = f"{name}#{parsed.fragment}"
 
                 artifact = new_archive_artifact(name, LocalFile(local_path))
-            elif file:
+            elif file or name.endswith(".sparkpkg"):
+                # Native data source packages are added as files.
                 artifact = new_file_artifact(name, LocalFile(local_path))
             elif name.endswith(".jar"):
                 artifact = new_jar_artifact(name, LocalFile(local_path))

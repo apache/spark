@@ -40,7 +40,7 @@ Compared to the earlier Data Source V1 API, DSV2 offers:
 
 | Feature | Description |
 |---------|-------------|
-| **Java API** | The connector interfaces are pure Java (`org.apache.spark.sql.connector`), removing the Scala dependency that DSV1 required. A [Python Data Source API](api/python/reference/pyspark.sql/api/pyspark.sql.datasource.DataSource.html) (`pyspark.sql.datasource`) is also available as a wrapper for lightweight connectors written entirely in Python. |
+| **Java API** | The connector interfaces are pure Java (`org.apache.spark.sql.connector`), removing the Scala dependency that DSV1 required. A [Python Data Source API](api/python/reference/pyspark.sql/api/pyspark.sql.datasource.DataSource.html) (`pyspark.sql.datasource`) is also available as a wrapper for lightweight connectors written entirely in Python, and the [Columnar Data Source API](sql-columnar-data-sources.html) (`org.apache.spark.sql.datasource`) for lightweight columnar connectors written in Java, Scala, or native code such as Rust or C++. |
 | **Catalog integration** | Connectors can expose namespaces, tables, views, and functions natively through Spark SQL. |
 | **Operator pushdown** | Connectors can accept pushed-down filters, required columns, aggregates, limits, offsets, and more. |
 | **Report partitioning and ordering** | Connectors can report the physical layout of data so that Spark can avoid unnecessary shuffles and sorts. |
@@ -473,5 +473,7 @@ A `Table` that declares `STREAMING_WRITE` supports streaming writes through
 - [Data Sources](sql-data-sources.html) for the user-facing guide to built-in data sources (DSV1).
 - [Python Data Source API](api/python/reference/pyspark.sql/api/pyspark.sql.datasource.DataSource.html)
   for writing lightweight connectors entirely in Python.
+- [Columnar Data Source API](sql-columnar-data-sources.html) for writing lightweight columnar
+  connectors in Java, Scala, or native code such as Rust or C++.
 - [Storage Partition Join](sql-performance-tuning.html#storage-partition-join) for how DSV2
   partitioning reporting enables join optimizations.

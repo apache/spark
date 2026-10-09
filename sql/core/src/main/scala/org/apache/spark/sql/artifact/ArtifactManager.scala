@@ -153,6 +153,19 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
    */
   def getPythonIncludes: Seq[String] = pythonIncludeList.asScala.toSeq
 
+  /**
+   * Returns the native data source packages added to this session, as the local files of the
+   * driver, and the UUID under which the executors store them, if the session is isolated.
+   */
+  private[sql] def getNativeDataSourcePackages: (Seq[File], Option[String]) = {
+    val packages = sparkContextRelativePaths.asScala.collect {
+      case (SparkContextResourceType.FILE, path, _)
+          if path.toString.endsWith(Artifact.NATIVE_DATA_SOURCE_PACKAGE_EXTENSION) =>
+        artifactPath.resolve(path).toFile
+    }.toSeq
+    (packages, Option(state).map(_.uuid))
+  }
+
   protected[sql] def getCachedBlockId(hash: String): Option[CacheId] = {
     Option(hashToCachedIdMap.get(hash)).map(_.id)
   }
