@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.nio.ByteBuffer
 import java.util.PrimitiveIterator
-import java.util.concurrent.{Callable, ExecutionException, TimeUnit}
+import java.util.concurrent.{Callable, ExecutionException, TimeoutException, TimeUnit}
 
 import scala.jdk.CollectionConverters._
 
@@ -50,34 +50,60 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
 
   import VectorizedRleValuesReaderSuite._
 
-  // Runs the reads that may never return before SPARK-59832. A thread per read, so that a read
-  // stuck in a loop does not block the following ones.
+  // Runs the reads that may never return before SPARK-59832, a thread per read, so that a read
+  // stuck in a loop does not block the following ones. The decode loops do not check for
+  // interruption, so a stuck read keeps its thread busy until the JVM exits. After the first
+  // timeout, later reads fail without running, so that a regression leaves one busy thread.
   private lazy val executor = ThreadUtils.newDaemonCachedThreadPool("rle-reader-suite")
+  @volatile private var timedOut = false
 
   override def afterAll(): Unit = {
     try {
       executor.shutdownNow()
+      executor.awaitTermination(10, TimeUnit.SECONDS)
     } finally {
       super.afterAll()
     }
   }
 
   /**
-   * Runs `f` in another thread, so that a reader that never returns fails the test, and checks
-   * that it fails with a `ParquetDecodingException` whose message contains `expected`.
+   * Checks that `f` fails with a `ParquetDecodingException` whose message contains
+   * "Corrupted RLE data: " followed by `expected`.
+   */
+  private def assertCorrupted(expected: String)(f: => Any): Unit = {
+    val e = intercept[ParquetDecodingException](f)
+    assert(e.getMessage.contains("Corrupted RLE data: " + expected), e.getMessage)
+  }
+
+  /**
+   * Like `assertCorrupted`, but runs `f` on another thread with a timeout, so that a read that
+   * never returns fails the test.
    */
   private def interceptCorrupted(expected: String)(f: => Any): Unit = {
+    assert(!timedOut, "Not run, since an earlier read did not return")
     val future = executor.submit(new Callable[Any] {
       override def call(): Any = f
     })
-    val e = intercept[ParquetDecodingException] {
+    assertCorrupted(expected) {
       try {
-        future.get(30, TimeUnit.SECONDS)
+        future.get(10, TimeUnit.SECONDS)
       } catch {
         case e: ExecutionException => throw e.getCause
+        case e: TimeoutException =>
+          timedOut = true
+          throw e
       }
     }
-    assert(e.getMessage.contains("Corrupted RLE data: " + expected), e.getMessage)
+  }
+
+  /** Checks that reading `n` dictionary ids from `page` fails, on every stream of `page`. */
+  private def assertReadIntegersFails(page: Array[Byte], n: Int, expected: String): Unit = {
+    streams(page).foreach { in =>
+      val reader = new VectorizedRleValuesReader()
+      reader.initFromPage(n, in())
+      val c = new OnHeapColumnVector(n, IntegerType)
+      interceptCorrupted(expected)(reader.readIntegers(n, c, 0))
+    }
   }
 
   test("PACKED: alternating null/non-null (many single-element runs)") {
@@ -240,18 +266,14 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
 
   test("SPARK-59832: truncated dictionary ids fail instead of being partially read") {
     // A dictionary id page with 10 ids, read as if it had 20.
-    streams(dictIdPage(Array.fill(10)(3), bitWidth = 4)).foreach { in =>
-      val reader = new VectorizedRleValuesReader()
-      reader.initFromPage(20, in())
-      val c = new OnHeapColumnVector(20, IntegerType)
-      interceptCorrupted(PastEnd)(reader.readIntegers(20, c, 0))
-    }
-    streams(dictIdPage(Array.fill(10)(3), bitWidth = 4)).foreach { in =>
+    val page = dictIdPage(Array.fill(10)(3), bitWidth = 4)
+    assertReadIntegersFails(page, 20, PastEnd)
+    streams(page).foreach { in =>
       val reader = new VectorizedRleValuesReader()
       reader.initFromPage(20, in())
       interceptCorrupted(PastEnd)(reader.skipIntegers(20))
     }
-    streams(dictIdPage(Array.fill(10)(3), bitWidth = 4)).foreach { in =>
+    streams(page).foreach { in =>
       val reader = new VectorizedRleValuesReader()
       reader.initFromPage(20, in())
       (0 until 10).foreach(_ => assert(reader.readInteger() == 3))
@@ -355,23 +377,15 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
     Seq(-1, -4, -5, payload.length + 1, Int.MaxValue).foreach { length =>
       streams(BytesUtils.intToBytes(length) ++ payload).foreach { in =>
         val reader = new VectorizedRleValuesReader(1)
-        val e = intercept[ParquetDecodingException](reader.initFromPage(8, in()))
-        assert(e.getMessage.contains(s"Corrupted RLE data: invalid length $length"),
-          e.getMessage)
+        assertCorrupted(s"invalid length $length")(reader.initFromPage(8, in()))
       }
     }
   }
 
   test("SPARK-59832: invalid bit-packed run is rejected before allocating its buffer") {
-    def check(bitWidth: Int, numGroups: Long, data: Array[Byte])(expected: String): Unit = {
-      val page = Array(bitWidth.toByte) ++ varint((numGroups << 1) | 1) ++ data
-      streams(page).foreach { in =>
-        val reader = new VectorizedRleValuesReader()
-        reader.initFromPage(10, in())
-        val c = new OnHeapColumnVector(10, IntegerType)
-        interceptCorrupted(expected)(reader.readIntegers(10, c, 0))
-      }
-    }
+    def check(bitWidth: Int, numGroups: Long, data: Array[Byte])(expected: String): Unit =
+      assertReadIntegersFails(
+        Array(bitWidth.toByte) ++ varint((numGroups << 1) | 1) ++ data, 10, expected)
     // Truncated last group. This was already rejected before (by `in.slice`), even when the
     // bytes cover every value read. parquet-java and Arrow accept it, for compatibility with
     // writers that do not pad the last group.
@@ -392,22 +406,16 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
     // The continuation byte of the run header is missing, and an RLE run of 10 without its
     // value.
     Seq(Array[Byte](4, 0x80.toByte), Array[Byte](4, 0x14)).foreach { page =>
-      streams(page).foreach { in =>
-        val reader = new VectorizedRleValuesReader()
-        reader.initFromPage(10, in())
-        val c = new OnHeapColumnVector(10, IntegerType)
-        interceptCorrupted("failed to read from input stream")(reader.readIntegers(10, c, 0))
-      }
+      assertReadIntegersFails(page, 10, "failed to read from input stream")
     }
   }
 
   test("SPARK-59832: cut-off level length is rejected") {
     streams(Array[Byte](3, 0)).foreach { in =>
       val reader = new VectorizedRleValuesReader(1)
-      val e = intercept[ParquetDecodingException](reader.initFromPage(8, in()))
-      assert(e.getMessage.contains(
-        "Corrupted RLE data: the 4-byte length is cut off, only 2 bytes are left in the page"),
-        e.getMessage)
+      assertCorrupted("the 4-byte length is cut off, only 2 bytes are left in the page") {
+        reader.initFromPage(8, in())
+      }
     }
   }
 
@@ -415,9 +423,7 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
     Seq(33, 255).foreach { bitWidth =>
       streams(Array[Byte](bitWidth.toByte, 0x14, 0)).foreach { in =>
         val reader = new VectorizedRleValuesReader()
-        val e = intercept[ParquetDecodingException](reader.initFromPage(10, in()))
-        assert(e.getMessage.contains(s"Corrupted RLE data: invalid bit width $bitWidth"),
-          e.getMessage)
+        assertCorrupted(s"invalid bit width $bitWidth")(reader.initFromPage(10, in()))
       }
     }
   }

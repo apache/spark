@@ -152,8 +152,11 @@ public class VectorizedColumnReader {
       try {
         this.dictionary = dictionaryPage.getEncoding().initDictionary(descriptor, dictionaryPage);
         this.isCurrentPageDictionaryEncoded = true;
-      } catch (IOException | ParquetDecodingException e) {
+      } catch (IOException e) {
         throw new IOException("could not decode the dictionary for " + descriptor, e);
+      } catch (ParquetDecodingException e) {
+        throw new ParquetDecodingException(
+          "could not decode the dictionary for " + descriptor + ": " + e.getMessage(), e);
       }
     } else {
       this.dictionary = null;
@@ -454,8 +457,11 @@ public class VectorizedColumnReader {
       defColumn.initFromPage(pageValueCount, in);
       initDataReader(pageValueCount, page.getValueEncoding(), in);
       return pageValueCount;
-    } catch (IOException | ParquetDecodingException e) {
+    } catch (IOException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
+    } catch (ParquetDecodingException e) {
+      throw new ParquetDecodingException(
+        "could not read page " + page + " in col " + descriptor + ": " + e.getMessage(), e);
     }
   }
 
@@ -474,8 +480,11 @@ public class VectorizedColumnReader {
     try {
       initDataReader(pageValueCount, page.getDataEncoding(), page.getData().toInputStream());
       return pageValueCount;
-    } catch (IOException | ParquetDecodingException e) {
+    } catch (IOException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
+    } catch (ParquetDecodingException e) {
+      throw new ParquetDecodingException(
+        "could not read page " + page + " in col " + descriptor + ": " + e.getMessage(), e);
     }
   }
 }

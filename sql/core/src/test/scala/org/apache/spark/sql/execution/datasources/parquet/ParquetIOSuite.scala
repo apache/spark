@@ -23,8 +23,6 @@ import java.time.{LocalDateTime, LocalTime}
 import java.util.Locale
 
 import scala.collection.mutable
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -32,6 +30,7 @@ import scala.reflect.runtime.universe.TypeTag
 import com.google.common.primitives.UnsignedLong
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
+import org.apache.parquet.bytes.BytesUtils
 import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.column.ParquetProperties.WriterVersion.PARQUET_1_0
 import org.apache.parquet.example.data.Group
@@ -41,6 +40,8 @@ import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
+import org.scalatest.concurrent.{Signaler, ThreadSignaler}
+import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
 import org.apache.spark.rdd.RDD
@@ -2517,13 +2518,12 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
       dir.listFiles().filter(_.getName.endsWith(".crc")).foreach(_.delete())
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-        // Before SPARK-59832 a truncated read never returned, so run it with a timeout.
-        // scalastyle:off awaitresult
+        // Before SPARK-59832 a truncated read never returned, so run it with a timeout. The test
+        // thread waits interruptibly for the job, so it can be signaled directly.
+        implicit val signaler: Signaler = ThreadSignaler
         error = intercept[SparkException] {
-          Await.result(
-            Future(spark.read.parquet(path).collect())(ExecutionContext.global), 1.minute)
+          failAfter(Span(60, Seconds))(spark.read.parquet(path).collect())
         }
-        // scalastyle:on awaitresult
       }
     }
     error
@@ -2534,16 +2534,15 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
 
   /** Sets the 4-byte length at `offset` to Int.MaxValue, far more than the rest of the page. */
   private def setMaxLength(bytes: Array[Byte], offset: Int): Unit =
-    Array(0xFF, 0xFF, 0xFF, 0x7F).zipWithIndex.foreach { case (b, i) =>
-      bytes(offset + i) = b.toByte
-    }
+    BytesUtils.intToBytes(Int.MaxValue).copyToArray(bytes, offset)
 
   /**
    * Checks that the page error is reported once with the column, directly on top of the
    * `ParquetDecodingException` about the invalid length.
    */
   private def assertInvalidLengthReportsColumn(e: Throwable, column: String): Unit = {
-    val pageErrors = causes(e).filter(_.getMessage.startsWith("could not read page"))
+    val pageErrors =
+      causes(e).filter(c => Option(c.getMessage).exists(_.startsWith("could not read page")))
     assert(pageErrors.size == 1, e)
     assert(pageErrors.head.getMessage.contains(s"in col [$column]"), e)
     assert(pageErrors.head.getCause.isInstanceOf[ParquetDecodingException], e)
