@@ -40,20 +40,12 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
     .add("age", IntegerType)
     .add(
       AutoCdcReservedNames.cdcMetadataColName,
-      new StructType()
-        .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, LongType)
-        .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType)
-        .add(
-          Scd1BatchProcessor.versionMapFieldName,
-          Scd1VersionMap.mapType(LongType)
-        )
+      Scd1BatchProcessor.cdcMetadataColSchema(LongType)
     )
 
   /** DataType for the CDC metadata column, where sequencing type is Long. */
-  private val cdcMetadataColSchemaType: DataType = new StructType()
-    .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, LongType)
-    .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType)
-    .add(Scd1BatchProcessor.versionMapFieldName, Scd1VersionMap.mapType(LongType))
+  private val cdcMetadataColSchemaType: DataType =
+    Scd1BatchProcessor.cdcMetadataColSchema(LongType)
 
   /**
    * Helper to construct a CDC metadata column row, following [[cdcMetadataColSchemaType]].

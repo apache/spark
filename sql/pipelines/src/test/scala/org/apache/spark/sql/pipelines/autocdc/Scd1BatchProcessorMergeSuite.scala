@@ -115,16 +115,7 @@ class Scd1BatchProcessorMergeSuite
     val microbatchSchema = new StructType()
       .add("id", IntegerType)
       .add("value", StringType)
-      .add(
-        AutoCdcReservedNames.cdcMetadataColName,
-        new StructType()
-          .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, LongType)
-          .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType)
-          .add(
-            Scd1BatchProcessor.versionMapFieldName,
-            Scd1VersionMap.mapType(LongType)
-          )
-      )
+      .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
     val microbatch = microbatchOf(microbatchSchema)(
       Row(1, "data-leak", cdcMetadataRow(deleteSeq = Some(20L), upsertSeq = None))
     )
