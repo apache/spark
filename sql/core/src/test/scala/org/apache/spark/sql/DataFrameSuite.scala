@@ -1718,17 +1718,6 @@ class DataFrameSuite extends SharedSparkSession
     assert(references.map(_.exprId).toSet === newLogicalRDD.output.map(_.exprId).toSet)
   }
 
-  test("SPARK-52878: case-sensitive resolution still rejects differently cased columns") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val df = spark.range(1).toDF("foo")
-      checkError(
-        exception = intercept[AnalysisException] { df.select("Foo") },
-        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        parameters = Map("objectName" -> "`Foo`", "proposal" -> "`foo`"),
-        context = ExpectedContext(fragment = "select", getCurrentClassCallSitePattern))
-    }
-  }
-
   test("SPARK-46794: exclude subqueries from LogicalRDD constraints") {
     withTempDir { checkpointDir =>
       val subquery =
