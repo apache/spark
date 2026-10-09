@@ -19,6 +19,10 @@ package org.apache.spark.sql
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual}
+import org.apache.spark.sql.catalyst.plans.{Backward, Forward}
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
 import org.apache.spark.sql.internal.SQLConf
@@ -71,6 +75,31 @@ class SortMergeAsOfJoinSuite extends QueryTest
     assert(op.get.metrics("spillSize").value > 0,
       s"Expected the right-side buffer to spill (spillSize > 0), " +
         s"got ${op.get.metrics("spillSize").value}")
+  }
+
+  /**
+   * Rewrites each as-of comparison with the right side first, as an optimizer rule may:
+   * `l.ts >= r.ts` becomes `r.ts <= l.ts`. It only flips a comparison that starts with a left
+   * side column, so running it again changes nothing.
+   */
+  private object PutRightSideFirst extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+      case j: AsOfJoin =>
+        def fromLeft(e: Expression): Boolean =
+          e.references.nonEmpty && e.references.subsetOf(j.left.outputSet)
+        j.copy(asOfCondition = j.asOfCondition.transform {
+          case GreaterThanOrEqual(l, r) if fromLeft(l) => LessThanOrEqual(r, l)
+          case GreaterThan(l, r) if fromLeft(l) => LessThan(r, l)
+          case LessThanOrEqual(l, r) if fromLeft(l) => GreaterThanOrEqual(r, l)
+          case LessThan(l, r) if fromLeft(l) => GreaterThan(r, l)
+        })
+    }
+  }
+
+  private def withRightSideFirst(f: => Unit): Unit = {
+    val saved = spark.experimental.extraOptimizations
+    spark.experimental.extraOptimizations = saved :+ PutRightSideFirst
+    try f finally spark.experimental.extraOptimizations = saved
   }
 
   test("uses SortMergeAsOfJoinExec physical operator") {
@@ -156,6 +185,39 @@ class SortMergeAsOfJoinSuite extends QueryTest
         Row(10, "z", "c", 7, "z", 7)
       )
     )
+  }
+
+  test("keeps the requested direction when a rewrite puts the right side first") {
+    val schema = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val left = spark.createDataFrame(List(Row(10, "a")).asJava, schema)
+    // Pairs of right rows tie on ts. Backward keeps the last row of a tie, Nearest the first.
+    // One partition keeps the input order, so the order within a tie is fixed.
+    val right = spark.createDataFrame(
+      List(Row(5, "r1"), Row(5, "r2"), Row(15, "r3"), Row(15, "r4")).asJava, schema)
+      .coalesce(1)
+    withRightSideFirst {
+      Seq(
+        ("backward", Backward, Row(10, "a", 5, "r2")),
+        ("forward", Forward, Row(10, "a", 15, "r3"))
+      ).foreach { case (directionName, direction, expected) =>
+        val joined = left.joinAsOf(
+          right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
+          joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = directionName)
+        checkAnswer(joined, expected :: Nil)
+        val op = collectFirst(joined.queryExecution.executedPlan) {
+          case s: SortMergeAsOfJoinExec => s
+        }.get
+        val rightSideFirst = op.asOfCondition match {
+          case c: BinaryComparison => c.left.references.subsetOf(op.right.outputSet)
+          case _ => false
+        }
+        assert(rightSideFirst, s"Expected the right side first in ${op.asOfCondition}")
+        assert(op.direction === direction)
+      }
+    }
   }
 
   test("backward join - tolerance = 1") {
@@ -467,8 +529,10 @@ class SortMergeAsOfJoinSuite extends QueryTest
     val df1 = spark.createDataFrame(
       List(Row(10, "a"), Row(20, "b")).asJava, schema1)
     val df2 = spark.createDataFrame(
-      List(Row(5, "x"), Row(12, "y"), Row(25, "z")).asJava, schema2)
-    // tolerance = 3: only match if |left.ts - right.ts| <= 3
+      List(Row(5, "x"), Row(8, "w"), Row(11, "v"), Row(12, "y"), Row(25, "z")).asJava, schema2)
+    // tolerance = 3: only match if |left.ts - right.ts| <= 3. For left.ts=10 the closest row
+    // (11) is neither the first (8) nor the last (12) row in range, so a forward or backward
+    // scan would pick a different row.
     checkAnswer(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
@@ -476,7 +540,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         tolerance = functions.lit(3),
         allowExactMatches = true, direction = "nearest"),
       Seq(
-        Row(10, "a", 12, "y"),  // |10-12|=2 <= 3, match
+        Row(10, "a", 11, "v"),  // |10-11|=1 is the closest in [7, 13]
         Row(20, "b", null, null) // |20-25|=5 > 3, no match
       )
     )
@@ -495,18 +559,14 @@ class SortMergeAsOfJoinSuite extends QueryTest
       List(Row(8, "x"), Row(12, "y")).asJava, schema2)
     // Both are distance 2 from left.ts=10. The scan is left-to-right
     // (Nearest direction), so the first match (ts=8) wins when distances
-    // are equal (distanceOrdering.lt is strict).
-    val result = df1.joinAsOf(
-      df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
-      joinType = "inner",
-      tolerance = functions.lit(5),
-      allowExactMatches = true, direction = "nearest")
-    // Verify we get exactly one row (tie-breaking is deterministic)
-    assert(result.count() == 1)
-    val row = result.collect().head
-    assert(row.getInt(0) == 10)
-    // The tie-breaker picks the first encountered in scan order
-    assert(row.getInt(2) == 8 || row.getInt(2) == 12)
+    // are equal (distanceOrdering.lt is strict). A backward scan would keep ts=12.
+    checkAnswer(
+      df1.joinAsOf(
+        df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
+        joinType = "inner",
+        tolerance = functions.lit(5),
+        allowExactMatches = true, direction = "nearest"),
+      Row(10, "a", 8, "x") :: Nil)
   }
 
   test("forward join - allowExactMatches = false") {
