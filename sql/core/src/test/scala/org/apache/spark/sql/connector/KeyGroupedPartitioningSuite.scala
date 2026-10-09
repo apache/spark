@@ -4078,6 +4078,41 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59981: a reported ordering that keeps no sort order falls back to the keys") {
+    withCustomReportingTable { reportingCatalog =>
+      reportingCatalog.reportedKeys = Seq(identity("id"))
+      // An empty report, one on `s`, which the join's projection prunes from the scan output, and
+      // one that starts with `s` and goes on with `data`, which is not a partition key.
+      val sOrder = sort(FieldReference("s"), SortDirection.ASCENDING)
+      val dataOrder = sort(FieldReference("data"), SortDirection.ASCENDING)
+      Seq(Seq.empty, Seq(sOrder), Seq(sOrder, dataOrder)).foreach { ordering =>
+        reportingCatalog.reportedOrdering = ordering
+        Seq(true, false).foreach { keyOrdering =>
+          withSQLConf(
+              SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> keyOrdering.toString) {
+            val (plan, reportingScan, warnings) = customReportingJoin()
+            assert(warnings.isEmpty, warnings)
+            // The report must reach the scan as it is, or this test would miss the fixed case.
+            assert(reportingScan.ordering.map(_.length) == Some(ordering.length))
+            val derivedOrdering = reportingScan.outputOrdering.map { o =>
+              (o.child.references.map(_.name).toSeq, o.direction)
+            }
+            val sortsAboveScan = collect(plan) {
+              case s: SortExec if s.exists(_ eq reportingScan) => s
+            }
+            if (keyOrdering) {
+              assert(derivedOrdering == Seq((Seq("id"), Ascending)), ordering)
+              assert(sortsAboveScan.isEmpty, "the join should read the derived ordering")
+            } else {
+              assert(derivedOrdering.isEmpty, ordering)
+              assert(sortsAboveScan.length == 1, ordering)
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-59721: a reported partition key that cannot be converted still fails") {
     val cases = Seq(
       (plusOneKey("id"), "id + 1"),
@@ -6589,24 +6624,28 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59995: a scan's output ordering drops sort orders that hold a partition transform") {
     // `t1` reports a transform in the middle, so the leading run of its ordering stops there.
     // `t2` reports a transform key first. Each split holds a single key, so the sort order on `id`
-    // after it still holds. `t3` reports no ordering, so the scan derives one from its keys. In
-    // each case a sort on `id` right above the scan needs no `SortExec`. A `GROUP BY id` plans a
-    // `SortAggregateExec`. The query selects `ts`, so the transform's column stays in the scan
-    // output. Otherwise SPARK-59899's pruned-column handling would give the same orderings even
-    // without this fix.
+    // after it still holds. `t3` reports no ordering, so the scan derives one from its keys. `t4`
+    // reports only a transform key. Nothing of the report is left, so the scan falls back to its
+    // keys (SPARK-59981). In each case a sort on `id` right above the scan needs no `SortExec`. A
+    // `GROUP BY id` plans a `SortAggregateExec`. The query selects `ts`, so the transform's column
+    // stays in the scan output. Otherwise SPARK-59899's pruned-column handling would give the same
+    // orderings even without this fix.
     val table1 = "transform_order_t1"
     val table2 = "transform_order_t2"
     val table3 = "transform_order_t3"
+    val table4 = "transform_order_t4"
     def asc(expr: Expression): SortOrder = sort(expr, SortDirection.ASCENDING)
     createTable(table1, columns, Array(identity("id")),
       Array(asc(FieldReference("id")), asc(years("ts")), asc(FieldReference("data"))))
     createTable(table2, columns, Array(years("ts"), identity("id")),
       Array(asc(years("ts")), asc(FieldReference("id"))))
     createTable(table3, columns, Array(days("ts"), identity("id")))
+    createTable(table4, columns, Array(years("ts"), identity("id")),
+      Array(asc(years("ts"))))
     withSQLConf(
         SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
         SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "true") {
-      Seq(table1, table2, table3).foreach { table =>
+      Seq(table1, table2, table3, table4).foreach { table =>
         sql(s"INSERT INTO testcat.ns.$table VALUES (1, 'aa', cast('2020-01-01' as timestamp))")
         val df = sql(s"SELECT id, data, ts FROM testcat.ns.$table")
         val scan = collectScans(df.queryExecution.executedPlan).head

@@ -377,8 +377,8 @@ case class GroupPartitionsExec(
   override def outputOrdering: Seq[SortOrder] = {
     if (!hasCoalescing) {
       // No coalescing: each output partition is exactly one input partition. The child's
-      // within-partition ordering is fully preserved (including any key-derived ordering that
-      // `DataSourceV2ScanExecBase` already prepended).
+      // within-partition ordering is fully preserved, including an ordering that
+      // `DataSourceV2ScanExecBase` derives from the partition keys.
       child.outputOrdering
     } else if (usesSortedMerge) {
       // Coalescing with sorted merge: SortedMergeCoalescedRDD performs a k-way merge using the

@@ -95,9 +95,8 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with AliasHelper 
           log"Spark ignores the ordering reported by ${MDC(RELATION_NAME, relation.name)} " +
             log"(scan ${MDC(CLASS_NAME, scan.getClass.getName)}) because the ordering columns " +
             log"cannot be resolved: ${MDC(COLUMN_NAMES, unresolvedColumns.mkString(", "))}.")
-        // Use None, not Some(Nil): only None lets DataSourceV2ScanExecBase.outputOrdering derive an
-        // ordering from a kept key-grouped partitioning, which does not depend on the dropped
-        // report.
+        // `None` and `Some(Nil)` mean the same to DataSourceV2ScanExecBase.outputOrdering, which
+        // can still derive an ordering from a kept key-grouped partitioning.
         d.copy(ordering = None)
       } else {
         // The ordering is kept as reported, even where it references columns pruned out of the

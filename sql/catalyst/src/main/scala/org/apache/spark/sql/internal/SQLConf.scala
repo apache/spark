@@ -2660,9 +2660,12 @@ object SQLConf {
       .doc("When enabled, Spark derives output ordering from the partition key expressions of " +
         "a V2 data source that reports a KeyedPartitioning but does not report explicit ordering " +
         "via SupportsReportOrdering, or reports one that Spark ignores because it references a " +
-        "column that cannot be resolved. Within a single partition all rows share the same key " +
-        "value, so the data is trivially sorted by those expressions. Partition transforms such " +
-        "as `days(ts)` or `bucket(8, id)` are left out of the ordering. Requires " +
+        "column that cannot be resolved, or one that starts with a sort order on a column " +
+        "pruned from the scan output or on a partition transform, and has no sort order on a " +
+        "partition key in the scan output that is not a transform. Within a single partition " +
+        "all rows share the same key value, so the data is trivially sorted by those " +
+        "expressions. Partition transforms such as `days(ts)` or `bucket(8, id)` are left out of " +
+        "the ordering. Requires " +
         s"${V2_BUCKETING_ENABLED.key} to be enabled.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
