@@ -74,6 +74,23 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59234: a distributed key with more splits than its expected count fails fast") {
+    // Keys [(1,1), (1,2)] projected onto position 0 both become key 1, so the child holds two
+    // splits for it. Declaring an expected count of 1 for key 1 while the node is ungrouped for a
+    // join split is the inconsistency this guard catches: `padTo` would emit both splits while the
+    // count says one, leaving duplicate keys under a grouped report.
+    val childKp = KeyedPartitioning(Seq(exprA, exprB), Seq(row(1, 1), row(1, 2)))
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    val e = intercept[AssertionError] {
+      GroupPartitionsExec(DummySparkPlan(outputPartitioning = childKp),
+        joinKeyPositions = Some(Seq(0)),
+        expectedPartitionKeys = Some(Seq(keyOf(1) -> 1)),
+        ungroupingOrigin = Some(SPLIT_FOR_JOIN))
+    }
+    assert(e.getMessage.contains("more splits"))
+  }
+
   test("SPARK-59121: a node with no reducers keeps the child's reduced key marker") {
     // This node re-reports the child's expressions, projected to `joinKeyPositions`. A reduce that
     // happened below it has to survive that, or a further join above reads the reported transform

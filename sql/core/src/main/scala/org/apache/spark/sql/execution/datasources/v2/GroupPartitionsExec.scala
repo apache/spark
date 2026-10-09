@@ -667,6 +667,13 @@ private[sql] object GroupPartitionsExec {
       val splits = keyMap.getOrElse(key, Seq.empty)
       numMatchedPartitions += splits.size
       if (distributePartitions) {
+        // `padTo` only pads, never truncates, so a key holding more splits than its expected
+        // count would emit more partitions than the pairing side expects while `isGrouped` can
+        // still read as grouped. Fail fast here, where the alignment is owned, rather than let
+        // the inconsistency surface downstream in `PartitioningCollection.fromPartitionings`.
+        assert(splits.size <= numSplits,
+          s"a distributed partition key holds more splits (${splits.size}) than its expected " +
+            s"count ($numSplits)")
         // Distribute splits across expected partitions, padding with empty sequences
         val paddedSplits = splits.map(Seq(_)).padTo(numSplits, Seq.empty)
         paddedSplits.map((key, _))
