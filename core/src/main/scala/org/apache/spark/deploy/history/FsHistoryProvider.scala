@@ -17,14 +17,13 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{File, FileNotFoundException, IOException}
+import java.io.{File, FileNotFoundException, InputStream, IOException}
 import java.lang.{Long => JLong}
 import java.util.{Date, NoSuchElementException, ServiceLoader}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, TimeUnit}
 import java.util.zip.ZipOutputStream
 
 import scala.collection.mutable
-import scala.io.{Codec, Source}
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.xml.Node
@@ -1107,24 +1106,23 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       Utils.tryWithResource(EventLogFileReader.openEventLog(lastFile.getPath,
           fsForPath(lastFile.getPath))) { in =>
         val target = lastFile.getLen - reparseChunkSize
-        if (target > 0) {
+        val sourceName = if (target > 0) {
           logInfo(log"Looking for end event; skipping ${MDC(NUM_BYTES, target)} bytes" +
             log" from ${MDC(PATH, logPath)}...")
           var skipped = 0L
           while (skipped < target) {
             skipped += in.skip(target - skipped)
           }
+          // Because skipping may leave the stream in the middle of a line, or even in the
+          // middle of a multi-byte UTF-8 character, discard the rest of that line before any
+          // decoding. Line numbers reported by the replay are then relative to this offset.
+          val offset = target + skipPartialLine(in)
+          s"${lastFile.getPath} (lines counted from uncompressed byte offset $offset)"
+        } else {
+          lastFile.getPath.toString
         }
 
-        val source = Source.fromInputStream(in)(Codec.UTF8).getLines()
-
-        // Because skipping may leave the stream in the middle of a line, read the next line
-        // before replaying.
-        if (target > 0) {
-          source.next()
-        }
-
-        bus.replay(source, lastFile.getPath.toString, !appCompleted, eventsFilter)
+        bus.replay(in, sourceName, !appCompleted, eventsFilter)
       }
     }
 
@@ -1771,6 +1769,22 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 }
 
 private[spark] object FsHistoryProvider {
+
+  /**
+   * Discards bytes up to and including the next '\n', returning the number of bytes discarded.
+   * This works on raw bytes so that it is safe to call at an arbitrary byte offset: '\n' never
+   * occurs inside a multi-byte UTF-8 sequence. The bytes are read one at a time so that the
+   * stream is left exactly at the start of the next line.
+   */
+  private[history] def skipPartialLine(in: InputStream): Long = {
+    var discarded = 0L
+    var b = in.read()
+    while (b != -1 && b != '\n') {
+      discarded += 1
+      b = in.read()
+    }
+    if (b == '\n') discarded + 1 else discarded
+  }
 
   private val APPL_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationStart\""
 

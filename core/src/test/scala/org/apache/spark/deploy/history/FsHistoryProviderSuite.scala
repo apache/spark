@@ -1248,6 +1248,61 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
+  test("end event reparse when the skip offset lands inside a multi-byte character") {
+    val log = newLogFile("end-event-utf8", None, inProgress = false)
+    val bytes = writeRawLog(log, endEventTestLines("end-event-utf8",
+      jobStartLine(1, 0x4e2d.toChar.toString * 200)))
+    // The job description is written as raw UTF-8: skip to the second byte of a character.
+    val leadByte = bytes.indexWhere(b => (b & 0xF0) == 0xE0)
+    assert(leadByte > 0)
+    val conf = createTestConf().set(END_EVENT_REPARSE_CHUNK_SIZE, (bytes.length - leadByte - 1L))
+    updateAndCheck(new FsHistoryProvider(conf)) { list =>
+      assert(list.size === 1)
+      assert(list(0).attempts.head.completed)
+    }
+  }
+
+  test("end event reparse applies the line length limit and reports relative line numbers") {
+    val log = newLogFile("end-event-limit", None, inProgress = false)
+    val tail = Seq(jobStartLine(2, "x" * 2048), jobStartLine(3, "y"))
+    val lines = endEventTestLines("end-event-limit", tail: _*)
+    val bytes = writeRawLog(log, lines)
+    // Skip into the middle of the line before the tail. The next line starts at `offset` and
+    // the over-long line is the first line after it.
+    val offset = lines.takeWhile(_ != tail.head).map(_.length + 1).sum
+    val conf = createTestConf()
+      .set(END_EVENT_REPARSE_CHUNK_SIZE, bytes.length - offset + 10L)
+      .set(EVENT_LOG_MAX_LINE_LENGTH.key, "1k")
+    val appender = new LogAppender("end event reparse")
+    withLogAppender(appender) {
+      updateAndCheck(new FsHistoryProvider(conf)) { list =>
+        assert(list.size === 1)
+        assert(list(0).attempts.head.completed)
+      }
+    }
+    val sourceName = s"${log.getName} (lines counted from uncompressed byte offset $offset)"
+    val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(messages.exists(m => m.contains("Skipped event log lines longer than 1024 bytes") &&
+      m.contains(s"$sourceName; first skipped line: 1")), messages)
+  }
+
+  test("end event reparse labels JSON errors with the skip offset") {
+    val log = newLogFile("end-event-malformed", None, inProgress = false)
+    val malformed = "{\"Event\":\"SparkListenerApplicationEnd\",\"Timestamp\":"
+    val tail = Seq(jobStartLine(2, "x"), malformed, jobStartLine(3, "y"))
+    val lines = endEventTestLines("end-event-malformed", tail: _*)
+    val bytes = writeRawLog(log, lines)
+    val offset = lines.takeWhile(_ != tail.head).map(_.length + 1).sum
+    val conf = createTestConf().set(END_EVENT_REPARSE_CHUNK_SIZE, bytes.length - offset + 10L)
+    val appender = new LogAppender("end event reparse")
+    withLogAppender(appender) {
+      new FsHistoryProvider(conf).checkForLogs()
+    }
+    val sourceName = s"${log.getName} (lines counted from uncompressed byte offset $offset)"
+    val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(messages.exists(_.contains(s"$sourceName at line 2")), messages)
+  }
+
   test("parse event logs with optimizations off") {
     val conf = createTestConf()
       .set(END_EVENT_REPARSE_CHUNK_SIZE, 0L)
@@ -2154,6 +2209,39 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     } {
       writer.close()
     }
+  }
+
+  /** Writes the given lines as an uncompressed event log and returns the written bytes. */
+  private def writeRawLog(file: File, lines: Seq[String]): Array[Byte] = {
+    val bytes = lines.map(_ + "\n").mkString.getBytes(StandardCharsets.UTF_8)
+    Utils.tryWithResource(new FileOutputStream(file))(_.write(bytes))
+    bytes
+  }
+
+  private def jobStartLine(jobId: Int, description: String): String = {
+    val properties = new java.util.Properties()
+    properties.setProperty("spark.job.description", description)
+    JsonProtocol.sparkEventToJsonString(SparkListenerJobStart(jobId, 1L, Nil, properties))
+  }
+
+  /**
+   * Event log lines with enough information for a listing entry, then a padding line, the given
+   * tail lines and the application end event.
+   */
+  private def endEventTestLines(appId: String, tail: String*): Seq[String] = {
+    Seq(
+      SparkListenerLogStart(SPARK_VERSION),
+      SparkListenerApplicationStart(appId, Some(appId), 1L, "test", None),
+      SparkListenerEnvironmentUpdate(Map(
+        "Spark Properties" -> Seq.empty,
+        "Hadoop Properties" -> Seq.empty,
+        "JVM Information" -> Seq.empty,
+        "System Properties" -> Seq.empty,
+        "Metrics Properties" -> Seq.empty,
+        "Classpath Entries" -> Seq.empty))
+    ).map(JsonProtocol.sparkEventToJsonString) ++
+      Seq(jobStartLine(1, "padding")) ++ tail ++
+      Seq(JsonProtocol.sparkEventToJsonString(SparkListenerApplicationEnd(5L)))
   }
 
   private def createEmptyFile(file: File) = {
