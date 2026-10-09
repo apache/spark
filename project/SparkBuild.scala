@@ -1480,7 +1480,24 @@ object SQL {
     // sql/core uses protoc-jar-maven-plugin which outputs to target/generated-sources.
     (Compile / PB.targets) := Seq(
       PB.gens.java -> target.value / "generated-sources"
-    )
+    ),
+    // snowflake-jdbc 4.4.0 shades Woodstox and registers it as a StAX factory.
+    // XMLInputFactory.newInstance() then parses sql XML tests with Woodstox.
+    // Nested arrays come back with _corrupt_record, and numeric inference changes.
+    // Drop the factory registrations. Shaded Woodstox classes stay for Snowflake.
+    (Test / fullClasspath) := {
+      val cp = (Test / fullClasspath).value
+      val dest = target.value / "test-classpath"
+      cp.map { entry =>
+        val jar = entry.data
+        val name = jar.getName
+        if (name.startsWith("snowflake-jdbc-") && name.endsWith(".jar")) {
+          entry.map(_ => stripSnowflakeStaxServices(jar, dest))
+        } else {
+          entry
+        }
+      }
+    }
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
     if (sparkProtocExecPath.isDefined) {
@@ -1489,6 +1506,54 @@ object SQL {
       )
     } else {
       Seq.empty
+    }
+  }
+
+  private val snowflakeStaxServices = Set(
+    "META-INF/services/javax.xml.stream.XMLInputFactory",
+    "META-INF/services/javax.xml.stream.XMLOutputFactory",
+    "META-INF/services/javax.xml.stream.XMLEventFactory"
+  )
+
+  private def stripSnowflakeStaxServices(jar: File, destDir: File): File = {
+    val stripped = destDir / s"${jar.getName.stripSuffix(".jar")}-no-stax-services.jar"
+    if (stripped.exists() && stripped.lastModified() >= jar.lastModified()) {
+      stripped
+    } else {
+      IO.createDirectory(destDir)
+      val tmp = destDir / (stripped.getName + ".tmp")
+      val in = new java.util.zip.ZipInputStream(new BufferedInputStream(new FileInputStream(jar)))
+      val out = new java.util.zip.ZipOutputStream(
+        new BufferedOutputStream(new FileOutputStream(tmp)))
+      try {
+        val buffer = new Array[Byte](8192)
+        var entry = in.getNextEntry
+        while (entry != null) {
+          if (!snowflakeStaxServices.contains(entry.getName)) {
+            val copied = new java.util.zip.ZipEntry(entry.getName)
+            copied.setTime(entry.getTime)
+            out.putNextEntry(copied)
+            var read = in.read(buffer)
+            while (read >= 0) {
+              if (read > 0) {
+                out.write(buffer, 0, read)
+              }
+              read = in.read(buffer)
+            }
+            out.closeEntry()
+          }
+          in.closeEntry()
+          entry = in.getNextEntry
+        }
+      } finally {
+        in.close()
+        out.close()
+      }
+      if (stripped.exists()) {
+        IO.delete(stripped)
+      }
+      IO.move(tmp, stripped)
+      stripped
     }
   }
 }
