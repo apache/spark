@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.python
 import java.io.File
 import java.util.Properties
 import java.util.concurrent.{CountDownLatch, LinkedBlockingQueue, TimeUnit}
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.jdk.CollectionConverters._
 
@@ -395,15 +395,18 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("task completion waits for a consumer reading its queue instead of freeing it") {
+  /**
+   * A task whose consumer pauses for 2 s once, in the first cancellation check for which
+   * `stallWhen` holds, after it takes the lock and before it reads its input or queue, as a
+   * GC pause would.
+   */
+  private class StallingTask {
     val taskMemory = new TaskMemoryManager(SparkEnv.get.memoryManager, 0)
-    val stall = new AtomicBoolean(false)
+    @volatile var stallWhen: () => Boolean = () => false
     val stalled = new CountDownLatch(1)
     val context = new TaskContextImpl(0, 0, 0, 0, 0, 1, taskMemory, new Properties, null) {
-      // A pause after the consumer takes the lock and before it reads the queue, as a GC
-      // pause or a slow read of a spilled queue would cause.
       override private[spark] def killTaskIfInterrupted(): Unit = {
-        if (stall.compareAndSet(true, false)) {
+        if (stalled.getCount == 1 && stallWhen()) {
           stalled.countDown()
           Thread.sleep(2000)
         }
@@ -411,30 +414,68 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
       }
     }
     val session = new InProcessPythonRuntime.InterpreterSession()
+  }
+
+  test("task completion waits for a consumer reading its queue instead of freeing it") {
+    val task = new StallingTask
     try {
       val iterator = new BlockingInput(InProcessArrowEvalPythonEvaluatorFactory.Buffered(None),
-        context, session, rowCount = 25).iterator()
+        task.context, task.session, rowCount = 25).iterator()
       val results = new LinkedBlockingQueue[Any]()
       val consumer = thread {
         try {
           results.put(iterator.next().getLong(0))
-          stall.set(true)
+          task.stallWhen = () => true
           results.put(iterator.next().getLong(0))
         } catch {
           case t: Throwable => results.put(t)
         }
       }
       assert(results.poll(30, TimeUnit.SECONDS) == 1L)
-      assert(stalled.await(30, TimeUnit.SECONDS))
-      val closing = thread(context.markTaskCompleted(None))
+      assert(task.stalled.await(30, TimeUnit.SECONDS))
+      val closing = thread(task.context.markTaskCompleted(None))
       closing.join(30000)
       assert(!closing.isAlive)
       // What the executor does after the task and its listeners: nothing is left to free.
-      assert(taskMemory.cleanUpAllAllocatedMemory() == 0L)
+      assert(task.taskMemory.cleanUpAllAllocatedMemory() == 0L)
       assert(results.poll(30, TimeUnit.SECONDS) == 2L)
       consumer.join(30000)
     } finally {
-      session.shutdown()
+      task.session.shutdown()
+    }
+  }
+
+  // The 11th row is the first one read after the first batch, which ends with the 10th: in
+  // `hasNext`, before filling the next batch, and the 12th in filling it.
+  Seq(10 -> "hasNext", 11 -> "a batch fill").foreach { case (blockAt, where) =>
+    test(s"a consumer that pauses before reading input does not read after task completion " +
+        s"(in $where)") {
+      val task = new StallingTask
+      val input = new BlockingInput(InProcessArrowEvalPythonEvaluatorFactory.Buffered(None),
+        task.context, task.session, rowCount = 25, blockAt = blockAt)
+      try {
+        val iterator = input.iterator()
+        assert(iterator.take(10).map(_.getLong(0)).toSeq == (1L to 10L))
+        // The last check before the read that blocks.
+        task.stallWhen = () => input.pulled.get == blockAt
+        val error = new AtomicReference[Throwable]()
+        val consumer = thread {
+          try iterator.next() catch { case t: Throwable => error.set(t) }
+        }
+        assert(task.stalled.await(30, TimeUnit.SECONDS))
+        val closing = thread(task.context.markTaskCompleted(None))
+        // The listener waits for the paused consumer, which then sees the completion instead
+        // of reading input that the gate holds back.
+        closing.join(5000)
+        assert(!closing.isAlive && input.reached.getCount == 1)
+        consumer.join(10000)
+        assert(error.get.isInstanceOf[NoSuchElementException])
+        assert(error.get.getMessage == "End of in-process UDF input")
+        assert(task.taskMemory.cleanUpAllAllocatedMemory() == 0L)
+      } finally {
+        input.gate.countDown()
+        task.session.shutdown()
+      }
     }
   }
 

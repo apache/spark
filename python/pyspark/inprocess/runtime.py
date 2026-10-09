@@ -454,16 +454,14 @@ def _validate_result(
     result: pa.Array,
     expected_rows: int,
     expected_type: pa.DataType,
+    expected_key: pa.DataType,
     null_checker: Optional[NullChecker] = None,
     full_validation: bool = True,
-    expected_key: Optional[pa.DataType] = None,
 ) -> pa.Array:
     if not isinstance(result, pa.Array):
         raise TypeError(f"In-process UDF must return a pyarrow.Array, got {type(result).__name__}")
     if len(result) != expected_rows:
         raise ValueError(f"In-process UDF returned {len(result)} rows; expected {expected_rows}")
-    if expected_key is None:
-        expected_key = _nullable_type(expected_type)
     convert = _nullable_type(result.type) != expected_key
     if convert and _nullable_type(_canonical_type(result.type)) != expected_key:
         raise TypeError(f"In-process UDF returned {result.type}; expected {expected_type}")
@@ -532,9 +530,9 @@ def _inprocess_invoke(
                 output,
                 int(expected_rows),
                 expected_type,
+                expected_key,
                 checker,
                 full_validation,
-                expected_key,
             )
         except BaseException:
             # The unvalidated result is a local of this and the validating frame. Capturing

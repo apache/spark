@@ -195,6 +195,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     }
 
     val resources = new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(
+      hasTaskMemory = queue != null,
       // Closing the queue deletes the spill files it tracks; deleteQuietly also removes any
       // other, without starting a process or throwing, also on an interrupted thread.
       releaseTaskMemory = () => if (queue != null) {
@@ -235,7 +236,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
         checkCancellation()
         val available = batchIter.hasNext || {
           resources.startReadingInput()
-          try rows.hasNext finally resources.endReadingInput()
+          try !resources.isClosed && rows.hasNext finally resources.endReadingInput()
         }
         if (!available) resources.close()
         available
@@ -287,7 +288,8 @@ class InProcessArrowEvalPythonEvaluatorFactory(
       private def pullRow(): Boolean = {
         resources.startReadingInput()
         val row = try {
-          if (rows.hasNext && !resources.isClosed) rows.next() else null
+          // Checked after marking, and again after `hasNext`, which may wait for input.
+          if (!resources.isClosed && rows.hasNext && !resources.isClosed) rows.next() else null
         } finally {
           resources.endReadingInput()
         }
@@ -425,9 +427,11 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
    * briefly. Then it leaves the task memory to the executor, deleting what lives outside it,
    * and the consumer releases the other resources once its row returns, without touching the
    * task memory again. Otherwise the consumer may use the task memory, e.g. the queue, and
-   * the listener waits for the lock until it is done.
+   * the listener waits for the lock until it is done. Without task memory, i.e. when the
+   * input is read back from Arrow, the listener always waits only briefly.
    */
   class IteratorResources(
+      hasTaskMemory: Boolean,
       releaseTaskMemory: () => Unit,
       abandonTaskMemory: () => Unit,
       releaseOthers: () => Unit,
@@ -450,16 +454,21 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
      * Marks that the consumer reads input, which may wait for a later listener, so that the
      * listener may leave the task memory to the executor meanwhile. Otherwise the consumer may
      * use the task memory whenever it holds the lock, e.g. to add a row to the queue, read
-     * one, or copy it, so the listener waits for the lock however long that takes.
+     * one, or copy it, so the listener waits for the lock however long that takes. Without
+     * task memory, there is nothing to mark, and the listener always waits only briefly.
+     *
+     * The consumer must check `isClosed` after marking and before it reads: `close` sets its
+     * flag before it reads this one, so either the consumer sees the close and does not read,
+     * or the listener sees the read and does not wait for it.
      */
-    def startReadingInput(): Unit = readingInput = true
+    def startReadingInput(): Unit = if (hasTaskMemory) readingInput = true
 
     /**
      * Ends reading input. The consumer must check `isClosed` afterwards, before it uses the
-     * task memory: the flag is cleared before that check, while `close` sets its own before it
-     * reads the flag, so either the consumer sees the close or the listener waits for it.
+     * task memory: the flag is cleared before that check, so either the consumer sees the
+     * close or the listener waits for it.
      */
-    def endReadingInput(): Unit = readingInput = false
+    def endReadingInput(): Unit = if (hasTaskMemory) readingInput = false
 
     /** Locks for a consumer call; returns false, without the lock, once closed. */
     def enter(): Boolean = {
@@ -500,7 +509,7 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
       } else if (Uninterruptibles.tryLockUninterruptibly(
           lock, lockWaitMillis, TimeUnit.MILLISECONDS)) {
         try releaseAll() finally lock.unlock()
-      } else if (readingInput &&
+      } else if ((!hasTaskMemory || readingInput) &&
           taskMemory.compareAndSet(TaskMemoryHeld, TaskMemoryAbandoned)) {
         // The executor frees the task memory, but not what lives outside it, e.g. spill files.
         abandonTaskMemory()

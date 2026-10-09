@@ -313,13 +313,17 @@ private[python] object InProcessPythonRuntime extends Logging {
         running = false
         finishShutdown()
       }
-      // With registrations left but no call pending, nothing runs until the last release,
-      // which then finishes the shutdown. Wait only for calls or the final cleanup.
-      if (!executor.isShutdown && pendingCalls.get == 0) return
+      // Waits for running calls and for tasks to release their registrations, the last of
+      // which finishes the shutdown, so that the interpreter is gone in the common case.
       try {
         if (!executor.awaitTermination(waitMillis, TimeUnit.MILLISECONDS)) {
-          logWarning("In-process Python is still stopping; native work and its buffers " +
-            "remain alive until the invocation finishes or the process exits.")
+          if (pendingCalls.get > 0) {
+            logWarning("In-process Python is still stopping; native work and its buffers " +
+              "remain alive until the invocation finishes or the process exits.")
+          } else {
+            logWarning("In-process Python is still stopping; tasks still hold UDF " +
+              "registrations, and the last release stops the interpreter.")
+          }
         }
       } catch {
         case _: InterruptedException => Thread.currentThread().interrupt()

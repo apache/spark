@@ -30,7 +30,7 @@ import org.apache.spark.internal.config.Python.{IN_PROCESS_PATH_RULE, IN_PROCESS
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 
 class InProcessPythonRuntimeSuite extends SparkFunSuite {
@@ -66,18 +66,20 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
       }
   }
 
-  test("shutdown does not wait for registrations while no call is running") {
+  test("shutdown waits for tasks to release their registrations") {
     val field = ArrowUtils.toArrowField("result", LongType, true, "UTC")
     intercept[NullPointerException] {
       runtime.register("idle", Array.emptyByteArray, field, "3.12", false, false, false, true)
     }
+    val releaser = thread {
+      Thread.sleep(300)
+      runtime.release(Seq("idle"))
+    }
     val start = System.nanoTime()
-    runtime.shutdown(waitMillis = 5000)
-    assert(System.nanoTime() - start < TimeUnit.SECONDS.toNanos(2) && !runtime.isTerminated)
-    // The last release finishes the shutdown.
-    runtime.release(Seq("idle"))
-    runtime.shutdown()
-    assert(runtime.isTerminated)
+    runtime.shutdown(waitMillis = 10000)
+    // The last release finishes the shutdown, and shutdown returns once it has.
+    assert(runtime.isTerminated && System.nanoTime() - start < TimeUnit.SECONDS.toNanos(5))
+    releaser.join()
   }
 
   test("registration failure frees its temporary native command buffer") {
@@ -198,9 +200,10 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     val abandoned = new AtomicInteger()
     val others = new AtomicInteger()
 
-    def resources(lockWaitMillis: Long = 10000L)
+    def resources(lockWaitMillis: Long = 10000L, hasTaskMemory: Boolean = true)
       : InProcessArrowEvalPythonEvaluatorFactory.IteratorResources =
       new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(
+        hasTaskMemory,
         () => taskMemory.incrementAndGet(),
         () => abandoned.incrementAndGet(),
         () => others.incrementAndGet(),
@@ -334,6 +337,38 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     closing.join(10000)
     assert(!closing.isAlive && releases.abandoned.get == 0)
     assert(releases.taskMemory.get == 1 && releases.others.get == 1)
+  }
+
+  test("without task memory, task completion waits only briefly for any consumer") {
+    val releases = new Releases
+    val resources = releases.resources(lockWaitMillis = 50L, hasTaskMemory = false)
+    withConsumer(resources) {
+      // There is nothing for the consumer to use after the executor frees task memory.
+      resources.close()
+      assert(releases.taskMemory.get == 0 && releases.others.get == 0)
+    }
+    assert(releases.taskMemory.get == 0 && releases.others.get == 1)
+  }
+
+  test("only some types read back from the exported input vectors") {
+    import InProcessArrowEvalPythonEvaluatorFactory.readsBack
+    val struct = (t: DataType) => new StructType().add("f", t)
+    Seq(
+      LongType -> true,
+      StringType -> true,
+      BinaryType -> true,
+      TimestampNTZType -> true,
+      struct(StringType) -> true,
+      struct(struct(IntegerType)) -> true,
+      DecimalType(10, 2) -> false,
+      ArrayType(LongType) -> false,
+      MapType(StringType, LongType) -> false,
+      struct(DecimalType(38, 18)) -> false,
+      struct(ArrayType(StringType)) -> false,
+      CalendarIntervalType -> false
+    ).foreach { case (dataType, expected) =>
+      assert(readsBack(dataType) == expected, dataType)
+    }
   }
 
   private def readBack(blockAt: Int, blockInNext: Boolean = false): BlockingInput =

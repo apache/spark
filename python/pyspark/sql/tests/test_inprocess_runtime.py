@@ -51,6 +51,7 @@ if _have_arrow_cdi:
         _inprocess_invoke,
         _inprocess_register,
         _inprocess_release,
+        _nullable_type,
         _Registration,
         _results,
         _strings_as_binary,
@@ -58,6 +59,13 @@ if _have_arrow_cdi:
         _validate_result,
     )
     from pyspark.inprocess.udf import inprocess_udf
+
+
+def validate(result, expected_rows, expected_type, **options):
+    """Validates as an invocation does, with the key that registration computes."""
+    return _validate_result(
+        result, expected_rows, expected_type, _nullable_type(expected_type), **options
+    )
 
 
 @unittest.skipUnless(_have_arrow_cdi, "Arrow CDI tests require PyArrow and cffi")
@@ -131,7 +139,7 @@ class InProcessRuntimeTests(unittest.TestCase):
         result.validate.side_effect = pa.ArrowInvalid("invalid result buffers")
         with patch("pyspark.inprocess.runtime._with_schema") as normalize:
             with self.assertRaisesRegex(pa.ArrowInvalid, "invalid result buffers"):
-                _validate_result(result, 2, pa.string())
+                validate(result, 2, pa.string())
             result.validate.assert_called_once_with()
             normalize.assert_not_called()
             result.buffers.assert_not_called()
@@ -149,7 +157,7 @@ class InProcessRuntimeTests(unittest.TestCase):
         ]
         for value in values:
             with self.subTest(type=value.type):
-                result = _validate_result(value, len(value), value.type)
+                result = validate(value, len(value), value.type)
                 self.assertEqual(
                     _strings_as_binary(result).to_pylist(),
                     _strings_as_binary(value).to_pylist(),
@@ -170,7 +178,7 @@ class InProcessRuntimeTests(unittest.TestCase):
         )
         for value in [hidden, nulls, nested]:
             with self.subTest(type=value.type):
-                result = _validate_result(value, len(value), value.type)
+                result = validate(value, len(value), value.type)
                 self.assertEqual(result.to_pylist(), value.to_pylist())
 
     def test_full_validation_rejects_invalid_interior_string_offsets(self):
@@ -179,7 +187,7 @@ class InProcessRuntimeTests(unittest.TestCase):
         for result in [value, pa.StructArray.from_arrays([value], names=["s"])]:
             with self.subTest(type=result.type):
                 with self.assertRaisesRegex(pa.ArrowInvalid, "non-monotonic offset"):
-                    _validate_result(result, 2, result.type)
+                    validate(result, 2, result.type)
 
     def test_validation_errors_do_not_capture_unvalidated_result_locals(self):
         def wrong_length(x):
@@ -215,7 +223,7 @@ class InProcessRuntimeTests(unittest.TestCase):
         offsets = pa.array([0, 5, 2], pa.int32()).buffers()[1]
         value = pa.Array.from_buffers(pa.string(), 2, [None, offsets, pa.py_buffer(b"hello")])
         # Only constant-time checks remain, which do not inspect interior offsets.
-        self.assertEqual(len(_validate_result(value, 2, value.type, full_validation=False)), 2)
+        self.assertEqual(len(validate(value, 2, value.type, full_validation=False)), 2)
         self.register("full", cloudpickle.dumps(lambda x: x))
         self.register("constant", cloudpickle.dumps(lambda x: x), full_validation=False)
         self.assertTrue(_udfs["full"].full_validation)
@@ -232,7 +240,7 @@ class InProcessRuntimeTests(unittest.TestCase):
         ]:
             with self.subTest(actual_type=actual_type):
                 value = pa.array(data, type=actual_type)
-                result = _validate_result(value, len(value), expected_type)
+                result = validate(value, len(value), expected_type)
                 self.assertEqual(result.type, expected_type)
                 self.assertEqual(result.to_pylist(), value.to_pylist())
                 self.assertEqual(
@@ -290,7 +298,7 @@ class InProcessRuntimeTests(unittest.TestCase):
             self.assertEqual(result.buffers()[1].address, value.buffers()[1].address)
         for datatype in [pa.timestamp("us"), pa.timestamp("ms", tz="UTC")]:
             with self.assertRaisesRegex(TypeError, "expected"):
-                _validate_result(pa.array([0], type=datatype), 1, value.type)
+                validate(pa.array([0], type=datatype), 1, value.type)
 
     def test_session_dependent_nested_string_and_binary_widths(self):
         # Declare the field order: newer PyArrow versions sort inferred struct fields.
@@ -301,10 +309,10 @@ class InProcessRuntimeTests(unittest.TestCase):
         expected = pa.struct(
             [pa.field("s", pa.list_(pa.large_string())), pa.field("b", pa.large_binary())]
         )
-        result = _validate_result(value, 2, expected)
+        result = validate(value, 2, expected)
         self.assertEqual(result.type, expected)
         self.assertEqual(result.to_pylist(), value.to_pylist())
-        self.assertEqual(_validate_result(result, 2, value.type).to_pylist(), value.to_pylist())
+        self.assertEqual(validate(result, 2, value.type).to_pylist(), value.to_pylist())
 
     def test_exported_numpy_buffers_are_finalized_on_the_interpreter_thread(self):
         import numpy as np
@@ -374,7 +382,7 @@ class InProcessRuntimeTests(unittest.TestCase):
 
         _null_checker(expected)(EmptyMap())
         nested = pa.array([[], None, []], type=pa.list_(expected))
-        self.assertEqual(_validate_result(nested, 3, nested.type), nested)
+        self.assertEqual(validate(nested, 3, nested.type), nested)
 
     def test_primitive_types_do_not_implicitly_cast(self):
         cases = [
@@ -410,7 +418,7 @@ class InProcessRuntimeTests(unittest.TestCase):
             for value, rows in cases:
                 with self.subTest(type=value.type, offsets=offsets):
                     expected = _canonical_type(value.type)
-                    result = _validate_result(value, rows, expected)
+                    result = validate(value, rows, expected)
                     self.assertTrue(_has_offsets_buffers(result))
                     self.assertEqual(result.to_pylist(), value.to_pylist())
                     self.assertEqual(result.type, expected)
@@ -435,7 +443,7 @@ class InProcessRuntimeTests(unittest.TestCase):
         ]
         for value, expected in cases:
             with self.subTest(type=value.type):
-                result = _validate_result(value, 3, expected)
+                result = validate(value, 3, expected)
                 self.assertEqual(result.type, expected)
                 self.assertEqual(result.to_pylist(), value.to_pylist())
 
@@ -448,7 +456,7 @@ class InProcessRuntimeTests(unittest.TestCase):
         for value, expected in cases:
             with self.subTest(type=value.type):
                 with self.assertRaisesRegex(TypeError, "expected"):
-                    _validate_result(value, 2, expected)
+                    validate(value, 2, expected)
 
     def test_zero_argument_udf_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "0-arg"):
@@ -528,7 +536,7 @@ class InProcessRuntimeTests(unittest.TestCase):
             pa.StructArray.from_arrays([pa.array([9, 1, None, 3]).slice(1)], names=["x"]),
         ):
             with self.subTest(data_type=value.type):
-                normalized = _validate_result(value, 3, value.type)
+                normalized = validate(value, 3, value.type)
                 self.assertEqual(normalized.offset, 0)
                 self.assertEqual(normalized.to_pylist(), value.to_pylist())
                 if pa.types.is_struct(value.type):
@@ -539,11 +547,11 @@ class InProcessRuntimeTests(unittest.TestCase):
         required = pa.list_(pa.field("element", pa.string(), nullable=False))
         for source, expected in ((nullable, required), (required, nullable)):
             value = pa.array([["a"], None, []], type=source)
-            result = _validate_result(value, 3, expected)
+            result = validate(value, 3, expected)
             self.assertEqual(result.type, expected)
             self.assertEqual(result.to_pylist(), value.to_pylist())
         with self.assertRaisesRegex(ValueError, "non-nullable"):
-            _validate_result(pa.array([[None]], type=nullable), 1, required)
+            validate(pa.array([[None]], type=nullable), 1, required)
 
     def test_null_struct_parents_do_not_violate_child_nullability(self):
         import pyarrow.compute as pc
@@ -558,12 +566,12 @@ class InProcessRuntimeTests(unittest.TestCase):
         for value in values:
             with self.subTest(value=value):
                 self.assertEqual(value.field(0).null_count, 1)
-                result = _validate_result(value, 2, expected)
+                result = validate(value, 2, expected)
                 self.assertEqual(result.to_pylist(), [None, {"len": 1}])
                 self.assertEqual(result.type, expected)
         visible_null = pa.StructArray.from_arrays([pa.array([None], pa.int32())], names=["len"])
         with self.assertRaisesRegex(ValueError, "non-nullable"):
-            _validate_result(visible_null, 1, expected)
+            validate(visible_null, 1, expected)
 
     def test_sliced_map_entries_are_normalized(self):
         map_type = pa.map_(pa.string(), pa.int64())
@@ -577,7 +585,7 @@ class InProcessRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(value.offset, 0)
         self.assertEqual(value.values.offset, 1)
-        result = _validate_result(value, 2, map_type)
+        result = validate(value, 2, map_type)
         self.assertEqual(result.values.offset, 0)
         self.assertEqual(result.to_pylist(), [[("a", 1)], [("b", 2), ("c", 3)]])
 
@@ -587,23 +595,23 @@ class InProcessRuntimeTests(unittest.TestCase):
             type=pa.map_(pa.field("k", pa.string(), False), pa.field("v", pa.int64())),
         )
         expected = pa.map_(pa.string(), pa.int64())
-        result = _validate_result(value, 1, expected)
+        result = validate(value, 1, expected)
         self.assertEqual(result.type.key_field.name, "key")
         self.assertEqual(result.type.item_field.name, "value")
         expected_struct = pa.struct([pa.field("x", pa.int64(), metadata={b"type": b"required"})])
-        result = _validate_result(pa.array([{"x": 1}]), 1, expected_struct)
+        result = validate(pa.array([{"x": 1}]), 1, expected_struct)
         self.assertEqual(result.type[0].metadata, {b"type": b"required"})
 
     def test_map_nullability_and_sliced_results(self):
         nullable = pa.map_(pa.string(), pa.field("value", pa.int64()))
         required = pa.map_(pa.string(), pa.field("value", pa.int64(), nullable=False))
         value = pa.array([[("discard", 0)], [("a", 1)], None], type=nullable).slice(1)
-        result = _validate_result(value, 2, required)
+        result = validate(value, 2, required)
         self.assertEqual(result.offset, 0)
         self.assertEqual(result.type, required)
         self.assertEqual(result.to_pylist(), [[("a", 1)], None])
         with self.assertRaisesRegex(ValueError, "non-nullable"):
-            _validate_result(pa.array([[("a", None)]], type=nullable), 1, required)
+            validate(pa.array([[("a", None)]], type=nullable), 1, required)
 
     def test_null_checks_skip_nullable_subtrees_and_null_free_parents(self):
         arrays = [
@@ -617,7 +625,7 @@ class InProcessRuntimeTests(unittest.TestCase):
                 patch("pyspark.inprocess.runtime.pc.filter") as filtered,
                 patch("pyspark.inprocess.runtime.pa.concat_arrays") as concat,
             ):
-                result = _validate_result(array, len(array), array.type)
+                result = validate(array, len(array), array.type)
                 self.assertEqual(result, array)
                 filtered.assert_not_called()
                 concat.assert_not_called()
@@ -625,9 +633,9 @@ class InProcessRuntimeTests(unittest.TestCase):
     def test_null_checks_still_validate_required_descendants(self):
         required = pa.struct([pa.field("x", pa.list_(pa.field("element", pa.int64(), False)))])
         with self.assertRaisesRegex(ValueError, "non-nullable"):
-            _validate_result(pa.array([{"x": [None]}, None], type=required), 2, required)
+            validate(pa.array([{"x": [None]}, None], type=required), 2, required)
         hidden = pa.array([{"x": None}, None], type=required)
-        self.assertEqual(_validate_result(hidden, 2, required), hidden)
+        self.assertEqual(validate(hidden, 2, required), hidden)
 
     def test_map_entries_offset_respects_required_values(self):
         source = pa.map_(pa.string(), pa.int64())
@@ -642,9 +650,9 @@ class InProcessRuntimeTests(unittest.TestCase):
             with self.subTest(data=data):
                 if data[-1] is None:
                     with self.assertRaisesRegex(ValueError, "non-nullable"):
-                        _validate_result(value, 2, expected)
+                        validate(value, 2, expected)
                 else:
-                    result = _validate_result(value, 2, expected)
+                    result = validate(value, 2, expected)
                     self.assertEqual(result.to_pylist(), [[("a", 1)], [("b", 2), ("c", 3)]])
 
     def test_null_parents_do_not_copy_null_free_children(self):
@@ -666,7 +674,7 @@ class InProcessRuntimeTests(unittest.TestCase):
                 patch("pyspark.inprocess.runtime.pc.filter") as filtered,
                 patch("pyspark.inprocess.runtime.pa.concat_arrays") as concat,
             ):
-                result = _validate_result(value, 2, value.type)
+                result = validate(value, 2, value.type)
                 self.assertEqual(result, value)
                 filtered.assert_not_called()
                 concat.assert_not_called()
@@ -680,7 +688,7 @@ class InProcessRuntimeTests(unittest.TestCase):
             mask=pa.array([True, False]),
         )
         with patch("pyspark.inprocess.runtime.pc.filter", wraps=pc.filter) as filtered:
-            result = _validate_result(value, 2, value.type)
+            result = validate(value, 2, value.type)
             self.assertEqual(result, value)
             filtered.assert_called_once()
             self.assertEqual(filtered.call_args.args[0].type, pa.int64())
