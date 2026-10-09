@@ -29,20 +29,16 @@ import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType}
  * which event currently authors each non-key user-data leaf.
  *
  * Concretely, the contract of the version map is as follows.
- * 1. Every user-data leaf present in the target-table-aligned row when the map is written receives
- *    an entry.
+ * 1. Every user-data leaf present in the row when the map is written receives an entry.
  * 2. A non-null entry is the sequencing clock of the event that authored the leaf's current stored
  *    value.
  * 3. A null entry means the leaf has no authored value.
  *
- * A user-data leaf is a non-framework field obtained by recursively expanding structs. A
- * target-table-aligned row uses the target's field set, order, and spelling. Alignment ensures
- * every target leaf has a stable map entry across reductive schema evolution and case differences.
+ * A user-data leaf is a non-framework field obtained by recursively expanding structs.
  *
  * Version-map keys are field paths rendered as fully quoted multipart identifiers using
  * [[org.apache.spark.sql.catalyst.util.QuotingUtils.quoteNameParts]]. Quoting each name part
- * distinguishes a nested path from a column whose name contains dots. Name parts use the persisted
- * target schema's canonical spelling.
+ * distinguishes a nested path from a column whose name contains dots.
  */
 private[pipelines] object Scd1VersionMap {
 
