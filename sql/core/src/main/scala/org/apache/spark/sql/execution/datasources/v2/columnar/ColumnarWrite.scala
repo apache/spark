@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
-import org.apache.spark.sql.datasource.{DataSource, DataSourceStreamWriter, DataSourceWriter}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -35,7 +34,7 @@ import org.apache.spark.util.Utils
 class ColumnarWriteBuilder(
     shortName: String,
     info: LogicalWriteInfo,
-    createDataSource: () => DataSource)
+    createDataSource: () => ColumnarDataSource)
   extends WriteBuilder with SupportsTruncate {
 
   private var overwrite = false
@@ -52,7 +51,7 @@ class ColumnarWrite(
     shortName: String,
     info: LogicalWriteInfo,
     overwrite: Boolean,
-    createDataSource: () => DataSource)
+    createDataSource: () => ColumnarDataSource)
   extends Write {
 
   override def description(): String = shortName
@@ -67,7 +66,7 @@ class ColumnarWrite(
   }
 }
 
-class ColumnarBatchWrite(writer: DataSourceWriter, schema: StructType) extends BatchWrite {
+class ColumnarBatchWrite(writer: ColumnarWriter, schema: StructType) extends BatchWrite {
 
   override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
     new ColumnarDataWriterFactory(writer, ArrowBatchingOptions(schema))
@@ -78,7 +77,7 @@ class ColumnarBatchWrite(writer: DataSourceWriter, schema: StructType) extends B
   override def abort(messages: Array[WriterCommitMessage]): Unit = writer.abort(messages)
 }
 
-class ColumnarStreamingWrite(writer: DataSourceStreamWriter, schema: StructType)
+class ColumnarStreamingWrite(writer: ColumnarStreamWriter, schema: StructType)
   extends StreamingWrite {
 
   override def createStreamingWriterFactory(
@@ -95,7 +94,7 @@ class ColumnarStreamingWrite(writer: DataSourceStreamWriter, schema: StructType)
   }
 }
 
-class ColumnarDataWriterFactory(writer: DataSourceWriter, options: ArrowBatchingOptions)
+class ColumnarDataWriterFactory(writer: ColumnarWriter, options: ArrowBatchingOptions)
   extends DataWriterFactory {
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
     new ArrowBatchingDataWriter(writer.createWriter(partitionId, taskId), options)
@@ -103,7 +102,7 @@ class ColumnarDataWriterFactory(writer: DataSourceWriter, options: ArrowBatching
 }
 
 class ColumnarStreamingDataWriterFactory(
-    writer: DataSourceStreamWriter,
+    writer: ColumnarStreamWriter,
     options: ArrowBatchingOptions)
   extends StreamingDataWriterFactory {
   override def createWriter(
@@ -131,7 +130,7 @@ object ArrowBatchingOptions {
 
 /**
  * Converts the rows of a write task to Arrow-backed [[ColumnarBatch]]es for the [[DataWriter]]
- * of a columnar data source. A new Arrow vector schema root is created for each batch, so a
+ * of a [[ColumnarDataSource]]. A new Arrow vector schema root is created for each batch, so a
  * native writer that took ownership of the data of a batch can keep it after the call.
  */
 class ArrowBatchingDataWriter(delegate: DataWriter[ColumnarBatch], options: ArrowBatchingOptions)

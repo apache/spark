@@ -32,8 +32,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
-import org.apache.spark.sql.datasource.{DataSource, DataSourceReader, DataSourceStreamReader, DataSourceStreamWriter, DataSourceWriter}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarDataSource, ColumnarReader, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
@@ -41,7 +41,7 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
 import org.apache.spark.util.Utils
 
 /**
- * A [[DataSource]] implemented by a native library, through
+ * A [[ColumnarDataSource]] implemented by a native library, through
  * `org.apache.spark.sql.datasource.NativeBridge`.
  *
  * @param name the name of the data source, as listed in the manifest of the package
@@ -50,7 +50,7 @@ class NativeDataSource(
     pkg: NativeDataSourcePackage,
     name: String,
     options: CaseInsensitiveStringMap)
-  extends DataSource {
+  extends ColumnarDataSource {
   import NativeCalls._
 
   override def schema(): StructType = {
@@ -62,7 +62,7 @@ class NativeDataSource(
     }
   }
 
-  override def reader(schema: StructType): DataSourceReader = {
+  override def reader(schema: StructType): ColumnarReader = {
     val library = NativeLibraries.get(pkg)
     val handle = create(library, "plan a scan of", "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED") {
       dataSource =>
@@ -71,7 +71,7 @@ class NativeDataSource(
     new NativeDataSourceReader(pkg, name, schema, new NativeHandle(handle, library.closeReader))
   }
 
-  override def streamReader(schema: StructType): DataSourceStreamReader = {
+  override def streamReader(schema: StructType): ColumnarStreamReader = {
     val library = NativeLibraries.get(pkg)
     val handle = create(library, "plan a scan of", "DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED") {
       dataSource =>
@@ -81,7 +81,7 @@ class NativeDataSource(
       pkg, name, schema, new NativeHandle(handle, library.closeStreamReader))
   }
 
-  override def writer(schema: StructType, overwrite: Boolean): DataSourceWriter = {
+  override def writer(schema: StructType, overwrite: Boolean): ColumnarWriter = {
     val library = NativeLibraries.get(pkg)
     val handle = new NativeHandle(
       create(library, "plan a write to", "DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED") { dataSource =>
@@ -93,7 +93,7 @@ class NativeDataSource(
     new NativeDataSourceWriter(pkg, name, handle, serializeWriter(library, handle))
   }
 
-  override def streamWriter(schema: StructType, overwrite: Boolean): DataSourceStreamWriter = {
+  override def streamWriter(schema: StructType, overwrite: Boolean): ColumnarStreamWriter = {
     val library = NativeLibraries.get(pkg)
     val handle = new NativeHandle(
       create(library, "plan a write to", "DATA_SOURCE_STREAMING_WRITE_NOT_SUPPORTED") {
@@ -145,7 +145,7 @@ class NativeDataSourceReader(
     name: String,
     schema: StructType,
     @transient private val handle: NativeHandle)
-  extends DataSourceReader {
+  extends ColumnarReader {
   import NativeCalls._
 
   // Set on the driver when the partitions are planned, and serialized to the executors.
@@ -218,7 +218,7 @@ class NativeDataSourceStreamReader(
     name: String,
     schema: StructType,
     @transient private val handle: NativeHandle)
-  extends DataSourceStreamReader {
+  extends ColumnarStreamReader {
   import NativeCalls._
 
   // Set on the driver whenever the partitions of a micro-batch are planned, and serialized to
@@ -262,7 +262,7 @@ class NativeDataSourceWriter(
     name: String,
     @transient private val handle: NativeHandle,
     writerState: Array[Byte])
-  extends DataSourceWriter {
+  extends ColumnarWriter {
   import NativeCalls._
 
   @transient private lazy val library = NativeLibraries.get(pkg)
@@ -293,7 +293,7 @@ class NativeDataSourceStreamWriter(
     name: String,
     @transient private val handle: NativeHandle,
     writerState: Array[Byte])
-  extends DataSourceStreamWriter {
+  extends ColumnarStreamWriter {
   import NativeCalls._
 
   @transient private lazy val library = NativeLibraries.get(pkg)

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Columnar Data Source API
-displayTitle: Columnar Data Source API
+title: Native Data Sources
+displayTitle: Native Data Sources
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -24,141 +24,49 @@ license: |
 
 ## Overview
 
-The columnar data source API is a simpler way to plug a data source into Spark than implementing
-the [Data Source V2](sql-v2-data-sources.html) interfaces directly. It is meant for data sources
-that identify their data by options, such as a path or a URL. It follows the
-[Python Data Source API](api/python/reference/pyspark.sql/api/pyspark.sql.datasource.DataSource.html),
-but data is exchanged only as columnar batches: a data source returns
-[`ColumnarBatch`](api/java/org/apache/spark/sql/vectorized/ColumnarBatch.html)es when reading, and
-receives them when writing. Spark adapts a data source to Data Source V2, so it supports:
+A native data source is a data source implemented in native code, such as Rust or C++, without
+any JVM code. It is a shared library that implements the
+[`NativeBridge`](api/java/org/apache/spark/sql/datasource/NativeBridge.html) binary interface, and
+it is distributed as a native data source package: a single file that Spark loads when a query
+uses the data source. Spark adapts it to [Data Source V2](sql-v2-data-sources.html), so it
+supports:
 
 - batch and micro-batch streaming reads,
 - batch and streaming writes, appending to or overwriting the existing data,
 - predicate, column and limit pushdown.
 
-A data source can be implemented in two ways:
+Data is exchanged only as columnar batches, through the
+[Arrow C data interface](https://arrow.apache.org/docs/format/CDataInterface.html), so Spark reads
+the data that a library returns without copying it.
 
-- **On the JVM**, in Java or Scala, with the interfaces of the
-  [`org.apache.spark.sql.datasource`](api/java/org/apache/spark/sql/datasource/package-summary.html)
-  package.
-- **In native code**, such as Rust or C++, as a shared library that implements the same API
-  through the [`NativeBridge`](api/java/org/apache/spark/sql/datasource/NativeBridge.html) binary
-  interface. A native data source needs no JVM code: it is distributed as a native data source
-  package, and Spark loads it when a query uses it.
+## How It Works
 
-## The API
-
-| Interface | Methods | Description |
-|-----------|---------|-------------|
-| `DataSource` | `schema`, `reader`, `streamReader`, `writer`, `streamWriter` | Created on the driver with the options of the user, for each schema inference, scan and write. A data source only implements the operations it supports. |
-| `DataSourceReader` | `pushPredicates`, `pushLimit`, `pruneColumns`, `partitions`, `read` | Reads the data for a batch scan. Spark pushes operations down and plans the partitions on the driver, then serializes the reader to the executors, where `read` returns the batches of a partition. |
-| `DataSourceStreamReader` | `initialOffset`, `latestOffset`, `partitions`, `read`, `commit`, `stop` | Reads the data for a micro-batch streaming scan. Offsets are JSON strings defined by the data source. |
-| `DataSourceWriter` | `createWriter`, `commit`, `abort` | Writes the data for a batch write. `createWriter` returns a `DataWriter<ColumnarBatch>` for each task, and Spark commits or aborts the write on the driver with the messages of the tasks. |
-| `DataSourceStreamWriter` | `createWriter`, `commit`, `abort` | Writes the data for a streaming write, one micro-batch (epoch) at a time. |
-
-The batches that a writer receives are backed by Apache Arrow: every column is an
-[`ArrowColumnVector`](api/java/org/apache/spark/sql/vectorized/ArrowColumnVector.html). A batch has
-at most `spark.sql.execution.arrow.maxRecordsPerBatch` rows, and is only valid during the call.
-
-## JVM Data Sources
-
-A JVM data source extends
-[`DataSourceProvider`](api/java/org/apache/spark/sql/datasource/DataSourceProvider.html), which
-creates the `DataSource` with the options given by the user. The following data source reads the
-numbers `[0, end)` as a column `id`, in two partitions:
-
-```scala
-import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.BigIntVector
-
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
-import org.apache.spark.sql.datasource._
-import org.apache.spark.sql.types.{LongType, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
-
-class RangeProvider extends DataSourceProvider {
-  override def shortName(): String = "scala_range"
-
-  override def createDataSource(options: CaseInsensitiveStringMap): DataSource = {
-    new RangeDataSource(options.getLong("end", 10))
-  }
-}
-
-class RangeDataSource(end: Long) extends DataSource {
-  override def schema(): StructType = new StructType().add("id", LongType, nullable = false)
-
-  override def reader(schema: StructType): DataSourceReader = new RangeReader(end)
-}
-
-case class RangePartition(start: Long, end: Long) extends InputPartition
-
-class RangeReader(end: Long) extends DataSourceReader {
-  override def partitions(): Array[InputPartition] = {
-    Array(RangePartition(0, end / 2), RangePartition(end / 2, end))
-  }
-
-  override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
-    val range = partition.asInstanceOf[RangePartition]
-    new RangePartitionReader(range.start, range.end)
-  }
-}
-
-// Returns the ids [start, end) in a single batch, backed by an Arrow vector.
-class RangePartitionReader(start: Long, end: Long) extends PartitionReader[ColumnarBatch] {
-  private val allocator = new RootAllocator()
-  private val ids = new BigIntVector("id", allocator)
-  private var done = false
-
-  override def next(): Boolean = {
-    if (done) return false
-    val count = (end - start).toInt
-    ids.allocateNew(count)
-    (0 until count).foreach(i => ids.set(i, start + i))
-    ids.setValueCount(count)
-    done = true
-    true
-  }
-
-  override def get(): ColumnarBatch = {
-    new ColumnarBatch(Array[ColumnVector](new ArrowColumnVector(ids)), ids.getValueCount)
-  }
-
-  override def close(): Unit = {
-    ids.close()
-    allocator.close()
-  }
-}
-```
-
-To use the data source by its short name, list the provider in
-`META-INF/services/org.apache.spark.sql.sources.DataSourceRegister` in its JAR, like any other data
-source. Its fully qualified class name can also be used as the format:
-
-```scala
-spark.read.format("scala_range").option("end", 100).load()
-```
-
-## Native Data Sources
-
-### How It Works
-
-A native data source is a shared library that implements the `native` methods of
-[`NativeBridge`](api/java/org/apache/spark/sql/datasource/NativeBridge.html) as JNI functions,
+A native data source library implements the `native` methods of `NativeBridge` as JNI functions,
 named after the class, such as `Java_org_apache_spark_sql_datasource_NativeBridge_createDataSource`.
 Spark loads each library into its own copy of the class, so any number of native data sources can
-be loaded side by side. The methods follow the API above: Spark implements `DataSource`,
-`DataSourceReader` and the other interfaces by calling them.
+be loaded side by side.
 
-- **Handles**: the `create` functions return a pointer to a native object, which Spark releases with
-  the matching `close` function.
-- **Arrow**: schemas and data are exchanged with the
-  [Arrow C data interface](https://arrow.apache.org/docs/format/CDataInterface.html). A partition
-  is read by exporting an `ArrowArrayStream`, and a writer receives an `ArrowArray` for each batch.
-- **State**: partitions, the state of readers and writers, and commit messages are byte arrays in a
-  format defined by the library. Spark sends them to the executors and back.
-- **Errors**: a library reports an error by throwing a Java exception, for example with the JNI
-  function `ThrowNew`. Spark reports it as a `NATIVE_DATA_SOURCE_ERROR`.
+Spark calls the functions of the library as follows:
+
+- **Data sources**: for each schema inference, scan and write, Spark creates a data source on the
+  driver with `createDataSource`, which receives the options of the user, and closes it right
+  after. When the user does not specify a schema, Spark asks for it with `schema`.
+- **Batch reads**: on the driver, Spark creates a reader with `createReader`, pushes operations down
+  with `pushPredicates`, `pushLimit` and `pruneColumns`, plans the partitions with `partitions`,
+  and serializes the state of the reader with `serializeReader`. Then it calls `read` on the
+  executors, in one task for each partition, and `read` exports an `ArrowArrayStream`.
+- **Streaming reads**: on the driver, Spark creates a stream reader with `createStreamReader`. For
+  each micro-batch, it asks for the `latestOffset`, plans the partitions with `streamPartitions`,
+  and calls `read` on the executors. Offsets are JSON strings defined by the library.
+- **Writes**: on the driver, Spark creates a writer with `createWriter` or `createStreamWriter`. On
+  the executors, each task creates a data writer with `createDataWriter`, writes the batches of its
+  data with `write`, and calls `commitDataWriter`. Then the driver calls `commit` with the messages
+  of the tasks, or `abort` if the write failed.
+
+The library defines the format of the partitions, of the state of its readers and writers, and of
+the commit messages, which Spark sends to the executors and back as byte arrays. A library reports
+an error by throwing a Java exception, for example with the JNI function `ThrowNew`, and Spark
+reports it as a `NATIVE_DATA_SOURCE_ERROR`.
 
 A library only exports the functions of the operations it supports. If a function is missing,
 Spark treats the operation as unsupported, except for the pushdown and `serialize` functions, which
@@ -172,10 +80,11 @@ are optional:
 | Batch write | `createWriter`, `commit`, `abort`, `closeWriter`, `createDataWriter`, `write`, `commitDataWriter`, `abortDataWriter` | `serializeWriter` |
 | Streaming write | `createStreamWriter`, `commit`, `abort`, `closeWriter`, `createDataWriter`, `write`, `commitDataWriter`, `abortDataWriter` | `serializeWriter` |
 
-The Javadoc of `NativeBridge` specifies each function, including the JSON format of the pushed
-predicates.
+The [Javadoc of `NativeBridge`](api/java/org/apache/spark/sql/datasource/NativeBridge.html)
+specifies each function, including the ownership of the Arrow structs and the JSON format of the
+pushed predicates.
 
-### Packages
+## Packages
 
 A native data source package is a zip file with the extension `.sparkpkg`. It contains a manifest
 named `spark-native-datasource.json`, and the library built for one or more platforms:
@@ -213,7 +122,7 @@ names, for example with their version: sessions that are not isolated share the 
 A Java data source with the same name takes precedence over a native one, and so does a Python
 data source.
 
-### Example in Rust
+## Example in Rust
 
 This data source reads the numbers `[0, end)` as a column `id`, in two partitions. It uses the
 [`jni`](https://crates.io/crates/jni) crate, and the `arrow-array` and `arrow-schema` crates of
@@ -417,7 +326,7 @@ EOF
 (cd package && zip -r ../rust_range.sparkpkg .)
 ```
 
-### Example in C++
+## Example in C++
 
 The same data source in C++, with [Arrow C++](https://arrow.apache.org/docs/cpp/), which exports
 schemas and streams with `arrow::ExportSchema` and `arrow::ExportRecordBatchReader`:
@@ -558,14 +467,14 @@ c++ -std=c++20 -O2 -shared -fPIC \
 A library loaded by Spark must find its dependencies, such as `libarrow`, on every node: link them
 statically, or install them on the nodes.
 
-### Configuration
+## Configuration
 
 | Property Name | Default | Meaning |
 |---------------|---------|---------|
 | `spark.sql.dataSource.native.enabled` | true | Whether Spark loads native data sources. It is a static configuration, so it can only be set when the Spark application starts. |
 | `spark.sql.dataSource.native.paths` | (none) | Comma-separated list of native data source packages, and of directories that contain them, on the local file system of the driver. |
 
-### Security
+## Security
 
 A native data source runs native code in the driver and executor processes, with their
 privileges, and is not sandboxed. Only add packages that you trust. Set

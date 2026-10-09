@@ -27,16 +27,40 @@ import org.apache.spark.annotation.Evolving;
  * class as JNI functions, for example
  * {@code Java_org_apache_spark_sql_datasource_NativeBridge_createDataSource}. Spark loads each
  * library into its own copy of this class, so any number of libraries that export the same
- * functions can be loaded side by side. The methods follow the {@link DataSource} API: Spark
- * implements {@link DataSource}, {@link DataSourceReader} and the other interfaces by calling
- * them.
+ * functions can be loaded side by side. Spark adapts a native data source to Data Source V2, with
+ * batch and micro-batch streaming reads, batch and streaming writes, and predicate, column and
+ * limit pushdown.
  * <p>
  * The library is distributed in a native data source package: a zip file with the extension
  * {@code .sparkpkg} that contains a manifest named {@code spark-native-datasource.json} and the
  * library built for one or more platforms. Spark finds the packages added to a session with
  * {@code spark.addArtifact}, and the ones under the paths in
- * {@code spark.sql.dataSource.native.paths}. See the "Columnar Data Source API" page of the Spark
- * SQL guide for details.
+ * {@code spark.sql.dataSource.native.paths}. See the "Native Data Sources" page of the Spark SQL
+ * guide for details and examples.
+ *
+ * <h2>Lifecycle</h2>
+ * Spark creates a data source with {@link #createDataSource} on the driver for each schema
+ * inference, scan and write, and closes it right after.
+ * <ul>
+ *   <li><b>Batch reads.</b> On the driver, Spark creates a reader with {@link #createReader},
+ *   pushes operations down by calling, each at most once and in this order,
+ *   {@link #pushPredicates}, {@link #pushLimit} and {@link #pruneColumns}, plans the partitions
+ *   with {@link #partitions}, serializes the state of the reader with {@link #serializeReader},
+ *   and closes it. Then it calls {@link #read} on the executors, in one task for each
+ *   partition.</li>
+ *   <li><b>Streaming reads.</b> On the driver, Spark creates a stream reader with
+ *   {@link #createStreamReader} and keeps it until the streaming query stops. For each
+ *   micro-batch, it asks for the {@link #latestOffset}, plans the partitions with
+ *   {@link #streamPartitions} and serializes the state with {@link #serializeStreamReader}, then
+ *   calls {@link #read} on the executors. Offsets are JSON strings defined by the library.</li>
+ *   <li><b>Writes.</b> On the driver, Spark creates a writer with {@link #createWriter} or
+ *   {@link #createStreamWriter}, and serializes its state with {@link #serializeWriter}. On the
+ *   executors, each task creates a data writer with {@link #createDataWriter}, calls
+ *   {@link #write} for each batch of at most {@code spark.sql.execution.arrow.maxRecordsPerBatch}
+ *   rows, and calls {@link #commitDataWriter}, or {@link #abortDataWriter} if it fails. Then the
+ *   driver calls {@link #commit} with the messages of the tasks if they all succeeded, or
+ *   {@link #abort} otherwise. A streaming write commits or aborts each micro-batch (epoch).</li>
+ * </ul>
  *
  * <h2>Conventions</h2>
  * <ul>
@@ -45,6 +69,8 @@ import org.apache.spark.annotation.Evolving;
  *   with {@link #commitDataWriter} or {@link #abortDataWriter} for data writers. A reader or
  *   writer handle must not depend on the data source handle it was created from, because Spark
  *   closes the data source handle right after creating it.</li>
+ *   <li><b>State.</b> Partitions, the state of readers and writers, and commit messages are byte
+ *   arrays in a format defined by the library. Spark sends them to the executors and back.</li>
  *   <li><b>Errors.</b> To report an error, throw a Java exception, for example with the JNI
  *   function {@code ThrowNew} on {@code java.lang.RuntimeException}, and return any value. Spark
  *   rethrows it as a {@code NATIVE_DATA_SOURCE_ERROR}.</li>
@@ -96,7 +122,8 @@ public final class NativeBridge {
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * Creates a data source. See {@link DataSourceProvider#createDataSource}.
+   * Creates a data source with the options given by the user, such as
+   * {@code spark.read.option("key", "value")}.
    *
    * @param name the name of the data source, as listed in the package manifest. A library can
    *             implement several data sources.
@@ -108,7 +135,7 @@ public final class NativeBridge {
       String name, String[] optionKeys, String[] optionValues);
 
   /**
-   * Exports the schema of the data source. See {@link DataSource#schema()}.
+   * Exports the schema of the data. Spark calls it only when the user does not specify a schema.
    *
    * @param schemaAddress the address of the {@code ArrowSchema} to initialize with a struct type
    *                      whose fields are the columns
@@ -116,33 +143,39 @@ public final class NativeBridge {
   public static native void schema(long dataSource, long schemaAddress);
 
   /**
-   * Creates a reader for a batch scan. See {@link DataSource#reader}.
+   * Creates a reader for a batch scan.
    *
-   * @param schemaAddress the address of the {@code ArrowSchema} of the schema to read
+   * @param schemaAddress the address of the {@code ArrowSchema} of the schema to read: the one the
+   *                      user specified, or the one returned by {@link #schema}
    * @return the reader handle
    */
   public static native long createReader(long dataSource, long schemaAddress);
 
   /**
-   * Creates a reader for a micro-batch streaming scan. See {@link DataSource#streamReader}.
+   * Creates a reader for a micro-batch streaming scan.
    *
-   * @param schemaAddress the address of the {@code ArrowSchema} of the schema to read
+   * @param schemaAddress the address of the {@code ArrowSchema} of the schema to read: the one the
+   *                      user specified, or the one returned by {@link #schema}
    * @return the stream reader handle
    */
   public static native long createStreamReader(long dataSource, long schemaAddress);
 
   /**
-   * Creates a writer for a batch write. See {@link DataSource#writer}.
+   * Creates a writer for a batch write.
    *
    * @param schemaAddress the address of the {@code ArrowSchema} of the data to write
+   * @param overwrite whether to replace the existing data (save mode "overwrite") instead of
+   *                  appending to it
    * @return the writer handle
    */
   public static native long createWriter(long dataSource, long schemaAddress, boolean overwrite);
 
   /**
-   * Creates a writer for a streaming write. See {@link DataSource#streamWriter}.
+   * Creates a writer for a streaming write.
    *
    * @param schemaAddress the address of the {@code ArrowSchema} of the data to write
+   * @param overwrite whether to replace the existing data in each micro-batch (output mode
+   *                  "complete") instead of appending to it
    * @return the writer handle
    */
   public static native long createStreamWriter(
@@ -156,7 +189,7 @@ public final class NativeBridge {
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * Pushes predicates down to the reader. See {@link DataSourceReader#pushPredicates}.
+   * Pushes predicates down to the reader. The predicates are combined with AND.
    * <p>
    * Each predicate is a JSON expression tree. An expression is one of:
    * <ul>
@@ -177,25 +210,30 @@ public final class NativeBridge {
    * Spark does not pass predicates that it cannot express this way.
    *
    * @return for each predicate, whether the reader evaluates it completely, so that Spark does
-   *         not have to evaluate it again
+   *         not have to evaluate it again. The reader can still use the other predicates to skip
+   *         data.
    */
   public static native boolean[] pushPredicates(long reader, String[] predicates);
 
   /**
-   * Pushes a LIMIT down to the reader. See {@link DataSourceReader#pushLimit}.
+   * Pushes a LIMIT down to the reader.
+   *
+   * @return whether the reader returns at most {@code limit} rows in total. Spark applies the
+   *         limit again after reading either way.
    */
   public static native boolean pushLimit(long reader, int limit);
 
   /**
-   * Prunes the columns to read. See {@link DataSourceReader#pruneColumns}.
+   * Prunes the columns to read.
    *
-   * @param columnNames the names of the top-level columns to read
-   * @return whether {@link #read} returns exactly these columns, in this order
+   * @param columnNames the names of the top-level columns that the query needs
+   * @return whether {@link #read} returns exactly these columns, in this order. If not, it
+   *         returns all the columns of the schema to read.
    */
   public static native boolean pruneColumns(long reader, String[] columnNames);
 
   /**
-   * Plans the partitions of the scan. See {@link DataSourceReader#partitions()}.
+   * Plans the partitions of the scan. Spark reads each partition in a separate task.
    *
    * @return the partitions, each serialized in a format defined by the library
    */
@@ -214,14 +252,14 @@ public final class NativeBridge {
   // Stream reader (driver)
   // ---------------------------------------------------------------------------------------------
 
-  /** Returns the initial offset as JSON. See {@link DataSourceStreamReader#initialOffset()}. */
+  /** Returns the offset to start from when the streaming query has no checkpoint, as JSON. */
   public static native String initialOffset(long streamReader);
 
-  /** Returns the latest offset as JSON. See {@link DataSourceStreamReader#latestOffset()}. */
+  /** Returns the most recent offset available, as JSON. */
   public static native String latestOffset(long streamReader);
 
   /**
-   * Plans the partitions between two offsets. See {@link DataSourceStreamReader#partitions}.
+   * Plans the partitions that read the data after {@code start} up to and including {@code end}.
    *
    * @return the partitions, each serialized in a format defined by the library
    */
@@ -233,10 +271,13 @@ public final class NativeBridge {
    */
   public static native byte[] serializeStreamReader(long streamReader);
 
-  /** Commits an offset. See {@link DataSourceStreamReader#commit}. */
+  /**
+   * Tells the library that Spark has processed all the data up to and including {@code end},
+   * and will not ask for it again.
+   */
   public static native void commitOffset(long streamReader, String end);
 
-  /** Releases a stream reader handle. See {@link DataSourceStreamReader#stop()}. */
+  /** Releases a stream reader handle, when the streaming query stops. */
   public static native void closeStreamReader(long streamReader);
 
   // ---------------------------------------------------------------------------------------------
@@ -244,14 +285,15 @@ public final class NativeBridge {
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * Reads a partition of a batch or streaming scan. See {@link DataSourceReader#read}.
+   * Reads a partition of a batch or streaming scan.
    *
    * @param readerState the state returned by {@link #serializeReader} or
    *                    {@link #serializeStreamReader}, or an empty array if there is none
    * @param partition a partition returned by {@link #partitions} or {@link #streamPartitions}
    * @param streamAddress the address of the {@code ArrowArrayStream} to initialize. Each array
-   *                      of the stream is a struct array whose fields are the columns. Spark
-   *                      calls the stream from the thread of the task that reads the partition.
+   *                      of the stream is a struct array whose fields are the columns to read:
+   *                      the columns of the schema to read, or the pruned columns. Spark calls
+   *                      the stream from the thread of the task that reads the partition.
    */
   public static native void read(byte[] readerState, byte[] partition, long streamAddress);
 
@@ -266,7 +308,7 @@ public final class NativeBridge {
   public static native byte[] serializeWriter(long writer);
 
   /**
-   * Commits a write. See {@link DataSourceWriter#commit} and {@link DataSourceStreamWriter#commit}.
+   * Commits a write, when all the tasks succeeded.
    *
    * @param epochId the ID of the micro-batch for a streaming write, or -1 for a batch write
    * @param messages the messages returned by {@link #commitDataWriter} of each task
@@ -274,7 +316,7 @@ public final class NativeBridge {
   public static native void commit(long writer, long epochId, byte[][] messages);
 
   /**
-   * Aborts a write. See {@link DataSourceWriter#abort} and {@link DataSourceStreamWriter#abort}.
+   * Aborts a write, when it failed.
    *
    * @param epochId the ID of the micro-batch for a streaming write, or -1 for a batch write
    * @param messages the messages returned by {@link #commitDataWriter} of each task. An element
@@ -290,10 +332,12 @@ public final class NativeBridge {
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * Creates the writer for one task. See {@link DataSourceWriter#createWriter}.
+   * Creates the writer for one task.
    *
    * @param writerState the state returned by {@link #serializeWriter}, or an empty array if there
    *                    is none
+   * @param partitionId the partition that the task writes
+   * @param taskId the ID of the task attempt
    * @param epochId the ID of the micro-batch for a streaming write, or -1 for a batch write
    * @return the data writer handle
    */

@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.datasources.v2.columnar
 
 import java.util
-import java.util.function.{Function => JFunction}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
@@ -27,20 +26,19 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
-import org.apache.spark.sql.datasource.{DataSource, DataSourceReader, DataSourceStreamReader}
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
- * The Data Source V2 [[Table]] of a data source implemented with the columnar data source API.
- * It creates a new [[DataSource]] for each scan and each write, with their options.
+ * The Data Source V2 [[Table]] of a [[ColumnarDataSource]]. It creates a new data source for each
+ * scan and each write, with their options.
  */
 class ColumnarTable(
     shortName: String,
     tableSchema: StructType,
-    createDataSource: JFunction[CaseInsensitiveStringMap, DataSource])
+    createDataSource: CaseInsensitiveStringMap => ColumnarDataSource)
   extends Table with SupportsRead with SupportsWrite {
 
   override def name(): String = shortName
@@ -51,15 +49,15 @@ class ColumnarTable(
     util.EnumSet.of(BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new ColumnarScanBuilder(tableSchema, () => createDataSource.apply(options))
+    new ColumnarScanBuilder(tableSchema, () => createDataSource(options))
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
-    new ColumnarWriteBuilder(shortName, info, () => createDataSource.apply(info.options()))
+    new ColumnarWriteBuilder(shortName, info, () => createDataSource(info.options()))
   }
 }
 
-class ColumnarScanBuilder(schema: StructType, createDataSource: () => DataSource)
+class ColumnarScanBuilder(schema: StructType, createDataSource: () => ColumnarDataSource)
   extends ScanBuilder
   with SupportsPushDownV2Filters
   with SupportsPushDownLimit
@@ -69,13 +67,13 @@ class ColumnarScanBuilder(schema: StructType, createDataSource: () => DataSource
 
   // Created on first use, because a streaming scan neither pushes anything down nor reads in
   // batch, and its data source may not support batch scans at all.
-  private var reader: DataSourceReader = _
+  private var reader: ColumnarReader = _
 
   private var pushed: Array[Predicate] = Array.empty
   private var pushedLimit: Option[Int] = None
   private var readSchema: StructType = schema
 
-  private def batchReader: DataSourceReader = {
+  private def batchReader: ColumnarReader = {
     if (reader == null) {
       reader = dataSource.reader(schema)
     }
@@ -119,8 +117,8 @@ class ColumnarScanBuilder(schema: StructType, createDataSource: () => DataSource
 class ColumnarScan(
     fullSchema: StructType,
     prunedSchema: StructType,
-    batchReader: () => DataSourceReader,
-    dataSource: () => DataSource,
+    batchReader: () => ColumnarReader,
+    dataSource: () => ColumnarDataSource,
     pushedPredicates: Array[Predicate],
     pushedLimit: Option[Int])
   extends Scan with SupportsMetadata {
@@ -150,7 +148,7 @@ class ColumnarScan(
   }
 }
 
-class ColumnarBatchScan(reader: DataSourceReader) extends Batch {
+class ColumnarBatchScan(reader: ColumnarReader) extends Batch {
   private lazy val partitions: Array[InputPartition] = reader.partitions()
 
   override def planInputPartitions(): Array[InputPartition] = partitions
@@ -164,7 +162,7 @@ class ColumnarBatchScan(reader: DataSourceReader) extends Batch {
 
 case class ColumnarStreamOffset(json: String) extends Offset
 
-class ColumnarMicroBatchStream(reader: DataSourceStreamReader) extends MicroBatchStream {
+class ColumnarMicroBatchStream(reader: ColumnarStreamReader) extends MicroBatchStream {
 
   override def initialOffset(): Offset = ColumnarStreamOffset(reader.initialOffset())
 
@@ -186,7 +184,7 @@ class ColumnarMicroBatchStream(reader: DataSourceStreamReader) extends MicroBatc
 }
 
 /**
- * Columnar data sources only produce columnar batches, so Spark never asks for rows: the scan
+ * A [[ColumnarDataSource]] only produces columnar batches, so Spark never asks for rows: the scan
  * reports [[Scan.ColumnarSupportMode.SUPPORTED]].
  */
 abstract class ColumnarOnlyPartitionReaderFactory extends PartitionReaderFactory {
@@ -197,14 +195,14 @@ abstract class ColumnarOnlyPartitionReaderFactory extends PartitionReaderFactory
   override def supportColumnarReads(partition: InputPartition): Boolean = true
 }
 
-class ColumnarPartitionReaderFactory(reader: DataSourceReader)
+class ColumnarPartitionReaderFactory(reader: ColumnarReader)
   extends ColumnarOnlyPartitionReaderFactory {
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     reader.read(partition)
   }
 }
 
-class ColumnarStreamPartitionReaderFactory(reader: DataSourceStreamReader)
+class ColumnarStreamPartitionReaderFactory(reader: ColumnarStreamReader)
   extends ColumnarOnlyPartitionReaderFactory {
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     reader.read(partition)
