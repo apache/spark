@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{BoundReference, GenericInterna
 import org.apache.spark.sql.catalyst.util.TupleSketchUtils
 import org.apache.spark.sql.types.{BinaryType, IntegerType}
 
-class TuplesketchAggSuite extends SparkFunSuite {
+class TupleSketchAggSuite extends SparkFunSuite {
   private val sketchInput = BoundReference(0, BinaryType, nullable = true)
   private val keyInput = BoundReference(0, IntegerType, nullable = false)
 
@@ -52,29 +52,29 @@ class TuplesketchAggSuite extends SparkFunSuite {
       assert(estimate(result) == expected)
     }
 
-    gridTest(s"$name keeps no-input partials null and returns an empty final sketch")(
+    gridTest(s"SPARK-59975: $name keeps no-input partials empty and returns an empty final sketch")(
       Seq(0, 2)) { numNulls =>
       val agg = createAggregate()
       val buffer = createBuffer(agg, Seq.fill[Array[Byte]](numNulls)(null))
-      assert(agg.serialize(buffer) == null)
-      assert(agg.deserialize(null) == null)
+      assert(agg.serialize(buffer).isEmpty)
+      assert(agg.serialize(agg.deserialize(Array.emptyByteArray)).isEmpty)
       checkEstimate(agg, buffer, 0.0)
       assert(agg.eval(buffer).asInstanceOf[Array[Byte]].sameElements(createSketch(Seq.empty)))
 
       // Final evaluation must not change the untouched intermediate state.
-      assert(agg.serialize(buffer) == null)
+      assert(agg.serialize(buffer).isEmpty)
       val updated = agg.update(buffer, InternalRow(createSketch(Seq(1, 2))))
       checkEstimate(agg, updated, 2.0)
     }
 
-    test(s"$name preserves null through partial merge and final merge") {
+    test(s"SPARK-59975: $name preserves no-input state through partial merge and final merge") {
       val agg = createAggregate()
       val partial = createBuffer(agg, Seq(null, null))
       val partialMerge = agg.merge(
         agg.createAggregationBuffer(),
         agg.deserialize(agg.serialize(partial)))
       val merged = agg.merge(partialMerge, agg.deserialize(agg.serialize(partial)))
-      assert(agg.serialize(merged) == null)
+      assert(agg.serialize(merged).isEmpty)
 
       val result = agg.merge(
         agg.createAggregationBuffer(),
@@ -82,7 +82,7 @@ class TuplesketchAggSuite extends SparkFunSuite {
       checkEstimate(agg, result, 0.0)
     }
 
-    gridTest(s"$name skips no-input partials (serialized, nullFirst)")(
+    gridTest(s"SPARK-59975: $name skips no-input partials (serialized, nullFirst) =")(
       Seq((false, false), (false, true), (true, false), (true, true))) {
       case (serialized, nullFirst) =>
         val agg = createAggregate()
@@ -102,7 +102,7 @@ class TuplesketchAggSuite extends SparkFunSuite {
         checkEstimate(agg, result, 2.0)
     }
 
-    test(s"$name skips untouched objects in mergeBuffersObjects") {
+    test(s"SPARK-59975: $name skips untouched objects in mergeBuffersObjects") {
       val agg = createAggregate()
       val destination = new GenericInternalRow(1)
       val incoming = new GenericInternalRow(1)
@@ -116,27 +116,27 @@ class TuplesketchAggSuite extends SparkFunSuite {
       assert(estimate(result) == 2.0)
     }
 
-    gridTest(s"$name does not skip real empty partials, (serialized, emptyFirst) =")(
+    gridTest(s"SPARK-59975: $name does not skip real empty partials (serialized, emptyFirst) =")(
       Seq((false, false), (false, true), (true, false), (true, true))) {
       case (serialized, emptyFirst) =>
         val agg = createAggregate()
         val empty = createBuffer(agg, Seq(createSketch(Seq.empty)))
         val populated = createBuffer(agg, Seq(createSketch(Seq(1, 2))))
-        assert(agg.serialize(empty) != null)
+        assert(agg.serialize(empty).nonEmpty)
         val partials = if (emptyFirst) Seq(empty, populated) else Seq(populated, empty)
         val result = partials.foldLeft(agg.createAggregationBuffer()) { (buffer, partial) =>
           val input = if (serialized) agg.deserialize(agg.serialize(partial)) else partial
           agg.merge(buffer, input)
         }
-        assert(agg.serialize(result) != null)
+        assert(agg.serialize(result).nonEmpty)
         checkEstimate(agg, result, 0.0)
     }
 
-    test(s"$name preserves an empty intersection of disjoint sketches") {
+    test(s"SPARK-59975: $name preserves an empty intersection of disjoint sketches") {
       val agg = createAggregate()
       val disjoint = createBuffer(agg, Seq(createSketch(Seq(1)), createSketch(Seq(2))))
       val serialized = agg.serialize(disjoint)
-      assert(serialized != null)
+      assert(serialized.nonEmpty)
       assert(estimate(serialized) == 0.0)
 
       val populated = createBuffer(agg, Seq(createSketch(Seq(1, 2))))

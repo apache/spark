@@ -50,7 +50,7 @@ case class IntersectionTupleAggregationBuffer[S <: Summary](intersection: Inters
     if (intersection.hasResult()) {
       intersection.getResult.toByteArray
     } else {
-      null
+      Array.emptyByteArray
     }
   }
 

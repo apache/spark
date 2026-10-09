@@ -49,7 +49,7 @@ case class IntersectionAggregationBuffer(intersection: Intersection) extends The
     if (intersection.hasResult()) {
       intersection.getResult.toByteArrayCompressed
     } else {
-      null
+      Array.emptyByteArray
     }
   }
 
@@ -536,6 +536,13 @@ case class ThetaUnionAgg(
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(sketch)) FROM (SELECT theta_sketch_agg(col) as sketch FROM VALUES (1) tab(col) UNION ALL SELECT theta_sketch_agg(col, 20) as sketch FROM VALUES (1) tab(col));
        1
+      > SELECT theta_sketch_estimate(_FUNC_(sketch)) FROM VALUES (CAST(NULL AS BINARY)) tab(sketch);
+       0
+  """,
+  note = """
+    NULL input sketches are ignored. If a group has no non-NULL input sketch, the result is
+    an empty sketch. The empty sketch is not neutral for a later intersection: intersecting
+    it with any other sketch returns an empty sketch.
   """,
   group = "agg_funcs",
   since = "4.1.0")
@@ -631,8 +638,7 @@ case class ThetaIntersectionAgg(
       intersectionBuffer: ThetaSketchState,
       input: ThetaSketchState): ThetaSketchState = {
     (intersectionBuffer, input) match {
-      // Null and untouched input states do not contribute to the intersection.
-      case (_, null) => intersectionBuffer
+      // Untouched input states do not contribute to the intersection.
       case (_, IntersectionAggregationBuffer(intersection)) if !intersection.hasResult() =>
         intersectionBuffer
       // If both arguments are intersection objects, merge them directly.
@@ -676,11 +682,9 @@ case class ThetaIntersectionAgg(
     sketchState.serialize()
   }
 
-  /** Wrap the byte array into a Compact sketch instance, or return null for null input. */
+  /** Wrap the byte array into a Compact sketch instance. */
   override def deserialize(buffer: Array[Byte]): ThetaSketchState = {
-    if (buffer == null) {
-      null
-    } else if (buffer.nonEmpty) {
+    if (buffer.nonEmpty) {
       FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))
     } else {
       this.createAggregationBuffer()

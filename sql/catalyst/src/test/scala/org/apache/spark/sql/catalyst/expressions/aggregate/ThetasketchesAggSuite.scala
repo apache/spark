@@ -199,29 +199,30 @@ class ThetasketchesAggSuite extends SparkFunSuite {
   }
 
   gridTest(
-    "theta intersection keeps no-input partials null and returns an empty final")(
+    "SPARK-59975: theta intersection keeps no-input partials empty and returns an empty final")(
     Seq(0, 2)) { numNulls =>
     val agg = new ThetaIntersectionAgg(BoundReference(0, BinaryType, nullable = true))
     val buffer = createIntersectionBuffer(agg, Seq.fill[Array[Byte]](numNulls)(null))
-    assert(agg.serialize(buffer) == null)
-    assert(agg.deserialize(null) == null)
+    assert(agg.serialize(buffer).isEmpty)
+    assert(agg.serialize(agg.deserialize(Array.emptyByteArray)).isEmpty)
     checkIntersectionEstimate(agg, buffer, 0.0)
     assert(agg.eval(buffer).asInstanceOf[Array[Byte]].sameElements(buildThetaSketch(Seq.empty)))
 
     // Final evaluation must not change the untouched intermediate state.
-    assert(agg.serialize(buffer) == null)
+    assert(agg.serialize(buffer).isEmpty)
     val updated = agg.update(buffer, InternalRow(buildThetaSketch(Seq(1, 2))))
     checkIntersectionEstimate(agg, updated, 2.0)
   }
 
-  test("theta intersection preserves null through partial merge and final merge") {
+  test("SPARK-59975: theta intersection preserves no-input state through partial merge " +
+    "and final merge") {
     val agg = new ThetaIntersectionAgg(BoundReference(0, BinaryType, nullable = true))
     val partial = createIntersectionBuffer(agg, Seq(null, null))
     val partialMerge = agg.merge(
       agg.createAggregationBuffer(),
       agg.deserialize(agg.serialize(partial)))
     val merged = agg.merge(partialMerge, agg.deserialize(agg.serialize(partial)))
-    assert(agg.serialize(merged) == null)
+    assert(agg.serialize(merged).isEmpty)
 
     val result = agg.merge(
       agg.createAggregationBuffer(),
@@ -229,7 +230,7 @@ class ThetasketchesAggSuite extends SparkFunSuite {
     checkIntersectionEstimate(agg, result, 0.0)
   }
 
-  gridTest("theta intersection skips no-input partials (serialized, nullFirst)")(
+  gridTest("SPARK-59975: theta intersection skips no-input partials (serialized, nullFirst) =")(
     Seq((false, false), (false, true), (true, false), (true, true))) {
     case (serialized, nullFirst) =>
       val agg = new ThetaIntersectionAgg(BoundReference(0, BinaryType, nullable = true))
@@ -249,7 +250,7 @@ class ThetasketchesAggSuite extends SparkFunSuite {
       checkIntersectionEstimate(agg, result, 2.0)
   }
 
-  test("theta intersection skips untouched objects in mergeBuffersObjects") {
+  test("SPARK-59975: theta intersection skips untouched objects in mergeBuffersObjects") {
     val agg = new ThetaIntersectionAgg(BoundReference(0, BinaryType, nullable = true))
     val destination = new GenericInternalRow(1)
     val incoming = new GenericInternalRow(1)
@@ -263,29 +264,29 @@ class ThetasketchesAggSuite extends SparkFunSuite {
     assert(ThetaSketchUtils.wrapCompactSketch(result, agg.prettyName).getEstimate == 2.0)
   }
 
-  gridTest("theta intersection does not skip real empty partials, " +
+  gridTest("SPARK-59975: theta intersection does not skip real empty partials " +
     "(serialized, emptyFirst) =")(
     Seq((false, false), (false, true), (true, false), (true, true))) {
     case (serialized, emptyFirst) =>
       val agg = new ThetaIntersectionAgg(BoundReference(0, BinaryType, nullable = true))
       val empty = createIntersectionBuffer(agg, Seq(buildThetaSketch(Seq.empty)))
       val populated = createIntersectionBuffer(agg, Seq(buildThetaSketch(Seq(1, 2))))
-      assert(agg.serialize(empty) != null)
+      assert(agg.serialize(empty).nonEmpty)
       val partials = if (emptyFirst) Seq(empty, populated) else Seq(populated, empty)
       val result = partials.foldLeft(agg.createAggregationBuffer()) { (buffer, partial) =>
         val input = if (serialized) agg.deserialize(agg.serialize(partial)) else partial
         agg.merge(buffer, input)
       }
-      assert(agg.serialize(result) != null)
+      assert(agg.serialize(result).nonEmpty)
       checkIntersectionEstimate(agg, result, 0.0)
   }
 
-  test("theta intersection preserves an empty intersection of disjoint sketches") {
+  test("SPARK-59975: theta intersection preserves an empty intersection of disjoint sketches") {
     val agg = new ThetaIntersectionAgg(BoundReference(0, BinaryType, nullable = true))
     val disjoint = createIntersectionBuffer(agg,
       Seq(buildThetaSketch(Seq(1)), buildThetaSketch(Seq(2))))
     val serialized = agg.serialize(disjoint)
-    assert(serialized != null)
+    assert(serialized.nonEmpty)
     assert(ThetaSketchUtils.wrapCompactSketch(serialized, agg.prettyName).getEstimate == 0.0)
 
     val populated = createIntersectionBuffer(agg, Seq(buildThetaSketch(Seq(1, 2))))
