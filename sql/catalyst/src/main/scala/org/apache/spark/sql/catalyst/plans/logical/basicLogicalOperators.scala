@@ -1759,16 +1759,26 @@ case class Unpivot(
 
   def canBeCoercioned: Boolean = values.exists(_.nonEmpty) &&
     values.exists(_.forall(_.forall(_.resolved))) &&
+    // values are coerced by position, so every value group must have one value per value column,
+    // otherwise CheckAnalysis reports UNPIVOT_VALUE_SIZE_MISMATCH
+    values.exists(_.forall(_.length == valueColumnNames.length)) &&
     // when no ids are given, values must be Attributes (column names) to allow detecting ids
     // coercion will add aliases, would disallow detecting ids, so defer coercion after id detection
     ids.exists(_.forall(_.resolved))
 
-  def valuesTypeCoercioned: Boolean = canBeCoercioned &&
+  def valuesTypeCoercioned: Boolean = canBeCoercioned && {
     // all inner values at position idx must have exactly the same data type, including nested
     // nullability, because the value column takes the data type of the first value
+    val sameType: (DataType, DataType) => Boolean =
+      if (conf.getConf(SQLConf.LEGACY_UNPIVOT_USE_FIRST_VALUE_NESTED_NULLABILITY)) {
+        DataTypeUtils.sameType
+      } else {
+        _ == _
+      }
     values.get.head.zipWithIndex.forall { case (v, idx) =>
-      values.get.tail.forall(vals => vals(idx).dataType == v.dataType)
+      values.get.tail.forall(vals => sameType(vals(idx).dataType, v.dataType))
     }
+  }
 
 }
 

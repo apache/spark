@@ -667,6 +667,27 @@ class DatasetUnpivotSuite extends SharedSparkSession {
     }
   }
 
+  test("unpivot sql with value groups of different sizes") {
+    // b differs from a only in nested nullability, d differs from a in element type
+    Seq("(a), (b, c)", "(b, c), (a)", "(a), (d, c)", "(d, c), (a)").foreach { groups =>
+      withClue(groups) {
+        val e = intercept[AnalysisException] {
+          spark.sql(s"""SELECT * FROM (
+                       |  SELECT array(1) a, array(cast(null as int)) b, 1 c, array(1L) d
+                       |)
+                       |UNPIVOT (
+                       |  (val1, val2) FOR col IN ($groups)
+                       |);
+                       |""".stripMargin)
+        }
+        checkError(
+          exception = e,
+          condition = "UNPIVOT_VALUE_SIZE_MISMATCH",
+          parameters = Map("names" -> "2"))
+      }
+    }
+  }
+
   test("unpivot merges nested nullability of all values") {
     // jan and feb are NOT NULL, mar and apr are nullable
     val df = Seq(
@@ -715,6 +736,21 @@ class DatasetUnpivotSuite extends SharedSparkSession {
       Seq(
         Row("north", "m1", false), Row("north", "m2", false),
         Row("south", "m1", false), Row("south", "m2", true)))
+  }
+
+  test("unpivot takes nested nullability of the first value with the legacy flag") {
+    withSQLConf(SQLConf.LEGACY_UNPIVOT_USE_FIRST_VALUE_NESTED_NULLABILITY.key -> "true") {
+      // a has NOT NULL elements, b has nullable elements
+      val df = Seq((1, Option.empty[Int])).toDF("id", "v")
+        .select($"id", array($"id").as("a"), array($"v").as("b"))
+      Seq(
+        Array[Column]($"a", $"b") -> false,
+        Array[Column]($"b", $"a") -> true
+      ).foreach { case (values, containsNull) =>
+        val unpivoted = df.unpivot(Array($"id"), values, "col", "value")
+        assert(unpivoted.schema("value").dataType === ArrayType(IntegerType, containsNull))
+      }
+    }
   }
 
   test("ORDER BY on a column dropped by UNPIVOT is rejected") {
