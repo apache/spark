@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, JoinHint, Limit, LogicalPlan, Offset, OneRowRelation, Project, Sort}
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, SortOrder => V2SortOrder, VariantGet => V2VariantGet}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, SortOrder => V2SortOrder, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
@@ -348,6 +348,64 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
     val unknownPred = new Predicate("UNKNOWN", Array())
     assert(V2ExpressionUtils.toCatalyst(unknownPred).isEmpty)
+  }
+
+  Seq(true, false).foreach { ansiEnabled =>
+    test(s"boolean operators wrap boolean casts for V2 pushdown with ANSI $ansiEnabled") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val intCol = AttributeReference("c", IntegerType)()
+        val boolCast = Cast(intCol, BooleanType)
+        val predicate = GreaterThan(intCol, Literal(0))
+        val v2BoolCast = new V2Cast(FieldReference("c"), IntegerType, BooleanType)
+        val wrappedBoolCast = new Predicate("BOOLEAN_EXPRESSION",
+          Array[V2Expression](v2BoolCast))
+        val v2Predicate = new Predicate(">",
+          Array[V2Expression](FieldReference("c"), LiteralValue(0, IntegerType)))
+        val expectedCast: Option[V2Expression] = if (ansiEnabled) Some(v2BoolCast) else None
+        assertResult(expectedCast) {
+          new V2ExpressionBuilder(boolCast).build()
+        }
+        val conditions = Seq[(Expression, Predicate)](
+          Not(boolCast) -> new V2Not(wrappedBoolCast),
+          And(boolCast, predicate) -> new V2And(wrappedBoolCast, v2Predicate),
+          Or(predicate, boolCast) -> new V2Or(v2Predicate, wrappedBoolCast))
+        conditions.foreach { case (condition, v2Condition) =>
+          val filter = Coalesce(Seq(condition, Literal(false)))
+          val expectedCondition: Option[Predicate] =
+            if (ansiEnabled) Some(v2Condition) else None
+          val expectedFilter = expectedCondition.map { translated =>
+            new Predicate("COALESCE", Array[V2Expression](translated, new AlwaysFalse))
+          }
+          testTranslateFilter(filter, expectedFilter)
+          assertResult(expectedCondition) {
+            new V2ExpressionBuilder(condition, isPredicate = true).buildPredicate()
+          }
+        }
+        assertResult(Some(new V2Not(v2Predicate))) {
+          new V2ExpressionBuilder(Not(predicate), isPredicate = true).buildPredicate()
+        }
+      }
+    }
+  }
+
+  test("boolean cast operands fall back when V2 predicate wrapping is disabled") {
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE.key -> "false") {
+      val intCol = AttributeReference("c", IntegerType)()
+      val boolCast = Cast(intCol, BooleanType)
+      val predicate = GreaterThan(intCol, Literal(0))
+      val conditions: Seq[Expression] = Seq(
+        Not(boolCast),
+        And(boolCast, predicate),
+        Or(predicate, boolCast))
+      conditions.foreach { condition =>
+        testTranslateFilter(Coalesce(Seq(condition, Literal(false))), None)
+        assertResult(Option.empty[Predicate]) {
+          new V2ExpressionBuilder(condition, isPredicate = true).buildPredicate()
+        }
+      }
+    }
   }
 
   test("round trip conversion of CASE_WHEN expression") {
