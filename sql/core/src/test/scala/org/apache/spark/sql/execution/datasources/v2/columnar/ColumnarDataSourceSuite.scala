@@ -14,30 +14,35 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.datasource
+package org.apache.spark.sql.execution.datasources.v2.columnar
 
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.connector.expressions.{Literal, NamedReference}
+import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
+import org.apache.spark.sql.connector.expressions.{Literal, NamedReference, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
-import org.apache.spark.sql.execution.datasources.v2.columnar.ColumnarScan
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.Utils
 
+/**
+ * Tests the Data Source V2 adapter of [[ColumnarDataSource]] with a data source implemented on the
+ * JVM. `NativeDataSourceSuite` tests the native data sources, which implement it.
+ */
 class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
@@ -47,12 +52,6 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     df.queryExecution.optimizedPlan.collectFirst {
       case relation: DataSourceV2ScanRelation => relation.scan.asInstanceOf[ColumnarScan]
     }.get
-  }
-
-  private def findError(e: Throwable, condition: String): SparkThrowable = {
-    Iterator.iterate(e)(_.getCause).takeWhile(_ != null)
-      .collectFirst { case t: SparkThrowable if t.getCondition == condition => t }
-      .getOrElse(throw e)
   }
 
   test("batch read") {
@@ -127,76 +126,43 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(TestColumnarSink.rows(table).sorted == (0L until 5L).map(id => (id, s"name$id")))
     assert(TestColumnarSink.epochs.get(table) == Seq(0L))
   }
-
-  test("operations that the data source does not implement") {
-    val provider = classOf[TestEmptyProvider].getName
-    val description = classOf[TestEmptyDataSource].getName
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        spark.read.format(provider).load()
-      },
-      condition = "UNABLE_TO_INFER_SCHEMA",
-      parameters = Map("format" -> description))
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        spark.read.schema("id BIGINT").format(provider).load().collect()
-      },
-      condition = "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED",
-      parameters = Map("description" -> description))
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        spark.range(1).write.format(provider).mode("append").save()
-      },
-      condition = "DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED",
-      parameters = Map("description" -> description))
-
-    def checkStreaming(condition: String)(start: => StreamingQuery): Unit = {
-      val e = intercept[Exception] {
-        val query = start
-        try query.processAllAvailable() finally query.stop()
-      }
-      checkError(
-        exception = findError(e, condition),
-        condition = condition,
-        parameters = Map("description" -> description))
-    }
-    checkStreaming("DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED") {
-      spark.readStream.schema("id BIGINT").format(provider).load()
-        .writeStream.format("noop").start()
-    }
-    checkStreaming("DATA_SOURCE_STREAMING_WRITE_NOT_SUPPORTED") {
-      spark.readStream.format("rate").load().writeStream.format(provider)
-        .option("checkpointLocation", Utils.createTempDir().getPath).start()
-    }
-  }
 }
 
 /** Reads the ids [0, end) and their names, and writes to [[TestColumnarSink]]. */
-class TestRangeProvider extends DataSourceProvider {
+class TestRangeProvider extends TableProvider with DataSourceRegister {
   override def shortName(): String = "test_columnar_range"
 
-  override def createDataSource(options: CaseInsensitiveStringMap): DataSource = {
-    new TestRangeDataSource(options)
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    new TestRangeDataSource(options).schema()
   }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    new ColumnarTable(shortName(), schema, new TestRangeDataSource(_))
+  }
+
+  override def supportsExternalMetadata(): Boolean = true
 }
 
-class TestRangeDataSource(options: CaseInsensitiveStringMap) extends DataSource {
+class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDataSource {
   private val end = options.getLong("end", 10)
   private val table = options.getOrDefault("table", "default")
 
   override def schema(): StructType = StructType.fromDDL("id BIGINT, name STRING")
 
-  override def reader(schema: StructType): DataSourceReader = new TestRangeReader(end, schema)
+  override def reader(schema: StructType): ColumnarReader = new TestRangeReader(end, schema)
 
-  override def streamReader(schema: StructType): DataSourceStreamReader = {
+  override def streamReader(schema: StructType): ColumnarStreamReader = {
     new TestRangeStreamReader(end, schema)
   }
 
-  override def writer(schema: StructType, overwrite: Boolean): DataSourceWriter = {
+  override def writer(schema: StructType, overwrite: Boolean): ColumnarWriter = {
     new TestSinkWriter(table, overwrite, options.getBoolean("fail", false))
   }
 
-  override def streamWriter(schema: StructType, overwrite: Boolean): DataSourceStreamWriter = {
+  override def streamWriter(schema: StructType, overwrite: Boolean): ColumnarStreamWriter = {
     new TestSinkStreamWriter(table)
   }
 }
@@ -204,7 +170,7 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends DataSource 
 case class TestRangePartition(lo: Long, hi: Long) extends InputPartition
 
 /** Accepts the predicates `id > <literal>`. */
-class TestRangeReader(end: Long, schema: StructType) extends DataSourceReader {
+class TestRangeReader(end: Long, schema: StructType) extends ColumnarReader {
   private var lo = 0L
   private var limit = Long.MaxValue
   private var readSchema = schema
@@ -243,7 +209,7 @@ class TestRangeReader(end: Long, schema: StructType) extends DataSourceReader {
   }
 }
 
-class TestRangeStreamReader(end: Long, schema: StructType) extends DataSourceStreamReader {
+class TestRangeStreamReader(end: Long, schema: StructType) extends ColumnarStreamReader {
   private def offset(json: String): Long = json.stripPrefix("{\"offset\":").stripSuffix("}").toLong
 
   override def initialOffset(): String = "{\"offset\":0}"
@@ -330,7 +296,7 @@ class TestDataWriter(fail: Boolean) extends DataWriter[ColumnarBatch] {
   override def close(): Unit = {}
 }
 
-class TestSinkWriter(table: String, overwrite: Boolean, fail: Boolean) extends DataSourceWriter {
+class TestSinkWriter(table: String, overwrite: Boolean, fail: Boolean) extends ColumnarWriter {
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[ColumnarBatch] = {
     new TestDataWriter(fail)
   }
@@ -344,7 +310,7 @@ class TestSinkWriter(table: String, overwrite: Boolean, fail: Boolean) extends D
   }
 }
 
-class TestSinkStreamWriter(table: String) extends DataSourceStreamWriter {
+class TestSinkStreamWriter(table: String) extends ColumnarStreamWriter {
   override def createWriter(
       partitionId: Int,
       taskId: Long,
@@ -359,14 +325,3 @@ class TestSinkStreamWriter(table: String) extends DataSourceStreamWriter {
     TestColumnarSink.aborted.add(table)
   }
 }
-
-/** A data source that implements nothing. */
-class TestEmptyProvider extends DataSourceProvider {
-  override def shortName(): String = "test_columnar_empty"
-
-  override def createDataSource(options: CaseInsensitiveStringMap): DataSource = {
-    new TestEmptyDataSource
-  }
-}
-
-class TestEmptyDataSource extends DataSource

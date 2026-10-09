@@ -75,17 +75,19 @@
       url: sql-v2-data-sources.html#streaming
     - text: Further Reading
       url: sql-v2-data-sources.html#further-reading
-- text: Columnar Data Source API
-  url: sql-columnar-data-sources.html
+- text: Native Data Sources
+  url: sql-native-data-sources.html
   subitems:
     - text: Overview
-      url: sql-columnar-data-sources.html#overview
-    - text: The API
-      url: sql-columnar-data-sources.html#the-api
-    - text: JVM Data Sources
-      url: sql-columnar-data-sources.html#jvm-data-sources
-    - text: Native Data Sources
-      url: sql-columnar-data-sources.html#native-data-sources
+      url: sql-native-data-sources.html#overview
+    - text: How It Works
+      url: sql-native-data-sources.html#how-it-works
+    - text: Packages
+      url: sql-native-data-sources.html#packages
+    - text: Example in Rust
+      url: sql-native-data-sources.html#example-in-rust
+    - text: Example in C++
+      url: sql-native-data-sources.html#example-in-c
 - text: Performance Tuning
   url: sql-performance-tuning.html
   subitems:
