@@ -48,6 +48,9 @@ if have_pandas and have_pyarrow:
     import pyarrow as pa
 
     from pyspark.eval_handlers._pandas import (
+        PandasCoGroupedMapUDFHandler,
+        PandasGroupedMapIterUDFHandler,
+        PandasGroupedMapUDFHandler,
         PandasMapUDFHandler,
         PandasScalarIterUDFHandler,
         PandasScalarUDFHandler,
@@ -95,6 +98,37 @@ def _map_handler(udf, return_type, runner_conf=None):
     )
 
 
+def _grouped_arg_offsets(*dataframes):
+    """Encode ``arg_offsets`` from ``(key_cols, value_cols)`` per DataFrame, laid out
+    as ``[length, num_keys, *key_cols, *value_cols]`` (BasePandasGroupExec.resolveArgOffsets).
+    """
+    offsets: list = []
+    for key_cols, value_cols in dataframes:
+        group = [len(key_cols), *key_cols, *value_cols]
+        offsets += [len(group), *group]
+    return offsets
+
+
+# Grouped-map return type and arg_offsets for key column 0 and value column 1.
+_GROUPED_RETURN_TYPE = StructType([StructField("v", LongType())])
+_KEY0_VALUE1 = _grouped_arg_offsets(([0], [1]))
+
+
+def _grouped_handler(handler_cls, udf, arg_offsets, num_udf_args, runner_conf=None):
+    """Build a grouped/cogrouped-map handler from its
+    ``(func, arg_offsets, return_type, num_udf_args)`` UDF tuple."""
+    return handler_cls(
+        udfs=[(udf, arg_offsets, _GROUPED_RETURN_TYPE, num_udf_args)],
+        runner_conf=runner_conf or RunnerConf({}),
+        eval_conf=None,
+    )
+
+
+def _struct_values(batches):
+    """Flatten the ``v`` field of each output batch's wrapping struct column."""
+    return [v for b in batches for v in b.column(0).field("v").to_pylist()]
+
+
 @unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
 class PandasEvalTypeHandlerRegistrationTests(unittest.TestCase):
     def test_pandas_eval_types_are_registered(self):
@@ -103,6 +137,9 @@ class PandasEvalTypeHandlerRegistrationTests(unittest.TestCase):
             (PythonEvalType.SQL_SCALAR_PANDAS_UDF, PandasScalarUDFHandler),
             (PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF, PandasScalarIterUDFHandler),
             (PythonEvalType.SQL_MAP_PANDAS_ITER_UDF, PandasMapUDFHandler),
+            (PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF, PandasGroupedMapUDFHandler),
+            (PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF, PandasGroupedMapIterUDFHandler),
+            (PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF, PandasCoGroupedMapUDFHandler),
         ):
             self.assertIs(get_eval_type_handler(eval_type), handler_cls)
 
@@ -305,6 +342,156 @@ class PandasMapUDFHandlerTests(unittest.TestCase):
         handler = _map_handler(yields_series, self._return_type)
         with self.assertRaises(PySparkTypeError):
             list(handler.run(0, iter([_batch(v=[1, 2])])))
+
+
+@unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
+class PandasGroupedMapUDFHandlerTests(unittest.TestCase):
+    def test_applies_udf_per_group(self):
+        # Each group (a lazy iterator of batches) is concatenated into one DataFrame.
+        handler = _grouped_handler(
+            PandasGroupedMapUDFHandler,
+            lambda df: pd.DataFrame({"v": df["b"] * 2}),
+            _KEY0_VALUE1,
+            1,
+        )
+        groups = [
+            iter([_batch(a=[1, 1], b=[1, 2]), _batch(a=[1], b=[3])]),
+            iter([_batch(a=[2], b=[5])]),
+        ]
+        out = list(handler.run(0, iter(groups)))
+        self.assertEqual(len(out), 2)
+        self.assertEqual(_struct_values(out[:1]), [2, 4, 6])
+        self.assertEqual(_struct_values(out[1:]), [10])
+
+    def test_passes_grouping_key(self):
+        # A two-argument UDF receives the grouping key tuple from the key columns.
+        handler = _grouped_handler(
+            PandasGroupedMapUDFHandler,
+            lambda key, df: pd.DataFrame({"v": [key[0]] * len(df)}),
+            _KEY0_VALUE1,
+            2,
+        )
+        out = list(handler.run(0, iter([iter([_batch(a=[7, 7], b=[1, 2])])])))
+        self.assertEqual(_struct_values(out), [7, 7])
+
+    def test_coerces_output_to_return_type(self):
+        handler = _grouped_handler(
+            PandasGroupedMapUDFHandler,
+            lambda df: pd.DataFrame({"v": df["b"].astype("int32")}),
+            _KEY0_VALUE1,
+            1,
+        )
+        out = list(handler.run(0, iter([iter([_batch(a=[1], b=[3])])])))
+        self.assertEqual(out[0].column(0).type.field("v").type, pa.int64())
+
+    def test_rejects_non_dataframe_result(self):
+        handler = _grouped_handler(PandasGroupedMapUDFHandler, lambda df: df["b"], _KEY0_VALUE1, 1)
+        with self.assertRaises(PySparkTypeError):
+            list(handler.run(0, iter([iter([_batch(a=[1], b=[3])])])))
+
+    def test_resizes_output_to_byte_cap(self):
+        # A positive output byte cap splits one large group result into several batches.
+        conf = RunnerConf({"spark.sql.execution.pythonUDF.arrow.workerOutputBatchMaxBytes": "64"})
+        handler = _grouped_handler(
+            PandasGroupedMapUDFHandler,
+            lambda df: pd.DataFrame({"v": df["b"]}),
+            _KEY0_VALUE1,
+            1,
+            runner_conf=conf,
+        )
+        values = list(range(100))
+        out = list(handler.run(0, iter([iter([_batch(a=[0] * 100, b=values)])])))
+        self.assertGreater(len(out), 1)
+        self.assertEqual(_struct_values(out), values)
+
+
+@unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
+class PandasGroupedMapIterUDFHandlerTests(unittest.TestCase):
+    def test_applies_udf_over_group_batches(self):
+        # The UDF sees one DataFrame per input batch of the group.
+        def double(df_iter):
+            for df in df_iter:
+                yield pd.DataFrame({"v": df["b"] * 2})
+
+        handler = _grouped_handler(PandasGroupedMapIterUDFHandler, double, _KEY0_VALUE1, 1)
+        groups = [
+            iter([_batch(a=[1, 1], b=[1, 2]), _batch(a=[1], b=[3])]),
+            iter([_batch(a=[2], b=[5])]),
+        ]
+        out = list(handler.run(0, iter(groups)))
+        self.assertEqual([_struct_values([b]) for b in out], [[2, 4], [6], [10]])
+
+    def test_passes_grouping_key(self):
+        def with_key(key, df_iter):
+            for df in df_iter:
+                yield pd.DataFrame({"v": [key[0]] * len(df)})
+
+        handler = _grouped_handler(PandasGroupedMapIterUDFHandler, with_key, _KEY0_VALUE1, 2)
+        out = list(handler.run(0, iter([iter([_batch(a=[7, 7], b=[1, 2])])])))
+        self.assertEqual(_struct_values(out), [7, 7])
+
+    def test_drains_unconsumed_group_batches(self):
+        # A UDF that reads only the first batch must not leave the rest of its group
+        # in the stream: the next group still starts at its own first batch.
+        def first_only(df_iter):
+            yield pd.DataFrame({"v": next(df_iter)["b"]})
+
+        handler = _grouped_handler(PandasGroupedMapIterUDFHandler, first_only, _KEY0_VALUE1, 1)
+        group1 = iter([_batch(a=[1], b=[1]), _batch(a=[1], b=[2])])
+        group2 = iter([_batch(a=[2], b=[3])])
+        out = list(handler.run(0, iter([group1, group2])))
+        self.assertEqual(_struct_values(out), [1, 3])
+        self.assertIsNone(next(group1, None))
+
+    def test_rejects_non_dataframe_element(self):
+        def yields_series(df_iter):
+            for df in df_iter:
+                yield df["b"]
+
+        handler = _grouped_handler(PandasGroupedMapIterUDFHandler, yields_series, _KEY0_VALUE1, 1)
+        with self.assertRaises(PySparkTypeError):
+            list(handler.run(0, iter([iter([_batch(a=[1], b=[3])])])))
+
+
+@unittest.skipIf(not (have_pandas and have_pyarrow), _missing_message)
+class PandasCoGroupedMapUDFHandlerTests(unittest.TestCase):
+    # Both sides: key column 0, value column 1.
+    _offsets = _grouped_arg_offsets(([0], [1]), ([0], [1]))
+
+    def test_applies_udf_per_cogroup(self):
+        handler = _grouped_handler(
+            PandasCoGroupedMapUDFHandler,
+            lambda left, right: pd.DataFrame({"v": [left["b"].sum() + right["b"].sum()]}),
+            self._offsets,
+            2,
+        )
+        cogroup = ([_batch(a=[1], b=[1]), _batch(a=[1], b=[2])], [_batch(a=[1], b=[10])])
+        out = list(handler.run(0, iter([cogroup])))
+        self.assertEqual(_struct_values(out), [13])
+
+    def test_key_from_right_when_left_empty(self):
+        # A three-argument UDF reads the key from the left side, falling back to the
+        # right side when the left side has no rows.
+        handler = _grouped_handler(
+            PandasCoGroupedMapUDFHandler,
+            lambda key, left, right: pd.DataFrame({"v": [key[0]]}),
+            self._offsets,
+            3,
+        )
+        cogroups = [
+            ([_batch(a=[4], b=[1])], [_batch(a=[], b=[])]),
+            ([_batch(a=[], b=[])], [_batch(a=[9], b=[1])]),
+        ]
+        out = list(handler.run(0, iter(cogroups)))
+        self.assertEqual(_struct_values(out), [4, 9])
+
+    def test_rejects_non_dataframe_result(self):
+        handler = _grouped_handler(
+            PandasCoGroupedMapUDFHandler, lambda left, right: 1, self._offsets, 2
+        )
+        cogroup = ([_batch(a=[1], b=[1])], [_batch(a=[1], b=[2])])
+        with self.assertRaises(PySparkTypeError):
+            list(handler.run(0, iter([cogroup])))
 
 
 if __name__ == "__main__":
