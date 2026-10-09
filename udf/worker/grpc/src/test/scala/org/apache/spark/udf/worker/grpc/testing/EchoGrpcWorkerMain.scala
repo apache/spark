@@ -38,7 +38,8 @@ import org.apache.spark.udf.worker.grpc.{GrpcWorkerChannel, UnixDomainSocketTran
  *     --id <id> --connection <uds-path>
  *
  * Hosts an [[EchoWorkerService]] on the supplied Unix domain socket and
- * blocks until the JVM receives `SIGTERM` (then shuts down gracefully).
+ * blocks until the JVM receives `SIGTERM` or its parent process exits
+ * (then shuts down gracefully).
  *
  * The engine injects `--id` and `--connection` automatically, matching the
  * contract documented in `worker_spec.proto`.
