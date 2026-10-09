@@ -450,8 +450,8 @@ private[kafka010] class KafkaDataConsumer(
             throwOnDataLoss(toFetchOffset, untilOffset, topicPartition, groupId, e)
           } else {
             logOnDataLoss(topicPartition, groupId, s"Cannot fetch offset $toFetchOffset", e)
-            // The consumer was released while handling the out-of-range offset, so reacquire it
-            // before recovery.
+            // [SPARK-60076] The consumer was released while handling the out-of-range offset,
+            // so reacquire it before recovery.
             consumer = getOrRetrieveConsumer()
           }
 
