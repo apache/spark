@@ -32,6 +32,7 @@ from pyspark.sql.conversion import (
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
+    ByteType,
     DecimalType,
     DoubleType,
     Geography,
@@ -438,6 +439,73 @@ class PandasToArrowConversionTests(unittest.TestCase):
         # With arrow_cast=True, should allow the conversion
         result = PandasToArrowConversion.from_pandas(df, schema, arrow_cast=True)
         self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])
+
+    def test_from_pandas_arrow_dtype_requested_type(self):
+        # SPARK-60009: Arrow-backed values must use the declared output type.
+        import pandas as pd
+        import pyarrow as pa
+
+        chunks = pa.chunked_array(
+            [pa.array([1], type=pa.int32()), pa.array([None, 2], type=pa.int32())]
+        )
+        series = pd.Series(chunks, dtype=pd.ArrowDtype(pa.int32()))
+        schema = StructType([StructField("value", LongType())])
+
+        result = PandasToArrowConversion.from_pandas([series], schema)
+        self.assertEqual(result.column(0).type, pa.int64())
+        self.assertEqual(result.column(0).to_pylist(), [1, None, 2])
+
+    def test_arrow_table_from_pandas_arrow_dtype_requested_type(self):
+        # SPARK-60009: The createDataFrame input path must honor the requested type too.
+        import pandas as pd
+        import pyarrow as pa
+
+        from pyspark.sql.pandas.conversion import create_arrow_table_from_pandas
+
+        series = pd.Series([1, None], dtype=pd.ArrowDtype(pa.int32()))
+        result = create_arrow_table_from_pandas([(series, LongType())])
+        self.assertEqual(result.column(0).type, pa.int64())
+        self.assertEqual(result.column(0).to_pylist(), [1, None])
+
+    def test_arrow_dtype_safe_conversion(self):
+        # SPARK-60009: Safe narrowing must reject values outside the requested type.
+        import pandas as pd
+        import pyarrow as pa
+
+        from pyspark.sql.pandas.conversion import create_arrow_array_from_pandas
+
+        series = pd.Series([128, None], dtype=pd.ArrowDtype(pa.int64()))
+        with self.assertRaisesRegex(PySparkValueError, "convertToArrowArraySafely"):
+            create_arrow_array_from_pandas(series, ByteType(), safecheck=True)
+
+    def test_arrow_dtype_unsafe_conversion(self):
+        # SPARK-60009: Explicitly unsafe casts must follow the supplied safecheck setting.
+        import pandas as pd
+        import pyarrow as pa
+
+        from pyspark.sql.pandas.conversion import create_arrow_array_from_pandas
+
+        series = pd.Series([128, None], dtype=pd.ArrowDtype(pa.int64()))
+        result = create_arrow_array_from_pandas(series, ByteType(), safecheck=False)
+        self.assertEqual(result.type, pa.int8())
+        self.assertEqual(result.to_pylist(), [-128, None])
+
+    def test_arrow_dtype_string_binary_offset_width(self):
+        # Preserve SPARK-46776 when enforcing types for all Arrow-backed inputs.
+        import pandas as pd
+        import pyarrow as pa
+
+        from pyspark.sql.pandas.conversion import create_arrow_array_from_pandas
+
+        for values, source_type, spark_type, target_type in [
+            (["x", None], pa.large_string(), StringType(), pa.string()),
+            ([b"x", None], pa.large_binary(), BinaryType(), pa.binary()),
+        ]:
+            with self.subTest(source_type=source_type):
+                series = pd.Series(values, dtype=pd.ArrowDtype(source_type))
+                result = create_arrow_array_from_pandas(series, spark_type, safecheck=False)
+                self.assertEqual(result.type, target_type)
+                self.assertEqual(result.to_pylist(), values)
 
     def test_from_pandas_decimal(self):
         """Test int to decimal coercion."""
