@@ -637,9 +637,11 @@ class JacksonParser(
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
-    // CHAR/VARCHAR keys last-win on exact (binary) duplicate names. This map from key
-    // to buffer index keeps that lookup O(1); it stays null (and the buffers keep every
-    // pair, as STRING maps always have) when last-win does not apply.
+    // CHAR/VARCHAR keys last-win on exact (binary) duplicate names. This maps a key to
+    // the index of its value in `values` for O(1) overwrite; it stays null (and the
+    // buffers keep every pair, as STRING maps always have) when last-win does not apply.
+    // It indexes `values` (not `keys`) so it stays valid even after the NonFatal arm
+    // appends a dangling key, leaving the two buffers unbalanced.
     val lastWinIndex: mutable.HashMap[UTF8String, Int] =
       if (isLengthCheckedKeyType(keyType)) mutable.HashMap.empty[UTF8String, Int] else null
 
@@ -651,7 +653,7 @@ class JacksonParser(
         if (existing >= 0) {
           values(existing) = value
         } else {
-          if (lastWinIndex != null) lastWinIndex(key) = keys.length
+          if (lastWinIndex != null) lastWinIndex(key) = values.length
           keys += key
           values += value
         }
@@ -661,7 +663,7 @@ class JacksonParser(
           if (existing >= 0) {
             values(existing) = err.partialResult
           } else {
-            if (lastWinIndex != null) lastWinIndex(key) = keys.length
+            if (lastWinIndex != null) lastWinIndex(key) = values.length
             keys += key
             values += err.partialResult
           }
