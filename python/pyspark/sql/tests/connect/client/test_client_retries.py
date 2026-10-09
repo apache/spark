@@ -33,6 +33,7 @@ if should_test_connect:
         DefaultPolicy,
         RetryException,
         Retrying,
+        RetryPolicy,
     )
     from pyspark.sql.tests.connect.client.test_client import (
         TestException,
@@ -111,6 +112,23 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
 
         # tolerated at least 10 mins of fails
         self.assertGreaterEqual(sum(sleep_tracker.times), 600)
+
+    def test_retry_policy_backoff_without_cap(self):
+        for multiplier, max_backoff, expected in [
+            (2.0, None, [100, 200, 400, 800]),
+            (2.0, 250, [100, 200, 250, 250]),
+            (1.0, None, [100, 100, 100, 100]),
+            (0.5, None, [100, 50, 25, 12]),
+        ]:
+            with self.subTest(multiplier=multiplier, max_backoff=max_backoff):
+                state = RetryPolicy(
+                    max_retries=4,
+                    initial_backoff=100,
+                    max_backoff=max_backoff,
+                    backoff_multiplier=multiplier,
+                ).to_state()
+                self.assertEqual([state.next_attempt() for _ in range(4)], expected)
+                self.assertIsNone(state.next_attempt())
 
     def test_retry_client_unit(self):
         client = SparkConnectClient("sc://foo/;token=bar")
