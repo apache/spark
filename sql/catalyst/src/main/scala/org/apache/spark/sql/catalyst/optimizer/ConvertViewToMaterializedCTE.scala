@@ -39,6 +39,14 @@ import org.apache.spark.sql.internal.SQLConf
  * `View` nodes remain and every reference site holds an independent copy of the view's
  * plan.
  *
+ * A join hint written at the top of a view body binds to the join(s) the view takes part
+ * in (see `SubqueryHintPropagationSuite`): `EliminateResolvedHint` extracts hints from
+ * Join children by walking down unary nodes, and processes the body inline today so the
+ * hint reaches the consuming join. After this rule the body lives inside a `CTERelationDef`
+ * the walk cannot reach, so the rule strips those top-of-body hints itself and re-attaches
+ * them above every reference site. Hints deeper in the body bind to the body's own joins
+ * and are left in place.
+ *
  * A converted definition keeps `forceSkipInline = true` only when at least two references
  * survive the rewrite; otherwise `InlineCTE` would immediately flatten it back into
  * duplicated subtrees (the definition body is deterministic in every case we convert),
@@ -107,12 +115,17 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
     // bare reference; later occurrences are wrapped in a `Project` re-minting the
     // occurrence's ids from the definition output, so consumers above need no rewriting.
     val cteDefs = mutable.ArrayBuffer.empty[CTERelationDef]
-    val defByGroup = mutable.HashMap.empty[TableIdentifier, CTERelationDef]
+    val defByGroup = mutable.HashMap.empty[TableIdentifier, (CTERelationDef, Seq[HintInfo])]
 
     val rewritten = plan.transformUpWithSubqueries {
       case v: View if qualifiedIdentifiers.contains(v.desc.identifier) =>
+        // The body's top-of-node hints must not stay in the definition, where neither
+        // this rule nor `EliminateResolvedHint` can hoist them into the consuming joins;
+        // build the definition from the hint-free body and re-apply the hints above each
+        // reference site instead. All occurrences share one canonicalized body, so the
+        // hints extracted from the first one describe every reference site uniformly.
         defByGroup.get(v.desc.identifier) match {
-          case Some(cteDef) =>
+          case Some((cteDef, bodyHints)) =>
             // Later occurrence: re-bind the reference output to this occurrence's
             // attributes positionally. The group qualification has already asserted that
             // name, type and nullability align element-wise.
@@ -122,22 +135,25 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
               output = cteDef.output,
               isStreaming = false,
               maxRows = cteDef.maxRows)
-            Project(rebindingProjectList(v.output, cteDef.output), ref)
+            withBodyHints(bodyHints,
+              Project(rebindingProjectList(v.output, cteDef.output), ref))
 
           case None =>
             // First occurrence: consumers above already reference this occurrence's
             // expression ids, which are exactly the definition output, so the bare
             // reference is output-compatible. `forceSkipInline` is decided after the
             // rewrite, by the number of surviving references.
-            val cteDef = CTERelationDef(v.child)
-            defByGroup.put(v.desc.identifier, cteDef)
+            val (hintFreeBody, bodyHints) =
+              EliminateResolvedHint.extractHintsFromPlan(v.child)
+            val cteDef = CTERelationDef(hintFreeBody)
+            defByGroup.put(v.desc.identifier, (cteDef, bodyHints))
             cteDefs += cteDef
-            CTERelationRef(
+            withBodyHints(bodyHints, CTERelationRef(
               cteDef.id,
               _resolved = true,
               output = v.child.output,
               isStreaming = false,
-              maxRows = cteDef.maxRows)
+              maxRows = cteDef.maxRows))
         }
     }
 
@@ -247,6 +263,11 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
       first.output.zip(other.output).forall { case (l, r) =>
         l.name == r.name && l.dataType == r.dataType && l.nullable == r.nullable
       }
+
+  // Restores the hints extracted from the definition body above a reference site,
+  // preserving the original nesting order (the extracted list is top-down).
+  private def withBodyHints(hints: Seq[HintInfo], site: LogicalPlan): LogicalPlan =
+    hints.foldRight(site)((h, acc) => ResolvedHint(acc, h))
 
   /**
    * Builds a project list that re-mints `target`'s attributes from the definition output
