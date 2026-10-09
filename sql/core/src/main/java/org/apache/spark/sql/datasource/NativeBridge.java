@@ -33,8 +33,9 @@ import org.apache.spark.annotation.Evolving;
  * <p>
  * The library is distributed in a native data source package: a zip file with the extension
  * {@code .sparkpkg} that contains a manifest named {@code spark-native-datasource.json} and the
- * library built for one or more platforms. Spark finds the packages added to a session with
- * {@code spark.addArtifact}, and the ones under the paths in
+ * library built for one or more platforms. Spark finds the packages installed in the
+ * {@code native-datasources} directory of {@code SPARK_HOME} automatically, as well as the
+ * packages added to a session with {@code spark.addArtifact} and the ones under the paths in
  * {@code spark.sql.dataSource.native.paths}. See the "Native Data Sources" page of the Spark SQL
  * guide for details and examples.
  *

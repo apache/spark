@@ -27,7 +27,7 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkConf, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, LiteralValue}
@@ -49,6 +49,13 @@ import org.apache.spark.util.Utils
 class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
 
   private lazy val buildDir = Utils.createTempDir(namePrefix = "native-datasource-test")
+
+  // The SPARK_HOME of the suite, where packages are installed in INSTALLED_PACKAGES_DIR.
+  private lazy val installedSparkHome = Utils.createTempDir(namePrefix = "spark-home")
+
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf.set("spark.home", installedSparkHome.getPath)
+  }
 
   // The executors store the files of the sessions that are not isolated in the same directory,
   // and jobs outside of SQL executions get the files of all the sessions. Each package has its
@@ -95,6 +102,10 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     compile("test_native_datasource_b", "-DNAME_PREFIX=\"b_\"", "-DID_SIGN=-1")
   private lazy val abiV2Library =
     compile("test_native_datasource_v2", "-DABI_VERSION=2", "-DNAME_PREFIX=\"v2_\"")
+  private lazy val installedLibrary =
+    compile("test_native_datasource_installed", "-DNAME_PREFIX=\"installed_\"")
+  private lazy val installedNegatingLibrary = compile(
+    "test_native_datasource_installed_b", "-DNAME_PREFIX=\"installed_\"", "-DID_SIGN=-1")
 
   private def dataSources(prefix: String): Seq[String] =
     Seq("native_range", "native_sink", "native_counter").map(prefix + _)
@@ -535,6 +546,27 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val (otherPackages, otherArtifactUUID) = other.artifactManager.getNativeDataSourcePackages
     assert(otherPackages.map(_.getName) == Seq(defaultPackage.getName))
     assert(distributed.artifactUUID == otherArtifactUUID)
+  }
+
+  nativeTest("find installed packages automatically") {
+    val installDir =
+      new File(installedSparkHome, NativeDataSourceRegistry.INSTALLED_PACKAGES_DIR)
+    val installed = createPackage(installedLibrary, dataSources("installed_"), dir = installDir)
+    try {
+      assert(NativeDataSourceRegistry.installedPackageFiles() == Seq(installed))
+      // The session neither adds the package nor configures a path.
+      checkRows(
+        newSession().read.format("installed_native_range").option("end", "3").load().select("id"),
+        Seq(Row(0L), Row(1L), Row(2L)))
+
+      // A package of the session takes precedence over an installed one.
+      val session = newSession(createPackage(installedNegatingLibrary, dataSources("installed_")))
+      checkRows(
+        session.read.format("installed_native_range").option("end", "3").load().select("id"),
+        Seq(Row(0L), Row(-1L), Row(-2L)))
+    } finally {
+      installed.delete()
+    }
   }
 
   nativeTest("find packages in directories") {

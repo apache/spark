@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.ffi
 import java.io.File
 import java.nio.file.Paths
 
-import org.apache.spark.{SparkEnv, SparkFiles}
+import org.apache.spark.{SparkContext, SparkEnv, SparkFiles}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.Artifact
@@ -30,11 +30,15 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.util.Utils
 
 /**
- * Finds the native data source packages of the active session on the driver: the packages added
- * with `spark.addArtifact`, and the packages listed in, or in a directory listed in,
- * `spark.sql.dataSource.native.paths`.
+ * Finds the native data source packages on the driver. Like the Python data sources installed in
+ * the Python path, the packages installed in `$SPARK_HOME/native-datasources` are found
+ * automatically. The active session can also add packages with `spark.addArtifact`, or with
+ * `spark.sql.dataSource.native.paths`, which take precedence over the installed ones.
  */
 object NativeDataSourceRegistry extends Logging {
+
+  /** The directory of `SPARK_HOME` that contains the installed native data source packages. */
+  val INSTALLED_PACKAGES_DIR = "native-datasources"
 
   /** Returns whether a package provides the native data source with the given name. */
   def exists(name: String, conf: SQLConf): Boolean = lookup(name, conf).isDefined
@@ -48,7 +52,12 @@ object NativeDataSourceRegistry extends Logging {
     if (!conf.getConf(StaticSQLConf.NATIVE_DATA_SOURCE_ENABLED)) {
       return None
     }
-    val found = packages(conf)
+    lookup(name, configuredPackageFiles(conf) ++ artifactPackageFiles())
+      .orElse(lookup(name, installedPackageFiles()))
+  }
+
+  private def lookup(name: String, files: Seq[File]): Option[(String, NativeDataSourcePackage)] = {
+    val found = files.map(_.getCanonicalFile).distinct.map(NativeDataSourcePackage.read)
       .flatMap(pkg => pkg.manifest.dataSources.find(_.equalsIgnoreCase(name)).map(_ -> pkg))
       // The same package can be found more than once, for example when it is in a configured
       // directory and was also added as an artifact.
@@ -110,9 +119,12 @@ object NativeDataSourceRegistry extends Logging {
     }
   }
 
-  private def packages(conf: SQLConf): Seq[NativeDataSourcePackage] = {
-    (configuredPackageFiles(conf) ++ artifactPackageFiles()).map(_.getCanonicalFile).distinct
-      .map(NativeDataSourcePackage.read)
+  /** The packages installed in `$SPARK_HOME/native-datasources`, if the directory exists. */
+  private[ffi] def installedPackageFiles(): Seq[File] = {
+    SparkContext.getActive.flatMap(_.getSparkHome()).toSeq
+      .map(home => new File(home, INSTALLED_PACKAGES_DIR))
+      .filter(_.isDirectory)
+      .flatMap(packageFilesIn)
   }
 
   private def configuredPackageFiles(conf: SQLConf): Seq[File] = {
@@ -124,10 +136,7 @@ object NativeDataSourceRegistry extends Logging {
           log"paths are supported. Add remote packages with spark.addArtifact instead.")
         Nil
       } else if (file.isDirectory) {
-        file.listFiles()
-          .filter(f => f.isFile && f.getName.endsWith(NativeDataSourcePackage.FILE_EXTENSION))
-          .sortBy(_.getName)
-          .toSeq
+        packageFilesIn(file)
       } else if (file.isFile) {
         Seq(file)
       } else {
@@ -135,6 +144,13 @@ object NativeDataSourceRegistry extends Logging {
         Nil
       }
     }
+  }
+
+  private def packageFilesIn(dir: File): Seq[File] = {
+    dir.listFiles()
+      .filter(f => f.isFile && f.getName.endsWith(NativeDataSourcePackage.FILE_EXTENSION))
+      .sortBy(_.getName)
+      .toSeq
   }
 
   private def artifactPackageFiles(): Seq[File] = {
