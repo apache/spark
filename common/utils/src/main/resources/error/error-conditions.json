@@ -294,6 +294,11 @@
           "One or more AutoCDC flows writing to the target use key columns <expectedKeySchema>, which are inconsistent with the keys recorded for it (recorded <recordedKeySchema>). AutoCDC does not support changing key columns or their types across incremental pipeline runs. Correct the conflicting flow(s) or perform a full refresh of the target table."
         ]
       },
+      "RESERVED_METADATA_COLUMN_CASING_DRIFT" : {
+        "message" : [
+          "The target table already has the reserved AutoCDC metadata column as `<existingColumnName>`, but the current table definition resolves it to `<resolvedColumnName>`. AutoCDC does not support changing the casing of the reserved metadata column across incremental pipeline runs: the target keeps its existing spelling while downstream consumers are planned against the new one, so a case-sensitive read of the target could fail to match them. Declare the reserved column with its existing name `<existingColumnName>`, or perform a full refresh of the target table."
+        ]
+      },
       "SCD_TYPE_DRIFT" : {
         "message" : [
           "One or more AutoCDC flows writing to the target use SCD type <expectedScdType>, which is inconsistent with the SCD type recorded for it (recorded <recordedScdType>). AutoCDC does not support changing a target's SCD type across incremental pipeline runs. Correct the conflicting flow(s) or perform a full refresh of the target table."
