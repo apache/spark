@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.csv
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.StructFilters
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.sources.Filter
@@ -48,7 +49,9 @@ case class CSVScanBuilder(
 
   override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
     if (sparkSession.sessionState.conf.csvFilterPushDown) {
-      StructFilters.pushedFilters(dataFilters, dataSchema)
+      CharVarcharUtils.excludeFiltersOnCharColumns(
+        StructFilters.pushedFilters(dataFilters, dataSchema),
+        dataSchema).toArray
     } else {
       Array.empty[Filter]
     }

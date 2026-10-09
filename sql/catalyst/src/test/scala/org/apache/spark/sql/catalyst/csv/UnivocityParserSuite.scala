@@ -416,24 +416,20 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
         "pattern" -> "invalid"))
   }
 
-  test("SPARK-60102: CHAR assignment after parse skips filter pushdown") {
+  test("SPARK-60102: CHAR column filters are not applied in the parser") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      val schema = StructType.fromDDL("c CHAR(4)")
+      val schema = StructType.fromDDL("c CHAR(4), i INT")
       val options = new CSVOptions(Map.empty[String, String], false, "UTC")
-      val parser = new UnivocityParser(
-        schema,
-        schema,
-        options,
-        Seq(EqualTo("c", UTF8String.fromString("ab  "))))
-      assert(parser.parse("ab") === Some(InternalRow(UTF8String.fromString("ab  "))))
+      // STRING equality of the unpadded literal would drop the padded CHAR value.
+      val charParser = new UnivocityParser(
+        schema, schema, options, Seq(EqualTo("c", UTF8String.fromString("ab"))))
+      assert(charParser.parse("ab,1") ===
+        Some(InternalRow(UTF8String.fromString("ab  "), 1)))
 
-      val overflow = intercept[BadRecordException] {
-        new UnivocityParser(schema, options).parse("abcdef")
-      }
-      checkError(
-        exception = overflow.getCause.asInstanceOf[SparkRuntimeException],
-        condition = "EXCEED_LIMIT_LENGTH",
-        parameters = Map("limit" -> "4"))
+      val intParser = new UnivocityParser(schema, schema, options, Seq(EqualTo("i", 2)))
+      assert(intParser.parse("ab,1") === None)
+      assert(intParser.parse("ab,2") ===
+        Some(InternalRow(UTF8String.fromString("ab  "), 2)))
     }
   }
 }

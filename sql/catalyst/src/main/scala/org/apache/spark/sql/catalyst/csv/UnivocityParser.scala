@@ -29,7 +29,7 @@ import com.univocity.parsers.csv.CsvParser
 import org.apache.spark.{SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, ExprUtils, GenericInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.{ExecutionErrors, QueryExecutionErrors}
@@ -115,15 +115,12 @@ class UnivocityParser(
     isParsing = true)
   private lazy val timeFormatter = TimeFormatter(options.timeFormatInRead, isParsing = true)
 
-  // CHAR/VARCHAR is STRING-on-the-wire in CSV. Parse as unbounded STRING, then assign.
-  private val physicalRequiredSchema: StructType =
-    CharVarcharUtils.replaceCharVarcharWithStringAlways(requiredSchema)
-      .asInstanceOf[StructType]
-
-  private val csvFilters = if (SQLConf.get.csvFilterPushDown &&
-      !CharVarcharUtils.hasCharVarchar(dataSchema) &&
-      !CharVarcharUtils.hasCharVarchar(requiredSchema)) {
-    new OrderedFilters(filters, requiredSchema)
+  // CHAR padding in the STRING converter does not match source Filter STRING equality.
+  // Skip only filters on CHAR columns; other columns still push down.
+  private val csvFilters = if (SQLConf.get.csvFilterPushDown) {
+    new OrderedFilters(
+      CharVarcharUtils.excludeFiltersOnCharColumns(filters, dataSchema, requiredSchema),
+      requiredSchema)
   } else {
     new NoopFilters
   }
@@ -181,29 +178,8 @@ class UnivocityParser(
     if (options.singleVariantColumn.isDefined) {
       null
     } else {
-      physicalRequiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
+      requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
     }
-
-  private val assignExpr: Expression =
-    CharVarcharUtils.assignAfterParse(
-      BoundReference(0, physicalRequiredSchema, nullable = true),
-      requiredSchema)
-
-  /**
-   * Pad CHAR / length-check VARCHAR on a row parsed as unbounded STRING.
-   * The helper takes the parsed value, not a JSON-shaped wrapper row.
-   */
-  private def applyAssignment(row: InternalRow): InternalRow = {
-    CharVarcharUtils.assignParsedValue(row, assignExpr).asInstanceOf[InternalRow]
-  }
-
-  private def tryAssignPartial(row: InternalRow): Array[InternalRow] = {
-    try {
-      Array(applyAssignment(row))
-    } catch {
-      case NonFatal(_) => Array.empty
-    }
-  }
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
@@ -306,8 +282,10 @@ class UnivocityParser(
         timeFormatter.parse(datum)
       }
 
-    case _: StringType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
+    case dt: StringType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { s =>
+        CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(s), dt)
+      }
 
     case _: BinaryType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(_.getBytes)
@@ -470,19 +448,9 @@ class UnivocityParser(
     } else {
       if (badRecordException.isDefined) {
         throw BadRecordException(
-          () => currentInput,
-          () => tryAssignPartial(row),
-          badRecordException.get)
+          () => currentInput, () => Array(requiredRow.get), badRecordException.get)
       } else {
-        try {
-          val assigned = applyAssignment(row)
-          if (assigned eq row) requiredRow else Some(assigned)
-        } catch {
-          case e: SparkUpgradeException => throw e
-          case NonFatal(e) =>
-            // Do not keep the STRING row: PERMISSIVE would then project it as CHAR/VARCHAR.
-            throw BadRecordException(() => currentInput, () => Array.empty, e)
-        }
+        requiredRow
       }
     }
   }

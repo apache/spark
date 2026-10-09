@@ -25,7 +25,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.CompressionCodecs
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CompressionCodecs}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
@@ -119,8 +119,10 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
 
     // Don't push any filter which refers to the "virtual" column which cannot present in the input.
     // Such filters will be applied later on the upper layer.
-    val actualFilters =
-      filters.filterNot(_.references.contains(parsedOptions.columnNameOfCorruptRecord))
+    val actualFilters = CharVarcharUtils.excludeFiltersOnCharColumns(
+      filters.filterNot(_.references.contains(parsedOptions.columnNameOfCorruptRecord)),
+      dataSchema,
+      requiredSchema)
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
