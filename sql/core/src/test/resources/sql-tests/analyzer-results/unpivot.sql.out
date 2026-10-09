@@ -186,3 +186,129 @@ Sort [kind#x ASC NULLS FIRST], true
             +- Project [cast(id#x as int) AS id#x, cast(date1#x as date) AS date1#x, cast(int1#x as int) AS int1#x, cast(date2#x as date) AS date2#x, cast(int2#x as int) AS int2#x, cast(date3#x as date) AS date3#x, cast(int3#x as int) AS int3#x]
                +- Project [1 AS id#x, cast(2026-01-01 as date) AS date1#x, cast(null as int) AS int1#x, cast(null as date) AS date2#x, 2 AS int2#x, cast(null as date) AS date3#x, cast(null as int) AS int3#x]
                   +- OneRowRelation
+
+
+-- !query
+create temporary view monthlySales as select * from values
+  ("north", 10, 20, 30, cast(null as int)),
+  ("south", 5, 6, NULL, NULL)
+  as monthlySales(store, jan, feb, mar, apr)
+-- !query analysis
+CreateViewCommand `monthlySales`, select * from values
+  ("north", 10, 20, 30, cast(null as int)),
+  ("south", 5, 6, NULL, NULL)
+  as monthlySales(store, jan, feb, mar, apr), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [store#x, jan#x, feb#x, mar#x, apr#x]
+      +- SubqueryAlias monthlySales
+         +- LocalRelation [store#x, jan#x, feb#x, mar#x, apr#x]
+
+
+-- !query
+SELECT store, half, b.lo, b.hi, b.hi IS NULL AS hi_is_null
+FROM (
+  SELECT store, named_struct('lo', jan, 'hi', feb) AS h1, named_struct('lo', mar, 'hi', apr) AS h2
+  FROM monthlySales
+)
+UNPIVOT (b FOR half IN (h1, h2))
+ORDER BY store, half
+-- !query analysis
+Sort [store#x ASC NULLS FIRST, half#x ASC NULLS FIRST], true
++- Project [store#x, half#x, b#x.lo AS lo#x, b#x.hi AS hi#x, isnull(b#x.hi) AS hi_is_null#x]
+   +- Filter isnotnull(coalesce(b#x))
+      +- Expand [[store#x, h1, cast(h1#x as struct<lo:int,hi:int>)], [store#x, h2, h2#x]], [store#x, half#x, b#x]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [store#x, named_struct(lo, jan#x, hi, feb#x) AS h1#x, named_struct(lo, mar#x, hi, apr#x) AS h2#x]
+               +- SubqueryAlias monthlysales
+                  +- View (`monthlySales`, [store#x, jan#x, feb#x, mar#x, apr#x])
+                     +- Project [cast(store#x as string) AS store#x, cast(jan#x as int) AS jan#x, cast(feb#x as int) AS feb#x, cast(mar#x as int) AS mar#x, cast(apr#x as int) AS apr#x]
+                        +- Project [store#x, jan#x, feb#x, mar#x, apr#x]
+                           +- SubqueryAlias monthlySales
+                              +- LocalRelation [store#x, jan#x, feb#x, mar#x, apr#x]
+
+
+-- !query
+SELECT store, half, b.lo, b.hi, b.hi IS NULL AS hi_is_null
+FROM (
+  SELECT store, named_struct('lo', jan, 'hi', feb) AS h1, named_struct('lo', mar, 'hi', apr) AS h2
+  FROM monthlySales
+)
+UNPIVOT (b FOR half IN (h2, h1))
+ORDER BY store, half
+-- !query analysis
+Sort [store#x ASC NULLS FIRST, half#x ASC NULLS FIRST], true
++- Project [store#x, half#x, b#x.lo AS lo#x, b#x.hi AS hi#x, isnull(b#x.hi) AS hi_is_null#x]
+   +- Filter isnotnull(coalesce(b#x))
+      +- Expand [[store#x, h2, h2#x], [store#x, h1, cast(h1#x as struct<lo:int,hi:int>)]], [store#x, half#x, b#x]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [store#x, named_struct(lo, jan#x, hi, feb#x) AS h1#x, named_struct(lo, mar#x, hi, apr#x) AS h2#x]
+               +- SubqueryAlias monthlysales
+                  +- View (`monthlySales`, [store#x, jan#x, feb#x, mar#x, apr#x])
+                     +- Project [cast(store#x as string) AS store#x, cast(jan#x as int) AS jan#x, cast(feb#x as int) AS feb#x, cast(mar#x as int) AS mar#x, cast(apr#x as int) AS apr#x]
+                        +- Project [store#x, jan#x, feb#x, mar#x, apr#x]
+                           +- SubqueryAlias monthlySales
+                              +- LocalRelation [store#x, jan#x, feb#x, mar#x, apr#x]
+
+
+-- !query
+SELECT store, half, m, m IS NULL AS m_is_null
+FROM (SELECT store, array(jan, feb) AS h1, array(mar, apr) AS h2 FROM monthlySales)
+UNPIVOT (months FOR half IN (h1, h2))
+LATERAL VIEW explode(months) e AS m
+ORDER BY store, half, m
+-- !query analysis
+Sort [store#x ASC NULLS FIRST, half#x ASC NULLS FIRST, m#x ASC NULLS FIRST], true
++- Project [store#x, half#x, m#x, isnull(m#x) AS m_is_null#x]
+   +- Generate explode(months#x), false, e, [m#x]
+      +- Filter isnotnull(coalesce(months#x))
+         +- Expand [[store#x, h1, cast(h1#x as array<int>)], [store#x, h2, h2#x]], [store#x, half#x, months#x]
+            +- SubqueryAlias __auto_generated_subquery_name
+               +- Project [store#x, array(jan#x, feb#x) AS h1#x, array(mar#x, apr#x) AS h2#x]
+                  +- SubqueryAlias monthlysales
+                     +- View (`monthlySales`, [store#x, jan#x, feb#x, mar#x, apr#x])
+                        +- Project [cast(store#x as string) AS store#x, cast(jan#x as int) AS jan#x, cast(feb#x as int) AS feb#x, cast(mar#x as int) AS mar#x, cast(apr#x as int) AS apr#x]
+                           +- Project [store#x, jan#x, feb#x, mar#x, apr#x]
+                              +- SubqueryAlias monthlySales
+                                 +- LocalRelation [store#x, jan#x, feb#x, mar#x, apr#x]
+
+
+-- !query
+SELECT store, half, m['k'] AS v, m['k'] IS NULL AS v_is_null
+FROM (SELECT store, map('k', jan) AS m1, map('k', mar) AS m2 FROM monthlySales)
+UNPIVOT (m FOR half IN (m1, m2))
+ORDER BY store, half
+-- !query analysis
+Sort [store#x ASC NULLS FIRST, half#x ASC NULLS FIRST], true
++- Project [store#x, half#x, m#x[k] AS v#x, isnull(m#x[k]) AS v_is_null#x]
+   +- Filter isnotnull(coalesce(m#x))
+      +- Expand [[store#x, m1, cast(m1#x as map<string,int>)], [store#x, m2, m2#x]], [store#x, half#x, m#x]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [store#x, map(k, jan#x) AS m1#x, map(k, mar#x) AS m2#x]
+               +- SubqueryAlias monthlysales
+                  +- View (`monthlySales`, [store#x, jan#x, feb#x, mar#x, apr#x])
+                     +- Project [cast(store#x as string) AS store#x, cast(jan#x as int) AS jan#x, cast(feb#x as int) AS feb#x, cast(mar#x as int) AS mar#x, cast(apr#x as int) AS apr#x]
+                        +- Project [store#x, jan#x, feb#x, mar#x, apr#x]
+                           +- SubqueryAlias monthlySales
+                              +- LocalRelation [store#x, jan#x, feb#x, mar#x, apr#x]
+
+
+-- !query
+SELECT store, half, s.hi, s.hi IS NULL AS hi_is_null, a
+FROM (
+  SELECT store, named_struct('hi', feb) AS s1, jan AS a1, named_struct('hi', apr) AS s2, mar AS a2
+  FROM monthlySales
+)
+UNPIVOT ((s, a) FOR half IN ((s1, a1) AS x, (s2, a2) AS y))
+ORDER BY store, half
+-- !query analysis
+Sort [store#x ASC NULLS FIRST, half#x ASC NULLS FIRST], true
++- Project [store#x, half#x, s#x.hi AS hi#x, isnull(s#x.hi) AS hi_is_null#x, a#x]
+   +- Filter (isnotnull(s#x) OR isnotnull(a#x))
+      +- Expand [[store#x, x, cast(s1#x as struct<hi:int>), a1#x], [store#x, y, s2#x, a2#x]], [store#x, half#x, s#x, a#x]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [store#x, named_struct(hi, feb#x) AS s1#x, jan#x AS a1#x, named_struct(hi, apr#x) AS s2#x, mar#x AS a2#x]
+               +- SubqueryAlias monthlysales
+                  +- View (`monthlySales`, [store#x, jan#x, feb#x, mar#x, apr#x])
+                     +- Project [cast(store#x as string) AS store#x, cast(jan#x as int) AS jan#x, cast(feb#x as int) AS feb#x, cast(mar#x as int) AS mar#x, cast(apr#x as int) AS apr#x]
+                        +- Project [store#x, jan#x, feb#x, mar#x, apr#x]
+                           +- SubqueryAlias monthlySales
+                              +- LocalRelation [store#x, jan#x, feb#x, mar#x, apr#x]

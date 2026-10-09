@@ -7709,6 +7709,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_UNPIVOT_USE_FIRST_VALUE_NESTED_NULLABILITY =
+    buildConf("spark.sql.legacy.unpivot.useFirstValueNestedNullability")
+      .internal()
+      .doc("When true, the value columns of UNPIVOT and Dataset.unpivot take the nested " +
+        "nullability (array element, map value, and struct field nullability) of the first " +
+        "listed value, which is the behavior in Spark 4.3 and earlier. A NULL nested value of " +
+        "a later value can then be returned as a non-NULL value. When false, the nested " +
+        "nullability of all values is merged.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT =
     buildConf("spark.sql.legacy.createHiveTableByDefault")
       .internal()

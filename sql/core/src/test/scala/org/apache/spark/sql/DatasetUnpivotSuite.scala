@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.functions.{length, struct, sum}
+import org.apache.spark.sql.functions.{array, explode, length, lit, map, struct, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -663,6 +663,92 @@ class DatasetUnpivotSuite extends SharedSparkSession {
           exception = e,
           condition = "UNPIVOT_VALUE_SIZE_MISMATCH",
           parameters = Map("names" -> "2"))
+      }
+    }
+  }
+
+  test("unpivot sql with value groups of different sizes") {
+    // b differs from a only in nested nullability, d differs from a in element type
+    Seq("(a), (b, c)", "(b, c), (a)", "(a), (d, c)", "(d, c), (a)").foreach { groups =>
+      withClue(groups) {
+        val e = intercept[AnalysisException] {
+          spark.sql(s"""SELECT * FROM (
+                       |  SELECT array(1) a, array(cast(null as int)) b, 1 c, array(1L) d
+                       |)
+                       |UNPIVOT (
+                       |  (val1, val2) FOR col IN ($groups)
+                       |);
+                       |""".stripMargin)
+        }
+        checkError(
+          exception = e,
+          condition = "UNPIVOT_VALUE_SIZE_MISMATCH",
+          parameters = Map("names" -> "2"))
+      }
+    }
+  }
+
+  test("unpivot merges nested nullability of all values") {
+    // jan and feb are NOT NULL, mar and apr are nullable
+    val df = Seq(
+      ("north", 10, 20, Some(30), Option.empty[Int]),
+      ("south", 5, 6, Option.empty[Int], Option.empty[Int])
+    ).toDF("store", "jan", "feb", "mar", "apr")
+    val nullableLoHi = new StructType().add("lo", IntegerType).add("hi", IntegerType)
+
+    Seq(
+      Array[Column]($"h1", $"h2") -> Seq(
+        Row("north", "h1", 10, 20, false), Row("north", "h2", 30, null, true),
+        Row("south", "h1", 5, 6, false), Row("south", "h2", null, null, true)),
+      Array[Column]($"h2", $"h1") -> Seq(
+        Row("north", "h2", 30, null, true), Row("north", "h1", 10, 20, false),
+        Row("south", "h2", null, null, true), Row("south", "h1", 5, 6, false))
+    ).foreach { case (values, expected) =>
+      val unpivoted = df
+        .select(
+          $"store",
+          struct($"jan".as("lo"), $"feb".as("hi")).as("h1"),
+          struct($"mar".as("lo"), $"apr".as("hi")).as("h2"))
+        .unpivot(Array($"store"), values, "half", "b")
+      assert(unpivoted.schema("b").dataType === nullableLoHi)
+      checkAnswer(
+        unpivoted.select($"store", $"half", $"b.lo", $"b.hi", $"b.hi".isNull),
+        expected)
+    }
+
+    val arrays = df
+      .select($"store", array($"jan", $"feb").as("h1"), array($"mar", $"apr").as("h2"))
+      .unpivot(Array($"store"), Array($"h1", $"h2"), "half", "months")
+    assert(arrays.schema("months").dataType === ArrayType(IntegerType, containsNull = true))
+    checkAnswer(
+      arrays.select($"store", $"half", explode($"months").as("m")).select($"half", $"m".isNull),
+      Seq(
+        Row("h1", false), Row("h1", false), Row("h2", false), Row("h2", true),
+        Row("h1", false), Row("h1", false), Row("h2", true), Row("h2", true)))
+
+    val maps = df
+      .select($"store", map(lit("k"), $"jan").as("m1"), map(lit("k"), $"mar").as("m2"))
+      .unpivot(Array($"store"), Array($"m1", $"m2"), "half", "m")
+    assert(maps.schema("m").dataType ===
+      MapType(StringType, IntegerType, valueContainsNull = true))
+    checkAnswer(
+      maps.select($"store", $"half", $"m".getItem("k").isNull),
+      Seq(
+        Row("north", "m1", false), Row("north", "m2", false),
+        Row("south", "m1", false), Row("south", "m2", true)))
+  }
+
+  test("unpivot takes nested nullability of the first value with the legacy flag") {
+    withSQLConf(SQLConf.LEGACY_UNPIVOT_USE_FIRST_VALUE_NESTED_NULLABILITY.key -> "true") {
+      // a has NOT NULL elements, b has nullable elements
+      val df = Seq((1, Option.empty[Int])).toDF("id", "v")
+        .select($"id", array($"id").as("a"), array($"v").as("b"))
+      Seq(
+        Array[Column]($"a", $"b") -> false,
+        Array[Column]($"b", $"a") -> true
+      ).foreach { case (values, containsNull) =>
+        val unpivoted = df.unpivot(Array($"id"), values, "col", "value")
+        assert(unpivoted.schema("value").dataType === ArrayType(IntegerType, containsNull))
       }
     }
   }
