@@ -18,15 +18,18 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.File
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+
+import scala.concurrent.duration._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
-import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager, TestMemoryManager}
+import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager, TestMemoryConsumer, TestMemoryManager}
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.unsafe.memory.{MemoryAllocator, MemoryBlock}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
 
@@ -169,5 +172,121 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
       }
       queue.close()
     }
+  }
+
+  // Small pages so that a few rows span several in-memory queues.
+  private val smallPageSize = 1024L
+  private val smallPageConf = new SparkConf(false).set(BUFFER_PAGESIZE, smallPageSize)
+
+  /** Creates two distinct queues with the same constructor arguments. */
+  private def queuesWithSameArguments(
+      taskM: TaskMemoryManager): (HybridRowQueue, HybridRowQueue) = {
+    val serManager = createSerializerManager(smallPageConf)
+    val tempDir = Utils.createTempDir().getCanonicalFile
+    (HybridRowQueue(taskM, tempDir, 1, serManager), HybridRowQueue(taskM, tempDir, 1, serManager))
+  }
+
+  private def addRows(queue: HybridRowQueue, n: Int): Unit = {
+    val row = new UnsafeRow(1)
+    row.pointTo(new Array[Byte](16), 16)
+    (0 until n).foreach { i =>
+      row.setLong(0, i)
+      assert(queue.add(row) === QueueMode.IN_MEMORY)
+    }
+  }
+
+  private def drainAndClose(queue: HybridRowQueue, n: Int): Unit = {
+    (0 until n).foreach { i =>
+      assert(queue.remove().getLong(0) === i)
+    }
+    queue.close()
+  }
+
+  test("hybrid queues with the same fields are distinct memory consumers") {
+    val mem = new TestMemoryManager(smallPageConf)
+    val taskM = new TaskMemoryManager(mem, 0)
+    val (queue1, queue2) = queuesWithSameArguments(taskM)
+    assert(queue1 != queue2)
+    assert(queue1.toString.startsWith("HybridRowQueue(numFields=1, lockFree=false)@"))
+    assert(queue1.toString != queue2.toString)
+
+    // queue1 is registered first and holds a single page, which it never spills because the
+    // last queue is kept for writing. queue2 holds several pages and can release all but one.
+    addRows(queue1, 1)
+    val n = 150
+    addRows(queue2, n)
+    assert(queue2.numQueues() > 2)
+    val queue2Used = queue2.getUsed
+
+    // Memory pressure from another consumer must be able to spill queue2.
+    mem.limit(0)
+    val consumer = new TestMemoryConsumer(taskM)
+    consumer.use(smallPageSize)
+    assert(consumer.getUsed === smallPageSize)
+    assert(queue2.getUsed === smallPageSize)
+    assert(queue2.getUsed < queue2Used)
+    consumer.free(smallPageSize)
+
+    drainAndClose(queue1, 1)
+    drainAndClose(queue2, n)
+    assert(taskM.cleanUpAllAllocatedMemory() === 0)
+  }
+
+  test("hybrid queue spills for another queue with the same fields") {
+    val taskM = new TaskMemoryManager(new TestMemoryManager(smallPageConf), 0)
+    val (queue1, queue2) = queuesWithSameArguments(taskM)
+    val n = 150
+    addRows(queue1, n)
+    assert(queue1.numQueues() > 2)
+    val used = queue1.getUsed
+    assert(queue1.spill(Long.MaxValue, queue2) === used - smallPageSize)
+    assert(queue1.spill(Long.MaxValue, queue1) === 0)
+    drainAndClose(queue1, n)
+    queue2.close()
+  }
+
+  test("closing a hybrid queue does not deadlock with a concurrent spill of it") {
+    val closeFreeingPage = new CountDownLatch(1)
+    val spillHoldingTaskMemoryManager = new CountDownLatch(1)
+    @volatile var closingThread: Thread = null
+    val taskM = new TaskMemoryManager(new TestMemoryManager(smallPageConf), 0) {
+      override def freePage(page: MemoryBlock, consumer: MemoryConsumer): Unit = {
+        if (Thread.currentThread() eq closingThread) {
+          // Pause close() at its first page free until the spilling thread holds this
+          // TaskMemoryManager's monitor, so the two lock orders are forced to overlap.
+          closeFreeingPage.countDown()
+          assert(spillHoldingTaskMemoryManager.await(10, TimeUnit.SECONDS))
+        }
+        super.freePage(page, consumer)
+      }
+    }
+    val (queue1, queue2) = queuesWithSameArguments(taskM)
+    addRows(queue2, 150)
+    assert(queue2.numQueues() > 2)
+
+    val pool = ThreadUtils.newDaemonFixedThreadPool(2, "row-queue-close-spill")
+    try {
+      val closing = pool.submit[Unit](() => {
+        closingThread = Thread.currentThread()
+        queue2.close()
+      })
+      // Mimic TaskMemoryManager.acquireExecutionMemory, which holds its monitor while it asks
+      // another consumer to spill.
+      val spilling = pool.submit[Long](() => {
+        assert(closeFreeingPage.await(10, TimeUnit.SECONDS))
+        taskM.synchronized {
+          spillHoldingTaskMemoryManager.countDown()
+          queue2.spill(Long.MaxValue, queue1)
+        }
+      })
+      ThreadUtils.awaitResult(closing, 10.seconds)
+      // close() has already detached all of queue2's pages, so the spill has nothing to release.
+      assert(ThreadUtils.awaitResult(spilling, 10.seconds) === 0L)
+    } finally {
+      pool.shutdownNow()
+    }
+    assert(queue2.getUsed === 0)
+    queue1.close()
+    assert(taskM.cleanUpAllAllocatedMemory() === 0)
   }
 }

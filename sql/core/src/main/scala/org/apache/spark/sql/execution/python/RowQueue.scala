@@ -181,8 +181,11 @@ private[python] case class DiskRowQueue(
  *
  * HybridRowQueue could be safely appended in one thread, and pulled in another thread in the same
  * time.
+ *
+ * This is not a case class: it is a memory consumer with identity equality (see [[HybridQueue]]),
+ * so copying or destructuring it by its constructor arguments would be meaningless.
  */
-case class HybridRowQueue(
+class HybridRowQueue(
     memManager: TaskMemoryManager,
     tempDir: File,
     numFields: Int,
@@ -209,9 +212,24 @@ case class HybridRowQueue(
 
   override protected def isInMemoryQueue(queue: RowQueue): Boolean =
     queue.isInstanceOf[InMemoryRowQueue]
+
+  // Shown in the per-consumer memory usage breakdown and TaskMemoryManager logs. The identity
+  // hash tells apart queues created with the same arguments.
+  override def toString: String =
+    s"HybridRowQueue(numFields=$numFields, lockFree=$lockFree)@" +
+      Integer.toHexString(System.identityHashCode(this))
 }
 
 object HybridRowQueue {
+  def apply(
+      taskMemoryMgr: TaskMemoryManager,
+      file: File,
+      fields: Int,
+      serMgr: SerializerManager,
+      lockFree: Boolean = false): HybridRowQueue = {
+    new HybridRowQueue(taskMemoryMgr, file, fields, serMgr, lockFree)
+  }
+
   def apply(taskMemoryMgr: TaskMemoryManager, file: File, fields: Int): HybridRowQueue = {
     HybridRowQueue(taskMemoryMgr, file, fields, SparkEnv.get.serializerManager)
   }
