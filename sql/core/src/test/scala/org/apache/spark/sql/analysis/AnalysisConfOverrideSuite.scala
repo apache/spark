@@ -107,7 +107,8 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
     }
   }
 
-  test("view and SQL function bodies follow a SESSION-bound config changed between queries") {
+  gridTest("view and SQL function bodies follow a SESSION-bound config changed between queries")(
+      Seq(true, false)) { memoize =>
     val key = SQLConf.LOWER_EMPTY_GROUPING_SET_TO_GLOBAL_AGGREGATE.key
     // Over empty input, this grand total returns one row when the config is on and none when off.
     val grandTotal =
@@ -120,7 +121,9 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
       checkAnswer(spark.sql("SELECT grand_total_func()"), Row(if (enabled) 0L else null))
     }
 
-    withSQLConf(key -> "true") {
+    withSQLConf(
+        key -> "true",
+        SQLConf.ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS.key -> memoize.toString) {
       withTempView("grand_total_temp_view") {
         withView("grand_total_view") {
           withUserDefinedFunction("grand_total_func" -> true) {

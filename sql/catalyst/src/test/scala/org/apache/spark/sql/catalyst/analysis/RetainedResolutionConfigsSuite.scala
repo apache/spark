@@ -195,14 +195,24 @@ class RetainedResolutionConfigsSuite extends SparkFunSuite {
     assert(sessionRetained.get(sessionBoundKey) == "false")
   }
 
-  test("disabling the memo recomputes retained configs on every call") {
-    val sessionConf = newSessionConf(memoizeKey -> "false")
-    val first = sessionConf.retainedResolutionConfigs
-    val second = sessionConf.retainedResolutionConfigs
+  test("with the memo disabled, body confs are built without consulting it") {
+    // A session conf whose memo throws, so a build that succeeds did not consult it.
+    def sessionConfWithThrowingMemo(memoize: Boolean): SQLConf = {
+      val sessionConf = new SQLConf {
+        override private[sql] def retainedResolutionConfigs: java.util.Map[String, String] =
+          throw new IllegalStateException("memo consulted")
+      }
+      newSessionConf(memoizeKey -> memoize.toString).getAllConfs.foreach {
+        case (key, value) => sessionConf.setConfString(key, value)
+      }
+      sessionConf
+    }
 
-    assert(first ne second)
-    assert(first.asScala == retainedFromSessionConf + (memoizeKey -> "false"))
-    assert(second.asScala == first.asScala)
+    intercept[IllegalStateException] {
+      buildViewConf(sessionConfWithThrowingMemo(memoize = true), Map.empty, "4.0.0")
+    }
+    assert(buildViewConf(sessionConfWithThrowingMemo(memoize = false), Map.empty, "4.0.0") ==
+      retainedFromSessionConf + (memoizeKey -> "false") + (SQLConf.ANSI_ENABLED.key -> "true"))
   }
 
   test("an executor-side read-only conf filters its settings without memoizing them") {

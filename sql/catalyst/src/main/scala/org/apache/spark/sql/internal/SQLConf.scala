@@ -121,6 +121,9 @@ object SQLConf {
    * sql/hive) is retained only after its holding object is initialized. Proto-defined entries are
    * all registered when `ConfigEntry` loads, and a replacement entry (e.g. from `checkValue`)
    * takes its binding policy from the same proto.
+   *
+   * `Analyzer.retainResolutionConfigsForAnalysis` applies the same rule directly while
+   * `ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS` is off.
    */
   private def filterRetainedResolutionConfigs(
       allConfs: scala.collection.Map[String, String]): util.Map[String, String] = {
@@ -2941,8 +2944,8 @@ object SQLConf {
       .doc("When true, each SQL conf memoizes the session-following configs that are copied " +
         "from it into the confs that resolve view and SQL function bodies, including nested " +
         "ones, and reuses them until that conf's settings or the registered SQL configs " +
-        "change. When false, they are recomputed on every body conf build. The resulting " +
-        "confs are the same either way.")
+        "change. When false, body confs are built as before this memo existed, recomputing " +
+        "these configs on every build. The resulting confs are the same either way.")
       .booleanConf
       .createWithDefault(true)
 
@@ -10446,10 +10449,11 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
    * confs built while this conf is active. One query can rebuild many body confs from the same
    * conf, so the result is memoized and reused only while neither these settings nor the
    * registered SQL config entries changed since it was computed.
+   * `Analyzer.retainResolutionConfigsForAnalysis` uses it only while
+   * `ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS` is on.
    */
   private[sql] def retainedResolutionConfigs: util.Map[String, String] = settings match {
-    case trackedSettings: ModificationCountingMap
-        if getConf(ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS) =>
+    case trackedSettings: ModificationCountingMap =>
       // Read before the entries it versions are consulted, so a concurrent registration leaves a
       // memo that is already stale rather than one that is silently missing the new entry.
       val entriesVersion = SQLConf.configEntriesVersion
