@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, JsonToStructs, Literal, StructsToJson, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -202,9 +202,9 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     val converter = CatalystTypeConverters.createToCatalystConverter(attr.dataType)
     attr.dataType match {
       // CHAR/VARCHAR must not reach the script reader; AstBuilder rewrites them to
-      // unbounded STRING and applies assignment in a Project when standard semantics
-      // are enabled. Reject any that still arrive (e.g. hand-built plans).
-      case dt @ (_: CharType | _: VarcharType) =>
+      // unbounded STRING and applies assignment in a Project when first-class types
+      // are enabled. Reject leftover CHAR/VARCHAR, including nested (hand-built plans).
+      case dt if CharVarcharUtils.hasCharVarchar(dt) =>
         throw QueryExecutionErrors.scriptTransformWithoutSerdeUnsupportedTypeError(dt)
       // Match collated STRING too (CHAR/VARCHAR COLLATE rewrite via toStringType).
       case _: StringType => wrapperConvertException(data => data, converter)
@@ -259,7 +259,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     }
   }
 
-  // Keep consistent with Hive `LazySimpleSerde`, when there is a type case error, return null
+  // Match Hive `LazySimpleSerDe`: return null when a type cast fails.
   private val wrapperConvertException: (String => Any, Any => Any) => String => Any =
     (f: String => Any, converter: Any => Any) =>
       (data: String) => converter {

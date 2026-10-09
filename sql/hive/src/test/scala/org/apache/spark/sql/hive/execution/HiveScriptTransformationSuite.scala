@@ -386,12 +386,12 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           |USING 'cat'
           |AS (
           |  chars ARRAY<CHAR(4) COLLATE UTF8_LCASE>,
-          |  nested STRUCT<value: VARCHAR(6)>)
+          |  nested STRUCT<value: VARCHAR(6) COLLATE UNICODE_CI>)
           |FROM VALUES (1) input(dummy)
           |""".stripMargin)
       assert(query.schema.map(_.dataType) === Seq(
         ArrayType(CharType(4, "UTF8_LCASE")),
-        StructType(Seq(StructField("value", VarcharType(6))))))
+        StructType(Seq(StructField("value", VarcharType(6, "UNICODE_CI"))))))
       checkAnswer(query, Row(Seq("ab  "), Row("xyz")))
 
       checkExceedLimitLength(

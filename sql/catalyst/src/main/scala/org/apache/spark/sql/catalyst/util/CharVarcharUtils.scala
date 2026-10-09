@@ -51,31 +51,27 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    * re-construct the original data type with CharType/VarcharType later when needed.
    */
   def replaceCharVarcharWithStringInSchema(st: StructType): StructType = {
-    StructType(st.map { field =>
-      if (hasCharVarchar(field.dataType)) {
-        val metadata = new MetadataBuilder().withMetadata(field.metadata)
-          .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, field.dataType.catalogString).build()
-        field.copy(dataType = replaceCharVarcharWithString(field.dataType), metadata = metadata)
-      } else {
-        field
-      }
-    })
+    replaceCharVarcharWithStringInSchema(st, replaceCharVarcharWithString)
   }
 
   /**
    * Like [[replaceCharVarcharWithStringInSchema]], but always rewrites the physical type to
    * unbounded STRING even when first-class CHAR/VARCHAR is enabled. Hive TRANSFORM script I/O
-   * is STRING-on-the-wire; callers apply [[stringLengthCheck]] in a Project when standard
-   * semantics are enabled.
+   * is STRING-on-the-wire; callers apply [[stringLengthCheck]] in a Project when first-class
+   * CHAR/VARCHAR types are enabled.
    */
   def replaceCharVarcharWithStringInSchemaAlways(st: StructType): StructType = {
+    replaceCharVarcharWithStringInSchema(st, replaceCharVarcharWithStringAlways)
+  }
+
+  private def replaceCharVarcharWithStringInSchema(
+      st: StructType,
+      replace: DataType => DataType): StructType = {
     StructType(st.map { field =>
       if (hasCharVarchar(field.dataType)) {
         val metadata = new MetadataBuilder().withMetadata(field.metadata)
           .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, field.dataType.catalogString).build()
-        field.copy(
-          dataType = replaceCharVarcharWithStringAlways(field.dataType),
-          metadata = metadata)
+        field.copy(dataType = replace(field.dataType), metadata = metadata)
       } else {
         field
       }
@@ -266,10 +262,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
           // No field needs char/varchar processing, just return the original expression.
           expr
-        } else if (expr.nullable) {
-          If(IsNull(expr), Literal(null, struct.dataType), struct)
         } else {
-          struct
+          nullSafeRebuiltStruct(expr, struct)
         }
 
       case ArrayType(et, containsNull) =>
@@ -290,6 +284,19 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         }
 
       case _ => expr
+    }
+  }
+
+  /**
+   * Guard a rebuilt named_struct so a NULL input stays NULL. Use CaseWhen rather than If:
+   * CollationTypeCoercion rewrites If (no same-type skip) and can widen VARCHAR collations
+   * inside the struct to unbounded STRING. CaseWhen skips that when the branches already match.
+   */
+  private def nullSafeRebuiltStruct(expr: Expression, struct: CreateNamedStruct): Expression = {
+    if (expr.nullable) {
+      CaseWhen(Seq((IsNull(expr), Literal(null, struct.dataType))), Some(struct))
+    } else {
+      struct
     }
   }
 
@@ -399,11 +406,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           // GetStructField on a NULL struct yields NULL fields, which CreateNamedStruct would
           // turn into a non-NULL struct of NULLs. Guard it the same way the scan-side rewrite
           // in processStringForCharVarchar does.
-          Some(if (expr.nullable) {
-            If(IsNull(expr), Literal(null, struct.dataType), struct)
-          } else {
-            struct
-          })
+          Some(nullSafeRebuiltStruct(expr, struct))
         } else {
           None
         }
