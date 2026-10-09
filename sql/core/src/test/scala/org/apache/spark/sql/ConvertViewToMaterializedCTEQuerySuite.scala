@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.plans.logical.{RepartitionByExpression, ResolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, RepartitionByExpression, ResolvedHint}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions.rand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -186,6 +187,68 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
           checkAnswer(spark.sql(query), expected)
         }
       }
+    }
+  }
+
+  test("join hints in the view body are applied to the consuming joins") {
+    // A join strategy hint written in the view body applies to the join(s) the view
+    // takes part in (SPARK-40999). Conversion replaces the View with a leaf
+    // CTERelationRef, which would strand the hint in the definition body and silently
+    // downgrade a broadcast self-join to SortMergeJoin, so the rule must re-attach the
+    // body's hints above the reference sites.
+    withTable("t", "big") {
+      sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 100)")
+      sql("CREATE TABLE big USING parquet AS SELECT id FROM range(0, 1000)")
+      withTempView("v") {
+        sql("CREATE TEMP VIEW v AS SELECT /*+ BROADCAST(t) */ id, k FROM t WHERE k < 4")
+
+        // Covers both rewrite branches: in the self join both occurrences are direct
+        // references on opposite join sides; in the chain of two joins the second join
+        // reuses the definition created by the first occurrence.
+        val queries = Seq(
+          "SELECT t1.id FROM v t1 JOIN v t2 ON t1.id = t2.id",
+          "SELECT b.id FROM big b JOIN v t1 ON b.id = t1.id JOIN v t2 ON b.id = t2.id")
+
+        queries.foreach { query =>
+          val expected = countBroadcastHintedJoins(query)
+          assert(expected > 0, s"precondition broken, hint not resolved: $query")
+          withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+            assert(countBroadcastHintedJoins(query) == expected,
+              s"conversion changed the join hints of: $query")
+          }
+        }
+
+        // With the broadcast threshold disabled, the hint is what keeps the self join
+        // a BroadcastHashJoin instead of a SortMergeJoin.
+        val query = queries.head
+        val expected = countBroadcastHashJoins(query, aqe = false)
+        assert(expected == 1, s"precondition broken, no broadcast join: $expected")
+        withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+          assert(countBroadcastHashJoins(query, aqe = false) == expected,
+            "broadcast hint was lost under conversion")
+        }
+      }
+    }
+  }
+
+  private def countBroadcastHintedJoins(query: String): Int =
+    spark.sql(query).queryExecution.optimizedPlan.collect {
+      case j: Join => j.hint
+    }.count { h =>
+      h.leftHint.exists(_.strategy.contains(BROADCAST)) ||
+        h.rightHint.exists(_.strategy.contains(BROADCAST))
+    }
+
+  private def countBroadcastHashJoins(query: String, aqe: Boolean): Int = {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+      val df = spark.sql(query)
+      df.collect()
+      // `collect` from AdaptiveSparkPlanHelper also descends through AQE wrappers.
+      collect(df.queryExecution.executedPlan) {
+        case _: BroadcastHashJoinExec => 1
+      }.length
     }
   }
 

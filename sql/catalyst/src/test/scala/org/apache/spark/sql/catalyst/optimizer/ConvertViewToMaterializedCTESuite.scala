@@ -150,6 +150,49 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
     }
   }
 
+  test("moves view-body join hints above the references") {
+    withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+      // A join hint at the top of the view body binds to the join(s) the view takes part
+      // in (SPARK-40999): after this rule replaces the View with a CTERelationRef, which
+      // is a leaf, the following EliminateResolvedHint can no longer hoist the hint
+      // through the tree. The definition is built from the hint-free body, and the
+      // extracted hints are re-attached above each reference so that hint hoisting keeps
+      // reaching the outer joins as before conversion.
+      val broadcastHint = HintInfo(Some(BROADCAST))
+      val base = Seq(attr("a", 100), attr("b", 101))
+      val (v1, v2, renewed) = sameViewTwice("v", base, (as: Seq[AttributeReference]) =>
+        ResolvedHint(simpleBody(as.head, as(1)), broadcastHint))
+      val query = Join(v1, v2, Inner, Some(base(0) === renewed(0)), JoinHint(None, None))
+
+      val optimized = Optimize.execute(query)
+
+      val WithCTE(mainPlan, cteDefs) = optimized
+      assert(cteDefs.length == 1)
+      // The definition must be built from the hint-free body.
+      assert(cteDefs.head.child.collect { case h: ResolvedHint => h }.isEmpty,
+        s"definition body still carries the hint: ${cteDefs.head.child}")
+
+      // Each reference carries the body's hint above it: the first occurrence wraps the
+      // bare reference, the later occurrence wraps its rebinding Project.
+      val hinted = mainPlan.collect {
+        case h @ ResolvedHint(_, hints) => (h, hints)
+      }
+      assert(hinted.length == 2, s"expected two hinted references in: $mainPlan")
+      assert(hinted.forall { case (_, hints) => hints == broadcastHint })
+      assert(hinted.count { case (h, _) => h.child.isInstanceOf[CTERelationRef] } == 1,
+        s"first reference must be hinted directly: $mainPlan")
+      assert(hinted.count { case (h, _) => h.child.isInstanceOf[Project] } == 1,
+        s"rebinding reference must be hinted above its Project: $mainPlan")
+
+      // The rebinding occurrence's identity is preserved under its hint.
+      val bindingProject = hinted.collect { case (ResolvedHint(p: Project, _), _) => p }.head
+      assert(bindingProject.output.map(_.exprId) == renewed.map(_.exprId))
+
+      // The query output schema is unchanged.
+      assert(optimized.output == query.output)
+    }
+  }
+
   test("leaves a single-reference view unchanged") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
       val a1 = attr("a", 100)
