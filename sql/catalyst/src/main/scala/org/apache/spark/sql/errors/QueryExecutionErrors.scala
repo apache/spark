@@ -828,6 +828,24 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("fileName" -> fileName, "checksum" -> checksum))
   }
 
+  def invalidNativeDataSourceLibraryError(
+      path: String,
+      subClass: String,
+      messageParameters: Map[String, String],
+      cause: Throwable = null): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = s"INVALID_NATIVE_DATA_SOURCE_LIBRARY.$subClass",
+      messageParameters = Map("path" -> path) ++ messageParameters,
+      cause = cause)
+  }
+
+  def nativeDataSourceLibraryNotFoundError(
+      fileName: String, path: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "NATIVE_DATA_SOURCE_LIBRARY_NOT_FOUND",
+      messageParameters = Map("fileName" -> fileName, "path" -> path))
+  }
+
   def removedClassInSpark2Error(className: String, e: Throwable): SparkClassNotFoundException = {
     new SparkClassNotFoundException(
       errorClass = "_LEGACY_ERROR_TEMP_2052",

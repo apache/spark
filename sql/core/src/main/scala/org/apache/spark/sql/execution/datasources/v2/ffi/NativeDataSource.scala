@@ -44,17 +44,19 @@ import org.apache.spark.util.Utils
  * A [[ColumnarDataSource]] implemented by a native library, through
  * `org.apache.spark.sql.datasource.NativeBridge`.
  *
- * @param name the name of the data source, as listed in the manifest of the package
+ * @param location where the library is
+ * @param name the name of the data source, as listed in the manifest of its package or in lower
+ *             case for an installed library
  */
 class NativeDataSource(
-    pkg: NativeDataSourcePackage,
+    location: NativeLibraryLocation,
     name: String,
     options: CaseInsensitiveStringMap)
   extends ColumnarDataSource {
   import NativeCalls._
 
   override def schema(): StructType = {
-    val library = NativeLibraries.get(pkg)
+    val library = NativeLibraries.get(location)
     withDataSource(library, "infer the schema of") { dataSource =>
       call(name, "infer the schema of") {
         optional(NativeArrow.importSchema(address => library.schema(dataSource, address)))
@@ -63,26 +65,27 @@ class NativeDataSource(
   }
 
   override def reader(schema: StructType): ColumnarReader = {
-    val library = NativeLibraries.get(pkg)
+    val library = NativeLibraries.get(location)
     val handle = create(library, "plan a scan of", "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED") {
       dataSource =>
         NativeArrow.exportSchema(schema)(address => library.createReader(dataSource, address))
     }
-    new NativeDataSourceReader(pkg, name, schema, new NativeHandle(handle, library.closeReader))
+    new NativeDataSourceReader(
+      location, name, schema, new NativeHandle(handle, library.closeReader))
   }
 
   override def streamReader(schema: StructType): ColumnarStreamReader = {
-    val library = NativeLibraries.get(pkg)
+    val library = NativeLibraries.get(location)
     val handle = create(library, "plan a scan of", "DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED") {
       dataSource =>
         NativeArrow.exportSchema(schema)(address => library.createStreamReader(dataSource, address))
     }
     new NativeDataSourceStreamReader(
-      pkg, name, schema, new NativeHandle(handle, library.closeStreamReader))
+      location, name, schema, new NativeHandle(handle, library.closeStreamReader))
   }
 
   override def writer(schema: StructType, overwrite: Boolean): ColumnarWriter = {
-    val library = NativeLibraries.get(pkg)
+    val library = NativeLibraries.get(location)
     val handle = new NativeHandle(
       create(library, "plan a write to", "DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED") { dataSource =>
         NativeArrow.exportSchema(schema) { address =>
@@ -90,11 +93,11 @@ class NativeDataSource(
         }
       },
       library.closeWriter)
-    new NativeDataSourceWriter(pkg, name, handle, serializeWriter(library, handle))
+    new NativeDataSourceWriter(location, name, handle, serializeWriter(library, handle))
   }
 
   override def streamWriter(schema: StructType, overwrite: Boolean): ColumnarStreamWriter = {
-    val library = NativeLibraries.get(pkg)
+    val library = NativeLibraries.get(location)
     val handle = new NativeHandle(
       create(library, "plan a write to", "DATA_SOURCE_STREAMING_WRITE_NOT_SUPPORTED") {
         dataSource =>
@@ -103,7 +106,7 @@ class NativeDataSource(
           }
       },
       library.closeWriter)
-    new NativeDataSourceStreamWriter(pkg, name, handle, serializeWriter(library, handle))
+    new NativeDataSourceStreamWriter(location, name, handle, serializeWriter(library, handle))
   }
 
   /** Runs `f` with a new native data source, which is closed afterwards. */
@@ -141,7 +144,7 @@ class NativeDataSource(
 
 /** Reads a native data source for a batch scan. */
 class NativeDataSourceReader(
-    pkg: NativeDataSourcePackage,
+    location: NativeLibraryLocation,
     name: String,
     schema: StructType,
     @transient private val handle: NativeHandle)
@@ -153,7 +156,7 @@ class NativeDataSourceReader(
   private var readSchema: StructType = schema
   @transient private var plannedPartitions: Array[InputPartition] = _
 
-  @transient private lazy val library = NativeLibraries.get(pkg)
+  @transient private lazy val library = NativeLibraries.get(location)
 
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     // Only the predicates that can be expressed in JSON are passed to the library.
@@ -208,13 +211,13 @@ class NativeDataSourceReader(
 
   override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     new NativePartitionReader(
-      pkg, name, readerState, partition.asInstanceOf[NativeInputPartition].bytes, readSchema)
+      location, name, readerState, partition.asInstanceOf[NativeInputPartition].bytes, readSchema)
   }
 }
 
 /** Reads a native data source for a micro-batch streaming scan. */
 class NativeDataSourceStreamReader(
-    pkg: NativeDataSourcePackage,
+    location: NativeLibraryLocation,
     name: String,
     schema: StructType,
     @transient private val handle: NativeHandle)
@@ -225,7 +228,7 @@ class NativeDataSourceStreamReader(
   // the executors with the partitions of that micro-batch.
   private var readerState: Array[Byte] = Array.emptyByteArray
 
-  @transient private lazy val library = NativeLibraries.get(pkg)
+  @transient private lazy val library = NativeLibraries.get(location)
 
   override def initialOffset(): String = {
     call(name, "plan a scan of")(library.initialOffset(handle.get))
@@ -246,7 +249,7 @@ class NativeDataSourceStreamReader(
 
   override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     new NativePartitionReader(
-      pkg, name, readerState, partition.asInstanceOf[NativeInputPartition].bytes, schema)
+      location, name, readerState, partition.asInstanceOf[NativeInputPartition].bytes, schema)
   }
 
   override def commit(end: String): Unit = {
@@ -258,17 +261,17 @@ class NativeDataSourceStreamReader(
 
 /** Writes to a native data source for a batch write. */
 class NativeDataSourceWriter(
-    pkg: NativeDataSourcePackage,
+    location: NativeLibraryLocation,
     name: String,
     @transient private val handle: NativeHandle,
     writerState: Array[Byte])
   extends ColumnarWriter {
   import NativeCalls._
 
-  @transient private lazy val library = NativeLibraries.get(pkg)
+  @transient private lazy val library = NativeLibraries.get(location)
 
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[ColumnarBatch] = {
-    new NativeDataWriter(pkg, name, writerState, partitionId, taskId, epochId = -1L)
+    new NativeDataWriter(location, name, writerState, partitionId, taskId, epochId = -1L)
   }
 
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
@@ -289,20 +292,20 @@ class NativeDataSourceWriter(
 
 /** Writes to a native data source for a streaming write. */
 class NativeDataSourceStreamWriter(
-    pkg: NativeDataSourcePackage,
+    location: NativeLibraryLocation,
     name: String,
     @transient private val handle: NativeHandle,
     writerState: Array[Byte])
   extends ColumnarStreamWriter {
   import NativeCalls._
 
-  @transient private lazy val library = NativeLibraries.get(pkg)
+  @transient private lazy val library = NativeLibraries.get(location)
 
   override def createWriter(
       partitionId: Int,
       taskId: Long,
       epochId: Long): DataWriter[ColumnarBatch] = {
-    new NativeDataWriter(pkg, name, writerState, partitionId, taskId, epochId)
+    new NativeDataWriter(location, name, writerState, partitionId, taskId, epochId)
   }
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
@@ -346,7 +349,7 @@ object NativeWriterCommitMessage {
  * imported into Arrow vectors that back the returned batch.
  */
 class NativePartitionReader(
-    pkg: NativeDataSourcePackage,
+    location: NativeLibraryLocation,
     name: String,
     readerState: Array[Byte],
     partition: Array[Byte],
@@ -373,7 +376,7 @@ class NativePartitionReader(
   }
 
   private def openStream(): ArrowReader = {
-    val library = NativeLibraries.get(pkg)
+    val library = NativeLibraries.get(location)
     val stream = ArrowArrayStream.allocateNew(allocator)
     try {
       call(name, "read")(optional(library.read(readerState, partition, stream.memoryAddress())))
@@ -432,7 +435,7 @@ class NativePartitionReader(
 
 /** Writes the batches of a task to the data writer of a native library. */
 class NativeDataWriter(
-    pkg: NativeDataSourcePackage,
+    location: NativeLibraryLocation,
     name: String,
     writerState: Array[Byte],
     partitionId: Int,
@@ -441,7 +444,7 @@ class NativeDataWriter(
   extends DataWriter[ColumnarBatch] {
   import NativeCalls._
 
-  private val library = NativeLibraries.get(pkg)
+  private val library = NativeLibraries.get(location)
   // Zero once the data writer was committed or aborted, which releases it.
   private var handle: Long = call(name, "write to") {
     library.createDataWriter(writerState, partitionId, taskId, epochId)

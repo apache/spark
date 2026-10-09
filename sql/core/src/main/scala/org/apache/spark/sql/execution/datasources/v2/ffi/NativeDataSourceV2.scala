@@ -39,28 +39,28 @@ class NativeDataSourceV2 extends NamedTableProvider {
     shortName = name
   }
 
-  // The name of the data source as listed in the manifest, and its package. Resolved on first
-  // use, which is while the query is analyzed, with the configuration of its session.
-  private lazy val resolved: (String, NativeDataSourcePackage) = {
+  // The name of the data source, and where its library is. Resolved on first use, which is while
+  // the query is analyzed, with the configuration of its session.
+  private lazy val resolved: (String, NativeLibraryLocation) = {
     assert(shortName != null)
-    val (name, pkg) = NativeDataSourceRegistry.lookup(shortName, SQLConf.get).getOrElse {
+    val (name, location) = NativeDataSourceRegistry.lookup(shortName, SQLConf.get).getOrElse {
       throw QueryCompilationErrors.dataSourceDoesNotExist(shortName)
     }
-    (name, NativeDataSourceRegistry.distribute(pkg))
+    (name, NativeDataSourceRegistry.distribute(location))
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
-    val (name, pkg) = resolved
-    new NativeDataSource(pkg, name, options).schema()
+    val (name, location) = resolved
+    new NativeDataSource(location, name, options).schema()
   }
 
   override def getTable(
       schema: StructType,
       partitioning: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    val (name, pkg) = resolved
+    val (name, location) = resolved
     new ColumnarTable(
-      shortName, schema, properties, options => new NativeDataSource(pkg, name, options))
+      shortName, schema, properties, options => new NativeDataSource(location, name, options))
   }
 
   override def supportsExternalMetadata(): Boolean = true

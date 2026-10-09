@@ -31,11 +31,15 @@ import org.apache.spark.annotation.Evolving;
  * batch and micro-batch streaming reads, batch and streaming writes, and predicate, column and
  * limit pushdown.
  * <p>
- * The library is distributed in a native data source package: a zip file with the extension
- * {@code .sparkpkg} that contains a manifest named {@code spark-native-datasource.json} and the
- * library built for one or more platforms. Spark finds the packages installed in the
- * {@code native-datasources} directory of {@code SPARK_HOME} automatically, as well as the
- * packages added to a session with {@code spark.addArtifact} and the ones under the paths in
+ * Spark finds the library of a data source automatically when it is installed like other native
+ * libraries and named after the data source: the library of {@code my_source} is
+ * {@code spark_datasource_my_source}, such as {@code libspark_datasource_my_source.so} in
+ * {@code /usr/local/lib} on Linux. Spark looks for it in the directories of
+ * {@code java.library.path}, which include {@code LD_LIBRARY_PATH} on Linux, and in the
+ * {@code lib} directory of each installation prefix in {@code PATH}. A library can also be
+ * distributed in a native data source package: a zip file with the extension {@code .sparkpkg}
+ * that contains a manifest named {@code spark-native-datasource.json} and the library built for
+ * one or more platforms, added to a session with {@code spark.addArtifact} or under the paths in
  * {@code spark.sql.dataSource.native.paths}. See the "Native Data Sources" page of the Spark SQL
  * guide for details and examples.
  *

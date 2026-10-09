@@ -18,8 +18,9 @@ package org.apache.spark.sql.execution.datasources.v2.ffi
 
 import java.io.File
 import java.nio.file.Paths
+import java.util.Locale
 
-import org.apache.spark.{SparkContext, SparkEnv, SparkFiles}
+import org.apache.spark.{SparkEnv, SparkFiles}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.Artifact
@@ -30,33 +31,37 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.util.Utils
 
 /**
- * Finds the native data source packages on the driver. Like the Python data sources installed in
- * the Python path, the packages installed in `$SPARK_HOME/native-datasources` are found
- * automatically. The active session can also add packages with `spark.addArtifact`, or with
- * `spark.sql.dataSource.native.paths`, which take precedence over the installed ones.
+ * Finds the native data sources on the driver. Like the Python data sources installed in the
+ * Python path, the native data source libraries installed in the native library path are found
+ * automatically, by their file name: the library `spark_datasource_<name>`, such as
+ * `libspark_datasource_my_source.so` on Linux, implements the data source `<name>`. The active
+ * session can also add packages with `spark.addArtifact`, or with
+ * `spark.sql.dataSource.native.paths`, which take precedence over the installed libraries.
  */
 object NativeDataSourceRegistry extends Logging {
 
-  /** The directory of `SPARK_HOME` that contains the installed native data source packages. */
-  val INSTALLED_PACKAGES_DIR = "native-datasources"
+  /** The prefix of the names of the installed native data source libraries. */
+  val LIBRARY_NAME_PREFIX = "spark_datasource_"
 
-  /** Returns whether a package provides the native data source with the given name. */
+  /** Returns whether the native data source with the given name exists. */
   def exists(name: String, conf: SQLConf): Boolean = lookup(name, conf).isDefined
 
   /**
-   * Finds the package that provides the native data source with the given name, which is
-   * case-insensitive. Returns the name of the data source as listed in the manifest, and the
-   * package.
+   * Finds the package or the installed library that provides the native data source with the
+   * given name, which is case-insensitive. Returns the name of the data source, as listed in the
+   * manifest of the package or in lower case for an installed library, and where its library is.
    */
-  def lookup(name: String, conf: SQLConf): Option[(String, NativeDataSourcePackage)] = {
+  def lookup(name: String, conf: SQLConf): Option[(String, NativeLibraryLocation)] = {
     if (!conf.getConf(StaticSQLConf.NATIVE_DATA_SOURCE_ENABLED)) {
       return None
     }
-    lookup(name, configuredPackageFiles(conf) ++ artifactPackageFiles())
-      .orElse(lookup(name, installedPackageFiles()))
+    lookupPackage(name, configuredPackageFiles(conf) ++ artifactPackageFiles())
+      .orElse(lookupInstalledLibrary(name))
   }
 
-  private def lookup(name: String, files: Seq[File]): Option[(String, NativeDataSourcePackage)] = {
+  private def lookupPackage(
+      name: String,
+      files: Seq[File]): Option[(String, NativeDataSourcePackage)] = {
     val found = files.map(_.getCanonicalFile).distinct.map(NativeDataSourcePackage.read)
       .flatMap(pkg => pkg.manifest.dataSources.find(_.equalsIgnoreCase(name)).map(_ -> pkg))
       // The same package can be found more than once, for example when it is in a configured
@@ -80,16 +85,62 @@ object NativeDataSourceRegistry extends Logging {
     }
   }
 
-  /**
-   * Makes the package available to the executors of the active session. Returns the package with
-   * the location of the copies of the executors.
-   */
-  def distribute(pkg: NativeDataSourcePackage): NativeDataSourcePackage = {
-    SparkSession.getActiveSession match {
-      // In local mode, the executors run in the driver and read the package where it is.
-      case Some(session) if !session.sparkContext.isLocal => addToArtifacts(session, pkg)
-      case _ => pkg
+  private def lookupInstalledLibrary(name: String): Option[(String, InstalledNativeLibrary)] = {
+    // Other names, such as class names, are not the names of libraries.
+    if (!name.matches("[A-Za-z0-9_]+")) {
+      return None
     }
+    val dataSource = name.toLowerCase(Locale.ROOT)
+    findInstalledLibrary(libraryFileName(dataSource))
+      .map(file => dataSource -> InstalledNativeLibrary(file.getPath))
+  }
+
+  /** Finds the library with the given file name in the native library path of this node. */
+  private[ffi] def findInstalledLibrary(fileName: String): Option[File] = {
+    librarySearchPath(System.getProperty("java.library.path"), System.getenv("PATH"))
+      .map(new File(_, fileName))
+      .find(_.isFile)
+  }
+
+  /**
+   * The file name of the installed library of the native data source with the given name, such
+   * as `libspark_datasource_my_source.so` on Linux, `libspark_datasource_my_source.dylib` on
+   * macOS and `spark_datasource_my_source.dll` on Windows.
+   */
+  def libraryFileName(name: String): String = {
+    System.mapLibraryName(LIBRARY_NAME_PREFIX + name.toLowerCase(Locale.ROOT))
+  }
+
+  /**
+   * The native library path: the directories where native data source libraries are installed,
+   * in the order they are searched. They are the directories of `java.library.path`, where the
+   * JVM finds native libraries, which include `LD_LIBRARY_PATH` on Linux, `DYLD_LIBRARY_PATH` on
+   * macOS and `PATH` on Windows, and then the `lib` directory of each installation prefix in
+   * `PATH`, such as `/usr/local/lib` for `/usr/local/bin`. Relative directories are ignored.
+   */
+  private[ffi] def librarySearchPath(javaLibraryPath: String, path: String): Seq[File] = {
+    def directories(value: String): Seq[File] = {
+      Option(value).toSeq.flatMap(_.split(File.pathSeparator)).map(new File(_)).filter(_.isAbsolute)
+    }
+    val prefixLibraries = directories(path)
+      .filter(_.getName == "bin")
+      .flatMap(bin => Option(bin.getParentFile))
+      .map(new File(_, "lib"))
+    (directories(javaLibraryPath) ++ prefixLibraries).distinct
+  }
+
+  /**
+   * Makes the library available to the executors of the active session. Returns where the
+   * executors find it. An installed library is already installed on every node.
+   */
+  def distribute(location: NativeLibraryLocation): NativeLibraryLocation = location match {
+    case pkg: NativeDataSourcePackage =>
+      SparkSession.getActiveSession match {
+        // In local mode, the executors run in the driver and read the package where it is.
+        case Some(session) if !session.sparkContext.isLocal => addToArtifacts(session, pkg)
+        case _ => pkg
+      }
+    case installed: InstalledNativeLibrary => installed
   }
 
   /** Adds the package as an artifact of the session, unless it already is one. */
@@ -117,14 +168,6 @@ object NativeDataSourceRegistry extends Logging {
       pkg.artifactUUID.map(uuid => new File(new File(root, uuid), pkg.fileName)).toSeq :+
         new File(root, pkg.fileName)
     }
-  }
-
-  /** The packages installed in `$SPARK_HOME/native-datasources`, if the directory exists. */
-  private[ffi] def installedPackageFiles(): Seq[File] = {
-    SparkContext.getActive.flatMap(_.getSparkHome()).toSeq
-      .map(home => new File(home, INSTALLED_PACKAGES_DIR))
-      .filter(_.isDirectory)
-      .flatMap(packageFilesIn)
   }
 
   private def configuredPackageFiles(conf: SQLConf): Seq[File] = {

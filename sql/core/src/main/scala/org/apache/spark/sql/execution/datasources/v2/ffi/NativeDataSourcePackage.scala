@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipFile
 
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 
@@ -59,6 +60,13 @@ case class NativeDataSourceManifest(
     libraries: Map[String, String])
 
 /**
+ * Where the library of a native data source is: in a [[NativeDataSourcePackage]], or installed in
+ * the native library path, as an [[InstalledNativeLibrary]]. It is sent to the executors, which
+ * load the library with [[NativeLibraries.get]].
+ */
+sealed trait NativeLibraryLocation extends Serializable
+
+/**
  * A native data source package: a zip file that contains a [[NativeDataSourceManifest]] and the
  * libraries it lists. The SHA-256 checksum of the file identifies the package, so that an
  * executor can check that it loads the same package as the driver.
@@ -71,7 +79,7 @@ case class NativeDataSourcePackage(
     path: String,
     sha256: String,
     manifest: NativeDataSourceManifest,
-    artifactUUID: Option[String] = None) {
+    artifactUUID: Option[String] = None) extends NativeLibraryLocation {
   def fileName: String = new File(path).getName
 }
 
@@ -161,6 +169,14 @@ object NativeDataSourcePackage {
   }
 }
 
+/**
+ * A native data source library installed in the native library path, where
+ * [[NativeDataSourceRegistry]] finds it by its file name. It must be installed on every node.
+ *
+ * @param path the path of the library on the driver
+ */
+case class InstalledNativeLibrary(path: String) extends NativeLibraryLocation
+
 /** The platform names used in [[NativeDataSourceManifest.libraries]]. */
 object NativePlatform {
   /** The platform of this JVM, such as `linux-x86_64`, `linux-aarch64` or `osx-aarch64`. */
@@ -183,21 +199,34 @@ object NativePlatform {
 }
 
 /**
- * The native data source libraries loaded in this JVM. A library is extracted from its package
- * and loaded once, on first use, and stays loaded until the JVM exits.
+ * The native data source libraries loaded in this JVM. A library is loaded once, on first use,
+ * after it is extracted from its package if needed, and stays loaded until the JVM exits.
  */
 object NativeLibraries extends Logging {
-  private val libraries = new ConcurrentHashMap[String, NativeLibrary]()
+  // The libraries of the packages, by the checksum of the package, and the installed libraries,
+  // by their canonical path: the JVM loads a library file in a single class loader. A library
+  // that is loaded but rejected stays loaded, so its error is kept: it cannot be loaded again.
+  private val packagedLibraries = new ConcurrentHashMap[String, Try[NativeLibrary]]()
+  private val installedLibraries = new ConcurrentHashMap[String, Try[NativeLibrary]]()
 
   private lazy val extractionDir: File = Utils.createTempDir(namePrefix = "native-datasources")
 
-  /** Returns the library of the given package, and loads it if needed. */
-  private[ffi] def get(pkg: NativeDataSourcePackage): NativeLibrary = {
-    val library = libraries.get(pkg.sha256)
-    if (library != null) library else libraries.computeIfAbsent(pkg.sha256, _ => load(pkg))
+  /** Returns the library at the given location, and loads it if needed. */
+  private[ffi] def get(location: NativeLibraryLocation): NativeLibrary = location match {
+    case pkg: NativeDataSourcePackage =>
+      getOrLoad(packagedLibraries, pkg.sha256)(loadPackaged(pkg))
+    case installed: InstalledNativeLibrary =>
+      val file = locate(installed).getCanonicalFile
+      getOrLoad(installedLibraries, file.getPath)(loadInstalled(file))
   }
 
-  private def load(pkg: NativeDataSourcePackage): NativeLibrary = {
+  private def getOrLoad(libraries: ConcurrentHashMap[String, Try[NativeLibrary]], key: String)(
+      load: => Try[NativeLibrary]): NativeLibrary = {
+    val library = libraries.get(key)
+    (if (library != null) library else libraries.computeIfAbsent(key, _ => load)).get
+  }
+
+  private def loadPackaged(pkg: NativeDataSourcePackage): Try[NativeLibrary] = {
     val platform = NativePlatform.current
     val libraryPath = pkg.manifest.libraries.getOrElse(platform, {
       throw QueryExecutionErrors.invalidNativeDataSourcePackageError(
@@ -212,30 +241,54 @@ object NativeLibraries extends Logging {
     if (!libraryFile.isFile) {
       extract(packageFile, libraryPath, libraryFile)
     }
-    logInfo(log"Loading the native data source library ${MDC(PATH, libraryFile)}.")
+    load(
+      libraryFile,
+      (reason, cause) => QueryExecutionErrors.invalidNativeDataSourcePackageError(
+        pkg.path, "INVALID_LIBRARY", Map("library" -> libraryPath, "reason" -> reason), cause),
+      parameters => QueryExecutionErrors.invalidNativeDataSourcePackageError(
+        pkg.path, "UNSUPPORTED_ABI_VERSION", parameters))
+  }
 
-    def invalidLibrary(reason: String, cause: Throwable): Throwable = {
-      QueryExecutionErrors.invalidNativeDataSourcePackageError(
-        pkg.path, "INVALID_LIBRARY", Map("library" -> libraryPath, "reason" -> reason), cause)
-    }
+  private def loadInstalled(file: File): Try[NativeLibrary] = {
+    load(
+      file,
+      (reason, cause) => QueryExecutionErrors.invalidNativeDataSourceLibraryError(
+        file.getPath, "CANNOT_LOAD", Map("reason" -> reason), cause),
+      parameters => QueryExecutionErrors.invalidNativeDataSourceLibraryError(
+        file.getPath, "UNSUPPORTED_ABI_VERSION", parameters))
+  }
+
+  /**
+   * Loads a library, and checks the version of the interface that it implements. Throws the error
+   * if the library cannot be loaded, and returns it if the library is loaded but rejected.
+   *
+   * @param invalidLibrary returns the error for an invalid library, with the reason
+   * @param unsupportedAbiVersion returns the error for an unsupported version of the interface,
+   *                              with the parameters `version` and `supported`
+   */
+  private def load(
+      file: File,
+      invalidLibrary: (String, Throwable) => Throwable,
+      unsupportedAbiVersion: Map[String, String] => Throwable): Try[NativeLibrary] = {
+    logInfo(log"Loading the native data source library ${MDC(PATH, file)}.")
     val library = try {
-      NativeLibrary.load(libraryFile.getPath)
+      NativeLibrary.load(file.getPath)
     } catch {
       case e: UnsatisfiedLinkError => throw invalidLibrary(e.getMessage, e)
     }
-    val abiVersion = try {
-      library.abiVersion()
-    } catch {
-      case e: UnsatisfiedLinkError =>
-        throw invalidLibrary("It does not implement NativeBridge.abiVersion.", e)
+    Try {
+      val abiVersion = try {
+        library.abiVersion()
+      } catch {
+        case e: UnsatisfiedLinkError =>
+          throw invalidLibrary("It does not implement NativeBridge.abiVersion.", e)
+      }
+      if (abiVersion != NativeBridge.ABI_VERSION) {
+        throw unsupportedAbiVersion(
+          Map("version" -> abiVersion.toString, "supported" -> NativeBridge.ABI_VERSION.toString))
+      }
+      library
     }
-    if (abiVersion != NativeBridge.ABI_VERSION) {
-      throw QueryExecutionErrors.invalidNativeDataSourcePackageError(
-        pkg.path,
-        "UNSUPPORTED_ABI_VERSION",
-        Map("version" -> abiVersion.toString, "supported" -> NativeBridge.ABI_VERSION.toString))
-    }
-    library
   }
 
   /** Finds a copy of the package on this node: the one on the driver, or a distributed one. */
@@ -245,6 +298,22 @@ object NativeLibraries extends Logging {
       .getOrElse {
         throw QueryExecutionErrors.nativeDataSourcePackageNotFoundError(pkg.fileName, pkg.sha256)
       }
+  }
+
+  /**
+   * Finds an installed library on this node: where the driver found it, or else in the native
+   * library path of this node.
+   */
+  private def locate(installed: InstalledNativeLibrary): File = {
+    val file = new File(installed.path)
+    if (file.isFile) {
+      file
+    } else {
+      NativeDataSourceRegistry.findInstalledLibrary(file.getName).getOrElse {
+        throw QueryExecutionErrors.nativeDataSourceLibraryNotFoundError(
+          file.getName, installed.path)
+      }
+    }
   }
 
   private def extract(packageFile: File, libraryPath: String, target: File): Unit = {

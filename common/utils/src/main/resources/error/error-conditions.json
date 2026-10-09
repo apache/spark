@@ -4792,6 +4792,24 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_NATIVE_DATA_SOURCE_LIBRARY" : {
+    "message" : [
+      "Invalid native data source library <path>:"
+    ],
+    "subClass" : {
+      "CANNOT_LOAD" : {
+        "message" : [
+          "<reason>"
+        ]
+      },
+      "UNSUPPORTED_ABI_VERSION" : {
+        "message" : [
+          "It requires version <version> of the native data source interface, but Spark supports version <supported>."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
   "INVALID_NATIVE_DATA_SOURCE_PACKAGE" : {
     "message" : [
       "Invalid native data source package <path>:"
@@ -6295,6 +6313,12 @@
       "Failed to <action> native data source <name>: <msg>"
     ],
     "sqlState" : "38000"
+  },
+  "NATIVE_DATA_SOURCE_LIBRARY_NOT_FOUND" : {
+    "message" : [
+      "Cannot find the native data source library <fileName>, which is installed at <path> on the driver. Install the same library on every node, at the same path or in the native library path."
+    ],
+    "sqlState" : "42K02"
   },
   "NATIVE_DATA_SOURCE_PACKAGE_CONFLICT" : {
     "message" : [
