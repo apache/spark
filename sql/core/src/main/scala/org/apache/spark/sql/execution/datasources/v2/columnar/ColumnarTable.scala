@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2.columnar
 
 import java.util
+import java.util.Locale
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
@@ -33,11 +34,17 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
  * The Data Source V2 [[Table]] of a [[ColumnarDataSource]]. It creates a new data source for each
- * scan and each write, with their options.
+ * scan and each write, with their options on top of the options of the table.
+ *
+ * @param tableOptions the options of the table, given to `TableProvider.getTable`. They are the
+ *                     options of `CREATE TABLE ... USING ... OPTIONS (...)` for a table in a
+ *                     catalog, while the scans and the writes of the table only get the options
+ *                     of their query.
  */
 class ColumnarTable(
     shortName: String,
     tableSchema: StructType,
+    tableOptions: util.Map[String, String],
     createDataSource: CaseInsensitiveStringMap => ColumnarDataSource)
   extends Table with SupportsRead with SupportsWrite {
 
@@ -49,11 +56,20 @@ class ColumnarTable(
     util.EnumSet.of(BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new ColumnarScanBuilder(tableSchema, () => createDataSource(options))
+    new ColumnarScanBuilder(tableSchema, () => createDataSource(withTableOptions(options)))
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
-    new ColumnarWriteBuilder(shortName, info, () => createDataSource(info.options()))
+    new ColumnarWriteBuilder(
+      shortName, info, () => createDataSource(withTableOptions(info.options())))
+  }
+
+  private def withTableOptions(options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    val merged = new util.HashMap[String, String]()
+    tableOptions.forEach((key, value) => merged.put(key.toLowerCase(Locale.ROOT), value))
+    // The keys of a case-insensitive map are in lower case.
+    options.forEach((key, value) => merged.put(key, value))
+    new CaseInsensitiveStringMap(merged)
   }
 }
 

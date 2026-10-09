@@ -989,7 +989,14 @@ jlong createAnyWriter(JNIEnv* env, jlong handle, jlong schema_address, jboolean 
     auto* schema = reinterpret_cast<ArrowSchema*>(schema_address);
     if (schema->n_children == 0) throw std::runtime_error("no columns to write");
     auto* writer = new Writer();
-    writer->state["path"] = get(source->options, "path", "");
+    // The location of a table in a catalog is passed as a URI.
+    std::string path = get(source->options, "path", "");
+    if (path.rfind("file://", 0) == 0) {
+      path = path.substr(7);
+    } else if (path.rfind("file:", 0) == 0) {
+      path = path.substr(5);
+    }
+    writer->state["path"] = path;
     writer->state["overwrite"] = overwrite ? "true" : "false";
     writer->state["fail"] = get(source->options, "fail", "");
     if (writer->state["path"].empty()) {
