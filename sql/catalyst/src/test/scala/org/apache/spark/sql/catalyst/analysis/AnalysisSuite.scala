@@ -168,6 +168,20 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Aggregate(Nil, count(Literal(1)).as("x") :: count(a).as("y") :: Nil, testRelation))
   }
 
+  test("SPARK-60072: transform count(*) to count(1) in a pivot aggregate") {
+    val pivot = Pivot(
+      Some(UnresolvedAttribute("a") :: Nil),
+      UnresolvedAttribute("b"),
+      Literal("x") :: Literal("y") :: Nil,
+      UnresolvedFunction("count" :: Nil, UnresolvedStar(None) :: Nil, isDistinct = false) :: Nil,
+      testRelation2)
+    assertAnalysisSuccess(pivot)
+    val counts = getAnalyzer.execute(pivot).flatMap(_.expressions.flatMap(_.collect {
+      case c: Count => c.children
+    }))
+    assert(counts.nonEmpty && counts.forall(_ == Literal(1) :: Nil))
+  }
+
   test("resolve sort references - filter/limit") {
     val a = testRelation2.output(0)
     val b = testRelation2.output(1)
