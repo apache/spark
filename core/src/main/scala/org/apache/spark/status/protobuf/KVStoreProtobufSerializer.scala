@@ -19,10 +19,14 @@ package org.apache.spark.status.protobuf
 
 import java.lang.reflect.ParameterizedType
 import java.util.ServiceLoader
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
+import org.apache.spark.util.kvstore.{LevelDB, RocksDB}
 
 private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
   override def serialize(o: Object): Array[Byte] =
@@ -39,7 +43,7 @@ private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
     }
 }
 
-private[spark] object KVStoreProtobufSerializer {
+private[spark] object KVStoreProtobufSerializer extends Logging {
 
   private[this] lazy val serializerMap: Map[Class[_], ProtobufSerDe[Any]] = {
     def getGenericsType(klass: Class[_]): Class[_] = {
@@ -51,6 +55,23 @@ private[spark] object KVStoreProtobufSerializer {
     }.toMap
   }
 
-  def getSerializer(klass: Class[_]): Option[ProtobufSerDe[Any]] =
-    serializerMap.get(klass)
+  private[this] val missedClasses = ConcurrentHashMap.newKeySet[Class[_]]()
+
+  // The KVStore backends' own bookkeeping values fall back to the JSON SerDe by design:
+  // they are internals of the kvstore library, which the ProtobufSerDe SPI does not cover.
+  // Skip warning for them.
+  private[this] val jsonByDesignClasses: Set[Class[_]] = Set(
+    classOf[LevelDB.TypeAliases],
+    classOf[RocksDB.TypeAliases])
+
+  private[protobuf] def resetMissedClassesForTesting(): Unit = missedClasses.clear()
+
+  def getSerializer(klass: Class[_]): Option[ProtobufSerDe[Any]] = {
+    val serializer = serializerMap.get(klass)
+    if (serializer.isEmpty && !jsonByDesignClasses.contains(klass) && missedClasses.add(klass)) {
+      logWarning(log"No Protobuf SerDe found for class ${MDC(CLASS_NAME, klass.getName)}, " +
+        log"falling back to the JSON SerDe.")
+    }
+    serializer
+  }
 }
