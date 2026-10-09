@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType}
  * 1. Every user-data leaf present in the row when the map is written receives an entry.
  * 2. A non-null entry is the sequencing clock of the event that authored the leaf's current stored
  *    value.
- * 3. A null entry means no event has authored the leaf so far.
+ * 3. A null entry means the leaf has no authored value.
  *
  * A user-data leaf is a non-framework field obtained by recursively expanding structs.
  *
@@ -57,8 +57,7 @@ private[pipelines] object Scd1VersionMap {
   def serializeKey(path: Seq[String]): String = QuotingUtils.quoteNameParts(path)
 
   /**
-   * Builds a column that computes the version map of one ingested upsert from the row it is
-   * evaluated on, independently of other events for its key.
+   * Builds a column that computes the version map of an upsert row from that row's column values.
    *
    * The map has an entry for every leaf in `schema`. A leaf selected by `ignoreNullSelection` is
    * read by path from the row: a null value receives a null entry, and a non-null value receives
