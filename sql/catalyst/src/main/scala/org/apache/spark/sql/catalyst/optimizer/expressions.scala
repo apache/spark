@@ -903,7 +903,9 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
           Some(EndsWith(input, Literal.create(postfix, input.dataType)))
         // 'a%a' pattern is basically same with 'a%' && '%a'.
         // However, the additional length condition is required to prevent 'a' match 'a%a'.
-        case startsAndEndsWith(prefix, postfix) =>
+        // The replacement reads the input three times, so it is made only for a deterministic
+        // input; a nondeterministic one could give each read a different value.
+        case startsAndEndsWith(prefix, postfix) if input.deterministic =>
           // The length guard only rejects inputs too short to hold both the prefix and the
           // suffix. When the collation matches raw bytes (supportsBinaryEquality),
           // StartsWith/EndsWith pin the literal bytes of the prefix and suffix, so a
