@@ -87,13 +87,7 @@ trait AutoCdcCatalogExecutionTestBase {
    * `Long` sequencing.
    */
   protected def cdcMetadataColSchemaType(sequencingType: DataType = LongType): StructType =
-    new StructType()
-      .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, sequencingType)
-      .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, sequencingType)
-      .add(
-        Scd1BatchProcessor.versionMapFieldName,
-        Scd1VersionMap.mapType(sequencingType)
-      )
+    Scd1BatchProcessor.cdcMetadataColSchema(sequencingType)
 
   /**
    * Build a [[Row]] matching the [[AutoCdcReservedNames.cdcMetadataColName]] struct's three fields,
