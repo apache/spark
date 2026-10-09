@@ -600,7 +600,9 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                     )
                     phases = [metrics.apply(name).value() for name in phase_names]
                     self.assertTrue(all(value >= 0 for value in phases))
-                    if num_rows:
+                    if num_rows and concurrency == 0:
+                        self.assertGreaterEqual(phases[2], 2 * num_rows)
+                    elif num_rows:
                         self.assertGreater(phases[2], 0)
                     else:
                         self.assertEqual(phases[1:4], [0, 0, 0])
@@ -639,11 +641,9 @@ class ArrowStreamTimingTests(unittest.TestCase):
                 clock_ns += 100_000_000
                 self.assertTrue(actual.equals(batch))
 
-        # Each I/O interval advances the fake clock by 1 ms; batch work costs 100 ms.
-        # Both durations must exclude the producer/consumer work between those intervals.
+        # Open, two batches, and close/EOF each add 1 ms; producer/consumer time is excluded.
         for name in ("pythonDataReadTime", "pythonDataWriteTime"):
-            self.assertGreater(metrics.to_dict()[name], 0)
-            self.assertLess(metrics.to_dict()[name], 100)
+            self.assertEqual(metrics.to_dict()[name], 4)
 
 
 if __name__ == "__main__":

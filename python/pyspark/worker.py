@@ -25,6 +25,7 @@ import itertools
 import json
 import os
 import sys
+import time
 import warnings
 from collections.abc import Iterator
 from typing import (
@@ -2365,7 +2366,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             for f in eval_conf.input_type
         ]
 
-        # Reuse one scope per phase across batches; the row loop has no timer calls.
+        # Keep task-bound duration handles; the batch loop accumulates locally.
         metrics = WorkerMetrics()
         input_timer = metrics.measure("pythonInputPreparationTime")
         udf_timer = metrics.measure("pythonUDFExecutionTime")
@@ -2383,9 +2384,15 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 return list(pool.map(lambda row: udf_func(*row), rows))
 
         def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-            for input_batch in data:
-                # --- Input: Arrow -> Python columns ---
-                with input_timer:
+            # Keep phase totals local so each metric is updated once instead of per batch.
+            input_duration_ns = 0
+            udf_duration_ns = 0
+            output_duration_ns = 0
+            clock = time.perf_counter_ns
+            try:
+                for input_batch in data:
+                    input_start_ns = clock()
+                    # --- Input: Arrow -> Python columns ---
                     metrics.increment("pythonNumTimedBatches")
                     num_rows = input_batch.num_rows
                     columns = [
@@ -2398,21 +2405,28 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     ]
                     if not columns:
                         columns = [[_NoValue] * num_rows]
-                    output_arrays = []
+                    output_arrays: list[pa.Array] = []
+                    # The UDF loop replaces this when output preparation begins.
+                    output_start_ns = input_start_ns
 
-                # --- Process: evaluate each UDF row-by-row ---
-                for udf_func, offsets, zero_arg, arrow_return_type, result_conv in udf_infos:
-                    with input_timer:
+                    # --- Process: evaluate each UDF row-by-row ---
+                    for udf_func, offsets, zero_arg, arrow_return_type, result_conv in udf_infos:
+                        if output_arrays:
+                            # One boundary ends the previous output and starts the next input.
+                            input_start_ns = clock()
+                            output_duration_ns += input_start_ns - output_start_ns
                         rows = (
                             [() for _ in range(num_rows)]
                             if zero_arg
                             else list(zip(*[columns[o] for o in offsets]))
                         )
-                    with udf_timer:
+                        udf_start_ns = clock()
+                        input_duration_ns += udf_start_ns - input_start_ns
                         results = _evaluate_batch_udf(udf_func, rows)
+                        output_start_ns = clock()
+                        udf_duration_ns += output_start_ns - udf_start_ns
 
-                    # --- Output: Python -> Arrow ---
-                    with output_timer:
+                        # --- Output: Python -> Arrow ---
                         verify_result_row_count(len(results), num_rows)
                         converted = (
                             [result_conv(r) for r in results]
@@ -2427,10 +2441,15 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                             )
                         output_arrays.append(arr)
 
-                with output_timer:
                     output_batch = pa.RecordBatch.from_arrays(output_arrays, col_names)
-                yield output_batch
-                del output_batch
+                    output_duration_ns += clock() - output_start_ns
+                    yield output_batch
+                    del output_batch
+            finally:
+                # Flush completed intervals if the generator closes early or raises.
+                input_timer.add_duration_ns(input_duration_ns)
+                udf_timer.add_duration_ns(udf_duration_ns)
+                output_timer.add_duration_ns(output_duration_ns)
 
         return func, ser
 

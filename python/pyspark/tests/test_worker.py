@@ -62,6 +62,7 @@ class WorkerMetricsTests(unittest.TestCase):
                 metrics.increment("currentTaskRows")
             with metrics.measure("currentTaskDuration"):
                 pass
+        previous_timer.add_duration_ns(3_000_000)
         self.assertIs(WorkerMetrics(), metrics)
         self.assertEqual(metrics.to_dict(), {"currentTaskRows": 1, "currentTaskDuration": 2})
 
