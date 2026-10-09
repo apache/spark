@@ -123,6 +123,90 @@ trait FileSourceAggregatePushDownSuite
     }
   }
 
+  test("SPARK-59607: COUNT on a null partition column is not overcounted with push down") {
+    withTempPath { dir =>
+      // Three partitions a / __HIVE_DEFAULT_PARTITION__ / b, one row each. The null
+      // partition value is written to the __HIVE_DEFAULT_PARTITION__ directory and read
+      // back as SQL NULL, which COUNT(p) must not count.
+      Seq((1, "a"), (2, null), (3, "b")).toDF("v", "p")
+        .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
+      withTempView("tmp") {
+        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
+        val query = "SELECT COUNT(*), COUNT(v), COUNT(p) FROM tmp"
+        Seq("false", "true").foreach { enableVectorizedReader =>
+          withSQLConf(vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            // Without push down, COUNT(p) skips the NULL-partition row: (3, 3, 2).
+            withSQLConf(aggPushDownEnabledKey -> "false") {
+              checkAnswer(sql(query), Seq(Row(3, 3, 2)))
+            }
+            // With push down the result must be identical; before the fix COUNT(p)
+            // wrongly returned 3 by counting the __HIVE_DEFAULT_PARTITION__ rows.
+            withSQLConf(aggPushDownEnabledKey -> "true") {
+              val df = sql(query)
+              checkPushedInfo(df, "PushedAggregation: [COUNT(*), COUNT(v), COUNT(p)]")
+              checkAnswer(df, Seq(Row(3, 3, 2)))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59607: GROUP BY a null partition column is not overcounted with push down") {
+    withTempPath { dir =>
+      // Partition a (1 row) / __HIVE_DEFAULT_PARTITION__ (2 rows) / b (1 row). Grouping on p
+      // routes a NULL group key through the reOrderPartitionCol/JoinedRow path; COUNT(p) in
+      // the null group must be 0, not the group's row count.
+      Seq((1, "a"), (2, null), (3, null), (4, "b")).toDF("v", "p")
+        .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
+      withTempView("tmp") {
+        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
+        val query = "SELECT p, COUNT(*), COUNT(p) FROM tmp GROUP BY p"
+        val expected = Seq(Row("a", 1, 1), Row(null, 2, 0), Row("b", 1, 1))
+        Seq("false", "true").foreach { enableVectorizedReader =>
+          withSQLConf(vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            withSQLConf(aggPushDownEnabledKey -> "false") {
+              checkAnswer(sql(query), expected)
+            }
+            withSQLConf(aggPushDownEnabledKey -> "true") {
+              val df = sql(query)
+              checkPushedInfo(df,
+                "PushedAggregation: [COUNT(*), COUNT(p)], PushedFilters: [], PushedGroupBy: [p]")
+              checkAnswer(df, expected)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59607: COUNT on multiple partition columns uses the correct partition index") {
+    withTempPath { dir =>
+      // Two partition columns; p1 is null in one partition, p2 in another, so the non-null
+      // counts differ (p1 = 3, p2 = 2). isNullAt must use each column's own partitionSchema
+      // index; a wrong index would read the other column's null-ness and change a count.
+      Seq((1, "x", "y"), (2, null, "y"), (3, "x", null), (4, "x", null)).toDF("v", "p1", "p2")
+        .write.partitionBy("p1", "p2").format(format).save(dir.getCanonicalPath)
+      withTempView("tmp") {
+        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
+        val query = "SELECT COUNT(*), COUNT(p1), COUNT(p2) FROM tmp"
+        val expected = Seq(Row(4, 3, 2))
+        Seq("false", "true").foreach { enableVectorizedReader =>
+          withSQLConf(vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            withSQLConf(aggPushDownEnabledKey -> "false") {
+              checkAnswer(sql(query), expected)
+            }
+            withSQLConf(aggPushDownEnabledKey -> "true") {
+              val df = sql(query)
+              checkPushedInfo(df, "PushedAggregation: [COUNT(*), COUNT(p1), COUNT(p2)]")
+              checkAnswer(df, expected)
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("filter alias over aggregate") {
     val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
       (9, "mno", 7), (2, null, 6))
