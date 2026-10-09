@@ -289,7 +289,7 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
     assert(slam.lastAttemptValueForRDDId(1) === Some(105)) // 40 + 15 + 30 + 10*2
   }
 
-  test("logAccumulatorState formats lazily and catches formatting failures") {
+  test("logAccumulatorState and logAccumulatorUpdate are lazy and catch formatting failures") {
     var failFormatting = false
     var logStateEvaluations = 0
     val slam = new SQLLastAttemptMetric(SQLMetrics.SUM_METRIC) {
@@ -306,10 +306,12 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
     val acc = slam.copy()
     setMockAttempt(rddId = 1, partitionId = 0)
     acc.set(10)
+    logStateEvaluations = 0
+    // With TRACE off, mergeLastAttempt does not format its logAccumulatorUpdate TRACE entry.
     slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 0, 0, mockProperties)
+    assert(logStateEvaluations === 0)
     assert(slam.lastAttemptValueForRDDId(1) === Some(10))
 
-    logStateEvaluations = 0
     val entry = slam.logAccumulatorState
     assert(logStateEvaluations === 0)
     assert(entry.message.contains("Direct driver QE values"))
@@ -318,9 +320,17 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
     failFormatting = true
     assert(slam.logAccumulatorState.message.contains(
       "<Unexpected exception in logAccumulatorState>"))
-    // A driver-side set after task updates is an unexpected update, which logs the state. It
-    // must still invalidate the accumulator when formatting the state fails.
-    slam.set(5)
+    // A driver-side set after task updates is an unexpected update, which logs the state and the
+    // update. It must still invalidate the accumulator when formatting them fails.
+    val appender = new LogAppender()
+    withLogAppender(appender, Seq(slam.getClass.getName)) {
+      slam.set(5)
+    }
     assert(slam.lastAttemptValueForRDDId(1) === None)
+    val warnings = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .filter(_.startsWith("Unexpected last attempt tracking"))
+    assert(warnings.size === 1)
+    assert(warnings.head.contains("<Unexpected exception in logAccumulatorState>"))
+    assert(warnings.head.contains("<Unexpected exception in logAccumulatorUpdate>"))
   }
 }
