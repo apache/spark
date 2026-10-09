@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution.externalUDF
 
 import java.nio.charset.StandardCharsets
+import java.nio.file.Paths
 
-import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, And, ArrayTransform, Attribute,
@@ -34,10 +35,12 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, BinaryNode, Execu
   Range, Window}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StructField, StructType}
-import org.apache.spark.udf.worker.{DirectWorker, ProcessCallable, UDFWorkerProperties,
-  UDFWorkerSpecification, WorkerEnvironment}
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, LongType, StructField,
+  StructType}
+import org.apache.spark.udf.worker.{DirectWorker, ProcessCallable, UDFProtoCommunicationPattern,
+  UDFWorkerDataFormat, UDFWorkerProperties, UDFWorkerSpecification, UnixDomainSocket,
+  WorkerCapabilities, WorkerConnectionSpec, WorkerEnvironment}
+import org.apache.spark.udf.worker.grpc.testing.EchoGrpcWorkerMain
 
 class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
 
@@ -716,11 +719,40 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
     assert(execution.workerSpec == spec)
   }
 
-  test("scalar external UDF execution reaches dispatcher creation") {
-    val spec = workerSpec("unimplemented-scalar")
-    val range = Range(0, 10, 1, 1)
-    val function = udf("unimplemented-scalar", spec, Seq(singleOutput(range)))
-    val resultAttr = AttributeReference("externalUDF", IntegerType, nullable = true)()
+  test("sql tests expose one unshaded epoll native library") {
+    val resource = "META-INF/native/libnetty_transport_native_epoll_x86_64.so"
+    val urls = new java.util.ArrayList[java.net.URL]()
+    val found = getClass.getClassLoader.getResources(resource)
+    while (found.hasMoreElements) {
+      urls.add(found.nextElement())
+    }
+    assert(urls.size == 1, urls.toString)
+    assert(urls.get(0).toString.contains("netty-transport-native-epoll"))
+  }
+
+  test("scalar external UDF returns rows from a direct gRPC worker process") {
+    assume(EchoGrpcWorkerMain.udsTransportAvailable,
+      "Netty UDS native transport (epoll on Linux or kqueue on macOS) is required")
+    val runner = ProcessCallable.newBuilder()
+      .addCommand(Paths.get(System.getProperty("java.home"), "bin", "java").toString)
+      .addCommand("-cp")
+      .addCommand(System.getProperty("java.class.path"))
+      .addCommand(classOf[EchoGrpcWorkerMain.type].getName.stripSuffix("$"))
+    val spec = UDFWorkerSpecification.newBuilder()
+      .setEnvironment(WorkerEnvironment.newBuilder())
+      .setCapabilities(WorkerCapabilities.newBuilder()
+        .addSupportedDataFormats(UDFWorkerDataFormat.ARROW)
+        .addSupportedCommunicationPatterns(UDFProtoCommunicationPattern.BIDIRECTIONAL_STREAMING))
+      .setDirect(DirectWorker.newBuilder()
+        .setRunner(runner)
+        .setProperties(UDFWorkerProperties.newBuilder()
+          .setConnection(WorkerConnectionSpec.newBuilder()
+            .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance))
+          .setInitializationTimeoutMs(30000)))
+      .build()
+    val range = Range(0, 6, 1, 2)
+    val function = udf("identity", spec, Seq(singleOutput(range)), dataType = LongType)
+    val resultAttr = AttributeReference("externalUDF", LongType, nullable = true)()
     val logicalPlan = ExecuteExternalUDF(function, resultAttr, range)
     val execution = spark.sessionState.planner.plan(logicalPlan).toSeq match {
       case Seq(node: ExecuteExternalUDFExec) => node
@@ -728,13 +760,8 @@ class PlanExternalUDFsSuite extends QueryTest with SharedSparkSession {
         fail(s"Expected one ExecuteExternalUDFExec node, found:\n${other.mkString("\n")}")
     }
 
-    val exception = intercept[SparkException] {
-      execution.execute().collect()
-    }
-    val message = Utils.exceptionString(exception)
-    assert(message.contains("built-in dispatcher implementation"))
-    assert(message.contains("DIRECT"))
-    assert(message.contains("spark-udf-worker-grpc"))
+    val rows = execution.executeCollect().map(row => (row.getLong(0), row.getLong(1)))
+    assert(rows.toSeq == Seq((0L, 0L), (1L, 1L), (2L, 2L), (3L, 3L), (4L, 4L), (5L, 5L)))
   }
 
   test("map partitions external UDF execution reports unimplemented before worker startup") {
