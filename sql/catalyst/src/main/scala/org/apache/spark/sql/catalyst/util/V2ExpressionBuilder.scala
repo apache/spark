@@ -249,7 +249,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case UnaryMinus(_, true) => generateExpressionWithName("-", expr, isPredicate)
     case _: BitwiseNot => generateExpressionWithName("~", expr, isPredicate)
     case caseWhen @ CaseWhen(branches, elseValue) =>
-      val conditions = branches.map(_._1).flatMap(generatePredicate)
+      val conditions = branches.map(_._1).flatMap(generateExpression(_, true))
       val values = branches.map(_._2).flatMap(generateExpression(_, isPredicate))
       val elseExprOpt = elseValue.flatMap(generateExpression(_, isPredicate))
       if (conditions.length == branches.length && values.length == branches.length &&
