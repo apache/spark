@@ -17,7 +17,7 @@
 
 package org.apache.spark.network.util;
 
-import java.util.LinkedList;
+import java.util.ArrayDeque;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.buffer.ByteBuf;
@@ -50,7 +50,9 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
   private static final int UNKNOWN_FRAME_SIZE = -1;
   private static final long CONSOLIDATE_THRESHOLD = 20 * 1024 * 1024;
 
-  private final LinkedList<ByteBuf> buffers = new LinkedList<>();
+  // Pending input buffers not yet consumed into a frame. ArrayDeque avoids a
+  // per-channelRead list-node allocation; used strictly FIFO.
+  private final ArrayDeque<ByteBuf> buffers = new ArrayDeque<>();
   private final ByteBuf frameLenBuf = Unpooled.buffer(LENGTH_SIZE, LENGTH_SIZE);
   private final long consolidateThreshold;
 

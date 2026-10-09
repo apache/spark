@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution.planmerging
 
+import java.util.OptionalLong
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, AttributeReference, CreateNamedStruct, ExprId, GetStructField, If, Literal, Or, ScalarSubquery, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, AttributeReference, CreateNamedStruct, Expression, ExpressionSet, ExprId, GetStructField, GreaterThan, If, LessThan, Literal, Or, ScalarSubquery, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -28,10 +31,11 @@ import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier, Supp
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{Expressions, FieldReference, SortDirection => V2SortDirection, SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsReportOrdering, SupportsReportPartitioning}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsReportOrdering, SupportsReportPartitioning, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning => V2KeyGroupedPartitioning, Partitioning => V2Partitioning, UnknownPartitioning => V2UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -1977,6 +1981,122 @@ class MergeSubplansSuite extends PlanTest {
     }
   }
 
+  // Merging subquery2 into subquery1 aliases `b = 2` as propagatedFilter_0 below the join, and
+  // subquery2's post-join filter folds it into propagatedFilter_2. The Projects above the join only
+  // carry propagatedFilter_2, so when subquery3 reuses propagatedFilter_0 on its own, the merged
+  // Project under the aggregate has to append it.
+  private def checkReusedFilterAfterPostJoinFold(selectInSubquery3: Boolean): Unit = {
+    val subquery1 = ScalarSubquery(
+      testRelation.where($"b" === 1).join(testRelation2, LeftOuter, Some($"a" === $"d"))
+        .select($"a")
+        .groupBy()(sum($"a").as("sum_a")))
+    val subquery2 = ScalarSubquery(
+      testRelation.where($"b" === 2).join(testRelation2, LeftOuter, Some($"a" === $"d"))
+        .where(coalesce($"e", 10) > 5)
+        .select($"a")
+        .groupBy()(max($"a").as("max_a")))
+    val join3 =
+      testRelation.where($"b" === 2).join(testRelation2, LeftOuter, Some($"a" === $"d"))
+    val subquery3 = ScalarSubquery(
+      (if (selectInSubquery3) join3.select($"a") else join3)
+        .groupBy()(count($"a").as("cnt")))
+    val originalQuery = testRelation.select(subquery1, subquery2, subquery3)
+
+    val f0Alias = Alias($"b" === 2, "propagatedFilter_0")()
+    val f0 = f0Alias.toAttribute
+    val f1Alias = Alias($"b" === 1, "propagatedFilter_1")()
+    val f1 = f1Alias.toAttribute
+    val joined = testRelation
+      .select(testRelation.output ++ Seq(f0Alias, f1Alias): _*)
+      .where(Or(f0, f1))
+      .join(testRelation2, LeftOuter, Some($"a" === $"d"))
+    val f2Alias = Alias(And(f0, coalesce($"e", 10) > 5), "propagatedFilter_2")()
+    val f2 = f2Alias.toAttribute
+    // Without its own Project, subquery3 merges all its join columns into the cached Project.
+    val mergedProjectList = if (selectInSubquery3) {
+      Seq($"a", f2, f1, f0)
+    } else {
+      Seq($"a", f2, f1, $"b", $"c", $"d", $"e", f0)
+    }
+    val mergedSubquery = joined
+      .select(joined.output :+ f2Alias: _*)
+      .select(mergedProjectList: _*)
+      .groupBy()(
+        sum($"a", Some(f1)).as("sum_a"),
+        max($"a", Some(f2)).as("max_a"),
+        count($"a", Some(f0)).as("cnt"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_a"), $"sum_a",
+        Literal("max_a"), $"max_a",
+        Literal("cnt"), $"cnt"
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1),
+        extractorExpression(0, analyzedMergedSubquery.output, 2)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
+  test("SPARK-60084: Reuse a filter that an earlier merge folded into a post-join filter") {
+    checkReusedFilterAfterPostJoinFold(selectInSubquery3 = true)
+  }
+
+  test("SPARK-60084: Reuse a folded filter when the new plan has no Project above the join") {
+    // The `(np, cp: Project)` arm builds the merged Project from subquery3's join output, and has
+    // to append the reused filter there.
+    checkReusedFilterAfterPostJoinFold(selectInSubquery3 = false)
+  }
+
+  test("SPARK-60084: Do not reuse a computed column as a propagated filter") {
+    // subquery3 computes `b > 2` as a column and filters on the same expression. The column lands
+    // in the Project under the merged Filter, but the Filter's OR doesn't keep its rows, so
+    // subquery3 needs a filter alias of its own.
+    val subquery1 = ScalarSubquery(testRelation.where($"a" < 1).groupBy()(sum($"a").as("sum_a")))
+    val subquery2 = ScalarSubquery(testRelation.where($"a" > 5).groupBy()(max($"a").as("max_a")))
+    val subquery3 = ScalarSubquery(
+      testRelation.select($"a", $"b", ($"b" > 2).as("flag")).where($"b" > 2)
+        .groupBy()(count($"a").as("cnt")))
+    val originalQuery = testRelation.select(subquery1, subquery2, subquery3)
+
+    val f0Alias = Alias($"a" > 5, "propagatedFilter_0")()
+    val f0 = f0Alias.toAttribute
+    val f1Alias = Alias($"a" < 1, "propagatedFilter_1")()
+    val f1 = f1Alias.toAttribute
+    val f2Alias = Alias($"b" > 2, "propagatedFilter_2")()
+    val f2 = f2Alias.toAttribute
+    val mergedSubquery = testRelation
+      .select(testRelation.output ++ Seq(f0Alias, f1Alias, ($"b" > 2).as("flag"), f2Alias): _*)
+      .where(Or(Or(f0, f1), f2))
+      .groupBy()(
+        sum($"a", Some(f1)).as("sum_a"),
+        max($"a", Some(f0)).as("max_a"),
+        count($"a", Some(f2)).as("cnt"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_a"), $"sum_a",
+        Literal("max_a"), $"max_a",
+        Literal("cnt"), $"cnt"
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1),
+        extractorExpression(0, analyzedMergedSubquery.output, 2)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    withSQLConf(SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
   // ---- SPARK-40259: generic DSv2 scan merge ----
 
   private val v2Table = new TestV2Table(StructType(Seq(
@@ -2058,6 +2178,20 @@ class MergeSubplansSuite extends PlanTest {
   private def v2Scans(plan: LogicalPlan): Seq[DataSourceV2ScanRelation] =
     plan.collectWithSubqueries { case s: DataSourceV2ScanRelation => s }
 
+  private def inferredFilterSubquery(
+      table: TestInferredFilterTable,
+      column: String,
+      withResidual: Boolean = false): ScalarSubquery = {
+    val relation = DataSourceV2Relation.create(table, None, None)
+    val id = relation.output.find(_.name == "id").get
+    val value = relation.output.find(_.name == "value").get
+    val attr = relation.output.find(_.name == column).get
+    val condition = if (withResidual) And(id > 0, attr > 0) else id > 0
+    val pushed = V2ScanRelationPushDown(
+      Project(Seq(id, value, attr), Filter(condition, relation)))
+    ScalarSubquery(pushed.groupBy()(sum(attr).as(s"sum_$column")))
+  }
+
   /**
    * Normalizes a merged plan so `comparePlans` can match it: (1) drops each DSv2 scan's
    * dynamically-built Scan to a schema-only placeholder (the pushed describe() strings are asserted
@@ -2101,6 +2235,89 @@ class MergeSubplansSuite extends PlanTest {
         extractorExpression(0, analyzedMergedSubquery.output, 1)),
       Seq(definitionNode(analyzedMergedSubquery, 0)))
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  gridTest("SPARK-58892: inferred filters survive rebuilding a merged scan")(
+      Seq(false, true)) { estimateInferred =>
+    val table = new TestInferredFilterTable(estimateInferred)
+    val subqueries = Seq("a", "b", "c").map(inferredFilterSubquery(table, _))
+    subqueries.foreach { subquery =>
+      val scan = v2Scans(subquery.plan).head
+      assert(scan.inferredFilters.size == 1)
+      val filters = subquery.plan.collect { case Filter(condition, _) => condition }
+      assert(filters.exists(_.exists(_.semanticEquals(scan.inferredFilters.head))) ==
+        !estimateInferred)
+    }
+
+    val originalQuery = testRelation.select(subqueries: _*).analyze
+    val optimized = Optimize.execute(originalQuery)
+    val scans = v2Scans(optimized)
+    assert(scans.size == 1, s"expected three scans to merge:\n$optimized")
+    val scan = scans.head
+    assert(scan.output.map(_.name).toSet == Set("id", "value", "a", "b", "c"))
+    val id = scan.output.find(_.name == "id").get
+    val value = scan.output.find(_.name == "value").get
+    // The deferred rebuild can offer the same predicate as both strict and best-effort pruning.
+    assert(ExpressionSet(scan.pushedFilters) == ExpressionSet(Seq(id > 0)))
+    assert(scan.inferredFilters.size == 1 &&
+      scan.inferredFilters.head.semanticEquals(value < 0))
+    assert(scan.scan.asInstanceOf[TestInferredFilterScan].estimateInferred == estimateInferred)
+    assert(optimized.resolved)
+    assert(optimized.collectWithSubqueries {
+      case plan if plan.missingInput.nonEmpty => plan
+    }.isEmpty)
+  }
+
+  gridTest("SPARK-58892: merge three scans with inferred filters under both symmetric modes")(
+      for {
+        estimateInferred <- Seq(false, true)
+        mode <- Seq("general", "dsv2", "disabled")
+      } yield (estimateInferred, mode)) { case (estimateInferred, mode) =>
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key ->
+          (mode == "general").toString,
+        SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key ->
+          (mode == "dsv2").toString) {
+      val table = new TestInferredFilterTable(estimateInferred)
+      val subqueries = Seq("a", "b", "c").map { column =>
+        inferredFilterSubquery(table, column, withResidual = true)
+      }
+      val originalQuery = testRelation.select(subqueries: _*).analyze
+      val optimized = Optimize.execute(originalQuery)
+
+      if (mode == "disabled") {
+        assert(v2Scans(optimized).size == 3)
+        comparePlans(optimized, originalQuery)
+      } else {
+        val scans = v2Scans(optimized)
+        assert(scans.size == 1, s"expected three scans to merge:\n$optimized")
+        val scan = scans.head
+        val value = scan.output.find(_.name == "value").get
+        assert(scan.inferredFilters.size == 1 &&
+          scan.inferredFilters.head.semanticEquals(value < 0))
+        val propagated = optimized.collectWithSubqueries {
+          case project: Project => project.projectList.collect {
+            case alias: Alias if alias.name.startsWith("propagatedFilter_") => alias.child
+          }
+        }.flatten
+        assert(propagated.nonEmpty)
+        if (estimateInferred) {
+          assert(propagated.forall(!_.references.exists(_.name == "value")),
+            s"inferred metadata must stay out of propagated aliases:\n$optimized")
+        }
+        val aggregates = optimized.collectWithSubqueries {
+          case aggregate: Aggregate => aggregate.aggregateExpressions.flatMap(_.collect {
+            case expression: AggregateExpression => expression
+          })
+        }.flatten
+        assert(aggregates.size == 3 && aggregates.forall(_.filter.nonEmpty))
+        assert(optimized.resolved)
+        assert(optimized.collectWithSubqueries {
+          case plan if plan.missingInput.nonEmpty => plan
+        }.isEmpty)
+      }
+    }
   }
 
   test("SPARK-40259: do not merge DSv2 scans when a pushdown is merge-blocking") {
@@ -2926,10 +3143,12 @@ class MergeSubplansSuite extends PlanTest {
   }
 
   test("SPARK-40259: merge DSv2 scans that report empty key-grouped partitioning or ordering") {
-    // A source implementing SupportsReportPartitioning/SupportsReportOrdering but reporting nothing
-    // yields Some(Nil), not None (V2ScanPartitioningAndOrdering sets the field unconditionally). An
-    // empty report carries no partitioning/ordering to drop, so the merge should still proceed --
-    // the gate tests the inner Seq, not the Option. The fused plan is the plain column union.
+    // A source implementing SupportsReportOrdering but reporting no ordering yields Some(Nil), not
+    // None (V2ScanPartitioningAndOrdering sets the ordering unless a reported column cannot be
+    // resolved). The partitioning pass turns an empty report into None instead, so the rule never
+    // produces the keyGroupedPartitioning = Some(Nil) case below. An empty report carries no
+    // partitioning/ordering to drop, so the merge should still proceed -- the gate tests the inner
+    // Seq, not the Option. The fused plan is the plain column union.
     def assertMerges(withEmptyField: DataSourceV2ScanRelation => DataSourceV2ScanRelation): Unit = {
       val sub1 = ScalarSubquery(withEmptyField(v2ScanReading("a")).groupBy()(sum($"a").as("sum_a")))
       val sub2 = ScalarSubquery(withEmptyField(v2ScanReading("b")).groupBy()(sum($"b").as("sum_b")))
@@ -3200,6 +3419,51 @@ private case class TestV2ReportingScan(
       new V2KeyGroupedPartitioning(Array(Expressions.bucket(numBuckets, col)), 0)
     case None => new V2UnknownPartitioning(0)
   }
+}
+
+/** Rows satisfy value = -id, so fully pushing id > n implies value < -n. */
+private class TestInferredFilterTable(estimateInferred: Boolean)
+  extends TestV2Table(StructType(Seq("id", "value", "a", "b", "c")
+    .map(StructField(_, IntegerType)))) {
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    new ScanBuilder with SupportsPushDownCatalystFilters with SupportsPushDownRequiredColumns {
+      private var requiredSchema = schema()
+      private var fullyPushed = Seq.empty[Expression]
+
+      override def pruneColumns(schema: StructType): Unit = requiredSchema = schema
+
+      override def pushFilters(filters: Seq[Expression]): Seq[Expression] = {
+        val (strict, residual) = filters.partition { filter =>
+          filter.references.nonEmpty && filter.references.forall(_.name == "id")
+        }
+        fullyPushed = strict
+        residual
+      }
+
+      override def pushedFilters: Array[Predicate] = Array.empty
+
+      override def inferredFilters: Seq[Expression] = fullyPushed.collect {
+        case GreaterThan(_: AttributeReference, Literal(n: Int, _)) =>
+          LessThan(AttributeReference("value", IntegerType)(), Literal(-n))
+      }
+
+      override def build(): Scan = TestInferredFilterScan(requiredSchema, estimateInferred)
+    }
+}
+
+private case class TestInferredFilterScan(schema: StructType, estimateInferred: Boolean)
+  extends Scan with SupportsReportStatistics {
+  override def readSchema(): StructType = schema
+
+  override def estimateStatistics(): V2Statistics = new V2Statistics {
+    override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+    override def numRows(): OptionalLong = OptionalLong.of(10L)
+  }
+
+  override def reflectsFullyPushedDownFilters(): Boolean = false
+
+  override def useInferredFilterEstimation(): Boolean = estimateInferred
 }
 
 /**

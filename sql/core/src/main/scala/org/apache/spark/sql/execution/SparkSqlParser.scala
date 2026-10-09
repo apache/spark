@@ -1347,7 +1347,8 @@ class SparkSqlAstBuilder extends AstBuilder {
         inSerdeClass, outSerdeClass,
         inSerdeProps, outSerdeProps,
         reader, writer,
-        schemaLess)
+        schemaLess,
+        conf.charVarcharStandardSemantics)
     }
   }
 
@@ -1737,7 +1738,10 @@ class SparkSqlAstBuilder extends AstBuilder {
           excludeColumns = params.excludeColumns,
           storedAsScdType = params.storedAsScdType,
           trackHistoryColumns = params.trackHistoryColumns,
-          trackHistoryExceptColumns = params.trackHistoryExceptColumns
+          trackHistoryExceptColumns = params.trackHistoryExceptColumns,
+          ignoreNullUpdates = params.ignoreNullUpdates,
+          ignoreNullUpdatesColumns = params.ignoreNullUpdatesColumns,
+          ignoreNullUpdatesExceptColumns = params.ignoreNullUpdatesExceptColumns
         )
       } else {
         Option(ctx.query) match {

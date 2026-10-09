@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, Disable
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, EnsureRequirements, REPARTITION_BY_COL, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeAsOfJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -744,6 +744,56 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         assert(rightKeys === rightPartitioningExpressions)
       case _ => fail(outputPlan.toString)
     }
+  }
+
+  test("SPARK-59438: as-of join with no equi-keys requires a single partition") {
+    // No equi-keys: distribution is AllTuples, so both sides shuffle to one partition.
+    val asOfExec = SortMergeAsOfJoinExec(
+      leftKeys = Nil,
+      rightKeys = Nil,
+      leftSortExprs = exprA :: Nil,
+      rightSortExprs = exprB :: Nil,
+      asOfCondition = GreaterThanOrEqual(exprA, exprB),
+      orderExpression = Subtract(exprA, exprB),
+      joinType = Inner,
+      condition = None,
+      left = planA,
+      right = planB)
+    assert(asOfExec.requiredChildDistribution == Seq(AllTuples, AllTuples))
+    assert(asOfExec.requiredChildOrdering == Seq(Seq(orderingA), Seq(orderingB)))
+    val outputPlan = EnsureRequirements.apply(asOfExec)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    val exchanges = outputPlan.collect { case e: ShuffleExchangeExec => e }
+    assert(exchanges.length == 2, s"Expected a shuffle on each side:\n$outputPlan")
+    assert(exchanges.forall(_.outputPartitioning == SinglePartition),
+      s"Both sides must be shuffled to a single partition:\n$outputPlan")
+  }
+
+  test("SPARK-59438: as-of join with equi-keys hash-partitions on the keys") {
+    // With equi-keys: distribution is Clustered, so each side hash-partitions on its key.
+    val asOfExec = SortMergeAsOfJoinExec(
+      leftKeys = exprC :: Nil,
+      rightKeys = exprC :: Nil,
+      leftSortExprs = exprA :: Nil,
+      rightSortExprs = exprB :: Nil,
+      asOfCondition = GreaterThanOrEqual(exprA, exprB),
+      orderExpression = Subtract(exprA, exprB),
+      joinType = Inner,
+      condition = None,
+      left = planA,
+      right = planB)
+    assert(asOfExec.requiredChildDistribution ==
+      Seq(ClusteredDistribution(exprC :: Nil), ClusteredDistribution(exprC :: Nil)))
+    assert(asOfExec.requiredChildOrdering ==
+      Seq(Seq(orderingC, orderingA), Seq(orderingC, orderingB)))
+    val outputPlan = EnsureRequirements.apply(asOfExec)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    val exchanges = outputPlan.collect { case e: ShuffleExchangeExec => e }
+    assert(exchanges.length == 2, s"Expected a shuffle on each side:\n$outputPlan")
+    assert(exchanges.forall(_.outputPartitioning match {
+      case h: HashPartitioning => h.expressions == Seq(exprC)
+      case _ => false
+    }), s"Both sides must hash-partition on the equi-key:\n$outputPlan")
   }
 
   test("SPARK-24500: create union with stream of children") {

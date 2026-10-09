@@ -351,6 +351,7 @@ trait AggregateCodegenSupport
       if (inputVars.forall(_.isDefined)) {
         val splitCodes = inputVars.flatten.zipWithIndex.map { case (args, i) =>
           val doAggFunc = ctx.freshName(s"doAggregate_${aggNames(i)}")
+          ctx.assertSplitCallsWithin(aggCodeBlocks(i).toString, args.map(_.variableName), doAggFunc)
           val argList = args.map { v =>
             s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
           }.mkString(", ")

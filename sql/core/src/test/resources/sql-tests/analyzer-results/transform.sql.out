@@ -67,7 +67,7 @@ SELECT TRANSFORM(a)
 USING 'cat' AS (a)
 FROM t
 -- !query analysis
-ScriptTransformation cat, [a#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Project [a#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -98,7 +98,7 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
 -- !query analysis
 Project [a#x, b#x, decode(c#x, UTF-8) AS decode(c, UTF-8)#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
 +- SubqueryAlias tmp
-   +- ScriptTransformation cat, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+   +- ScriptTransformation cat, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
       +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
          +- SubqueryAlias t
             +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -129,7 +129,7 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
 -- !query analysis
 Project [a#x, b#x, decode(c#x, UTF-8) AS decode(c, UTF-8)#x, d#x, e#x, f#x, g#x, h#x, i#x, j#x, k#x, l#x]
 +- SubqueryAlias tmp
-   +- ScriptTransformation cat, [a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, i#x, j#x, k#x, l#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+   +- ScriptTransformation cat, [a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, i#x, j#x, k#x, l#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
       +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
          +- SubqueryAlias t
             +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -144,7 +144,7 @@ SELECT TRANSFORM(a)
 USING 'cat'
 FROM t
 -- !query analysis
-ScriptTransformation cat, [key#x, value#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,true)
+ScriptTransformation cat, [key#x, value#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,true,false)
 +- Project [a#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -159,7 +159,7 @@ SELECT TRANSFORM(a, b)
 USING 'cat'
 FROM t
 -- !query analysis
-ScriptTransformation cat, [key#x, value#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,true)
+ScriptTransformation cat, [key#x, value#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,true,false)
 +- Project [a#x, b#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -174,7 +174,7 @@ SELECT TRANSFORM(a, b, c)
 USING 'cat'
 FROM t
 -- !query analysis
-ScriptTransformation cat, [key#x, value#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,true)
+ScriptTransformation cat, [key#x, value#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,true,false)
 +- Project [a#x, b#x, c#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -190,7 +190,7 @@ USING 'cat' AS (a int, b short, c long, d byte, e float, f double, g decimal(38,
 FROM VALUES
 ('a','','1231a','a','213.21a','213.21a','0a.21d','2000-04-01123','1997-0102 00:00:') tmp(a, b, c, d, e, f, g, h, i)
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x, c#xL, d#x, e#x, f#x, g#x, h#x, i#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x, c#xL, d#x, e#x, f#x, g#x, h#x, i#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, i#x]
    +- SubqueryAlias tmp
       +- LocalRelation [a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, i#x]
@@ -202,7 +202,7 @@ USING 'cat' AS (a, b)
 FROM t
 GROUP BY b
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Aggregate [b#x], [b#x, max(a#x) AS max(a)#x, sum(f#x) AS sum(f)#xL]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -215,7 +215,7 @@ ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None
 -- !query
 MAP a, b USING 'cat' AS (a, b) FROM t
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Project [a#x, b#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -228,7 +228,7 @@ ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None
 -- !query
 REDUCE a, b USING 'cat' AS (a, b) FROM t
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Project [a#x, b#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -253,7 +253,7 @@ FROM t
 -- !query analysis
 ScriptTransformation cat, [a#x, b#x, c#x, d#x], ScriptInputOutputSchema(List((TOK_TABLEROWFORMATFIELD,@), (TOK_TABLEROWFORMATNULL,NULL), (TOK_TABLEROWFORMATLINES,
 )),List((TOK_TABLEROWFORMATFIELD,@), (TOK_TABLEROWFORMATNULL,NULL), (TOK_TABLEROWFORMATLINES,
-)),None,None,List(),List(),None,None,false)
+)),None,None,List(),List(),None,None,false,false)
 +- Project [a#x, b#x, c#x, null AS NULL#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -278,7 +278,7 @@ FROM t
 -- !query analysis
 ScriptTransformation cat, [d#x], ScriptInputOutputSchema(List((TOK_TABLEROWFORMATFIELD,@), (TOK_TABLEROWFORMATNULL,NULL), (TOK_TABLEROWFORMATLINES,
 )),List((TOK_TABLEROWFORMATFIELD,@), (TOK_TABLEROWFORMATNULL,NULL), (TOK_TABLEROWFORMATLINES,
-)),None,None,List(),List(),None,None,false)
+)),None,None,List(),List(),None,None,false,false)
 +- Project [a#x, b#x, c#x, null AS NULL#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -302,7 +302,7 @@ FROM t
 -- !query analysis
 ScriptTransformation cat, [a#x, b#x, c#x, d#x], ScriptInputOutputSchema(List((TOK_TABLEROWFORMATFIELD,@), (TOK_TABLEROWFORMATLINES,
 )),List((TOK_TABLEROWFORMATFIELD,@), (TOK_TABLEROWFORMATNULL,NULL), (TOK_TABLEROWFORMATLINES,
-)),None,None,List(),List(),None,None,false)
+)),None,None,List(),List(),None,None,false,false)
 +- Project [a#x, b#x, c#x, null AS NULL#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -325,7 +325,7 @@ FROM t
 -- !query analysis
 ScriptTransformation cat, [a#x, b#x, c#x, d#x], ScriptInputOutputSchema(List((TOK_TABLEROWFORMATFIELD,@), (TOK_TABLEROWFORMATLINES,
 )),List((TOK_TABLEROWFORMATFIELD,@), (TOK_TABLEROWFORMATLINES,
-)),None,None,List(),List(),None,None,false)
+)),None,None,List(),List(),None,None,false,false)
 +- Project [a#x, b#x, c#x, null AS NULL#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -349,7 +349,7 @@ FROM t
 -- !query analysis
 ScriptTransformation cat, [a#x, b#x, c#x, d#x], ScriptInputOutputSchema(List((TOK_TABLEROWFORMATFIELD,@), (TOK_TABLEROWFORMATNULL,XXXX), (TOK_TABLEROWFORMATLINES,
 )),List((TOK_TABLEROWFORMATFIELD,@), (TOK_TABLEROWFORMATLINES,
-)),None,None,List(),List(),None,None,false)
+)),None,None,List(),List(),None,None,false,false)
 +- Project [a#x, b#x, c#x, null AS NULL#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -374,7 +374,7 @@ FROM t
 ScriptTransformation cat, [a#x, b#x, c#x, d#x], ScriptInputOutputSchema(List((TOK_TABLEROWFORMATFIELD,@), (TOK_TABLEROWFORMATNULL,
 ), (TOK_TABLEROWFORMATLINES,
 )),List((TOK_TABLEROWFORMATFIELD,@), (TOK_TABLEROWFORMATLINES,
-)),None,None,List(),List(),None,None,false)
+)),None,None,List(),List(),None,None,false,false)
 +- Project [a#x, b#x, c#x, null AS NULL#x]
    +- SubqueryAlias t
       +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -415,7 +415,7 @@ Project [a#x, b#x, decode(c#x, UTF-8) AS decode(c, UTF-8)#x, d#x, e#x, f#x, g#xL
 +- SubqueryAlias tmp
    +- ScriptTransformation cat, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x], ScriptInputOutputSchema(List((TOK_TABLEROWFORMATFIELD,,), (TOK_TABLEROWFORMATNULL,NULL), (TOK_TABLEROWFORMATLINES,
 )),List((TOK_TABLEROWFORMATFIELD,,), (TOK_TABLEROWFORMATNULL,NULL), (TOK_TABLEROWFORMATLINES,
-)),None,None,List(),List(),None,None,false)
+)),None,None,List(),List(),None,None,false,false)
       +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
          +- SubqueryAlias t
             +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -456,7 +456,7 @@ Project [a#x, b#xL, decode(c#x, UTF-8) AS decode(c, UTF-8)#x, d#x, e#x, f#x, g#x
 +- SubqueryAlias tmp
    +- ScriptTransformation cat, [a#x, b#xL, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#xL], ScriptInputOutputSchema(List((TOK_TABLEROWFORMATFIELD,,), (TOK_TABLEROWFORMATNULL,NULL), (TOK_TABLEROWFORMATLINES,
 )),List((TOK_TABLEROWFORMATFIELD,,), (TOK_TABLEROWFORMATNULL,NULL), (TOK_TABLEROWFORMATLINES,
-)),None,None,List(),List(),None,None,false)
+)),None,None,List(),List(),None,None,false,false)
       +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x]
          +- SubqueryAlias t
             +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -516,7 +516,7 @@ SELECT TRANSFORM(b, a, CAST(c AS STRING))
 FROM script_trans
 WHERE a <= 4
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Project [b#x, a#x, cast(c#x as string) AS c#x]
    +- Filter (a#x <= 4)
       +- SubqueryAlias script_trans
@@ -533,7 +533,7 @@ SELECT TRANSFORM(1, 2, 3)
 FROM script_trans
 WHERE a <= 4
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Project [1 AS 1#x, 2 AS 2#x, 3 AS 3#x]
    +- Filter (a#x <= 4)
       +- SubqueryAlias script_trans
@@ -552,7 +552,7 @@ LIMIT 1
 -- !query analysis
 GlobalLimit 1
 +- LocalLimit 1
-   +- ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+   +- ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
       +- Project [1 AS 1#x, 2 AS 2#x]
          +- SubqueryAlias script_trans
             +- View (`script_trans`, [a#x, b#x, c#x])
@@ -573,7 +573,7 @@ SELECT TRANSFORM(
 FROM script_trans
 WHERE a <= 4
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Project [b#x, a#x, CASE WHEN (c#x > 100) THEN 1 WHEN (c#x < 100) THEN 2 ELSE 3 END AS CASE WHEN (c > 100) THEN 1 WHEN (c < 100) THEN 2 ELSE 3 END#x]
    +- Filter (a#x <= 4)
       +- SubqueryAlias script_trans
@@ -590,7 +590,7 @@ SELECT TRANSFORM(b, a, c + 1)
 FROM script_trans
 WHERE a <= 4
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Project [b#x, a#x, (c#x + 1) AS (c + 1)#x]
    +- Filter (a#x <= 4)
       +- SubqueryAlias script_trans
@@ -607,7 +607,7 @@ SELECT TRANSFORM(*)
 FROM script_trans
 WHERE a <= 4
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Project [a#x, b#x, c#x]
    +- Filter (a#x <= 4)
       +- SubqueryAlias script_trans
@@ -625,7 +625,7 @@ FROM script_trans
 WHERE a <= 4
 GROUP BY b
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Aggregate [b#x], [b#x, max(a#x) AS max(a)#x, cast(sum(c#x) as string) AS CAST(sum(c) AS STRING)#x]
    +- Filter (a#x <= 4)
       +- SubqueryAlias script_trans
@@ -643,7 +643,7 @@ FROM script_trans
 WHERE a <= 4
 GROUP BY b
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Aggregate [b#x], [b#x, max(a#x) FILTER (WHERE (a#x > 3)) AS max(a) FILTER (WHERE (a > 3))#x, cast(sum(c#x) as string) AS CAST(sum(c) AS STRING)#x]
    +- Filter (a#x <= 4)
       +- SubqueryAlias script_trans
@@ -661,7 +661,7 @@ FROM script_trans
 WHERE a <= 2
 GROUP BY b
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Aggregate [b#x], [b#x, max(a#x) AS max(a)#x, cast(sum(c#x) as string) AS CAST(sum(c) AS STRING)#x]
    +- Filter (a#x <= 2)
       +- SubqueryAlias script_trans
@@ -680,7 +680,7 @@ WHERE a <= 4
 GROUP BY b
 HAVING MAX(a) > 0
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Filter (max(a)#x > 0)
    +- Aggregate [b#x], [b#x, max(a#x) AS max(a)#x, cast(sum(c#x) as string) AS CAST(sum(c) AS STRING)#x]
       +- Filter (a#x <= 4)
@@ -700,7 +700,7 @@ WHERE a <= 4
 GROUP BY b
 HAVING MAX(a) > 1
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Filter (max(a)#x > 1)
    +- Aggregate [b#x], [b#x, max(a#x) AS max(a)#x, cast(sum(c#x) as string) AS CAST(sum(c) AS STRING)#x]
       +- Filter (a#x <= 4)
@@ -719,7 +719,7 @@ FROM script_trans
 WHERE a <= 4
 WINDOW w AS (PARTITION BY b ORDER BY a)
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x, c#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Project [b#x, max(a) OVER (PARTITION BY b ORDER BY a ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, CAST(sum(c) OVER (PARTITION BY b ORDER BY a ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS STRING)#x]
    +- Project [b#x, a#x, c#x, max(a) OVER (PARTITION BY b ORDER BY a ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, _we1#xL, max(a) OVER (PARTITION BY b ORDER BY a ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, cast(_we1#xL as string) AS CAST(sum(c) OVER (PARTITION BY b ORDER BY a ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS STRING)#x]
       +- Window [max(a#x) windowspecdefinition(b#x, a#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS max(a) OVER (PARTITION BY b ORDER BY a ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, sum(c#x) windowspecdefinition(b#x, a#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS _we1#xL], [b#x], [a#x ASC NULLS FIRST]
@@ -743,7 +743,7 @@ WHERE a <= 4
 GROUP BY b, myCol, myCol2
 HAVING max(a) > 1
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x, c#x, d#x, e#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x, c#x, d#x, e#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Filter (max(a)#x > 1)
    +- Aggregate [b#x, myCol#x, myCol2#x], [b#x, max(a#x) AS max(a)#x, cast(sum(c#x) as string) AS CAST(sum(c) AS STRING)#x, myCol#x, myCol2#x]
       +- Filter (a#x <= 4)
@@ -767,7 +767,7 @@ SELECT a + 1
 -- !query analysis
 Project [(a#x + 1) AS (a + 1)#x]
 +- SubqueryAlias t
-   +- ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+   +- ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
       +- Project [a#x, b#x]
          +- SubqueryAlias script_trans
             +- View (`script_trans`, [a#x, b#x, c#x])
@@ -790,7 +790,7 @@ ORDER BY result
 Sort [result#xL ASC NULLS FIRST], true
 +- Project [(cast(b#x as bigint) + cast(1 as bigint)) AS result#xL]
    +- SubqueryAlias t
-      +- ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+      +- ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
          +- Aggregate [a#x], [a#x, sum(b#x) AS sum(b)#xL]
             +- SubqueryAlias script_trans
                +- View (`script_trans`, [a#x, b#x, c#x])
@@ -803,7 +803,7 @@ Sort [result#xL ASC NULLS FIRST], true
 -- !query
 MAP k / 10 USING 'cat' AS (one) FROM (SELECT 10 AS k)
 -- !query analysis
-ScriptTransformation cat, [one#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [one#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Project [(cast(k#x as double) / cast(10 as double)) AS (k / 10)#x]
    +- SubqueryAlias __auto_generated_subquery_name
       +- Project [10 AS k#x]
@@ -815,7 +815,7 @@ FROM (SELECT 1 AS key, 100 AS value) src
 MAP src.*, src.key, CAST(src.key / 10 AS INT), CAST(src.key % 10 AS INT), src.value
   USING 'cat' AS (k, v, tkey, ten, one, tvalue)
 -- !query analysis
-ScriptTransformation cat, [k#x, v#x, tkey#x, ten#x, one#x, tvalue#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [k#x, v#x, tkey#x, ten#x, one#x, tvalue#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Project [key#x, value#x, key#x, cast((cast(key#x as double) / cast(10 as double)) as int) AS CAST((key / 10) AS INT)#x, cast((key#x % 10) as int) AS CAST((key % 10) AS INT)#x, value#x]
    +- SubqueryAlias src
       +- Project [1 AS key#x, 100 AS value#x]
@@ -828,7 +828,7 @@ SELECT TRANSFORM(1)
 FROM script_trans
 HAVING true
 -- !query analysis
-ScriptTransformation cat, [a#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Filter cast(true as boolean)
    +- Aggregate [1 AS 1#x]
       +- SubqueryAlias script_trans
@@ -851,7 +851,7 @@ SELECT TRANSFORM(1)
 FROM script_trans
 HAVING true
 -- !query analysis
-ScriptTransformation cat, [a#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Filter cast(true as boolean)
    +- Project [1 AS 1#x]
       +- SubqueryAlias script_trans
@@ -877,7 +877,7 @@ SELECT t1.b FROM temp t1 JOIN temp t2 ON t1.b = t2.b
 WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias temp
-:     +- ScriptTransformation cat, [b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+:     +- ScriptTransformation cat, [b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 :        +- Project [a#x]
 :           +- SubqueryAlias t
 :              +- View (`t`, [a#x, b#x, c#x, d#x, e#x, f#x, g#xL, h#x, i#x, j#x, k#x, l#x])
@@ -999,12 +999,12 @@ FROM (
 SELECT TRANSFORM(a, b)
   USING 'cat' AS (a, b)
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Project [a#x, b#x]
    +- SubqueryAlias map_output
       +- Sort [a#x ASC NULLS FIRST], false
          +- RepartitionByExpression [a#x]
-            +- ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+            +- ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
                +- Project [a#x, b#x]
                   +- SubqueryAlias complex_trans
                      +- View (`complex_trans`, [a#x, b#x])
@@ -1024,11 +1024,11 @@ FROM (
 SELECT TRANSFORM(a, b)
   USING 'cat' AS (a, b)
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Project [a#x, b#x]
    +- SubqueryAlias map_output
       +- Sort [a#x ASC NULLS FIRST], true
-         +- ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+         +- ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
             +- Project [a#x, b#x]
                +- SubqueryAlias complex_trans
                   +- View (`complex_trans`, [a#x, b#x])
@@ -1043,7 +1043,7 @@ SELECT TRANSFORM (a, b)
   USING 'cat' AS (a CHAR(10), b VARCHAR(10))
 FROM VALUES('apache', 'spark') t(a, b)
 -- !query analysis
-ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
+ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false,false)
 +- Project [a#x, b#x]
    +- SubqueryAlias t
       +- LocalRelation [a#x, b#x]

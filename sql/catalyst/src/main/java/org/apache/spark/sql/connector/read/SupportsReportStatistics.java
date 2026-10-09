@@ -69,8 +69,8 @@ public interface SupportsReportStatistics extends Scan {
    * adjust stats. Re-applying those fully pushed filters in Spark should be redundant for query
    * results because the data source already evaluates them.
    * <p>
-   * The adjustment Spark performs when this returns {@code false} is best-effort: Spark re-applies
-   * a fully pushed filter for stats adjustment only when every column the filter references is
+   * The adjustment Spark performs when this returns {@code false} is best-effort: by default,
+   * Spark re-applies a fully pushed filter only when every column the filter references is
    * still present in {@link Scan#readSchema()}. If {@code pruneColumns} removes a pushed-filter
    * column, Spark drops that filter from the adjustment, so the reported statistics will not
    * reflect it.
@@ -84,5 +84,25 @@ public interface SupportsReportStatistics extends Scan {
    */
   default boolean reflectsFullyPushedDownFilters() {
     return true;
+  }
+
+  /**
+   * Returns whether Spark should estimate original and inferred filters separately from the same
+   * reported scan statistics and use the smaller row-count estimate, including its column stats.
+   * This avoids compounding the selectivity of correlated original and inferred predicates.
+   * <p>
+   * This option applies only when the source reports inferred filters and
+   * {@link #reflectsFullyPushedDownFilters()} returns {@code false}. By default, Spark adds the
+   * inferred predicates as logical filters for its existing best-effort statistics adjustment.
+   * <p>
+   * When this returns {@code true}, inferred predicates remain scan metadata and are not added to
+   * executable filters in Spark. The separate estimates require cost-based optimization; when it
+   * is disabled, Spark leaves the reported scan statistics unadjusted. This option does not affect
+   * filter evaluation or partition pruning within the data source.
+   *
+   * @since 4.4.0
+   */
+  default boolean useInferredFilterEstimation() {
+    return false;
   }
 }

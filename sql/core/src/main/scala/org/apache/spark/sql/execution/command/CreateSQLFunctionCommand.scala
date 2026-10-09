@@ -426,7 +426,7 @@ case class CreateSQLFunctionCommand(
     def checkExpression(expression: Expression, path: Seq[FunctionIdentifier]): Unit = {
       expression.foreach {
         case s: SubqueryExpression => checkPlan(s.plan, path)
-        case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _) =>
+        case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _, _) =>
           val funcId = nameParts.asFunctionIdentifier
           val info = catalog.lookupFunctionInfo(funcId)
           if (isSQLFunction(info.getClassName)) {

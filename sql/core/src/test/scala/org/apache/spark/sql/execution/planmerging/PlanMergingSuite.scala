@@ -439,4 +439,44 @@ class PlanMergingSuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-60084: Reuse a filter that an earlier merge folded into a post-join filter") {
+    // Merging the 2nd subquery into the 1st aliases `l.b = 2` below the join, and the 2nd
+    // subquery's post-join filter folds that alias into a new one, so only the new alias is
+    // carried up to the aggregate. The 3rd subquery then reuses the `l.b = 2` alias on its own.
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true",
+        // ObjectSerializerPruning produces different scan shapes depending on whether a Filter is
+        // present. Disabling the rule makes both scans identical so PlanMerger can merge them.
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning") {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT sum(l.a)
+            |   FROM testData2 l LEFT JOIN testData2 r ON l.a = r.a WHERE l.b = 1),
+            |  (SELECT max(l.a)
+            |   FROM testData2 l LEFT JOIN testData2 r ON l.a = r.a
+            |   WHERE l.b = 2 AND coalesce(r.b, 3) > 1),
+            |  (SELECT count(*)
+            |   FROM testData2 l LEFT JOIN testData2 r ON l.a = r.a WHERE l.b = 2)
+          """.stripMargin)
+
+        checkAnswer(df, Row(12, 3, 6) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected ReusedSubqueryExec in the plan")
+      }
+    }
+  }
 }

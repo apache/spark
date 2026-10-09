@@ -120,6 +120,41 @@ trait MergeIntoSchemaEvolutionExtraSourceColumnTests extends MergeIntoSchemaEvol
       "`active` cannot be resolved"
   )
 
+  test("schema evolution - evolved target column takes precedence over a SQL variable") {
+    withTable(tableNameAsString) {
+      withTempView("source") {
+        createAndInitTable(
+          "pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }""".stripMargin)
+        Seq((1, 150, "hr", true)).toDF("pk", "salary", "dep", "active")
+          .createOrReplaceTempView("source")
+
+        withSessionVariable("active", "action_enabled") {
+          sql("DECLARE VARIABLE active BOOLEAN DEFAULT false")
+          sql("DECLARE VARIABLE action_enabled BOOLEAN DEFAULT true")
+          executeMerge(
+            withSchemaEvolution = true,
+            targetTableName = tableNameAsString,
+            sourceViewName = "source",
+            cond = "t.pk = s.pk",
+            clauses = Seq(
+              update(set = "salary = s.salary, active = s.active"),
+              updateNotMatched(
+                set = "salary = salary + 1",
+                condition = "active IS NULL AND action_enabled AND salary = 200"),
+              deleteNotMatched(
+                condition = "active IS NULL AND action_enabled AND salary = 300")))
+
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Row(1, 150, "hr", true) :: Row(2, 201, "software", null) :: Nil)
+        }
+      }
+    }
+  }
+
   testEvolution("source has extra column with set all columns")(
     targetData = Seq(
       (1, 100, "hr"),

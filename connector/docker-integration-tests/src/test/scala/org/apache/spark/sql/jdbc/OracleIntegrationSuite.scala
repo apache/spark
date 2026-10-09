@@ -159,6 +159,14 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
       .executeUpdate()
     conn.commit()
 
+    // Single-row table with a nanosecond TIMESTAMP(9) for the nanos-preview NTZ precision test.
+    conn.prepareStatement("CREATE TABLE datetimeNanos (id NUMBER(10), t TIMESTAMP(9))")
+      .executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO datetimeNanos VALUES (1, TIMESTAMP '1996-01-01 01:23:45.123456789')")
+      .executeUpdate()
+    conn.commit()
+
     conn.prepareStatement("CREATE TABLE test_ltz(t TIMESTAMP WITH LOCAL TIME ZONE)")
       .executeUpdate()
     conn.prepareStatement(
@@ -388,8 +396,8 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
       spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", new Properties()).collect()
     }
     assert(e.getMessage.contains(
-      "The 12312321321321312312312312123.0000000000 rounded half up from" +
-        " 12312321321321312312312312123 cannot be represented as Decimal(38, 10)"))
+      "The 12312321321321312312312312123.000000000000000000 rounded half up from" +
+        " 12312321321321312312312312123 cannot be represented as Decimal(38, 18)"))
 
     // custom schema can read data
     val props = new Properties()
@@ -621,6 +629,21 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
       val legacyRow = legacyDf.select("D", "T").collect().head
       assert(legacyRow.getTimestamp(0) === Timestamp.valueOf("1991-11-09 00:00:00"))
       assert(legacyRow.getTimestamp(1) === Timestamp.valueOf("1996-01-01 01:23:45"))
+    }
+  }
+
+  test("SPARK-58876: Oracle TIMESTAMP(9) reads back as nanosecond NTZ under the nanos preview") {
+    // End-to-end: a real Oracle TIMESTAMP(9) reads back as the nanosecond NTZ type with its full
+    // sub-microsecond wall-clock value. Type-resolution edge cases are covered by JDBCSuite.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val df = spark.read.format("jdbc")
+        .option("url", jdbcUrl)
+        .option("dbtable", "datetimeNanos")
+        .option("preferTimestampNanos", "true")
+        .load()
+      assert(df.schema("T").dataType === TimestampNTZNanosType(9))
+      assert(df.select("T").collect().head.getAs[LocalDateTime](0)
+        === LocalDateTime.of(1996, 1, 1, 1, 23, 45, 123456789))
     }
   }
 

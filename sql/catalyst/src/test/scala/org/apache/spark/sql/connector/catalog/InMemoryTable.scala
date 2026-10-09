@@ -26,6 +26,7 @@ import org.apache.spark.sql.connector.distributions.{Distribution, Distributions
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwrite, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -47,10 +48,11 @@ class InMemoryTable(
     advisoryPartitionSize: Option[Long] = None,
     isDistributionStrictlyRequired: Boolean = true,
     override val numRowsPerSplit: Int = Int.MaxValue,
-    override val id: String = UUID.randomUUID().toString)
+    override val id: String = UUID.randomUUID().toString,
+    override val schemaAlignmentConfig: SchemaAlignmentConfig = SchemaAlignmentConfig.DEFAULT)
   extends InMemoryBaseTable(name, columns, partitioning, properties, constraints, distribution,
     ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
-    numRowsPerSplit) with SupportsDelete {
+    numRowsPerSplit, schemaAlignmentConfig) with SupportsDelete {
 
   def this(
       name: String,
@@ -143,7 +145,8 @@ class InMemoryTable(
       advisoryPartitionSize,
       isDistributionStrictlyRequired,
       numRowsPerSplit,
-      id)
+      id,
+      schemaAlignmentConfig = schemaAlignmentConfig)
 
     dataMap.synchronized {
       dataMap.foreach { case (key, splits) =>

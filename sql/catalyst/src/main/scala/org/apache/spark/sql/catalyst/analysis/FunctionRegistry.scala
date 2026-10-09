@@ -941,6 +941,17 @@ object FunctionRegistry {
     expression[StructsToCsv]("to_csv")
   )
 
+  // Built-in forms of the SQL:2016 JSON constructor and path functions. `AstBuilder` routes the
+  // eligible flat clause-free calls here so a same-named routine can shadow them. Clause-bearing
+  // forms, and the nested/implicit-JSON clause-free forms (routing deferred to SPARK-59243), are
+  // still built directly by the grammar.
+  private val routedSqlJsonFunctionEntries: Seq[FunctionRegistryEntry] = Seq(
+    expressionBuilder("json_value", JsonValueExpressionBuilder),
+    expressionBuilder("json_query", JsonQueryExpressionBuilder),
+    expressionBuilder("json_exists", JsonExistsExpressionBuilder),
+    expressionBuilder("json_array", JsonArrayExpressionBuilder)
+  )
+
   private def jsonExpressions: Seq[FunctionRegistryEntry] = Seq(
     // JSON functions
     expression[GetJsonObject]("get_json_object"),
@@ -951,7 +962,21 @@ object FunctionRegistry {
     expression[LengthOfJsonArray]("json_array_length"),
     expression[JsonObjectKeys]("json_object_keys"),
     expression[JsonTypeof]("json_typeof")
-  )
+  ) ++ routedSqlJsonFunctionEntries
+
+  /**
+   * Names of the clause-free SQL/JSON functions that `AstBuilder` routes through
+   * function resolution. This is the shared list backing the star owner check in
+   * [[FunctionResolution.selectRoutedSqlJsonDirectStarOwner]], which derives its set from here
+   * so a newly routed function is covered automatically. It is NOT a single source of truth for
+   * the whole feature: two sibling lists still need a matching manual entry when a function is
+   * added or removed --
+   *   1. the routed grammar branches in `AstBuilder`, and
+   *   2. the `ResolverGuard.isGenerallySupportedExpression` allowlist (keyed on the concrete
+   *      expression classes), so the single-pass resolver accepts the routed expression.
+   */
+  val routedSqlJsonFunctionNames: Set[String] =
+    routedSqlJsonFunctionEntries.map(_._1).toSet
 
   private def variantExpressions: Seq[FunctionRegistryEntry] = Seq(
     // variant functions

@@ -750,6 +750,26 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("SPARK-58881: ignore non-numeric part files in a checkpoint directory") {
+    withTempDir { checkpointDir =>
+      sc = new SparkContext("local", "test", new SparkConf().set(UI_ENABLED.key, "false"))
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+      assert(rdd.collect().toSeq === (1 to 20))
+
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+      Seq("part-00000.bak", "part-backup", "part-").foreach { fileName =>
+        fs.create(new Path(checkpointPath, fileName)).close()
+      }
+
+      val recovered = sc.checkpointFile[Int](checkpointPath.toString)
+      assert(recovered.getNumPartitions === 4)
+      assert(recovered.collect().toSeq === (1 to 20))
+    }
+  }
+
   test("checkpoint path that cannot be created") {
     withTempDir { checkpointDir =>
       // MkdirsFailingFilesystem refuses to create the per-RDD directory and reports it the way

@@ -6759,6 +6759,37 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   // Pipelined shuffle dependency: group formation + concurrent submission
   // ==========================================================================================
 
+  for (withShuffle <- Seq(false, true)) {
+    test(s"non-pipelined stage start skips waiting stages (withShuffle=$withShuffle)") {
+      val producerRdd = new MyRDD(sc, 2, Nil)
+      val finalRdd = if (withShuffle) {
+        val dep = new ShuffleDependency(producerRdd, new HashPartitioner(2))
+        new MyRDD(sc, 2, List(dep), tracker = mapOutputTracker)
+      } else {
+        producerRdd
+      }
+      val unrelatedWaitingStage = mock(classOf[Stage])
+      when(unrelatedWaitingStage.id).thenReturn(Int.MaxValue)
+      when(unrelatedWaitingStage.parents).thenReturn(Nil)
+      scheduler.waitingStages += unrelatedWaitingStage
+      try {
+        submit(finalRdd, Array(0, 1))
+        verify(unrelatedWaitingStage, never()).parents
+        assert(scheduler.waitingStages.contains(unrelatedWaitingStage))
+      } finally {
+        scheduler.waitingStages -= unrelatedWaitingStage
+      }
+
+      if (withShuffle) {
+        completeShuffleMapStageSuccessfully(taskSets(0).stageId, 0, 2)
+      }
+      val resultTaskSet = taskSets(if (withShuffle) 1 else 0)
+      completeAndCheckAnswer(
+        resultTaskSet, Seq((Success, 42), (Success, 43)), Map(0 -> 42, 1 -> 43))
+      assertDataStructuresEmpty()
+    }
+  }
+
   test("pipelined shuffle: consumer stage is submitted concurrently with its producer") {
     // producer (shuffle map) --[pipelined]--> consumer (result)
     val producerRdd = new MyRDD(sc, 2, Nil)
@@ -6975,7 +7006,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: a non-mixed job is classified by the cheap kinds pre-pass") {
-    // classifyJobShuffleShape runs on EVERY job submission, including on deployments that never
+    // Shuffle-shape preflight runs on every job submission, including on deployments that never
     // enable this feature, so a non-mixed job must not pay the precise (RDD, belowRegular)-keyed
     // walk that only a pipelined/regular MIX needs.
     //
@@ -7105,6 +7136,115 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       "job cancellation must clean up the buffered consumer deferral (no state outlives the job)")
     assert(results.isEmpty, "a cancelled job's buffered consumer success must not be applied")
     assertDataStructuresEmpty()
+  }
+
+  for {
+    speculation <- Seq(false, true)
+    dynamicAllocation <- Seq(false, true)
+    withShuffle <- Seq(false, true)
+  } {
+    test(s"ordinary job preflight traverses once (speculation=$speculation, " +
+        s"dynamicAllocation=$dynamicAllocation, withShuffle=$withShuffle)") {
+      val producerRdd = new MyRDD(sc, 2, Nil)
+      val inputRdd = if (withShuffle) {
+        val dep = new ShuffleDependency(producerRdd, new HashPartitioner(2))
+        new MyRDD(sc, 2, List(dep), tracker = mapOutputTracker)
+      } else {
+        producerRdd
+      }
+      val edgeReads = new AtomicInteger
+      val dep = new OneToOneDependency(inputRdd) {
+        override def rdd: RDD[(Int, Int)] = {
+          edgeReads.incrementAndGet()
+          super.rdd
+        }
+      }
+      val finalRdd = new MyRDD(sc, 2, List(dep))
+      var preflightEdgeReads = -1
+      doAnswer { invocation =>
+        // Snapshot before stage discovery adds its own dependency traversals.
+        if (preflightEdgeReads == -1) {
+          preflightEdgeReads = edgeReads.get()
+        }
+        invocation.callRealMethod()
+      }.when(scheduler).getShuffleDependenciesAndResourceProfiles(finalRdd)
+
+      sc.conf.set(config.SPECULATION_ENABLED, speculation)
+      sc.conf.set(config.DYN_ALLOCATION_ENABLED, dynamicAllocation)
+      sc.conf.set(config.DYN_ALLOCATION_TESTING, true)
+      try {
+        edgeReads.set(0)
+        submit(finalRdd, Array(0, 1))
+        assert(preflightEdgeReads === 1)
+        if (withShuffle) {
+          completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+        }
+        completeAndCheckAnswer(
+          taskSets.last, Seq((Success, 42), (Success, 43)), Map(0 -> 42, 1 -> 43))
+        assertDataStructuresEmpty()
+      } finally {
+        sc.conf.set(config.SPECULATION_ENABLED, false)
+        sc.conf.set(config.DYN_ALLOCATION_ENABLED, false)
+        sc.conf.set(config.DYN_ALLOCATION_TESTING, false)
+      }
+    }
+  }
+
+  for ((speculation, dynamicAllocation) <- Seq((true, false), (false, true), (true, true))) {
+    val expectedError = if (speculation) {
+      "Speculative execution is not supported"
+    } else {
+      "Dynamic allocation is not supported"
+    }
+
+    test(s"pipelined shuffle: feature rejection short-circuits (speculation=$speculation, " +
+        s"dynamicAllocation=$dynamicAllocation)") {
+      val producerRdd = new MyRDD(sc, 2, Nil)
+      val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      val untouchedRdd = new MyRDD(sc, 2, Nil) {
+        override protected def getDependencies: Seq[Dependency[_]] =
+          throw new IllegalStateException("this branch must not be visited")
+      }
+      val consumerRdd = new MyRDD(sc, 2,
+        List(pipelinedDep, new OneToOneDependency(untouchedRdd)))
+      sc.conf.set(config.SPECULATION_ENABLED, speculation)
+      sc.conf.set(config.DYN_ALLOCATION_ENABLED, dynamicAllocation)
+      sc.conf.set(config.DYN_ALLOCATION_TESTING, true)
+      try {
+        val failure = submitAndCaptureFailure(consumerRdd, Array(0, 1))
+        assert(failure != null)
+        assert(failure.getMessage.contains(expectedError))
+        assert(taskSets.isEmpty)
+        assertDataStructuresEmpty()
+      } finally {
+        sc.conf.set(config.SPECULATION_ENABLED, false)
+        sc.conf.set(config.DYN_ALLOCATION_ENABLED, false)
+        sc.conf.set(config.DYN_ALLOCATION_TESTING, false)
+      }
+    }
+
+    test(s"pipelined shuffle: feature rejection precedes mixed-shape rejection " +
+        s"(speculation=$speculation, dynamicAllocation=$dynamicAllocation)") {
+      val producerRdd = new MyRDD(sc, 2, Nil)
+      val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      val middleRdd = new MyRDD(sc, 2, List(pipelinedDep))
+      val regularDep = new ShuffleDependency(middleRdd, new HashPartitioner(2))
+      val finalRdd = new MyRDD(sc, 2, List(regularDep))
+      sc.conf.set(config.SPECULATION_ENABLED, speculation)
+      sc.conf.set(config.DYN_ALLOCATION_ENABLED, dynamicAllocation)
+      sc.conf.set(config.DYN_ALLOCATION_TESTING, true)
+      try {
+        val failure = submitAndCaptureFailure(finalRdd, Array(0, 1))
+        assert(failure != null)
+        assert(failure.getMessage.contains(expectedError))
+        assert(taskSets.isEmpty)
+        assertDataStructuresEmpty()
+      } finally {
+        sc.conf.set(config.SPECULATION_ENABLED, false)
+        sc.conf.set(config.DYN_ALLOCATION_ENABLED, false)
+        sc.conf.set(config.DYN_ALLOCATION_TESTING, false)
+      }
+    }
   }
 
   test("regular shuffle job with speculation enabled is NOT rejected (rejection path is inert)") {
@@ -7241,6 +7381,40 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   // ==========================================================================================
   // Gang admission / slot check
   // ==========================================================================================
+
+  test("pipelined shuffle: admission enumerates each dependency once") {
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val deps = List(pipelinedDep)
+    val edgeVisits = new AtomicInteger
+    val countingDeps = new scala.collection.immutable.AbstractSeq[Dependency[_]] {
+      override def length: Int = deps.length
+      override def apply(index: Int): Dependency[_] = deps(index)
+      override def iterator: Iterator[Dependency[_]] = deps.iterator.map { dep =>
+        edgeVisits.incrementAndGet()
+        dep
+      }
+    }
+    val consumerRdd = new MyRDD(sc, 2, Nil) {
+      override protected def getDependencies: Seq[Dependency[_]] = countingDeps
+    }
+    val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
+    myScheduler.maxConcurrentTasksForTest = 0
+    try {
+      val failure = submitAndCaptureFailure(consumerRdd, Array(0, 1))
+      assert(failure.isInstanceOf[SparkException])
+      checkError(
+        exception = failure.asInstanceOf[SparkException],
+        condition = "CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT",
+        parameters = scala.collection.immutable.Map("numTasks" -> "4", "numSlots" -> "0"))
+      // Classification and admission each enumerate the edge once; no stage was created.
+      assert(edgeVisits.get() === 2)
+      assert(taskSets.isEmpty)
+      assertDataStructuresEmpty()
+    } finally {
+      myScheduler.maxConcurrentTasksForTest = 1000
+    }
+  }
 
   test("pipelined shuffle: an all-pipelined group that fits is admitted up front and runs") {
     // Whole-group demand producer(2) + consumer(2) = 4 <= capacity 4, other-work occupancy 0, so

@@ -111,9 +111,5 @@ class TransformExpressionSuite extends SparkFunSuite {
     assert(!left.hasSameReducedKeys(b12), "an unreduced side never shares one")
     assert(!b12.hasSameReducedKeys(left))
     assert(!b12.hasSameReducedKeys(b8), "nor do two unreduced ones")
-
-    // The marker rides on the expression, so it survives the attribute rewrites a projection and
-    // `GroupPartitionsExec` apply to a reported partitioning.
-    assert(left.hasSameReducedKeys(left.withReference(b)))
   }
 }

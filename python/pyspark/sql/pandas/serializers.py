@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 class SpecialLengths:
     END_OF_DATA_SECTION = -1
     PYTHON_EXCEPTION_THROWN = -2
-    TIMING_DATA = -3
+    METRICS_DATA = -3
     END_OF_STREAM = -4
     NULL = -5
     START_ARROW_STREAM = -6
@@ -126,7 +126,7 @@ class ArrowCollectSerializer(ArrowStreamSerializer):
                 errorClass="ERROR_OCCURRED_WHILE_CALLING",
                 messageParameters={
                     "func_name": "ArrowCollectSerializer.load_stream",
-                    "error_msg": error_msg,
+                    "error_msg": str(error_msg),
                 },
             )
         # Yield the batches in order, dropping our reference to each as it goes so

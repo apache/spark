@@ -327,6 +327,91 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     assert(stateOptions.isEmpty)
   }
 
+  gridTest("state option projection preserves effective values for duplicate-case keys")(
+      Seq("table", "changelog")) { kind =>
+    val catalog = catalogWithStateOptions(java.util.Set.of("SnApShOt"))
+    when(catalog.changelogStateOptionKeys()).thenCallRealMethod()
+    val entries = Seq("snapshot" -> "lower-value", "SNAPSHOT" -> "upper-value")
+    Seq(entries, entries.reverse).foreach { orderedEntries =>
+      val original = new java.util.LinkedHashMap[String, String]()
+      orderedEntries.foreach { case (key, value) => original.put(key, value) }
+      original.put("split-size", "5")
+      val options = new CaseInsensitiveStringMap(original)
+
+      val projected = if (kind == "table") {
+        CatalogV2Util.extractTableStateOptions(catalog, options)
+      } else {
+        CatalogV2Util.extractChangelogStateOptions(catalog, options)
+      }
+
+      assert(options.get("snapshot") == orderedEntries.last._2)
+      assert(projected.size() == 1)
+      assert(projected.get("snapshot") == options.get("snapshot"))
+      assert(projected.asCaseSensitiveMap().containsKey("snapshot"))
+      assert(projected.asCaseSensitiveMap().containsKey("SNAPSHOT"))
+    }
+  }
+
+  test("extractChangelogStateOptions defaults to table state keys") {
+    val catalog = catalogWithStateOptions(java.util.Set.of("BrAnCh"))
+    when(catalog.changelogStateOptionKeys()).thenCallRealMethod()
+    val options = new CaseInsensitiveStringMap(java.util.Map.of(
+      "BRANCH", "Main", "split-size", "5", "startingVersion", "1"))
+
+    val stateOptions = CatalogV2Util.extractChangelogStateOptions(catalog, options)
+
+    assert(stateOptions == new CaseInsensitiveStringMap(java.util.Map.of("branch", "Main")))
+    assert(stateOptions.asCaseSensitiveMap().containsKey("BRANCH"))
+    assert(options.size() == 3)
+  }
+
+  test("extractChangelogStateOptions allows independent changelog state keys") {
+    val catalog = catalogWithStateOptions(java.util.Set.of("branch"))
+    when(catalog.changelogStateOptionKeys()).thenReturn(java.util.Set.of("schemaVersion"))
+    val options = new CaseInsensitiveStringMap(java.util.Map.of(
+      "branch", "Main", "SCHEMAVERSION", "10", "split-size", "5"))
+
+    val changelogOptions = CatalogV2Util.extractChangelogStateOptions(catalog, options)
+    val tableOptions = CatalogV2Util.extractTableStateOptions(catalog, options)
+
+    assert(changelogOptions ==
+      new CaseInsensitiveStringMap(java.util.Map.of("schemaVersion", "10")))
+    assert(tableOptions == new CaseInsensitiveStringMap(java.util.Map.of("branch", "Main")))
+  }
+
+  test("extractChangelogStateOptions allows an empty override of table state keys") {
+    val catalog = catalogWithStateOptions(java.util.Set.of("branch"))
+    when(catalog.changelogStateOptionKeys()).thenReturn(java.util.Set.of[String]())
+    val options = new CaseInsensitiveStringMap(java.util.Map.of("branch", "Main"))
+
+    assert(CatalogV2Util.extractChangelogStateOptions(catalog, options).isEmpty)
+  }
+
+  test("extractChangelogStateOptions returns no options by default") {
+    val catalog = mock(classOf[TableCatalog])
+    when(catalog.tableStateOptionKeys()).thenCallRealMethod()
+    when(catalog.changelogStateOptionKeys()).thenCallRealMethod()
+    val options = new CaseInsensitiveStringMap(
+      java.util.Map.of("branch", "Main", "split-size", "5"))
+
+    assert(CatalogV2Util.extractChangelogStateOptions(catalog, options).isEmpty)
+  }
+
+  test("extractChangelogStateOptions compares keys case-insensitively and values sensitively") {
+    val catalog = mock(classOf[TableCatalog])
+    when(catalog.changelogStateOptionKeys()).thenReturn(java.util.Set.of("BrAnCh"))
+    val lowerCaseKey = CatalogV2Util.extractChangelogStateOptions(
+      catalog, new CaseInsensitiveStringMap(java.util.Map.of("branch", "Main")))
+    val upperCaseKey = CatalogV2Util.extractChangelogStateOptions(
+      catalog, new CaseInsensitiveStringMap(java.util.Map.of("BRANCH", "Main")))
+    val lowerCaseValue = CatalogV2Util.extractChangelogStateOptions(
+      catalog, new CaseInsensitiveStringMap(java.util.Map.of("branch", "main")))
+
+    assert(lowerCaseKey == upperCaseKey)
+    assert(lowerCaseKey.hashCode() == upperCaseKey.hashCode())
+    assert(lowerCaseKey != lowerCaseValue)
+  }
+
   test("viewInfoBuilderFrom preserves the dependency list") {
     val dependencies = DependencyList.of(Array(Dependency.table(Array("cat", "ns", "events"))))
     val existing = viewWithDependencies(Some(dependencies))
