@@ -2739,6 +2739,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  // A SparkRuntimeException (not SparkSQLFeatureNotSupportedException) despite the 0A000
+  // SQLSTATE: restricting CHAR/VARCHAR JSON map keys is a limitation, but the error is
+  // raised while parsing a row and must flow through Jackson's throw/catch parse-mode
+  // model (PERMISSIVE wraps it as a bad record, FAILFAST surfaces it).
   def unsupportedJsonCharVarcharMapKey(
       key: UTF8String, dataType: DataType): SparkRuntimeException = {
     new SparkRuntimeException(

@@ -1051,15 +1051,14 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
   private def assertUnsupportedJsonMapKeyError(
       body: => Any, key: String, dataTypeSql: String): Unit = {
-    val e = intercept[SparkException] { body }
-    val cause = e.getCause match {
-      case r: SparkRuntimeException => r
-      case other =>
-        Option(other).flatMap(t => Option(t.getCause)).getOrElse(other) match {
-          case r: SparkRuntimeException => r
-          case _ => fail(s"expected UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY cause, got: $e")
-        }
-    }
+    val error = intercept[Exception] { body }
+    val cause = Iterator.iterate[Throwable](error)(_.getCause)
+      .takeWhile(_ != null)
+      .collectFirst {
+        case e: SparkRuntimeException
+          if e.getCondition == "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY" => e
+      }
+      .getOrElse(fail("expected UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY cause", error))
     checkError(
       exception = cause,
       condition = "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY",
@@ -3152,6 +3151,32 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         checkAnswer(
           sql("""SELECT from_json('{"abc": 1, "abc": 2}', 'MAP<VARCHAR(3), INT>')"""),
           Row(Map("abc" -> 2)))
+      }
+
+      // A last-win duplicate whose winning (second) value overflows nulls the whole
+      // record and keeps EXCEED_LIMIT_LENGTH, matching the non-duplicate case, instead
+      // of silently keeping the superseded first value. Holds for both partial modes.
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          checkAnswer(
+            sql("""SELECT from_json('{"abc": "x", "abc": "abcdef"}',
+              |  'MAP<CHAR(3), CHAR(2)>')""".stripMargin),
+            Row(null))
+          assertParseExceedLimit(
+            """SELECT from_json('{"abc": "x", "abc": "abcdef"}',
+              |  'MAP<CHAR(3), CHAR(2)>',
+              |  map('mode', 'FAILFAST'))""".stripMargin,
+            expectedLimit = "2")
+        }
+      }
+
+      // Collation is not consulted for last-win: binary-distinct names are both kept,
+      // unlike XML which pads keys and then applies the dedup policy.
+      withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+        checkAnswer(
+          sql("""SELECT map_entries(from_json('{"ab": 1, "AB": 2}',
+            |  'MAP<VARCHAR(2) COLLATE UTF8_LCASE, INT>'))""".stripMargin),
+          Row(Seq(Row("ab", 1), Row("AB", 2))))
       }
     }
 

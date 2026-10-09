@@ -626,7 +626,9 @@ class JacksonParser(
    * JSON object names used as CHAR/VARCHAR keys are length-checked without rewriting:
    * CHAR keys must already be exactly n characters, and VARCHAR keys must already be
    * at most n characters. Padding, trimming, and mapKeyDedupPolicy are not applied.
-   * Exact repeated names last-win for CHAR/VARCHAR keys; STRING keys keep every pair.
+   * Repeated names that are binary-equal last-win for CHAR/VARCHAR keys (collation is
+   * not consulted, matching how STRING keys are compared here); STRING keys keep every
+   * pair. This differs from XML, which pads keys and then applies mapKeyDedupPolicy.
    */
   private def convertMap(
       parser: JsonParser,
@@ -635,21 +637,21 @@ class JacksonParser(
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
-    val lastWinCharVarcharKeys = charVarcharStandardSemantics && {
-      keyType match {
-        case _: CharType | _: VarcharType => true
-        case _ => false
-      }
-    }
+    // CHAR/VARCHAR keys last-win on exact (binary) duplicate names. This map from key
+    // to buffer index keeps that lookup O(1); it stays null (and the buffers keep every
+    // pair, as STRING maps always have) when last-win does not apply.
+    val lastWinIndex: mutable.HashMap[UTF8String, Int] =
+      if (isLengthCheckedKeyType(keyType)) mutable.HashMap.empty[UTF8String, Int] else null
 
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       val key = convertJsonMapKey(parser.currentName, keyType)
-      val existing = if (lastWinCharVarcharKeys) keys.indexWhere(_ == key) else -1
+      val existing = if (lastWinIndex != null) lastWinIndex.getOrElse(key, -1) else -1
       try {
         val value = fieldConverter.apply(parser)
         if (existing >= 0) {
           values(existing) = value
         } else {
+          if (lastWinIndex != null) lastWinIndex(key) = keys.length
           keys += key
           values += value
         }
@@ -659,17 +661,18 @@ class JacksonParser(
           if (existing >= 0) {
             values(existing) = err.partialResult
           } else {
+            if (lastWinIndex != null) lastWinIndex(key) = keys.length
             keys += key
             values += err.partialResult
           }
         case NonFatal(e) if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(e))
           parser.skipChildren()
-          // Record the key without a value so the unpaired-buffer check below
-          // rethrows EXCEED_LIMIT_LENGTH instead of returning an empty map.
-          if (existing < 0) {
-            keys += key
-          }
+          // Append the key with no value so the unpaired-buffer check below rethrows the
+          // underlying failure (for example EXCEED_LIMIT_LENGTH). Appending even for a
+          // last-win duplicate forces the imbalance so the failing winner nulls the whole
+          // record instead of silently keeping the superseded earlier value.
+          keys += key
       }
     }
 
@@ -691,9 +694,20 @@ class JacksonParser(
     }
   }
 
+  /**
+   * A CHAR/VARCHAR map key under standard semantics is length-checked (not padded or
+   * trimmed) and deduplicated last-win on exact names. This is the single predicate both
+   * `convertMap` and `convertJsonMapKey` consult so the two cannot drift apart.
+   */
+  private def isLengthCheckedKeyType(keyType: DataType): Boolean =
+    charVarcharStandardSemantics && (keyType match {
+      case _: CharType | _: VarcharType => true
+      case _ => false
+    })
+
   private def convertJsonMapKey(rawName: String, keyType: DataType): UTF8String = {
     val key = UTF8String.fromString(rawName)
-    if (!charVarcharStandardSemantics) {
+    if (!isLengthCheckedKeyType(keyType)) {
       key
     } else {
       keyType match {
