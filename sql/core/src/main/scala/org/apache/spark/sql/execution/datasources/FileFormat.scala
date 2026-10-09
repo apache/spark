@@ -22,6 +22,7 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.mapreduce.Job
 
+import org.apache.spark.SparkContext
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -29,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -164,6 +166,82 @@ trait FileFormat {
       }
     }
   }
+
+  /**
+   * Like [[buildReaderWithPartitionValues]] but additionally accepts a sequence of storage filters:
+   * Catalyst expressions that the storage layer may evaluate to prune the IO of the columns they do
+   * not reference, by reading and evaluating the ones they do first (e.g. late materialization with
+   * a runtime bloom filter).
+   *
+   * Honoring them is optional, here and in a reader that does implement them, because the planner
+   * leaves every one of them in the post-scan `Filter` as well, so ignoring one is a missed
+   * optimization rather than a wrong answer.
+   *
+   * Being optional is also an obligation. A storage filter is evaluated out of the plan's order,
+   * without the conjuncts that precede it, so it can raise an error on a row those conjuncts would
+   * have rejected, which is an error a plain scan never raises. A reader must not fail the query
+   * for that. It gives the filter up for as much of the read as it needs to and lets the post-scan
+   * `Filter` decide, in its own order.
+   *
+   * A format that does not apply storage filters returns `None`, which is the default, and the
+   * caller then builds an ordinary reader. Returning an `Option` rather than delegating from here
+   * is what keeps the two builders from being able to call each other.
+   *
+   * Scalar subqueries inside `storageFilters` are expected to have been materialized before this
+   * method is called, so that the returned reader can be safely serialized to executors.
+   *
+   * They also arrive bound to `requiredSchema`, as `BoundReference`s over the row a reader
+   * assembles from it, so that the reader evaluates one per row without resolving anything by name.
+   * `supportsStorageFilter` is asked about the unbound expression instead, where the names and the
+   * metadata are still there, so that is where a format decides what it can evaluate.
+   *
+   * `storageFilterMetrics` is the SQL metrics the reader updates during execution, keyed the way
+   * this format's own `storageFilterMetrics` created them, since that is where a scan gets them. A
+   * format is free to ignore them, and free to require its own, so a caller that passes anything
+   * else is a caller of the wrong format. The scan is expected to expose them via its `metrics`
+   * field so they show up in the SQL UI.
+   */
+  def buildReaderWithStorageFilters(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      storageFilters: Seq[Expression],
+      options: Map[String, String],
+      hadoopConf: Configuration,
+      storageFilterMetrics: Map[String, SQLMetric]
+    ): Option[PartitionedFile => Iterator[InternalRow]] = None
+
+  /**
+   * Whether this format applies storage filters in this session at all, which is also where the
+   * conf that enables them belongs, since a format's own conf should not decide for another format.
+   * Asked once per scan, before anything per conjunct, so a format that answers false costs one
+   * call.
+   */
+  def supportsStorageFilterPushdown(sparkSession: SparkSession): Boolean = false
+
+  /**
+   * The SQL metrics this format's reader updates while it applies storage filters, keyed the way
+   * the scan then exposes them. Asked once per scan, and only for a scan that has storage filters.
+   *
+   * It belongs to the format for the same reason the conf does, that what there is to count is the
+   * format's own vocabulary. Row groups and page filtering are Parquet's words, and another format
+   * measures what it avoided differently.
+   */
+  def storageFilterMetrics(sparkContext: SparkContext): Map[String, SQLMetric] = Map.empty
+
+  /**
+   * Whether this format's reader can evaluate `expr` as a storage filter, i.e. whether the planner
+   * may offer it to [[buildReaderWithStorageFilters]].
+   *
+   * The planner decides what it can see from the plan, that the conjunct is deterministic and
+   * references only projected data columns. It asks this for everything else, so the expression
+   * shapes and column types a reader supports stay in that reader's own package. Answering true
+   * says the reader can evaluate the expression, not that it will, since the conjunct stays in the
+   * post-scan `Filter`, so a reader is free to give a file up.
+   */
+  def supportsStorageFilter(expr: Expression): Boolean = false
 
   /**
    * Create a file metadata struct column containing fields supported by the given file format.

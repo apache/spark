@@ -71,9 +71,11 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     (ArtifactUtils.concatenatePaths(artifactRootPath, session.sessionUUID),
       s"$artifactRootURI/${session.sessionUUID}")
 
+  private val ivyCachePath = artifactPath.resolve(".ivy-cache")
+
   private lazy val runtimeDependencyResolver = {
     val sparkConf = session.sparkContext.getConf
-    val ivyPath = Files.createDirectories(artifactPath.resolve(".ivy-cache")).toString
+    val ivyPath = Files.createDirectories(ivyCachePath).toString
     new RuntimeDependencyResolver(
       ivySettingsPath = sparkConf.get(JAR_IVY_SETTING_PATH),
       ivyPath = Some(ivyPath),
@@ -400,11 +402,26 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     loader
   }
 
+  private def copyArtifacts(targetPath: Path): Unit = {
+    Files.createDirectories(targetPath)
+    Utils.tryWithResource(Files.newDirectoryStream(artifactPath)) { entries =>
+      // The Ivy cache is session-local scratch data. A cloned session recreates it lazily.
+      entries.asScala.filterNot(_ == ivyCachePath).foreach { source =>
+        val target = targetPath.resolve(source.getFileName)
+        if (Files.isDirectory(source)) {
+          Utils.copyDirectory(source.toFile, target.toFile)
+        } else {
+          Utils.copyFile(source.toFile, target.toFile)
+        }
+      }
+    }
+  }
+
   private[sql] def clone(newSession: SparkSession): ArtifactManager = {
     val sparkContext = session.sparkContext
     val newArtifactManager = new ArtifactManager(newSession)
     if (artifactPath.toFile.exists()) {
-      Utils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
+      copyArtifacts(newArtifactManager.artifactPath)
     }
 
     // Share cached blocks with the cloned session by copying the references and incrementing

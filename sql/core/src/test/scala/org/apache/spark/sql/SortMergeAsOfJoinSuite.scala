@@ -685,6 +685,49 @@ class SortMergeAsOfJoinSuite extends QueryTest
     )
   }
 
+  test("forward join - residual rejects every row within the tolerance") {
+    // For left (5, 10), ts 6 is within the tolerance but fails amount > threshold. ts 9 passes
+    // the residual but is past the tolerance, so it gets no match. Left (4, 30) matches ts 6.
+    val schema1 = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("amount", IntegerType) :: Nil)
+    val schema2 = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("threshold", IntegerType) :: Nil)
+    val df1 = spark.createDataFrame(List(Row(4, 30), Row(5, 10)).asJava, schema1)
+    val df2 = spark.createDataFrame(List(Row(6, 20), Row(9, 1)).asJava, schema2)
+    checkAnswer(
+      df1.joinAsOf(
+        df2, df1.col("ts"), df2.col("ts"),
+        joinExprs = df1.col("amount") > df2.col("threshold"),
+        joinType = "leftouter", tolerance = functions.lit(2),
+        allowExactMatches = true, direction = "forward"),
+      Seq(Row(4, 30, 6, 20), Row(5, 10, null, null)))
+  }
+
+  test("forward join - picks the closest row when right - left overflows") {
+    // Int.MaxValue - (-100) overflows INT, so a distance-based scan throws or picks far.
+    val schema1 = StructType(StructField("ts", IntegerType) :: Nil)
+    val schema2 = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("tag", StringType) :: Nil)
+    val df1 = spark.createDataFrame(List(Row(-100)).asJava, schema1)
+    val df2 = spark.createDataFrame(
+      List(Row(-50, "near"), Row(Int.MaxValue, "far")).asJava, schema2)
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        Seq(true, false).foreach { allowExactMatches =>
+          checkAnswer(
+            df1.joinAsOf(
+              df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
+              joinType = "inner", tolerance = null,
+              allowExactMatches = allowExactMatches, direction = "forward"),
+            Seq(Row(-100, -50, "near")))
+        }
+      }
+    }
+  }
+
   test("backward join - spill to disk") {
     // Force spill by setting in-memory threshold to 1 row.
     // Verifies that ExternalAppendOnlyUnsafeRowArray's spill path

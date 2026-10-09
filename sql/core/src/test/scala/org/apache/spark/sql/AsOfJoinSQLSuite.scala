@@ -105,6 +105,18 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
     assert(asOfJoin.matchLeftOperand.isEmpty)
   }
 
+  test("INNER ASOF JOIN keeps NOT NULL right columns; LEFT ASOF JOIN makes them nullable") {
+    def rightValueNullable(joinType: String): Boolean =
+      sql(
+        s"""
+           |SELECT l.k, r.v
+           |FROM VALUES (2) AS l(k) $joinType ASOF JOIN VALUES (1, 'a') AS r(k, v)
+           |  MATCH_CONDITION (l.k >= r.k)
+           |""".stripMargin).schema("v").nullable
+    assert(!rightValueNullable(""))
+    assert(rightValueNullable("LEFT"))
+  }
+
   test("SQL ASOF JOIN uses sort-merge without DataFrame sort-merge conf") {
     setupTradeQuoteViews()
     val sqlText =

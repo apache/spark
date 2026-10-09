@@ -57,8 +57,8 @@ private[hive] object IsolatedClientLoader extends Logging {
     val files = if (resolvedVersions.contains((resolvedVersion, hadoopVersion))) {
       resolvedVersions((resolvedVersion, hadoopVersion))
     } else {
-      val remoteRepos = sparkConf.get(SQLConf.ADDITIONAL_REMOTE_REPOSITORIES)
       val ivySettingsPath = sparkConf.getOption(MavenUtils.JAR_IVY_SETTING_PATH_KEY)
+      val remoteRepos = getRemoteRepos(sparkConf, ivySettingsPath)
       val (downloadedFiles, actualHadoopVersion) =
         try {
           (downloadVersion(resolvedVersion, hadoopVersion, ivyPath, ivySettingsPath, remoteRepos),
@@ -122,12 +122,23 @@ private[hive] object IsolatedClientLoader extends Logging {
     }
   }
 
+  private[hive] def getRemoteRepos(
+      sparkConf: SparkConf,
+      ivySettingsPath: Option[String]): Option[String] = {
+    if (ivySettingsPath.isEmpty ||
+        sparkConf.contains(SQLConf.ADDITIONAL_REMOTE_REPOSITORIES)) {
+      Some(sparkConf.get(SQLConf.ADDITIONAL_REMOTE_REPOSITORIES))
+    } else {
+      None
+    }
+  }
+
   private def downloadVersion(
       version: HiveVersion,
       hadoopVersion: String,
       ivyPath: Option[String],
       ivySettingsPath: Option[String],
-      remoteRepos: String): Seq[URL] = {
+      remoteRepos: Option[String]): Seq[URL] = {
     val hadoopJarNames = if (supportsHadoopShadedClient(hadoopVersion)) {
       Seq(s"org.apache.hadoop:hadoop-client-api:$hadoopVersion",
         s"org.apache.hadoop:hadoop-client-runtime:$hadoopVersion")
@@ -141,15 +152,15 @@ private[hive] object IsolatedClientLoader extends Logging {
     implicit val printStream: PrintStream = SparkSubmit.printStream
     val ivySettings = ivySettingsPath match {
       case Some(path) =>
-        MavenUtils.loadIvySettings(path, Some(remoteRepos), ivyPath)
+        MavenUtils.loadIvySettings(path, remoteRepos, ivyPath)
       case None =>
-        MavenUtils.buildIvySettings(Some(remoteRepos), ivyPath)
+        MavenUtils.buildIvySettings(remoteRepos, ivyPath)
     }
     val noCacheIvySettings = ivySettingsPath match {
       case Some(path) =>
-        Some(MavenUtils.loadIvySettings(path, Some(remoteRepos), ivyPath))
+        Some(MavenUtils.loadIvySettings(path, remoteRepos, ivyPath))
       case None =>
-        Some(MavenUtils.buildIvySettings(Some(remoteRepos), ivyPath, useLocalM2AsCache = false))
+        Some(MavenUtils.buildIvySettings(remoteRepos, ivyPath, useLocalM2AsCache = false))
     }
     val classpaths = quietly {
       MavenUtils.resolveMavenCoordinates(

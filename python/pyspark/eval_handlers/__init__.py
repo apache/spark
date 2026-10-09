@@ -24,8 +24,8 @@ declares its ``eval_type`` and self-registers at class definition, which
 ``read_udfs`` looks up via ``get_eval_type_handler``. Importing this package
 imports the concrete handler submodules so they register.
 
-``_arrow`` imports pyarrow lazily, so it registers its handlers without pyarrow
-installed and defers the pyarrow check to when a handler runs.
+``_arrow`` and ``_pandas`` import pyarrow (and pandas) lazily, so they register
+their handlers without those installed and defer the checks to when a handler runs.
 """
 
-from pyspark.eval_handlers import _arrow  # noqa: F401  # registers handlers on import
+from pyspark.eval_handlers import _arrow, _pandas  # noqa: F401  # registers handlers on import

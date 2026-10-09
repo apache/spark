@@ -106,6 +106,137 @@ case class SubExprCodes(
     exprCodesNeedEvaluate: Seq[ExprCode])
 
 /**
+ * How [[CodegenContext.collectInputs]] answers at the points where moving generated code into a
+ * method needs a different answer for different callers. Each field is one such point; the
+ * companion holds the policies in use.
+ *
+ * @param rowWherever pass `INPUT_ROW` wherever it is set, rather than only where the code reads
+ *                    it.
+ * @param hoistDeferredInputs take an input the operator has not evaluated yet out of `currentVars`
+ *                            to be evaluated ahead of the method, rather than refuse the method.
+ * @param refuseSubExprStates refuse a node subexpression elimination has computed, rather than
+ *                            take the variables of its state and stop there.
+ * @param onlyStatesRead take a state only for a node whose generated code reads it: a node whose
+ *                       code is its child's (`Alias`, `Collate`, a `Cast` that changes nothing)
+ *                       is looked through to the child, and any other node that overrides
+ *                       `genCode` is refused.
+ * @param followCommonExprs follow a `With` and a `CommonExpressionRef` into the definitions the
+ *                          code computes, rather than walk them like any other node.
+ * @param onlyNames refuse a value no parameter can name, rather than pass over it.
+ * @param fieldsNeedNoArgument leave a field out of the arguments, the method reading it as it
+ *                             stands, rather than pass it.
+ * @param checkParamLength refuse a method whose parameters would pass the JVM's limit.
+ */
+private[sql] case class InputPolicy(
+    rowWherever: Boolean,
+    hoistDeferredInputs: Boolean,
+    refuseSubExprStates: Boolean,
+    onlyStatesRead: Boolean,
+    followCommonExprs: Boolean,
+    onlyNames: Boolean,
+    fieldsNeedNoArgument: Boolean,
+    checkParamLength: Boolean)
+
+private[sql] object InputPolicy {
+
+  /**
+   * The methods an operator moves its own code into - the subexpression functions, the aggregate
+   * functions, `ExpandExec`'s switch cases - whose callers check the parameter length themselves.
+   * See `CodeGenerator.getLocalInputVariableValues`.
+   */
+  val operatorMethod: InputPolicy = InputPolicy(
+    rowWherever = true,
+    hoistDeferredInputs = true,
+    refuseSubExprStates = false,
+    onlyStatesRead = false,
+    followCommonExprs = false,
+    onlyNames = false,
+    fieldsNeedNoArgument = false,
+    checkParamLength = false)
+
+  /** The method a `With` definition is computed in. See `CodegenContext.CommonExprSlots`. */
+  val commonExpressionMethod: InputPolicy = InputPolicy(
+    rowWherever = true,
+    hoistDeferredInputs = false,
+    refuseSubExprStates = true,
+    onlyStatesRead = false,
+    followCommonExprs = true,
+    onlyNames = true,
+    fieldsNeedNoArgument = false,
+    checkParamLength = true)
+
+  /**
+   * A method split out of an expression's code under whole stage codegen, such as a block of a
+   * `CaseWhen`'s branches; see `CodegenContext.splitExpressionsWithSources`. The method is called
+   * where the code was, inside the operator's method or a method that operator split out, so it
+   * takes `INPUT_ROW` only where the code reads it, since an operator may leave `INPUT_ROW` naming
+   * a local that is out of scope there; and a state's variables where the code reads the state,
+   * so that its arguments are among those of an enclosing method, which stops at a state too,
+   * looking through a node whose code is its child's. Its caller checks the parameter length,
+   * its own arguments included.
+   */
+  val wholeStageSplit: InputPolicy = InputPolicy(
+    rowWherever = false,
+    hoistDeferredInputs = false,
+    refuseSubExprStates = false,
+    onlyStatesRead = true,
+    followCommonExprs = true,
+    onlyNames = true,
+    fieldsNeedNoArgument = true,
+    checkParamLength = false)
+}
+
+/**
+ * What whole stage codegen does with an expression it could split into methods
+ * ([[CodegenContext.splitExpressionsWithSources]]), which `WholeStageCodegenExec.doCodeGen` sets
+ * on the context of each generation of a stage. An expression is known by its
+ * [[WholeStageSplitKey]], which is the same in every generation of the stage.
+ */
+private[sql] sealed trait WholeStageSplit
+
+private[sql] object WholeStageSplit {
+
+  /** The code stays in one piece, as with `spark.sql.codegen.wholeStage.splitExpressions` off. */
+  case object Off extends WholeStageSplit
+
+  /**
+   * The code stays in one piece, and the code of each expression a split could take is marked
+   * with its index in `CodegenContext.wholeStageSplitsRecorded`
+   * (`CodeGenerator.wholeStageSplitMarker`), so that the methods it lands in can be found.
+   */
+  case object Record extends WholeStageSplit
+
+  /** The expressions in `only` are split, or every one where it is None. */
+  case class Split(only: Option[Set[WholeStageSplitKey]]) extends WholeStageSplit
+}
+
+/**
+ * An expression [[CodegenContext.splitExpressionsWithSources]] could split, as each generation of a
+ * stage knows it: the sources of its pieces, with the values of lambda variables left out, and its
+ * occurrence among the expressions with those sources in the generation. A fresh copy of a lambda
+ * variable gets a new value, which takes part in its equality, so the values would make the copies
+ * that each generation makes unequal; and two copies of one expression, such as a projection's CASE
+ * WHEN and the one a filter pushed below it evaluates, can land in different methods, of which only
+ * one may be past the limit.
+ */
+private[sql] case class WholeStageSplitKey(sources: Seq[Seq[Expression]], occurrence: Int)
+
+/**
+ * What [[CodegenContext.collectInputs]] found that the code generated for some expressions reads.
+ *
+ * @param arguments the local variables to pass, in the order the walk first met them.
+ * @param readsRow whether the code reads `INPUT_ROW` through an input the operator has not put
+ *                 in `currentVars`. A call to a `With` definition's method that takes the row is
+ *                 told from the code instead (`CodegenContext.wholeStageSplitArguments`).
+ * @param inputsToEvaluate the code of the inputs taken out of `currentVars`, under
+ *                         `InputPolicy.hoistDeferredInputs`, to be evaluated ahead of the method.
+ */
+private[sql] case class CollectedInputs(
+    arguments: Seq[VariableValue],
+    readsRow: Boolean,
+    inputsToEvaluate: Seq[ExprCode])
+
+/**
  * The main information about a new added function.
  *
  * @param functionName String representing the name of the function
@@ -289,13 +420,15 @@ class CodegenContext extends Logging {
         case Some(args) =>
           val funcName = freshName("computeCommonExpr")
           val params = args.map(a => s"${typeName(a.javaType)} ${a.variableName}").mkString(", ")
-          val funcFullName = addNewFunction(funcName,
+          val argNames = args.map(_.variableName)
+          assertSplitCallsWithin(body.toString, argNames, funcName)
+          val funcFullName = addNewFunctionTaking(funcName, argNames,
             s"""
                |private void $funcName($params) {
                |  $body
                |}
            """.stripMargin)
-          code"$funcFullName(${args.map(_.variableName).mkString(", ")});"
+          code"$funcFullName(${argNames.mkString(", ")});"
         case None =>
           body
       }
@@ -317,76 +450,21 @@ class CodegenContext extends Logging {
      * call, the way `getLocalInputVariableValues` does for subexpression elimination, since that
      * evaluates it on rows that reach no reference.
      *
-     * Nor does a definition that is or holds a node subexpression elimination has computed, for
-     * which see the walk below. The two remaining refusals are local: `canPass` on a value no
-     * parameter can name, and the descriptor length at the end.
+     * Nor does a definition that is or holds a node subexpression elimination has computed. Which
+     * values the body reads there cannot be told from the tree: `Expression.genCode` reads the
+     * state, for a `With` as much as anything else since `With` overrides only `doGenCode`, while
+     * `Alias`, `Collate` and an identity `Cast` override `genCode` and generate their child again
+     * -- two different parameter lists. Refusing also keeps what this collects within what
+     * `getLocalInputVariableValues` collects for the operator's whole expression, which stops at a
+     * state as well and computes the parameters of the methods `ExpandExec` and the aggregates move
+     * this call into.
+     *
+     * The two remaining refusals are local: a value no parameter can name, and the descriptor
+     * length. The walk is `collectInputs`, under `InputPolicy.commonExpressionMethod`.
      */
-    private def methodArgs: Option[Seq[VariableValue]] = {
-      val args = mutable.LinkedHashMap.empty[String, VariableValue]
-      // False for a value no parameter can carry: `ExpandExec` hands out a `VariableValue` naming a
-      // slot of a compacted mutable state array, and a `SimpleExprValue` is an expression rather
-      // than a name -- `posexplode_outer` gives its position the nullness `index == -1`, and a
-      // `Byte` or `Short` literal's value is `(byte)1`. A field or a literal needs no parameter and
-      // is read as it stands.
-      def canPass(v: ExprValue): Boolean = v match {
-        case local: VariableValue =>
-          val name = local.variableName
-          val isName = name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
-            name.forall(Character.isJavaIdentifierPart)
-          if (isName) {
-            args.getOrElseUpdate(name, local)
-          }
-          isName
-        case _: GlobalValue | _: LiteralValue => true
-        case _ => false
-      }
-      var possible = INPUT_ROW == null ||
-        canPass(JavaCode.variable(INPUT_ROW, classOf[InternalRow]))
-      val visited = mutable.HashSet.empty[Long]
-      // The definitions of a `With` in the tree walked here, which reach `currentCommonExprs` only
-      // once that `With` is generated. Ids come from one counter, so one map serves every scope.
-      val nestedDefs = mutable.HashMap.empty[Long, Expression]
-      val toVisit = mutable.Stack[Expression](definition)
-      while (possible && toVisit.nonEmpty) {
-        val next = toVisit.pop()
-        // A node subexpression elimination has computed keeps the definition inline. Which values
-        // the body reads there cannot be told from the tree: `Expression.genCode` reads the state,
-        // for a `With` as much as anything else since `With` overrides only `doGenCode`, while
-        // `Alias`, `Collate` and an identity `Cast` override `genCode` and generate their child
-        // again -- two different parameter lists. Refusing also keeps what this collects within
-        // what `getLocalInputVariableValues` collects for the operator's whole expression, which
-        // stops at a state as well and computes the parameters of the methods `ExpandExec` and the
-        // aggregates move this call into.
-        if (subExprEliminationExprs.contains(ExpressionEquals(next))) {
-          possible = false
-        } else {
-          next match {
-            case ref: BoundReference if currentVars != null && currentVars(ref.ordinal) != null =>
-              val input = currentVars(ref.ordinal)
-              possible = input.code == EmptyBlock && canPass(input.value) && canPass(input.isNull)
-            case w: With =>
-              // Only `child` is generated: a definition is generated where a reference reaches it,
-              // so one no reference reaches is not in the body, and what it reads decides nothing.
-              w.defs.foreach(d => nestedDefs.put(d.id.id, d.child))
-              toVisit.push(w.child)
-            case ref: CommonExpressionRef =>
-              // The definition this reference fills, which it does inside this method, so what
-              // that definition reads has to come in as well. One belonging to a `With` in the
-              // tree walked here is in `nestedDefs`; a sibling of this definition, or one of an
-              // enclosing scope, is registered in `currentCommonExprs`.
-              if (visited.add(ref.id.id)) {
-                nestedDefs.get(ref.id.id)
-                  .orElse(currentCommonExprs.get(ref.id.id).map(_.definition))
-                  .foreach(toVisit.push)
-              }
-            case e => toVisit.pushAll(e.children)
-          }
-        }
-      }
-      val params = args.values.toSeq
-      Option.when(
-        possible && isValidParamLength(calculateParamLengthFromExprValues(params)))(params)
-    }
+    private def methodArgs: Option[Seq[VariableValue]] =
+      collectInputs(Seq(definition), InputPolicy.commonExpressionMethod, subExprEliminationExprs)
+        .map(_.arguments)
   }
 
   /**
@@ -394,6 +472,38 @@ class CodegenContext extends Logging {
    * the same way [[currentLambdaVars]] holds the variables of the enclosing lambdas.
    */
   var currentCommonExprs: mutable.Map[Long, CommonExprSlots] = mutable.HashMap.empty
+
+  /**
+   * The functions added so far that take `INPUT_ROW`: the methods `CommonExprSlots.build` makes
+   * of `With` definitions, and the split and group functions of a whole stage split. Code that
+   * calls one passes the row, so a method split out of that code must take the row too, whether
+   * the row is read there or passed on - a CASE WHEN inside a CASE WHEN's branch, split first,
+   * leaves its calls in the outer one's block. Known by the function's name, which is in the code
+   * that calls it, rather than by the definition: one `With` can be generated more than once, as
+   * a method in one place and inline in another, and the split computes its arguments only after
+   * all of them are generated.
+   */
+  private val functionsTakingRow = mutable.HashSet.empty[String]
+
+  /**
+   * [[addNewFunction]] for a function whose parameters are named `argumentNames`, registered in
+   * [[functionsTakingRow]] where one of them is `INPUT_ROW`.
+   */
+  private def addNewFunctionTaking(
+      funcName: String,
+      argumentNames: Seq[String],
+      funcCode: String): String = {
+    val funcFullName = addNewFunction(funcName, funcCode)
+    if (INPUT_ROW != null && argumentNames.contains(INPUT_ROW)) {
+      functionsTakingRow += funcName
+    }
+    funcFullName
+  }
+
+  /** Whether `code` calls a function that takes `INPUT_ROW` ([[functionsTakingRow]]). */
+  private def callsFunctionTakingRow(code: String): Boolean =
+    functionsTakingRow.nonEmpty && CodeGenerator.CallSite.findAllMatchIn(code)
+      .exists(m => functionsTakingRow.contains(m.group(1)))
 
   /**
    * Allocates a value slot and a `computed` flag per definition, generates `f` with them in scope,
@@ -808,8 +918,54 @@ class CodegenContext extends Logging {
       funcName: String,
       funcCode: String,
       className: String) = {
-    classSize(className) += funcCode.length
+    if (!classFunctions(className).contains(funcName)) {
+      addedFunctions += className -> funcName
+    }
+    classSize(className) += sizeInClass(funcCode)
     classFunctions(className) += funcName -> funcCode
+  }
+
+  /**
+   * What a function's code counts towards its class's size: its length without the marks of a
+   * recorded split, so that functions spill into nested classes where they do with the conf off,
+   * and the code with the marks stripped is that code.
+   */
+  private def sizeInClass(funcCode: String): Int =
+    if (wholeStageSplitsRecorded.nonEmpty && CodeGenerator.holdsWholeStageSplitMarker(funcCode)) {
+      CodeGenerator.stripWholeStageSplitMarkers(funcCode).length
+    } else {
+      funcCode.length
+    }
+
+  /**
+   * Every function added, as its class and name, in the order added, for `removeFunctionsSince`.
+   * Only a name its class did not have yet: a name added again replaces the function's code, which
+   * a removal must not undo.
+   */
+  private val addedFunctions = mutable.ArrayBuffer.empty[(String, String)]
+
+  /** Marks the functions and classes added so far, for `removeFunctionsSince`. */
+  private def functionsMark(): (Int, Int) = (addedFunctions.length, classes.length)
+
+  /**
+   * Removes every function added since `mark` was taken, and every class added since then, which
+   * held only such functions: the code that called them has been discarded.
+   */
+  private def removeFunctionsSince(mark: (Int, Int)): Unit = {
+    val (functionsBefore, classesBefore) = mark
+    addedFunctions.drop(functionsBefore).foreach { case (className, name) =>
+      classFunctions(className).remove(name)
+        .foreach(code => classSize(className) -= sizeInClass(code))
+      splitCallArguments.remove(name)
+    }
+    addedFunctions.dropRightInPlace(addedFunctions.length - functionsBefore)
+    // `addClass` prepends, so the classes added since the mark come first.
+    val classesAdded = classes.length - classesBefore
+    classes.take(classesAdded).foreach { case (className, _) =>
+      classSize.remove(className)
+      classFunctions.remove(className)
+    }
+    classes.remove(0, classesAdded)
   }
 
   /**
@@ -1149,6 +1305,147 @@ class CodegenContext extends Logging {
   }
 
   /**
+   * What the code generated for `roots` reads from the scope it was generated in, for moving that
+   * code into a method: the local variables to pass and the inputs to evaluate first, or None
+   * where `policy` refuses the method. The code reads its inputs from `currentVars` and, where
+   * the operator sets one, from `INPUT_ROW`; from the states in `subExprs`; and, inside a `With`,
+   * from the definitions its references compute. A field or a literal is read as it stands.
+   *
+   * Every place that moves generated code into a method walks the code's expressions with this,
+   * so that a node binding a variable needs one change here; where those places need different
+   * answers, `policy` says which (see [[InputPolicy]]).
+   */
+  private[sql] def collectInputs(
+      roots: Seq[Expression],
+      policy: InputPolicy,
+      subExprs: Map[ExpressionEquals, SubExprEliminationState]): Option[CollectedInputs] = {
+    val args = mutable.LinkedHashMap.empty[String, VariableValue]
+    val inputsToEvaluate = mutable.ArrayBuffer.empty[ExprCode]
+    // Whether the code can read `v` from the method: false for a value no parameter can carry
+    // where the policy asks for names. `ExpandExec` hands out a `VariableValue` naming a slot of a
+    // compacted mutable state array, and a `SimpleExprValue` is an expression rather than a name
+    // -- `posexplode_outer` gives its position the nullness `index == -1`, and a `Byte` or `Short`
+    // literal's value is `(byte)1`. A field or a literal needs no parameter and is read as it
+    // stands; so is a field handed out as a `VariableValue` where the policy says so, passing one
+    // being refused by the split methods' own check, a slot of a compacted array included.
+    def take(v: ExprValue): Boolean = v match {
+      case local: VariableValue =>
+        val name = local.variableName
+        val isName = name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
+          name.forall(Character.isJavaIdentifierPart)
+        // A slot of a compacted array is a field under every policy, since no parameter can be
+        // named `array[i]`, where the whole stage split is on; with it off, every policy answers
+        // as it did before that split existed. Another field is passed where the policy says so.
+        val isField = (isCompactedSlot(name) && wholeStageSplit != WholeStageSplit.Off) ||
+          (policy.fieldsNeedNoArgument && mutableStateNames.contains(name))
+        val taken = isName || isField || !policy.onlyNames
+        if (taken && !isField) {
+          args.getOrElseUpdate(name, local)
+        }
+        taken
+      case _: GlobalValue | _: LiteralValue => true
+      case _ => !policy.onlyNames
+    }
+    var possible = !policy.rowWherever || INPUT_ROW == null ||
+      take(JavaCode.variable(INPUT_ROW, classOf[InternalRow]))
+    var readsRow = false
+    val visited = mutable.HashSet.empty[Long]
+    // The definitions of a `With` in the trees walked here, which reach `currentCommonExprs` only
+    // once that `With` is generated. Ids come from one counter, so one map serves every scope.
+    val nestedDefs = mutable.HashMap.empty[Long, Expression]
+    val toVisit = mutable.Stack[Expression](roots: _*)
+    while (possible && toVisit.nonEmpty) {
+      val next = toVisit.pop()
+      // A state is looked up before anything else; no input is a common subexpression, since
+      // `EquivalentExpressions` skips leaves.
+      subExprs.get(ExpressionEquals(next)) match {
+        case Some(state) =>
+          generatedChild(next).filter(_ => policy.onlyStatesRead) match {
+            case Some(child) =>
+              // The code generated for it is its child's, which reads what is below it, not the
+              // state.
+              toVisit.push(child)
+            case None =>
+              possible = !policy.refuseSubExprStates &&
+                (!policy.onlyStatesRead || readsSubExprState(next)) &&
+                take(state.eval.value) && take(state.eval.isNull)
+          }
+        case None => next match {
+          case ref: BoundReference if currentVars != null && currentVars(ref.ordinal) != null =>
+            val input = currentVars(ref.ordinal)
+            if (input.code != EmptyBlock) {
+              if (policy.hoistDeferredInputs) {
+                inputsToEvaluate += input.copy()
+                input.code = EmptyBlock
+              } else {
+                possible = false
+              }
+            }
+            possible &&= take(input.value) && take(input.isNull)
+          case _: BoundReference =>
+            readsRow = true
+          case w: With if policy.followCommonExprs =>
+            // Only `child` is generated: a definition is generated where a reference reaches it,
+            // so one no reference reaches is not in the code, and what it reads decides nothing.
+            w.defs.foreach(d => nestedDefs.put(d.id.id, d.child))
+            toVisit.push(w.child)
+          case ref: CommonExpressionRef if policy.followCommonExprs =>
+            // The definition this reference fills, where the reference is, so what that
+            // definition reads is read here as well. One belonging to a `With` in the trees walked
+            // here is in `nestedDefs`; a sibling of the definition walked, or one of an enclosing
+            // scope, is registered in `currentCommonExprs`. Whether the reference calls a method
+            // that takes `INPUT_ROW` is told from the code (`wholeStageSplitArguments`).
+            if (visited.add(ref.id.id)) {
+              nestedDefs.get(ref.id.id)
+                .orElse(currentCommonExprs.get(ref.id.id).map(_.definition))
+                .foreach(toVisit.push)
+            }
+          case e => toVisit.pushAll(e.children)
+        }
+      }
+    }
+    val arguments = args.values.toSeq
+    Option.when(possible && (!policy.checkParamLength ||
+        isValidParamLength(calculateParamLengthFromExprValues(arguments)))) {
+      CollectedInputs(arguments, readsRow, inputsToEvaluate.toSeq)
+    }
+  }
+
+  /**
+   * Whether `name` is a slot of a compacted mutable state array, such as `mutableStateArray_0[3]`,
+   * which `addMutableState` hands out for a state it does not inline: a field of the class.
+   */
+  private def isCompactedSlot(name: String): Boolean = name match {
+    case CodeGenerator.CompactedSlot(array) => mutableStateNames.contains(array)
+    case _ => false
+  }
+
+  /**
+   * Whether the code generated for `e` reads its subexpression elimination state, which
+   * `Expression.genCode` does; a node that overrides `genCode` may generate its child instead, as
+   * `Alias`, `Collate` and a `Cast` that changes nothing do, and then reads what is below it. A
+   * `Cast` says which it does; any other override is refused, being told from the class
+   * (`CodeGenerator.leavesGenCodeToExpression`) rather than asked, since a method on `Expression`
+   * saying the same would default to reading the state, and so accept an expression from outside
+   * Spark whose override generates its child.
+   */
+  private def readsSubExprState(e: Expression): Boolean = e match {
+    case c: Cast => !c.generatesChildCode
+    case _ => CodeGenerator.leavesGenCodeToExpression.get(e.getClass)
+  }
+
+  /**
+   * The child a node generates in place of its own code, as `Alias`, `Collate` and a `Cast` that
+   * changes nothing do, whose code then reads what the child's does.
+   */
+  private def generatedChild(e: Expression): Option[Expression] = e match {
+    case a: Alias => Some(a.child)
+    case c: Collate => Some(c.child)
+    case c: Cast if c.generatesChildCode => Some(c.child)
+    case _ => None
+  }
+
+  /**
    * Splits the generated code of expressions into multiple functions, because function has
    * 64kb code size limit in JVM. If the class to which the function would be inlined would grow
    * beyond 1000kb, we declare a private, inner sub-class, and the function is inlined to it
@@ -1156,8 +1453,9 @@ class CodegenContext extends Logging {
    *
    * Note that different from `splitExpressions`, we will extract the current inputs of this
    * context and pass them to the generated functions. The input is `INPUT_ROW` for normal codegen
-   * path, and `currentVars` for whole stage codegen path. Whole stage codegen path is not
-   * supported yet.
+   * path, and `currentVars` for whole stage codegen path. This method does not split under whole
+   * stage codegen, where which inputs a piece of code reads cannot be told from the code;
+   * `splitExpressionsWithSources`, which is given the expressions too, does.
    *
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
@@ -1174,7 +1472,6 @@ class CodegenContext extends Logging {
       returnType: String = "void",
       makeSplitFunction: String => String = identity,
       foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
-    // TODO: support whole stage codegen
     if (INPUT_ROW == null || currentVars != null) {
       expressions.mkString("\n")
     } else {
@@ -1185,6 +1482,216 @@ class CodegenContext extends Logging {
         returnType,
         makeSplitFunction,
         foldFunctions)
+    }
+  }
+
+  /**
+   * What whole stage codegen does with an expression it could split, which
+   * `WholeStageCodegenExec.doCodeGen` sets for each generation of a stage. Read here rather than
+   * the conf, so that every split of a generation follows the decision `doCodeGen` made from the
+   * stage's own conf.
+   */
+  private[sql] var wholeStageSplit: WholeStageSplit = WholeStageSplit.Off
+
+  /**
+   * Under `WholeStageSplit.Record`, the expressions [[splitExpressionsWithSources]] might have
+   * split, by the index their code is marked with.
+   */
+  private[sql] val wholeStageSplitsRecorded = mutable.ArrayBuffer.empty[WholeStageSplitKey]
+
+  /**
+   * Under `WholeStageSplit.Record`, a digest of the stage's source with the marks of the recorded
+   * expressions, which `WholeStageCodegenExec.generate` sets before it strips them: the marks say
+   * which expression each index in [[wholeStageSplitsRecorded]] is, so a decision made for these
+   * indices holds for this digest and no other.
+   */
+  private[sql] var wholeStageSplitDigest: String = ""
+
+  /**
+   * How many expressions with each sources [[splitExpressionsWithSources]] has met in this
+   * generation, for [[WholeStageSplitKey.occurrence]].
+   */
+  private val wholeStageSplitOccurrences = mutable.HashMap.empty[Seq[Seq[Expression]], Int]
+
+  /**
+   * Under `WholeStageSplit.Split`, how many blocks [[splitExpressionsWithSources]] has turned into
+   * methods in this generation: none, and the code is the code in one piece, whatever the split
+   * was asked for, but for the helper functions of a discarded subexpression elimination pass,
+   * which only a split generation removes.
+   */
+  private[sql] var wholeStageBlocksSplit: Int = 0
+
+  /** The key of the next expression [[splitExpressionsWithSources]] meets, from its pieces. */
+  private def nextWholeStageSplitKey(pieces: Seq[(String, Seq[Expression])]): WholeStageSplitKey = {
+    val sources = pieces.map(_._2.map(CodeGenerator.withoutLambdaValues))
+    val occurrence = wholeStageSplitOccurrences.getOrElse(sources, 0)
+    wholeStageSplitOccurrences(sources) = occurrence + 1
+    WholeStageSplitKey(sources, occurrence)
+  }
+
+  /**
+   * The functions that hold each mark of a recorded expression, by its index
+   * (`CodeGenerator.wholeStageSplitMarker`): the functions declared, so that a function removed or
+   * replaced since it held a mark holds none. The code a class runs once outside its functions -
+   * its constructor and `init` - is in none.
+   */
+  private[sql] def wholeStageSplitMarkersByFunction: Map[Int, Set[String]] = {
+    val found = mutable.HashMap.empty[Int, Set[String]]
+    for {
+      functions <- classFunctions.values
+      (name, code) <- functions if CodeGenerator.holdsWholeStageSplitMarker(code)
+      (index, _, _) <- CodeGenerator.wholeStageSplitMarkersIn(code)
+    } found(index) = found.getOrElse(index, Set.empty) + name
+    found.toMap
+  }
+
+  /**
+   * `splitExpressionsWithCurrentInputs` for pieces of code whose expressions are known, which it
+   * splits under whole stage codegen as well. There the inputs are local variables of the
+   * operator's method, and which of them a piece of code reads is known only from the expressions
+   * it was generated for, which each piece carries.
+   *
+   * The pieces are packed into blocks as `splitExpressions` packs them, and each block becomes a
+   * method taking the locals its own pieces read (`collectInputs`, under
+   * `InputPolicy.wholeStageSplit`). A block whose code reads a local no method could take - an
+   * input the operator has not evaluated yet, whose code names locals of the operator producing
+   * the row, or a value no parameter can name - stays where it was, between the calls; so a piece
+   * must be valid both in the caller and inside a split function after `makeSplitFunction`, as
+   * `CaseWhen`'s branches are. The calls of each run of consecutive split blocks are grouped until
+   * at most `SPLIT_CALLS_PER_GROUP` are left in the caller: under whole stage codegen every
+   * expression of an operator is generated into one method, so the budget per call of
+   * `splitExpressions` would add up there (see `groupSplitCalls`).
+   *
+   * Outside whole stage codegen this is `splitExpressionsWithCurrentInputs`; inside it, the code
+   * is split as `wholeStageSplit` says: in one piece where it is off, in one piece and marked where
+   * it records, and split where it splits this expression.
+   *
+   * @param pieces the codes to evaluate expressions, each with the expressions it was generated
+   *               from.
+   * @param funcName the split function name base.
+   * @param returnType the return type of the split function.
+   * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
+   * @param foldFunctions folds the split function calls.
+   */
+  private[sql] def splitExpressionsWithSources(
+      pieces: Seq[(String, Seq[Expression])],
+      funcName: String,
+      returnType: String = "void",
+      makeSplitFunction: String => String = identity,
+      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
+    val codes = pieces.map(_._1)
+    if (currentVars == null) {
+      splitExpressionsWithCurrentInputs(codes, funcName, returnType = returnType,
+        makeSplitFunction = makeSplitFunction, foldFunctions = foldFunctions)
+    } else if (wholeStageSplit == WholeStageSplit.Off) {
+      codes.mkString("\n")
+    } else {
+      val key = nextWholeStageSplitKey(pieces)
+      wholeStageSplit match {
+        case WholeStageSplit.Record if wholeStageSplitPossible(pieces) =>
+          val marker = CodeGenerator.wholeStageSplitMarker(wholeStageSplitsRecorded.length)
+          wholeStageSplitsRecorded += key
+          marker + codes.mkString("\n")
+        case WholeStageSplit.Split(only) if only.forall(_.contains(key)) =>
+          splitWholeStage(pieces, funcName, returnType, makeSplitFunction, foldFunctions)
+        case _ =>
+          codes.mkString("\n")
+      }
+    }
+  }
+
+  /** The whole stage split of `splitExpressionsWithSources`. */
+  private def splitWholeStage(
+      pieces: Seq[(String, Seq[Expression])],
+      funcName: String,
+      returnType: String,
+      makeSplitFunction: String => String,
+      foldFunctions: Seq[String] => String): String = {
+    val blocks = wholeStageBlocks(pieces)
+    if (blocks.forall(_._2.isEmpty)) {
+      pieces.map(_._1).mkString("\n")
+    } else {
+      val func = freshName(funcName)
+      // A block left in place splits the calls into runs, each grouped on its own; their groups
+      // are named after the run, so that two runs' groups do not share a name.
+      val inRuns = blocks.exists(_._2.isEmpty)
+      val code = new StringBuilder
+      val run = mutable.ArrayBuffer.empty[SplitCall]
+      var runs = 0
+      def endRun(): Unit = if (run.nonEmpty) {
+        val groupName = if (inRuns) s"${func}_run$runs" else func
+        val calls = groupSplitCalls(run.toSeq, groupName, returnType, makeSplitFunction,
+          foldFunctions, callsLeft = SPLIT_CALLS_PER_GROUP, audited = true)
+        code.append(foldFunctions(calls.map(_.call))).append("\n")
+        run.clear()
+        runs += 1
+      }
+      blocks.zipWithIndex.foreach {
+        case ((body, Some(args)), i) =>
+          run += splitCall(s"${func}_$i", args, returnType, makeSplitFunction(body),
+            audited = true)
+          wholeStageBlocksSplit += 1
+        case ((body, None), _) =>
+          endRun()
+          code.append(body).append("\n")
+      }
+      endRun()
+      code.toString
+    }
+  }
+
+  /**
+   * The blocks `splitWholeStage` packs `pieces` into, each with the arguments of the method it
+   * becomes, or None where it stays in place, as every block does where there is only one.
+   */
+  private def wholeStageBlocks(
+      pieces: Seq[(String, Seq[Expression])]): Seq[(String, Option[Seq[(String, String)]])] = {
+    val blocks = buildCodeBlocksOf(pieces.map(_._1))
+    if (blocks.length <= 1) {
+      blocks.map { case (body, _) => body -> None }
+    } else {
+      val sources = pieces.map(_._2).toIndexedSeq
+      blocks.map { case (body, indices) =>
+        body -> wholeStageSplitArguments(indices.flatMap(sources), body)
+      }
+    }
+  }
+
+  /**
+   * Whether `splitWholeStage` might split some block of `pieces`, for recording. It errs only
+   * towards yes, which costs the stage a trial compile and nothing else, so that recording does
+   * not pack the blocks: packing measures every piece with its comments stripped, which costs more
+   * than generating the stage. A second block starts only after the pieces before it pass
+   * `methodSplitThreshold`, and stripping only shortens them; and a block that splits has the
+   * inputs of each of its pieces collected.
+   */
+  private def wholeStageSplitPossible(pieces: Seq[(String, Seq[Expression])]): Boolean = {
+    pieces.dropRight(1).iterator.map(_._1.length.toLong).sum >
+      SQLConf.get.methodSplitThreshold &&
+      pieces.exists { case (code, sources) => wholeStageSplitArguments(sources, code).isDefined }
+  }
+
+  /**
+   * The arguments of a function split out of whole stage generated code so that the code generated
+   * for `sources` compiles inside it; None where that code reads a local no function could take,
+   * or the arguments would pass the JVM's limit.
+   * `INPUT_ROW` comes last, and only where the code reads it (`CollectedInputs.readsRow`) or
+   * `code` calls a function that takes it ([[functionsTakingRow]]): an operator may leave it
+   * naming a local that is out of scope where other code is generated, as a join does after
+   * generating the variables of its build side.
+   */
+  private def wholeStageSplitArguments(
+      sources: Seq[Expression],
+      code: String): Option[Seq[(String, String)]] = {
+    collectInputs(sources, InputPolicy.wholeStageSplit, subExprEliminationExprs).flatMap { in =>
+      val readsRow = in.readsRow || callsFunctionTakingRow(code)
+      val locals = if (!readsRow || mutableStateNames.contains(INPUT_ROW)) {
+        Some(in.arguments)
+      } else {
+        Option(INPUT_ROW).map(row => in.arguments :+ JavaCode.variable(row, classOf[InternalRow]))
+      }
+      locals.filter(values => isValidParamLength(calculateParamLengthFromExprValues(values)))
+        .map(_.map(v => typeName(v.javaType) -> v.variableName))
     }
   }
 
@@ -1271,22 +1778,10 @@ class CodegenContext extends Logging {
     DEFAULT_JVM_HUGE_METHOD_LIMIT / 2 / (MAX_BYTES_PER_SPLIT_CALL + 2 * arguments.length))
 
   /**
-   * The calls to the functions `splitExpressions` split out, grouped into functions of their own
-   * where there are too many for the calling method to be JIT-compiled, level by level.
-   *
-   * The calls are what is left in the calling method, one per block of code, and a `CASE WHEN`
-   * of a thousand branches has hundreds of blocks: their calls alone take the caller past the
-   * 8000 bytes HotSpot compiles (`CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT`), so the method
-   * every row goes through runs interpreted. A call and its fold compile to at most about 20 bytes
-   * plus 2 for each argument - the invocation, a load per argument, and the fold's store, test
-   * and branch - so the calls are left as they are while they fit in half of that limit, the rest
-   * being the caller's own code, and grouped otherwise. The groups are small, of
-   * `CodeGenerator.SPLIT_CALLS_PER_GROUP` calls, so that C2 can inline the split functions into
-   * each group within its inlining budget; a group of hundreds of calls stays compilable but has
-   * most of its calls left out of inlining, and runs slower. A group is folded with
-   * `foldFunctions` and wrapped with `makeSplitFunction`, which is what
-   * `generateInnerClassesFunctionCalls` does with the functions of one inner class, so every
-   * caller of `splitExpressions` supports it.
+   * The calls to the functions `splitExpressions` split out, grouped by `groupSplitCalls` where
+   * there are too many for the calling method to be JIT-compiled. Every call takes `arguments`, so
+   * the groups are of `SPLIT_CALLS_PER_GROUP` calls, and the calls stay in the calling method while
+   * they fit in `splitCallsPerMethod`.
    */
   private def groupFunctionCalls(
       calls: Seq[String],
@@ -1294,26 +1789,140 @@ class CodegenContext extends Logging {
       arguments: Seq[(String, String)],
       returnType: String,
       makeSplitFunction: String => String,
+      foldFunctions: Seq[String] => String): Seq[String] = {
+    groupSplitCalls(calls.map(SplitCall(_, arguments)), funcName, returnType, makeSplitFunction,
+      foldFunctions, callsLeft = splitCallsPerMethod(arguments)).map(_.call)
+  }
+
+  /** A call to a split function, and the (type, name) arguments it passes. */
+  private case class SplitCall(call: String, arguments: Seq[(String, String)])
+
+  /**
+   * Adds the function `name`, taking `arguments` and running `body`, and returns a call to it.
+   * Where `audited`, its arguments are kept under testing for `assertSplitCallsWithin`: those of a
+   * whole stage split, computed from what its code reads where it was generated, which an operator
+   * moving that code into a method of its own must take. The other splits' arguments are their
+   * callers' own, which may be locals of the method they are made in.
+   */
+  private def splitCall(
+      name: String,
+      arguments: Seq[(String, String)],
+      returnType: String,
+      body: String,
+      audited: Boolean = false): SplitCall = {
+    if (Utils.isTesting) {
+      // Passing global variables to the split method is dangerous, as any mutating to it is
+      // ignored and may lead to unexpected behavior.
+      arguments.foreach { case (_, argument) =>
+        assert(!mutableStateNames.contains(argument),
+          s"split function argument $argument cannot be a global variable.")
+      }
+    }
+    val argDefinitionString = arguments.map { case (t, argument) => s"$t $argument" }.mkString(", ")
+    val code =
+      s"""
+         |private $returnType $name($argDefinitionString) {
+         |  $body
+         |}
+           """.stripMargin
+    val argNames = arguments.map(_._2)
+    val call = s"${addNewFunctionTaking(name, argNames, code)}(${argNames.mkString(", ")})"
+    if (audited && Utils.isTesting) {
+      splitCallArguments(name) = argNames
+    }
+    SplitCall(call, arguments)
+  }
+
+  /**
+   * The calls to split functions, grouped into functions of their own, level by level, until at
+   * most `callsLeft` remain in the calling method.
+   *
+   * The calls are what is left in the calling method, one per block of code, and a `CASE WHEN`
+   * of a thousand branches has hundreds of blocks: their calls alone take the caller past the
+   * 8000 bytes HotSpot compiles (`CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT`), so the method
+   * every row goes through runs interpreted. A call and its fold compile to at most about 20 bytes
+   * plus 2 for each argument - the invocation, a load per argument, and the fold's store, test
+   * and branch - so outside whole stage codegen the calls are left as they are while they fit in
+   * half of that limit, the rest being the caller's own code (`splitCallsPerMethod`). Under whole
+   * stage codegen the caller is the operator's method, which holds every expression's calls, so
+   * at most `SPLIT_CALLS_PER_GROUP` are left there for each.
+   *
+   * The groups are small, of `CodeGenerator.SPLIT_CALLS_PER_GROUP` calls, so that C2 can inline
+   * the split functions into each group within its inlining budget; a group of hundreds of calls
+   * stays compilable but has most of its calls left out of inlining, and runs slower. A group
+   * takes the union of what its calls take, and is closed when one more call would take it past
+   * those calls or past the parameters a method can have; where no group can hold two calls, the
+   * calls are left as they are. A group is folded with `foldFunctions` and wrapped with
+   * `makeSplitFunction`, which is what `generateInnerClassesFunctionCalls` does with the functions
+   * of one inner class, so every caller of `splitExpressions` supports it.
+   */
+  private def groupSplitCalls(
+      calls: Seq[SplitCall],
+      funcName: String,
+      returnType: String,
+      makeSplitFunction: String => String,
       foldFunctions: Seq[String] => String,
-      level: Int = 0): Seq[String] = {
-    val callsPerMethod = splitCallsPerMethod(arguments)
-    if (calls.length <= callsPerMethod) {
+      callsLeft: Int,
+      level: Int = 0,
+      audited: Boolean = false): Seq[SplitCall] = {
+    if (calls.length <= callsLeft) {
       calls
     } else {
-      val argDefinitionString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
-      val argInvocationString = arguments.map(_._2).mkString(", ")
-      val groupCalls = calls.grouped(SPLIT_CALLS_PER_GROUP).zipWithIndex.map { case (group, i) =>
-        val name = s"${funcName}_group${level}_$i"
-        val code =
-          s"""
-             |private $returnType $name($argDefinitionString) {
-             |  ${makeSplitFunction(foldFunctions(group))}
-             |}
-           """.stripMargin
-        s"${addNewFunction(name, code)}($argInvocationString)"
-      }.toSeq
-      groupFunctionCalls(groupCalls, funcName, arguments, returnType, makeSplitFunction,
-        foldFunctions, level + 1)
+      val groups = mutable.ArrayBuffer.empty[mutable.ArrayBuffer[SplitCall]]
+      var taken = Seq.empty[(String, String)]
+      calls.foreach { c =>
+        val union = (taken ++ c.arguments).distinctBy(_._2)
+        if (groups.isEmpty || groups.last.length == SPLIT_CALLS_PER_GROUP ||
+            !isValidParamLength(calculateParamLengthFromTypes(union.map(_._1)))) {
+          groups += mutable.ArrayBuffer(c)
+          taken = c.arguments
+        } else {
+          groups.last += c
+          taken = union
+        }
+      }
+      if (groups.length == calls.length) {
+        calls
+      } else {
+        val grouped = groups.zipWithIndex.map { case (group, i) =>
+          splitCall(s"${funcName}_group${level}_$i",
+            group.flatMap(_.arguments).distinctBy(_._2).toSeq, returnType,
+            makeSplitFunction(foldFunctions(group.map(_.call).toSeq)), audited)
+        }.toSeq
+        groupSplitCalls(grouped, funcName, returnType, makeSplitFunction, foldFunctions,
+          callsLeft, level + 1, audited)
+      }
+    }
+  }
+
+  /**
+   * Under testing, the names every split function's calls pass, by the function's name, for
+   * `assertSplitCallsWithin`. `removeFunctionsSince` removes a function's entry here along with
+   * the function.
+   */
+  private val splitCallArguments = mutable.HashMap.empty[String, Seq[String]]
+
+  /**
+   * Under testing, asserts that every call to a split function in `body`, the code of the method
+   * `method` taking `parameters`, passes only names among those parameters. A split function's
+   * arguments are computed where its code is generated, from what that code reads; when an
+   * operator then moves that code into a method of its own - a subexpression function, an
+   * aggregate function, `ExpandExec`'s switch case, a `With` definition's method - those arguments
+   * must be among the method's parameters, which the operator computes separately.
+   */
+  private[sql] def assertSplitCallsWithin(
+      body: => String,
+      parameters: Seq[String],
+      method: String): Unit = {
+    if (Utils.isTesting && splitCallArguments.nonEmpty) {
+      CodeGenerator.CallSite.findAllMatchIn(body).foreach { site =>
+        val function = site.group(1)
+        splitCallArguments.get(function).foreach { args =>
+          val missing = args.filterNot(parameters.contains)
+          assert(missing.isEmpty, s"$method calls $function, passing ${missing.mkString(", ")}, " +
+            s"which $method does not take")
+        }
+      }
     }
   }
 
@@ -1323,25 +1932,32 @@ class CodegenContext extends Logging {
    *
    * @param expressions the codes to evaluate expressions.
    */
-  private def buildCodeBlocks(expressions: Seq[String]): Seq[String] = {
-    val blocks = new ArrayBuffer[String]()
+  private def buildCodeBlocks(expressions: Seq[String]): Seq[String] =
+    buildCodeBlocksOf(expressions).map(_._1)
+
+  /** `buildCodeBlocks`, with the indices in `expressions` of the codes each block holds. */
+  private def buildCodeBlocksOf(expressions: Seq[String]): Seq[(String, Seq[Int])] = {
+    val blocks = new ArrayBuffer[(String, Seq[Int])]()
     val blockBuilder = new StringBuilder()
+    val indices = new ArrayBuffer[Int]()
     var length = 0
     val splitThreshold = SQLConf.get.methodSplitThreshold
-    for (code <- expressions) {
+    for ((code, i) <- expressions.zipWithIndex) {
       // We can't know how many bytecode will be generated, so use the length of source code
       // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
       // also not be too small, or it will have many function calls (for wide table), see the
       // results in BenchmarkWideTable.
       if (length > splitThreshold) {
-        blocks += blockBuilder.toString()
+        blocks += blockBuilder.toString() -> indices.toSeq
         blockBuilder.clear()
+        indices.clear()
         length = 0
       }
       blockBuilder.append(code)
+      indices += i
       length += CodeFormatter.stripExtraNewLinesAndComments(code).length
     }
-    blocks += blockBuilder.toString()
+    blocks += blockBuilder.toString() -> indices.toSeq
     blocks.toSeq
   }
 
@@ -1528,6 +2144,15 @@ class CodegenContext extends Logging {
     // elimination.
     val commonExprs = equivalentExpressions.getCommonSubexpressions
 
+    // The code of the non-split pass is discarded when the split pass below is taken, and with it
+    // the calls to every function added while generating it, such as the split methods of a CASE
+    // WHEN or a `With` definition's method. A generation that splits the stage's expressions
+    // (`WholeStageSplit.Split`) removes those functions then; any other keeps them, as the class
+    // did before that split existed, so that a stage kept in one piece, and the split turned off,
+    // give back the code generated before it.
+    val functionsBeforeNonSplit = functionsMark()
+    val occurrencesBeforeNonSplit = wholeStageSplitOccurrences.clone()
+    val blocksSplitBeforeNonSplit = wholeStageBlocksSplit
     val nonSplitCode = {
       val allStates = mutable.ArrayBuffer.empty[SubExprEliminationState]
       commonExprs.map { expr =>
@@ -1562,6 +2187,16 @@ class CodegenContext extends Logging {
     val needSplit = nonSplitCode.map(_.eval.code.length).sum > SQLConf.get.methodSplitThreshold
     val (subExprsMap, exprCodes) = if (needSplit) {
       if (inputVarsForAllFuncs.map(calculateParamLengthFromExprValues).forall(isValidParamLength)) {
+        if (wholeStageSplit.isInstanceOf[WholeStageSplit.Split]) {
+          removeFunctionsSince(functionsBeforeNonSplit)
+        }
+        // The expressions of the discarded pass occur again in this one, and count from where
+        // they did: a generation that keeps the non-split pass, as a split can make another
+        // generation of the stage do, then gives the code kept the same occurrences. The blocks
+        // the discarded pass split are gone with it.
+        wholeStageSplitOccurrences.clear()
+        wholeStageSplitOccurrences ++= occurrencesBeforeNonSplit
+        wholeStageBlocksSplit = blocksSplitBeforeNonSplit
         val localSubExprEliminationExprs =
           mutable.HashMap.empty[ExpressionEquals, SubExprEliminationState]
 
@@ -1586,6 +2221,7 @@ class CodegenContext extends Logging {
           // Generate the code for this expression tree and wrap it in a function.
           val fnName = freshName("subExpr")
           val inputVars = inputVarsForAllFuncs(i)
+          assertSplitCallsWithin(eval.code.toString, inputVars.map(_.variableName), fnName)
           val argList =
             inputVars.map(v => s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}")
           val fn =
@@ -1898,15 +2534,7 @@ object CodeGenerator extends Logging {
    * @return a pair of a generated class and the bytecode statistics of generated functions.
    */
   def compile(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = try {
-    val classLoaderRef = new HashableWeakReference(Utils.getContextOrSparkClassLoader)
-    // The active backend is part of the cache key: flipping
-    // `spark.sql.codegen.compiler` mid-session must not silently reuse a class
-    // (and `ByteCodeStats`) compiled by the previously selected backend. The key
-    // holds the CodeCompiler singleton itself rather than its name: identity
-    // equality/hashCode is stable for an in-memory cache and immune to case
-    // variants of the name.
-    val backend = CodeCompiler.active(code)
-    cache.get((classLoaderRef, backend, code))
+    cache.get(cacheKey(code))
   } catch {
     // Cache.get() may wrap the original exception. See the following URL
     // https://guava.dev/releases/14.0.1/api/docs/com/google/common/cache/
@@ -1914,6 +2542,29 @@ object CodeGenerator extends Logging {
     case e @ (_: UncheckedExecutionException | _: ExecutionError) =>
       throw e.getCause
   }
+
+  /**
+   * What the compile cache keys `code`'s class on besides the code: the class loader, held
+   * weakly - the calling thread's context class loader, or Spark's - and the active backend.
+   * Flipping `spark.sql.codegen.compiler` mid-session must not silently reuse a class (and
+   * `ByteCodeStats`) compiled by the previously selected backend. It holds the CodeCompiler
+   * singleton itself rather than its name: identity equality/hashCode is stable for an in-memory
+   * cache and immune to case variants of the name. Whole stage codegen keys its split decisions
+   * on it too.
+   */
+  private[sql] def compileCacheScope(code: CodeAndComment): (HashableWeakReference, CodeCompiler) =
+    (new HashableWeakReference(Utils.getContextOrSparkClassLoader), CodeCompiler.active(code))
+
+  /** The key of `code`'s class in the compile cache. */
+  private def cacheKey(
+      code: CodeAndComment): (HashableWeakReference, CodeCompiler, CodeAndComment) = {
+    val (classLoader, backend) = compileCacheScope(code)
+    (classLoader, backend, code)
+  }
+
+  /** Drops `code`'s class from the compile cache: a variant whole stage codegen did not keep. */
+  private[sql] def invalidateCompiled(code: CodeAndComment): Unit =
+    cache.invalidate(cacheKey(code))
 
   /**
    * A cache of generated classes.
@@ -1937,10 +2588,12 @@ object CodeGenerator extends Logging {
         val endTime = System.nanoTime()
         val duration = endTime - startTime
         val timeMs: Double = duration.toDouble / NANOS_PER_MILLIS
-        CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
-        CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
-        logInfo(log"Code generated in ${MDC(TOTAL_TIME, timeMs)} ms")
-        _compileTime.add(duration)
+        CodeCompiler.reportOrHold {
+          CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
+          CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
+          logInfo(log"Code generated in ${MDC(TOTAL_TIME, timeMs)} ms")
+          _compileTime.add(duration)
+        }
         result
     }
     NonFateSharingCache(loadFunc, SQLConf.get.codegenCacheMaxEntries)
@@ -2212,6 +2865,22 @@ object CodeGenerator extends Logging {
   }
 
   /**
+   * Whether a class of expression leaves `genCode` to `Expression`, which reads the expression's
+   * subexpression elimination state, for `CodegenContext.readsSubExprState`: one reflective lookup
+   * per class. The lookup resolves every public method of the class and its supertypes, so a
+   * method whose signature names a class missing at runtime fails it with a `LinkageError`; such
+   * a class is answered no, which keeps the code it is in from being split.
+   */
+  private[codegen] val leavesGenCodeToExpression: ClassValue[java.lang.Boolean] =
+    new ClassValue[java.lang.Boolean] {
+      override def computeValue(c: Class[_]): java.lang.Boolean = try {
+        c.getMethod("genCode", classOf[CodegenContext]).getDeclaringClass == classOf[Expression]
+      } catch {
+        case _: LinkageError => false
+      }
+    }
+
+  /**
    * This methods returns two values in a Tuple.
    *
    * First value: Extracts all the input variables from references and subexpression
@@ -2220,51 +2889,19 @@ object CodeGenerator extends Logging {
    *
    * Second value: Returns the set of `ExprCodes`s which are necessary codes before
    * evaluating subexpressions.
+   *
+   * The walk is `CodegenContext.collectInputs` under `InputPolicy.operatorMethod`, which never
+   * refuses.
    */
   def getLocalInputVariableValues(
       ctx: CodegenContext,
       expr: Expression,
       subExprs: Map[ExpressionEquals, SubExprEliminationState] = Map.empty)
       : (Set[VariableValue], Set[ExprCode]) = {
-    val argSet = mutable.Set[VariableValue]()
-    val exprCodesNeedEvaluate = mutable.Set[ExprCode]()
-
-    if (ctx.INPUT_ROW != null) {
-      argSet += JavaCode.variable(ctx.INPUT_ROW, classOf[InternalRow])
-    }
-
-    // Collects local variables from a given `expr` tree
-    val collectLocalVariable = (ev: ExprValue) => ev match {
-      case vv: VariableValue => argSet += vv
-      case _ =>
-    }
-
-    val stack = mutable.Stack[Expression](expr)
-    while (stack.nonEmpty) {
-      stack.pop() match {
-        case ref: BoundReference if ctx.currentVars != null &&
-            ctx.currentVars(ref.ordinal) != null =>
-          val exprCode = ctx.currentVars(ref.ordinal)
-          // If the referred variable is not evaluated yet.
-          if (exprCode.code != EmptyBlock) {
-            exprCodesNeedEvaluate += exprCode.copy()
-            exprCode.code = EmptyBlock
-          }
-          collectLocalVariable(exprCode.value)
-          collectLocalVariable(exprCode.isNull)
-
-        case e =>
-          subExprs.get(ExpressionEquals(e)) match {
-            case Some(state) =>
-              collectLocalVariable(state.eval.value)
-              collectLocalVariable(state.eval.isNull)
-            case None =>
-              stack.pushAll(e.children)
-          }
-      }
-    }
-
-    (argSet.toSet, exprCodesNeedEvaluate.toSet)
+    val inputs = ctx.collectInputs(Seq(expr), InputPolicy.operatorMethod, subExprs).get
+    // Hash sets, as they always were, so a caller's parameter list follows their iteration order
+    // rather than the walk's.
+    (mutable.Set(inputs.arguments: _*).toSet, mutable.Set(inputs.inputsToEvaluate: _*).toSet)
   }
 
   /**
@@ -2382,25 +3019,26 @@ object CodeGenerator extends Logging {
    * we also need to pass a boolean parameter for the null status.
    */
   def calculateParamLength(params: Seq[Expression]): Int = {
-    def paramLengthForExpr(input: Expression): Int = {
-      val javaParamLength = javaType(input.dataType) match {
-        case JAVA_LONG | JAVA_DOUBLE => 2
-        case _ => 1
-      }
-      // For a nullable expression, we need to pass in an extra boolean parameter.
-      (if (input.nullable) 1 else 0) + javaParamLength
-    }
+    // For a nullable expression, we need to pass in an extra boolean parameter.
+    def paramLengthForExpr(input: Expression): Int =
+      (if (input.nullable) 1 else 0) + paramSlotsOf(javaType(input.dataType))
     // Initial value is 1 for `this`.
     1 + params.map(paramLengthForExpr).sum
   }
 
-  def calculateParamLengthFromExprValues(params: Seq[ExprValue]): Int = {
-    def paramLengthForExpr(input: ExprValue): Int = input.javaType match {
-      case java.lang.Long.TYPE | java.lang.Double.TYPE => 2
-      case _ => 1
-    }
+  /** The slots a parameter of the Java type `javaType` takes: two for a `long` or a `double`. */
+  private def paramSlotsOf(javaType: String): Int = javaType match {
+    case JAVA_LONG | JAVA_DOUBLE => 2
+    case _ => 1
+  }
+
+  def calculateParamLengthFromExprValues(params: Seq[ExprValue]): Int =
+    calculateParamLengthFromTypes(params.map(p => typeName(p.javaType)))
+
+  /** The parameter length of a method whose parameters are of the Java types `javaTypes`. */
+  private[codegen] def calculateParamLengthFromTypes(javaTypes: Seq[String]): Int = {
     // Initial value is 1 for `this`.
-    1 + params.map(paramLengthForExpr).sum
+    1 + javaTypes.map(paramSlotsOf).sum
   }
 
   /**
@@ -2414,4 +3052,79 @@ object CodeGenerator extends Logging {
       case validLength => paramLength <= validLength.toInt
     }
   }
+
+  // ---------------------------------------------------------------------------------------------
+  // The whole stage split of expressions (`CodegenContext.splitExpressionsWithSources`)
+  // ---------------------------------------------------------------------------------------------
+
+  /** A slot of a compacted mutable state array, such as `mutableStateArray_0[3]`. */
+  private[codegen] val CompactedSlot = "([A-Za-z_$][\\w$]*)\\[\\d+\\]".r
+
+  /** A name and an opening parenthesis: a call, or a keyword such as `if`. */
+  private[codegen] val CallSite = "(?<![\\w$])([A-Za-z_$][\\w$]*)\\s*\\(".r
+
+  /**
+   * The comment marking the code of the expression of index `i` in
+   * `CodegenContext.wholeStageSplitsRecorded` under `WholeStageSplit.Record`.
+   */
+  private[sql] def wholeStageSplitMarker(i: Int): String = s"$WholeStageSplitMarkerStart$i*/"
+
+  private val WholeStageSplitMarkerStart = "/*wholeStageSplit:"
+
+  private val WholeStageSplitMarker = """/\*wholeStageSplit:(\d+)\*/""".r
+
+  /** Whether `code` may hold a `wholeStageSplitMarker`, a check before a scan. */
+  private[codegen] def holdsWholeStageSplitMarker(code: String): Boolean =
+    code.contains(WholeStageSplitMarkerStart)
+
+  /**
+   * Each `wholeStageSplitMarker` in the generated Java `code`, as its index and where it starts and
+   * ends: a block comment that is exactly a marker. String and character literals and other
+   * comments are skipped, so that text a literal holds, such as a user's regular expression, is
+   * never taken for a marker.
+   */
+  private[sql] def wholeStageSplitMarkersIn(code: String): Seq[(Int, Int, Int)] = {
+    val found = mutable.ArrayBuffer.empty[(Int, Int, Int)]
+    CodeCompiler.forEachJavaSpan(code) {
+      case (CodeCompiler.JavaSpan.Comment, start, end) =>
+        code.substring(start, end) match {
+          case WholeStageSplitMarker(index) => found += ((index.toInt, start, end))
+          case _ =>
+        }
+      case _ =>
+    }
+    found.toSeq
+  }
+
+  /** `source` without the comments `wholeStageSplitMarker` adds (`wholeStageSplitMarkersIn`). */
+  private[sql] def stripWholeStageSplitMarkers(source: String): String = {
+    val markers = if (holdsWholeStageSplitMarker(source)) {
+      wholeStageSplitMarkersIn(source)
+    } else {
+      Nil
+    }
+    if (markers.isEmpty) {
+      source
+    } else {
+      val stripped = new java.lang.StringBuilder(source.length)
+      var from = 0
+      markers.foreach { case (_, start, end) =>
+        stripped.append(source, from, start)
+        from = end
+      }
+      stripped.append(source, from, source.length).toString
+    }
+  }
+
+  /**
+   * `e` with the value of every lambda variable in it replaced by one value: a fresh copy of a
+   * lambda variable gets a new value, which takes part in its equality, so that two generations'
+   * copies of an expression holding one compare equal only without the values.
+   */
+  private[codegen] def withoutLambdaValues(e: Expression): Expression = e.transform {
+    // Not pruned on `LAMBDA_VARIABLE`: `NamedLambdaVariable` declares no pattern.
+    case v: NamedLambdaVariable => v.copy(value = NoLambdaValue)
+  }
+
+  private val NoLambdaValue = new java.util.concurrent.atomic.AtomicReference[Any]()
 }

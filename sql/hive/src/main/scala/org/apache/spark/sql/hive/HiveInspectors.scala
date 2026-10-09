@@ -943,6 +943,24 @@ private[hive] trait HiveInspectors {
     }
 
   /**
+   * In-place unwrapper that uses DataType-aware conversion when the target
+   * contains CHAR/VARCHAR or nanosecond timestamps. Other fields keep the
+   * specialized primitive setters from the field-only overload.
+   */
+  def unwrapperFor(
+      field: HiveStructField,
+      dataType: DataType): (Any, InternalRow, Int) => Unit = {
+    if (CharVarcharUtils.hasCharVarchar(dataType) ||
+        dataType.existsRecursively(_.isInstanceOf[AnyTimestampNanoType])) {
+      val unwrapper = unwrapperFor(field.getFieldObjectInspector, dataType)
+      (value: Any, row: InternalRow, ordinal: Int) =>
+        row.update(ordinal, unwrapper(value))
+    } else {
+      unwrapperFor(field)
+    }
+  }
+
+  /**
    * Builds unwrappers ahead of time according to object inspector
    * types to avoid pattern matching and branching costs per row.
    *

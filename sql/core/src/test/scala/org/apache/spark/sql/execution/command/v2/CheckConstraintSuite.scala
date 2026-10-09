@@ -147,6 +147,29 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-59962: Check added by ALTER TABLE reading a computed value twice") {
+    // NULLIF reads `id + 1` twice. A predicate stored with a column pre-evaluated under the ALTER
+    // TABLE would make every later write fail to resolve it.
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
+      sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (nullif(id + 1, 3) > 0)")
+      // `nullif(3, 3)` is NULL, which a check accepts.
+      sql(s"INSERT INTO $t VALUES (2, 'a')")
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (-5, 'b')")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "c1",
+          "expression" -> "nullif(id + 1, 3) > 0",
+          "values" -> " - id : -5"))
+      checkAnswer(sql(s"SELECT * FROM $t"), Row(2, "a"))
+    }
+  }
+
   def getConstraintCharacteristics(): Seq[(String, String)] = {
     Seq(
       ("", s"ENFORCED NORELY"),

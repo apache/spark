@@ -76,6 +76,7 @@ from pyspark.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
     _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings,
+    _check_no_char_varchar,
     _create_row,
     _infer_type,
     _make_type_verifier,
@@ -658,6 +659,50 @@ class TypesTestsMixin:
         self.assertEqual(StringType("UTF8_BINARY").simpleString(), "string")
         self.assertEqual(StringType("UTF8_LCASE").simpleString(), "string collate UTF8_LCASE")
         self.assertEqual(StringType("UNICODE").simpleString(), "string collate UNICODE")
+
+    def test_check_no_char_varchar(self):
+        from pyspark.testing.objects import ExamplePointUDT
+
+        _check_no_char_varchar(StringType(), "Python UDF return types")
+        _check_no_char_varchar(ArrayType(StringType()), "Python UDF return types")
+
+        cases = [
+            CharType(3),
+            VarcharType(8),
+            ArrayType(CharType(5)),
+            MapType(VarcharType(4), StringType()),
+            MapType(StringType(), VarcharType(4)),
+            MapType(StringType(), ArrayType(CharType(3))),
+            StructType([StructField("c", CharType(3))]),
+        ]
+        for dt in cases:
+            with self.subTest(dt=dt.simpleString()):
+                with self.assertRaises(PySparkNotImplementedError) as pe:
+                    _check_no_char_varchar(dt, "Python UDF return types")
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+                    messageParameters={
+                        "feature": "Python UDF return types",
+                        "data_type": dt.simpleString(),
+                    },
+                )
+
+        class CharStorageUDT(ExamplePointUDT):
+            @classmethod
+            def sqlType(cls):
+                return StructType([StructField("x", CharType(3))])
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            _check_no_char_varchar(CharStorageUDT(), "Python UDF return types")
+        self.check_error(
+            exception=pe.exception,
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={
+                "feature": "Python UDF return types",
+                "data_type": CharStorageUDT().simpleString(),
+            },
+        )
 
     def test_char_varchar_type_collations(self):
         from pyspark.sql.types import _parse_datatype_json_string
