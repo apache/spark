@@ -354,7 +354,7 @@ SELECT
   (SELECT avg(ss_net_paid) FROM store_sales WHERE ss_quantity BETWEEN 21 AND 40)
 ```
 
-In TPC-DS benchmark runs, enabling symmetric filter propagation made `q9` and `q28` about 3.5x faster, and enabling it together with propagation through joins made `q88` about 7x and `q90` about 2x faster. See [SPARK-40193](https://issues.apache.org/jira/browse/SPARK-40193) and [SPARK-56677](https://issues.apache.org/jira/browse/SPARK-56677) for these measurements. The trade-off depends on the tables: the gain is largest when the differing filters are on columns the data source cannot prune on, and the risk is highest on heavily partitioned or file-pruned tables where the widened filter loses that pruning. Validate it on your own workload before enabling it in production.
+In TPC-DS benchmark runs, enabling symmetric filter propagation made `q9` and `q28` about 3.5x faster, and enabling it together with propagation through joins made `q88` about 7x and `q90` about 2x faster. See [SPARK-40193](https://issues.apache.org/jira/browse/SPARK-40193) and [SPARK-56677](https://issues.apache.org/jira/browse/SPARK-56677) for these measurements. The trade-off depends on the tables: the gain is largest when the differing filters are on columns the data source cannot prune on, and the risk is highest on heavily partitioned or file-pruned tables where the widened filter loses that pruning. With propagation through joins, two subplans that filter different join children also merge. The merged join then builds join pairs that neither subplan needs, which can multiply its work. Validate it on your own workload before enabling it in production.
 
 <table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
@@ -370,7 +370,7 @@ In TPC-DS benchmark runs, enabling symmetric filter propagation made `q9` and `q
     <td><code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code></td>
     <td>false</td>
     <td>
-      When true, two non-grouping aggregate subplans that both have a filter condition can also be merged. Disabled by default because the merged filter is widened to <code>OR(f1, f2)</code>, which may read more data than the two original filters, especially on heavily partitioned or file-pruned tables.
+      When true, two non-grouping aggregate subplans that both have a filter condition can also be merged. Disabled by default because the merged filter is widened to <code>OR(f1, f2)</code>, which may read more data than the two original filters, especially on heavily partitioned or file-pruned tables. Through a join, two subplans that filter different join children also count as symmetric. The merged join then also builds join pairs that neither subplan needs, which can multiply the join's work.
     </td>
     <td>4.2.0</td>
   </tr>
@@ -378,7 +378,7 @@ In TPC-DS benchmark runs, enabling symmetric filter propagation made `q9` and `q
     <td><code>spark.sql.optimizer.mergeSubplans.filterPropagation.throughJoin.enabled</code></td>
     <td>false</td>
     <td>
-      When true, filter conditions can also propagate through <code>Join</code> nodes, which lets subplans that differ only in their filter conditions and share a common join be merged. When false, no filter is propagated across a join, not even when only one of the two subplans has a filter. A filter only propagates from the preserved side of the join: the left side of <code>LEFT OUTER</code>/<code>LEFT SEMI</code>/<code>LEFT ANTI</code>, the right side of <code>RIGHT OUTER</code>, or either side of <code>INNER</code>/<code>CROSS</code>. <code>FULL OUTER</code> joins are never eligible. Subplans that differ in their filters typically have a filter on both sides, so this is usually set together with <code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code>.
+      When true, filter conditions can also propagate through <code>Join</code> nodes, which lets subplans that differ only in their filter conditions and share a common join be merged. When false, no filter is propagated across a join, not even when only one of the two subplans has a filter. A filter only propagates from the preserved side of the join: the left side of <code>LEFT OUTER</code>/<code>LEFT SEMI</code>/<code>LEFT ANTI</code>, the right side of <code>RIGHT OUTER</code>, or either side of <code>INNER</code>/<code>CROSS</code>. <code>FULL OUTER</code> joins are never eligible. Subplans that differ in their filters typically both have one, on the same join child or on different ones. Such a merge also needs <code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code>, so this is usually set together with it.
     </td>
     <td>4.2.0</td>
   </tr>
