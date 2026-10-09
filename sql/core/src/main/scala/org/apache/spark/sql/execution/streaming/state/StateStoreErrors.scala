@@ -398,9 +398,9 @@ class StateStoreColumnFamilyMismatch(
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE",
     messageParameters = Map(
-      "columnFamilyName" -> columnFamilyName,
-      "oldColumnFamilySchema" -> oldColumnFamilySchema,
-      "newColumnFamilySchema" -> newColumnFamilySchema))
+      "colFamilyName" -> columnFamilyName,
+      "oldSchema" -> oldColumnFamilySchema,
+      "newSchema" -> newColumnFamilySchema))
 
 class StatefulProcessorCannotPerformOperationWithInvalidTimeMode(
     operationType: String,

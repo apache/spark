@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.Utils
 
 abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSuite {
@@ -349,6 +350,7 @@ class TextV1Suite extends TextSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "text")
 }
 
+@ExtendedSQLTest
 class TextV2Suite extends TextSuite {
   override protected def sparkConf: SparkConf =
     super

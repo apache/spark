@@ -291,7 +291,8 @@ class AvroCatalystDataConversionSuite extends SharedSparkSession
       filters,
       false,
       "",
-      -1)
+      -1,
+      dataSchema = None)
     val deserialized = deserializer.deserialize(data)
     expected match {
       case None => assert(deserialized == None)
@@ -309,7 +310,8 @@ class AvroCatalystDataConversionSuite extends SharedSparkSession
       new NoopFilters,
       false,
       "",
-      -1)
+      -1,
+      dataSchema = None)
   }
 
   test("SPARK-58218: null array element for non-null Catalyst type reports a typed error") {

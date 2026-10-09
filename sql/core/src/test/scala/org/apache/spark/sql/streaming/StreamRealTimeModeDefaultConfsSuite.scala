@@ -167,7 +167,7 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
 
   test("switching an existing v1 checkpoint to Real-Time Mode fails fast") {
     // An existing v1 checkpoint carries no explicit config, so the pre-flight cannot see it; the
-    // initializeExecution fail-fast catches it instead, from the resolved commit log version.
+    // initializeExecution fail-fast catches it instead, from the resolved state-store format.
     // Resolution keeps an existing checkpoint at the version it was created with, so rather than
     // silently running at v1 (where a re-executed batch can reuse the failed batch's state file
     // names and lose data) the query is rejected at start. The rejection is unconditional -- a
@@ -221,9 +221,9 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
   }
 
   test("a fresh Real-Time Mode checkpoint is not rejected") {
-    // A fresh checkpoint takes v2 from the Real-Time Mode defaults, so its resolved commit log is
-    // v2 and the rejection does not apply. Only a v1 commit log -- an existing v1 checkpoint, or an
-    // explicit v1 config without the escape hatch -- is rejected.
+    // A fresh checkpoint takes state-store format v2 from the Real-Time Mode defaults, so the
+    // rejection does not apply. Only a resolved state-store format v1 -- from an existing
+    // incompatible checkpoint or an explicit v1 config without the escape hatch -- is rejected.
     withTempDir { checkpointDir =>
       val inputData = LowLatencyMemoryStream[Int]
       testStream(inputData.toDS(), OutputMode.Update, Map.empty, new ContinuousMemorySink())(

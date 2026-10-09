@@ -16,18 +16,19 @@
 #
 
 import _string  # type: ignore[import-not-found]
-from typing import Any, Dict, Optional, Union, List
 import inspect
+from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
 
-from pyspark.sql import SparkSession, DataFrame as SDataFrame
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas.utils import default_session
 from pyspark.pandas.frame import DataFrame
-from pyspark.pandas.series import Series
 from pyspark.pandas.internal import InternalFrame
 from pyspark.pandas.namespace import _get_index_map
+from pyspark.pandas.series import Series
+from pyspark.pandas.utils import default_session
+from pyspark.sql import DataFrame as SDataFrame
+from pyspark.sql import SparkSession
 
 __all__ = ["sql"]
 
@@ -359,11 +360,12 @@ class SQLProcessor:
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.sql_processor
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

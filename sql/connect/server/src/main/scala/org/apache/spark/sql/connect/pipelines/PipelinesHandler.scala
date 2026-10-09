@@ -31,7 +31,7 @@ import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DescribeTablePartition, DropView, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DescribeTablePartition, DropView, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews, UnresolvedInsert}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -173,6 +173,7 @@ private[connect] object PipelinesHandler extends Logging {
       queryPlan.isInstanceOf[CreateTable] ||
       queryPlan.isInstanceOf[CreateView] ||
       queryPlan.isInstanceOf[InsertIntoStatement] ||
+      queryPlan.isInstanceOf[UnresolvedInsert] ||
       queryPlan.isInstanceOf[RenameTable] ||
       queryPlan.isInstanceOf[CreateNamespace] ||
       queryPlan.isInstanceOf[DropView]
@@ -429,9 +430,6 @@ private[connect] object PipelinesHandler extends Logging {
       transformExpressionFunc: proto.Expression => Expression): AutoCdcFlow = {
     // TODO(SPARK-57092): apply_as_truncates is declared on AutoCdcFlowDetails but is not yet
     //   honored by the engine; wire it through once SCD1 truncate support lands.
-    // TODO(SPARK-57093): ignore_null_updates_column_list and ignore_null_updates_except_column_list
-    //   are declared on AutoCdcFlowDetails but are not yet honored by the engine; wire them
-    //   through once SCD1 ignore-null support lands.
 
     if (!autoCdcDetails.hasSource) {
       throw new AnalysisException("AUTOCDC_MISSING_SOURCE", Map.empty)
@@ -511,6 +509,29 @@ private[connect] object PipelinesHandler extends Logging {
       throw new AnalysisException("AUTOCDC_TRACK_HISTORY_REQUIRES_SCD2", Map.empty)
     }
 
+    // Ignore-null (partial update) selection. The three inputs are mutually exclusive:
+    // ignore_null_updates (all columns), ignore_null_updates_column_list (an include list), and
+    // ignore_null_updates_except_column_list (an except list). "All columns" is represented as an
+    // ExcludeColumns selection with an empty list; this cannot be expressed via the repeated
+    // except field alone (an empty repeated field is indistinguishable from an unset one), which
+    // is why the dedicated boolean exists.
+    val ignoreNullSelection: Option[ColumnSelection] = {
+      val all = autoCdcDetails.getIgnoreNullUpdates
+      val included = autoCdcDetails.getIgnoreNullUpdatesColumnListList.asScala.toSeq
+      val excluded = autoCdcDetails.getIgnoreNullUpdatesExceptColumnListList.asScala.toSeq
+      if (Seq(all, included.nonEmpty, excluded.nonEmpty).count(identity) > 1) {
+        throw new AnalysisException("AUTOCDC_CONFLICTING_IGNORE_NULL_UPDATES_OPTIONS", Map.empty)
+      } else if (all) {
+        Some(ColumnSelection.ExcludeColumns(Seq.empty))
+      } else if (included.nonEmpty) {
+        Some(ColumnSelection.IncludeColumns(included.map(asUnqualifiedColumnName)))
+      } else if (excluded.nonEmpty) {
+        Some(ColumnSelection.ExcludeColumns(excluded.map(asUnqualifiedColumnName)))
+      } else {
+        None
+      }
+    }
+
     val changeArgs = ChangeArgs(
       keys = keys,
       sequencing = toColumn(autoCdcDetails.getSequenceBy),
@@ -518,7 +539,8 @@ private[connect] object PipelinesHandler extends Logging {
       deleteCondition =
         Option.when(autoCdcDetails.hasApplyAsDeletes)(toColumn(autoCdcDetails.getApplyAsDeletes)),
       columnSelection = columnSelection,
-      trackHistorySelection = trackHistorySelection)
+      trackHistorySelection = trackHistorySelection,
+      ignoreNullSelection = ignoreNullSelection)
 
     AutoCdcFlow(
       identifier = flowIdentifier,

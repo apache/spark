@@ -18,6 +18,7 @@
 # $example on$
 from pyspark.ml.classification import NaiveBayes
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+
 # $example off$
 from pyspark.sql import SparkSession
 

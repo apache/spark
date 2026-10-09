@@ -28,13 +28,9 @@ private[spark] trait SchedulingAlgorithm {
 
 private[spark] class FIFOSchedulingAlgorithm extends SchedulingAlgorithm {
   override def comparator(s1: Schedulable, s2: Schedulable): Boolean = {
-    val priority1 = s1.priority
-    val priority2 = s2.priority
-    var res = math.signum(priority1 - priority2)
+    var res = Integer.compare(s1.priority, s2.priority)
     if (res == 0) {
-      val stageId1 = s1.stageId
-      val stageId2 = s2.stageId
-      res = math.signum(stageId1 - stageId2)
+      res = Integer.compare(s1.stageId, s2.stageId)
     }
     res < 0
   }

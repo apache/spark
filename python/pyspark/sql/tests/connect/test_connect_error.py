@@ -17,11 +17,10 @@
 
 import unittest
 
-from pyspark.errors import PySparkAttributeError
+from pyspark.errors import PySparkAttributeError, PySparkNotImplementedError, PySparkTypeError
 from pyspark.errors.exceptions.base import SessionNotSameException
-from pyspark.sql.types import Row
 from pyspark.sql import functions as F
-from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
+from pyspark.sql.types import Row
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.util import is_remote_only
 

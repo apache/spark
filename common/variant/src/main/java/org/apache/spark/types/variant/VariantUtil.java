@@ -688,6 +688,16 @@ public class VariantUtil {
     }
   }
 
+  // Encode an object field key for comparison in the order required by the Variant spec.
+  public static byte[] encodeKey(String key) {
+    return key.getBytes(StandardCharsets.UTF_8);
+  }
+
+  // Compare UTF-8-encoded object field keys using unsigned lexicographic byte ordering.
+  public static int compareKeys(byte[] left, byte[] right) {
+    return Arrays.compareUnsigned(left, right);
+  }
+
   // Get a key at `id` in the variant metadata.
   // Throw `MALFORMED_VARIANT` if the variant is malformed. An out-of-bound `id` is also considered
   // a malformed variant because it is read from the corresponding variant value.

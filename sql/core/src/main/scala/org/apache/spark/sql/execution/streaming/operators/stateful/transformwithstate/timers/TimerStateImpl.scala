@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers
 
+import java.io.Closeable
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{EXPIRY_TIMESTAMP, KEY}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -113,6 +115,15 @@ class TimerStateImpl(
     useMultipleValuesPerKey = false, isInternal = true)
 
   private val secIndexProjection = UnsafeProjection.create(keySchemaForSecIndex)
+
+  private var reusableIterator: Option[ReusableIterator[UnsafeRowPair]] = None
+  private var lastScannedExpiryTimestampMs = 0L
+
+  private lazy val expiryTimestampProjection = UnsafeProjection.create(
+    new StructType().add("expiryTimestampMs", LongType, nullable = false))
+
+  private lazy val lastScannedExpiryTimestampRow =
+    expiryTimestampProjection.apply(InternalRow(lastScannedExpiryTimestampMs))
 
   // Placeholder grouping-key struct used in range-scan boundary rows; see
   // [[RangeScanBoundaryUtils]] for rationale. Correctness relies on real stored
@@ -236,6 +247,37 @@ class TimerStateImpl(
     val endKey = encodeTimestampAsKey(expiryTimestampMs)
     val iter = store.rangeScan(startKey, endKey, tsToKeyCFName)
 
+    getExpiredTimersIterator(iter, expiryTimestampMs, isReusable = false)
+  }
+
+  /**
+   * Return expired timers using one cached native iterator. After the first scan, refresh and
+   * resume from the previous scan's expiration threshold.
+   */
+  private[sql] def getExpiredTimersReusable(
+      expiryTimestampMs: Long): Iterator[(Any, Long)] = {
+    store match {
+      case reusableStore: SupportsReusableIterator =>
+        val iter = reusableIterator match {
+          case Some(existingIterator) =>
+            lastScannedExpiryTimestampRow.setLong(0, lastScannedExpiryTimestampMs)
+            existingIterator.refreshAndSeekToPrefix(lastScannedExpiryTimestampRow)
+            existingIterator
+          case None =>
+            val newIterator = reusableStore.reusableIterator(tsToKeyCFName)
+            reusableIterator = Some(newIterator)
+            newIterator
+        }
+        lastScannedExpiryTimestampMs = expiryTimestampMs
+        getExpiredTimersIterator(iter, expiryTimestampMs, isReusable = true)
+      case _ => getExpiredTimers(expiryTimestampMs)
+    }
+  }
+
+  private def getExpiredTimersIterator(
+      iter: Iterator[UnsafeRowPair] with Closeable,
+      expiryTimestampMs: Long,
+      isReusable: Boolean): Iterator[(Any, Long)] = {
     new NextIterator[(Any, Long)] {
       override protected def getNext(): (Any, Long) = {
         if (iter.hasNext) {
@@ -255,7 +297,9 @@ class TimerStateImpl(
       }
 
       override protected def close(): Unit = {
-        iter.close()
+        if (!isReusable) {
+          iter.close()
+        }
       }
     }
   }

@@ -125,10 +125,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     uninterruptibleThreadRunner.shutdown()
   }
 
-  /**
-   * @return The Set of TopicPartitions for a given topic
-   */
-  private def fetchTopicPartitions(): Set[TopicPartition] =
+  override protected def fetchTopicPartitions(): Set[TopicPartition] =
     uninterruptibleThreadRunner.runUninterruptibly {
       assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
       // Poll to get the latest assigned partitions
@@ -158,8 +155,8 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       case LatestOffsetRangeLimit => partitions.map {
         case tp => tp -> KafkaOffsetRangeLimit.LATEST
       }.toMap
-      case SpecificOffsetRangeLimit(partitionOffsets) =>
-        validateTopicPartitions(partitions, partitionOffsets)
+      case offsets: SpecificOffsetRangeLimit =>
+        validateTopicPartitions(partitions, offsets.resolve(partitions))
       case SpecificTimestampRangeLimit(partitionTimestamps, strategy) =>
         fetchSpecificTimestampBasedOffsets(partitionTimestamps,
           isStartingOffsets, strategy).partitionToOffsets
@@ -170,9 +167,12 @@ private[kafka010] class KafkaOffsetReaderConsumer(
   }
 
   override def fetchSpecificOffsets(
-      partitionOffsets: Map[TopicPartition, Long],
+      offsets: SpecificOffsetRangeLimit,
       reportDataLoss: (String, () => Throwable) => Unit): KafkaSourceOffset = {
+    // Topic-level offsets are expanded against the partitions the fetch is actually run with,
+    // so that metadata changing in between cannot make valid offsets fail the assertion below
     val fnAssertParametersWithPartitions: ju.Set[TopicPartition] => Unit = { partitions =>
+      val partitionOffsets = offsets.resolve(partitions.asScala.toSet)
       assert(partitions.asScala == partitionOffsets.keySet,
         "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
           "Use -1 for latest, -2 for earliest, if you don't care.\n" +
@@ -180,12 +180,14 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionOffsets")
     }
 
-    val fnRetrievePartitionOffsets: ju.Set[TopicPartition] => Map[TopicPartition, Long] = { _ =>
-      partitionOffsets
+    val fnRetrievePartitionOffsets: ju.Set[TopicPartition] => Map[TopicPartition, Long] = {
+      partitions => offsets.resolve(partitions.asScala.toSet)
     }
 
     val fnAssertFetchedOffsets: Map[TopicPartition, Long] => Unit = { fetched =>
-      partitionOffsets.foreach {
+      // Only the explicitly specified offsets can be checked here. Topic-level ones always
+      // expand to the earliest/latest sentinels, which have no expected value to compare to.
+      offsets.partitionOffsets.foreach {
         case (tp, off) if off != KafkaOffsetRangeLimit.LATEST &&
           off != KafkaOffsetRangeLimit.EARLIEST =>
           if (fetched(tp) != off) {
@@ -466,9 +468,11 @@ private[kafka010] class KafkaOffsetReaderConsumer(
 
       // No need to report data loss here
       val resolvedFromOffsets =
-        fetchSpecificOffsets(fromOffsetsMap, (_, _) => ()).partitionToOffsets
+        fetchSpecificOffsets(SpecificOffsetRangeLimit(fromOffsetsMap), (_, _) => ())
+          .partitionToOffsets
       val resolvedUntilOffsets =
-        fetchSpecificOffsets(untilOffsetsMap, (_, _) => ()).partitionToOffsets
+        fetchSpecificOffsets(SpecificOffsetRangeLimit(untilOffsetsMap), (_, _) => ())
+          .partitionToOffsets
       val ranges = offsetRangesBase.map(_.topicPartition).map { tp =>
         KafkaOffsetRange(tp, resolvedFromOffsets(tp), resolvedUntilOffsets(tp), preferredLoc = None)
       }

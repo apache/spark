@@ -19,12 +19,11 @@
 A collections of builtin protobuf functions
 """
 
-from typing import Dict, Optional, TYPE_CHECKING
-
-from pyspark.sql.protobuf import functions as PyProtobufFunctions
+from typing import TYPE_CHECKING, Dict, Optional
 
 from pyspark.sql.column import Column
-from pyspark.sql.connect.functions.builtin import _invoke_function, _to_col, _options_to_col, lit
+from pyspark.sql.connect.functions.builtin import _invoke_function, _options_to_col, _to_col, lit
+from pyspark.sql.protobuf import functions as PyProtobufFunctions
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -116,6 +115,7 @@ def _read_descriptor_set_file(filePath: str) -> bytes:
 def _test() -> None:
     import os
     import sys
+
     from pyspark.testing.sqlutils import search_jar
 
     protobuf_jar = search_jar("connector/protobuf", "spark-protobuf-assembly-", "spark-protobuf")
@@ -133,8 +133,9 @@ def _test() -> None:
         os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, existing_args])
 
     import doctest
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.connect.protobuf.functions
+    from pyspark.sql import SparkSession as PySparkSession
 
     globs = pyspark.sql.connect.protobuf.functions.__dict__.copy()
     globs["spark"] = (

@@ -17,6 +17,7 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.Collections
+import java.util.concurrent.ScheduledThreadPoolExecutor
 
 import scala.jdk.CollectionConverters._
 
@@ -24,14 +25,15 @@ import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.{ContainerMetrics, PodMetrics}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.{MetricAPIGroupDSL, PodMetricOperation}
+import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, anyString}
 import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.api.plugin.PluginContext
-import org.apache.spark.deploy.k8s.Config.KUBERNETES_ALLOCATION_PODS_ALLOCATOR
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 
@@ -72,17 +74,29 @@ class ExecutorResizePluginSuite
     when(podOperations.inNamespace(namespace)).thenReturn(podsWithNamespace)
     when(podsWithNamespace.withLabel(SPARK_APP_ID_LABEL, appId)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
+    when(labeledPods.withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")).thenReturn(labeledPods)
     when(labeledPods.list()).thenReturn(podList)
     when(kubernetesClient.top()).thenReturn(topOperations)
     when(topOperations.pods()).thenReturn(podMetricOperations)
   }
 
-  private def createPlugin(): ExecutorResizeDriverPlugin = {
+  private def createPlugin(maxMemory: Long = Long.MaxValue): ExecutorResizeDriverPlugin = {
     val plugin = new ExecutorResizeDriverPlugin()
     val scField = plugin.getClass.getDeclaredField("sparkContext")
     scField.setAccessible(true)
     scField.set(plugin, sparkContext)
+    val maxField = plugin.getClass.getDeclaredField("maxMemory")
+    maxField.setAccessible(true)
+    maxField.setLong(plugin, maxMemory)
     plugin
+  }
+
+  private def verifyPatchedMemory(podResource: SINGLE_POD, expected: Long): Unit = {
+    val captor = ArgumentCaptor.forClass(classOf[Pod])
+    verify(podResource, times(1)).patch(any(), captor.capture())
+    val resources = captor.getValue.getSpec.getContainers.get(0).getResources
+    assert(Quantity.getAmountInBytes(resources.getLimits.get("memory")).longValue() === expected)
+    assert(Quantity.getAmountInBytes(resources.getRequests.get("memory")).longValue() === expected)
   }
 
   private def createPodWithMemoryLimit(
@@ -147,6 +161,33 @@ class ExecutorResizePluginSuite
     verify(podMetricOperations, never()).metrics(anyString(), anyString())
   }
 
+  test("Pod with placeholder executor ID label should be skipped") {
+    val plugin = createPlugin()
+    val pod = new PodBuilder()
+      .withNewMetadata()
+        .withName("spark-executor-1")
+        .addToLabels(SPARK_APP_ID_LABEL, appId)
+        .addToLabels(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+        .addToLabels(SPARK_EXECUTOR_ID_LABEL, "EXECID")
+      .endMetadata()
+      .build()
+
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
+
+    verify(podMetricOperations, never()).metrics(anyString(), anyString())
+  }
+
+  test("SPARK-59840: Inactive executor pods are excluded from the listing") {
+    val plugin = createPlugin()
+    when(podList.getItems).thenReturn(Collections.emptyList())
+
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
+
+    verify(labeledPods).withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
+  }
+
   test("Memory usage below threshold should not trigger resize") {
     val plugin = createPlugin()
     val pod = createPodWithMemoryLimit(1, "1000000000") // 1GB limit
@@ -177,7 +218,8 @@ class ExecutorResizePluginSuite
 
     plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
 
-    verify(podResource, times(1)).patch(any(), any(classOf[Pod]))
+    // 1GB * (1 + 0.1) = 1.1GB
+    verifyPatchedMemory(podResource, 1100000000L)
   }
 
   test("Memory usage exactly at threshold should not trigger resize") {
@@ -288,7 +330,58 @@ class ExecutorResizePluginSuite
     verify(podResource, times(1)).patch(any(), any(classOf[Pod]))
   }
 
-  Seq("statefulset", "deployment").foreach { allocator =>
+  test("SPARK-59303: Resize is clamped to resizeMaxMemory") {
+    val plugin = createPlugin(maxMemory = 1050000000L) // 1.05GB cap
+    val pod = createPodWithMemoryLimit(1, "1000000000") // 1GB limit
+    val metrics = createPodMetrics("spark-executor-1", "950000000") // 95% usage
+
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+    when(podMetricOperations.metrics(namespace, "spark-executor-1")).thenReturn(metrics)
+
+    val podResource = mock(classOf[SINGLE_POD])
+    when(podsWithNamespace.withName("spark-executor-1")).thenReturn(podResource)
+    when(podResource.subresource(anyString())).thenReturn(podResource)
+
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
+
+    // 1GB * (1 + 0.1) = 1.1GB exceeds the cap, so the new limit is clamped to 1.05GB
+    verifyPatchedMemory(podResource, 1050000000L)
+  }
+
+  test("SPARK-59303: Resize is skipped and logged once when limit already at resizeMaxMemory") {
+    val plugin = createPlugin(maxMemory = 1000000000L) // 1GB cap
+    val pod = createPodWithMemoryLimit(1, "1000000000") // 1GB limit
+    val metrics = createPodMetrics("spark-executor-1", "950000000") // 95% usage
+
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+    when(podMetricOperations.metrics(namespace, "spark-executor-1")).thenReturn(metrics)
+
+    val podResource = mock(classOf[SINGLE_POD])
+    when(podsWithNamespace.withName("spark-executor-1")).thenReturn(podResource)
+
+    def countSkipLogs(rounds: Int): Int = {
+      val logAppender = new LogAppender
+      withLogAppender(logAppender) {
+        (1 to rounds).foreach { _ =>
+          plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
+        }
+      }
+      logAppender.loggingEvents
+        .count(_.getMessage.getFormattedMessage.contains("already reached the maximum"))
+    }
+
+    // Logged only once across repeated rounds.
+    assert(countSkipLogs(2) === 1)
+    verify(podResource, never()).patch(any(), any(classOf[Pod]))
+
+    // Once the executor disappears, its capped state is forgotten and logged again on return.
+    when(podList.getItems).thenReturn(Collections.emptyList())
+    assert(countSkipLogs(1) === 0)
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+    assert(countSkipLogs(2) === 1)
+  }
+
+  Seq("statefulset").foreach { allocator =>
     test(s"init returns early when pods allocator is '$allocator'") {
       val plugin = new ExecutorResizeDriverPlugin()
       val sparkConf = new SparkConf().set(KUBERNETES_ALLOCATION_PODS_ALLOCATOR, allocator)
@@ -299,6 +392,76 @@ class ExecutorResizePluginSuite
       val result = plugin.init(sc, pluginCtx)
 
       assert(result.isEmpty)
+    }
+  }
+
+  test("SPARK-59918: init schedules the resize task when pods allocator is 'deployment'") {
+    val plugin = new ExecutorResizeDriverPlugin()
+    val sparkConf = new SparkConf().set(KUBERNETES_ALLOCATION_PODS_ALLOCATOR, "deployment")
+    val sc = mock(classOf[SparkContext])
+    when(sc.conf).thenReturn(sparkConf)
+    val pluginCtx = mock(classOf[PluginContext])
+    try {
+      assert(plugin.init(sc, pluginCtx).isEmpty)
+      val field = plugin.getClass.getDeclaredField("periodicService")
+      field.setAccessible(true)
+      assert(field.get(plugin).asInstanceOf[ScheduledThreadPoolExecutor].getQueue.size === 1)
+    } finally {
+      plugin.shutdown()
+    }
+  }
+
+  Seq(
+    (EXECUTOR_RESIZE_THRESHOLD, Seq("0", "1", "1.5"), "The threshold should be in (0, 1)"),
+    (EXECUTOR_RESIZE_FACTOR, Seq("-0.1", "0", "1.5"), "The factor should be in (0, 1]")
+  ).foreach { case (entry, invalidValues, requirement) =>
+    test(s"SPARK-59843: init fails on invalid ${entry.key}") {
+      invalidValues.foreach { value =>
+        val plugin = new ExecutorResizeDriverPlugin()
+        val sparkConf = new SparkConf().set(entry.key, value)
+        val sc = mock(classOf[SparkContext])
+        when(sc.conf).thenReturn(sparkConf)
+        val pluginCtx = mock(classOf[PluginContext])
+
+        checkError(
+          exception = intercept[SparkIllegalArgumentException](plugin.init(sc, pluginCtx)),
+          condition = "INVALID_CONF_VALUE.REQUIREMENT",
+          parameters = Map(
+            "confName" -> entry.key,
+            "confValue" -> value.toDouble.toString,
+            "confRequirement" -> requirement))
+      }
+    }
+  }
+
+  test("SPARK-59842: resizeInterval defaults to 1 minute") {
+    assert(new SparkConf(false).get(EXECUTOR_RESIZE_INTERVAL) === 60)
+  }
+
+  test("SPARK-59842: init returns early when resizeInterval is 0") {
+    val plugin = new ExecutorResizeDriverPlugin()
+    val sparkConf = new SparkConf().set(EXECUTOR_RESIZE_INTERVAL.key, "0")
+    val sc = mock(classOf[SparkContext])
+    when(sc.conf).thenReturn(sparkConf)
+    val pluginCtx = mock(classOf[PluginContext])
+
+    val result = plugin.init(sc, pluginCtx)
+
+    assert(result.isEmpty)
+  }
+
+  test("SPARK-59842: init schedules the resize task by default") {
+    val plugin = new ExecutorResizeDriverPlugin()
+    val sc = mock(classOf[SparkContext])
+    when(sc.conf).thenReturn(new SparkConf())
+    val pluginCtx = mock(classOf[PluginContext])
+    try {
+      assert(plugin.init(sc, pluginCtx).isEmpty)
+      val field = plugin.getClass.getDeclaredField("periodicService")
+      field.setAccessible(true)
+      assert(field.get(plugin).asInstanceOf[ScheduledThreadPoolExecutor].getQueue.size === 1)
+    } finally {
+      plugin.shutdown()
     }
   }
 }

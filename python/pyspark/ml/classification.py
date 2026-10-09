@@ -20,88 +20,90 @@ import sys
 import uuid
 import warnings
 from abc import ABCMeta, abstractmethod
-from multiprocessing.pool import ThreadPool
 from functools import cached_property
+from multiprocessing.pool import ThreadPool
 from typing import (
+    TYPE_CHECKING,
     Any,
+    Callable,
     Dict,
     Generic,
     List,
     Optional,
+    Tuple,
     Type,
     TypeVar,
     Union,
     cast,
     overload,
-    TYPE_CHECKING,
-    Tuple,
-    Callable,
 )
 
-from pyspark import keyword_only, since, inheritable_thread_target
-from pyspark.ml import Estimator, Predictor, PredictionModel, Model, functions as MF
+from pyspark import inheritable_thread_target, keyword_only, since
+from pyspark.ml import functions as MF
+from pyspark.ml.base import Estimator, Model, PredictionModel, Predictor, _PredictorParams
+from pyspark.ml.common import inherit_doc
+from pyspark.ml.linalg import Matrix, Vector
 from pyspark.ml.param.shared import (
-    HasRawPredictionCol,
-    HasProbabilityCol,
-    HasThresholds,
-    HasRegParam,
-    HasMaxIter,
-    HasFitIntercept,
-    HasTol,
-    HasStandardization,
-    HasWeightCol,
     HasAggregationDepth,
-    HasThreshold,
     HasBlockSize,
+    HasElasticNetParam,
+    HasFitIntercept,
     HasMaxBlockSizeInMB,
+    HasMaxIter,
+    HasParallelism,
+    HasProbabilityCol,
+    HasRawPredictionCol,
+    HasRegParam,
+    HasSeed,
+    HasSolver,
+    HasStandardization,
+    HasStepSize,
+    HasThreshold,
+    HasThresholds,
+    HasTol,
+    HasWeightCol,
     Param,
     Params,
     TypeConverters,
-    HasElasticNetParam,
-    HasSeed,
-    HasStepSize,
-    HasSolver,
-    HasParallelism,
 )
+from pyspark.ml.regression import DecisionTreeRegressionModel, _FactorizationMachinesParams
 from pyspark.ml.tree import (
     _DecisionTreeModel,
     _DecisionTreeParams,
-    _TreeEnsembleModel,
-    _RandomForestParams,
     _GBTParams,
     _HasVarianceImpurity,
+    _RandomForestParams,
     _TreeClassifierParams,
+    _TreeEnsembleModel,
 )
-from pyspark.ml.regression import _FactorizationMachinesParams, DecisionTreeRegressionModel
-from pyspark.ml.base import _PredictorParams
 from pyspark.ml.util import (
     DefaultParamsReader,
     DefaultParamsWriter,
+    HasTrainingSummary,
     JavaMLReadable,
     JavaMLWritable,
     JavaMLWriter,
-    MLReader,
     MLReadable,
-    MLWriter,
+    MLReader,
     MLWritable,
-    HasTrainingSummary,
+    MLWriter,
+    _cache_spark_dataset,
+    try_remote_attribute_relation,
     try_remote_read,
     try_remote_write,
-    try_remote_attribute_relation,
-    _cache_spark_dataset,
 )
-from pyspark.ml.wrapper import JavaParams, JavaPredictor, JavaPredictionModel, JavaWrapper
-from pyspark.ml.common import inherit_doc
-from pyspark.ml.linalg import Matrix, Vector
-from pyspark.sql import DataFrame, Row, SparkSession, functions as F
+from pyspark.ml.wrapper import JavaParams, JavaPredictionModel, JavaPredictor, JavaWrapper
+from pyspark.sql import DataFrame, Row, SparkSession
+from pyspark.sql import functions as F
 from pyspark.sql.internal import InternalFunction as SF
-from pyspark.storagelevel import StorageLevel
 from pyspark.sql.utils import is_remote
+from pyspark.storagelevel import StorageLevel
 
 if TYPE_CHECKING:
-    from pyspark.ml._typing import P, ParamMap
     from py4j.java_gateway import JavaObject
+
     from pyspark.core.context import SparkContext
+    from pyspark.ml._typing import P, ParamMap
 
 
 T = TypeVar("T")
@@ -4352,6 +4354,7 @@ class FMClassificationTrainingSummary(FMClassificationSummary, _TrainingSummary)
 
 if __name__ == "__main__":
     import doctest
+
     import pyspark.ml.classification
     from pyspark.sql import SparkSession
 

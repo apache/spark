@@ -59,6 +59,18 @@ SELECT hll_sketch_estimate(hll_union_agg(sketch, true))
           SELECT hll_sketch_agg(col, 20) as sketch
             FROM VALUES (1) AS tab(col));
 
+-- TIME type: hll_sketch_agg counts distinct times, and the resulting sketches merge via
+-- hll_union_agg (which only sees the serialized binary sketch).
+SELECT hll_sketch_estimate(hll_sketch_agg(col))
+FROM VALUES (TIME'12:00:00'), (TIME'12:00:00'), (TIME'09:00:00'), (TIME'17:00:00') tab(col);
+
+SELECT hll_sketch_estimate(hll_union_agg(sketch, true))
+    FROM (SELECT hll_sketch_agg(col) as sketch
+            FROM VALUES (TIME'12:00:00'), (TIME'09:00:00') AS tab(col)
+          UNION ALL
+          SELECT hll_sketch_agg(col) as sketch
+            FROM VALUES (TIME'12:00:00'), (TIME'17:00:00') AS tab(col));
+
 -- Negative test cases
 SELECT hll_sketch_agg(col)
 FROM VALUES (ARRAY(1, 2)), (ARRAY(3, 4)) tab(col);

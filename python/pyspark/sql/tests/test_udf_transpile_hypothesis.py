@@ -76,7 +76,6 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import have_package
 from pyspark.util import is_remote_only
 
-
 # Sentinel value used by ``_run`` to mark "this side raised". A unique
 # object is sufficient because we only ever compare it against itself
 # inside the helper.
@@ -109,7 +108,8 @@ _skip_reason = (
 
 
 if _have_hypothesis:
-    from hypothesis import HealthCheck, example, given, settings, strategies as st
+    from hypothesis import HealthCheck, example, given, settings
+    from hypothesis import strategies as st
 
     _DEFAULT_MAX_EXAMPLES = int(os.environ.get("RUN_HYPOTHESIS_MAX_EXAMPLES", "1000"))
 
@@ -256,10 +256,9 @@ def is_none_branch(x):
         return x
 
 
-def truthy_bool_branch(x):
-    # The transpiler currently mishandles ``if x:`` for nullable bool inputs:
-    # Python treats ``None`` as falsy and takes the else branch, but a naive
-    # SQL lowering can produce NULL. This test is the canonical regression.
+def truthy_bool_branch(x: bool):
+    # bare ``if x:`` on a bool-annotated parameter transpiles via
+    # coalesce(x, False), correctly treating NULL as falsy.
     if x:
         return 1
     else:
@@ -504,27 +503,13 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @_hyp_settings
         @given(value=_bool_strategy)
         @_seed_examples(_BOOL_EDGES)
-        def test_truthy_bool_branch_falls_back(self, value):
-            # `if x:` on a bare parameter name is a bare truthiness test whose
-            # type is unknown at transpile time. The transpiler must refuse to
-            # lower it (Spark's coalesce(x, false) is unsound for non-boolean
-            # columns) and fall back to interpreted Python instead.
+        def test_truthy_bool_branch_matches_python(self, value):
+            # bare ``if x:`` on a bool-annotated parameter transpiles correctly.
+            # NULL is treated as falsy (coalesce(x, False)), matching Python's
+            # ``None is falsy`` semantics.
             df = self._single_arg_df(value, BooleanType())
-            with self.sql_conf(
-                {
-                    "spark.sql.experimental.optimizer.transpilePyUDFs": True,
-                    "spark.sql.ansi.enabled": True,
-                }
-            ):
-                pudf = UserDefinedFunction(truthy_bool_branch, LongType())
-                self.assertEqual(
-                    [],
-                    pudf.transpiled,
-                    "truthy_bool_branch: bare truthiness test must NOT transpile",
-                )
-                interpreted = df.select(pudf("a")).collect()[0][0]
-            expected = 1 if value else 2
-            self.assertEqual(interpreted, expected, f"truthy_bool_branch mismatch on {value!r}")
+            transpiled, interpreted = self._run(truthy_bool_branch, LongType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"truthy_bool_branch mismatch on {value!r}")
 
         @_hyp_settings
         @given(value=_long_arith_strategy)

@@ -85,6 +85,21 @@ case class QueryExecutionFailure(
     }
 }
 
+/**
+ * Indicates that a run has failed because a streaming flow's set of sources changed since the last
+ * run. The flow is not retried, since only a full refresh can recover it.
+ */
+case class StreamingSourcesChangedFailure(
+    flowName: String,
+    override val cause: Option[Throwable])
+    extends RunFailure {
+  override def isFatal: Boolean = false
+
+  override def message: String =
+    s"Run is $terminalState since flow '$flowName' had streaming sources added or removed. " +
+    s"Perform a full refresh to rebuild it against the current sources."
+}
+
 /** Abstract class used to identify failures related to failures stopping an operation/timeouts. */
 abstract class FailureStoppingOperation extends RunFailure {
 

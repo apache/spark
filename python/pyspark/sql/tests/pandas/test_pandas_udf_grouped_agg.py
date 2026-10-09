@@ -15,24 +15,24 @@
 # limitations under the License.
 #
 
-import unittest
 import logging
+import unittest
 from typing import Iterator, Tuple
 
-from pyspark.util import PythonEvalType, is_remote_only
-from pyspark.sql import Row, functions as sf
+from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
+from pyspark.sql import Row
+from pyspark.sql import functions as sf
 from pyspark.sql.functions import (
+    PandasUDFType,
     array,
-    explode,
     col,
+    explode,
     lit,
     mean,
-    udf,
     pandas_udf,
-    PandasUDFType,
+    udf,
 )
 from pyspark.sql.types import ArrayType, YearMonthIntervalType
-from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     assertDataFrameEqual,
@@ -41,6 +41,7 @@ from pyspark.testing.utils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+from pyspark.util import PythonEvalType, is_remote_only
 
 if have_pandas:
     import pandas as pd
@@ -752,8 +753,9 @@ class GroupedAggPandasUDFTestsMixin:
                     )
 
     def test_arrow_cast_enabled_numeric_to_decimal(self):
-        import numpy as np
         from decimal import Decimal
+
+        import numpy as np
 
         columns = [
             "int8",

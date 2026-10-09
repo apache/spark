@@ -18,7 +18,7 @@ import tempfile
 
 from pyspark import StorageLevel
 from pyspark.errors import AnalysisException, PySparkTypeError
-from pyspark.sql.types import StructType, StructField, IntegerType
+from pyspark.sql.types import IntegerType, StructField, StructType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

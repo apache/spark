@@ -39,6 +39,10 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
   private val FILTER = "Filter"
   private val PROJECT = "Project"
 
+  /** Splits `text` into lines, dropping any empty ones. */
+  private def nonEmptyLines(text: String): Array[String] =
+    text.split("\n").filter(_.nonEmpty)
+
   test("identical plans should return empty strings") {
     val plan1 = LocalRelation(idAttr, nameAttr)
     val plan2 = LocalRelation(idAttr, nameAttr)
@@ -88,8 +92,8 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     assert(result2.contains("age") || result2.contains("50"))
 
     // Should NOT contain operations too far away (limit is at the top)
-    val lines1 = result1.split("\n").filter(_.nonEmpty).length
-    val lines2 = result2.split("\n").filter(_.nonEmpty).length
+    val lines1 = nonEmptyLines(result1).length
+    val lines2 = nonEmptyLines(result2).length
     assert(
       lines1 <= 7,
       s"Expected at most 7 lines (2 before + mismatch + 2 after + margins), got $lines1"
@@ -159,8 +163,8 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     assert(result2.contains(FILTER))
 
     // Both should have truncated output
-    val lines1 = result1.split("\n").filter(_.nonEmpty).length
-    val lines2 = result2.split("\n").filter(_.nonEmpty).length
+    val lines1 = nonEmptyLines(result1).length
+    val lines2 = nonEmptyLines(result2).length
     assert(lines1 >= 1 && lines1 <= 7, s"Expected 1-7 lines, got $lines1")
     assert(lines2 >= 1 && lines2 <= 7, s"Expected 1-7 lines, got $lines2")
 
@@ -190,8 +194,8 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     val (result1, result2) = LogicalPlanDifference(plan1, plan2, 0)
 
     // With 0 context lines, should only show the mismatched line
-    val lines1 = result1.split("\n").filter(_.nonEmpty)
-    val lines2 = result2.split("\n").filter(_.nonEmpty)
+    val lines1 = nonEmptyLines(result1)
+    val lines2 = nonEmptyLines(result2)
 
     // Should have exactly 1 line (the mismatch)
     assert(lines1.length == 1, s"Expected 1 line, got ${lines1.length}: ${lines1.mkString("; ")}")
@@ -237,8 +241,8 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     val (result1, result2) = LogicalPlanDifference(plan1, plan2, 5)
 
     // With 5 context lines, should show 5 before, mismatch, and 5 after (11 total)
-    val lines1 = result1.split("\n").filter(_.nonEmpty)
-    val lines2 = result2.split("\n").filter(_.nonEmpty)
+    val lines1 = nonEmptyLines(result1)
+    val lines2 = nonEmptyLines(result2)
 
     assert(lines1.length >= 10, s"Expected at least 10 lines, got ${lines1.length}")
     assert(lines2.length >= 10, s"Expected at least 10 lines, got ${lines2.length}")
@@ -281,8 +285,8 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     val (result1, result2) = LogicalPlanDifference(plan1, plan2, 2)
 
     // The mismatch is at the top (Project vs GlobalLimit), so both should show their top portions
-    val lines1 = result1.split("\n").filter(_.nonEmpty)
-    val lines2 = result2.split("\n").filter(_.nonEmpty)
+    val lines1 = nonEmptyLines(result1)
+    val lines2 = nonEmptyLines(result2)
 
     assert(lines1.length >= 1, s"Plan1 should have at least 1 line, got ${lines1.length}")
     assert(lines2.length >= 1, s"Plan2 should have at least 1 line, got ${lines2.length}")
@@ -313,8 +317,8 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
 
     val (result1, result2) = LogicalPlanDifference(plan1, plan2, 2)
 
-    val lines1 = result1.split("\n").filter(_.nonEmpty)
-    val lines2 = result2.split("\n").filter(_.nonEmpty)
+    val lines1 = nonEmptyLines(result1)
+    val lines2 = nonEmptyLines(result2)
 
     // Both should have content
     assert(lines1.length >= 1, s"Plan1 should have at least 1 line")
@@ -371,8 +375,8 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     assert(result1 != result2, "Plans should produce different output strings")
 
     // Should be truncated (not showing all operations)
-    val lines1 = result1.split("\n").filter(_.nonEmpty).length
-    val lines2 = result2.split("\n").filter(_.nonEmpty).length
+    val lines1 = nonEmptyLines(result1).length
+    val lines2 = nonEmptyLines(result2).length
     assert(lines1 <= 10, s"Expected truncated output with at most 10 lines, got $lines1")
     assert(lines2 <= 10, s"Expected truncated output with at most 10 lines, got $lines2")
     assert(lines1 >= 1, "Should have at least the mismatch line")
@@ -415,10 +419,10 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     val (result1, result2) = LogicalPlanDifference(plan1, plan2, 1000)
 
     // With very large context, should show entire plans
-    val lines1 = result1.split("\n").filter(_.nonEmpty).length
-    val lines2 = result2.split("\n").filter(_.nonEmpty).length
-    val planLines1 = plan1.toString.split("\n").filter(_.nonEmpty).length
-    val planLines2 = plan2.toString.split("\n").filter(_.nonEmpty).length
+    val lines1 = nonEmptyLines(result1).length
+    val lines2 = nonEmptyLines(result2).length
+    val planLines1 = nonEmptyLines(plan1.toString).length
+    val planLines2 = nonEmptyLines(plan2.toString).length
 
     assert(lines1 <= planLines1)
     assert(lines2 <= planLines2)
@@ -445,8 +449,8 @@ class LogicalPlanDifferenceSuite extends SparkFunSuite with SQLConfHelper {
     val (result1, result2) = LogicalPlanDifference(plan1, plan2, 1)
 
     // With 1 context line, should show 1 line before, the mismatch, and 1 line after (3 total)
-    val lines1 = result1.split("\n").filter(_.nonEmpty)
-    val lines2 = result2.split("\n").filter(_.nonEmpty)
+    val lines1 = nonEmptyLines(result1)
+    val lines2 = nonEmptyLines(result2)
 
     assert(
       lines1.length <= 3,

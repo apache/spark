@@ -39,7 +39,7 @@ import org.apache.spark.SparkUnsupportedOperationException;
  * This is used to pass options to v2 implementations to ensure consistent case insensitivity.
  * <p>
  * Methods that return keys in this map, like {@link #entrySet()} and {@link #keySet()}, return
- * keys converted to lower case. This map doesn't allow null key.
+ * keys converted to lower case. This map is read-only and does not allow null keys.
  *
  * @since 3.0.0
  */
@@ -58,15 +58,16 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
 
   public CaseInsensitiveStringMap(Map<String, String> originalMap) {
     original = new HashMap<>(originalMap);
-    delegate = new HashMap<>(originalMap.size());
+    Map<String, String> normalizedMap = new HashMap<>(originalMap.size());
     for (Map.Entry<String, String> entry : originalMap.entrySet()) {
       String key = toLowerCase(entry.getKey());
-      if (delegate.containsKey(key)) {
+      if (normalizedMap.containsKey(key)) {
         logger.warn("Converting duplicated key {} into CaseInsensitiveStringMap.",
           MDC.of(LogKeys.KEY, entry.getKey()));
       }
-      delegate.put(key, entry.getValue());
+      normalizedMap.put(key, entry.getValue());
     }
+    delegate = Collections.unmodifiableMap(normalizedMap);
   }
 
   @Override

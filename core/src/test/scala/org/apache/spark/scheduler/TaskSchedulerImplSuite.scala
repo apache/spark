@@ -2866,6 +2866,62 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set(0)) === 0)
   }
 
+  /**
+   * A TaskSet marked as a pipelined-group member. FakeTask.createTaskSet always leaves
+   * `isPipelined` at its default (false), so build the TaskSet directly here.
+   */
+  private def pipelinedTaskSet(numTasks: Int, stageId: Int, stageAttemptId: Int = 0): TaskSet = {
+    val tasks = Array.tabulate[Task[_]](numTasks)(i => new FakeTask(stageId, i, Nil))
+    new TaskSet(tasks, stageId, stageAttemptId, priority = 0, null,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None, isPipelined = true)
+  }
+
+  test("SPARK-58913: hasPipelinedTaskSets is true only while a pipelined-group member is live") {
+    val taskScheduler = setupScheduler()
+    assert(!taskScheduler.hasPipelinedTaskSets, "no task set has been submitted yet")
+
+    // A regular task set leaves isPipelined at false and must not register as a group member.
+    taskScheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 0, stageAttemptId = 0))
+    assert(!taskScheduler.hasPipelinedTaskSets,
+      "a regular task set is not a pipelined-group member")
+
+    // One pipelined member anywhere in the map is enough, even next to regular task sets.
+    taskScheduler.submitTasks(pipelinedTaskSet(2, stageId = 1))
+    assert(taskScheduler.hasPipelinedTaskSets,
+      "a live pipelined task set must be reported even alongside regular ones")
+  }
+
+  test("SPARK-58913: hasPipelinedTaskSets ignores zombie attempts") {
+    // A zombie (superseded by a retry/kill) attempt no longer schedules tasks, so a stale pipelined
+    // attempt left in the map must not make the scheduler look like a group is still in flight.
+    val taskScheduler = setupScheduler()
+    taskScheduler.submitTasks(pipelinedTaskSet(2, stageId = 0, stageAttemptId = 0))
+    assert(taskScheduler.hasPipelinedTaskSets)
+
+    taskScheduler.taskSetManagerForAttempt(0, 0).get.isZombie = true
+    assert(!taskScheduler.hasPipelinedTaskSets,
+      "a zombie pipelined attempt must not count as a live group member")
+
+    // The live retry of the same stage is a group member again.
+    taskScheduler.submitTasks(pipelinedTaskSet(2, stageId = 0, stageAttemptId = 1))
+    assert(taskScheduler.hasPipelinedTaskSets,
+      "the live retry attempt must be reported even though the zombie attempt is skipped")
+  }
+
+  test("SPARK-58913: hasPipelinedTaskSets is false once every member's task set has finished") {
+    // The task scheduler drops a task set once it finishes, so the flag goes false at that point
+    // even though the job that owns the group is not done yet (the DAGScheduler has still to
+    // process the final completion). This is the documented narrowing of the task-scheduler view.
+    val taskScheduler = setupScheduler()
+    taskScheduler.submitTasks(pipelinedTaskSet(1, stageId = 0, stageAttemptId = 0))
+    assert(taskScheduler.hasPipelinedTaskSets)
+
+    val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
+    taskScheduler.taskSetFinished(tsm)
+    assert(!taskScheduler.hasPipelinedTaskSets,
+      "a finished task set is no longer held by the task scheduler")
+  }
+
   test("error() with no active task sets reports a cluster manager failure") {
     val taskScheduler = setupScheduler()
     // No task set has been submitted, so `error` cannot abort anything and throws instead.

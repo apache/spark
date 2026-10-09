@@ -19,9 +19,10 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeduplicateWithinWatermark, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, MetadataAttribute}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeduplicateSpec, DeduplicateWithinWatermark, LeafNode, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StringType
 
 /**
  * Unit tests for [[ResolveDeduplicate]], the analyzer rule that resolves [[UnresolvedDeduplicate]]
@@ -29,6 +30,10 @@ import org.apache.spark.sql.internal.SQLConf
  * deterministic-key-order conf can be toggled per case. See SPARK-57489.
  */
 class ResolveDeduplicateSuite extends AnalysisTest {
+
+  private case class RelationWithMetadata(
+      override val output: Seq[Attribute],
+      override val metadataOutput: Seq[Attribute]) extends LeafNode
 
   private val a = $"a".int
   private val b = $"b".int
@@ -128,6 +133,94 @@ class ResolveDeduplicateSuite extends AnalysisTest {
         viaSparkClassic = true, rel))
     assert(resolved.isInstanceOf[DeduplicateWithinWatermark])
     assert(resolved.asInstanceOf[DeduplicateWithinWatermark].keys.map(_.name) === Seq("a"))
+  }
+
+  test("recomputation excludes metadata added after the deduplication boundary") {
+    val metadataAddedAfterDeduplication = MetadataAttribute("_metadata", StringType)
+    val metadataRelation = RelationWithMetadata(rel.output, Seq(metadataAddedAfterDeduplication))
+    // Model AddMetadataColumns promoting a downstream metadata reference after keys were resolved.
+    val childAfterMetadataPropagation = Project(
+      metadataRelation.output :+ metadataAddedAfterDeduplication, metadataRelation)
+    val originalKeys = metadataRelation.output
+    val spec = DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true)
+
+    Seq(false, true).foreach { orderDeterministically =>
+      val expectedKeys = ResolveDeduplicate.computeKeys(
+        metadataRelation, spec, orderDeterministically, SQLConf.get.resolver)
+      val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
+        originalKeys, childAfterMetadataPropagation, spec, orderDeterministically,
+        SQLConf.get.resolver)
+
+      withClue(s"orderDeterministically=$orderDeterministically: ") {
+        assert(recomputedKeys === expectedKeys)
+      }
+    }
+  }
+
+  test("recomputation retains metadata visible at the deduplication boundary") {
+    val metadataSelectedBeforeDeduplication = MetadataAttribute("_metadata", StringType)
+    val metadataRelation = RelationWithMetadata(
+      rel.output, Seq(metadataSelectedBeforeDeduplication))
+    // Model an explicit metadata projection before deduplication keys were resolved.
+    val childWithSelectedMetadata = Project(
+      metadataRelation.output :+ metadataSelectedBeforeDeduplication, metadataRelation)
+    val originalKeys = childWithSelectedMetadata.output
+    val spec = DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true)
+
+    Seq(false, true).foreach { orderDeterministically =>
+      val expectedKeys = ResolveDeduplicate.computeKeys(
+        childWithSelectedMetadata, spec, orderDeterministically, SQLConf.get.resolver)
+      val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
+        originalKeys, childWithSelectedMetadata, spec, orderDeterministically,
+        SQLConf.get.resolver)
+
+      withClue(s"orderDeterministically=$orderDeterministically: ") {
+        assert(recomputedKeys === expectedKeys)
+      }
+    }
+  }
+
+  test("metadata boundary preservation does not change legacy recomputation without metadata") {
+    val specs = Seq(
+      DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true),
+      DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = false),
+      DeduplicateSpec(DeduplicateKeyColumns(Seq("c", "a", "c", "b")),
+        viaSparkClassic = true),
+      DeduplicateSpec(DeduplicateKeyColumns(Seq("c", "a", "c", "b")),
+        viaSparkClassic = false))
+
+    specs.foreach { spec =>
+      val legacyKeys = ResolveDeduplicate.computeKeys(
+        rel, spec, orderDeterministically = false, SQLConf.get.resolver)
+      val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
+        legacyKeys, rel, spec, orderDeterministically = false, SQLConf.get.resolver)
+
+      withClue(s"spec=$spec: ") {
+        assert(recomputedKeys === legacyKeys)
+      }
+    }
+  }
+
+  test("metadata propagation does not change legacy key order") {
+    val ordinaryRelation = LocalRelation(
+      Symbol("column_1").int,
+      Symbol("column_2").int,
+      Symbol("column_3").int,
+      Symbol("column_4").int)
+    val metadataAddedAfterDeduplication = MetadataAttribute("_metadata", StringType)
+    val metadataRelation = RelationWithMetadata(
+      ordinaryRelation.output, Seq(metadataAddedAfterDeduplication))
+    val childAfterMetadataPropagation = Project(
+      metadataRelation.output :+ metadataAddedAfterDeduplication, metadataRelation)
+    val spec = DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true)
+    val legacyKeys = ResolveDeduplicate.computeKeys(
+      metadataRelation, spec, orderDeterministically = false, SQLConf.get.resolver)
+
+    val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
+      legacyKeys, childAfterMetadataPropagation, spec, orderDeterministically = false,
+      SQLConf.get.resolver)
+
+    assert(recomputedKeys === legacyKeys)
   }
 
   test("SPARK-57489: duplicate-named columns produce multiple keys (filter, not find)") {

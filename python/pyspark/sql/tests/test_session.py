@@ -22,16 +22,16 @@ from io import StringIO
 
 from pyspark import SparkConf, SparkContext
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
-from pyspark.sql import SparkSession, SQLContext, Row
-from pyspark.sql.functions import col
-from pyspark.testing.connectutils import (
-    should_test_connect,
-    connect_requirement_message,
-)
 from pyspark.errors.exceptions.captured import SparkNoSuchElementException
+from pyspark.sql import Row, SparkSession, SQLContext
+from pyspark.sql.functions import col
 from pyspark.sql.profiler import Profile
+from pyspark.testing.connectutils import (
+    connect_requirement_message,
+    should_test_connect,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import PySparkTestCase, PySparkErrorTestUtils
+from pyspark.testing.utils import PySparkErrorTestUtils, PySparkTestCase
 
 
 class SparkSessionTests(ReusedSQLTestCase):
@@ -737,6 +737,7 @@ class SparkExtensionsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         import glob
+
         from pyspark.find_spark_home import _find_spark_home
 
         SPARK_HOME = _find_spark_home()

@@ -70,4 +70,10 @@ case class ParquetTable(
   }
 
   override def formatName: String = "Parquet"
+
+  // A row is decoded from the column chunks the scan asked for, so under strict file reads reading
+  // more columns can only surface an error, never silently change which rows come back. When the
+  // read is not strict that error is swallowed and the rest of the file's rows go with it, which is
+  // why FileTable withholds the capability there.
+  override protected def supportsScanMerging: Boolean = true
 }

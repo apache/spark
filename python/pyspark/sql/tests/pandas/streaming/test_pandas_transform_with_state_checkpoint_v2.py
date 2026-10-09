@@ -16,10 +16,10 @@
 #
 
 
-from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state import (
     TransformWithStateInPandasTestsMixin,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class TransformWithStateInPandasWithCheckpointV2TestsMixin(TransformWithStateInPandasTestsMixin):

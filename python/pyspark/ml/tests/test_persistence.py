@@ -16,22 +16,22 @@
 #
 
 import json
-from shutil import rmtree
 import tempfile
+from shutil import rmtree
 
 from pyspark.ml import Transformer
 from pyspark.ml.classification import (
     DecisionTreeClassifier,
-    FMClassifier,
     FMClassificationModel,
+    FMClassifier,
     LogisticRegression,
-    MultilayerPerceptronClassifier,
     MultilayerPerceptronClassificationModel,
+    MultilayerPerceptronClassifier,
     OneVsRest,
     OneVsRestModel,
 )
 from pyspark.ml.clustering import KMeans
-from pyspark.ml.feature import Binarizer, Bucketizer, HashingTF, PCA
+from pyspark.ml.feature import PCA, Binarizer, Bucketizer, HashingTF
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.param import Params
 from pyspark.ml.pipeline import Pipeline, PipelineModel

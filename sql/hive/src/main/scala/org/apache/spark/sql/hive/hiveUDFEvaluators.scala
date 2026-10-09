@@ -36,7 +36,7 @@ import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.types.DataType
 
 abstract class HiveUDFEvaluatorBase[UDFType <: AnyRef](
-    funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
+    protected val funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends HiveInspectors with Serializable {
 
   @transient
@@ -111,25 +111,36 @@ class HiveSimpleUDFEvaluator(
   }
 }
 
-class HiveGenericUDFEvaluator(
-    funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
-  extends HiveUDFEvaluatorBase[GenericUDF](funcWrapper, children) {
+private[hive] object HiveGenericUDFEvaluator extends HiveInspectors {
 
-  @transient
-  private lazy val argumentInspectors = children.map(toInspector).toArray
+  /**
+   * Driver-side Hive initialization for `SELECT hive_udf(...)`. Returns the Catalyst type
+   * (for example CHAR(5) from a CHAR inspector). `HiveGenericUDF.apply` stores it.
+   */
+  def inferReturnType(
+      funcWrapper: HiveFunctionWrapper,
+      children: Seq[Expression]): DataType = {
+    val function =
+      HiveFunctionRegistryUtils.cloneGenericUDF(funcWrapper.createFunction[GenericUDF]())
+    inspectorToDataType(initialize(function, children.map(toInspector).toArray))
+  }
 
-  @transient
-  lazy val returnInspector = {
+  def initialize(
+      function: GenericUDF,
+      argumentInspectors: Array[ObjectInspector]): ObjectInspector = {
     // Inline o.a.h.hive.ql.udf.generic.GenericUDF#initializeAndFoldConstants, but
     // eliminate calls o.a.h.hive.ql.exec.FunctionRegistry to avoid initializing Hive
     // built-in UDFs.
     val oi = function.initialize(argumentInspectors)
+    val udfType = function.getClass.getAnnotation(classOf[HiveUDFType])
+    val isDeterministic =
+      udfType != null && udfType.deterministic() && !udfType.stateful()
     // If the UDF depends on any external resources, we can't fold because the
     // resources may not be available at compile time.
     if (function.getRequiredFiles == null && function.getRequiredJars == null &&
       argumentInspectors.forall(ObjectInspectorUtils.isConstantObjectInspector) &&
       !ObjectInspectorUtils.isConstantObjectInspector(oi) &&
-      isUDFDeterministic &&
+      isDeterministic &&
       ObjectInspectorUtils.supportsConstantObjectInspector(oi)) {
       val argumentValues: Array[DeferredObject] = argumentInspectors.map { argumentInspector =>
         new GenericUDF.DeferredJavaObject(
@@ -146,6 +157,32 @@ class HiveGenericUDFEvaluator(
       oi
     }
   }
+}
+
+private[hive] class HiveGenericUDFEvaluator(
+    funcWrapper: HiveFunctionWrapper,
+    children: Seq[Expression],
+    catalystReturnType: DataType)
+  extends HiveUDFEvaluatorBase[GenericUDF](funcWrapper, children) {
+
+  // SPARK-58792: copied expression nodes (e.g. via withNewChildrenInternal) share one
+  // HiveFunctionWrapper, whose cached GenericUDF instance is mutable: initialize()
+  // rewrites its converters and output holders based on the arguments of whichever
+  // copy initialized it last. Give every evaluator its own clone so copied nodes
+  // cannot corrupt each other.
+  @transient
+  override lazy val function: GenericUDF =
+    HiveFunctionRegistryUtils.cloneGenericUDF(funcWrapper.createFunction[GenericUDF]())
+
+  @transient
+  private lazy val argumentInspectors = children.map(toInspector).toArray
+
+  @transient
+  lazy val returnInspector = {
+    val inspector = HiveGenericUDFEvaluator.initialize(function, argumentInspectors)
+    checkCompatibleHiveReturnType(inspector, catalystReturnType)
+    inspector
+  }
 
   @transient
   private lazy val deferredObjects: Array[DeferredObject] = argumentInspectors.zip(children).map {
@@ -153,9 +190,9 @@ class HiveGenericUDFEvaluator(
   }
 
   @transient
-  private lazy val unwrapper: Any => Any = unwrapperFor(returnInspector)
+  private lazy val unwrapper: Any => Any = unwrapperFor(returnInspector, catalystReturnType)
 
-  override def returnType: DataType = inspectorToDataType(returnInspector)
+  override def returnType: DataType = catalystReturnType
 
   def setArg(index: Int, arg: Any): Unit =
     deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(() => arg)

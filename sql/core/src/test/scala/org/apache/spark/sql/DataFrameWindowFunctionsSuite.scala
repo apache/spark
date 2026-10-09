@@ -79,6 +79,28 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
       parameters = Map("wf_name" -> "row_number", "wf_expr" -> "row_number()"))
   }
 
+  test("SPARK-58757: collapse window with an empty order spec into an ordered sibling") {
+    val df = Seq(
+      (0, 0), (0, 2), (0, 4),
+      (1, 1), (1, 3), (1, 5)).toDF("k", "v")
+    val ordered = Window.partitionBy("k").orderBy("v")
+    val unordered = Window.partitionBy("k")
+    val res = df.select(
+      $"k",
+      $"v",
+      row_number().over(ordered).as("rn"),
+      collect_list($"v").over(unordered).as("vs"),
+      first($"v").over(unordered).as("f"))
+    assert(res.queryExecution.optimizedPlan.collect { case w: LogicalWindow => w }.size === 1)
+    checkAnswer(res, Seq(
+      Row(0, 0, 1, Array(0, 2, 4), 0),
+      Row(0, 2, 2, Array(0, 2, 4), 0),
+      Row(0, 4, 3, Array(0, 2, 4), 0),
+      Row(1, 1, 1, Array(1, 3, 5), 1),
+      Row(1, 3, 2, Array(1, 3, 5), 1),
+      Row(1, 5, 3, Array(1, 3, 5), 1)))
+  }
+
   test("corr, covar_pop, stddev_pop functions in specific window") {
     withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true",
       SQLConf.ANSI_ENABLED.key -> "false") {

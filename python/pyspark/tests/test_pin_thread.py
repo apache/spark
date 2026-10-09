@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 import os
-import time
 import threading
+import time
 import unittest
 
-from pyspark import SparkContext, SparkConf, InheritableThread
+from pyspark import InheritableThread, SparkConf, SparkContext
 
 
 class PinThreadTests(unittest.TestCase):

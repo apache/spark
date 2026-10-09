@@ -273,5 +273,3 @@ object PushLeftSemiLeftAntiThroughJoin extends Rule[LogicalPlan] with PredicateH
       }
   }
 }
-
-

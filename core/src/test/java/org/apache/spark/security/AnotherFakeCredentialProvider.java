@@ -31,6 +31,12 @@ public class AnotherFakeCredentialProvider implements CredentialProvider {
   /** Sentinel URI host that triggers a CredentialResolutionException. */
   public static final String ERROR_HOST = "error.example.com";
 
+  /**
+   * When set to true, {@link #additionalSparkProperties()} throws a RuntimeException.
+   * Used to test exception isolation in UserCredentialManager.
+   */
+  public static volatile boolean throwOnProperties = false;
+
   private Map<String, String> initConf;
 
   @Override
@@ -57,5 +63,13 @@ public class AnotherFakeCredentialProvider implements CredentialProvider {
   /** Returns the configuration map passed to {@link #init(Map)}, or null if not yet called. */
   public Map<String, String> getInitConf() {
     return initConf;
+  }
+
+  @Override
+  public Map<String, String> additionalSparkProperties() {
+    if (throwOnProperties) {
+      throw new RuntimeException("Simulated failure in additionalSparkProperties");
+    }
+    return Map.of();
   }
 }

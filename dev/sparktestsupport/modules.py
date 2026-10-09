@@ -15,13 +15,91 @@
 # limitations under the License.
 #
 
-from functools import total_ordering
 import itertools
 import os
 import re
-from pathlib import Path
+import sys
+from functools import total_ordering
+from pathlib import Path, PurePath
 
 all_modules = []
+
+# These are `pathlib.PurePath` glob-style patterns with some customization:
+#   - Bare patterns match a file name at any depth.
+#   - Leading slashes anchor at the repository root.
+#   - A trailing slash denotes an ignored directory subtree.
+# See: https://docs.python.org/3/library/pathlib.html#pathlib.PurePath.match
+#
+# Rejected alternatives:
+# - Regexes present a footgun in that `.` needs to be carefully escaped but
+#   often isn't.
+# - `.gitignore`-style patterns would be ideal but don't have support in the
+#   standard library.
+ignored_file_patterns = (
+    ".asf.yaml",
+    ".gitignore",
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "README.md",
+    "/LICENSE-binary",
+    "/NOTICE-binary",
+    "/scalastyle-config.xml",
+    "/SECURITY.md",
+    "/dev/checkstyle-suppressions.xml",
+    "/dev/checkstyle.xml",
+    "/dev/create_jira_and_branch.py",
+    "/dev/create_spark_jira.py",
+    "/dev/create-release/",
+    "/dev/lint-python",
+    "/dev/lint-scala",
+    "/dev/make-distribution.sh",
+    "/dev/merge_spark_pr.py",
+    "/dev/pr_merge_status.py",
+    "/dev/reformat-python",
+    "/dev/requirements.txt",
+    "/dev/spark_merge_footer.py",
+    "/dev/spark-test-image/lint/Dockerfile",
+    "/dev/structured_logging_style.py",
+    "/ui-test/package-lock.json",
+    "/ui-test/package.json",
+)
+
+
+def is_ignored_file(filename: str) -> bool:
+    """
+    Return whether a repository-relative path should be ignored when selecting
+    test modules.
+
+    Bare patterns match a file name at any depth:
+    >>> is_ignored_file("python/README.md")
+    True
+
+    Leading slashes anchor at the repository root:
+    >>> is_ignored_file("SECURITY.md")
+    True
+    >>> is_ignored_file("docs/SECURITY.md")
+    False
+
+    A trailing slash ignores a directory subtree:
+    >>> is_ignored_file("dev/create-release/spark-rm/Dockerfile")
+    True
+
+    Non-matches fall through:
+    >>> is_ignored_file("xasfZyaml")
+    False
+    """
+    path = PurePath("/") / filename
+    for pattern in ignored_file_patterns:
+        # TODO: When Python 3.13 becomes the minimum supported version, migrate
+        # to `PurePath.full_match` and use `**` patterns instead of this custom
+        # trailing slash behavior.
+        if pattern.endswith("/"):
+            ignored_directory = PurePath(pattern)
+            if path == ignored_directory or ignored_directory in path.parents:
+                return True
+        elif path.match(pattern):
+            return True
+    return False
 
 
 @total_ordering
@@ -51,6 +129,7 @@ class Module(object):
         Define a new module.
 
         :param name: A short module name, for display in logging and error messages.
+            Must be unique across modules.
         :param dependencies: A set of dependencies for this module. This should only include direct
             dependencies; transitive dependencies are resolved automatically.
         :param source_file_regexes: a set of regexes that match source files belonging to this
@@ -69,7 +148,17 @@ class Module(object):
             is not explicitly changed.
         :param should_run_r_tests: If true, changes in this module will trigger all R tests.
         :param should_run_build_tests: If true, changes in this module will trigger build tests.
+
+        Duplicate names are rejected and not registered:
+
+        >>> Module("core", [], [])
+        Traceback (most recent call last):
+            ...
+        ValueError: module name 'core' is already in use
         """
+        if any(module.name == name for module in all_modules):
+            raise ValueError(f"module name {name!r} is already in use")
+
         self.name = name
         self.dependencies = dependencies
         self.source_file_prefixes = source_file_regexes
@@ -415,6 +504,7 @@ credential_aws = Module(
     dependencies=[tags, core],
     source_file_regexes=[
         "connector/credential-aws/",
+        "connector/credential-aws-integration-tests/",
     ],
     build_profile_flags=[
         "-Pcredential-aws",
@@ -535,17 +625,6 @@ pyspark_core = Module(
         "pyspark.tests.test_worker",
         "pyspark.tests.test_stage_sched",
         "pyspark.tests.test_zero_copy_byte_stream",
-        # unittests for upstream projects
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_default",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_non_default",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_default",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_non_default",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_coercion",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_inference",
-        "pyspark.tests.upstream.pyarrow.test_pyarrow_type_coercion",
     ],
 )
 
@@ -584,6 +663,9 @@ pyspark_sql = Module(
         "pyspark.sql.observation",
         "pyspark.sql.tvf",
         # unittests
+        "pyspark.eval_handlers.tests.test_arrow_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_base_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_pandas_eval_type_handlers",
         "pyspark.sql.tests.test_artifact",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
@@ -591,8 +673,9 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_context",
         "pyspark.sql.tests.test_sql_context",
         "pyspark.sql.tests.test_dataframe",
+        "pyspark.sql.tests.test_pipelined_shuffle",
         "pyspark.sql.tests.test_collection",
-        "pyspark.sql.tests.test_creation",
+        "pyspark.sql.tests.test_dataframe_creation",
         "pyspark.sql.tests.test_conversion",
         "pyspark.sql.tests.test_dataframe_query_context",
         "pyspark.sql.tests.test_listener",
@@ -610,6 +693,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map_misc",
         "pyspark.sql.tests.arrow.test_arrow_grouped_map",
+        "pyspark.sql.tests.arrow.test_arrow_python_aggregator",
         "pyspark.sql.tests.arrow.test_arrow_python_udf",
         "pyspark.sql.tests.arrow.test_arrow_python_udf_cached",
         "pyspark.sql.tests.arrow.test_arrow_udf",
@@ -641,6 +725,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_types",
         "pyspark.sql.tests.test_geographytype",
         "pyspark.sql.tests.test_geometrytype",
+        "pyspark.sql.tests.test_python_worker_env",
         "pyspark.sql.tests.test_udf",
         "pyspark.sql.tests.test_udf_combinations",
         "pyspark.sql.tests.test_udf_in_higher_order_function",
@@ -674,6 +759,7 @@ pyspark_testing = Module(
         "pyspark.testing.utils",
         "pyspark.testing.pandasutils",
         # unittests
+        "pyspark.testing.tests.test_changed_files",
         "pyspark.testing.tests.test_fail",
         "pyspark.testing.tests.test_fail_in_set_up_class",
         "pyspark.testing.tests.test_no_tests",
@@ -841,20 +927,35 @@ pyspark_ml = Module(
     ],
 )
 
-pyspark_install = Module(
-    name="pyspark-install",
+pyspark_periodic = Module(
+    name="pyspark-periodic",
     dependencies=[],
     source_file_regexes=[
-        # Python package tests will be triggered with this module
+        # This module contains tests that are not sensitive to pyspark code changes.
+        # We run these on scheduled CIs and pre-merge CIs, not post-merge CIs.
         # Any changes in python/ should trigger this module
-        # This module won't be executed for post-commit CIs so it's cheap
         "python/",
-        "python/pyspark/install.py",
-        "python/pyspark/tests/test_install_spark.py",
     ],
     python_test_goals=[
         "pyspark.tests.test_import_spark",
         "pyspark.tests.test_install_spark",
+        # unittests for upstream projects
+        "pyspark.tests.upstream.numpy.test_numpy_ufunc_type_coercion",
+        "pyspark.tests.upstream.pandas.test_pandas_api_types",
+        "pyspark.tests.upstream.pandas.test_pandas_series_astype",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_non_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_non_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_dataframe_from_pandas",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_coercion",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_inference",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_table_cast",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_table_to_pandas",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_type_coercion",
     ],
 )
 
@@ -1165,6 +1266,7 @@ pyspark_connect = Module(
     dependencies=[pyspark_sql, connect],
     source_file_regexes=[
         "python/pyspark/sql/connect",
+        "sbin/start-connect-server.sh",
     ],
     python_test_goals=[
         # sql doctests
@@ -1191,11 +1293,12 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_dataframe_property",
         "pyspark.sql.tests.connect.test_connect_channel",
         "pyspark.sql.tests.connect.test_connect_clone_session",
+        "pyspark.sql.tests.connect.test_parity_python_worker_env",
         "pyspark.sql.tests.connect.test_connect_error",
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_collection",
         "pyspark.sql.tests.connect.test_connect_column",
-        "pyspark.sql.tests.connect.test_connect_creation",
+        "pyspark.sql.tests.connect.test_connect_dataframe_creation",
         "pyspark.sql.tests.connect.test_connect_readwriter",
         "pyspark.sql.tests.connect.test_connect_retry",
         "pyspark.sql.tests.connect.test_connect_session",
@@ -1218,7 +1321,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_dataframe",
         "pyspark.sql.tests.connect.test_parity_dataframe_query_context",
         "pyspark.sql.tests.connect.test_parity_collection",
-        "pyspark.sql.tests.connect.test_parity_creation",
+        "pyspark.sql.tests.connect.test_parity_dataframe_creation",
         "pyspark.sql.tests.connect.test_parity_observation",
         "pyspark.sql.tests.connect.test_parity_repartition",
         "pyspark.sql.tests.connect.test_parity_stat",
@@ -1254,6 +1357,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_grouped_map",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_cogrouped_map",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_cogrouped_map_misc",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_python_aggregator",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_python_udf",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf_scalar",
@@ -1280,6 +1384,7 @@ pyspark_structured_streaming_connect = Module(
     python_test_goals=[
         # unittests
         "pyspark.sql.tests.connect.test_parity_python_streaming_datasource",
+        "pyspark.sql.tests.connect.streaming.test_listener",
         "pyspark.sql.tests.connect.streaming.test_parity_streaming",
         "pyspark.sql.tests.connect.streaming.test_parity_listener",
         "pyspark.sql.tests.connect.streaming.test_parity_foreach",
@@ -1731,46 +1836,6 @@ docker_integration_tests = Module(
     test_tags=["org.apache.spark.tags.DockerTest"],
 )
 
-
-# dev_tools is a pseudo module that contains all the dev related files that
-# won't impact the CI build and tests (except for CI which is forced to
-# run anyway).
-# This module is created so modifying files in this module won't trigger any
-# tests to run.
-dev_tools = Module(
-    name="dev-tools",
-    dependencies=[],
-    source_file_regexes=[
-        ".*README.md",
-        ".*AGENTS.md",
-        r".*\.gitignore",
-        "CONTRIBUTING.md",
-        ".asf.yaml",
-        "SECURITY.md",
-        "NOTICE-binary",
-        "LICENSE-binary",
-        "ui-test/package.json",
-        "ui-test/package-lock.json",
-        "scalastyle-config.xml",
-        "dev/checkstyle.xml",
-        "dev/checkstyle-suppressions.xml",
-        "dev/create_jira_and_branch.py",
-        "dev/create_spark_jira.py",
-        "dev/spark-test-image/lint/Dockerfile",
-        "dev/lint-python",
-        "dev/lint-scala",
-        "dev/reformat-python",
-        "dev/structured_logging_style.py",
-        "dev/make-distribution.sh",
-        "dev/merge_spark_pr.py",
-        "dev/requirements.txt",
-        "dev/pr_merge_status.py",
-        "dev/spark_merge_footer.py",
-        "dev/create_spark_jira.py",
-        "dev/create-release/",
-    ],
-)
-
 # The root module is a dummy module which is used to run all of the tests.
 # No other modules should directly depend on this module.
 root = Module(
@@ -1788,3 +1853,15 @@ root = Module(
     should_run_r_tests=True,
     should_run_build_tests=True,
 )
+
+
+def _test():
+    import doctest
+
+    failure_count = doctest.testmod()[0]
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

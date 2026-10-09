@@ -19,32 +19,32 @@ pandas-on-Spark specific features.
 """
 
 import inspect
-from typing import Any, Callable, Optional, Tuple, Union, TYPE_CHECKING, cast, List
 from types import FunctionType
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union, cast
 
 import numpy as np  # noqa: F401
 import pandas as pd
 
-from pyspark.sql import functions as F
-from pyspark.sql.functions import pandas_udf
-from pyspark.sql.types import DataType, LongType, StructField, StructType
 from pyspark.pandas._typing import DataFrameOrSeries, Name
 from pyspark.pandas.internal import (
+    SPARK_DEFAULT_SERIES_NAME,
+    SPARK_INDEX_NAME_FORMAT,
+    SPARK_INDEX_NAME_PATTERN,
     InternalField,
     InternalFrame,
-    SPARK_INDEX_NAME_FORMAT,
-    SPARK_DEFAULT_SERIES_NAME,
-    SPARK_INDEX_NAME_PATTERN,
 )
-from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
+from pyspark.pandas.typedef import DataFrameType, ScalarType, SeriesType, infer_return_type
 from pyspark.pandas.utils import (
-    is_name_like_value,
     is_name_like_tuple,
+    is_name_like_value,
+    log_advice,
     name_like_string,
     scol_for,
     verify_temp_column_name,
-    log_advice,
 )
+from pyspark.sql import functions as F
+from pyspark.sql.functions import pandas_udf
+from pyspark.sql.types import DataType, LongType, StructField, StructType
 
 if TYPE_CHECKING:
     from pyspark.pandas.frame import DataFrame
@@ -328,9 +328,9 @@ class PandasOnSparkFrameMethods:
         """
         # TODO: codes here partially duplicate `DataFrame.apply`. Can we deduplicate?
 
-        from pyspark.pandas.groupby import GroupBy
-        from pyspark.pandas.frame import DataFrame
         from pyspark import pandas as ps
+        from pyspark.pandas.frame import DataFrame
+        from pyspark.pandas.groupby import GroupBy
 
         if not isinstance(func, FunctionType):
             assert callable(func), "the first argument should be a callable function."
@@ -564,10 +564,10 @@ class PandasOnSparkFrameMethods:
         2    12
         Name: B, dtype: int64
         """
-        from pyspark.pandas.groupby import GroupBy
-        from pyspark.pandas.frame import DataFrame
-        from pyspark.pandas.series import first_series
         from pyspark import pandas as ps
+        from pyspark.pandas.frame import DataFrame
+        from pyspark.pandas.groupby import GroupBy
+        from pyspark.pandas.series import first_series
 
         assert callable(func), "the first argument should be a callable function."
         spec = inspect.getfullargspec(func)
@@ -899,9 +899,9 @@ class PandasOnSparkSeriesMethods:
     def _transform_batch(
         self, func: Callable[..., pd.Series], return_type: Optional[Union[SeriesType, ScalarType]]
     ) -> "Series":
+        from pyspark import pandas as ps
         from pyspark.pandas.groupby import GroupBy
         from pyspark.pandas.series import Series, first_series
-        from pyspark import pandas as ps
 
         if not isinstance(func, FunctionType):
             f = func
@@ -960,11 +960,12 @@ class PandasOnSparkSeriesMethods:
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.accessors
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

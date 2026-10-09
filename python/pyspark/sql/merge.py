@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 import sys
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Optional
 
 from pyspark.sql.column import Column
 from pyspark.sql.utils import to_scala_map
@@ -224,10 +224,12 @@ class MergeIntoWriter:
 def _test() -> None:
     import doctest
     import os
+
     import py4j
+
+    import pyspark.sql.merge
     from pyspark.core.context import SparkContext
     from pyspark.sql import SparkSession
-    import pyspark.sql.merge
 
     os.chdir(os.environ["SPARK_HOME"])
 

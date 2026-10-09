@@ -18,8 +18,8 @@
 import datetime
 import unittest
 
-from pyspark.sql.functions import col, udf
 from pyspark.sql import Row
+from pyspark.sql.functions import col, udf
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     assertDataFrameEqual,

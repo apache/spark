@@ -44,12 +44,12 @@ import org.apache.spark.sql.types.{LongType, StructField, StructType}
  */
 class AutoCdcScd2AuxiliaryTableSpecSuite extends PipelineTest with SharedSparkSession {
 
+  import testImplicits._
+
   private def targetIdentifier = fullyQualifiedIdentifier("target")
 
   /** Source change feed with data columns `(id, name, version)`. */
   private def sourceDf = {
-    val session = spark
-    import session.implicits._
     val stream = MemoryStream[(Int, String, Long)]
     stream.addData((1, "alice", 1L))
     stream.toDF().toDF("id", "name", "version")

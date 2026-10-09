@@ -17,28 +17,28 @@
 
 from abc import ABCMeta, abstractmethod
 from typing import (
+    TYPE_CHECKING,
     Any,
+    Callable,
     Generic,
     List,
     Optional,
+    Tuple,
     TypeVar,
     Union,
-    TYPE_CHECKING,
-    Tuple,
-    Callable,
 )
 
 import pandas as pd
 
 from pyspark import since
 from pyspark.ml.common import inherit_doc
-from pyspark.sql.dataframe import DataFrame
 from pyspark.ml.param import Params
 from pyspark.ml.param.shared import (
-    HasLabelCol,
     HasFeaturesCol,
+    HasLabelCol,
     HasPredictionCol,
 )
+from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap

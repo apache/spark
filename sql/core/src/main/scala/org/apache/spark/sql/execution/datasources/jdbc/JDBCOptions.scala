@@ -268,7 +268,8 @@ class JDBCOptions(
   val hint = parameters.get(JDBC_HINT_STRING).map(value => {
     require(value.matches("(?s)^/\\*\\+ .* \\*/$"),
       s"Invalid value `$value` for option `$JDBC_HINT_STRING`." +
-        s" It should start with `/*+ ` and end with ` */`.")
+        s" It should start with `/*+ ` and end with ` */`," +
+        s" for example `/*+ INDEX(t1 id_idx) */`.")
       s"$value "
     }).getOrElse("")
 

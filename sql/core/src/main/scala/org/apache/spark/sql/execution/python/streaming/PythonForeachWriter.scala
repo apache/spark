@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.python.{EvaluatePython, HybridRowQueue}
+import org.apache.spark.sql.execution.python.{EvaluatePython, HybridRowQueue, PythonWorkerEnvironment}
 import org.apache.spark.sql.execution.streaming.sources.ForeachUserFuncException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -97,6 +97,12 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
 
   private lazy val pythonRunner = {
     new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), jobArtifactUUID) {
+      // `writeStream.foreach` runs the user's `process` in this worker, so it takes the session
+      // environment like any other worker running a session's Python function. Installed at
+      // launch, which for this runner is inside the task that writes a partition.
+      override val envVars: java.util.Map[String, String] =
+        PythonWorkerEnvironment.mergeValidated(funcs.head.funcs.head.envVars, SQLConf.get)
+
       override val pythonExec: String =
         SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
           funcs.head.funcs.head.pythonExec)

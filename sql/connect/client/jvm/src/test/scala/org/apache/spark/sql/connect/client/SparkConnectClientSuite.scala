@@ -45,8 +45,11 @@ class SparkConnectClientSuite extends ConnectFunSuite {
   private var service: DummySparkConnectService = _
   private var server: Server = _
 
-  private def startDummyServer(port: Int, interceptors: Seq[ServerInterceptor] = Seq()): Unit = {
-    service = new DummySparkConnectService
+  private def startDummyServer(
+      port: Int,
+      interceptors: Seq[ServerInterceptor] = Seq(),
+      dummyService: DummySparkConnectService = new DummySparkConnectService): Unit = {
+    service = dummyService
     val serverBuilder = NettyServerBuilder
       .forPort(port)
       .addService(service)
@@ -78,19 +81,84 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     assert(client.userId == System.getProperty("user.name"))
   }
 
-  test("client generates an operation ID for ExecutePlan requests") {
-    startDummyServer(0)
-    client = SparkConnectClient
-      .builder()
-      .connectionString(s"sc://localhost:${server.getPort}")
-      .disableReattachableExecute()
-      .build()
+  Seq(false, true).foreach { reattachable =>
+    test(s"client generates an operation ID for ExecutePlan requests ($reattachable)") {
+      val operationIdHeaders = mutable.Map.empty[String, Option[String]]
+      val interceptor = new ServerInterceptor {
+        override def interceptCall[ReqT, RespT](
+            call: ServerCall[ReqT, RespT],
+            headers: Metadata,
+            next: ServerCallHandler[ReqT, RespT]): ServerCall.Listener[ReqT] = {
+          val key = Metadata.Key.of(
+            SparkConnectClient.OPERATION_ID_HEADER,
+            Metadata.ASCII_STRING_MARSHALLER)
+          operationIdHeaders.synchronized {
+            operationIdHeaders(call.getMethodDescriptor.getBareMethodName) =
+              Option(headers.get(key))
+          }
+          next.startCall(call, headers)
+        }
+      }
+      val dummyService = if (reattachable) {
+        new DummySparkConnectService {
+          override def executePlan(
+              request: ExecutePlanRequest,
+              responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+            responseObserver.onNext(
+              ExecutePlanResponse
+                .newBuilder()
+                .setSessionId(request.getSessionId)
+                .setOperationId(request.getOperationId)
+                .setResponseId("initial-response")
+                .build())
+            responseObserver.onCompleted()
+          }
 
-    val responses = client.execute(buildPlan("select 1")).toSeq
-    val operationId = responses.head.getOperationId
+          override def reattachExecute(
+              request: proto.ReattachExecuteRequest,
+              responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+            responseObserver.onNext(
+              ExecutePlanResponse
+                .newBuilder()
+                .setSessionId(request.getSessionId)
+                .setOperationId(request.getOperationId)
+                .setResponseId("result-complete")
+                .setResultComplete(proto.ExecutePlanResponse.ResultComplete.newBuilder().build())
+                .build())
+            responseObserver.onCompleted()
+          }
+        }
+      } else {
+        new DummySparkConnectService
+      }
+      startDummyServer(0, Seq(interceptor), dummyService)
+      val builder = SparkConnectClient
+        .builder()
+        .connectionString(s"sc://localhost:${server.getPort}")
+        .option(SparkConnectClient.OPERATION_ID_HEADER, "ignored")
+      if (reattachable) builder.enableReattachableExecute()
+      else builder.disableReattachableExecute()
+      client = builder.build()
 
-    UUID.fromString(operationId)
-    assert(responses.forall(_.getOperationId == operationId))
+      val responses = client.execute(buildPlan("select 1")).toSeq
+      val operationId = responses.head.getOperationId
+
+      UUID.fromString(operationId)
+      assert(responses.forall(_.getOperationId == operationId))
+      assert(operationIdHeaders.synchronized {
+        operationIdHeaders("ExecutePlan").contains(operationId)
+      })
+      if (reattachable) {
+        assert(operationIdHeaders.synchronized {
+          operationIdHeaders("ReattachExecute").contains(operationId)
+        })
+        Eventually.eventually(timeout(5.seconds)) {
+          assert(operationIdHeaders.synchronized {
+            operationIdHeaders("ReleaseExecute").contains(operationId)
+          })
+        }
+      }
+    }
   }
 
   test("ExecutePlan exceptions expose the client-generated operation ID") {
@@ -1360,6 +1428,8 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   private val sparkConfigs = mutable.Map.empty[String, String]
 
   var errorToThrowOnExecute: Option[Throwable] = None
+  var errorToThrowOnAnalyze: Option[Throwable] = None
+  var serverCapabilities: Seq[String] = Nil
 
   private var errorToThrowOnConfig: Map[String, Throwable] = Map.empty
 
@@ -1433,6 +1503,11 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   override def analyzePlan(
       request: AnalyzePlanRequest,
       responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
+    errorToThrowOnAnalyze.foreach { error =>
+      errorToThrowOnAnalyze = None
+      responseObserver.onError(error)
+      return
+    }
     // Reply with a dummy response using the same client ID
     val requestSessionId = request.getSessionId
     synchronized {
@@ -1452,11 +1527,17 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
         case _ => inputPlan = null
       }
     }
-    val response = AnalyzePlanResponse
+    val responseBuilder = AnalyzePlanResponse
       .newBuilder()
       .setSessionId(requestSessionId)
-      .build()
-    responseObserver.onNext(response)
+    if (request.hasSparkVersion) {
+      responseBuilder.setSparkVersion(
+        proto.AnalyzePlanResponse.SparkVersion
+          .newBuilder()
+          .setVersion("test-version")
+          .addAllCapabilities(serverCapabilities.asJava))
+    }
+    responseObserver.onNext(responseBuilder.build())
     responseObserver.onCompleted()
   }
 

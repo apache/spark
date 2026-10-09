@@ -14,38 +14,40 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import collections
 import math
+import pickle
 import sys
 import unittest
 
 from pyspark import serializers
 from pyspark.serializers import (
-    CloudPickleSerializer,
-    CompressedSerializer,
     AutoBatchedSerializer,
     BatchedSerializer,
-    AutoSerializer,
+    CartesianDeserializer,
+    CloudPickleSerializer,
+    CompressedSerializer,
+    CPickleSerializer,
+    FlattenedValuesSerializer,
+    MarshalSerializer,
     NoOpSerializer,
     PairDeserializer,
-    FlattenedValuesSerializer,
-    CartesianDeserializer,
-    CPickleSerializer,
     UTF8Deserializer,
-    MarshalSerializer,
 )
 from pyspark.testing.utils import (
-    PySparkTestCase,
-    read_int,
-    write_int,
     ByteArrayOutput,
+    PySparkTestCase,
     have_numpy,
     have_scipy,
+    read_int,
+    write_int,
 )
 
 
 class SerializationTestCase(unittest.TestCase):
     def test_namedtuple(self):
         from collections import namedtuple
+
         from pyspark.cloudpickle import dumps, loads
 
         P = namedtuple("P", "x y")
@@ -150,13 +152,21 @@ class SerializationTestCase(unittest.TestCase):
         hash(UTF8Deserializer())
         hash(CPickleSerializer())
         hash(MarshalSerializer())
-        hash(AutoSerializer())
         hash(BatchedSerializer(CPickleSerializer()))
         hash(AutoBatchedSerializer(MarshalSerializer()))
         hash(PairDeserializer(NoOpSerializer(), UTF8Deserializer()))
         hash(CartesianDeserializer(NoOpSerializer(), UTF8Deserializer()))
         hash(CompressedSerializer(CPickleSerializer()))
         hash(FlattenedValuesSerializer(CPickleSerializer()))
+
+    def test_restricted_unpickler(self):
+        ser = CloudPickleSerializer(allowed_names=[("collections", "deque")])
+        q = collections.deque([1, 2, 3])
+        q2 = ser.loads(ser.dumps(q))
+        self.assertEqual(q, q2)
+
+        with self.assertRaises(pickle.UnpicklingError):
+            ser.loads(ser.dumps(collections.defaultdict(int)))
 
 
 @unittest.skipIf(not have_scipy, "SciPy not installed")

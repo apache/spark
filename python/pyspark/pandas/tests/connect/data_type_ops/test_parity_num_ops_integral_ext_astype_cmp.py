@@ -19,8 +19,8 @@ from pyspark.pandas.tests.data_type_ops.test_num_ops_integral_ext_astype_cmp imp
     IntegralExtensionAstypeCmpOpsTestsMixin,
 )
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class IntegralExtensionAstypeCmpOpsParityTests(

@@ -69,7 +69,6 @@ case class CsvToStructs(
   with ExpectsInputTypes {
 
   override def nullable: Boolean = child.nullable
-
   override def nullIntolerant: Boolean = true
 
   // Used in `FunctionRegistry`
@@ -85,7 +84,7 @@ case class CsvToStructs(
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
       schema = ExprUtils.evalSchemaExpr(schema),
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "from_csv"),
       child = child,
       timeZoneId = None)
 
@@ -167,7 +166,7 @@ case class SchemaOfCsv(
 
   def this(child: Expression, options: Expression) = this(
     child = child,
-    options = ExprUtils.convertToMapData(options))
+    options = ExprUtils.convertToMapData(options, "schema_of_csv"))
 
   override def nullable: Boolean = false
 
@@ -183,7 +182,7 @@ case class SchemaOfCsv(
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "csv"))
-    } else if (child.dataType != StringType) {
+    } else if (!child.dataType.isInstanceOf[StringType]) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
@@ -255,7 +254,7 @@ case class StructsToCsv(
 
   def this(child: Expression, options: Expression) =
     this(
-      options = ExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options, "to_csv"),
       child = child,
       timeZoneId = None)
 

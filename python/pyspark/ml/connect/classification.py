@@ -14,31 +14,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Dict, Union, List, Tuple, Callable, Optional
 import math
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 
 from pyspark import keyword_only
-from pyspark.ml.connect.base import _PredictorParams
-from pyspark.ml.param.shared import HasProbabilityCol
-from pyspark.sql import DataFrame
 from pyspark.ml.common import inherit_doc
-from pyspark.ml.torch.distributor import TorchDistributor
+from pyspark.ml.connect.base import PredictionModel, Predictor, _PredictorParams
+from pyspark.ml.connect.io_utils import CoreModelReadWrite, ParamsReadWrite
 from pyspark.ml.param.shared import (
-    HasMaxIter,
+    HasBatchSize,
     HasFitIntercept,
+    HasLearningRate,
+    HasMaxIter,
+    HasMomentum,
+    HasNumTrainWorkers,
+    HasProbabilityCol,
+    HasSeed,
     HasTol,
     HasWeightCol,
-    HasSeed,
-    HasNumTrainWorkers,
-    HasBatchSize,
-    HasLearningRate,
-    HasMomentum,
 )
-from pyspark.ml.connect.base import Predictor, PredictionModel
-from pyspark.ml.connect.io_utils import ParamsReadWrite, CoreModelReadWrite
+from pyspark.ml.torch.distributor import TorchDistributor
+from pyspark.sql import DataFrame
 from pyspark.sql import functions as sf
 
 
@@ -86,12 +85,13 @@ def _train_logistic_regression_model_worker_fn(
     fit_intercept: bool,
     seed: int,
 ) -> Any:
-    from pyspark.ml.torch.distributor import _get_spark_partition_data_loader
     import torch
-    import torch.nn as torch_nn
-    from torch.nn.parallel import DistributedDataParallel as DDP
     import torch.distributed
+    import torch.nn as torch_nn
     import torch.optim as optim
+    from torch.nn.parallel import DistributedDataParallel as DDP
+
+    from pyspark.ml.torch.distributor import _get_spark_partition_data_loader
 
     # TODO: add a setting seed param.
     torch.manual_seed(seed)

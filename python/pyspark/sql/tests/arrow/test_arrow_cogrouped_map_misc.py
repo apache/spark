@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import logging
 import os
 import time
 import unittest
-import logging
 
 from pyspark.sql import Row
 from pyspark.sql import functions as sf

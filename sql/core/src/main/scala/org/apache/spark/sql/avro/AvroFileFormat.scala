@@ -106,7 +106,7 @@ private[sql] class AvroFileFormat extends FileFormat
         // A tar archive (always a single split, see `isSplitable`) is streamed entry by entry when
         // archive reads are enabled; otherwise the file is read directly. The V2 data source has
         // no archive support, so this dispatch lives here.
-        readArchive(file, conf, parsedOptions, requiredSchema, filters)
+        readArchive(file, conf, parsedOptions, dataSchema, requiredSchema, filters)
       } else {
       val userProvidedSchema = parsedOptions.schema
 
@@ -161,7 +161,8 @@ private[sql] class AvroFileFormat extends FileFormat
             avroFilters,
             parsedOptions.useStableIdForUnionType,
             parsedOptions.stableIdPrefixForUnionType,
-            parsedOptions.recursiveFieldMaxDepth)
+            parsedOptions.recursiveFieldMaxDepth,
+            dataSchema = Some(dataSchema))
           override val stopPosition = file.start + file.length
 
           override def hasNext: Boolean = hasNextRow
@@ -188,6 +189,7 @@ private[sql] class AvroFileFormat extends FileFormat
       file: PartitionedFile,
       conf: Configuration,
       parsedOptions: AvroOptions,
+      dataSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter]): Iterator[InternalRow] = {
     val userProvidedSchema = parsedOptions.schema
@@ -218,7 +220,8 @@ private[sql] class AvroFileFormat extends FileFormat
         avroFilters,
         parsedOptions.useStableIdForUnionType,
         parsedOptions.stableIdPrefixForUnionType,
-        parsedOptions.recursiveFieldMaxDepth)
+        parsedOptions.recursiveFieldMaxDepth,
+        dataSchema = Some(dataSchema))
       // The record is deserialized eagerly in `hasNext` because `AvroDeserializer#deserialize` may
       // filter rows (returning None); the stream is closed once its records are exhausted.
       new Iterator[InternalRow] with Closeable {

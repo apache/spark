@@ -84,7 +84,7 @@ case class OpenCursorExec(
     val df = org.apache.spark.sql.classic.Dataset.ofRows(
       session.asInstanceOf[org.apache.spark.sql.classic.SparkSession],
       analyzedQuery)
-    val resultIterator = df.queryExecution.executedPlan.executeToIterator()
+    val resultIterator = df.queryExecution.withRegularShuffle.executedPlan.executeToIterator()
 
     // Transition cursor state to Opened with iterator
     scriptingContext.updateCursorState(

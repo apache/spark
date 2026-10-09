@@ -143,6 +143,93 @@ Project [col#x]
 
 
 -- !query
+WITH s AS MATERIALIZED (SELECT 46 AS col)
+FROM s
+INSERT INTO cte_tbl SELECT col
+INSERT INTO cte_tbl2 SELECT col
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_ALWAYS_INLINED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "cteName" : "`s`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 6,
+    "stopIndex" : 41,
+    "fragment" : "s AS MATERIALIZED (SELECT 46 AS col)"
+  } ]
+}
+
+
+-- !query
+WITH s AS NOT MATERIALIZED (SELECT 46 AS col)
+FROM s
+INSERT INTO cte_tbl SELECT col
+INSERT INTO cte_tbl2 SELECT col
+-- !query analysis
+Union false, false
+:- InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/cte_tbl, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/cte_tbl], Append, `spark_catalog`.`default`.`cte_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/cte_tbl), [col]
+:  +- Project [col#x AS col#x]
+:     +- Project [col#x]
+:        +- SubqueryAlias s
+:           +- Project [46 AS col#x]
+:              +- OneRowRelation
++- InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/cte_tbl2, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/cte_tbl2], Append, `spark_catalog`.`default`.`cte_tbl2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/cte_tbl2), [col]
+   +- Project [col#x AS col#x]
+      +- Project [col#x]
+         +- SubqueryAlias s
+            +- Project [46 AS col#x]
+               +- OneRowRelation
+
+
+-- !query
+SELECT * FROM cte_tbl
+-- !query analysis
+Project [col#x]
++- SubqueryAlias spark_catalog.default.cte_tbl
+   +- Relation spark_catalog.default.cte_tbl[col#x] csv
+
+
+-- !query
+SELECT * FROM cte_tbl2
+-- !query analysis
+Project [col#x]
++- SubqueryAlias spark_catalog.default.cte_tbl2
+   +- Relation spark_catalog.default.cte_tbl2[col#x] csv
+
+
+-- !query
+INSERT INTO cte_tbl WITH s AS MATERIALIZED (SELECT 47 AS col) SELECT col FROM s UNION ALL SELECT col FROM s
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/cte_tbl, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/cte_tbl], Append, `spark_catalog`.`default`.`cte_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/cte_tbl), [col]
++- Project [col#x AS col#x]
+   +- WithCTE
+      :- CTERelationDef xxxx, false, MATERIALIZED
+      :  +- SubqueryAlias s
+      :     +- Project [47 AS col#x]
+      :        +- OneRowRelation
+      +- Union false, false
+         :- Project [col#x]
+         :  +- SubqueryAlias s
+         :     +- CTERelationRef xxxx, true, [col#x], false, false, 1
+         +- Project [col#x]
+            +- SubqueryAlias s
+               +- CTERelationRef xxxx, true, [col#x], false, false, 1
+
+
+-- !query
+SELECT * FROM cte_tbl
+-- !query analysis
+Project [col#x]
++- SubqueryAlias spark_catalog.default.cte_tbl
+   +- Relation spark_catalog.default.cte_tbl[col#x] csv
+
+
+-- !query
 DROP TABLE cte_tbl
 -- !query analysis
 DropTable false, false

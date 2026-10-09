@@ -19,10 +19,9 @@ import os
 import tempfile
 
 from pyspark.mllib.common import _to_java_object_rdd
-from pyspark.mllib.util import LinearDataGenerator
-from pyspark.mllib.util import MLUtils
-from pyspark.mllib.linalg import SparseVector, DenseVector, Vectors
+from pyspark.mllib.linalg import DenseVector, SparseVector, Vectors
 from pyspark.mllib.random import RandomRDDs
+from pyspark.mllib.util import LinearDataGenerator, MLUtils
 from pyspark.testing.mllibutils import MLlibTestCase
 
 

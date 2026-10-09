@@ -17,15 +17,25 @@
 
 import numbers
 from abc import ABCMeta
-from typing import Any, Optional, Union, cast
 from itertools import chain
+from typing import Any, Optional, Union, cast
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 from pandas.core.dtypes.common import is_numeric_dtype
 
-from pyspark.sql import functions as F, Column as PySparkColumn
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
+from pyspark.pandas.typedef.typehints import (
+    extension_dtypes_available,
+    extension_float_dtypes_available,
+    extension_object_dtypes_available,
+    handle_dtype_as_extension_dtype,
+    is_str_dtype,
+    spark_type_to_pandas_dtype,
+)
+from pyspark.sql import Column as PySparkColumn
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -41,18 +51,9 @@ from pyspark.sql.types import (
     NumericType,
     StringType,
     StructType,
-    TimestampType,
     TimestampNTZType,
+    TimestampType,
     UserDefinedType,
-)
-from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
-from pyspark.pandas.typedef.typehints import (
-    extension_dtypes_available,
-    extension_float_dtypes_available,
-    extension_object_dtypes_available,
-    handle_dtype_as_extension_dtype,
-    is_str_dtype,
-    spark_type_to_pandas_dtype,
 )
 
 if extension_dtypes_available:
@@ -115,8 +116,9 @@ def _should_return_all_false(left: IndexOpsLike, right: Any) -> bool:
     Determine if binary comparison should short-circuit to all False,
     based on incompatible dtypes: non-numeric vs. numeric (including bools).
     """
-    from pyspark.pandas.base import IndexOpsMixin
     from pandas.api.types import is_list_like
+
+    from pyspark.pandas.base import IndexOpsMixin
 
     def are_both_numeric(left_dtype: Dtype, right_dtype: Dtype) -> bool:
         return is_numeric_dtype(left_dtype) and is_numeric_dtype(right_dtype)
@@ -262,11 +264,11 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
     def __new__(cls, dtype: Dtype, spark_type: DataType) -> "DataTypeOps":
         from pyspark.pandas.data_type_ops.binary_ops import BinaryOps
-        from pyspark.pandas.data_type_ops.boolean_ops import BooleanOps, BooleanExtensionOps
+        from pyspark.pandas.data_type_ops.boolean_ops import BooleanExtensionOps, BooleanOps
         from pyspark.pandas.data_type_ops.categorical_ops import CategoricalOps
         from pyspark.pandas.data_type_ops.complex_ops import ArrayOps, MapOps, StructOps
         from pyspark.pandas.data_type_ops.date_ops import DateOps
-        from pyspark.pandas.data_type_ops.datetime_ops import DatetimeOps, DatetimeNTZOps
+        from pyspark.pandas.data_type_ops.datetime_ops import DatetimeNTZOps, DatetimeOps
         from pyspark.pandas.data_type_ops.null_ops import NullOps
         from pyspark.pandas.data_type_ops.num_ops import (
             DecimalOps,
@@ -275,7 +277,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
             IntegralExtensionOps,
             IntegralOps,
         )
-        from pyspark.pandas.data_type_ops.string_ops import StringOps, StringExtensionOps
+        from pyspark.pandas.data_type_ops.string_ops import StringExtensionOps, StringOps
         from pyspark.pandas.data_type_ops.timedelta_ops import TimedeltaOps
         from pyspark.pandas.data_type_ops.udt_ops import UDTOps
 
@@ -434,9 +436,9 @@ class DataTypeOps(object, metaclass=ABCMeta):
                 return cast(SeriesOrIndex, left_scol)
 
         if isinstance(right, (list, tuple)):
-            from pyspark.pandas.series import first_series, scol_for
             from pyspark.pandas.frame import DataFrame
             from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, InternalField
+            from pyspark.pandas.series import first_series, scol_for
 
             if len(left) != len(right):
                 raise ValueError("Lengths must be equal")
@@ -526,7 +528,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
             return column_op(PySparkColumn.__eq__)(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op, IndexOpsMixin
+        from pyspark.pandas.base import IndexOpsMixin, column_op
 
         _sanitize_list_like(right)
 

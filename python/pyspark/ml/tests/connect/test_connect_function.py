@@ -16,13 +16,13 @@
 #
 import unittest
 
-from pyspark.util import is_remote_only
 from pyspark.ml import functions as SF
 from pyspark.testing.connectutils import (
-    should_test_connect,
     ReusedMixedTestCase,
+    should_test_connect,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.util import is_remote_only
 
 if should_test_connect:
     from pyspark.ml.connect import functions as CF

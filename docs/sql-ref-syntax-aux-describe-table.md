@@ -164,6 +164,16 @@ to return the metadata pertaining to a partition or column respectively.
 | MapType               | `{ "name" : "map", "key_type": <type_json>, "value_type": <type_json>, "value_nullable": <boolean> }`                                                            |
 | StructType            | `{ "name" : "struct", "fields": [ {"name" : "field1", "type" : <type_json>, “nullable”: <boolean>, "comment": “<comment>”, "default": “<default_val>”}, ... ] }` |
 
+**Note**
+- If a V1 (session catalog) table's declared partition columns do not match the last columns
+  of its schema, the catalog metadata is considered inconsistent. `DESCRIBE TABLE` still
+  returns the rest of the metadata and reports both column lists under an
+  `# Invalid Partition Information` section in place of `# Partition Information`. Repair
+  the table metadata so the declared partition columns match the last columns of the
+  schema. Until then, commands that inspect a specific partition may still fail:
+  `DESCRIBE TABLE ... PARTITION`, `SHOW TABLE EXTENDED ... PARTITION`, and
+  `SHOW PARTITIONS ... PARTITION`.
+
 ### Examples
 
 ```sql

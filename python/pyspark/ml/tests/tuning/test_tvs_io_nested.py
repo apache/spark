@@ -20,6 +20,7 @@ import tempfile
 from pyspark.ml.classification import LogisticRegression, OneVsRest
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.ml.linalg import Vectors
+from pyspark.ml.tests.tuning.test_tuning import ValidatorTestUtilsMixin
 from pyspark.ml.tuning import (
     ParamGridBuilder,
     TrainValidationSplit,
@@ -29,7 +30,6 @@ from pyspark.testing.mlutils import (
     DummyLogisticRegression,
     SparkSessionTestCase,
 )
-from pyspark.ml.tests.tuning.test_tuning import ValidatorTestUtilsMixin
 
 
 class TrainValidationSplitIONestedTests(SparkSessionTestCase, ValidatorTestUtilsMixin):

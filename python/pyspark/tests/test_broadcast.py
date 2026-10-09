@@ -17,16 +17,16 @@
 import os
 import pickle
 import random
-import time
 import tempfile
+import time
 import unittest
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import SparkConf, SparkContext, Broadcast
+from pyspark import Broadcast, SparkConf, SparkContext
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import ChunkedStream
-from pyspark.sql import SparkSession, Row
+from pyspark.sql import Row, SparkSession
 
 
 class BroadcastTest(unittest.TestCase):

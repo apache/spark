@@ -39,10 +39,9 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
 
-  test("a higher-sequence event in a later pipeline run correctly upserts the row") {
-    val session = spark
-    import session.implicits._
+  import testImplicits._
 
+  test("a higher-sequence event in a later pipeline run correctly upserts the row") {
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
@@ -82,9 +81,6 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
   test("an event with a sequence lower than what was applied in a prior pipeline run " +
     "is suppressed") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
@@ -120,9 +116,6 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
   test("the auxiliary table places the AutoCDC key column first, ahead of any non-key " +
     "source columns") {
-    val session = spark
-    import session.implicits._
-
     // Source DF column order is (name, id, version): the AutoCDC key column `id` does NOT
     // appear first in the source DF. The auxiliary table must still write `id` as its
     // leading column.
@@ -150,9 +143,6 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
   test("the auxiliary table preserves the user's declared key order, independent of the " +
     "source DataFrame and target table column orders") {
-    val session = spark
-    import session.implicits._
-
     // Source DF: (value, id, region, version). Target table: (value, id, region, version,
     // _cdc_metadata) -- same ordering as the source. The user, however, declares
     // `keys = Seq("region", "id")` -- the OPPOSITE order from how those columns appear in
@@ -183,9 +173,6 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
   test("a dry run resolves and validates the graph without provisioning the auxiliary " +
     "table") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
@@ -208,9 +195,6 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
   test("if the AutoCDC auxiliary table is dropped between runs, it is transparently " +
     "recreated") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
@@ -247,9 +231,6 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
   test("auxiliary key-column-names property survives identifiers containing special " +
     "characters that exercise both JSON and SQL string-literal escaping") {
-    val session = spark
-    import session.implicits._
-
     // This test exercises the full identifier-text persistence path with composite keys whose
     // names collectively cover every escape class:
     //   - `it's`              -- single quote: not escaped by JSON; the writer must double it

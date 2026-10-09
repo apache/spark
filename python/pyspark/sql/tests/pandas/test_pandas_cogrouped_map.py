@@ -17,6 +17,7 @@
 
 import unittest
 
+from pyspark.errors import IllegalArgumentException, PythonException
 from pyspark.loose_version import LooseVersion
 from pyspark.sql import functions as sf
 from pyspark.sql.functions import pandas_udf, udf
@@ -24,12 +25,11 @@ from pyspark.sql.types import (
     ArrayType,
     DoubleType,
     LongType,
-    StructType,
-    StructField,
-    YearMonthIntervalType,
     Row,
+    StructField,
+    StructType,
+    YearMonthIntervalType,
 )
-from pyspark.errors import IllegalArgumentException, PythonException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     have_pandas,

@@ -88,6 +88,12 @@ case class CallMethodViaReflection(
       throw QueryCompilationErrors.wrongNumArgsError(
         toSQLId(prettyName), Seq("> 1"), children.length
       )
+    } else if (SQLConf.get.restrictedModeEnabled) {
+      // In restricted execution mode this call is rejected during analysis by
+      // `CheckAnalysis.checkRestrictedMode`. Skip resolving the referenced class here so a call
+      // that is going to be rejected never loads the class and runs its static initializer (which
+      // `classExists`/`findMethod` would otherwise trigger via `Utils.classForName`).
+      TypeCheckSuccess
     } else {
       val unexpectedParameter = children.zipWithIndex.collectFirst {
         case (e, 0) if !(e.dataType.isInstanceOf[StringType] && e.foldable) =>
@@ -209,6 +215,11 @@ case class CallMethodViaReflection(
 
   /** A temporary buffer used to hold intermediate results returned by children. */
   @transient private lazy val buffer = new Array[Object](argExprs.length)
+
+  // Stateful because of the reusable `buffer` holding the reflection arguments: it is filled by
+  // `evalInternal` and then handed to the call, so two evaluations sharing one instance would
+  // overwrite each other's arguments. Fresh copies give every evaluation its own buffer.
+  override def stateful: Boolean = true
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): CallMethodViaReflection = copy(children = newChildren)

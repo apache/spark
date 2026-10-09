@@ -31,11 +31,23 @@ trait SparkCharVarcharUtils {
   }
 
   /**
-   * Validate the given [[DataType]] to fail if it is char or varchar types or contains nested
-   * ones
+   * Logical type name for CHAR/VARCHAR, used when stamping `spark.sql.catalyst.type` on STRING
+   * storage (ORC/Avro). None for other types, including unbounded STRING.
+   */
+  def charVarcharTypeName(dt: DataType): Option[String] = dt match {
+    case c: CharType => Some(c.typeName)
+    case v: VarcharType => Some(v.typeName)
+    case _ => None
+  }
+
+  /**
+   * Fail if the type contains CHAR/VARCHAR unless legacy-as-string or first-class CHAR/VARCHAR is
+   * enabled (standard semantics or preserveCharVarcharTypeInfo).
    */
   def failIfHasCharVarchar(dt: DataType): DataType = {
-    if (!SqlApiConf.get.charVarcharAsString && hasCharVarchar(dt)) {
+    if (SqlApiConf.get.charVarcharFirstClassTypes) {
+      dt
+    } else if (!SqlApiConf.get.charVarcharAsString && hasCharVarchar(dt)) {
       throw DataTypeErrors.charOrVarcharTypeAsStringUnsupportedError()
     } else {
       replaceCharVarcharWithString(dt)
@@ -54,8 +66,8 @@ trait SparkCharVarcharUtils {
       StructType(fields.map { field =>
         field.copy(dataType = replaceCharVarcharWithString(field.dataType))
       })
-    case c: CharType if !SqlApiConf.get.preserveCharVarcharTypeInfo => c.toStringType
-    case v: VarcharType if !SqlApiConf.get.preserveCharVarcharTypeInfo => v.toStringType
+    case c: CharType if !SqlApiConf.get.charVarcharFirstClassTypes => c.toStringType
+    case v: VarcharType if !SqlApiConf.get.charVarcharFirstClassTypes => v.toStringType
     case _ => dt
   }
 }

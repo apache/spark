@@ -20,24 +20,24 @@ import unittest
 
 from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
-    Row,
     ArrayType,
-    StringType,
-    IntegerType,
-    StructType,
-    StructField,
     BooleanType,
     DateType,
-    TimestampType,
-    TimestampNTZType,
-    FloatType,
     DayTimeIntervalType,
+    FloatType,
+    IntegerType,
+    Row,
+    StringType,
+    StructField,
+    StructType,
+    TimestampNTZType,
+    TimestampType,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     assertDataFrameEqual,
-    have_pyarrow,
     have_pandas,
+    have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
@@ -45,7 +45,7 @@ from pyspark.testing.utils import (
 
 class DataFrameCollectionTestsMixin:
     def _to_pandas(self):
-        from datetime import datetime, date, timedelta
+        from datetime import date, datetime, timedelta
 
         schema = (
             StructType()
@@ -96,8 +96,8 @@ class DataFrameCollectionTestsMixin:
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         pdf = self._to_pandas()
         types = pdf.dtypes
@@ -165,8 +165,8 @@ class DataFrameCollectionTestsMixin:
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_avoid_astype(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         schema = StructType().add("a", IntegerType()).add("b", StringType()).add("c", IntegerType())
         data = [(1, "foo", 16777220), (None, "bar", None)]
@@ -222,8 +222,8 @@ class DataFrameCollectionTestsMixin:
         # SPARK-29188 test that toPandas() on a dataframe with only nulls has correct dtypes
         # SPARK-30537 test that toPandas() on a dataframe with only nulls has correct dtypes
         # using arrow
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         sql = """
             SELECT CAST(NULL AS TINYINT) AS tinyint,

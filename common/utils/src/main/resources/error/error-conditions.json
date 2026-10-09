@@ -176,7 +176,7 @@
   },
   "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE" : {
     "message" : [
-      "Each operand of the MATCH_CONDITION comparison must reference only columns of one join input. Got: <refs1> and <refs2>."
+      "Each operand of the MATCH_CONDITION comparison must reference exactly one join input, and the two operands must reference different inputs. Got: <refs1> and <refs2>."
     ],
     "sqlState" : "42K0E"
   },
@@ -233,9 +233,39 @@
     ],
     "sqlState" : "42703"
   },
+  "AUTOCDC_CONFLICTING_IGNORE_NULL_UPDATES_OPTIONS" : {
+    "message" : [
+      "AutoCDC flow specifies more than one of `ignore_null_updates`, `ignore_null_updates_column_list`, and `ignore_null_updates_except_column_list`; at most one may be provided."
+    ],
+    "sqlState" : "42613"
+  },
   "AUTOCDC_EMPTY_KEYS" : {
     "message" : [
       "AutoCDC requires at least one key column to identify rows, but received an empty key set."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_IGNORE_NULL_CANNOT_SELECT_RESERVED_COLUMN" : {
+    "message" : [
+      "In AutoCDC flow <flowName>, the ignore-null selection names column `<columnName>` which collides with the reserved column name prefix `<reservedColumnNamePrefix>` (<caseSensitivity>). Reserved columns may not appear in an ignore-null selection."
+    ],
+    "sqlState" : "42710"
+  },
+  "AUTOCDC_IGNORE_NULL_COLUMN_NOT_IN_OUTPUT_COLUMNS" : {
+    "message" : [
+      "In AutoCDC flow <flowName>, the ignore-null selection names column `<columnName>` which is not present in the flow's selected output columns (<caseSensitivity>). Only user-data columns surviving the column selection may appear in an ignore-null selection."
+    ],
+    "sqlState" : "42703"
+  },
+  "AUTOCDC_IGNORE_NULL_EMPTY_COLUMN_LIST" : {
+    "message" : [
+      "AutoCDC flow specifies an empty `ignore_null_updates_column_list`. Provide at least one column, or omit the option entirely to disable ignore-null updates. To ignore nulls for every column, specify an empty `ignore_null_updates_except_column_list` instead."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_IGNORE_NULL_SELECTION_CONTAINS_KEY_COLUMN" : {
+    "message" : [
+      "In AutoCDC flow <flowName>, the ignore-null selection names key column `<columnName>` (<caseSensitivity>). Key columns identify rows and may not appear in an ignore-null selection. Key columns: <keyColumnNames>."
     ],
     "sqlState" : "22023"
   },
@@ -493,6 +523,24 @@
       "BIN BY requires a top-level column, but <columnName> is a nested or computed field. Alias it to a top-level column in a select before BIN BY."
     ],
     "sqlState" : "0A000"
+  },
+  "BITMAP_INPUT_TOO_LARGE" : {
+    "message" : [
+      "The input bitmap has <inputNumBytes> bytes, which exceeds the maximum supported size of <maxNumBytes> bytes."
+    ],
+    "sqlState" : "22001"
+  },
+  "BUCKET_COLUMN_IN_PARTITION_COLUMNS" : {
+    "message" : [
+      "Bucketing column <bucketColumn> should not be part of partition columns <partitionColumns>."
+    ],
+    "sqlState" : "42713"
+  },
+  "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS" : {
+    "message" : [
+      "Bucket sort column <sortColumn> should not be part of partition columns <partitionColumns>."
+    ],
+    "sqlState" : "42713"
   },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
@@ -938,6 +986,12 @@
     ],
     "sqlState" : "42000"
   },
+  "CANNOT_USE_RESERVED_DATABASE_AS_CURRENT" : {
+    "message" : [
+      "Cannot use <database> as the current database because the name is reserved for system use. To access global temporary views, use a qualified name, e.g. SELECT * FROM <database>.viewName."
+    ],
+    "sqlState" : "42939"
+  },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
       "Error writing state store files for provider <providerClass>."
@@ -998,6 +1052,19 @@
     },
     "sqlState" : "XX000"
   },
+  "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON" : {
+    "message" : [
+      "CHAR/VARCHAR is not supported in <feature>. Use STRING in the declaration. Data type: <data_type>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "CHECKPOINT_DIRECTORY_NOT_SET" : {
+    "message" : [
+      "Cannot checkpoint because no checkpoint directory is configured.",
+      "Set one with `SparkContext.setCheckpointDir` or the \"spark.checkpoint.dir\" configuration."
+    ],
+    "sqlState" : "55019"
+  },
   "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
       "Checksum verification failed, the file may be corrupted. File: <fileName>",
@@ -1012,6 +1079,13 @@
       "If this problem persists, you may consider using `rdd.checkpoint()` instead, which is slower than local checkpointing but more fault-tolerant."
     ],
     "sqlState" : "56000"
+  },
+  "CHECKPOINT_RDD_PARTITION_COUNT_MISMATCH" : {
+    "message" : [
+      "The checkpoint of RDD <originalRDDId> has <newRDDLength> partition(s), but the RDD itself has <originalRDDLength>. The checkpoint RDD is <newRDDId>.",
+      "This usually means the checkpoint directory is not on storage that both the driver and the executors can read and write, or that some checkpoint files did not survive until the checkpoint was read back."
+    ],
+    "sqlState" : "58030"
   },
   "CHECK_CONSTRAINT_VIOLATION" : {
     "message" : [
@@ -1811,7 +1885,7 @@
   },
   "CURSOR_OUTSIDE_SCRIPT" : {
     "message" : [
-      "Cursor operations can only be used within SQL scripts."
+      "Cursor <cursorName> can only be used within SQL scripts."
     ],
     "sqlState" : "0A000"
   },
@@ -1958,6 +2032,11 @@
           "The <inputName> value must to be a <requireType> literal of <validValues>, but got <inputValue>."
         ]
       },
+      "INVALID_JSON_FORMAT_JSON_INPUT" : {
+        "message" : [
+          "<functionName> FORMAT JSON requires a string argument containing JSON text, but the argument at position <position> has type <inputType>."
+        ]
+      },
       "INVALID_JSON_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
@@ -1965,7 +2044,22 @@
       },
       "INVALID_JSON_PATH" : {
         "message" : [
-          "<functionName> has an invalid or unsupported JSON path <path>. Only simple, wildcard-free paths are supported."
+          "<functionName> has an invalid or unsupported JSON path <path>."
+        ]
+      },
+      "INVALID_JSON_QUERY_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> cannot return a value of type <returningType>. The RETURNING type must be a string type."
+        ]
+      },
+      "INVALID_JSON_QUERY_WRAPPER_AND_QUOTES" : {
+        "message" : [
+          "<functionName> cannot combine an OMIT QUOTES clause with a WITH ARRAY WRAPPER clause. OMIT QUOTES applies only to an unwrapped result."
+        ]
+      },
+      "INVALID_JSON_RETURNING_TYPE" : {
+        "message" : [
+          "<functionName> RETURNING clause must be a STRING type, but got <returningType>."
         ]
       },
       "INVALID_JSON_SCALAR_RETURNING_TYPE" : {
@@ -2235,6 +2329,29 @@
     ],
     "sqlState" : "KD010"
   },
+  "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE" : {
+    "message" : [
+      "The runtime filter attribute <attribute> reported by `<method>` in data source scan <scanClass> is invalid for the scan relation output <relationOutput>."
+    ],
+    "subClass" : {
+      "CANNOT_RESOLVE" : {
+        "message" : [
+          "The attribute cannot be resolved."
+        ]
+      },
+      "NOT_IN_FILTER_ATTRIBUTES" : {
+        "message" : [
+          "The attribute must also be returned by `filterAttributes()`."
+        ]
+      },
+      "NOT_TOP_LEVEL" : {
+        "message" : [
+          "The attribute must be top-level, but it is a nested reference."
+        ]
+      }
+    },
+    "sqlState" : "KD000"
+  },
   "DATA_SOURCE_METADATA_SCHEMA_NOT_IMPLEMENTED" : {
     "message" : [
       "<class> does not implement metadataSchema."
@@ -2496,6 +2613,12 @@
     ],
     "sqlState" : "42815"
   },
+  "EMPTY_COLLECTION_NOT_ALLOWED" : {
+    "message" : [
+      "empty collection"
+    ],
+    "sqlState" : "0A000"
+  },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
       "Failed to parse an empty string for data type <dataType>."
@@ -2660,6 +2783,12 @@
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
     ],
     "sqlState" : "42822"
+  },
+  "FAILED_CREATE_CHECKPOINT_DIRECTORY" : {
+    "message" : [
+      "Failed to create the checkpoint directory <path> as FileSystem.mkdirs returned false."
+    ],
+    "sqlState" : "58030"
   },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
@@ -2981,6 +3110,12 @@
     ],
     "sqlState" : "42822"
   },
+  "HIVE_THRIFT_SERVER_INEFFECTIVE_DOAS" : {
+    "message" : [
+      "<doAsConf> is set to true, but the Spark Thrift Server impersonates the connecting user only on the driver, for Hive metastore calls and driver-side file system access: executor-side data access still runs as the server's own service identity, so storage permissions are checked against the service principal rather than the connecting user (SPARK-5159). That can expose data the connecting user is not authorized to read. To start anyway, set <allowIneffectiveDoAsConf> to true; it is a static conf, so it must be set before the SparkSession is created. Setting <doAsConf> to false also starts the server, but note that it stops impersonating metastore calls too, so it is not a no-op (and unsetting it does not help -- Hive's own default is true)."
+    ],
+    "sqlState" : "42616"
+  },
   "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the `hll_sketch_agg` function)."
@@ -3207,6 +3342,11 @@
       "Detected incompatible changes to table <tableName> after DataFrame/Dataset has been resolved and analyzed, meaning the underlying plan is out of sync. Please, re-create DataFrame/Dataset before attempting to execute the query again."
     ],
     "subClass" : {
+      "CHANGELOG_METADATA_MISMATCH" : {
+        "message" : [
+          "Changelog metadata used for post-processing has changed: <changedProperties>."
+        ]
+      },
       "COLUMNS_MISMATCH" : {
         "message" : [
           "Data columns have changed:",
@@ -3757,6 +3897,35 @@
     },
     "sqlState" : "42K03"
   },
+  "INVALID_CHAR_VARCHAR_COLLATION_METADATA" : {
+    "message" : [
+      "Invalid CHAR/VARCHAR collation metadata."
+    ],
+    "subClass" : {
+      "INVALID_VALUE" : {
+        "message" : [
+          "The value <value> must be a provider-qualified, non-empty collation name."
+        ]
+      },
+      "RESERVED_METADATA_KEY" : {
+        "message" : [
+          "The metadata key <metadataKey> is reserved and cannot be provided by callers."
+        ]
+      },
+      "UNRECOGNIZED_PATH" : {
+        "message" : [
+          "The field path <fieldPath> does not identify an uncollated CHAR/VARCHAR type."
+        ]
+      }
+    },
+    "sqlState" : "2203G"
+  },
+  "INVALID_CHECKPOINT_DIRECTORY" : {
+    "message" : [
+      "Cannot read the checkpoint directory <path>: expected the partition file <expectedFileName> but found <fileName>. The partition files must be numbered contiguously from part-00000."
+    ],
+    "sqlState" : "58030"
+  },
   "INVALID_CLONE_SESSION_REQUEST" : {
     "message" : [
       "Invalid session clone request."
@@ -4220,17 +4389,20 @@
       "SESSION_CHANGED" : {
         "message" : [
           "The existing Spark server driver instance has restarted. Please reconnect."
-        ]
+        ],
+        "sqlState" : "08003"
       },
       "SESSION_CLOSED" : {
         "message" : [
           "Session was closed."
-        ]
+        ],
+        "sqlState" : "08003"
       },
       "SESSION_NOT_FOUND" : {
         "message" : [
           "Session not found."
-        ]
+        ],
+        "sqlState" : "08003"
       }
     },
     "sqlState" : "HY000"
@@ -4427,6 +4599,12 @@
     ],
     "sqlState" : "46121"
   },
+  "INVALID_JDBC_PARTITION_BOUND" : {
+    "message" : [
+      "Cannot parse the value <value> for JDBC data source option <option> as <dataType>."
+    ],
+    "sqlState" : "42616"
+  },
   "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
     "message" : [
       "Invalid join type in joinWith: <joinType>."
@@ -4444,6 +4622,12 @@
       "Collations can only be applied to string types, but the JSON data type is <jsonType>."
     ],
     "sqlState" : "2203G"
+  },
+  "INVALID_JSON_FORMAT_JSON_VALUE" : {
+    "message" : [
+      "<functionName> FORMAT JSON argument at position <position> must contain exactly one well-formed JSON value, but got <value>."
+    ],
+    "sqlState" : "22032"
   },
   "INVALID_JSON_RECORD_TYPE" : {
     "message" : [
@@ -4749,7 +4933,7 @@
       },
       "EXTENSION" : {
         "message" : [
-          "Invalid extension: <invalidValue>. Extension is limited to exactly 3 letters (e.g. csv, tsv, etc...)"
+          "Invalid extension: <invalidValue>. Extension must be non-empty and contain only letters."
         ]
       },
       "HMAC_ALGORITHM" : {
@@ -4832,6 +5016,11 @@
           "expects one of the units 'HOUR', 'MINUTE', 'SECOND', 'MILLISECOND', 'MICROSECOND', but got '<invalidValue>'."
         ]
       },
+      "TRIM_ARRAY_LENGTH" : {
+        "message" : [
+          "Expects a value between 0 and the array cardinality (<numElements>), but got <length>."
+        ]
+      },
       "ZERO_INDEX" : {
         "message" : [
           "expects %1$, %2$ and so on, but got %0$."
@@ -4887,6 +5076,18 @@
       "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>"
     ],
     "sqlState" : "42602"
+  },
+  "INVALID_PYTHON_AGGREGATOR_BUFFER_SCHEMA" : {
+    "message" : [
+      "The incremental Python aggregate function <functionName> requires a struct (StructType) intermediate buffer schema, but got <bufferType>."
+    ],
+    "sqlState" : "42000"
+  },
+  "INVALID_PYTHON_UDF_PLACEMENT" : {
+    "message" : [
+      "The Python user-defined aggregate function(s) <functionList> cannot be invoked together with other kinds of aggregate function in the same aggregation. Multiple such functions may be used together, but not mixed with SQL or differently-typed aggregate functions."
+    ],
+    "sqlState" : "0A000"
   },
   "INVALID_QUERY_MIXED_QUERY_PARAMETERS" : {
     "message" : [
@@ -5016,6 +5217,16 @@
           "<memoryFractionKey> should be between 0 and 1 (was '<memoryFractionValue>')."
         ]
       },
+      "INVALID_PYTHON_WORKER_ENV_VAR_NAME" : {
+        "message" : [
+          "The environment variable name <name>, set under <prefix>, is not valid. Names must match the pattern <pattern> and contain at most <maxLength> characters."
+        ]
+      },
+      "INVALID_PYTHON_WORKER_ENV_VAR_VALUE" : {
+        "message" : [
+          "The value of the environment variable <name>, set under <prefix>, contains a NUL character, which a process environment cannot carry."
+        ]
+      },
       "INVALID_SPARK_SUBMIT_DEPLOY_MODE_KEY" : {
         "message" : [
           "<sparkSubmitDeployModeKey> can only be \"cluster\" or \"client\"."
@@ -5024,6 +5235,21 @@
       "NETWORK_AUTH_MUST_BE_ENABLED" : {
         "message" : [
           "<networkAuthEnabledConf> must be enabled when enabling encryption."
+        ]
+      },
+      "PYTHON_WORKER_ENV_TOO_LARGE" : {
+        "message" : [
+          "The environment variables set under <prefix> total <size> bytes, which is more than the maximum of <maxSize> bytes."
+        ]
+      },
+      "PYTHON_WORKER_ENV_TOO_MANY_VARIABLES" : {
+        "message" : [
+          "<count> environment variables are set under <prefix>, which is more than the maximum of <maxCount>."
+        ]
+      },
+      "RESERVED_PYTHON_WORKER_ENV_VAR_NAME" : {
+        "message" : [
+          "The environment variable name <name>, set under <prefix>, is reserved for Spark. Names beginning with <reservedPrefixes>, and the names <reservedNames>, are set by Spark for its own Python workers and cannot be set by a session."
         ]
       }
     },
@@ -5566,7 +5792,7 @@
   },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
-      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. <externalEngineError>."
+      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. External engine SQLSTATE: <externalEngineSqlState>. <externalEngineError>."
     ],
     "subClass" : {
       "DURING_OUTPUT_SCHEMA_RESOLUTION" : {
@@ -5593,6 +5819,30 @@
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
     ],
     "sqlState" : "42K0E"
+  },
+  "JSON_EXISTS_ON_ERROR" : {
+    "message" : [
+      "<functionName> could not evaluate the path <path>: the input is not valid JSON. This error was requested by the ERROR ON ERROR clause."
+    ],
+    "sqlState" : "2203G"
+  },
+  "JSON_QUERY_ON_ERROR" : {
+    "message" : [
+      "<functionName> could not extract a value at path <path>."
+    ],
+    "subClass" : {
+      "EMPTY" : {
+        "message" : [
+          "The path matched no value. This error was requested by the ERROR ON EMPTY clause."
+        ]
+      },
+      "ERROR" : {
+        "message" : [
+          "The input is not valid JSON. This error was requested by the ERROR ON ERROR clause."
+        ]
+      }
+    },
+    "sqlState" : "2203G"
   },
   "JSON_VALUE_ON_ERROR" : {
     "message" : [
@@ -5678,6 +5928,12 @@
       "LOAD DATA input path does not exist: <path>."
     ],
     "sqlState" : "42K03"
+  },
+  "LOCAL_BLOCK_DATA_NOT_FOUND" : {
+    "message" : [
+      "Block <blockId> had block metadata but its data was missing from both the memory and disk stores. The block has been removed, so a later read must fetch it from another replica or recompute it."
+    ],
+    "sqlState" : "58030"
   },
   "LOCAL_MUST_WITH_SCHEMA_FILE" : {
     "message" : [
@@ -6603,6 +6859,14 @@
     ],
     "sqlState" : "0A000"
   },
+  "PIPELINE_NESTED_COMPLEX_TYPE_SCHEMA_EVOLUTION_UNSUPPORTED" : {
+    "message" : [
+      "Schema evolution within a complex type (array or map) whose element is itself a complex type is not supported.",
+      "Column path <columnPath> has element type <currentType> but the target element type is <targetType>.",
+      "Flatten the nesting or apply the change manually."
+    ],
+    "sqlState" : "0A000"
+  },
   "PIPELINE_RUN_FAILED" : {
     "message" : [
       "<message>"
@@ -6840,6 +7104,12 @@
     ],
     "sqlState" : "42939"
   },
+  "RESULT_ROWS_MISMATCH" : {
+    "message" : [
+      "External UDF output row count was <output_length>; expected <input_length>. An external UDF must produce exactly one row for each input row."
+    ],
+    "sqlState" : "21000"
+  },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the <newRoutineType> <routineName> because a <existingRoutineType> of that name already exists.",
@@ -6962,6 +7232,12 @@
       "SHOW COLUMNS with conflicting namespaces: <namespaceA> != <namespaceB>."
     ],
     "sqlState" : "42K05"
+  },
+  "SHUFFLE_BLOCK_MIGRATION_NOT_SUPPORTED" : {
+    "message" : [
+      "Shuffle block <blockId> cannot be migrated to the receiving executor: its shuffle block resolver <resolverClass> must implement MigratableResolver. See the cause for details."
+    ],
+    "sqlState" : "0A000"
   },
   "SKETCH_INVALID_LG_NOM_ENTRIES" : {
     "message" : [
@@ -7792,6 +8068,11 @@
         "message" : [
           "The following session configuration(s) are incompatible with Real-Time Mode: <invalidReasons>. Update or remove them and restart the query."
         ]
+      },
+      "STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED" : {
+        "message" : [
+          "Streaming queries in real-time mode cannot include stateful operators (e.g. aggregate, deduplicate, transformWithState) before a union. Please restructure your query to apply the union before any stateful operations."
+        ]
       }
     },
     "sqlState" : "0A000"
@@ -7811,6 +8092,14 @@
   "STREAMING_SHUFFLE_UNEXPECTED_MESSAGE_TYPE" : {
     "message" : [
       "Unexpected message type <messageType> encountered during streaming shuffle."
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT" : {
+    "message" : [
+      "Streaming shuffle <shuffleId> writer <writerId> timed out after <timeoutMs> ms waiting for reader <readerId> to connect.",
+      "This can occur when the reader task is delayed because cluster resources are unavailable or when network connectivity prevents the reader from reaching the writer.",
+      "Check cluster resources and network connectivity. If the reader needs more time to start, increase 'spark.shuffle.streaming.writerConnectionTimeout', or set it to -1 to wait indefinitely."
     ],
     "sqlState" : "XXKST"
   },
@@ -7914,6 +8203,12 @@
     },
     "sqlState" : "42601"
   },
+  "TABLE_LOCATION_URI_NOT_SPECIFIED" : {
+    "message" : [
+      "Table <identifier> did not specify locationUri."
+    ],
+    "sqlState" : "42601"
+  },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create table or view <relationName> because it already exists.",
@@ -7998,6 +8293,12 @@
       "Invalid call to <function>; the `lgNomEntries` value must be a constant value, but got a non-constant expression."
     ],
     "sqlState" : "42K0E"
+  },
+  "TIMESTAMP_NANOS_PYTHON_MAP_KEY" : {
+    "message" : [
+      "Cannot convert a map with <type> keys to Python. Python `datetime.datetime` is microsecond-resolution and cannot represent the sub-microsecond digits, so two distinct nanosecond keys can collapse to a single entry. Avoid nanosecond-precision timestamp types as map keys on the Python conversion path."
+    ],
+    "sqlState" : "22000"
   },
   "TRAILING_COMMA_IN_SELECT" : {
     "message" : [
@@ -8142,6 +8443,12 @@
     ],
     "sqlState" : "42K0G"
   },
+  "UNABLE_TO_CREATE_DATABASE_DIRECTORY" : {
+    "message" : [
+      "Unable to create database <name> as failed to create its directory <locationUri>."
+    ],
+    "sqlState" : "58030"
+  },
   "UNABLE_TO_FETCH_HIVE_TABLES" : {
     "message" : [
       "Unable to fetch tables of Hive database: <dbName>."
@@ -8166,6 +8473,12 @@
       "Unable to infer schema for <format>. It must be specified manually."
     ],
     "sqlState" : "42KD9"
+  },
+  "UNABLE_TO_REGISTER_WITH_EXTERNAL_SHUFFLE_SERVICE" : {
+    "message" : [
+      "Unable to register with the external shuffle service: <message>"
+    ],
+    "sqlState" : "58030"
   },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
@@ -8266,7 +8579,8 @@
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
-      "Unrecognized SQL type - name: <typeName>, id: <jdbcType>."
+      "Unrecognized SQL type - name: <typeName>, id: <jdbcType>.",
+      "To read this column, map it explicitly with the `customSchema` option, or register a custom `JdbcDialect` that handles this type."
     ],
     "sqlState" : "42704"
   },
@@ -8772,6 +9086,26 @@
           "Drop the namespace <namespace>."
         ]
       },
+      "EXTERNAL_UDF" : {
+        "message" : [
+          "External UDF expressions are disabled. Set <config> to true to enable planning."
+        ]
+      },
+      "EXTERNAL_UDF_IN_BARRIER_TASK" : {
+        "message" : [
+          "External UDF execution in a barrier task without callback transport."
+        ]
+      },
+      "EXTERNAL_UDF_IN_ON_CLAUSE" : {
+        "message" : [
+          "External UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+        ]
+      },
+      "EXTERNAL_UDF_WITH_MULTIPLE_CHILDREN" : {
+        "message" : [
+          "External UDF <funcName> uses columns from more than one input relation. Rewrite the query so the UDF is evaluated after the inputs are combined."
+        ]
+      },
       "GEOSPATIAL_DISABLED" : {
         "message" : [
           "Geospatial feature is disabled."
@@ -8795,6 +9129,12 @@
       "INTERRUPT_TYPE" : {
         "message" : [
           "Unsupported interrupt type: <interruptType>."
+        ]
+      },
+      "LAMBDA_FUNCTION_WITH_EXTERNAL_UDF" : {
+        "message" : [
+          "Cannot evaluate the external UDF <funcName> inside the lambda of a higher-order function.",
+          "This placement is not supported. Rewrite the query so the UDF is applied outside the lambda."
         ]
       },
       "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
@@ -8848,9 +9188,29 @@
           "Literal for '<value>' of <type>."
         ]
       },
+      "MATERIALIZED_CTE_ALWAYS_INLINED" : {
+        "message" : [
+          "MATERIALIZED CTE <cteName> in a statement that always inlines its CTEs."
+        ]
+      },
+      "MATERIALIZED_CTE_IN_CORRELATED_SUBQUERY" : {
+        "message" : [
+          "MATERIALIZED CTE <cteName> in a correlated subquery."
+        ]
+      },
+      "MATERIALIZED_CTE_WITH_OUTER_REFERENCE" : {
+        "message" : [
+          "MATERIALIZED CTE referencing the outer query column <colName>."
+        ]
+      },
       "MULTIPLE_BUCKET_TRANSFORMS" : {
         "message" : [
           "Multiple bucket TRANSFORMs."
+        ]
+      },
+      "MULTIPLE_PYTHON_UDF_TYPES_IN_WINDOW" : {
+        "message" : [
+          "Cannot use Python user-defined functions of different types together over a single window: <functionList>. Use a separate window specification for each."
         ]
       },
       "MULTI_ACTION_ALTER" : {
@@ -8995,6 +9355,11 @@
           "SQL cursor operations (DECLARE CURSOR, OPEN, FETCH, CLOSE) are not supported."
         ]
       },
+      "SQL_RESTRICTED_MODE" : {
+        "message" : [
+          "<feature> is not allowed because <config> is enabled."
+        ]
+      },
       "SQL_SCRIPTING" : {
         "message" : [
           "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
@@ -9088,6 +9453,11 @@
       "TRANSFORM_NON_HIVE" : {
         "message" : [
           "TRANSFORM with SERDE is only supported in hive mode."
+        ]
+      },
+      "TRANSFORM_WITHOUT_SERDE_TYPE" : {
+        "message" : [
+          "TRANSFORM without SERDE does not support the output data type <dataType>."
         ]
       },
       "TRIM_COLLATION" : {
@@ -9721,6 +10091,12 @@
     ],
     "sqlState" : "42601"
   },
+  "WINDOW_FUNCTION_PARTITION_SIZE_EXCEEDS_LIMIT" : {
+    "message" : [
+      "Cannot evaluate the window function because the window partition has <numRows> rows, which exceeds the maximum of 2,147,483,647 (2^31 - 1) rows supported per window partition. Reduce the partition size, for example by adding more expressions to the PARTITION BY clause."
+    ],
+    "sqlState" : "54000"
+  },
   "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE" : {
     "message" : [
       "Window function <funcName> requires an OVER clause."
@@ -9738,6 +10114,12 @@
       "`writeStream` can be called only on streaming Dataset/DataFrame."
     ],
     "sqlState" : "42601"
+  },
+  "WRITING_JOB_FAILED" : {
+    "message" : [
+      "Writing job failed."
+    ],
+    "sqlState" : "58030"
   },
   "WRONG_COMMAND_FOR_OBJECT_TYPE" : {
     "message" : [
@@ -10007,11 +10389,6 @@
       "ADD COLUMN with v1 tables cannot specify NOT NULL."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1058" : {
-    "message" : [
-      "Cannot create table with both USING <provider> and <serDeInfo>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1059" : {
     "message" : [
       "STORED AS with file format '<serdeInfo>' is invalid."
@@ -10020,11 +10397,6 @@
   "_LEGACY_ERROR_TEMP_1060" : {
     "message" : [
       "<command> does not support nested column: <column>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1068" : {
-    "message" : [
-      "<database> is a system preserved database, you cannot use it as current database. To access global temporary views, you should use qualified name with the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM <database>.viewName."
     ]
   },
   "_LEGACY_ERROR_TEMP_1071" : {
@@ -10045,11 +10417,6 @@
   "_LEGACY_ERROR_TEMP_1080" : {
     "message" : [
       "Table <identifier> did not specify database."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1081" : {
-    "message" : [
-      "Table <identifier> did not specify locationUri."
     ]
   },
   "_LEGACY_ERROR_TEMP_1082" : {
@@ -10236,16 +10603,6 @@
   "_LEGACY_ERROR_TEMP_1165" : {
     "message" : [
       "It is not allowed to specify partitioning when the table schema is not defined."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1166" : {
-    "message" : [
-      "Bucketing column '<bucketCol>' should not be part of partition columns '<normalizedPartCols>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1167" : {
-    "message" : [
-      "Bucket sorting column '<sortCol>' should not be part of partition columns '<normalizedPartCols>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1169" : {
@@ -10708,11 +11065,6 @@
       "<fieldCannotBeNullMsg>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2033" : {
-    "message" : [
-      "Unable to create database <name> as failed to create its directory <locationUri>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2034" : {
     "message" : [
       "Unable to drop database <name> as failed to delete its directory <locationUri>."
@@ -10828,11 +11180,6 @@
   "_LEGACY_ERROR_TEMP_2068" : {
     "message" : [
       "Missing database location."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2070" : {
-    "message" : [
-      "Writing job failed."
     ]
   },
   "_LEGACY_ERROR_TEMP_2071" : {
@@ -11413,11 +11760,6 @@
       "Subprocess exited with status <exitCode>. Error: <stderrBuffer>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2265" : {
-    "message" : [
-      "<nodeName> without serde does not support <dt> as output data type."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2266" : {
     "message" : [
       "Invalid `startIndex` provided for generating iterator over the array. Total elements: <numRows>, requested `startIndex`: <startIndex>."
@@ -11520,66 +11862,14 @@
       "Can only zip RDDs with same number of elements in each partition"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3014" : {
-    "message" : [
-      "empty collection"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3015" : {
     "message" : [
       "countByValueApprox() does not support arrays"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3016" : {
-    "message" : [
-      "Checkpoint directory has not been set in the SparkContext"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3017" : {
-    "message" : [
-      "Invalid checkpoint file: <path>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3018" : {
-    "message" : [
-      "Failed to create checkpoint path <checkpointDirPath>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3019" : {
-    "message" : [
-      "Checkpoint RDD has a different number of partitions from original RDD. Original",
-      "RDD [ID: <originalRDDId>, num of partitions: <originalRDDLength>];",
-      "Checkpoint RDD [ID: <newRDDId>, num of partitions: <newRDDLength>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3020" : {
-    "message" : [
-      "Checkpoint dir must be specified."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3028" : {
     "message" : [
       "<errorMsg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3033" : {
-    "message" : [
-      "Unable to register with external shuffle server due to : <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3035" : {
-    "message" : [
-      "Unexpected shuffle block <blockId> with unsupported shuffle resolver <shuffleBlockResolver>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3036" : {
-    "message" : [
-      "Failure while trying to store block <blockId> on <blockManagerId>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3037" : {
-    "message" : [
-      "Block <blockId> was not found even though it's read-locked"
     ]
   },
   "_LEGACY_ERROR_TEMP_3052" : {
@@ -11662,7 +11952,7 @@
   },
   "_LEGACY_ERROR_TEMP_3070" : {
     "message" : [
-      "<internalName> is a reserved column name that cannot be read in combination with <colName> column."
+      "Unrecognized file metadata field: <field>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3071" : {

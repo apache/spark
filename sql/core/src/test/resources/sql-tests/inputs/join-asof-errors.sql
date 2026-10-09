@@ -73,14 +73,35 @@ SELECT * FROM VALUES (MAP('a', 1)) AS t(m) ASOF JOIN VALUES (MAP('a', 1)) AS r(m
 SELECT * FROM VALUES (ARRAY(MAP('a', 1))) AS t(a) ASOF JOIN VALUES (ARRAY(MAP('a', 1))) AS r(a)
   MATCH_CONDITION (t.a >= r.a);
 
--- FVT-ASOF-3-012: incompatible types in MATCH_CONDITION
+-- FVT-ASOF-3-011a: ARRAY elements with no common type rejected (INT vs STRING only string-promotes)
+SELECT * FROM VALUES (ARRAY(1)) AS t(a) ASOF JOIN VALUES (ARRAY('x')) AS r(a)
+  MATCH_CONDITION (t.a >= r.a);
+
+-- FVT-ASOF-3-012: incompatible types in MATCH_CONDITION (TIMESTAMP vs DECIMAL has no common type)
 SELECT * FROM trades t ASOF JOIN quotes q
-  MATCH_CONDITION (t.trade_time >= q.symbol)
+  MATCH_CONDITION (t.trade_time >= q.bid_price)
   ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-012a: STRING vs INTERVAL has no comparison common type, rejected like `>=`
+SELECT * FROM VALUES ('2026-06-29') AS t(s) ASOF JOIN
+     VALUES (INTERVAL '1-2' YEAR TO MONTH) AS r(iv)
+  MATCH_CONDITION (t.s >= r.iv);
 
 -- FVT-ASOF-3-013: STRUCT with non-orderable field rejected
 SELECT * FROM VALUES (named_struct('a', 1, 'm', MAP('a', 1))) AS t(s) ASOF JOIN
      VALUES (named_struct('a', 1, 'm', MAP('a', 1))) AS r(s)
+  MATCH_CONDITION (t.s >= r.s);
+
+-- FVT-ASOF-3-013a: STRUCT operands with different field names and coercible types rejected
+-- (different names have no common type for the coercion the comparison needs)
+SELECT * FROM VALUES (named_struct('a', 1)) AS t(s) ASOF JOIN
+     VALUES (named_struct('c', CAST(1 AS BIGINT))) AS r(s)
+  MATCH_CONDITION (t.s >= r.s);
+
+-- FVT-ASOF-3-013b: STRUCT operands with same field name but only string-promotable types rejected
+-- (INT vs STRING has no tightest common type, so the comparison cannot widen the field)
+SELECT * FROM VALUES (named_struct('a', 1)) AS t(s) ASOF JOIN
+     VALUES (named_struct('a', CAST('x' AS STRING))) AS r(s)
   MATCH_CONDITION (t.s >= r.s);
 
 -- FVT-ASOF-3-014: operand references both sides
@@ -128,4 +149,24 @@ SELECT * FROM trades t ASOF JOIN quotes q
 -- FVT-ASOF-3-023: right operand references only right table
 SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (q.quote_time >= q.quote_time - INTERVAL 1 HOUR)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-024: literal constant operand (right) references no join input
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= TIMESTAMP '2026-06-29 10:00:00')
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-025: literal constant operand (left) references no join input
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (TIMESTAMP '2026-06-29 10:00:00' >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-026: query-foldable constant operand (current_timestamp) references no join input
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (current_timestamp() >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-027: both operands are constants that reference no join input
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (TIMESTAMP '2026-06-29 10:00:01' >= TIMESTAMP '2026-06-29 10:00:00')
   ON t.symbol = q.symbol;

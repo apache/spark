@@ -21,20 +21,21 @@ from typing import cast
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.sql import Column
 from pyspark.testing.connectutils import (
-    should_test_connect,
     connect_requirement_message,
+    should_test_connect,
 )
+from pyspark.testing.utils import PySparkErrorTestUtils
 
 if should_test_connect:
     from pyspark import pipelines as dp
-    from pyspark.pipelines.graph_element_registry import graph_element_registration_context
     from pyspark.pipelines.flow import AutoCdcFlow
+    from pyspark.pipelines.graph_element_registry import graph_element_registration_context
     from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
     from pyspark.sql.connect.functions.builtin import col, expr
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class AutoCdcFlowConstructionTest(unittest.TestCase):
+class AutoCdcFlowConstructionTest(unittest.TestCase, PySparkErrorTestUtils):
     def test_create_auto_cdc_flow(self):
         registry = LocalGraphElementRegistry()
         with graph_element_registration_context(registry):
@@ -297,6 +298,183 @@ class AutoCdcFlowConstructionTest(unittest.TestCase):
                     track_history_except_column_list=["op"],
                 )
             self.assertEqual(ctx.exception.getCondition(), "CANNOT_SET_TOGETHER")
+
+    def test_create_auto_cdc_flow_with_ignore_null_updates(self):
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("t")
+            dp.create_auto_cdc_flow(
+                target="t",
+                source="s",
+                keys=[col("k")],
+                sequence_by=expr("seq"),
+                ignore_null_updates=True,
+            )
+
+        flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
+        self.assertTrue(flow.ignore_null_updates)
+        self.assertIsNone(flow.ignore_null_updates_column_list)
+        self.assertIsNone(flow.ignore_null_updates_except_column_list)
+
+    def test_create_auto_cdc_flow_ignore_null_updates_defaults(self):
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("t")
+            dp.create_auto_cdc_flow(
+                target="t",
+                source="s",
+                keys=[col("k")],
+                sequence_by=expr("seq"),
+            )
+
+        flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
+        self.assertFalse(flow.ignore_null_updates)
+        self.assertIsNone(flow.ignore_null_updates_column_list)
+        self.assertIsNone(flow.ignore_null_updates_except_column_list)
+
+    def test_create_auto_cdc_flow_with_ignore_null_updates_column_list(self):
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("t")
+            dp.create_auto_cdc_flow(
+                target="t",
+                source="s",
+                keys=[col("k")],
+                sequence_by=expr("seq"),
+                ignore_null_updates_column_list=["val"],
+            )
+
+        flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
+        self.assertFalse(flow.ignore_null_updates)
+        assert flow.ignore_null_updates_column_list is not None
+        self.assertEqual(len(flow.ignore_null_updates_column_list), 1)
+        self.assertIsInstance(flow.ignore_null_updates_column_list[0], Column)
+        self.assertIsNone(flow.ignore_null_updates_except_column_list)
+
+    def test_create_auto_cdc_flow_with_ignore_null_updates_except_column_list(self):
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("t")
+            dp.create_auto_cdc_flow(
+                target="t",
+                source="s",
+                keys=[col("k")],
+                sequence_by=expr("seq"),
+                ignore_null_updates_except_column_list=["op", "seq"],
+            )
+
+        flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
+        assert flow.ignore_null_updates_except_column_list is not None
+        self.assertEqual(len(flow.ignore_null_updates_except_column_list), 2)
+        self.assertIsNone(flow.ignore_null_updates_column_list)
+
+    def test_create_auto_cdc_flow_rejects_conflicting_ignore_null_options(self):
+        # ignore_null_updates=True, ignore_null_updates_column_list, and
+        # ignore_null_updates_except_column_list are mutually exclusive. A list counts as
+        # specified even when empty, so an empty list also conflicts with the others.
+        cases = [
+            (
+                "include list and except list",
+                {
+                    "ignore_null_updates_column_list": ["val"],
+                    "ignore_null_updates_except_column_list": ["op"],
+                },
+                "ignore_null_updates_column_list, ignore_null_updates_except_column_list",
+            ),
+            (
+                "flag and include list",
+                {"ignore_null_updates": True, "ignore_null_updates_column_list": ["val"]},
+                "ignore_null_updates, ignore_null_updates_column_list",
+            ),
+            (
+                "flag and except list",
+                {"ignore_null_updates": True, "ignore_null_updates_except_column_list": ["op"]},
+                "ignore_null_updates, ignore_null_updates_except_column_list",
+            ),
+            (
+                "include list and empty except list",
+                {
+                    "ignore_null_updates_column_list": ["val"],
+                    "ignore_null_updates_except_column_list": [],
+                },
+                "ignore_null_updates_column_list, ignore_null_updates_except_column_list",
+            ),
+            (
+                "flag and empty except list",
+                {"ignore_null_updates": True, "ignore_null_updates_except_column_list": []},
+                "ignore_null_updates, ignore_null_updates_except_column_list",
+            ),
+            (
+                "flag and empty include list",
+                {"ignore_null_updates": True, "ignore_null_updates_column_list": []},
+                "ignore_null_updates, ignore_null_updates_column_list",
+            ),
+        ]
+        for label, kwargs, arg_list in cases:
+            with self.subTest(label):
+                registry = LocalGraphElementRegistry()
+                with graph_element_registration_context(registry):
+                    dp.create_streaming_table("t")
+                    with self.assertRaises(PySparkValueError) as ctx:
+                        dp.create_auto_cdc_flow(
+                            target="t",
+                            source="s",
+                            keys=[col("k")],
+                            sequence_by=expr("seq"),
+                            **kwargs,
+                        )
+                self.check_error(
+                    exception=ctx.exception,
+                    errorClass="CANNOT_SET_TOGETHER",
+                    messageParameters={"arg_list": arg_list},
+                )
+
+    def test_create_auto_cdc_flow_rejects_empty_ignore_null_list(self):
+        # A lone empty ignore-null list of either kind cannot be represented on the wire, so it
+        # is rejected; use ignore_null_updates=True to ignore nulls on all columns.
+        for arg_name in (
+            "ignore_null_updates_column_list",
+            "ignore_null_updates_except_column_list",
+        ):
+            with self.subTest(arg_name):
+                registry = LocalGraphElementRegistry()
+                with graph_element_registration_context(registry):
+                    dp.create_streaming_table("t")
+                    with self.assertRaises(PySparkValueError) as ctx:
+                        dp.create_auto_cdc_flow(
+                            target="t",
+                            source="s",
+                            keys=[col("k")],
+                            sequence_by=expr("seq"),
+                            **{arg_name: []},
+                        )
+                self.check_error(
+                    exception=ctx.exception,
+                    errorClass="CANNOT_BE_EMPTY",
+                    messageParameters={"item": f"column in {arg_name}"},
+                )
+
+    def test_create_auto_cdc_flow_rejects_non_bool_ignore_null_updates(self):
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("t")
+            with self.assertRaises(PySparkTypeError) as ctx:
+                dp.create_auto_cdc_flow(
+                    target="t",
+                    source="s",
+                    keys=[col("k")],
+                    sequence_by=expr("seq"),
+                    ignore_null_updates="yes",  # type: ignore[arg-type]
+                )
+        self.check_error(
+            exception=ctx.exception,
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "ignore_null_updates",
+                "expected_type": "bool",
+                "arg_type": "str",
+            },
+        )
 
     def test_create_auto_cdc_flow_empty_column_lists_not_treated_as_both_set(self):
         # Empty lists are no-ops (they serialize to unset repeated fields), so an empty include

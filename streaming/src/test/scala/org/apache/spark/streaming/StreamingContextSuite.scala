@@ -176,7 +176,7 @@ class StreamingContextSuite
       ssc.start()
     }
     assert(ssc.getState() === StreamingContextState.STOPPED)
-    assert(ssc.scheduler.isStarted() === false)
+    assert(!ssc.scheduler.isStarted())
   }
 
   test("start should set local properties of streaming jobs correctly") {
@@ -499,7 +499,7 @@ class StreamingContextSuite
 
     // test whether awaitTerminationOrTimeout() return false after give amount of time
     failAfter(1.second) {
-      assert(ssc.awaitTerminationOrTimeout(500) === false)
+      assert(!ssc.awaitTerminationOrTimeout(500))
     }
 
     var t: Thread = null

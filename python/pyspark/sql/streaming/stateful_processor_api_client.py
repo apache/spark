@@ -14,23 +14,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from datetime import datetime
-from enum import Enum
 import json
 import os
 import socket
-from typing import IO, Any, Dict, List, Union, Optional, Tuple, Iterator, cast
-
-from pyspark.serializers import write_int, read_int, UTF8Deserializer
-from pyspark.sql.pandas.serializers import ArrowStreamSerializer
-from pyspark.sql.types import (
-    StructType,
-    Row,
-)
-from pyspark.sql.pandas.types import convert_pandas_using_numpy_type
-from pyspark.serializers import PickleSerializer
-from pyspark.errors import PySparkRuntimeError
 import uuid
+from datetime import datetime
+from enum import Enum
+from typing import IO, Any, Dict, Iterator, List, Optional, Tuple, Union, cast
+
+from pyspark.errors import PySparkRuntimeError
+from pyspark.serializers import PickleSerializer, UTF8Deserializer, read_int, write_int
+from pyspark.sql.pandas.serializers import ArrowStreamSerializer
+from pyspark.sql.pandas.types import convert_pandas_using_numpy_type
+from pyspark.sql.types import (
+    Row,
+    StructType,
+)
+from pyspark.util import _do_server_auth
 
 __all__ = ["StatefulProcessorApiClient", "StatefulProcessorHandleState"]
 
@@ -92,7 +92,11 @@ class StatefulProcessorHandleState(Enum):
 
 class StatefulProcessorApiClient:
     def __init__(
-        self, state_server_port: Union[int, str], key_schema: StructType, is_driver: bool = False
+        self,
+        state_server_port: Union[int, str],
+        key_schema: StructType,
+        is_driver: bool = False,
+        auth_secret: Optional[str] = None,
     ) -> None:
         self.key_schema = key_schema
         if isinstance(state_server_port, str):
@@ -116,6 +120,9 @@ class StatefulProcessorApiClient:
         self.sockfile = self._client_socket.makefile(
             "rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536))
         )
+        if not isinstance(state_server_port, str) and auth_secret is not None:
+            # Unix domain sockets rely on filesystem permissions and skip the handshake.
+            _do_server_auth(self.sockfile, auth_secret)
         if is_driver:
             self.handle_state = StatefulProcessorHandleState.PRE_INIT
         else:
@@ -547,8 +554,8 @@ class StatefulProcessorApiClient:
         return self.pickleSer.loads(value)
 
     def _send_arrow_state(self, schema: StructType, state: List[Tuple]) -> None:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         column_names = [field.name for field in schema.fields]
         pandas_df = convert_pandas_using_numpy_type(

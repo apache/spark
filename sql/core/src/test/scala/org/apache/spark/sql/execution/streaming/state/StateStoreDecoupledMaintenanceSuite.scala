@@ -1244,6 +1244,7 @@ class StateStoreDecoupledMaintenanceSuiteWithRowChecksum
     extends StateStoreDecoupledMaintenanceSuite
     with EnableStateStoreRowChecksum
 
+@ExtendedSQLTest
 class RocksDBDecoupledMaintenanceSuite
     extends StateStoreDecoupledMaintenanceSuiteBase[RocksDBStateStoreProvider]
     with AlsoTestWithEncodingTypes
@@ -1252,6 +1253,7 @@ class RocksDBDecoupledMaintenanceSuite
   override def afterEach(): Unit = {}
 }
 
+@ExtendedSQLTest
 class RocksDBDecoupledMaintenanceSuiteWithRowChecksum
     extends RocksDBDecoupledMaintenanceSuite
     with EnableStateStoreRowChecksum

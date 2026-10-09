@@ -24,6 +24,8 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import org.apache.spark.network.protocol.Encoders;
+
 public class FetchShuffleBlocksSuite {
 
   @Test
@@ -38,5 +40,17 @@ public class FetchShuffleBlocksSuite {
 
     FetchShuffleBlocks decoded = FetchShuffleBlocks.decode(buf);
     assertEquals(fetchShuffleBlocks, decoded);
+  }
+
+  @Test
+  public void testDecodeRejectsCountExceedingReceivedBytes() {
+    // Decode must reject the count rather than allocate an array of the claimed size.
+    ByteBuf buf = Unpooled.buffer(64);
+    Encoders.Strings.encode(buf, "app0");
+    Encoders.Strings.encode(buf, "exec1");
+    buf.writeInt(0); // shuffleId
+    Encoders.LongArrays.encode(buf, new long[] {0});
+    buf.writeInt(Integer.MAX_VALUE); // reduceIds count
+    assertThrows(IndexOutOfBoundsException.class, () -> FetchShuffleBlocks.decode(buf));
   }
 }

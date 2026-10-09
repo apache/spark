@@ -20,13 +20,13 @@ Package for distributed linear algebra.
 """
 
 import sys
-from typing import Any, Generic, Optional, Tuple, TypeVar, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Generic, Optional, Tuple, TypeVar, Union
 
 from py4j.java_gateway import JavaObject
 
 from pyspark import RDD, since
-from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import _convert_to_vector, DenseMatrix, Matrix, QRDecomposition, Vector
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
+from pyspark.mllib.linalg import DenseMatrix, Matrix, QRDecomposition, Vector, _convert_to_vector
 from pyspark.mllib.stat import MultivariateStatisticalSummary
 from pyspark.sql import DataFrame
 from pyspark.storagelevel import StorageLevel
@@ -1633,10 +1633,12 @@ class BlockMatrix(DistributedMatrix):
 
 def _test() -> None:
     import doctest
+
     import numpy
-    from pyspark.sql import SparkSession
-    from pyspark.mllib.linalg import Matrices
+
     import pyspark.mllib.linalg.distributed
+    from pyspark.mllib.linalg import Matrices
+    from pyspark.sql import SparkSession
 
     try:
         # Numpy 1.14+ changed it's string format.

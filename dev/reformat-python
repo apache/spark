@@ -30,3 +30,4 @@ if [ $? -ne 0 ]; then
 fi
 
 $RUFF_BUILD format python/pyspark dev python/packaging python/benchmarks
+$RUFF_BUILD check --select I --fix

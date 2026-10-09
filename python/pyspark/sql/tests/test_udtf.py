@@ -15,27 +15,34 @@
 # limitations under the License.
 #
 
-from decimal import Decimal
 import datetime
+import logging
 import os
 import shutil
 import tempfile
-import unittest
-import logging
 import time
+import unittest
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Iterator, Optional
 
 from pyspark.errors import (
-    PySparkAttributeError,
-    PythonException,
-    PySparkTypeError,
     AnalysisException,
-    PySparkPicklingError,
     IllegalArgumentException,
+    PySparkAttributeError,
+    PySparkNotImplementedError,
+    PySparkPicklingError,
+    PySparkTypeError,
+    PythonException,
 )
-from pyspark.util import PythonEvalType
+from pyspark.logger import PySparkLogger
 from pyspark.sql.functions import (
+    AnalyzeArgument,
+    AnalyzeResult,
+    OrderingColumn,
+    PartitioningColumn,
+    SelectedColumn,
+    SkipRestOfInputTableException,
     array,
     col,
     create_map,
@@ -43,16 +50,11 @@ from pyspark.sql.functions import (
     named_struct,
     udf,
     udtf,
-    AnalyzeArgument,
-    AnalyzeResult,
-    OrderingColumn,
-    PartitioningColumn,
-    SelectedColumn,
-    SkipRestOfInputTableException,
 )
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
+    CharType,
     DataType,
     IntegerType,
     LongType,
@@ -64,7 +66,7 @@ from pyspark.sql.types import (
     StructType,
     VariantVal,
 )
-from pyspark.logger import PySparkLogger
+from pyspark.sql.utils import is_remote
 from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -74,7 +76,7 @@ from pyspark.testing.utils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.util import is_remote_only
+from pyspark.util import PythonEvalType, is_remote_only
 
 
 class BaseUDTFTestsMixin:
@@ -85,6 +87,60 @@ class BaseUDTFTestsMixin:
 
         func = udtf(TestUDTF, returnType="c1: string, c2: string")
         assertDataFrameEqual(func(), [Row(c1="hello", c2="world")])
+
+    def test_udtf_char_varchar_return_type(self):
+        class TestUDTF:
+            def eval(self):
+                yield ("a",)
+
+        schema = StructType([StructField("c", CharType(3))])
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            udtf(TestUDTF, returnType=schema)()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={
+                "feature": "Python UDTF return types",
+                "data_type": schema.simpleString(),
+            },
+        )
+
+    def test_udtf_char_varchar_return_type_ddl(self):
+        class TestUDTF:
+            def eval(self):
+                yield ("a",)
+
+        def invoke():
+            return udtf(TestUDTF, returnType="c: char(3)")()
+
+        if is_remote():
+            with self.assertRaises(AnalysisException) as pe:
+                invoke().collect()
+            self.assertEqual(pe.exception.getCondition(), "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON")
+        else:
+            with self.assertRaises(PySparkNotImplementedError) as pe:
+                invoke()
+            self.check_error(
+                exception=pe.exception,
+                errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+                messageParameters={
+                    "feature": "Python UDTF return types",
+                    "data_type": "struct<c:char(3)>",
+                },
+            )
+
+    def test_udtf_char_varchar_analyze_schema(self):
+        class TestUDTF:
+            @staticmethod
+            def analyze(*args):
+                return AnalyzeResult(StructType([StructField("c", CharType(3))]))
+
+            def eval(self, *args):
+                yield ("a",)
+
+        with self.assertRaises(AnalysisException) as pe:
+            udtf(TestUDTF)().collect()
+        self.assertEqual(pe.exception.getCondition(), "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON")
 
     def test_udtf_yield_single_row_col(self):
         class TestUDTF:

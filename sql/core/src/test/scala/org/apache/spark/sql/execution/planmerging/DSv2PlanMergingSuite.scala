@@ -23,7 +23,7 @@ import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.connector.FakeV2ProviderWithCustomSchema
 import org.apache.spark.sql.connector.catalog.{InMemoryScanMergingPartitionFilterCatalog, InMemoryScanMergingReportingCatalog}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -37,10 +37,11 @@ import org.apache.spark.sql.test.SharedSparkSession
  * mis-classify it as non-strict and decline the merge (leaving two scans).
  */
 class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
-  with BeforeAndAfter {
+  with BeforeAndAfter with V2ScanMergingTestHelper {
 
   private val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   private val tbl = "scanmerge.t"
+  private val tbl2 = "scanmerge.t2"
 
   before {
     spark.conf.set("spark.sql.catalog.scanmerge",
@@ -54,11 +55,6 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
     spark.conf.unset("spark.sql.catalog.scanmerge")
     spark.conf.unset("spark.sql.catalog.scanmergereport")
   }
-
-  private def v2Scans(df: DataFrame): Seq[DataSourceV2ScanRelation] =
-    df.queryExecution.optimizedPlan.collectWithSubqueries {
-      case s: DataSourceV2ScanRelation => s
-    }
 
   // A successful DSv2 merge builds the scan and leaves NO bare DataSourceV2Relation in the plan.
   // A leaked deferred scan (e.g. if a future recursion arm forwarded `deferredScan` without
@@ -171,6 +167,29 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
           s"the merged scan should read the union of both columns; got ${scans.head.output}")
         assertNoPlaceholderRelation(df)
       }
+    }
+  }
+
+  test("SPARK-40259: do not merge DSv2 scans from different tables") {
+    withTable(tbl, tbl2) {
+      sql(s"CREATE TABLE $tbl (part_col string, c1 int) USING $v2Source " +
+        "PARTITIONED BY (part_col)")
+      sql(s"CREATE TABLE $tbl2 (part_col string, c2 int) USING $v2Source " +
+        "PARTITIONED BY (part_col)")
+      sql(s"INSERT INTO $tbl VALUES ('a', 1), ('a', 2)")
+      sql(s"INSERT INTO $tbl2 VALUES ('a', 10), ('a', 30)")
+
+      val df = sql(
+        s"""
+           |SELECT
+           |  (SELECT max(c1) FROM $tbl WHERE part_col IN ('a')) AS m1,
+           |  (SELECT max(c2) FROM $tbl2 WHERE part_col IN ('a')) AS m2
+           |""".stripMargin)
+
+      checkAnswer(df, Row(2, 30))
+      val scans = v2Scans(df)
+      assert(scans.map(_.canonicalized).distinct.length == 2,
+        s"scans from different tables must remain separate:\n${df.queryExecution.optimizedPlan}")
     }
   }
 

@@ -692,6 +692,10 @@ case class Cast(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  // Parser, Column.cast, and Connect set USER_SPECIFIED_CAST. Analyzer-inserted Casts do not.
+  override protected def truncateCharVarcharOnCast: Boolean =
+    containsTag(Cast.USER_SPECIFIED_CAST)
+
   override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)
 
   // CAST_TO_TIMESTAMP must be set on a superset of the targets accepted by
@@ -1614,12 +1618,16 @@ case class Cast(
   override def genCode(ctx: CodegenContext): ExprCode = {
     // If the cast does not change the structure, then we don't really need to cast anything.
     // We can return what the children return. Same thing should happen in the interpreted path.
-    if (DataType.equalsStructurally(child.dataType, dataType)) {
+    if (generatesChildCode) {
       child.genCode(ctx)
     } else {
       super.genCode(ctx)
     }
   }
+
+  /** Whether `genCode` generates the child's code as this cast's, the cast changing nothing. */
+  private[catalyst] def generatesChildCode: Boolean =
+    DataType.equalsStructurally(child.dataType, dataType)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)

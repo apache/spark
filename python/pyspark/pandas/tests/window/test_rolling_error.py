@@ -16,8 +16,8 @@
 #
 
 import pyspark.pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 from pyspark.pandas.window import Rolling
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
 class RollingErrorMixin:

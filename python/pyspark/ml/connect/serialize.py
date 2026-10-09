@@ -14,20 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, List, TYPE_CHECKING, Mapping, Dict
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping
 
 import pyspark.sql.connect.proto as pb2
-from pyspark.sql.types import DataType
 from pyspark.ml.linalg import (
-    DenseVector,
-    SparseVector,
     DenseMatrix,
+    DenseVector,
     SparseMatrix,
+    SparseVector,
 )
+from pyspark.sql.types import DataType
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.ml.param import Params
+    from pyspark.sql.connect.client import SparkConnectClient
 
 
 def literal_null() -> pb2.Expression.Literal:

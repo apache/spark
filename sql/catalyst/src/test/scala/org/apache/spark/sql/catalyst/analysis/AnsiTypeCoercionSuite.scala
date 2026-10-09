@@ -61,6 +61,9 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
   override def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] =
     AnsiTypeCoercion.implicitCast(e, expectedType)
 
+  override protected def implicitTypeCastsRule: TypeCoercionRule =
+    AnsiTypeCoercion.ImplicitTypeCasts
+
   override def dateTimeOperationsRule: TypeCoercionRule = AnsiTypeCoercion.DateTimeOperations
 
   private def checkWidenType(

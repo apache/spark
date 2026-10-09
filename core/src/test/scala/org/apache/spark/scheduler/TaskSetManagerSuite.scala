@@ -2164,7 +2164,7 @@ class TaskSetManagerSuite
     // if the time threshold has not been exceeded, no speculative run should be triggered
     clock.advance(1000*60*60)
     assert(!manager.checkSpeculatableTasks(0))
-    assert(sched.speculativeTasks.size == 0)
+    assert(sched.speculativeTasks.isEmpty)
 
     // Now the task should have been running for 60 minutes and 1 second
     clock.advance(1000)
@@ -2177,7 +2177,7 @@ class TaskSetManagerSuite
     } else {
       // If the feature flag is turned off, or the stage contains too many tasks
       assert(!manager.checkSpeculatableTasks(0))
-      assert(sched.speculativeTasks.size == 0)
+      assert(sched.speculativeTasks.isEmpty)
     }
   }
 
@@ -2353,7 +2353,7 @@ class TaskSetManagerSuite
     }
     clock.advance(1000*60*60)
     assert(!manager.checkSpeculatableTasks(0))
-    assert(sched.speculativeTasks.size == 0)
+    assert(sched.speculativeTasks.isEmpty)
     // Now the task should have been running for 60 minutes and 1 second
     clock.advance(1000)
     assert(manager.checkSpeculatableTasks(0))
@@ -2459,7 +2459,7 @@ class TaskSetManagerSuite
     clock.advance(1000)
     manager.checkSpeculatableTasks(sched.MIN_TIME_TO_SPECULATION)
     // The task is not considered as speculative task due to minimum threshold interval of 3s
-    assert(sched.speculativeTasks.size == 0)
+    assert(sched.speculativeTasks.isEmpty)
     clock.advance(2000)
     manager.checkSpeculatableTasks(sched.MIN_TIME_TO_SPECULATION)
     // After 3s have elapsed now the task is marked as speculative task
@@ -3242,6 +3242,51 @@ class TaskSetManagerSuite
         assert(sched.taskSetsFailed.contains(taskSet.id),
           "must abort after MAX_TASK_FAILURES counted failures")
       }
+    }
+  }
+
+  test("resourceOffer attaches current userCredentials to TaskDescription") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(3)
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    try {
+      // Initially no credentials in SparkEnv store
+      assert(SparkEnv.get.userCredentials.get() == null)
+      val taskOpt1 = manager.resourceOffer("exec1", "host1", TaskLocality.ANY)._1
+      assert(taskOpt1.isDefined)
+      assert(taskOpt1.get.userCredentials.isEmpty,
+        "TaskDescription should have None when credential store is empty")
+
+      // Set credentials to version 1
+      val v1Bytes = Array[Byte](10, 20, 30, 40, 50)
+      VersionedCredentials.updateIfNewer(SparkEnv.get.userCredentials, 1L, v1Bytes)
+
+      // Offer another task from the same set -- should carry v1
+      val taskOpt2 = manager.resourceOffer("exec1", "host1", TaskLocality.ANY)._1
+      assert(taskOpt2.isDefined)
+      assert(taskOpt2.get.userCredentials.isDefined,
+        "TaskDescription should carry credentials after store is populated")
+      assert(taskOpt2.get.userCredentials.get._1 === 1L,
+        "TaskDescription should carry version 1")
+      assert(taskOpt2.get.userCredentials.get._2 === v1Bytes,
+        "TaskDescription should carry the v1 credential bytes")
+
+      // Update store to version 2
+      val v2Bytes = Array[Byte](50, 60, 70, 80, 90)
+      VersionedCredentials.updateIfNewer(SparkEnv.get.userCredentials, 2L, v2Bytes)
+
+      // Offer another task -- should carry v2
+      val taskOpt3 = manager.resourceOffer("exec1", "host1", TaskLocality.ANY)._1
+      assert(taskOpt3.isDefined)
+      assert(taskOpt3.get.userCredentials.get._1 === 2L,
+        "After renewal, TaskDescription should carry version 2")
+      assert(taskOpt3.get.userCredentials.get._2 === v2Bytes,
+        "TaskDescription should carry the v2 credential bytes")
+    } finally {
+      SparkEnv.get.userCredentials.set(null)
     }
   }
 

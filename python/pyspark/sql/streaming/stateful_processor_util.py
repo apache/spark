@@ -15,20 +15,21 @@
 # limitations under the License.
 #
 
-from enum import Enum
 import itertools
-from typing import Any, Iterator, Optional, TYPE_CHECKING, Union
-from pyspark.sql.streaming.stateful_processor_api_client import (
-    StatefulProcessorApiClient,
-    StatefulProcessorHandleState,
-)
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Iterator, Optional, Union
+
 from pyspark.sql.streaming.stateful_processor import (
     ExpiredTimerInfo,
     StatefulProcessor,
     StatefulProcessorHandle,
     TimerValues,
 )
-from pyspark.sql.streaming.stateful_processor_api_client import ExpiredTimerIterator
+from pyspark.sql.streaming.stateful_processor_api_client import (
+    ExpiredTimerIterator,
+    StatefulProcessorApiClient,
+    StatefulProcessorHandleState,
+)
 from pyspark.sql.types import Row
 
 if TYPE_CHECKING:

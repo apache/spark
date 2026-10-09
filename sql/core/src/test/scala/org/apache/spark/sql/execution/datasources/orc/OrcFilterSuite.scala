@@ -871,7 +871,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       assert(caseSensitiveFilters.isEmpty)
       assert(caseInsensitiveFilters.isDefined)
 
-      assert(caseInsensitiveFilters.get.getLeaves().size() > 0)
+      assert(!caseInsensitiveFilters.get.getLeaves().isEmpty)
       assert(caseInsensitiveFilters.get.getLeaves().size() == expected.getLeaves().size())
       (0 until expected.getLeaves().size()).foreach { index =>
         assert(caseInsensitiveFilters.get.getLeaves().get(index) == expected.getLeaves().get(index))
@@ -911,5 +911,9 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
         .equals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 2L)
         .`end`().build())
   }
-}
 
+  test("SPARK-58814: CHAR/VARCHAR filters use the ORC string predicate type") {
+    assert(OrcFilters.getPredicateLeafType(CharType(5)) === PredicateLeaf.Type.STRING)
+    assert(OrcFilters.getPredicateLeafType(VarcharType(7)) === PredicateLeaf.Type.STRING)
+  }
+}

@@ -206,7 +206,8 @@ object OffsetSeqMetadata extends Logging {
     STATE_STORE_ROW_CHECKSUM_ENABLED, PROTOBUF_EXTENSIONS_SUPPORT_ENABLED,
     ENABLE_STREAMING_SOURCE_EVOLUTION,
     STATEFUL_OPERATOR_ALWAYS_NULLABLE_OUTPUT,
-    DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER
+    DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER,
+    ALLOW_EXCEPT_ON_STREAMING_DATAFRAME
   )
 
   /**
@@ -230,6 +231,26 @@ object OffsetSeqMetadata extends Logging {
    */
   private val rebindSQLConfsOffsetLogToSession: Map[ConfigEntry[_], ConfigEntry[_]] =
     rebindSQLConfsSessionToOffsetLog.map { case (k, v) => (v, k) }.toMap
+
+  /**
+   * Builds the configuration map persisted in offset metadata.
+   *
+   * Re-bound session configurations are written using their legacy offset-log
+   * keys for checkpoint compatibility.
+   */
+  private[checkpointing] def confsForOffsetLog(
+      sessionConf: RuntimeConfig): Map[String, String] = {
+    val relevantConfs = relevantSQLConfs.map { conf =>
+      conf.key -> sessionConf.get(conf.key)
+    }.toMap
+
+    val reboundConfs = rebindSQLConfsSessionToOffsetLog.map {
+      case (confInSession, confInOffsetLog) =>
+        confInOffsetLog.key -> sessionConf.get(confInSession.key)
+    }.toMap
+
+    relevantConfs ++ reboundConfs
+  }
 
   /**
    * Default values of relevant configurations that are used for backward compatibility.
@@ -258,7 +279,8 @@ object OffsetSeqMetadata extends Logging {
     PROTOBUF_EXTENSIONS_SUPPORT_ENABLED.key -> "false",
     ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false",
     STATEFUL_OPERATOR_ALWAYS_NULLABLE_OUTPUT.key -> "false",
-    DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER.key -> "false"
+    DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER.key -> "false",
+    ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "true"
   )
 
   def readValue[T](metadataLog: OffsetSeqMetadataBase, confKey: ConfigEntry[T]): String = {
@@ -281,12 +303,19 @@ object OffsetSeqMetadata extends Logging {
       batchWatermarkMs: Long,
       batchTimestampMs: Long,
       sessionConf: RuntimeConfig): OffsetSeqMetadata = {
-    val confs = relevantSQLConfs.map { conf => conf.key -> sessionConf.get(conf.key) }.toMap
-    val confsFromRebind = rebindSQLConfsSessionToOffsetLog.map {
-      case (confInSession, confInOffsetLog) =>
-        confInOffsetLog.key -> sessionConf.get(confInSession.key)
-    }.toMap
-    OffsetSeqMetadata(batchWatermarkMs, batchTimestampMs, confs++ confsFromRebind)
+    OffsetSeqMetadata(batchWatermarkMs, batchTimestampMs, confsForOffsetLog(sessionConf))
+  }
+
+  /**
+   * Adds the stateful shuffle partitions to offset metadata if missing. The value
+   * is written with the legacy offset-log key so that the regular session configuration
+   * rebinding path can restore it.
+   */
+  private[sql] def withStatefulShufflePartitions(
+      metadata: OffsetSeqMetadataV2,
+      numPartitions: Int): OffsetSeqMetadataV2 = {
+    val conf = metadata.conf.updated(SHUFFLE_PARTITIONS.key, numPartitions.toString)
+    metadata.copy(conf = conf)
   }
 
   /** Set the SparkSession configuration with the values in the metadata */
@@ -453,9 +482,10 @@ object OffsetSeqMetadataV2 {
       batchWatermarkMs: Long,
       batchTimestampMs: Long,
       sessionConf: RuntimeConfig): OffsetSeqMetadataV2 = {
-    val confs = OffsetSeqMetadata.relevantSQLConfs.map {
-      conf => conf.key -> sessionConf.get(conf.key)
-    }.toMap
-    OffsetSeqMetadataV2(batchWatermarkMs, batchTimestampMs, confs)
+    OffsetSeqMetadataV2(
+      batchWatermarkMs,
+      batchTimestampMs,
+      OffsetSeqMetadata.confsForOffsetLog(sessionConf)
+    )
   }
 }

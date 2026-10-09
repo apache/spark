@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, FileSourceConstantMetadataStructField, FileSourceGeneratedMetadataStructField, Literal}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
@@ -411,6 +411,21 @@ class FileSourceCustomMetadataStructSuite extends SharedSparkSession {
           Row(0, 102L, 1L, f0.getLen, f0.getPath.getName),
           Row(1, 111L, 0L, f1.getLen, f1.getPath.getName),
           Row(1, 112L, 1L, f1.getLen, f1.getPath.getName)))
+    }
+  }
+
+  test("SPARK-58945: invalid file metadata fields report the field") {
+    withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
+      val invalidField = StructField("bad", StringType)
+      val format = new TestFileFormat(Seq(invalidField))
+      val df = createDF(format, Seq(FileStatusWithMetadata(f0), FileStatusWithMetadata(f1)))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.select("_metadata.bad").collect()
+        },
+        condition = "_LEGACY_ERROR_TEMP_3070",
+        parameters = Map("field" -> invalidField.toString))
     }
   }
 }

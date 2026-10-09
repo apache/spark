@@ -700,7 +700,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     private UnsafeSorterIterator upstream;
     private MemoryBlock lastPage = null;
     private boolean loaded = false;
-    private int numRecords;
+    // Named as in UnsafeSorterSpillReader: numRecords is the fixed total reported by
+    // getNumRecords(), while numRecordsRemaining counts down as records are returned.
+    private final int numRecords;
+    private int numRecordsRemaining;
 
     private Object currentBaseObject;
     private long currentBaseOffset;
@@ -710,6 +713,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     SpillableIterator(UnsafeSorterIterator inMemIterator) {
       this.upstream = inMemIterator;
       this.numRecords = inMemIterator.getNumRecords();
+      this.numRecordsRemaining = this.numRecords;
     }
 
     @Override
@@ -734,10 +738,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           long currentPageNumber = upstream.getCurrentPageNumber();
 
           ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
-          if (numRecords > 0) {
+          if (numRecordsRemaining > 0) {
             // Iterate over the records that have not been returned and spill them.
             final UnsafeSorterSpillWriter spillWriter = new UnsafeSorterSpillWriter(
-                    blockManager, fileBufferSizeBytes, writeMetrics, numRecords);
+                    blockManager, fileBufferSizeBytes, writeMetrics, numRecordsRemaining);
             spillIterator(upstream, spillWriter);
             spillWriters.add(spillWriter);
             upstream = spillWriter.getReader(serializerManager);
@@ -798,7 +802,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     @Override
     public boolean hasNext() {
-      return numRecords > 0;
+      return numRecordsRemaining > 0;
     }
 
     @Override
@@ -819,7 +823,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
             allocatedPages.clear();
             lastPage = null;
           }
-          numRecords--;
+          numRecordsRemaining--;
           upstream.loadNext();
 
           // Keep track of the current base object, base offset, record length, and key prefix,

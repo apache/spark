@@ -1,0 +1,13 @@
+test case	pyarrow table	pandas dataframe
+empty:0-columns	{}@Table[]	{}@Dataframe[]
+empty:columns-no-rows	{i: [], s: []}@Table[i: int64, s: string]	{'i': [], 's': []}@Dataframe[i int64, s object]
+single-column	{i: [1, 2, None]}@Table[i: int64]	{'i': [1.0, 2.0, nan]}@Dataframe[i float64]
+single-column:string	{s: [hello, world, None]}@Table[s: string]	{'s': ['hello', 'world', None]}@Dataframe[s object]
+multi-column:mixed-scalar	{i: [1, 2, None], s: [a, b, None], f: [1.5, 2.5, 3.5], b: [True, False, None]}@Table[i: int64, s: string, f: float64, b: bool]	{'i': [1.0, 2.0, nan], 's': ['a', 'b', None], 'f': [1.5, 2.5, 3.5], 'b': [True, False, None]}@Dataframe[i float64, s object, f float64, b object]
+multi-column:all-null	{i: [None, None], s: [None, None]}@Table[i: int64, s: string]	{'i': [nan, nan], 's': [None, None]}@Dataframe[i float64, s object]
+multi-column:nested	{lst: [[1, 2], [3], None], st: [[('x', 1)], None, [('x', 3)]]}@Table[lst: list<item: int64>, st: struct<x: int64>]	{'lst': [array([1, 2]), array([3]), None], 'st': [{'x': 1}, None, {'x': 3}]}@Dataframe[lst object, st object]
+temporal:timestamp	{ts: [2020-01-01 05:30:00, 2021-06-15 23:59:00]}@Table[ts: timestamp[us]]	{'ts': [Timestamp('2020-01-01 05:30:00'), Timestamp('2021-06-15 23:59:00')]}@Dataframe[ts datetime64[us]]
+temporal:date32	{d: [2020-01-01, 2021-06-15]}@Table[d: date32[day]]	{'d': [datetime.date(2020, 1, 1), datetime.date(2021, 6, 15)]}@Dataframe[d object]
+temporal:date64	{d: [2020-01-01, 2021-06-15]}@Table[d: date64[ms]]	{'d': [datetime.date(2020, 1, 1), datetime.date(2021, 6, 15)]}@Dataframe[d object]
+temporal:date32-far-future	{d: [9999-12-31]}@Table[d: date32[day]]	{'d': [datetime.date(9999, 12, 31)]}@Dataframe[d object]
+temporal:multi-column-mix	{ts: [2020-01-01 05:30:00, 2020-01-01 05:30:00], d: [2020-01-01, 9999-12-31], i: [1, 2]}@Table[ts: timestamp[us], d: date32[day], i: int64]	{'ts': [Timestamp('2020-01-01 05:30:00'), Timestamp('2020-01-01 05:30:00')], 'd': [datetime.date(2020, 1, 1), datetime.date(9999, 12, 31)], 'i': [1, 2]}@Dataframe[ts datetime64[us], d object, i int64]

@@ -60,6 +60,33 @@ class TimerSuite extends StateVariableSuiteBase {
     }
   }
 
+  testWithTimeMode("reusable expired timer iterator resumes from prior threshold") { timeMode =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      assert(store.isInstanceOf[SupportsReusableIterator])
+
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      val timerState = new TimerStateImpl(store, timeMode, stringEncoder)
+      timerState.registerTimer(1000L)
+      timerState.registerTimer(3000L)
+
+      assert(timerState.getExpiredTimersReusable(1500L).toSeq ===
+        Seq(("test_key", 1000L)))
+
+      timerState.deleteTimer(1000L)
+      // The refreshed iterator resumes at the prior 1500 ms threshold, so it does not revisit
+      // the backdated timer at 500 ms.
+      timerState.registerTimer(500L)
+      timerState.registerTimer(1500L)
+      timerState.registerTimer(2000L)
+
+      assert(timerState.getExpiredTimersReusable(2500L).toSeq ===
+        Seq(("test_key", 1500L), ("test_key", 2000L)))
+      assert(timerState.getExpiredTimers(2500L).toSeq ===
+        Seq(("test_key", 500L), ("test_key", 1500L), ("test_key", 2000L)))
+    }
+  }
+
   testWithTimeMode("multiple instances with single key") { timeMode =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)

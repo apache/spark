@@ -1,0 +1,21 @@
+================================================================================================
+RTM vs MBM Kafka transformWithState latency
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1161-aws-fips
+Intel(R) Xeon(R) 6975P-C
+
+Kafka-to-Kafka transformWithState e2e latency in milliseconds
+RTM trigger=RealTime(5m) MBM trigger=ProcessingTime(0ms)
+modeOrder=RTM,MBM observationWindow=1800s warmupFiltered=600s recordsPerSecond=1000
+master=local-cluster[3, 5, 2048] inputPartitions=5 shufflePartitions=5
+stateStore=RocksDB checkpointFormatVersion=2 changelogCheckpointing=true trackTotalNumberOfRows=false
+workload=ProcessingTime, one ValueState get/update per row, keys=50000, no registered timers or TTL; includes empty timer checks; samples are steady-state updates
+
+Mode   obsBatch   produced sourceRows   sinkRows    samples   tailMs         p0        p50        p90        p95        p99       p100
+--------------------------------------------------------------------------------------------------------------------------------------
+RTM           5    1799965    1799965    1799965    1199957        0       20.0      104.0      127.0      132.0      141.0      454.0
+MBM        6914    1799997    1799997    1799997    1199994        0      136.0      319.0      422.0      437.0      463.0      652.0
+
+MBM / RTM ratio over each mode's emitted samples (>1 means RTM has lower latency)
+ratio                                                                     6.80x      3.07x      3.32x      3.31x      3.28x      1.44x

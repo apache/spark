@@ -22,7 +22,6 @@ from collections import namedtuple
 
 from pyspark.java_gateway import launch_gateway
 
-
 ExpressionInfo = namedtuple(
     "ExpressionInfo", "className name usage arguments examples note since deprecated group")
 

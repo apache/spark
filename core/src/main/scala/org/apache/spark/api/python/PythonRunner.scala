@@ -29,6 +29,9 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Success, Try}
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.core.{JsonParser, JsonProcessingException}
+import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
+
 import org.apache.spark._
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.internal.{Logging, MessageWithContext}
@@ -87,6 +90,19 @@ private[spark] object PythonEvalType {
   val SQL_WINDOW_AGG_ARROW_UDF = 253
   val SQL_GROUPED_AGG_ARROW_ITER_UDF = 254
 
+  // Incremental (partial + final) Arrow aggregator. Unlike the whole-group grouped-agg UDFs
+  // above, these support true partial aggregation: the PARTIAL eval type folds input rows into a
+  // per-group buffer (via the aggregator's `reduce`) on the map side, and the FINAL eval type
+  // merges partial buffers across the shuffle (via `merge`) and produces the output (via `finish`).
+  // See PythonIncrementalAggregateExec and the Python `Aggregator` API.
+  val SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF = 255
+  val SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF = 256
+
+  // Window aggregation with an incremental Arrow aggregator. A window has no shuffle, so it needs
+  // neither the PARTIAL nor the FINAL eval type above: the operator sends each frame's rows to the
+  // worker, which folds them with `reduce` (from `zero`) and produces the value with `finish`.
+  val SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF = 257
+
   val SQL_TABLE_UDF = 300
   val SQL_ARROW_TABLE_UDF = 301
   val SQL_ARROW_UDTF = 302
@@ -130,6 +146,11 @@ private[spark] object PythonEvalType {
     case SQL_GROUPED_AGG_ARROW_UDF => "SQL_GROUPED_AGG_ARROW_UDF"
     case SQL_WINDOW_AGG_ARROW_UDF => "SQL_WINDOW_AGG_ARROW_UDF"
     case SQL_GROUPED_AGG_ARROW_ITER_UDF => "SQL_GROUPED_AGG_ARROW_ITER_UDF"
+    case SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF =>
+      "SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF"
+    case SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF =>
+      "SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF"
+    case SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF => "SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF"
   }
 
   // The eval types produced by ExtractPythonUDFFromLambda: a scalar UDF lifted out of a
@@ -190,6 +211,53 @@ private[spark] object BasePythonRunner extends Logging {
       }
       perWorkerMb
     }
+  }
+
+  // Values used to update the existing Python SQL metrics and task spill metrics.
+  private[python] case class WorkerMetrics(
+      bootTimestampMs: Long,
+      initTimestampMs: Long,
+      finishTimestampMs: Long,
+      pythonExecutionDurationMs: Long,
+      memoryBytesSpilled: Long,
+      diskBytesSpilled: Long)
+
+  private lazy val workerMetricsMapper = new ObjectMapper()
+    .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+    .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+
+  /** Read and validate worker metrics after METRICS_DATA; ignore additional fields. */
+  private[python] def readWorkerMetrics(stream: DataInputStream): WorkerMetrics = {
+    val length = stream.readInt()
+    if (length <= 0) {
+      throw new SparkException(s"Invalid Python worker report length: $length")
+    }
+    val json = PythonWorkerUtils.readUTF(length, stream)
+    val report = try {
+      workerMetricsMapper.readTree(json)
+    } catch {
+      case e: JsonProcessingException =>
+        throw new SparkException("Malformed Python worker report JSON", e)
+    }
+    if (report == null || !report.isObject) {
+      throw new SparkException("Expected a Python worker JSON object")
+    }
+
+    def metricValue(name: String): Long = {
+      val value = report.get(name)
+      if (value == null || !value.isIntegralNumber || !value.canConvertToLong) {
+        throw new SparkException(s"Missing or invalid Python worker metric: $name")
+      }
+      value.longValue()
+    }
+
+    WorkerMetrics(
+      metricValue("bootTimestampMs"),
+      metricValue("initTimestampMs"),
+      metricValue("finishTimestampMs"),
+      metricValue("pythonExecutionDurationMs"),
+      metricValue("memoryBytesSpilled"),
+      metricValue("diskBytesSpilled"))
   }
 
   /**
@@ -839,14 +907,17 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
      */
     protected def read(): OUT
 
-    protected def handleTimingData(): Unit = {
-      // Timing data from worker
-      val bootTime = stream.readLong()
-      val initTime = stream.readLong()
-      val finishTime = stream.readLong()
-      val processingTimeMs = stream.readLong()
-      val boot = bootTime - startTime
-      val init = initTime - bootTime
+    protected def handleMetricsData(): Unit = {
+      val workerMetrics = BasePythonRunner.readWorkerMetrics(stream)
+      val bootTime = workerMetrics.bootTimestampMs
+      val initTime = workerMetrics.initTimestampMs
+      val finishTime = workerMetrics.finishTimestampMs
+      val pythonExecutionDurationMs = workerMetrics.pythonExecutionDurationMs
+      // A reused Python worker records bootTime before waiting for this task, so it can precede
+      // startTime. Use the later timestamp to exclude the worker's idle time from initialization.
+      val pythonWorkerInitializationStartTime = math.max(startTime, bootTime)
+      val boot = pythonWorkerInitializationStartTime - startTime
+      val init = initTime - pythonWorkerInitializationStartTime
       val finish = finishTime - initTime
       val total = finishTime - startTime
 
@@ -867,11 +938,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       metrics.get("pythonBootTime").foreach(_.add(boot))
       metrics.get("pythonInitTime").foreach(_.add(init))
       metrics.get("pythonTotalTime").foreach(_.add(total))
-      metrics.get("pythonProcessingTime").foreach(_.add(processingTimeMs))
-      val memoryBytesSpilled = stream.readLong()
-      val diskBytesSpilled = stream.readLong()
-      context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
-      context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
+      metrics.get("pythonProcessingTime").foreach(_.add(pythonExecutionDurationMs))
+      context.taskMetrics().incMemoryBytesSpilled(workerMetrics.memoryBytesSpilled)
+      context.taskMetrics().incDiskBytesSpilled(workerMetrics.diskBytesSpilled)
     }
 
     protected def handlePythonException(): PythonException = {
@@ -1377,8 +1446,8 @@ private[spark] class PythonRunner(
               batchesProcessed += 1
               totalDataReceived += length
               data
-            case SpecialLengths.TIMING_DATA =>
-              handleTimingData()
+            case SpecialLengths.METRICS_DATA =>
+              handleMetricsData()
               read()
             case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
               throw handlePythonException()
@@ -1401,7 +1470,7 @@ class PythonWorkerException(msg: String, cause: Throwable)
 private[spark] object SpecialLengths {
   val END_OF_DATA_SECTION = -1
   val PYTHON_EXCEPTION_THROWN = -2
-  val TIMING_DATA = -3
+  val METRICS_DATA = -3
   val END_OF_STREAM = -4
   val NULL = -5
   val START_ARROW_STREAM = -6

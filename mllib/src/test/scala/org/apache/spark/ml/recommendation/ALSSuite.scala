@@ -995,8 +995,8 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val shuffledItemFactors = getShuffledDependencies(itemFactors.rdd).filter { dep =>
       dep.rdd.name != null && dep.rdd.name.contains("itemFactors")
     }
-    assert(shuffledUserFactors.size == 0)
-    assert(shuffledItemFactors.size == 0)
+    assert(shuffledUserFactors.isEmpty)
+    assert(shuffledItemFactors.isEmpty)
   }
 
   private def checkRecommendations(

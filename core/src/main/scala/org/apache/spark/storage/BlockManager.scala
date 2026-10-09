@@ -948,9 +948,9 @@ private[spark] class BlockManager(
       try {
         return migratableResolver.putShuffleBlockAsStream(blockId, serializerManager)
       } catch {
-        case _: ClassCastException =>
-          throw SparkCoreErrors.unexpectedShuffleBlockWithUnsupportedResolverError(
-            shuffleBlockResolver, blockId)
+        case e: ClassCastException =>
+          throw SparkCoreErrors.shuffleBlockMigrationNotSupportedError(
+            blockId, shuffleBlockResolver, e)
       }
     }
     logDebug(s"Putting regular block ${blockId}")
@@ -1128,7 +1128,7 @@ private[spark] class BlockManager(
     releaseLock(blockId)
     // Remove the missing block so that its unavailability is reported to the driver
     removeBlock(blockId)
-    throw SparkCoreErrors.readLockedBlockNotFoundError(blockId)
+    throw SparkCoreErrors.localBlockDataNotFoundError(blockId)
   }
 
   private def isIORelatedException(t: Throwable): Boolean =

@@ -953,6 +953,15 @@ abstract class JdbcDialect extends Serializable with Logging {
       rsmd: ResultSetMetaData,
       columnIdx: Int,
       metadata: MetadataBuilder): Unit = {}
+
+  /**
+   * Set extra column metadata for the given column on the write path.
+   *
+   * @param dt The Catalyst type of the column being written.
+   * @param metadata The metadata builder to store the extra column information.
+   */
+  @Since("4.4.0")
+  def updateExtraColumnMetaForWrite(dt: DataType, metadata: MetadataBuilder): Unit = {}
 }
 
 /**

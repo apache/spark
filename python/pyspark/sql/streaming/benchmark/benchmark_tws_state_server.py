@@ -15,29 +15,28 @@
 # limitations under the License.
 #
 
-import sys
 import os
+import sys
 
 # Required to run the script easily on PySpark's root directory on the Spark repo.
 sys.path.append(os.getcwd())
 
-import uuid
-import time
 import random
+import time
+import uuid
 from typing import List
 
-from pyspark.sql.types import (
-    StringType,
-    StructType,
-    StructField,
-)
+from pyspark.sql.streaming.benchmark.tws_utils import get_list_state, get_map_state, get_value_state
+from pyspark.sql.streaming.benchmark.utils import print_percentiles
 from pyspark.sql.streaming.stateful_processor_api_client import (
     ListTimerIterator,
     StatefulProcessorApiClient,
 )
-
-from pyspark.sql.streaming.benchmark.utils import print_percentiles
-from pyspark.sql.streaming.benchmark.tws_utils import get_list_state, get_map_state, get_value_state
+from pyspark.sql.types import (
+    StringType,
+    StructField,
+    StructType,
+)
 
 
 def benchmark_value_state(api_client: StatefulProcessorApiClient, params: List[str]) -> None:

@@ -25,13 +25,13 @@
 """
 
 import sys
-from typing import Any, Dict, List, NoReturn, cast
 from functools import cached_property
+from typing import Any, Dict, List, NoReturn, cast
 
 import numpy as np
 
-from pyspark.sql.types import Row, StructType, _create_row, _parse_datatype_json_string
 from pyspark.sql import SparkSession
+from pyspark.sql.types import Row, StructType, _create_row, _parse_datatype_json_string
 
 __all__ = ["ImageSchema"]
 
@@ -231,6 +231,7 @@ _ImageSchema.__init__ = _disallow_instance  # type: ignore[assignment]
 
 def _test() -> None:
     import doctest
+
     import pyspark.ml.image
 
     globs = pyspark.ml.image.__dict__.copy()

@@ -15,24 +15,24 @@
 # limitations under the License.
 #
 
+import inspect
 import unittest
 from collections import defaultdict
-import inspect
 from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
-from pyspark.ml.linalg import SparseVector
 
 from pyspark import pandas as ps
 from pyspark.loose_version import LooseVersion
-from pyspark.testing.pandasutils import (
-    PandasOnSparkTestCase,
-    SPARK_CONF_ARROW_ENABLED,
-)
+from pyspark.ml.linalg import SparseVector
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.series import MissingPandasLikeSeries
 from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
+from pyspark.testing.pandasutils import (
+    SPARK_CONF_ARROW_ENABLED,
+    PandasOnSparkTestCase,
+)
 
 
 class SeriesTestsMixin:

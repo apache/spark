@@ -622,34 +622,29 @@ class CliSuite extends SparkFunSuite {
   }
 
   test("SPARK-37471: spark-sql support nested bracketed comment ") {
-    // `/* outer /* inner */ outer */` is a truly-nested bracketed comment: the
-    // inner `/* ... */` opens and closes an extra nesting level, and the outer
-    // comment closes only at the final `*/`. The whole comment is skipped and
-    // the following `SELECT 'nested-comment'` executes. (Note `/*+` is a hint
-    // marker, not a nested comment opener, so nesting must use `/*`.)
+    // Both ordinary and hint-shaped nested comments close before the outer comment.
     runCliWithin(1.minute)(
       """
         |/* outer /* inner */ outer */
         |SELECT 'nested-comment';
-        |""".stripMargin -> "nested-comment"
+        |""".stripMargin -> "nested-comment",
+      """
+        |/* outer /*+ inner */ outer */
+        |SELECT 'nested-hint-comment';
+        |""".stripMargin -> "nested-hint-comment"
     )
   }
 
   testRetry("SPARK-37555: spark-sql should pass last unclosed comment to backend") {
+    val unclosedCommentError =
+      "Found an unclosed bracketed comment. Please, append */ at the end of the comment."
     runCliWithin(1.minute)(
-      // A fully closed bracketed comment. `/*+` inside it is a hint marker,
-      // not a nested comment opener, so the comment closes at the first `*/`;
-      // the comment is skipped and the trailing `SELECT 1` executes.
-      "/* SELECT /*+ HINT() 4; */ SELECT 1;".stripMargin -> "1",
-      // Genuinely unclosed comment with a query inside it. The splitter
-      // detects the un-terminated bracketed comment and flushes the partial
-      // input to the backend so the parser reports the error rather than the
-      // CLI buffering forever.
-      "/* Here is a unclosed bracketed comment SELECT 1;"->
-        "Found an unclosed bracketed comment. Please, append */ at the end of the comment.",
-      // Whole comment with `/*+` hint marker inside, followed by trailing
-      // tokens that are not a valid statement -- backend reports the error.
-      "/* SELECT /*+ HINT() */ 4; */;".stripMargin -> ""
+      // SPARK-59536: the inner terminator leaves the outer comment open.
+      "/* SELECT /*+ HINT() 4; */ SELECT 1;" -> unclosedCommentError,
+      // The splitter flushes unclosed comments to the backend for error reporting.
+      "/* Here is a unclosed bracketed comment SELECT 1;" -> unclosedCommentError,
+      // Both comment levels close before the following query executes.
+      "/* SELECT /*+ HINT() */ 4; */; SELECT 'after-comment';" -> "after-comment"
     )
   }
 

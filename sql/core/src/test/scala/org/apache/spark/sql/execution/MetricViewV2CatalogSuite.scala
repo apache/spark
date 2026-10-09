@@ -184,7 +184,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
 
       // SQL configs and current catalog/namespace are first-class typed fields on View, no
       // longer encoded into properties for V2 catalogs.
-      assert(info.sqlConfigs().size > 0,
+      assert(!info.sqlConfigs().isEmpty,
         s"Expected at least one captured SQL config; got ${info.sqlConfigs()}")
       assert(info.currentCatalog() ===
         spark.sessionState.catalogManager.currentCatalog.name())

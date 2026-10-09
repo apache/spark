@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
 
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
@@ -44,6 +44,8 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
   assert(Utils.isTesting, s"${IS_TESTING.key} is not set to true")
 
   protected def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression]
+
+  protected def implicitTypeCastsRule: TypeCoercionRule
 
   protected def dateTimeOperationsRule: TypeCoercionRule
 
@@ -218,6 +220,58 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     shouldNotCast(checkedType, IntegralType)
   }
 
+  test("time_bucket implicitly casts date and string timestamp arguments") {
+    val bucketSize = Literal(Duration.ofMinutes(15))
+    val date = Literal(0, DateType)
+    val string = Literal("2024-01-01 00:00:00")
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = TimeBucket(bucketSize = bucketSize, ts = date, originTs = string),
+      transformed = TimeBucket(
+        bucketSize = bucketSize,
+        ts = Cast(date, TimestampType),
+        originTs = Cast(string, TimestampType)))
+  }
+
+  test("time_bucket does not implicitly cast time arguments to timestamp") {
+    val bucketSize = Literal(Duration.ofMinutes(15))
+    val time = Literal(LocalTime.of(10, 23, 0))
+    val timeBucket = TimeBucket(bucketSize = bucketSize, ts = time, originTs = time)
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = timeBucket,
+      transformed = timeBucket)
+  }
+
+  test("time_bucket does not implicitly cast string bucket size") {
+    val bucketSize = Literal("0 00:15:00")
+    val timestamp = Literal(Timestamp.valueOf("2024-01-01 00:00:00"))
+    val timeBucket = TimeBucket(
+      bucketSize = bucketSize,
+      ts = timestamp,
+      originTs = timestamp)
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = timeBucket,
+      transformed = timeBucket)
+  }
+
+  test("time_bucket implicitly casts null bucket size to day-time interval") {
+    val bucketSize = Literal(null)
+    val timestamp = Literal(Timestamp.valueOf("2024-01-01 00:00:00"))
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = TimeBucket(bucketSize = bucketSize, ts = timestamp, originTs = timestamp),
+      transformed = TimeBucket(
+        bucketSize = Cast(bucketSize, DayTimeIntervalType()),
+        ts = timestamp,
+        originTs = timestamp))
+  }
+
   test("SPARK-56152: implicit type cast - TimeType") {
     val checkedType = TimeType()
     checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
@@ -354,6 +408,22 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))),
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))))
     }
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(2))
+      val collatedChar = Literal.create("ab", CharType(2, "UTF8_LCASE"))
+      val collatedString = StringType("UTF8_LCASE")
+      Seq(TypeCoercion.ConcatCoercion, AnsiTypeCoercion.ConcatCoercion).foreach { r =>
+        ruleTest(r,
+          Concat(Seq(charLit, charLit)),
+          Concat(Seq(Cast(charLit, StringType), Cast(charLit, StringType))))
+        ruleTest(r,
+          Concat(Seq(collatedChar, collatedChar)),
+          Concat(Seq(
+            Cast(collatedChar, collatedString),
+            Cast(collatedChar, collatedString))))
+      }
+    }
   }
 
   test("type coercion for Elt") {
@@ -407,6 +477,23 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
       ruleTest(rule,
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))),
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))))
+    }
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(5))
+      val collatedChar = Literal.create("ab", CharType(5, "UTF8_LCASE"))
+      val collatedString = StringType("UTF8_LCASE")
+      Seq(TypeCoercion.EltCoercion, AnsiTypeCoercion.EltCoercion).foreach { r =>
+        ruleTest(r,
+          Elt(Seq(Literal(1), charLit, charLit)),
+          Elt(Seq(Literal(1), Cast(charLit, StringType), Cast(charLit, StringType))))
+        ruleTest(r,
+          Elt(Seq(Literal(1), collatedChar, collatedChar)),
+          Elt(Seq(
+            Literal(1),
+            Cast(collatedChar, collatedString),
+            Cast(collatedChar, collatedString))))
+      }
     }
   }
 
@@ -566,6 +653,9 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
   // scalastyle:on line.size.limit
   override def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] =
     TypeCoercion.implicitCast(e, expectedType)
+
+  override protected def implicitTypeCastsRule: TypeCoercionRule =
+    TypeCoercion.ImplicitTypeCasts
 
   override def dateTimeOperationsRule: TypeCoercionRule = TypeCoercion.DateTimeOperations
 
@@ -1083,6 +1173,34 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     ruleTest(TypeCoercion.ImplicitTypeCasts,
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
       NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(2))
+      ruleTest(TypeCoercion.ImplicitTypeCasts,
+        Upper(charLit),
+        Upper(Cast(charLit, StringType)))
+    }
+  }
+
+  test("coerce JsonTuple children without the NullType rewrite") {
+    val json = Literal("""{"a":1}""")
+    val nullField = Literal.create(null, NullType)
+    val intField = Literal(1)
+
+    // JsonTuple keeps its own NON_STRING_TYPE check, so these stay for checkInputDataTypes.
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
+      JsonTuple(Seq(json, nullField)),
+      JsonTuple(Seq(json, nullField)))
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
+      JsonTuple(Seq(json, intField)),
+      JsonTuple(Seq(json, intField)))
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(2))
+      ruleTest(TypeCoercion.ImplicitTypeCasts,
+        JsonTuple(Seq(charLit, charLit)),
+        JsonTuple(Seq(Cast(charLit, StringType), Cast(charLit, StringType))))
+    }
   }
 
   test("cast NullType for binary operators") {
@@ -1686,10 +1804,10 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
       In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1))),
       In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1)))
     )
+    // Only the children that are not already of the common type are cast.
     ruleTest(inConversion,
       In(Literal("a"), Seq(Literal(1), Literal("b"))),
-      In(Cast(Literal("a"), StringType),
-        Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
+      In(Literal("a"), Seq(Cast(Literal(1), StringType), Literal("b")))
     )
   }
 

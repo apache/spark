@@ -20,6 +20,7 @@ import tempfile
 from pyspark.ml.classification import LogisticRegression, LogisticRegressionModel
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.linalg import Vectors
+from pyspark.ml.tests.tuning.test_tuning import ValidatorTestUtilsMixin
 from pyspark.ml.tuning import (
     CrossValidator,
     CrossValidatorModel,
@@ -31,7 +32,6 @@ from pyspark.testing.mlutils import (
     DummyLogisticRegressionModel,
     SparkSessionTestCase,
 )
-from pyspark.ml.tests.tuning.test_tuning import ValidatorTestUtilsMixin
 
 
 class CrossValidatorIOBasicTests(SparkSessionTestCase, ValidatorTestUtilsMixin):

@@ -15,27 +15,9 @@
 # limitations under the License.
 #
 from abc import ABC, abstractmethod
-from typing import Dict
-from typing import Any, Optional, Union, List, overload, Tuple, cast, Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union, cast, overload
 
-from pyspark.sql.connect.plan import (
-    Read,
-    RelationChanges,
-    DataSource,
-    LogicalPlan,
-    WriteOperation,
-    WriteOperationV2,
-    Parse,
-)
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.types import StructType
-from pyspark.sql.utils import to_str
-from pyspark.sql.readwriter import (
-    DataFrameWriter as PySparkDataFrameWriter,
-    DataFrameReader as PySparkDataFrameReader,
-    DataFrameWriterV2 as PySparkDataFrameWriterV2,
-)
 from pyspark.errors import (
     AnalysisException,
     PySparkAttributeError,
@@ -43,10 +25,30 @@ from pyspark.errors import (
     PySparkValueError,
 )
 from pyspark.sql.connect.functions import builtin as F
+from pyspark.sql.connect.plan import (
+    DataSource,
+    LogicalPlan,
+    Parse,
+    Read,
+    RelationChanges,
+    WriteOperation,
+    WriteOperationV2,
+)
+from pyspark.sql.readwriter import (
+    DataFrameReader as PySparkDataFrameReader,
+)
+from pyspark.sql.readwriter import (
+    DataFrameWriter as PySparkDataFrameWriter,
+)
+from pyspark.sql.readwriter import (
+    DataFrameWriterV2 as PySparkDataFrameWriterV2,
+)
+from pyspark.sql.types import StructType
+from pyspark.sql.utils import to_str
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect._typing import ColumnOrName, OptionalPrimitiveType
+    from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.metrics import ExecutionInfo
 
@@ -109,6 +111,11 @@ class DataFrameReader(OptionUtils):
     schema.__doc__ = PySparkDataFrameReader.schema.__doc__
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameReader":
+        # Remove case-insensitive matches so the latest spelling and value win.
+        normalized_key = key.lower()
+        for existing_key in list(self._options):
+            if existing_key.lower() == normalized_key:
+                del self._options[existing_key]
         self._options[key] = cast(str, to_str(value))
         return self
 
@@ -1076,11 +1083,12 @@ class DataFrameWriterV2(OptionUtils):
 
 
 def _test() -> None:
-    import sys
-    import os
     import doctest
-    from pyspark.sql import SparkSession as PySparkSession
+    import os
+    import sys
+
     import pyspark.sql.connect.readwriter
+    from pyspark.sql import SparkSession as PySparkSession
 
     globs = pyspark.sql.connect.readwriter.__dict__.copy()
 

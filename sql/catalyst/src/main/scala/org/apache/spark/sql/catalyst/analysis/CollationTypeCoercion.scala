@@ -25,7 +25,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Proj
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, IndeterminateStringType, MapType, NullType, StringType, StructType}
+import org.apache.spark.sql.types.{
+  ArrayType, DataType, IndeterminateStringType, MapType, NullType, StringHelper,
+  StringType, StructType
+}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -107,6 +110,11 @@ object CollationTypeCoercion extends SQLConfHelper {
 
   /**
    * Changes the data type of the expression to the given `newType`.
+   *
+   * Literal and Cast: wrap in a new Cast when the CHAR/VARCHAR constraint
+   * changes so truncation, overflow, and padding stay on the original node.
+   * Collation-only changes retarget with `copy(dataType)`, which keeps a
+   * non-string Cast child non-string and therefore Default strength.
    */
   private def changeType(expr: Expression, newType: DataType): Expression = {
     mergeTypes(expr.dataType, newType) match {
@@ -114,8 +122,13 @@ object CollationTypeCoercion extends SQLConfHelper {
         assert(!newDataType.existsRecursively(_.isInstanceOf[StringTypeWithContext]))
 
         expr match {
+          case lit: Literal if stringConstraintChanged(lit.dataType, newDataType) =>
+            Cast(lit, newDataType, timeZoneId = Some(conf.sessionLocalTimeZone))
           case lit: Literal => lit.copy(dataType = newDataType)
-          case cast: Cast => cast.copy(dataType = newDataType)
+          case cast: Cast if stringConstraintChanged(cast.dataType, newDataType) =>
+            Cast(cast, newDataType, timeZoneId = Some(conf.sessionLocalTimeZone))
+          case cast: Cast =>
+            cast.copy(dataType = newDataType)
           case subquery: SubqueryExpression =>
             changeTypeInSubquery(subquery, newType)
 
@@ -124,6 +137,24 @@ object CollationTypeCoercion extends SQLConfHelper {
 
       case _ =>
         expr
+    }
+  }
+
+  /**
+   * True when CHAR/VARCHAR length (or nested length) differs between `from` and `to`.
+   * Collation-only differences are not a constraint change.
+   */
+  private def stringConstraintChanged(from: DataType, to: DataType): Boolean = {
+    (from, to) match {
+      case (f: StringType, t: StringType) => f.constraint != t.constraint
+      case (ArrayType(fe, _), ArrayType(te, _)) => stringConstraintChanged(fe, te)
+      case (MapType(fk, fv, _), MapType(tk, tv, _)) =>
+        stringConstraintChanged(fk, tk) || stringConstraintChanged(fv, tv)
+      case (fs: StructType, ts: StructType) if fs.length == ts.length =>
+        fs.fields.indices.exists { i =>
+          stringConstraintChanged(fs.fields(i).dataType, ts.fields(i).dataType)
+        }
+      case _ => false
     }
   }
 
@@ -414,7 +445,17 @@ object CollationTypeCoercion extends SQLConfHelper {
     }
   }
 
-  /** Determines the winning StringTypeWithContext based on the strength of the collation. */
+  /**
+   * Resolves collation strength independently of CHAR/VARCHAR length.
+   *
+   * Runs whenever first-class CHAR/VARCHAR are enabled (`standardSemantics` or
+   * `preserveCharVarcharTypeInfo`).
+   *
+   * Same collation: string-family LCT `max(n, m)` with the stronger strength.
+   * Different collations, equal strength: mismatch (error if Explicit, else
+   * indeterminate). Different collations, unequal strength: the stronger
+   * operand wins in full, including its length.
+   */
   private def getWinningStringType(
       left: StringTypeWithContext,
       right: StringTypeWithContext): StringTypeWithContext = {
@@ -427,14 +468,13 @@ object CollationTypeCoercion extends SQLConfHelper {
       }
     }
 
-    (left.strength.priority, right.strength.priority) match {
-      case (leftPriority, rightPriority) if leftPriority == rightPriority =>
-        if (left.sameType(right)) left
-        else handleMismatch()
+    val winner =
+      if (left.strength.priority <= right.strength.priority) left else right
 
-      case (leftPriority, rightPriority) =>
-        if (leftPriority < rightPriority) left
-        else right
+    StringHelper.tightestCommonString(left.stringType, right.stringType) match {
+      case Some(lct) => StringTypeWithContext(lct, winner.strength)
+      case None if left.strength.priority == right.strength.priority => handleMismatch()
+      case None => winner
     }
   }
 

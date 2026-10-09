@@ -18,10 +18,13 @@
 import os
 import unittest
 
-from pyspark.util import is_remote_only
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.connectutils import (
+    ReusedConnectTestCase,
+    connect_requirement_message,
+    should_test_connect,
+)
 from pyspark.testing.utils import have_torch, torch_requirement_message
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.util import is_remote_only
 
 if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_pipeline import PipelineTestsMixin

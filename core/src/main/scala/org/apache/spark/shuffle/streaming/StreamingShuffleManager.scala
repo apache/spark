@@ -74,6 +74,20 @@ object StreamingShuffleManager extends Logging {
       errorClass = "STREAMING_SHUFFLE_UNEXPECTED_MESSAGE_TYPE",
       messageParameters = Map("messageType" -> messageType.toString))
   }
+
+  def streamingShuffleWriterConnectionTimeout(
+      shuffleId: Int,
+      writerId: Int,
+      readerId: Int,
+      timeoutMs: Long): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT",
+      messageParameters = Map(
+        "shuffleId" -> shuffleId.toString,
+        "writerId" -> writerId.toString,
+        "readerId" -> readerId.toString,
+        "timeoutMs" -> timeoutMs.toString))
+  }
 }
 
 private[spark] class StreamingShuffleManager extends PipelinedShuffleManager with Logging {

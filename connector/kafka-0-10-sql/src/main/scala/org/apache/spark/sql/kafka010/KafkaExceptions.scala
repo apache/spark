@@ -166,6 +166,16 @@ object KafkaExceptions {
         "assignedPartitions" -> assignedPartitions.toString))
   }
 
+  def topicOffsetDoesNotMatchAssigned(
+      specifiedTopics: Set[String],
+      assignedTopics: Set[String]): KafkaIllegalStateException = {
+    new KafkaIllegalStateException(
+      errorClass = "KAFKA_TOPIC_OFFSET_DOES_NOT_MATCH_ASSIGNED",
+      messageParameters = Map(
+        "specifiedTopics" -> specifiedTopics.toString,
+        "assignedTopics" -> assignedTopics.toString))
+  }
+
   def timestampOffsetDoesNotMatchAssigned(
       isStartingOffsets: Boolean,
       specifiedPartitions: Set[TopicPartition],
@@ -252,6 +262,14 @@ object KafkaExceptions {
         "endOffset" -> endOffset.toString,
         "topic" -> topicPartition.topic,
         "partition" -> topicPartition.partition.toString))
+  }
+
+  def disallowedOption(option: String, config: String): KafkaIllegalArgumentException = {
+    new KafkaIllegalArgumentException(
+      errorClass = "KAFKA_DISALLOWED_OPTION",
+      messageParameters = Map(
+        "option" -> option,
+        "config" -> config))
   }
 }
 

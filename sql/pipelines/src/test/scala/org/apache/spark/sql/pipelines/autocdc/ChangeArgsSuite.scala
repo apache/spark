@@ -418,6 +418,60 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
     assert(args.trackHistorySelection.isEmpty)
   }
 
+  test("ChangeArgs rejects an empty ignoreNullSelection include list") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        ChangeArgs(
+          keys = Seq(UnqualifiedColumnName("id")),
+          sequencing = F.col("seq"),
+          storedAsScdType = ScdType.Type2,
+          ignoreNullSelection = Some(
+            ColumnSelection.IncludeColumns(Seq.empty)
+          )
+        )
+      },
+      condition = "AUTOCDC_IGNORE_NULL_EMPTY_COLUMN_LIST",
+      sqlState = "22023",
+      parameters = Map.empty
+    )
+  }
+
+  test("ChangeArgs allows non-empty ignoreNullSelection include list") {
+    val args = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type2,
+      ignoreNullSelection = Some(
+        ColumnSelection.IncludeColumns(
+          Seq(UnqualifiedColumnName("Name"))
+        )
+      )
+    )
+    assert(args.ignoreNullSelection.isDefined)
+  }
+
+  test("ChangeArgs allows empty ignoreNullSelection exclude list") {
+    // An empty exclude list means "every eligible column", which is valid.
+    val args = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type2,
+      ignoreNullSelection = Some(
+        ColumnSelection.ExcludeColumns(Seq.empty)
+      )
+    )
+    assert(args.ignoreNullSelection.isDefined)
+  }
+
+  test("ChangeArgs allows None ignoreNullSelection") {
+    val args = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type2
+    )
+    assert(args.ignoreNullSelection.isEmpty)
+  }
+
   test("UnqualifiedColumnName lets a ParseException from the SQL parser propagate") {
     checkError(
       exception = intercept[ParseException] {

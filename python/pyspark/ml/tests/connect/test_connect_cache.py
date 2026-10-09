@@ -17,8 +17,8 @@
 
 import json
 
-from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import LinearSVC
+from pyspark.ml.linalg import Vectors
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 

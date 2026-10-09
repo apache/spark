@@ -35,8 +35,8 @@ Normal Functions
     call_function
     col
     column
-    lit
     expr
+    lit
 
 
 Conditional Functions
@@ -299,12 +299,6 @@ Date and Timestamp Functions
     quarter
     second
     session_window
-    timestamp_add
-    timestamp_diff
-    timestamp_micros
-    timestamp_millis
-    timestamp_nanos
-    timestamp_seconds
     time_bucket
     time_diff
     time_from_micros
@@ -314,6 +308,12 @@ Date and Timestamp Functions
     time_to_millis
     time_to_seconds
     time_trunc
+    timestamp_add
+    timestamp_diff
+    timestamp_micros
+    timestamp_millis
+    timestamp_nanos
+    timestamp_seconds
     to_date
     to_time
     to_timestamp
@@ -326,9 +326,9 @@ Date and Timestamp Functions
     try_make_timestamp
     try_make_timestamp_ltz
     try_make_timestamp_ntz
+    try_to_date
     try_to_time
     try_to_timestamp
-    try_to_date
     unix_date
     unix_micros
     unix_millis
@@ -363,23 +363,30 @@ Collection Functions
 .. autosummary::
     :toctree: api/
 
-    aggregate
-    array_sort
     cardinality
     concat
     element_at
+    reverse
+    size
+    try_element_at
+
+
+Lambda Functions
+----------------
+.. autosummary::
+    :toctree: api/
+
+    aggregate
+    array_sort
     exists
     filter
     forall
     map_filter
     map_zip_with
     reduce
-    reverse
-    size
     transform
     transform_keys
     transform_values
-    try_element_at
     zip_with
 
 
@@ -413,6 +420,7 @@ Array Functions
     shuffle
     slice
     sort_array
+    trim_array
 
 
 Struct Functions
@@ -453,12 +461,15 @@ Aggregate Functions
     bit_and
     bit_or
     bit_xor
+    bitmap_and_agg
     bitmap_construct_agg
     bitmap_or_agg
+    bitmap_xor_agg
     bool_and
     bool_or
     collect_list
     collect_set
+    collect_union
     corr
     count
     count_distinct
@@ -474,12 +485,12 @@ Aggregate Functions
     histogram_numeric
     hll_sketch_agg
     hll_union_agg
+    kll_merge_agg_bigint
+    kll_merge_agg_double
+    kll_merge_agg_float
     kll_sketch_agg_bigint
     kll_sketch_agg_double
     kll_sketch_agg_float
-    kll_merge_agg_bigint
-    kll_merge_agg_float
-    kll_merge_agg_double
     kurtosis
     last
     last_value
@@ -517,14 +528,14 @@ Aggregate Functions
     theta_intersection_agg
     theta_sketch_agg
     theta_union_agg
+    try_avg
+    try_sum
     tuple_intersection_agg_double
     tuple_intersection_agg_integer
     tuple_sketch_agg_double
     tuple_sketch_agg_integer
     tuple_union_agg_double
     tuple_union_agg_integer
-    try_avg
-    try_sum
     var_pop
     var_samp
     variance
@@ -566,11 +577,11 @@ Partition Transformation Functions
 .. autosummary::
     :toctree: api/
 
-    partitioning.years
-    partitioning.months
+    partitioning.bucket
     partitioning.days
     partitioning.hours
-    partitioning.bucket
+    partitioning.months
+    partitioning.years
 
 
 CSV Functions
@@ -608,20 +619,21 @@ VARIANT Functions
     parse_json
     schema_of_variant
     schema_of_variant_agg
-    try_variant_get
-    variant_array_append
+    to_variant_object
+    try_parse_json
     try_variant_array_append
+    try_variant_get
+    try_variant_insert
+    try_variant_set
+    variant_array_append
     variant_delete
     variant_from_arrays
     variant_from_entries
-    variant_strip_nulls
     variant_get
     variant_insert
-    try_variant_insert
+    variant_pick
     variant_set
-    try_variant_set
-    try_parse_json
-    to_variant_object
+    variant_strip_nulls
 
 
 XML Functions
@@ -650,9 +662,9 @@ URL Functions
 
     parse_url
     try_parse_url
+    try_url_decode
     url_decode
     url_encode
-    try_url_decode
 
 
 Misc Functions
@@ -663,9 +675,13 @@ Misc Functions
     aes_decrypt
     aes_encrypt
     assert_true
+    bitmap_and
+    bitmap_andnot
     bitmap_bit_position
     bitmap_bucket_number
     bitmap_count
+    bitmap_or
+    bitmap_xor
     current_catalog
     current_database
     current_path
@@ -751,12 +767,12 @@ Vector Functions
 .. autosummary::
     :toctree: api/
 
+    vector_avg
     vector_cosine_similarity
     vector_inner_product
     vector_l2_distance
     vector_norm
     vector_normalize
-    vector_avg
     vector_sum
 
 
@@ -769,9 +785,11 @@ UDF, UDTF and UDT
     arrow_udtf
     call_udf
     pandas_udf
+    udaf
     udf
     udtf
     unwrap_udt
+    wrap_udt
 
 
 Table-Valued Functions

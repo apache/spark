@@ -17,14 +17,14 @@
 
 import string
 import typing
-from typing import Any, Optional, List, Tuple, Sequence, Mapping
 import uuid
+from typing import Any, List, Mapping, Optional, Sequence, Tuple
 
 from pyspark.errors import PySparkValueError
 
 if typing.TYPE_CHECKING:
-    from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql.connect.session import SparkSession
 
 
 class SQLStringFormatter(string.Formatter):
@@ -46,8 +46,8 @@ class SQLStringFormatter(string.Formatter):
         """
         Converts the given value into a SQL string.
         """
-        from pyspark.sql.connect.dataframe import DataFrame
         from pyspark.sql.connect.column import Column
+        from pyspark.sql.connect.dataframe import DataFrame
         from pyspark.sql.connect.expressions import ColumnReference
         from pyspark.sql.utils import get_lit_sql_str
 

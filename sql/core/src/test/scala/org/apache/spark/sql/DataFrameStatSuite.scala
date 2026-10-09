@@ -264,7 +264,7 @@ class DataFrameStatSuite extends SharedSparkSession {
 
     val q1 = 0.5
     val q2 = 0.8
-    val epsilons = List(2.0, 5.0, 100.0)
+    val epsilons = List(2.0, 5.0, 100.0, Double.PositiveInfinity)
 
     val Array(single1_1) = df.stat.approxQuantile("singles", Array(q1), 1.0)
     val Array(s1_1, s2_1) = df.stat.approxQuantile("singles", Array(q1, q2), 1.0)

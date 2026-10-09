@@ -20,34 +20,17 @@ An internal immutable DataFrame with some metadata to manage indexes.
 """
 
 import re
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype, is_integer_dtype  # noqa: F401
 
-from pyspark._globals import _NoValue, _NoValueType
-from pyspark.sql import (
-    functions as F,
-    Column as PySparkColumn,
-    DataFrame as PySparkDataFrame,
-    Window,
-)
-from pyspark.sql.types import (  # noqa: F401
-    _drop_metadata,
-    BooleanType,
-    DataType,
-    LongType,
-    StructField,
-    StructType,
-    StringType,
-)
-from pyspark.sql.utils import is_timestamp_ntz_preferred, is_remote
 from pyspark import pandas as ps
-from pyspark.sql.internal import InternalFunction as SF
+from pyspark._globals import _NoValue, _NoValueType
 from pyspark.pandas._typing import Label
-from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.data_type_ops.base import DataTypeOps
+from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.typedef import (
     Dtype,
     as_spark_type,
@@ -65,6 +48,29 @@ from pyspark.pandas.utils import (
     scol_for,
     spark_column_equals,
 )
+from pyspark.sql import (
+    Column as PySparkColumn,
+)
+from pyspark.sql import (
+    DataFrame as PySparkDataFrame,
+)
+from pyspark.sql import (
+    Window,
+)
+from pyspark.sql import (
+    functions as F,
+)
+from pyspark.sql.internal import InternalFunction as SF
+from pyspark.sql.types import (  # noqa: F401
+    BooleanType,
+    DataType,
+    LongType,
+    StringType,
+    StructField,
+    StructType,
+    _drop_metadata,
+)
+from pyspark.sql.utils import is_remote, is_timestamp_ntz_preferred
 
 if TYPE_CHECKING:
     from pyspark.pandas.series import Series
@@ -1630,11 +1636,12 @@ class InternalFrame:
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.internal
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

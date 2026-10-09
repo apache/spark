@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.Utils.createArray
 
@@ -946,6 +947,28 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59740: ORC round-trips a NULL nanosecond timestamp") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { precision =>
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            val schema = new StructType().add("ts", nanosType)
+            val inputDf = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(null))), schema)
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              inputDf.write.mode("overwrite").orc(path)
+              Seq(true, false).foreach { vectorized =>
+                withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+                  checkAnswer(spark.read.schema(schema).orc(path), Row(null))
+                }
+              }
+            }
+        }
+      }
+    }
+  }
+
   test("SPARK-57455: nanos timestamps survive a time-zone change across ORC write/read") {
     // The NTZ wall clock stays zone-independent and the LTZ instant is preserved even when the
     // writer's and reader's JVM default time zones differ: NTZ goes through an ORC TIMESTAMP
@@ -1266,6 +1289,7 @@ class OrcV1QuerySuite extends OrcQuerySuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 }
 
+@ExtendedSQLTest
 class OrcV2QuerySuite extends OrcQuerySuite {
   override protected def sparkConf: SparkConf =
     super

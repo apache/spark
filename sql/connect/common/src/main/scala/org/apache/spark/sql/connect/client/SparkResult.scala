@@ -101,7 +101,7 @@ private[sql] class SparkResult[T](
       case UnboundRowEncoder =>
         // Replace the row encoder with the encoder inferred from the schema.
         RowEncoder
-          .encoderFor(dataType.asInstanceOf[StructType])
+          .encoderForResultSchema(dataType.asInstanceOf[StructType])
           .asInstanceOf[AgnosticEncoder[E]]
       case ProductEncoder(clsTag, fields, outer) if ProductEncoder.isTuple(clsTag) =>
         // Recursively continue updating the tuple product encoder

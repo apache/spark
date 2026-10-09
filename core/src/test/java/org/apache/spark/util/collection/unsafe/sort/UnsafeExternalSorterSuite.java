@@ -612,6 +612,101 @@ public class UnsafeExternalSorterSuite {
   }
 
 
+  @Test
+  public void testGetNumRecordsCountsUnspilledRecords() throws Exception {
+    // The merged iterator must count every record it will produce, including the ones still held
+    // in memory, which reach the merger as a SpillableIterator.
+    final UnsafeExternalSorter sorter = newSorter();
+    try {
+      for (int i = 0; i < 5; i++) {
+        insertNumber(sorter, i);
+      }
+      sorter.spill();
+      for (int i = 5; i < 10; i++) {
+        insertNumber(sorter, i);
+      }
+      sorter.spill();
+      for (int i = 10; i < 15; i++) {
+        insertNumber(sorter, i);
+      }
+      // Pin the branch under test: two spills plus records left in memory, so getSortedIterator()
+      // merges spill readers with a SpillableIterator rather than taking a single-source path.
+      assertEquals(2, spillFilesCreated.size());
+
+      UnsafeSorterIterator iter = sorter.getSortedIterator();
+      assertEquals(15, iter.getNumRecords());
+
+      int consumed = 0;
+      while (iter.hasNext()) {
+        iter.loadNext();
+        consumed++;
+      }
+      assertEquals(15, consumed);
+    } finally {
+      sorter.cleanupResources();
+    }
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testGetNumRecordsIsATotalNotARemainingCount() throws Exception {
+    // getNumRecords() is a fixed total for every UnsafeSorterIterator, so it must not change as
+    // the iterator is consumed. This pins the no-spill branch of getSortedIterator(), which
+    // returns a SpillableIterator directly, against the merged branch above.
+    final UnsafeExternalSorter sorter = newSorter();
+    try {
+      for (int i = 0; i < 15; i++) {
+        insertNumber(sorter, i);
+      }
+      assertEquals(0, spillFilesCreated.size());
+
+      UnsafeSorterIterator iter = sorter.getSortedIterator();
+      assertEquals(15, iter.getNumRecords());
+
+      int consumed = 0;
+      while (iter.hasNext()) {
+        iter.loadNext();
+        consumed++;
+      }
+      assertEquals(15, consumed);
+      assertEquals(15, iter.getNumRecords(), "getNumRecords() must not count down");
+    } finally {
+      sorter.cleanupResources();
+    }
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testGetNumRecordsWithoutUnspilledRecords() throws Exception {
+    // The all-spilled case has always been counted correctly; this pins it so the changes above
+    // cannot regress it.
+    final UnsafeExternalSorter sorter = newSorter();
+    try {
+      for (int i = 0; i < 5; i++) {
+        insertNumber(sorter, i);
+      }
+      sorter.spill();
+      for (int i = 5; i < 10; i++) {
+        insertNumber(sorter, i);
+      }
+      sorter.spill();
+      assertEquals(2, spillFilesCreated.size());
+
+      UnsafeSorterIterator iter = sorter.getSortedIterator();
+      assertEquals(10, iter.getNumRecords());
+
+      int consumed = 0;
+      while (iter.hasNext()) {
+        iter.loadNext();
+        consumed++;
+      }
+      assertEquals(10, consumed);
+    } finally {
+      sorter.cleanupResources();
+    }
+    assertSpillFilesWereCleanedUp();
+  }
+
   private void verifyIntIterator(UnsafeSorterIterator iter, int start, int end)
       throws IOException {
     for (int i = start; i < end; i++) {

@@ -17,9 +17,8 @@
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Literal, Optional
 
-from pyspark.sql import DataFrame
-from pyspark.sql import Column
 from pyspark.pipelines.source_code_location import SourceCodeLocation
+from pyspark.sql import Column, DataFrame
 
 QueryFunction = Callable[[], DataFrame]
 
@@ -61,6 +60,12 @@ class AutoCdcFlow:
     :param except_column_list: Optional columns to exclude from the output table.
     :param stored_as_scd_type: Optional SCD type for the target table. 1 (or "1") and 2 (or "2") \
         are supported.
+    :param ignore_null_updates: When True, null values in an incoming update are ignored and the \
+        existing target value is preserved, for every column.
+    :param ignore_null_updates_column_list: Optional subset of columns for which null values in \
+        an incoming update are ignored.
+    :param ignore_null_updates_except_column_list: Optional subset of columns for which null \
+        values in an incoming update overwrite the target; nulls are ignored for all others.
     :param track_history_column_list: Optional SCD2-only columns whose value change opens a new \
         history record.
     :param track_history_except_column_list: Optional SCD2-only columns excluded from history \
@@ -79,6 +84,9 @@ class AutoCdcFlow:
     column_list: Optional[List[Column]]
     except_column_list: Optional[List[Column]]
     stored_as_scd_type: Optional[Literal[1, 2, "1", "2"]]
+    ignore_null_updates: bool
+    ignore_null_updates_column_list: Optional[List[Column]]
+    ignore_null_updates_except_column_list: Optional[List[Column]]
     track_history_column_list: Optional[List[Column]]
     track_history_except_column_list: Optional[List[Column]]
     spark_conf: Dict[str, str]

@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 
+from pyspark.pandas.tests.diff_frames_ops.test_basic import BasicMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
-from pyspark.pandas.tests.diff_frames_ops.test_basic import BasicMixin
 
 
 class BasicParityTests(

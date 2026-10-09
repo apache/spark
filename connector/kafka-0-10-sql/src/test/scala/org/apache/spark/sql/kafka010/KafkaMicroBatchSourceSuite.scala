@@ -911,6 +911,54 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
     )
   }
 
+  test("topic-level offsets tolerate a new topic matching subscribePattern after the start") {
+    val topicPrefix = newTopic()
+    val topic = s"$topicPrefix-a"
+    val topic2 = s"$topicPrefix-b"
+    testUtils.createTopic(topic, partitions = 1)
+    testUtils.sendMessages(topic, Array("1"), Some(0))
+
+    // The starting offsets only name the topic that exists when the query starts
+    val ds = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribePattern", s"$topicPrefix-.*")
+      .option("startingOffsets", s"""{"$topic":"earliest"}""")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .as[String]
+      .map(_.toInt)
+
+    testStream(ds)(
+      StartStream(),
+      AssertOnQuery { q =>
+        q.processAllAvailable()
+        true
+      },
+      CheckAnswer(1),
+      // A topic created after the initial offsets were resolved is picked up as a new partition,
+      // starting at earliest, instead of tripping the strict topic check
+      WithOffsetSync(new TopicPartition(topic2, 0), expectedOffset = 1) { () =>
+        testUtils.createTopic(topic2, partitions = 1)
+        testUtils.sendMessages(topic2, Array("2"), Some(0))
+      },
+      AssertOnQuery { q =>
+        // The consumer based reader only sees a newly created topic on its next metadata refresh,
+        // so keep triggering batches until the topic shows up in the query's offsets
+        eventually(timeout(streamingTimeout)) {
+          q.processAllAvailable()
+          val progress = q.lastProgress
+          assert(progress != null && progress.sources.exists(_.endOffset.contains(topic2)),
+            s"$topic2 has not been discovered yet")
+        }
+        true
+      },
+      CheckAnswer(1, 2)
+    )
+  }
+
   test("ensure that initial offset are written with an extra byte in the beginning (SPARK-19517)") {
     withTempDir { metadataPath =>
       val topic = "kafka-initial-offset-current"
@@ -1882,6 +1930,8 @@ abstract class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBa
 
     // test null latestAvailablePartitionOffsets
     assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), None).isEmpty)
+    assert(KafkaMicroBatchStream.metrics(
+      Optional.ofNullable(offset), Some(null).asInstanceOf[Option[PartitionOffsetMap]]).isEmpty)
   }
 
   test("SPARK-57438: metrics should not NPE when latestPartitionOffsets is null") {
@@ -2098,6 +2148,42 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
         addPartitions = true,
         "subscribePattern" -> s"$topicPrefix-.*")
     }
+  }
+
+  test("subscribing topics from topic-level offsets") {
+    val topic1 = newTopic()
+    val topic2 = newTopic()
+    testUtils.createTopic(topic1, partitions = 3)
+    testUtils.createTopic(topic2, partitions = 2)
+    testUtils.sendMessages(topic1, (1 to 3).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic2, Array("11"), Some(0))
+
+    // topic1 is read from its beginning while topic2 only contributes the records added after
+    // the query started, without either topic having its partitions enumerated in the option.
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribe", s"$topic1,$topic2")
+      .option("startingOffsets", s"""{"$topic1":"earliest","$topic2":"latest"}""")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .as[String]
+    val mapped = kafka.map(_.toInt)
+
+    testStream(mapped)(
+      makeSureGetOffsetCalled,
+      // Records written to topic2 after the query started are read, unlike "11" which predates it
+      WithOffsetSync(new TopicPartition(topic2, 0), expectedOffset = 2) { () =>
+        testUtils.sendMessages(topic2, Array("12"), Some(0))
+      },
+      AddKafkaData(Set(topic1, topic2), 4),
+      CheckAnswer(1, 2, 3, 12, 4),
+      StopStream,
+      StartStream(),
+      CheckAnswer(1, 2, 3, 12, 4) // Should get the data back on recovery
+    )
   }
 
   test("subscribing topic by name from specific timestamps with non-matching starting offset") {
@@ -2339,7 +2425,11 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       (STARTING_OFFSETS_OPTION_KEY, "earLiEst", EarliestOffsetRangeLimit),
       (ENDING_OFFSETS_OPTION_KEY, "laTest", LatestOffsetRangeLimit),
       (STARTING_OFFSETS_OPTION_KEY, """{"topic-A":{"0":23}}""",
-        SpecificOffsetRangeLimit(Map(new TopicPartition("topic-A", 0) -> 23))))) {
+        SpecificOffsetRangeLimit(Map(new TopicPartition("topic-A", 0) -> 23))),
+      (STARTING_OFFSETS_OPTION_KEY, """{"topic-A":"eArLiEst","topic-B":{"0":23}}""",
+        SpecificOffsetRangeLimit(
+          Map(new TopicPartition("topic-B", 0) -> 23),
+          Map("topic-A" -> KafkaOffsetRangeLimit.EARLIEST))))) {
       val offset = getKafkaOffsetRangeLimit(
         CaseInsensitiveMap[String](Map(optionKey -> optionValue)), "dummy", "dummy", optionKey,
         answer)

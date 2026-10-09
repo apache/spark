@@ -18,8 +18,7 @@
 import os
 import unittest
 
-from pyspark.testing.connectutils import should_test_connect
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 
 if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_evaluation import EvaluationTestsMixin

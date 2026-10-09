@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import scala.jdk.CollectionConverters._
+
 import io.fabric8.kubernetes.api.model.{EnvVarBuilder, VolumeBuilder, VolumeMountBuilder}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -103,6 +105,34 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite {
           .withName("SPARK_LOCAL_DIRS")
           .withValue("/var/data/my-local-dir-2,/var/data/my-local-dir-1")
           .build())
+  }
+
+  test("SPARK-58857: randomize the local dirs resolved from configuration") {
+    // SPARK-39755 added randomization to both branches of configurePod, but the emptyDir branch
+    // called Utils.randomize as a statement and dropped its result, so the order stayed as
+    // configured. Run the step repeatedly and require that not every run agrees.
+    val dirs = (1 to 4).map(i => s"/var/data/my-local-dir-$i")
+    val sparkConf = new SparkConfWithEnv(Map("SPARK_LOCAL_DIRS" -> dirs.mkString(",")))
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+
+    val orders = (1 to 10).map { _ =>
+      val configuredPod =
+        new LocalDirsFeatureStep(kubernetesConf, defaultLocalDir).configurePod(
+          SparkPod.initialPod())
+      val env = configuredPod.container.getEnv.get(0)
+      assert(env.getName === "SPARK_LOCAL_DIRS")
+      // Whatever the order, the set of dirs is preserved and the mounts agree with the env var.
+      assert(env.getValue.split(",").sorted === dirs.sorted)
+      assert(configuredPod.pod.getSpec.getVolumes.size === dirs.size)
+      assert(configuredPod.container.getVolumeMounts.asScala.map(_.getName) ===
+        (1 to dirs.size).map(i => s"spark-local-dir-$i"))
+      assert(configuredPod.container.getVolumeMounts.asScala.map(_.getMountPath).mkString(",") ===
+        env.getValue)
+      env.getValue
+    }.toSet
+
+    // 10 runs of 4 dirs: a false failure needs the same permutation every time, (1/24)^9.
+    assert(orders.size > 1, s"local dirs were never reordered across 10 runs: $orders")
   }
 
   test("Use tmpfs to back default local dir") {

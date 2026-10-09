@@ -84,7 +84,7 @@ class MetadataResolver(
 
         case unresolvedWith: UnresolvedWith =>
           for (cteRelation <- unresolvedWith.cteRelations) {
-            handleAllUnresolvedRelations(cteRelation._2)
+            handleAllUnresolvedRelations(cteRelation.plan)
           }
 
           unresolvedWith

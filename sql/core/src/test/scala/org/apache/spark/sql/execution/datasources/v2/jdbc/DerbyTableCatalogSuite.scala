@@ -48,7 +48,10 @@ class DerbyTableCatalogSuite extends SharedSparkSession {
         condition = "CANNOT_RENAME_ACROSS_SCHEMA",
         parameters = Map("type" -> "table"))
       sql(s"ALTER TABLE $n1t1 RENAME TO $n1t2")
-      checkAnswer(sql(s"SHOW TABLES IN derby.test1"), Row("test1", "TABLE2", false))
+      // renameTable quotes the new name, so Derby stores it as written rather than folding it to
+      // upper case, and the table is therefore addressable under the name it was renamed to.
+      checkAnswer(sql(s"SELECT c1 FROM derby.$n1t2"), Nil)
+      checkAnswer(sql(s"SHOW TABLES IN derby.test1"), Row("test1", "table2", false))
     }
   }
 

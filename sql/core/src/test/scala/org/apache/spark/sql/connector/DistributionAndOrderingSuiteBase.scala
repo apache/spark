@@ -33,9 +33,12 @@ abstract class DistributionAndOrderingSuiteBase
     extends SharedSparkSession with BeforeAndAfter with AdaptiveSparkPlanHelper {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
+  /** The catalog implementation `testcat` is registered with. */
+  protected def catalogClassName: String = classOf[InMemoryCatalog].getName
+
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat", catalogClassName)
   }
 
   override def afterAll(): Unit = {
@@ -50,8 +53,8 @@ abstract class DistributionAndOrderingSuiteBase
       plan: QueryPlan[T]): Partitioning = partitioning match {
     case HashPartitioning(exprs, numPartitions) =>
       HashPartitioning(exprs.map(resolveAttrs(_, plan)), numPartitions)
-    case KeyedPartitioning(expressions, partitionKeys, isGrouped, _) =>
-      KeyedPartitioning(expressions.map(resolveAttrs(_, plan)), partitionKeys, isGrouped)
+    case kp: KeyedPartitioning =>
+      kp.copy(expressions = kp.expressions.map(resolveAttrs(_, plan)))
     case PartitioningCollection(partitionings) =>
       PartitioningCollection(partitionings.map(resolvePartitioning(_, plan)))
     case RangePartitioning(ordering, numPartitions) =>

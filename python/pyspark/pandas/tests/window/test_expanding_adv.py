@@ -19,8 +19,8 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.loose_version import LooseVersion
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.window.test_expanding import ExpandingTestingFuncMixin
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class ExpandingAdvMixin(ExpandingTestingFuncMixin):

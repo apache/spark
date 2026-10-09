@@ -19,10 +19,10 @@ import unittest
 
 import numpy as np
 
+from pyspark.ml.functions import array_to_vector, predict_batch_udf, vector_to_array
 from pyspark.ml.linalg import DenseVector
-from pyspark.ml.functions import array_to_vector, vector_to_array, predict_batch_udf
-from pyspark.sql.functions import array, struct, col
-from pyspark.sql.types import ArrayType, DoubleType, IntegerType, StructType, StructField, FloatType
+from pyspark.sql.functions import array, col, struct
+from pyspark.sql.types import ArrayType, DoubleType, FloatType, IntegerType, StructField, StructType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     have_pandas,

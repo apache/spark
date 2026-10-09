@@ -17,11 +17,12 @@
 
 import os
 import unittest
+
 from pyspark.sql import SparkSession
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import (
-    have_pyarrow,
     have_pandas,
+    have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
@@ -37,6 +38,7 @@ class QueryExecutionListenerTests(
     @classmethod
     def setUpClass(cls):
         import glob
+
         from pyspark.find_spark_home import _find_spark_home
 
         SPARK_HOME = _find_spark_home()

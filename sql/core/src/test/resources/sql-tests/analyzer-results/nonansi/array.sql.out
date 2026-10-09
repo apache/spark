@@ -951,3 +951,73 @@ select array_distinct(array(0.0, -0.0, -0.0, DOUBLE("NaN"), DOUBLE("NaN")))
 -- !query analysis
 Project [array_distinct(array(cast(0.0 as double), cast(0.0 as double), cast(0.0 as double), cast(NaN as double), cast(NaN as double))) AS array_distinct(array(0.0, 0.0, 0.0, NaN, NaN))#x]
 +- OneRowRelation
+
+
+-- !query
+select trim_array(array(1, 2, 3, 4, 5), 0)
+-- !query analysis
+Project [trim_array(array(1, 2, 3, 4, 5), 0) AS trim_array(array(1, 2, 3, 4, 5), 0)#x]
++- OneRowRelation
+
+
+-- !query
+select trim_array(array(1, 2, 3, 4, 5), 2)
+-- !query analysis
+Project [trim_array(array(1, 2, 3, 4, 5), 2) AS trim_array(array(1, 2, 3, 4, 5), 2)#x]
++- OneRowRelation
+
+
+-- !query
+select trim_array(array(1, 2, 3, 4, 5), 5)
+-- !query analysis
+Project [trim_array(array(1, 2, 3, 4, 5), 5) AS trim_array(array(1, 2, 3, 4, 5), 5)#x]
++- OneRowRelation
+
+
+-- !query
+select trim_array(array('a', 'b', 'c'), 1)
+-- !query analysis
+Project [trim_array(array(a, b, c), 1) AS trim_array(array(a, b, c), 1)#x]
++- OneRowRelation
+
+
+-- !query
+select trim_array(array(1, 2, null, 4), 1)
+-- !query analysis
+Project [trim_array(array(1, 2, cast(null as int), 4), 1) AS trim_array(array(1, 2, NULL, 4), 1)#x]
++- OneRowRelation
+
+
+-- !query
+select trim_array(array(), 0)
+-- !query analysis
+Project [trim_array(array(), 0) AS trim_array(array(), 0)#x]
++- OneRowRelation
+
+
+-- !query
+select trim_array(array(1, 2, 3), -1)
+-- !query analysis
+Project [trim_array(array(1, 2, 3), -1) AS trim_array(array(1, 2, 3), -1)#x]
++- OneRowRelation
+
+
+-- !query
+select trim_array(array(1, 2, 3), 4)
+-- !query analysis
+Project [trim_array(array(1, 2, 3), 4) AS trim_array(array(1, 2, 3), 4)#x]
++- OneRowRelation
+
+
+-- !query
+select trim_array(CAST(null AS ARRAY<INT>), 1)
+-- !query analysis
+Project [trim_array(cast(null as array<int>), 1) AS trim_array(NULL, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select trim_array(array(1, 2, 3), CAST(null AS INT))
+-- !query analysis
+Project [trim_array(array(1, 2, 3), cast(null as int)) AS trim_array(array(1, 2, 3), CAST(NULL AS INT))#x]
++- OneRowRelation

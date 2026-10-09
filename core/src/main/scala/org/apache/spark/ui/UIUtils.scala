@@ -19,7 +19,7 @@ package org.apache.spark.ui
 
 import java.{util => ju}
 import java.lang.{Long => JLong}
-import java.net.{URLDecoder, URLEncoder}
+import java.net.{URI, URISyntaxException, URLDecoder, URLEncoder}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.time.{Instant, ZoneId}
 import java.time.format.DateTimeFormatter
@@ -637,6 +637,21 @@ private[spark] object UIUtils extends Logging {
   }
 
   /**
+   * The method for the forms behind the UI's state-changing buttons (job and stage kill,
+   * application hold and resume). Those are always forms, carrying the per-UI CSRF token
+   * and the target id as hidden fields; only the method follows
+   * spark.ui.actionsViaGetEnabled. Submitted with GET, the browser turns the fields into
+   * the query string, the same request a plain link would make, which also works through
+   * proxies that do not forward POST, such as the YARN ResourceManager/AM proxy
+   * (SPARK-6846). SparkUI.initialize accepts GET on the endpoints under the same flag, so
+   * the form and the endpoint always agree, and webui.js prompts for confirmation before
+   * the submit either way.
+   */
+  def actionFormMethod(actionsViaGetEnabled: Boolean): String = {
+    if (actionsViaGetEnabled) "GET" else "POST"
+  }
+
+  /**
    * Returns HTML rendering of a job or stage description. It will try to parse the string as HTML
    * and make sure that it only contains anchors with root-relative links. Otherwise,
    * the whole string will rendered as a simple escaped text.
@@ -787,8 +802,22 @@ private[spark] object UIUtils extends Logging {
     if (proxy) {
       val proxyPrefix = sys.props.getOrElse("spark.ui.proxyBase", "")
       proxyPrefix + "/proxy/" + id
-    } else {
+    } else if (isSafeHref(origHref)) {
       origHref
+    } else {
+      // The href may come from an external registrant (e.g. an application's appUiUrl or
+      // a worker's webUiAddress); render anything unrecognized as a dead link.
+      "#"
+    }
+  }
+
+  /** Returns true if the given href is relative or uses the http(s) scheme. */
+  private def isSafeHref(href: String): Boolean = href != null && {
+    try {
+      val scheme = new URI(href).getScheme
+      scheme == null || scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https")
+    } catch {
+      case _: URISyntaxException => false
     }
   }
 

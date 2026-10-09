@@ -87,6 +87,19 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
+   * Whether this plan reads a streaming source in Real-Time Mode, which is the case when the
+   * relation carries a real-time mode duration -- the same signal that decides whether to plan
+   * a [[org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec]] for it.
+   */
+  private def isRealTimeMode(plan: LogicalPlan): Boolean = {
+    plan.collectLeaves().exists {
+      case s: StreamingDataSourceV2ScanRelation =>
+        s.relation.realTimeModeDuration.isDefined
+      case _ => false
+    }
+  }
+
+  /**
    * Plans special cases of limit operators.
    */
   object SpecialLimits extends Strategy {
@@ -102,6 +115,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           CollectLimitExec(limit = offset + limit, child = planLater(child), offset = offset)
         case Limit(IntegerLiteral(limit), child) =>
           CollectLimitExec(limit = limit, child = planLater(child))
+        case logical.Offset(IntegerLiteral(0), child) =>
+          // OFFSET 0 is a no-op. It is normally removed by the EliminateOffsets optimizer rule,
+          // but that rule is excludable, so handle it defensively here to avoid constructing a
+          // CollectLimitExec with no limit and a zero offset (which fails its assertion).
+          planLater(child)
         case logical.Offset(IntegerLiteral(offset), child) =>
           CollectLimitExec(child = planLater(child), offset = offset)
         case Tail(IntegerLiteral(limit), child) =>
@@ -328,7 +346,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
       case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
-          if canBroadcastBySize(j.right, conf) =>
+          if canPlanAsBroadcastHashJoin(j, conf) =>
         Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
           None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
@@ -560,27 +578,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * [[org.apache.spark.sql.execution.streaming.StreamExecution]]
    */
   object StatefulAggregationStrategy extends Strategy {
-
-    /**
-     * Whether this plan reads a streaming source in Real-Time Mode, which is the case when the
-     * relation carries a real-time mode duration -- the same signal that decides whether to plan
-     * a [[org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec]] for it.
-     */
-    private def isRealTimeMode(plan: LogicalPlan): Boolean = {
-      plan.collectLeaves().exists {
-        case s: StreamingDataSourceV2ScanRelation =>
-          s.relation.realTimeModeDuration.isDefined
-        case _ => false
-      }
-    }
-
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case _ if !plan.isStreaming => Nil
 
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
-        if (aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[PythonUDAF])) {
+        if (aggregateExpressions.exists(ae =>
+            ae.aggregateFunction.isInstanceOf[PythonUDAF] ||
+            ae.aggregateFunction.isInstanceOf[PythonAggregate])) {
           throw new AnalysisException(
             errorClass = "_LEGACY_ERROR_TEMP_3067",
             messageParameters = Map.empty)
@@ -618,7 +624,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             // A Real-Time Mode batch runs until its duration elapses rather than until its input
             // is exhausted, so an aggregation that only emits once the batch ends would hold every
             // result back for the whole batch. Plan the streamline operator instead, which merges
-            // each input row against state and emits immediately.
+            // each input row against state; Update mode can emit an intermediate result per
+            // input.
             if (isRealTimeMode(child) ||
               conf.getConf(SQLConf.STREAMING_USE_STREAMLINE_AGGREGATOR)) {
               AggUtils.planStreamlineStreamingAggregation(
@@ -720,7 +727,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
-        if !aggExpressions.exists(_.aggregateFunction.isInstanceOf[PythonUDAF]) =>
+        if !aggExpressions.exists(ae => ae.aggregateFunction.isInstanceOf[PythonUDAF] ||
+          ae.aggregateFunction.isInstanceOf[PythonAggregate]) =>
         val (functionsWithDistinct, functionsWithoutDistinct) =
           aggExpressions.partition(_.isDistinct)
         val distinctAggChildSets = functionsWithDistinct.map { ae =>
@@ -799,13 +807,40 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           resultExpressions,
           planLater(child)))
 
+      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
+          if aggExpressions.forall(_.aggregateFunction.isInstanceOf[PythonAggregate]) =>
+        // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
+        // `groupingExpressions` is not extracted during logical phase. Without this, 0.0/-0.0 (and
+        // distinct NaN bit patterns) would split one logical group across output rows.
+        val normalizedGroupingExpressions = groupingExpressions.map { e =>
+          NormalizeFloatingNumbers.normalize(e) match {
+            case n: NamedExpression => n
+            // Keep the name of the original expression.
+            case other => Alias(other, e.name)(exprId = e.exprId)
+          }
+        }
+        Seq(execution.python.PythonIncrementalAggregateExec.plan(
+          normalizedGroupingExpressions,
+          aggExpressions,
+          resultExpressions,
+          planLater(child)))
+
       case PhysicalAggregation(_, aggExpressions, _, _) =>
-        val groupAggPandasUDFNames = aggExpressions
-          .map(_.aggregateFunction)
-          .filter(_.isInstanceOf[PythonUDAF])
-          .map(_.asInstanceOf[PythonUDAF].name)
-        // If cannot match the two cases above, then it's an error
-        throw QueryCompilationErrors.invalidPandasUDFPlacementError(groupAggPandasUDFNames.distinct)
+        // Reached when Python aggregate UDFs cannot be planned by the two cases above -- e.g. a
+        // grouped-agg pandas/arrow UDF or an incremental Python aggregator is mixed with other
+        // (SQL or differently-typed Python) aggregate functions in the same Aggregate.
+        val aggFunctions = aggExpressions.map(_.aggregateFunction)
+        val incrementalNames = aggFunctions.collect { case p: PythonAggregate => p.name }
+        val pandasUDFNames = aggFunctions.collect { case p: PythonUDAF => p.name }
+        if (incrementalNames.nonEmpty) {
+          // The message for pandas UDFs is misleading for an Arrow-based incremental aggregator, so
+          // report the dedicated, aggregator-neutral error. Name every offending Python aggregate
+          // function -- both the incremental aggregators and any grouped-agg pandas/arrow UDAFs
+          // mixed in -- so the diagnostic is complete rather than dropping the co-offenders.
+          throw QueryCompilationErrors.invalidPythonAggregatePlacementError(
+            (incrementalNames ++ pandasUDFNames).distinct)
+        }
+        throw QueryCompilationErrors.invalidPandasUDFPlacementError(pandasUDFNames.distinct)
 
       case _ => Nil
     }
@@ -928,6 +963,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           eventTimeWatermarkForEviction = None,
           planLater(child),
           isStreaming = true,
+          isRealTimeMode = isRealTimeMode(plan),
           hasInitialState,
           initialStateGroupingAttrs,
           initialStateDataAttrs,
@@ -1107,11 +1143,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.MapInPandasExec(func, output, planLater(child), isBarrier, profile) :: Nil
       case logical.MapInArrow(func, output, child, isBarrier, profile) =>
         execution.python.MapInArrowExec(func, output, planLater(child), isBarrier, profile) :: Nil
+      case logical.ExecuteExternalUDF(udf, resultAttr, child) =>
+        execution.externalUDF.ExecuteExternalUDFExec(
+          udf, resultAttr, planLater(child)) :: Nil
       case logical.MapPartitionsExternalUDF(
-          workerSpec, functionExpr, isBarrier, profile, child) =>
+          functionExpr, isBarrier, profile, child) =>
         execution.externalUDF.MapPartitionsExternalUDFExec(
-          workerSpec, functionExpr,
-          isBarrier, profile, planLater(child)) :: Nil
+          functionExpr, isBarrier, profile, planLater(child)) :: Nil
       case logical.AttachDistributedSequence(attr, child, cache) =>
         execution.python.AttachDistributedSequenceExec(attr, planLater(child), cache) :: Nil
       case logical.PythonWorkerLogs(jsonAttr) =>
@@ -1210,6 +1248,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
         execution.GlobalLimitExec(limit, planLater(child)) :: Nil
+      case logical.Offset(IntegerLiteral(0), child) =>
+        // OFFSET 0 is a no-op; see the note in SpecialLimits. Excluding EliminateOffsets leaves
+        // the Offset node in place, so avoid building a GlobalLimitExec with no limit and a zero
+        // offset (which fails its assertion).
+        planLater(child) :: Nil
       case logical.Offset(IntegerLiteral(offset), child) =>
         GlobalLimitExec(child = planLater(child), offset = offset) :: Nil
       case union: logical.Union =>

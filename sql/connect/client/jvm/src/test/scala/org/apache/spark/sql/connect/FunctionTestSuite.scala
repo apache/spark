@@ -180,6 +180,7 @@ class FunctionTestSuite extends ConnectFunSuite {
     window(a, "10 seconds"))
   testEquals("session_window", session_window(a, "1 second"), session_window(a, lit("1 second")))
   testEquals("slice", slice(a, 1, 2), slice(a, lit(1), lit(2)))
+  testEquals("trim_array", trim_array(a, 2), trim_array(a, lit(2)))
   testEquals("bucket", bucket(lit(3), a), bucket(3, a))
   testEquals(
     "lag",

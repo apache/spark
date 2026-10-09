@@ -78,6 +78,34 @@ abstract class TimestampNanosTypeApiOps extends TypeApiOps with DataTypeErrorsBa
   // column to STRING_TYPE for consistency, mirroring the reference TimeType ops.
   override def thriftTypeName: Option[String] = Some("STRING_TYPE")
 
+  // ==================== Python Interop ====================
+
+  // The external Python value is `datetime.datetime`, which is microsecond-resolution, so PySpark
+  // represents these types as epoch microseconds (TimestampNTZNanosType / TimestampLTZNanosType in
+  // pyspark/sql/types.py) and sub-microsecond digits never cross the Py4J boundary in either
+  // direction. That is the documented Python/UDF microsecond-only limitation (SPARK-57808).
+  // Lossless Arrow/pandas value conversion for these types (toPandas) is a pending PySpark
+  // follow-up, so it is not yet an alternative that preserves the extra digits.
+  override def needConversionInPython: Option[Boolean] = Some(true)
+
+  // Python hands us epoch microseconds; rebuild the internal value with a zero sub-microsecond
+  // remainder. The reverse direction is EvaluatePython.toJava, which yields `epochMicros`.
+  //
+  // The gate is enforced eagerly, when the converter is built, so that the classic PySpark
+  // explicit-schema path (SparkSession.applySchemaToPythonRDD, which calls
+  // EvaluatePython.makeFromJava rather than the guarded getEncoder) and Python UDF nanosecond
+  // return types cannot execute with spark.sql.timestampNanosTypes.enabled = false. Mirrors the
+  // guard on getEncoder below.
+  override def makeFromJava: Option[Any => Any] = {
+    DataTypeErrors.checkTimestampNanosTypesEnabled()
+    Some((obj: Any) =>
+      nullSafeConvert(obj) {
+        case c: Long => TimestampNanosVal.fromParts(c, 0.toShort)
+        // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
+        case c: Int => TimestampNanosVal.fromParts(c.toLong, 0.toShort)
+      })
+  }
+
   // ==================== Row Encoding ====================
 
   // Honor the spark.sql.timestampNanosTypes.enabled gate just like the legacy

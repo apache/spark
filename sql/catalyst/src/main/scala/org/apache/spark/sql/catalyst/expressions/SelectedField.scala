@@ -85,7 +85,7 @@ object SelectedField {
     expr match {
       case a: Attribute =>
         dataTypeOpt.map { dt =>
-          StructField(a.name, dt, a.nullable)
+          StructField(a.name, dt, a.nullable, a.metadata)
         }
       case c: GetStructField =>
         val field = c.childSchema(c.ordinal)
@@ -109,7 +109,7 @@ object SelectedField {
             // This should not happen.
             throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "GetArrayStructFields")
         }
-        val newField = StructField(field.name, newFieldDataType, field.nullable)
+        val newField = StructField(field.name, newFieldDataType, field.nullable, field.metadata)
         selectField(child, Option(ArrayType(struct(newField), containsNull)))
       case GetMapValue(child, key) if key.foldable =>
         // GetMapValue does not select a field from a struct (i.e. prune the struct) so it can't be

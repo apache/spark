@@ -16,12 +16,12 @@
 #
 
 from pyspark.pandas.tests.data_type_ops.test_boolean_ops import (
-    BooleanOpsTestsMixin,
     BooleanExtensionOpsTestsMixin,
+    BooleanOpsTestsMixin,
 )
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class BooleanOpsParityTests(

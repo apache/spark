@@ -40,6 +40,8 @@ object SchemaMergingUtils {
       tableSchema: StructType,
       dataSchema: StructType,
       caseSensitive: Boolean): StructType = {
+    // TODO (SPARK-59268): don't drop changes to comments and field metadata `desiredSchema`, or
+    // loudly reject changes to such fields.
     StructType.merge(tableSchema, dataSchema, caseSensitive).asInstanceOf[StructType]
   }
 }

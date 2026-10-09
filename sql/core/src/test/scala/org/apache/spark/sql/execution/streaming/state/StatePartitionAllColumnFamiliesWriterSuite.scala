@@ -32,12 +32,14 @@ import org.apache.spark.sql.streaming.{InputEvent, ListStateTTLProcessor, MapInp
 import org.apache.spark.sql.streaming.util.{StreamManualClock, TTLProcessorUtils}
 import org.apache.spark.sql.streaming.util.{EventTimeTimerProcessor, MultiStateVarProcessor, MultiStateVarProcessorTestUtils, TimerTestUtils}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.SlowSQLTest
 
 /**
  * Test suite for StatePartitionAllColumnFamiliesWriter.
  * Tests the writer's ability to correctly write raw bytes read from
  * StatePartitionAllColumnFamiliesReader to a state store without loading previous versions.
  */
+@SlowSQLTest
 class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase {
   import testImplicits._
 

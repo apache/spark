@@ -24,7 +24,7 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters.MapHasAsScala
 
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Cast, CurrentDate, CurrentTime, CurrentTimestamp, CurrentTimestampNanos, CurrentTimeZone, Expression, InSubquery, ListQuery, Literal, LocalTimestamp, LocalTimestampNanos, Now}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Cast, CurrentDate, CurrentTime, CurrentTimestamp, CurrentTimestampNanos, CurrentTimeZone, Expression, InSubquery, ListQuery, Literal, LocalTimestamp, LocalTimestampNanos, Now, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -336,6 +336,32 @@ class ComputeCurrentTimeSuite extends PlanTest {
     checkLiterals({ zoneId: String => LocalTimestamp(Some(zoneId)) }, numUniqueZoneIds)
     checkLiterals({ _: String => Now() }, 1)
     checkLiterals({ zoneId: String => CurrentDate(Some(zoneId)) }, numUniqueZoneIds)
+  }
+
+  test("applyForExpression rewrites current date/time leaves to literals") {
+    val date = ComputeCurrentTime.applyForExpression(CurrentDate(Some("UTC")))
+    assert(date.isInstanceOf[Literal] && date.dataType == DateType)
+    val timestamp = ComputeCurrentTime.applyForExpression(CurrentTimestamp())
+    assert(timestamp.isInstanceOf[Literal] && timestamp.dataType == TimestampType)
+  }
+
+  test("applyForExpression shares the provided instant across expressions") {
+    val instant = Instant.now()
+    val timestamp = ComputeCurrentTime.applyForExpression(CurrentTimestamp(), instant)
+    val now = ComputeCurrentTime.applyForExpression(Now(), instant)
+    assert(timestamp.isInstanceOf[Literal] && now.isInstanceOf[Literal])
+    val micros = DateTimeUtils.instantToMicros(instant)
+    assert(timestamp.asInstanceOf[Literal].value == micros)
+    assert(now.asInstanceOf[Literal].value == micros)
+  }
+
+  test("applyForExpression does not descend into subquery plans") {
+    // current_timestamp() inside the subquery plan is left for a separate pass.
+    val subquery = ScalarSubquery(
+      Project(Seq(Alias(CurrentTimestamp(), "ts")()), LocalRelation()))
+    val rewritten = ComputeCurrentTime.applyForExpression(subquery)
+    val innerPlan = rewritten.asInstanceOf[ScalarSubquery].plan
+    assert(innerPlan.expressions.exists(_.exists(_.isInstanceOf[CurrentTimestamp])))
   }
 
   test("CAST(time AS TIMESTAMP_NTZ) is stabilized with the query current date") {

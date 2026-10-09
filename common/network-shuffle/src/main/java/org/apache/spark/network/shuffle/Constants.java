@@ -28,4 +28,12 @@ public class Constants {
    */
   public static final String SHUFFLE_SERVICE_DB_BACKEND =
     "spark.shuffle.service.db.backend";
+
+  /**
+   * Whether the shuffle service re-resolves block file paths at read time and requires them
+   * to remain under the executor's registered local directories. Enabled by default; disable
+   * to skip the per-fetch path canonicalization cost.
+   */
+  public static final String SHUFFLE_SERVICE_VERIFY_BLOCK_PATHS_AT_READ =
+    "spark.shuffle.service.verifyBlockPathsAtRead";
 }

@@ -15,11 +15,18 @@
 # limitations under the License.
 #
 import json
+import pickle
 import re
 import sys
-import pickle
-from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Union, cast, overload
 
+import pyspark.sql.connect.proto as pb2
+from pyspark.errors import (
+    AnalysisException,
+    PySparkPicklingError,
+    PySparkTypeError,
+    PySparkValueError,
+)
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect.plan import (
     DataSource,
@@ -28,28 +35,23 @@ from pyspark.sql.connect.plan import (
     RelationChanges,
     WriteStreamOperation,
 )
-import pyspark.sql.connect.proto as pb2
 from pyspark.sql.connect.readwriter import OptionUtils, to_str
 from pyspark.sql.connect.streaming.query import StreamingQuery
+from pyspark.sql.connect.utils import get_python_ver
+from pyspark.sql.streaming.listener import QueryStartedEvent
 from pyspark.sql.streaming.readwriter import (
     DataStreamReader as PySparkDataStreamReader,
+)
+from pyspark.sql.streaming.readwriter import (
     DataStreamWriter as PySparkDataStreamWriter,
 )
-from pyspark.sql.streaming.listener import QueryStartedEvent
-from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.types import Row, StructType
-from pyspark.errors import (
-    AnalysisException,
-    PySparkTypeError,
-    PySparkValueError,
-    PySparkPicklingError,
-)
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.session import SparkSession
+    from pyspark.sql._typing import SupportsProcess
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql._typing import SupportsProcess
+    from pyspark.sql.connect.session import SparkSession
 
 
 class DataStreamReader(OptionUtils):
@@ -640,7 +642,7 @@ class DataStreamWriter:
     def foreach(self, f: "SupportsProcess") -> "DataStreamWriter": ...
 
     def foreach(self, f: Union[Callable[[Row], None], "SupportsProcess"]) -> "DataStreamWriter":
-        from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
+        from pyspark.serializers import AutoBatchedSerializer, CPickleSerializer
 
         func = PySparkDataStreamWriter._construct_foreach_function(f)
         serializer = AutoBatchedSerializer(CPickleSerializer())
@@ -766,11 +768,12 @@ class DataStreamWriter:
 
 
 def _test() -> None:
+    import doctest
     import os
     import sys
-    import doctest
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.connect.streaming.readwriter
+    from pyspark.sql import SparkSession as PySparkSession
 
     globs = pyspark.sql.connect.readwriter.__dict__.copy()
 

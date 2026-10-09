@@ -48,9 +48,14 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
+    <!--
+      Use the same bundle as hadoop-cloud to avoid mixing shaded and unshaded SDK
+      classes. Even at the same version, modular SDK jars are not binary-compatible
+      with the bundle's relocated third-party dependencies.
+    -->
     <dependency>
       <groupId>software.amazon.awssdk</groupId>
-      <artifactId>sts</artifactId>
+      <artifactId>bundle</artifactId>
       <version>${aws.java.sdk.v2.version}</version>
     </dependency>
 

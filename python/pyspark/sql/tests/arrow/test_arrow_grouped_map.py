@@ -15,18 +15,24 @@
 # limitations under the License.
 #
 import inspect
+import logging
 import os
 import time
-import logging
-from typing import Iterator, Tuple
 import unittest
+from typing import Iterator, Tuple
 
 from pyspark.errors import PythonException
-from pyspark.sql import Row, functions as sf
+from pyspark.sql import Row
+from pyspark.sql import functions as sf
 from pyspark.sql.functions import array, col, explode, lit, mean, stddev
 from pyspark.sql.window import Window
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import assertDataFrameEqual, have_pyarrow, pyarrow_requirement_message
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
+    eventually,
+    have_pyarrow,
+    pyarrow_requirement_message,
+)
 from pyspark.util import is_remote_only
 
 if have_pyarrow:
@@ -471,20 +477,27 @@ class ApplyInArrowTestsMixin:
                 df,
             )
 
-            logs = self.spark.tvf.python_worker_logs()
+            # Worker logs are captured asynchronously from the worker's stdout and only
+            # become visible once the trailing block is flushed, so they may not all be
+            # present immediately after the query completes. Poll until they show up.
+            @eventually(timeout=5, catch_assertions=True)
+            def check_logs():
+                logs = self.spark.tvf.python_worker_logs()
 
-            assertDataFrameEqual(
-                logs.select("level", "msg", "context", "logger"),
-                [
-                    Row(
-                        level="WARNING",
-                        msg=f"arrow grouped map: {dict(id=lst, value=[v * 10 for v in lst])}",
-                        context={"func_name": func_with_logging.__name__},
-                        logger="test_arrow_grouped_map",
-                    )
-                    for lst in [[0, 2, 4, 6, 8], [1, 3, 5, 7]]
-                ],
-            )
+                assertDataFrameEqual(
+                    logs.select("level", "msg", "context", "logger"),
+                    [
+                        Row(
+                            level="WARNING",
+                            msg=f"arrow grouped map: {dict(id=lst, value=[v * 10 for v in lst])}",
+                            context={"func_name": func_with_logging.__name__},
+                            logger="test_arrow_grouped_map",
+                        )
+                        for lst in [[0, 2, 4, 6, 8], [1, 3, 5, 7]]
+                    ],
+                )
+
+            check_logs()
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_apply_in_arrow_iter_with_logging(self):
@@ -511,20 +524,27 @@ class ApplyInArrowTestsMixin:
                 df,
             )
 
-            logs = self.spark.tvf.python_worker_logs()
+            # Worker logs are captured asynchronously from the worker's stdout and only
+            # become visible once the trailing block is flushed, so they may not all be
+            # present immediately after the query completes. Poll until they show up.
+            @eventually(timeout=5, catch_assertions=True)
+            def check_logs():
+                logs = self.spark.tvf.python_worker_logs()
 
-            assertDataFrameEqual(
-                logs.select("level", "msg", "context", "logger"),
-                [
-                    Row(
-                        level="WARNING",
-                        msg=f"arrow grouped map: {dict(id=lst, value=[v * 10 for v in lst])}",
-                        context={"func_name": func_with_logging.__name__},
-                        logger="test_arrow_grouped_map",
-                    )
-                    for lst in [[0, 2, 4], [6, 8], [1, 3, 5], [7]]
-                ],
-            )
+                assertDataFrameEqual(
+                    logs.select("level", "msg", "context", "logger"),
+                    [
+                        Row(
+                            level="WARNING",
+                            msg=f"arrow grouped map: {dict(id=lst, value=[v * 10 for v in lst])}",
+                            context={"func_name": func_with_logging.__name__},
+                            logger="test_arrow_grouped_map",
+                        )
+                        for lst in [[0, 2, 4], [6, 8], [1, 3, 5], [7]]
+                    ],
+                )
+
+            check_logs()
 
 
 class ApplyInArrowTests(ApplyInArrowTestsMixin, ReusedSQLTestCase):

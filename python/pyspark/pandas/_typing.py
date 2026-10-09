@@ -16,7 +16,7 @@
 #
 import datetime
 import decimal
-from typing import Any, Tuple, TypeVar, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Tuple, TypeVar, Union
 
 import numpy as np
 from pandas.api.extensions import ExtensionDtype

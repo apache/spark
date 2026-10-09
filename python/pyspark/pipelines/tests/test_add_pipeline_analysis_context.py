@@ -19,8 +19,8 @@ from unittest import mock
 
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
-    should_test_connect,
     connect_requirement_message,
+    should_test_connect,
 )
 
 if should_test_connect:
@@ -94,8 +94,9 @@ class AddPipelineAnalysisContextTests(ReusedConnectTestCase):
         # If any setup step fails before the extension is registered, extension_id stays None and
         # the finally block must skip remove_user_context_extension(None) - which would raise
         # AttributeError and mask the original error. Cover each step that can fail.
-        import pyspark.sql.connect.proto as pb2
         from google.protobuf import any_pb2
+
+        import pyspark.sql.connect.proto as pb2
 
         failing_any = mock.MagicMock()
         failing_any.Pack.side_effect = ValueError("boom")

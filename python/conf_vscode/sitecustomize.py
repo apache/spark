@@ -24,8 +24,9 @@ try:
     ):
 
         def install_debugpy():
-            import debugpy
             import fcntl
+
+            import debugpy
 
             lock_file = os.getenv("DEBUGPY_ADAPTER_ENDPOINTS") + ".lock"
             try:

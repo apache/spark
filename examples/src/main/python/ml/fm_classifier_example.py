@@ -21,8 +21,9 @@ FMClassifier Example.
 # $example on$
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import FMClassifier
-from pyspark.ml.feature import MinMaxScaler, StringIndexer
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+from pyspark.ml.feature import MinMaxScaler, StringIndexer
+
 # $example off$
 from pyspark.sql import SparkSession
 

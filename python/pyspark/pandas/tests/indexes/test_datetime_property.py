@@ -17,8 +17,8 @@
 import numpy as np
 import pandas as pd
 
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.indexes.test_datetime import DatetimeIndexTestingFuncMixin
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class DatetimeIndexPropertyTestsMixin(DatetimeIndexTestingFuncMixin):

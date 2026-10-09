@@ -84,6 +84,7 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
+  override lazy val throwable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),

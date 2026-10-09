@@ -14,12 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Dict, Iterator, Union, Tuple, Optional
+import uuid
+from typing import Any, Dict, Iterator, Optional, Tuple, Union
 
+from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.types import StructType
-from pyspark.errors import PySparkRuntimeError
-import uuid
 
 __all__ = ["MapStateClient"]
 

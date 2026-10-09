@@ -16,11 +16,12 @@
 #
 
 
-import pandas as pd
 import numpy as np
+import pandas as pd
+
 import pyspark.pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.groupby import SeriesGroupBy
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class GroupingTestsMixin:

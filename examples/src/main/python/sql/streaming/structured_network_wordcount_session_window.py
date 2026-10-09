@@ -31,21 +31,19 @@ r"""
     localhost 9999`
 """
 import sys
-from typing import Iterator, Any
+from typing import Any, Iterator
 
 import pandas as pd
-
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import explode
-from pyspark.sql.functions import split
+from pyspark.sql.functions import explode, split
+from pyspark.sql.streaming.state import GroupState, GroupStateTimeout
 from pyspark.sql.types import (
     LongType,
     StringType,
-    TimestampType,
-    StructType,
     StructField,
+    StructType,
+    TimestampType,
 )
-from pyspark.sql.streaming.state import GroupStateTimeout, GroupState
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:

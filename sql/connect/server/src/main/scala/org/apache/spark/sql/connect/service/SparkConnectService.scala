@@ -437,12 +437,14 @@ object SparkConnectService extends Logging {
       sb.permitKeepAliveWithoutCalls(true)
       sb.addService(sparkConnectService)
 
+      // Add all registered interceptors to the server builder.
+      SparkConnectInterceptorRegistry.chainInterceptors(sb, configuredInterceptors)
+
+      // A ServerBuilder invokes interceptors in the reverse of the order they were added so add
+      // auth at the end so it runs first.
       getAuthenticateToken.foreach { token =>
         sb.intercept(new PreSharedKeyAuthenticationInterceptor(token))
       }
-
-      // Add all registered interceptors to the server builder.
-      SparkConnectInterceptorRegistry.chainInterceptors(sb, configuredInterceptors)
 
       // If debug mode is configured, load the ProtoReflection service so that tools like
       // grpcurl can introspect the API for debugging.
@@ -558,19 +560,6 @@ object SparkConnectService extends Logging {
     }
 
     listenerBus.post(eventBuilder(bindingAddress))
-  }
-
-  def extractErrorMessage(st: Throwable): String = {
-    val message = Utils.abbreviate(st.getMessage, 2048)
-    convertNullString(message)
-  }
-
-  def convertNullString(str: String): String = {
-    if (str != null) {
-      str
-    } else {
-      ""
-    }
   }
 }
 

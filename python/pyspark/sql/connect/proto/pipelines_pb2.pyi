@@ -594,6 +594,7 @@ class PipelineCommand(google.protobuf.message.Message):
             TRACK_HISTORY_EXCEPT_COLUMN_LIST_FIELD_NUMBER: builtins.int
             IGNORE_NULL_UPDATES_COLUMN_LIST_FIELD_NUMBER: builtins.int
             IGNORE_NULL_UPDATES_EXCEPT_COLUMN_LIST_FIELD_NUMBER: builtins.int
+            IGNORE_NULL_UPDATES_FIELD_NUMBER: builtins.int
             source: builtins.str
             """The name of the CDC source to stream from."""
             @property
@@ -660,6 +661,10 @@ class PipelineCommand(google.protobuf.message.Message):
                 pyspark.sql.connect.proto.expressions_pb2.Expression
             ]:
                 """Subset of columns excluded from ignoring null in updates."""
+            ignore_null_updates: builtins.bool
+            """When true, ignore null updates on all columns of the target table. Mutually exclusive
+            with ignore_null_updates_column_list and ignore_null_updates_except_column_list.
+            """
             def __init__(
                 self,
                 *,
@@ -695,6 +700,7 @@ class PipelineCommand(google.protobuf.message.Message):
                     pyspark.sql.connect.proto.expressions_pb2.Expression
                 ]
                 | None = ...,
+                ignore_null_updates: builtins.bool | None = ...,
             ) -> None: ...
             def HasField(
                 self,
@@ -703,6 +709,8 @@ class PipelineCommand(google.protobuf.message.Message):
                     b"_apply_as_deletes",
                     "_apply_as_truncates",
                     b"_apply_as_truncates",
+                    "_ignore_null_updates",
+                    b"_ignore_null_updates",
                     "_sequence_by",
                     b"_sequence_by",
                     "_source",
@@ -711,6 +719,8 @@ class PipelineCommand(google.protobuf.message.Message):
                     b"apply_as_deletes",
                     "apply_as_truncates",
                     b"apply_as_truncates",
+                    "ignore_null_updates",
+                    b"ignore_null_updates",
                     "sequence_by",
                     b"sequence_by",
                     "source",
@@ -724,6 +734,8 @@ class PipelineCommand(google.protobuf.message.Message):
                     b"_apply_as_deletes",
                     "_apply_as_truncates",
                     b"_apply_as_truncates",
+                    "_ignore_null_updates",
+                    b"_ignore_null_updates",
                     "_sequence_by",
                     b"_sequence_by",
                     "_source",
@@ -736,6 +748,8 @@ class PipelineCommand(google.protobuf.message.Message):
                     b"column_list",
                     "except_column_list",
                     b"except_column_list",
+                    "ignore_null_updates",
+                    b"ignore_null_updates",
                     "ignore_null_updates_column_list",
                     b"ignore_null_updates_column_list",
                     "ignore_null_updates_except_column_list",
@@ -766,6 +780,13 @@ class PipelineCommand(google.protobuf.message.Message):
                     "_apply_as_truncates", b"_apply_as_truncates"
                 ],
             ) -> typing_extensions.Literal["apply_as_truncates"] | None: ...
+            @typing.overload
+            def WhichOneof(
+                self,
+                oneof_group: typing_extensions.Literal[
+                    "_ignore_null_updates", b"_ignore_null_updates"
+                ],
+            ) -> typing_extensions.Literal["ignore_null_updates"] | None: ...
             @typing.overload
             def WhichOneof(
                 self, oneof_group: typing_extensions.Literal["_sequence_by", b"_sequence_by"]

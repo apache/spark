@@ -23,7 +23,6 @@ import sys
 from pyspark import SparkContext
 from pyspark.mllib.util import MLUtils
 
-
 if __name__ == "__main__":
     if len(sys.argv) not in [1, 2]:
         print("Usage: sampled_rdds <libsvm data file>", file=sys.stderr)

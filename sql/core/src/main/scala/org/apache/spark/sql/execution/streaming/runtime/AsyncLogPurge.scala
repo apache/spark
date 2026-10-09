@@ -95,7 +95,7 @@ trait AsyncLogPurge extends Logging {
   // used for testing
   private[sql] def arePendingAsyncPurge: Boolean = {
     purgeRunning.get() ||
-      asyncPurgeExecutorService.getQueue.size() > 0 ||
+      !asyncPurgeExecutorService.getQueue.isEmpty ||
       asyncPurgeExecutorService.getActiveCount > 0
   }
 }

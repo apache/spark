@@ -28,9 +28,10 @@ import net.razorvine.pickle.Pickler
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, TableArg}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, TranspiledPythonUDF, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonAggregate, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, TranspiledPythonUDF, TranspiledUDFParameter, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.ColumnConversions
@@ -56,9 +57,21 @@ case class UserDefinedPythonFunction(
     // categories match the bound argument types; when none match, the call
     // falls back to the plain Python UDF. `builder` requires the two lists to
     // be parallel and skips transpilation otherwise.
-    transpiledInputTypes: JList[JList[String]] = Nil.asJava) {
+    transpiledInputTypes: JList[JList[String]] = Nil.asJava,
+    // Schema of the intermediate aggregation buffer, set only for the incremental Python
+    // aggregator eval types (see [[PythonAggregate]]); `null` otherwise. Nullable rather than
+    // `Option` so it can be passed positionally from Python over Py4J.
+    bufferType: DataType = null) {
 
   def builder(e: Seq[Expression]): Expression = {
+    if (CharVarcharUtils.hasCharVarcharIncludingUDT(dataType)) {
+      throw QueryCompilationErrors.charVarcharNotSupportedInPython(
+        "Python UDF return types", dataType.catalogString)
+    }
+    if (bufferType != null && CharVarcharUtils.hasCharVarcharIncludingUDT(bufferType)) {
+      throw QueryCompilationErrors.charVarcharNotSupportedInPython(
+        "Python UDAF buffer schemas", bufferType.catalogString)
+    }
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
         || pythonEvalType ==PythonEvalType.SQL_ARROW_BATCHED_UDF
         || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
@@ -66,7 +79,8 @@ case class UserDefinedPythonFunction(
         || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
         || pythonEvalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
         || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
-        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF) {
       /*
        * Check if the named arguments:
        * - don't have duplicated names
@@ -87,6 +101,21 @@ case class UserDefinedPythonFunction(
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
       PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType)
+    } else if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF) {
+      // The incremental Python aggregator. `bufferType` (the intermediate buffer schema) must have
+      // been supplied as a struct when the UDF was created. The single expression carries the
+      // aggregator for both the PARTIAL and FINAL stages; the physical operator picks the per-stage
+      // eval type. `udaf()` enforces this up front, but a malformed Connect proto (eval type set,
+      // `buffer_type` missing or non-struct) or a direct `UserDefinedFunction(f, evalType=...)` can
+      // reach here without it, so return a classed error rather than a bare require /
+      // ClassCastException.
+      val bufferStruct = bufferType match {
+        case s: StructType => s
+        case _ =>
+          throw QueryCompilationErrors.invalidIncrementalPythonAggregatorBufferError(
+            name, bufferType)
+      }
+      PythonAggregate(name, func, dataType, e, udfDeterministic, bufferStruct)
     } else {
       PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
     }
@@ -126,13 +155,17 @@ case class UserDefinedPythonFunction(
     if (transpiledExprsForUse.nonEmpty &&
         optionInputTypesForUse.length == transpiledExprsForUse.length &&
         optionInputTypesForUse.forall(_.length == e.length)) {
-      val udfChildren = udfExpr.children.toArray
-      // Resolve the `_udf_param_N` placeholders the transpiler emits into the bound
-      // UDF arguments. Apply this ONLY to the transpiled options -- never to
-      // `udfExpr` itself, whose children are the user's argument expressions. A user
-      // column literally named `_udf_param_N` passed as an argument must not be
-      // rewritten, so we leave `udfExpr` untouched.
-      def resolveUDFParams(expression: Expression, children: Array[Expression]): Expression = {
+      // Turn the transpiler's `_udf_param_N` placeholders into references to the bound arguments.
+      // References, not copies, so the argument stays in `udfExpr`'s children and ConvertToCatalyst
+      // can compute it once in a Project below the operator (SPARK-58626). We run before the
+      // arguments are bound so the reference has no type yet; ResolveTranspiledPythonUDFOptions
+      // fills that in, which is also what gets the option body coerced.
+      //
+      // Options ONLY, never `udfExpr` itself. Somebody's column really can be called
+      // `_udf_param_0`, and if they pass it in we must not rewrite it.
+      // Only the arity is needed, so the arguments are not in scope here at all -- there is nothing
+      // to read one off the wrong node with.
+      def resolveUDFParams(expression: Expression): Expression = {
         expression match {
           case UnresolvedAttribute(nameParts)
               if nameParts.length == 1 && nameParts.head.startsWith("_udf_param_") =>
@@ -140,17 +173,16 @@ case class UserDefinedPythonFunction(
             val index = suffix.toIntOption.getOrElse {
               throw QueryCompilationErrors.invalidUDFParameterPlaceholder(nameParts.head)
             }
-            if (index >= 0 && index < children.length) {
-              children(index)
+            if (index >= 0 && index < e.length) {
+              TranspiledUDFParameter(index)
             } else {
-              throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(
-                index, children.length)
+              throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(index, e.length)
             }
           case _ =>
-            expression.mapChildren(resolveUDFParams(_, children))
+            expression.mapChildren(resolveUDFParams)
         }
       }
-      val resolvedOptions = transpiledExprsForUse.map(resolveUDFParams(_, udfChildren))
+      val resolvedOptions = transpiledExprsForUse.map(resolveUDFParams)
       TranspiledPythonUDF(name, udfExpr, resolvedOptions, optionInputTypesForUse)
     } else {
       udfExpr
@@ -172,6 +204,7 @@ case class UserDefinedPythonFunction(
       case TranspiledPythonUDF(name, udaf: PythonUDAF, transpiled, inputCategories) =>
         TranspiledPythonUDF(name, udaf.toAggregateExpression(), transpiled, inputCategories)
       case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case agg: PythonAggregate => agg.toAggregateExpression()
       case _ => expr
     })
   }
@@ -211,6 +244,13 @@ case class UserDefinedPythonTableFunction(
      * - don't contain positional arguments after named arguments
      */
     NamedParametersSupport.splitAndCheckNamedArguments(exprs, name, SQLConf.get.resolver)
+
+    returnType.foreach { rt =>
+      if (CharVarcharUtils.hasCharVarcharIncludingUDT(rt)) {
+        throw QueryCompilationErrors.charVarcharNotSupportedInPython(
+          "Python UDTF return types", rt.catalogString)
+      }
+    }
 
     // Check which argument is a table argument here since it will be replaced with
     // `UnresolvedAttribute` to construct lateral join.
@@ -351,6 +391,10 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
 
     val schema = DataType.fromJson(
       PythonWorkerUtils.readUTF(length, dataIn)).asInstanceOf[StructType]
+    if (CharVarcharUtils.hasCharVarcharIncludingUDT(schema)) {
+      throw QueryCompilationErrors.charVarcharNotSupportedInPython(
+        "Python UDTF return types", schema.catalogString)
+    }
 
     // Receive the pickled AnalyzeResult buffer, if any.
     val pickledAnalyzeResult: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)

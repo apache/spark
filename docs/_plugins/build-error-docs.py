@@ -22,7 +22,14 @@ ERROR_CONDITIONS_PATH = (
 
 def assemble_message(message_parts):
     message = " ".join(message_parts)
-    cleaned_message = re.sub(r"(<.*?>)", lambda x: f"`{x.group(1)}`", message)
+    # If a message section contains backticks (e.g. `APPROX NEAREST <numResults> BY ...`),
+    # keep it as-is. Otherwise, wrap <placeholder> tags with backticks so they are not
+    # interpreted as HTML tags.
+    cleaned_message = re.sub(
+        r"`[^`]*`|(<.*?>)",
+        lambda x: x.group(0) if x.group(1) is None else f"`{x.group(1)}`",
+        message,
+    )
     return markdown.markdown(cleaned_message)
 
 
@@ -89,7 +96,7 @@ def generate_doc_rows(condition_name, condition_details):
             sub_condition_rows.append(
                 """
                 <tr id="{anchor}">
-                    <td></td>
+                    <td>{sql_state}</td>
                     <td class="error-sub-condition">
                         <span class="error-condition-name">
                             <code>
@@ -103,6 +110,9 @@ def generate_doc_rows(condition_name, condition_details):
                 """
                 .format(
                     anchor=anchor_name(condition_name, sub_condition_name),
+                    sql_state=(
+                        condition_details["subClass"][sub_condition_name].get("sqlState", "")
+                    ),
                     # See comment above for explanation of `<wbr />`.
                     sub_condition_name=sub_condition_name.replace("_", "<wbr />_"),
                     message=condition_details["subClass"][sub_condition_name]["message"],

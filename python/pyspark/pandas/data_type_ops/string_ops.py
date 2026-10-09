@@ -22,11 +22,8 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark.loose_version import LooseVersion
-from pyspark.sql import functions as F
-from pyspark.sql.types import IntegralType, StringType
-from pyspark.sql.utils import pyspark_column_op
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
-from pyspark.pandas.base import column_op, IndexOpsMixin
+from pyspark.pandas.base import IndexOpsMixin, column_op
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
     _as_categorical_type,
@@ -39,7 +36,9 @@ from pyspark.pandas.typedef import (
     is_str_dtype,
     pandas_on_spark_type,
 )
-from pyspark.sql.types import BooleanType
+from pyspark.sql import functions as F
+from pyspark.sql.types import BooleanType, IntegralType, StringType
+from pyspark.sql.utils import pyspark_column_op
 
 
 class StringOps(DataTypeOps):

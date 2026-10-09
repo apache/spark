@@ -14,13 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.errors import PySparkValueError, PySparkTypeError
-
-from typing import Any, Dict, Optional, Union, cast
 import warnings
+from typing import Any, Dict, Optional, Union, cast
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.conf import RuntimeConfig as PySparkRuntimeConfig
 from pyspark.sql.connect import proto
 from pyspark.sql.connect.client import SparkConnectClient
@@ -134,11 +133,12 @@ RuntimeConf.__doc__ = PySparkRuntimeConfig.__doc__
 
 
 def _test() -> None:
+    import doctest
     import os
     import sys
-    import doctest
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.connect.conf
+    from pyspark.sql import SparkSession as PySparkSession
 
     globs = pyspark.sql.connect.conf.__dict__.copy()
     globs["spark"] = (

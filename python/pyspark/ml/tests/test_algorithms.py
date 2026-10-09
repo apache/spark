@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 import os
-from shutil import rmtree
 import tempfile
+from shutil import rmtree
 
 import numpy as np
 
@@ -26,9 +26,9 @@ from pyspark.ml.classification import (
     MultilayerPerceptronClassifier,
     OneVsRest,
 )
-from pyspark.ml.clustering import DistributedLDAModel, KMeans, LocalLDAModel, LDA, LDAModel
+from pyspark.ml.clustering import LDA, DistributedLDAModel, KMeans, LDAModel, LocalLDAModel
 from pyspark.ml.fpm import FPGrowth
-from pyspark.ml.linalg import Vectors, DenseVector
+from pyspark.ml.linalg import DenseVector, Vectors
 from pyspark.ml.recommendation import ALS
 from pyspark.ml.regression import GeneralizedLinearRegression, LinearRegression
 from pyspark.sql import Row

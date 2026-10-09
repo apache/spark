@@ -15,15 +15,15 @@
 # limitations under the License.
 #
 
-from contextlib import contextmanager
 import inspect
 import io
 import logging
 import os
 import sys
 import time
-from typing import BinaryIO, Callable, Generator, Iterable, Iterator, Optional, TextIO, Union
+from contextlib import contextmanager
 from types import FrameType, TracebackType
+from typing import BinaryIO, Callable, Generator, Iterable, Iterator, Optional, TextIO, Union
 
 from pyspark.logger.logger import JSONFormatter
 
