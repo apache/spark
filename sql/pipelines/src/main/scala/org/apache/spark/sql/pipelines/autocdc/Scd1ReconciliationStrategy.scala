@@ -219,6 +219,9 @@ private[pipelines] object Scd1LeafLevelReconciliation {
    * including nested fields, are filled with nulls. Microbatch-only fields are retained after the
    * target fields.
    *
+   * Version maps are built from aligned rows, so each key is spelled as in the target schema and
+   * every target leaf receives an entry, even when the microbatch omits it.
+   *
    * @param microbatchDf The microbatch rows to align.
    * @param targetTableDf A target-table snapshot whose schema provides the canonical field order
    *                      and spelling. Its rows are ignored.
