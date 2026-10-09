@@ -534,6 +534,15 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   /**
+   * Points the top-level primitive slot {@code slot} at {@code reader} for the rest of the row
+   * group installed last. From the next batch on, {@code reader} must read the rows the other
+   * slots read, or the slot's values land on other rows.
+   */
+  protected final void replaceColumnReader(int slot, VectorizedColumnReader reader) {
+    columnVectors[slot].setColumnReader(reader);
+  }
+
+  /**
    * Whether the batch's top-level slot {@code slot} takes its vector from somewhere other than the
    * row group being installed. A subclass answering true must have a primitive column there.
    */

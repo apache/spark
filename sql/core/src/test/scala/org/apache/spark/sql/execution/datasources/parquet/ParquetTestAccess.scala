@@ -235,8 +235,12 @@ object ParquetTestAccess {
   /** The survivor sets phase 1 queued and the reader has not emitted yet, oldest first. */
   def queuedSurvivorSets(
       reader: LateMaterializationParquetRecordReader): Seq[Seq[WritableColumnVector]] =
-    survivorBatchesField.get(reader)
-      .asInstanceOf[java.util.ArrayDeque[Array[WritableColumnVector]]].asScala.map(_.toSeq).toSeq
+    survivorBatchesField.get(reader).asInstanceOf[java.util.ArrayDeque[AnyRef]].asScala.map {
+      batch =>
+        val vectors = batch.getClass.getDeclaredMethod("vectors")
+        vectors.setAccessible(true)
+        vectors.invoke(batch).asInstanceOf[Array[WritableColumnVector]].toSeq
+    }.toSeq
 
   private lazy val columnVectorsField = {
     val f = classOf[VectorizedParquetRecordReader].getDeclaredField("columnVectors")

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, RandomAccessFile}
 import java.net.URI
 import java.time.LocalTime
-import java.util.Locale
+import java.util.{Locale, Properties}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
@@ -47,8 +47,9 @@ import org.mockito.ArgumentMatchers.{any, anyInt}
 import org.mockito.Mockito.{doAnswer, doThrow, spy}
 import org.mockito.invocation.InvocationOnMock
 
-import org.apache.spark.{SparkEnv, SparkException, TaskContext, TaskKilledException}
+import org.apache.spark.{SparkEnv, SparkException, TaskContext, TaskContextImpl, TaskKilledException}
 import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
+import org.apache.spark.memory.{TaskMemoryManager, TestMemoryConsumer, TestMemoryManager}
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{classic, sources, DataFrame, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -67,7 +68,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.sketch.BloomFilter
 
 /**
@@ -1977,6 +1978,18 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
   private def marked(keys: Seq[Long], checked: Boolean): Seq[(Long, Boolean)] =
     keys.map(_ -> checked)
 
+  // 40 rows of a long key and a string value in two row groups of 20. A filter of `k >= 10` keeps
+  // one range of 10 rows in the first and all 20 rows of the second. A buffered long key costs 9
+  // bytes and a range 40, so the first row group holds 130 bytes and the second 220.
+  private def twoRowGroupsOf20(dir: File): String = {
+    val path = writeSingleParquetFile(dir, (0L until 40L).map(i => (i, i.toString)).toDF("k", "v"),
+      rowGroupSize = ParquetWriter.DEFAULT_BLOCK_SIZE,
+      options = Map(ParquetOutputFormat.BLOCK_ROW_COUNT_LIMIT -> "20"))
+    assert(footerOf(path).getBlocks.asScala.map(_.getRowCount) == Seq(20L, 20L),
+      "the fixture must be two row groups of 20 rows")
+    path
+  }
+
   test("the checked column is true exactly for the rows of a row group the filter was applied to") {
     // The post-scan Filter skips the storage filter on a row marked true, so true must mean the
     // filter kept that row. A row group the filter was given up on comes back whole and must be
@@ -1984,12 +1997,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     // give-up in the first leaves the second its own. Batches of 4 rows split each row group, and
     // every batch of it must be marked alike.
     withTempDir { dir =>
-      val rows = (0L until 40L).map(i => (i, i.toString))
-      val path = writeSingleParquetFile(dir, rows.toDF("k", "v"),
-        rowGroupSize = ParquetWriter.DEFAULT_BLOCK_SIZE,
-        options = Map(ParquetOutputFormat.BLOCK_ROW_COUNT_LIMIT -> "20"))
-      assert(footerOf(path).getBlocks.asScala.map(_.getRowCount) == Seq(20L, 20L),
-        "the fixture must be two row groups of 20 rows")
+      val path = twoRowGroupsOf20(dir)
       val schema = checkedSchema()
       val k = BoundReference(0, LongType, nullable = true)
       def filtersOn(key: Expression): Seq[Expression] = Seq(GreaterThanOrEqual(key, Literal(10L)))
@@ -2116,6 +2124,201 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       assert(marks.isInstanceOf[OffHeapColumnVector],
         s"the checked column must be off heap; got ${marks.getClass}")
       assert(address(marks) == 0, "the checked column's vector must be freed by close")
+    }
+  }
+
+  // A task whose memory manager draws on `memoryManager`, which a test can limit.
+  private def memoryTask(memoryManager: TestMemoryManager): TaskContextImpl =
+    new TaskContextImpl(stageId = 0, stageAttemptNumber = 0, partitionId = 0, taskAttemptId = 0,
+      attemptNumber = 0, numPartitions = 1,
+      taskMemoryManager = new TaskMemoryManager(memoryManager, 0),
+      localProperties = new Properties, metricsSystem = null)
+
+  // Reads `path` under `filter` in batches of `batchSize`, as a task of `context`. `onRow` gets
+  // each row's index in its batch before its key is read. The confs are set outside the task, which
+  // sees a read-only one.
+  private def readInTask(
+      path: String,
+      context: TaskContext,
+      offHeap: Boolean = false,
+      filter: Expression = keyAtLeast(10L),
+      schema: StructType = checkedSchema(),
+      batchSize: Int = 4)(onRow: Int => Unit): Seq[(Long, Boolean)] = withSQLConf(
+      SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE.key -> batchSize.toString,
+      SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeap.toString) {
+    asTask(context) {
+      readChecked(path, schema, Seq(filter),
+        keyOf = (b, i) => { onRow(i); b.column(0).getLong(i) })
+    }
+  }
+
+  // Reads `path` as `readInTask` does. At the first batch, another consumer asks for memory the
+  // manager has no more of, so the reader is spilled. Returns the rows, with what the task held
+  // before and after the spill.
+  private def readWithSpill(
+      path: String,
+      otherThread: Boolean = false,
+      filter: Expression = keyAtLeast(10L),
+      schema: StructType = checkedSchema(),
+      batchSize: Int = 4): (Seq[(Long, Boolean)], Long, Long) = {
+    val memoryManager = new TestMemoryManager(spark.sparkContext.conf)
+    val context = memoryTask(memoryManager)
+    val memory = context.taskMemoryManager
+    val other = new TestMemoryConsumer(memory)
+    var before, after = -1L
+    val rows = readInTask(path, context, filter = filter, schema = schema,
+        batchSize = batchSize) { i =>
+      if (before < 0 && i == 0) {
+        before = memory.getMemoryConsumptionForThisTask
+        memoryManager.limit(0L)
+        if (otherThread) ThreadUtils.runInNewThread("spill")(other.use(before))
+        else other.use(before)
+        after = memory.getMemoryConsumptionForThisTask - other.getUsed
+        other.free(other.getUsed)
+        // Not Long.MaxValue, which the releases still to come would overflow.
+        memoryManager.limit(1L << 40)
+      }
+    }
+    (rows, before, after)
+  }
+
+  test("the survivor buffer is accounted to the task's execution memory") {
+    // What is buffered is held while a spliced row group is emitted, each batch's share released as
+    // it goes, and the rest at the end. Off heap, only the ranges are accounted, since the vectors'
+    // native memory is not the memory manager's.
+    withTempDir { dir =>
+      val path = twoRowGroupsOf20(dir)
+      Seq(false -> Seq(130L, 94L, 58L, 220L, 184L, 148L, 112L, 76L),
+          true -> Seq.fill(8)(40L)).foreach { case (offHeap, expected) =>
+        val context = memoryTask(new TestMemoryManager(spark.sparkContext.conf))
+        val memory = context.taskMemoryManager
+        var held = Seq.empty[Long]
+        val rows = readInTask(path, context, offHeap) { i =>
+          if (i == 0) held :+= memory.getMemoryConsumptionForThisTask
+        }
+        assert(rows == marked(10L until 40L, checked = true), s"off heap $offHeap: got $rows")
+        assert(held == expected,
+          s"off heap $offHeap: each batch must hold what is still buffered; got $held")
+        assert(memory.getMemoryConsumptionForThisTask == 0, s"off heap $offHeap: not released")
+      }
+      // A reader closed after its first batch, as under a limit, releases what it still holds.
+      val context = memoryTask(new TestMemoryManager(spark.sparkContext.conf))
+      val file = PartitionedFile(
+        InternalRow.empty, SparkPath.fromPathString(path), 0, new File(path).length())
+      val heldAtFirst = withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE.key -> "4") {
+        asTask(context) {
+          drain(formatReader(checkedSchema(), Nil, Seq(keyAtLeast(10L)))(file)) { it =>
+            it.next()
+            context.taskMemoryManager.getMemoryConsumptionForThisTask
+          }
+        }
+      }
+      assert(heldAtFirst == 130L,
+        s"the first batch must hold the first row group; got $heldAtFirst")
+      assert(context.taskMemoryManager.getMemoryConsumptionForThisTask == 0,
+        "a reader closed early must release what it holds")
+    }
+  }
+
+  test("memory the task's memory manager denies gives splicing up, and then the filter") {
+    withTempDir { dir =>
+      val path = twoRowGroupsOf20(dir)
+      def limitedTask(available: Long): TaskContext = {
+        val memoryManager = new TestMemoryManager(spark.sparkContext.conf)
+        memoryManager.limit(available)
+        memoryTask(memoryManager)
+      }
+      def rows(available: Long): Seq[(Long, Boolean)] =
+        readInTask(path, limitedTask(available))(_ => ())
+      def bytes(available: Long, cap: String = "64MB"): Long = withSQLConf(
+          SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE.key -> "4",
+          SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES.key -> cap) {
+        asTask(limitedTask(available)) {
+          readCounting(path, formatReader(
+            checkedSchema(), Nil, Seq(keyAtLeast(10L)), countingHadoopConf()))._2
+        }
+      }
+      val plain = rows(Long.MaxValue)
+      assert(plain == marked(10L until 40L, checked = true), s"got $plain")
+      // 105 bytes hold the 40 of the first row group's range and 7 of its keys, but not the 8th.
+      // So splicing is given up there, as a cap of 105 bytes gives it up. The read must cost
+      // exactly what the cap does, the key column read again, while the filter stays.
+      val keysDenied = rows(105L)
+      assert(keysDenied == plain, s"denied keys must keep the filter; got $keysDenied")
+      val cappedBytes = bytes(Long.MaxValue, cap = "105b")
+      assert(cappedBytes > bytes(Long.MaxValue), "a cap of 105 bytes must give splicing up")
+      val keysDeniedBytes = bytes(105L)
+      assert(keysDeniedBytes == cappedBytes,
+        s"denied keys must read what the cap reads; got $keysDeniedBytes against $cappedBytes")
+      // Nothing at all does not hold the ranges either, so the filter is given up.
+      assert(rows(0L) == marked(0L until 40L, checked = false),
+        "denied ranges must give the filter up")
+    }
+  }
+
+  test("the survivor buffer asks for little more memory than it holds") {
+    // Another consumer holds all but 10,000 bytes, and the buffer never holds more than 220. A
+    // reservation asking for more than is free would spill that consumer.
+    withTempDir { dir =>
+      val path = twoRowGroupsOf20(dir)
+      val memoryManager = new TestMemoryManager(spark.sparkContext.conf)
+      val held = 1000000L
+      memoryManager.limit(held + 10000L)
+      val context = memoryTask(memoryManager)
+      val other = new TestMemoryConsumer(context.taskMemoryManager)
+      other.use(held)
+      val rows = readInTask(path, context)(_ => ())
+      assert(rows == marked(10L until 40L, checked = true), s"got $rows")
+      assert(other.getUsed == held, "the read must not spill another consumer")
+    }
+  }
+
+  test("a spill while a spliced row group is emitted frees its survivors, and its keys are read " +
+      "again") {
+    // The queued survivors of the first row group go at its first batch, and the rest of its rows
+    // read their keys again. A spill from another thread leaves the buffer alone, since the reader
+    // takes no lock.
+    withTempDir { dir =>
+      val path = twoRowGroupsOf20(dir)
+      Seq(false, true).foreach { otherThread =>
+        val (rows, before, after) = readWithSpill(path, otherThread)
+        assert(rows == marked(10L until 40L, checked = true),
+          s"other thread $otherThread: the keys after the spill must be read again; got $rows")
+        // 130 bytes buffered, and 76 left once the queued 6 survivors of 9 bytes go.
+        assert((before, after) == (if (otherThread) (130L, 130L) else (130L, 76L)),
+          s"other thread $otherThread: got $before before and $after after")
+      }
+    }
+  }
+
+  test("a spill leaves a row group phase 2 read whole, whose offset index may not parse") {
+    // Every row of the middle row group survives, so both phases read it whole and never need its
+    // damaged offset index. Reading the rest of its keys again after a spill would need it.
+    withTempDir { dir =>
+      val blocks = (0 until 3).map(b => ((b * 100 + 1L) to (b * 100 + 100L)).map(i => (i, i)))
+      val path = writeParquetFileByHand(dir, blocks, (_, _) => true)
+      breakOffsetIndex(path, blockIdx = 1, columnIdx = 1)
+      val (rows, before, after) = readWithSpill(path, filter = keyAtLeast(101L),
+        schema = checkedSchema(valueType = LongType), batchSize = 16)
+      assert(rows == marked(101L to 300L, checked = true), s"got $rows")
+      assert(before > 0 && after == before, s"got $before before and $after after the spill")
+    }
+  }
+
+  test("a row group phase 2 reads whole or not at all reads no offset index in a task either") {
+    // Under `k >= 20` the filter skips the first row group whole and keeps all of the second, so
+    // neither needs an offset index. A reader that can spill must not read one for them.
+    withTempDir { dir =>
+      val path = twoRowGroupsOf20(dir)
+      def bytes(context: Option[TaskContext]): Long =
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE.key -> "4") {
+          def read(): Long = readCounting(path, formatReader(
+            checkedSchema(), Nil, Seq(keyAtLeast(20L)), countingHadoopConf()))._2
+          context.map(asTask(_)(read())).getOrElse(read())
+        }
+      val outside = bytes(None)
+      val inTask = bytes(Some(memoryTask(new TestMemoryManager(spark.sparkContext.conf))))
+      assert(inTask == outside, s"got $inTask in a task against $outside outside one")
     }
   }
 
