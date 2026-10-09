@@ -21,6 +21,10 @@ import java.io.{File, IOException, PrintStream}
 import java.net.URI
 import java.text.ParseException
 import java.util.UUID
+import java.util.concurrent.{CancellationException, TimeUnit}
+import java.util.concurrent.locks.ReentrantLock
+
+import scala.jdk.CollectionConverters._
 
 import org.apache.ivy.Ivy
 import org.apache.ivy.core.LogOptions
@@ -29,10 +33,10 @@ import org.apache.ivy.core.module.id.{ArtifactId, ModuleId, ModuleRevisionId}
 import org.apache.ivy.core.report.{DownloadStatus, ResolveReport}
 import org.apache.ivy.core.resolve.ResolveOptions
 import org.apache.ivy.core.retrieve.RetrieveOptions
-import org.apache.ivy.core.settings.IvySettings
+import org.apache.ivy.core.settings.{IvySettings, NamedTimeoutConstraint}
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
-import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
+import org.apache.ivy.plugins.resolver.{AbstractResolver, ChainResolver, FileSystemResolver, IBiblioResolver}
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
@@ -41,6 +45,48 @@ import org.apache.spark.util.ArrayImplicits._
 /** Provides utility functions to be used inside SparkSubmit. */
 private[spark] object MavenUtils extends Logging {
   val JAR_IVY_SETTING_PATH_KEY: String = "spark.jars.ivySettings"
+
+  private lazy val testM2Path = new File(
+    SparkFileUtils.createTempDir(namePrefix = "spark-test-m2"),
+    "repository")
+
+  private val ivyLock = new ReentrantLock()
+  private val ivyLockPollIntervalMs = 100L
+
+  private def withIvyContext[T](ivy: Ivy)(f: => T): T = {
+    ivy.pushContext()
+    try {
+      f
+    } finally {
+      ivy.popContext()
+    }
+  }
+
+  private def acquireIvyLock(isCancelled: () => Boolean): Unit = {
+    def checkCancelled(): Unit = {
+      if (isCancelled() || Thread.currentThread().isInterrupted) {
+        throw new CancellationException("Maven dependency resolution was cancelled")
+      }
+    }
+
+    checkCancelled()
+    try {
+      while (!ivyLock.tryLock(ivyLockPollIntervalMs, TimeUnit.MILLISECONDS)) {
+        checkCancelled()
+      }
+    } catch {
+      case _: InterruptedException =>
+        Thread.currentThread().interrupt()
+        throw new CancellationException("Maven dependency resolution was cancelled")
+    }
+    try {
+      checkCancelled()
+    } catch {
+      case e: Throwable =>
+        ivyLock.unlock()
+        throw e
+    }
+  }
 
   // Exposed for testing
   // var printStream = SparkSubmit.printStream
@@ -119,8 +165,8 @@ private[spark] object MavenUtils extends Logging {
   /** Path of the local Maven cache. */
   private[util] def m2Path: File = {
     if (SparkEnvUtils.isTesting) {
-      // test builds delete the maven cache, and this can cause flakiness
-      new File("dummy", ".m2" + File.separator + "repository")
+      // Keep concurrent test JVMs from deleting each other's local Maven repository.
+      testM2Path
     } else {
       new File(System.getProperty("user.home"), ".m2" + File.separator + "repository")
     }
@@ -340,6 +386,28 @@ private[spark] object MavenUtils extends Logging {
     ivySettings
   }
 
+  /** Apply bounded network timeouts to every resolver in an Ivy settings graph. */
+  private[spark] def setResolverTimeouts(
+      ivySettings: IvySettings,
+      connectTimeoutMs: Int,
+      readTimeoutMs: Int): Unit = {
+    require(connectTimeoutMs > 0, "The Ivy connection timeout must be positive")
+    require(readTimeoutMs > 0, "The Ivy read timeout must be positive")
+
+    val name = s"spark-runtime-${UUID.randomUUID()}"
+    val timeout = new NamedTimeoutConstraint(name)
+    timeout.setConnectionTimeout(connectTimeoutMs)
+    timeout.setReadTimeout(readTimeoutMs)
+    ivySettings.addConfigured(timeout)
+
+    ivySettings.getResolvers.asScala.foreach {
+      case resolver: AbstractResolver =>
+        resolver.setTimeoutConstraint(name)
+        resolver.validate()
+      case _ =>
+    }
+  }
+
   /* Set ivy settings for location of cache, if option is supplied */
   private[util] def processIvyPathArg(ivySettings: IvySettings, ivyPath: Option[String]): Unit = {
     val alternateIvyDir = ivyPath.filterNot(_.trim.isEmpty).getOrElse {
@@ -454,10 +522,31 @@ private[spark] object MavenUtils extends Logging {
       noCacheIvySettings: Option[IvySettings] = None,
       transitive: Boolean,
       exclusions: Seq[String] = Nil,
-      isTest: Boolean = false)(implicit printStream: PrintStream): Seq[String] = {
+      isTest: Boolean = false)(
+      implicit printStream: PrintStream): Seq[String] = {
+    resolveMavenCoordinatesWithCancellation(
+      coordinates,
+      ivySettings,
+      noCacheIvySettings,
+      transitive,
+      exclusions,
+      isTest,
+      () => false)
+  }
+
+  private[spark] def resolveMavenCoordinatesWithCancellation(
+      coordinates: String,
+      ivySettings: IvySettings,
+      noCacheIvySettings: Option[IvySettings],
+      transitive: Boolean,
+      exclusions: Seq[String],
+      isTest: Boolean,
+      isCancelled: () => Boolean)(
+      implicit printStream: PrintStream): Seq[String] = {
     if (coordinates == null || coordinates.trim.isEmpty) {
       Nil
     } else {
+      acquireIvyLock(isCancelled)
       val sysOut = System.out
       // Default configuration name for ivy
       val ivyConfName = "default"
@@ -479,77 +568,72 @@ private[spark] object MavenUtils extends Logging {
         // scalastyle:on println
 
         val ivy = Ivy.newInstance(ivySettings)
-        ivy.pushContext()
-
-        // Set resolve options to download transitive dependencies as well
-        val resolveOptions = new ResolveOptions
-        resolveOptions.setTransitive(transitive)
-        val retrieveOptions = new RetrieveOptions
-        // Turn downloading and logging off for testing
-        if (isTest) {
-          resolveOptions.setDownload(false)
-          resolveOptions.setLog(LogOptions.LOG_QUIET)
-          retrieveOptions.setLog(LogOptions.LOG_QUIET)
-        } else {
-          resolveOptions.setDownload(true)
-        }
-        // retrieve all resolved dependencies
-        retrieveOptions.setDestArtifactPattern(
-          packagesDirectory.getAbsolutePath + File.separator +
-            "[organization]_[artifact]-[revision](-[classifier]).[ext]")
-        retrieveOptions.setConfs(Array(ivyConfName))
-
-        // Add exclusion rules for Spark and Scala Library
-        addExclusionRules(ivySettings, ivyConfName, md)
-        // add all supplied maven artifacts as dependencies
-        addDependenciesToIvy(md, artifacts, ivyConfName)
-        exclusions.foreach { e =>
-          md.addExcludeRule(createExclusion(e + ":*", ivySettings, ivyConfName))
-        }
-        // resolve dependencies
-        val rr: ResolveReport = ivy.resolve(md, resolveOptions)
-        if (rr.hasError) {
-          // SPARK-46302: When there are some corrupted jars in the local maven repo,
-          // we try to continue without the cache
-          val failedReports = rr.getArtifactsReports(DownloadStatus.FAILED, true)
-          if (failedReports.nonEmpty && noCacheIvySettings.isDefined) {
-            val failedArtifacts = failedReports.map(r => r.getArtifact)
-            logInfo(log"Download failed: " +
-              log"${MDC(LogKeys.ARTIFACTS, failedArtifacts.mkString("[", ", ", "]"))}, " +
-              log"attempt to retry while skipping local-m2-cache.")
-            failedArtifacts.foreach(artifact => {
-              clearInvalidIvyCacheFiles(artifact.getModuleRevisionId, ivySettings.getDefaultCache)
-            })
-            ivy.popContext()
-
-            val noCacheIvy = Ivy.newInstance(noCacheIvySettings.get)
-            noCacheIvy.pushContext()
-
-            val noCacheRr = noCacheIvy.resolve(md, resolveOptions)
-            if (noCacheRr.hasError) {
-              throw new RuntimeException(noCacheRr.getAllProblemMessages.toString)
-            }
-            noCacheIvy.retrieve(noCacheRr.getModuleDescriptor.getModuleRevisionId, retrieveOptions)
-            val dependencyPaths = resolveDependencyPaths(
-              noCacheRr.getArtifacts.toArray, packagesDirectory)
-            noCacheIvy.popContext()
-
-            dependencyPaths
+        withIvyContext(ivy) {
+          // Set resolve options to download transitive dependencies as well
+          val resolveOptions = new ResolveOptions
+          resolveOptions.setTransitive(transitive)
+          val retrieveOptions = new RetrieveOptions
+          // Turn downloading and logging off for testing
+          if (isTest) {
+            resolveOptions.setDownload(false)
+            resolveOptions.setLog(LogOptions.LOG_QUIET)
+            retrieveOptions.setLog(LogOptions.LOG_QUIET)
           } else {
-            throw new RuntimeException(rr.getAllProblemMessages.toString)
+            resolveOptions.setDownload(true)
           }
-        } else {
-          ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId, retrieveOptions)
-          val dependencyPaths = resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
-          ivy.popContext()
+          // retrieve all resolved dependencies
+          retrieveOptions.setDestArtifactPattern(
+            packagesDirectory.getAbsolutePath + File.separator +
+              "[organization]_[artifact]-[revision](-[classifier]).[ext]")
+          retrieveOptions.setConfs(Array(ivyConfName))
 
-          dependencyPaths
+          // Add exclusion rules for Spark and Scala Library
+          addExclusionRules(ivySettings, ivyConfName, md)
+          // add all supplied maven artifacts as dependencies
+          addDependenciesToIvy(md, artifacts, ivyConfName)
+          exclusions.foreach { e =>
+            md.addExcludeRule(createExclusion(e + ":*", ivySettings, ivyConfName))
+          }
+          // resolve dependencies
+          val rr: ResolveReport = ivy.resolve(md, resolveOptions)
+          if (rr.hasError) {
+            // SPARK-46302: When there are some corrupted jars in the local maven repo,
+            // we try to continue without the cache
+            val failedReports = rr.getArtifactsReports(DownloadStatus.FAILED, true)
+            if (failedReports.nonEmpty && noCacheIvySettings.isDefined) {
+              val failedArtifacts = failedReports.map(r => r.getArtifact)
+              logInfo(log"Download failed: " +
+                log"${MDC(LogKeys.ARTIFACTS, failedArtifacts.mkString("[", ", ", "]"))}, " +
+                log"attempt to retry while skipping local-m2-cache.")
+              failedArtifacts.foreach(artifact => {
+                clearInvalidIvyCacheFiles(
+                  artifact.getModuleRevisionId, ivySettings.getDefaultCache)
+              })
+
+              val noCacheIvy = Ivy.newInstance(noCacheIvySettings.get)
+              withIvyContext(noCacheIvy) {
+                val noCacheRr = noCacheIvy.resolve(md, resolveOptions)
+                if (noCacheRr.hasError) {
+                  throw new RuntimeException(noCacheRr.getAllProblemMessages.toString)
+                }
+                noCacheIvy.retrieve(
+                  noCacheRr.getModuleDescriptor.getModuleRevisionId, retrieveOptions)
+                resolveDependencyPaths(noCacheRr.getArtifacts.toArray, packagesDirectory)
+              }
+            } else {
+              throw new RuntimeException(rr.getAllProblemMessages.toString)
+            }
+          } else {
+            ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId, retrieveOptions)
+            resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
+          }
         }
       } finally {
         System.setOut(sysOut)
         if (md != null) {
           clearIvyResolutionFiles(md.getModuleRevisionId, ivySettings.getDefaultCache, ivyConfName)
         }
+        ivyLock.unlock()
       }
     }
   }

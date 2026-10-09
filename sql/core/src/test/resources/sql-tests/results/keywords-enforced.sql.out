@@ -433,6 +433,7 @@ UNPIVOT	false
 UNSET	false
 UNTIL	false
 UPDATE	false
+UPDATES	false
 USE	false
 USER	true
 USING	true

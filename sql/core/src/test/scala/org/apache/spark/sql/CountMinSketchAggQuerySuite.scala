@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.time.LocalTime
+
 import org.apache.spark.sql.functions.{count_min_sketch, lit}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.sketch.CountMinSketch
@@ -60,5 +62,43 @@ class CountMinSketchAggQuerySuite extends SharedSparkSession {
     items.foreach(reference.add)
 
     assert(sketch == reference)
+  }
+
+  test("count-min sketch over the TIME type") {
+    val eps = 0.1
+    val confidence = 0.95
+    val seed = 11
+
+    val sketch = CountMinSketch.readFrom(
+      spark.sql(
+        s"SELECT count_min_sketch(t, ${eps}d, ${confidence}d, $seed) FROM VALUES " +
+          "(TIME'12:00:00'), (TIME'12:00:00'), (TIME'09:00:00'), (TIME'17:00:00') AS tab(t)")
+        .head().get(0).asInstanceOf[Array[Byte]])
+
+    // A TIME column sketches by its nanos-of-day, identical to a BIGINT of the same values.
+    val reference = CountMinSketch.create(eps, confidence, seed)
+    Seq(LocalTime.of(12, 0, 0), LocalTime.of(12, 0, 0), LocalTime.of(9, 0, 0),
+      LocalTime.of(17, 0, 0)).foreach(t => reference.add(t.toNanoOfDay))
+
+    assert(sketch == reference)
+  }
+
+  test("count_min_sketch TIME frequency is looked up by nanoseconds-of-day") {
+    val eps = 0.1
+    val confidence = 0.95
+    val seed = 11
+
+    val sketch = CountMinSketch.readFrom(
+      spark.sql(
+        s"SELECT count_min_sketch(t, ${eps}d, ${confidence}d, $seed) FROM VALUES " +
+          "(TIME'12:00:00'), (TIME'12:00:00'), (TIME'12:00:00'), (TIME'09:00:00') AS tab(t)")
+        .head().get(0).asInstanceOf[Array[Byte]])
+
+    // A TIME value is looked up by its nanoseconds-of-day (LocalTime.toNanoOfDay), not by a
+    // LocalTime -- the underlying sketch key is the same long the aggregate stored.
+    assert(sketch.estimateCount(LocalTime.of(12, 0, 0).toNanoOfDay) == 3L)
+    assert(sketch.estimateCount(LocalTime.of(9, 0, 0).toNanoOfDay) == 1L)
+    // Passing the LocalTime itself is not a valid lookup key.
+    intercept[IllegalArgumentException](sketch.estimateCount(LocalTime.of(12, 0, 0)))
   }
 }

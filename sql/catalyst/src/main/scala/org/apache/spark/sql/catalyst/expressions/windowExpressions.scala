@@ -334,7 +334,7 @@ case class UnresolvedWindowExpression(
 
 object WindowExpression {
   def hasWindowExpression(e: Expression): Boolean = {
-    e.find(_.isInstanceOf[WindowExpression]).isDefined
+    e.exists(_.isInstanceOf[WindowExpression])
   }
 
   def expressionToIngnoreNulls(e: Expression, source: String): Boolean = e match {

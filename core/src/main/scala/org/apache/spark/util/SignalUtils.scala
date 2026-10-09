@@ -22,7 +22,7 @@ import java.util.Collections
 import scala.jdk.CollectionConverters._
 
 import org.slf4j.Logger
-import sun.misc.{Signal, SignalHandler}
+import sun.misc.{Signal, SignalHandler} // scalastyle:ignore sunmiscsignal
 
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
@@ -90,6 +90,23 @@ private[spark] object SignalUtils extends Logging {
         } else {
           logWarning(failMessage)
         }
+    }
+  }
+
+  /**
+   * Runs `body` with `handler` temporarily installed for the given signal, and restores the
+   * previous handler afterwards.
+   *
+   * Unlike `register`, the handler replaces the existing one instead of being chained with it,
+   * and it is run whenever the signal is received while `body` is running.
+   */
+  def withSignalHandler[T](signal: String)(handler: => Unit)(body: => T): T = {
+    val sig = new Signal(signal)
+    val prevHandler = Signal.handle(sig, (_: Signal) => handler)
+    try {
+      body
+    } finally {
+      Signal.handle(sig, prevHandler)
     }
   }
 

@@ -181,7 +181,8 @@ object TextInputJsonDataSource extends JsonDataSource {
     val sampled: Dataset[String] = JsonUtils.sample(json, parsedOptions)
     val rdd: RDD[InternalRow] = sampled.queryExecution.toRdd
     val rowParser = parsedOptions.encoding.map { enc =>
-      CreateJacksonParser.internalRow(enc, _: JsonFactory, _: InternalRow)
+      CreateJacksonParser.internalRow(enc, parsedOptions.legacyJavaCharsets,
+        parsedOptions.legacyCodingErrorAction, _: JsonFactory, _: InternalRow)
     }.getOrElse(CreateJacksonParser.internalRow(_: JsonFactory, _: InternalRow))
 
     SQLExecution.withSQLConfPropagated(json.sparkSession) {
@@ -213,7 +214,8 @@ object TextInputJsonDataSource extends JsonDataSource {
     )
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
     val textParser = parser.options.encoding
-      .map(enc => CreateJacksonParser.text(enc, _: JsonFactory, _: Text))
+      .map(enc => CreateJacksonParser.text(enc, parser.options.legacyJavaCharsets,
+        parser.options.legacyCodingErrorAction, _: JsonFactory, _: Text))
       .getOrElse(CreateJacksonParser.text(_: JsonFactory, _: Text))
 
     val safeParser = new FailureSafeParser[Text](
@@ -229,7 +231,8 @@ object TextInputJsonDataSource extends JsonDataSource {
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
     val textParser = parser.options.encoding
-      .map(enc => CreateJacksonParser.text(enc, _: JsonFactory, _: Text))
+      .map(enc => CreateJacksonParser.text(enc, parser.options.legacyJavaCharsets,
+        parser.options.legacyCodingErrorAction, _: JsonFactory, _: Text))
       .getOrElse(CreateJacksonParser.text(_: JsonFactory, _: Text))
 
     val safeParser = new FailureSafeParser[Text](
@@ -395,7 +398,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
       file: PartitionedFile,
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
-    def partitionedFileString(ignored: Any): UTF8String = {
+    lazy val fileLiteral: UTF8String = {
       Utils.tryWithResource {
         Utils.createResourceUninterruptiblyIfInTaskThread {
           CodecStreams.createInputStreamWithCloseResource(conf, file.toPath)
@@ -404,6 +407,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
         UTF8String.fromBytes(inputStream.readAllBytes())
       }
     }
+    def partitionedFileString(ignored: Any): UTF8String = fileLiteral
     val streamParser = parser.options.encoding
       .map(enc => CreateJacksonParser.inputStream(enc, _: JsonFactory, _: InputStream))
       .getOrElse(CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream))
@@ -414,8 +418,14 @@ object MultiLineJsonDataSource extends JsonDataSource {
       schema,
       parser.options.columnNameOfCorruptRecord)
 
-    safeParser.parse(
-      CodecStreams.createInputStreamWithCloseResource(conf, file.toPath))
+    val input = CodecStreams.createInputStreamWithCloseResource(conf, file.toPath)
+    if (parser.options.streamMultilineTopLevelArray) {
+      safeParser.parseIterator(
+        input,
+        input => parser.parseIterator[InputStream](input, streamParser, partitionedFileString))
+    } else {
+      safeParser.parse(input)
+    }
   }
 
   override protected def readStream(
@@ -425,16 +435,25 @@ object MultiLineJsonDataSource extends JsonDataSource {
     // The entry is a single JSON document. Buffer its bytes so the corrupt-record column can echo
     // the whole document on a parse failure, mirroring `readFile`'s `partitionedFileString`.
     val bytes = in.readAllBytes()
+    lazy val documentLiteral: UTF8String = UTF8String.fromBytes(bytes)
     val streamParser = parser.options.encoding
       .map(enc => CreateJacksonParser.inputStream(enc, _: JsonFactory, _: InputStream))
       .getOrElse(CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream))
 
     val safeParser = new FailureSafeParser[InputStream](
-      input => parser.parse[InputStream](input, streamParser, _ => UTF8String.fromBytes(bytes)),
+      input => parser.parse[InputStream](input, streamParser, _ => documentLiteral),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
 
-    safeParser.parse(new ByteArrayInputStream(bytes))
+    val input = new ByteArrayInputStream(bytes)
+    if (parser.options.streamMultilineTopLevelArray) {
+      safeParser.parseIterator(
+        input,
+        input => parser.parseIterator[InputStream](
+          input, streamParser, _ => documentLiteral))
+    } else {
+      safeParser.parse(input)
+    }
   }
 }

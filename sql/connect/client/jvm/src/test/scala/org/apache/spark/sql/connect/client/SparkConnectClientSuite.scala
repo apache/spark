@@ -1428,6 +1428,8 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   private val sparkConfigs = mutable.Map.empty[String, String]
 
   var errorToThrowOnExecute: Option[Throwable] = None
+  var errorToThrowOnAnalyze: Option[Throwable] = None
+  var serverCapabilities: Seq[String] = Nil
 
   private var errorToThrowOnConfig: Map[String, Throwable] = Map.empty
 
@@ -1501,6 +1503,11 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   override def analyzePlan(
       request: AnalyzePlanRequest,
       responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
+    errorToThrowOnAnalyze.foreach { error =>
+      errorToThrowOnAnalyze = None
+      responseObserver.onError(error)
+      return
+    }
     // Reply with a dummy response using the same client ID
     val requestSessionId = request.getSessionId
     synchronized {
@@ -1520,11 +1527,17 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
         case _ => inputPlan = null
       }
     }
-    val response = AnalyzePlanResponse
+    val responseBuilder = AnalyzePlanResponse
       .newBuilder()
       .setSessionId(requestSessionId)
-      .build()
-    responseObserver.onNext(response)
+    if (request.hasSparkVersion) {
+      responseBuilder.setSparkVersion(
+        proto.AnalyzePlanResponse.SparkVersion
+          .newBuilder()
+          .setVersion("test-version")
+          .addAllCapabilities(serverCapabilities.asJava))
+    }
+    responseObserver.onNext(responseBuilder.build())
     responseObserver.onCompleted()
   }
 

@@ -518,40 +518,84 @@ class DataType(google.protobuf.message.Message):
 
         LENGTH_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
+        COLLATION_FIELD_NUMBER: builtins.int
         length: builtins.int
         type_variation_reference: builtins.int
+        collation: builtins.str
+        """(Optional) Collation name. When omitted, the collation was not explicitly specified.
+        Older clients ignore this field and decode the historical uncollated CHAR type.
+        """
         def __init__(
             self,
             *,
             length: builtins.int = ...,
             type_variation_reference: builtins.int = ...,
+            collation: builtins.str | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_collation", b"_collation", "collation", b"collation"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "length", b"length", "type_variation_reference", b"type_variation_reference"
+                "_collation",
+                b"_collation",
+                "collation",
+                b"collation",
+                "length",
+                b"length",
+                "type_variation_reference",
+                b"type_variation_reference",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_collation", b"_collation"]
+        ) -> typing_extensions.Literal["collation"] | None: ...
 
     class VarChar(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         LENGTH_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
+        COLLATION_FIELD_NUMBER: builtins.int
         length: builtins.int
         type_variation_reference: builtins.int
+        collation: builtins.str
+        """(Optional) Collation name. When omitted, the collation was not explicitly specified.
+        Older clients ignore this field and decode the historical uncollated VARCHAR type.
+        """
         def __init__(
             self,
             *,
             length: builtins.int = ...,
             type_variation_reference: builtins.int = ...,
+            collation: builtins.str | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_collation", b"_collation", "collation", b"collation"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "length", b"length", "type_variation_reference", b"type_variation_reference"
+                "_collation",
+                b"_collation",
+                "collation",
+                b"collation",
+                "length",
+                b"length",
+                "type_variation_reference",
+                b"type_variation_reference",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_collation", b"_collation"]
+        ) -> typing_extensions.Literal["collation"] | None: ...
 
     class Decimal(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor

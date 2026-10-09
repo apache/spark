@@ -308,7 +308,7 @@ class FileBasedWriteAheadLogSuite
     val reader = new FileBasedWriteAheadLogReader(testFile, hadoopConf)
     val readData = reader.toSeq.map(byteBufferToString)
     assert(readData === writtenData)
-    assert(reader.hasNext === false)
+    assert(!reader.hasNext)
     intercept[Exception] {
       reader.next()
     }

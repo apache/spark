@@ -30,8 +30,14 @@ import org.apache.spark.sql.catalyst.expressions.KnownNotContainsNull
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAY_DISTINCT, ARRAY_EXCEPT, ARRAY_INTERSECT, ARRAY_UNION, ARRAYS_OVERLAP, ARRAYS_ZIP, CONCAT, MAP_FROM_ENTRIES, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{
+  ARRAYS_ZIP,
+  CONCAT,
+  MAP_FROM_ENTRIES,
+  TreePattern
+}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalIntegralType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -1903,9 +1909,6 @@ case class ArrayAppend(left: Expression, right: Expression) extends ArrayPendBas
 // scalastyle:off line.size.limit
 case class ArraysOverlap(left: Expression, right: Expression)
   extends BinaryArrayExpressionWithImplicitCast with Predicate {
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAYS_OVERLAP)
-
   override def nullIntolerant: Boolean = true
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
@@ -1916,6 +1919,12 @@ case class ArraysOverlap(left: Expression, right: Expression)
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(elementType)
+
+  @transient private lazy val normalizeElement: Any => Any = elementType match {
+    case FloatType => NormalizeFloatingNumbers.FLOAT_NORMALIZER
+    case DoubleType => NormalizeFloatingNumbers.DOUBLE_NORMALIZER
+    case _ => identity
+  }
 
   @transient private lazy val doEvaluation = if (TypeUtils.typeWithProperEquals(elementType)) {
     fastEval _
@@ -1949,12 +1958,12 @@ case class ArraysOverlap(left: Expression, right: Expression)
         if (v == null) {
           hasNull = true
         } else {
-          smallestSet.add(v)
+          smallestSet.add(normalizeElement(v))
         })
       bigger.foreach(elementType, (_, v1) =>
         if (v1 == null) {
           hasNull = true
-        } else if (smallestSet.contains(v1)) {
+        } else if (smallestSet.contains(normalizeElement(v1))) {
           return true
         }
       )
@@ -2027,22 +2036,70 @@ case class ArraysOverlap(left: Expression, right: Expression)
     val i = ctx.freshName("i")
     val getFromSmaller = CodeGenerator.getValue(smaller, elementType, i)
     val getFromBigger = CodeGenerator.getValue(bigger, elementType, i)
+    val javaElementType = CodeGenerator.javaType(elementType)
     val javaElementClass = CodeGenerator.boxedType(elementType)
     val javaSet = classOf[java.util.HashSet[_]].getName
     val set = ctx.freshName("set")
+
+    def normalize(value: String): String = elementType match {
+      case DoubleType =>
+        s"""
+           |if (java.lang.Double.isNaN($value)) {
+           |  $value = java.lang.Double.NaN;
+           |} else if ($value == 0.0d) {
+           |  $value = 0.0d;
+           |}
+         """.stripMargin
+      case FloatType =>
+        s"""
+           |if (java.lang.Float.isNaN($value)) {
+           |  $value = java.lang.Float.NaN;
+           |} else if ($value == 0.0f) {
+           |  $value = 0.0f;
+           |}
+         """.stripMargin
+      case _ => ""
+    }
+
+    val smallerValue = ctx.freshName("smallerValue")
+    val addToSet = elementType match {
+      case FloatType | DoubleType =>
+        s"""
+           |$javaElementType $smallerValue = $getFromSmaller;
+           |${normalize(smallerValue)}
+           |$set.add($smallerValue);
+         """.stripMargin
+      case _ => s"$set.add($getFromSmaller);"
+    }
     val addToSetFromSmallerCode = nullSafeElementCodegen(
-      smaller, i, s"$set.add($getFromSmaller);", s"${ev.isNull} = true;")
+      smaller, i, addToSet, s"${ev.isNull} = true;")
     val setIsNullCode = if (nullable) s"${ev.isNull} = false;" else ""
+
+    val biggerValue = ctx.freshName("biggerValue")
+    val findInSet = elementType match {
+      case FloatType | DoubleType =>
+        s"""
+           |$javaElementType $biggerValue = $getFromBigger;
+           |${normalize(biggerValue)}
+           |if ($set.contains($biggerValue)) {
+           |  $setIsNullCode
+           |  ${ev.value} = true;
+           |  break;
+           |}
+         """.stripMargin
+      case _ =>
+        s"""
+           |if ($set.contains($getFromBigger)) {
+           |  $setIsNullCode
+           |  ${ev.value} = true;
+           |  break;
+           |}
+         """.stripMargin
+    }
     val elementIsInSetCode = nullSafeElementCodegen(
       bigger,
       i,
-      s"""
-         |if ($set.contains($getFromBigger)) {
-         |  $setIsNullCode
-         |  ${ev.value} = true;
-         |  break;
-         |}
-       """.stripMargin,
+      findInSet,
       s"${ev.isNull} = true;")
     s"""
        |$javaSet<$javaElementClass> $set = new $javaSet<$javaElementClass>();
@@ -3315,10 +3372,16 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   private def genCodeForNumberOfElements(ctx: CodegenContext) : (String, String) = {
     val numElements = ctx.freshName("numElements")
     val z = ctx.freshName("z")
+    // The upper bound is checked here rather than left to the array allocation so that this path
+    // reports the same error as `eval`. Without it the allocation fails with an internal error.
     val code = s"""
         |long $numElements = 0L;
         |for (int $z = 0; $z < ${children.length}; $z++) {
         |  $numElements += args[$z].numElements();
+        |}
+        |if ($numElements > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+        |  throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+        |    "$prettyName", $numElements);
         |}
       """.stripMargin
 
@@ -3448,10 +3511,16 @@ case class Flatten(child: Expression) extends UnaryExpression
       ctx: CodegenContext,
       childVariableName: String) : (String, String) = {
     val variableName = ctx.freshName("numElements")
+    // The upper bound is checked here rather than left to the array allocation so that this path
+    // reports the same error as `eval`. Without it the allocation fails with an internal error.
     val code = s"""
       |long $variableName = 0;
       |for (int z = 0; z < $childVariableName.numElements(); z++) {
       |  $variableName += $childVariableName.getArray(z).numElements();
+      |}
+      |if ($variableName > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+      |  throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+      |    "$prettyName", $variableName);
       |}
       """.stripMargin
     (code, variableName)
@@ -4561,6 +4630,15 @@ trait ArraySetLike {
   @transient protected lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(et)
 
+  @transient protected lazy val normalizedElement: Any => Any =
+    if (NormalizeFloatingNumbers.needNormalize(et)) {
+      val ref = BoundReference(0, et, nullable = true)
+      val normalizer = NormalizeFloatingNumbers.normalize(ref)
+      (value: Any) => InternalRow.copyValue(normalizer.eval(InternalRow(value)))
+    } else {
+      identity
+    }
+
   protected def resultArrayElementNullable = dt.asInstanceOf[ArrayType].containsNull
 
   protected def genGetValue(array: String, i: String): String =
@@ -4652,9 +4730,6 @@ trait ArraySetLike {
   since = "2.4.0")
 case class ArrayDistinct(child: Expression)
   extends UnaryExpression with ArraySetLike with ExpectsInputTypes {
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_DISTINCT)
-
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
@@ -4717,7 +4792,7 @@ case class ArrayDistinct(child: Expression)
             j += 1
           }
           if (!found) {
-            arrayBuffer += array(i)
+            arrayBuffer += normalizedElement(array(i)).asInstanceOf[AnyRef]
           }
         } else {
           // De-duplicate the null values.
@@ -4858,8 +4933,6 @@ trait ArrayBinaryLike
 case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_UNION)
-
   @transient lazy val evalUnion: (ArrayData, ArrayData) => ArrayData = {
     if (TypeUtils.typeWithProperEquals(elementType)) {
       (array1, array2) =>
@@ -4916,7 +4989,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
               throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
                 prettyName, arrayBuffer.length)
             }
-            arrayBuffer += elem
+            arrayBuffer += normalizedElement(elem)
           }
         }))
         new GenericArrayData(arrayBuffer)
@@ -5044,8 +5117,6 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
 case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_INTERSECT)
-
   private lazy val internalDataType: DataType = {
     dataTypeCheck
     ArrayType(elementType, leftArrayElementNullable && rightArrayElementNullable)
@@ -5139,7 +5210,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
               }
             }
             if (found) {
-              arrayBuffer += elem1
+              arrayBuffer += normalizedElement(elem1)
             }
             i += 1
           }
@@ -5285,8 +5356,6 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_EXCEPT)
-
   private lazy val internalDataType: DataType = {
     dataTypeCheck
     left.dataType
@@ -5368,7 +5437,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
             }
           }
           if (!found) {
-            arrayBuffer += elem1
+            arrayBuffer += normalizedElement(elem1)
           }
           i += 1
         }

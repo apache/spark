@@ -24,9 +24,9 @@ Part of the per-batch cost is fixed per COLUMN and does not scale with row
 count, so ``n_cols`` is swept alongside ``n_rows``: wide batches and small
 batches are the shapes where that fixed cost dominates.
 
-``ArrowToPandasConversion.convert`` routes each column by type. ``long`` and
+``ArrowToPandasConversion._convert_array`` converts each Arrow array by Spark type. ``long`` and
 ``timestamp`` are in the ``_prefer_convert_numpy`` allowlist and take
-``convert_numpy``; ``string`` is not, and takes ``convert_legacy``. The two
+``_convert_array_numpy``; ``string`` is not, and takes ``_convert_array_legacy``. The two
 allowlist types differ by an order of magnitude in conversion cost -- a timestamp
 column is localized by pyarrow compute kernels -- so sweeping both shows how much
 of a change is fixed per-column cost rather than per-row work.
