@@ -988,8 +988,12 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.changes(tableName))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "tableName",
+                    "expected_type": "str",
+                    "arg_type": type(tableName).__name__,
+                },
             )
 
 

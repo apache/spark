@@ -449,7 +449,16 @@ class ReadwriterV2TestsMixin:
 
 
 class ReadwriterTests(ReadwriterTestsMixin, ReusedSQLTestCase):
-    pass
+    # Classic only: Spark Connect's DataStreamReader.changes does not validate the argument type.
+    def test_streaming_changes_rejects_non_str_table_name(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.readStream.changes(123)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"arg_name": "tableName", "expected_type": "str", "arg_type": "int"},
+        )
 
 
 class ReadwriterV2Tests(ReadwriterV2TestsMixin, ReusedSQLTestCase):
