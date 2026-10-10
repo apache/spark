@@ -388,7 +388,8 @@ object HybridAnalyzer {
         metadataResolverExtensions = legacyAnalyzer.singlePassMetadataResolverExtensions,
         externalRelationResolution = Some(relationResolution),
         extendedRewriteRules = legacyAnalyzer.singlePassPostHocResolutionRules,
-        tracker = Some(tracker)
+        tracker = Some(tracker),
+        hintResolutionRules = legacyAnalyzer.singlePassHintResolutionRules
       ),
       tracker = tracker,
       extendedResolutionChecks = legacyAnalyzer.singlePassExtendedResolutionChecks
