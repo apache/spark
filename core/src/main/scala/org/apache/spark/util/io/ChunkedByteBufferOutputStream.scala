@@ -35,6 +35,7 @@ private[spark] class ChunkedByteBufferOutputStream(
   extends OutputStream {
 
   private[this] var toChunkedByteBufferWasCalled = false
+  private[this] var disposed = false
 
   private val chunks = new ArrayBuffer[ByteBuffer]
 
@@ -52,6 +53,16 @@ private[spark] class ChunkedByteBufferOutputStream(
   private[this] var closed: Boolean = false
 
   def size: Long = _size
+
+  /** Release untransferred chunks without allocating a compact final chunk. */
+  def dispose(): Unit = {
+    if (!disposed && !toChunkedByteBufferWasCalled) {
+      disposed = true
+      close()
+      chunks.foreach(StorageUtils.dispose)
+      chunks.clear()
+    }
+  }
 
   override def close(): Unit = {
     if (!closed) {
@@ -92,6 +103,7 @@ private[spark] class ChunkedByteBufferOutputStream(
 
   def toChunkedByteBuffer: ChunkedByteBuffer = {
     require(closed, "cannot call toChunkedByteBuffer() unless close() has been called")
+    require(!disposed, "cannot call toChunkedByteBuffer() after dispose()")
     require(!toChunkedByteBufferWasCalled, "toChunkedByteBuffer() can only be called once")
     toChunkedByteBufferWasCalled = true
     if (lastChunkIndex == -1) {
