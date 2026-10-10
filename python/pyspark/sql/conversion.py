@@ -16,6 +16,7 @@
 #
 
 import array
+import calendar
 import datetime
 import decimal
 import functools
@@ -1429,7 +1430,13 @@ class ArrowTableToRowsConversion:
                     # lossless path), so drop any sub-microsecond digits to match classic collect().
                     if hasattr(value, "to_pydatetime"):
                         value = value.to_pydatetime(warn=False)
-                    return datetime.datetime.fromtimestamp(value.timestamp())
+                    # SPARK-60081: route through integer POSIX seconds so fromtimestamp honors
+                    # datetime.fold on the local wall time, then re-attach microseconds. Going
+                    # through float timestamps would drop microseconds past ~2255 and overflow at
+                    # 9999-12-31 under UTC; keeping the microseconds separate avoids both.
+                    return datetime.datetime.fromtimestamp(
+                        calendar.timegm(value.utctimetuple())
+                    ).replace(microsecond=value.microsecond)
 
             return convert_timestamp
 
