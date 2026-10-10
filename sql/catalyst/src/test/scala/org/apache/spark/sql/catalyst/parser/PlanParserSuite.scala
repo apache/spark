@@ -1376,16 +1376,53 @@ class PlanParserSuite extends AnalysisTest {
     }
   }
 
+  test("asof join - missing MATCH_CONDITION is rejected, not parsed as a plain join") {
+    // A missing MATCH_CONDITION must fail to parse. If `asof` were read as t's alias, the first
+    // query would parse as a plain INNER join instead. Check both keyword modes.
+    Seq("false", "true").foreach { enforceReservedKeywords =>
+      withSQLConf(
+        SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true",
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> enforceReservedKeywords) {
+        Seq(
+          "select * from t asof join u on t.a = u.a",
+          "select * from t x asof join u on t.a = u.a").foreach { query =>
+          checkError(
+            exception = parseException(query),
+            condition = "PARSE_SYNTAX_ERROR",
+            parameters = Map("error" -> "'on'", "hint" -> ""))
+        }
+        // A back-quoted `asof` is still a valid alias.
+        assertEqual(
+          "select * from t `asof` join u on t.a = u.a",
+          table("t").as("asof").join(table("u"), Inner, Option($"t.a" === $"u.a"))
+            .select(star()))
+      }
+    }
+  }
+
+  test("asof is strict-non-reserved in the default keyword mode") {
+    // Usable as a column and a table name, but not as an unquoted table alias.
+    assertEqual("select asof from t", table("t").select($"asof"))
+    assertEqual("select * from asof", table("asof").select(star()))
+    Seq("select * from t asof", "select * from t as asof").foreach { query =>
+      checkError(
+        exception = parseException(query),
+        condition = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "end of input", "hint" -> ""))
+    }
+  }
+
   test("nearest-by keywords are non-reserved (usable as identifiers)") {
     // Spark-specific join keywords must remain non-reserved so they can be used as identifiers.
-    Seq("approx", "asof", "distance", "exact", "nearest", "similarity").foreach { kw =>
+    Seq("approx", "distance", "exact", "nearest", "similarity").foreach { kw =>
       // As a column identifier in the SELECT list.
       parsePlan(s"select $kw from t")
       // As a table identifier in the FROM clause.
       parsePlan(s"select * from $kw")
     }
-    // All six together in a single SELECT list.
-    parsePlan("select approx, asof, distance, exact, nearest, similarity from t")
+    // All five together in a single SELECT list.
+    parsePlan("select approx, distance, exact, nearest, similarity from t")
   }
 
   test("sampled relations") {
