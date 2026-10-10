@@ -65,6 +65,24 @@ class JavaRecordDatasetSuite extends QueryTest with SharedSparkSession {
     checkDataset(df.as[Person], new Person("Bob", 30, new Address("S", "C")))
   }
 
+  test("type checks when converting a DataFrame to a record Dataset") {
+    // Widening casts are allowed; narrowing casts and missing fields are rejected.
+    checkDataset(
+      spark.sql("SELECT 1 AS id, 2 AS count, 1.5D AS amount")
+        .as(Encoders.record(classOf[BoxedRecord])),
+      new BoxedRecord(1, 2L, 1.5))
+    val narrowing = intercept[AnalysisException] {
+      spark.sql("SELECT 'Bob' AS name, 30L AS age, NULL AS address").as[Person]
+    }
+    assert(narrowing.getCondition === "CANNOT_UP_CAST_DATATYPE")
+    assert(narrowing.getMessage.contains(classOf[Person].getName))
+    val missingField = intercept[AnalysisException] {
+      spark.sql("SELECT 'Bob' AS name, 30 AS age, named_struct('street', 's') AS address")
+        .as[Person]
+    }
+    assert(missingField.getCondition === "FIELD_NOT_FOUND")
+  }
+
   test("null value for a primitive or @Nonnull record component") {
     val primitive = spark.sql("SELECT 'Bob' AS name, CAST(NULL AS INT) AS age, NULL AS address")
     val nonnull = spark.sql("SELECT CAST(NULL AS STRING) AS name, 1 AS count, 'n' AS note")

@@ -411,5 +411,10 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
         Encoders.record(classOf[SelfReferencingRecord])),
       condition = "CIRCULAR_CLASS_REFERENCE",
       parameters = Map("t" -> s"'${classOf[SelfReferencingRecord]}'"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException](
+        Encoders.record(classOf[InterfaceComponentRecord])),
+      condition = "BEAN_ENCODER_INTERFACE_NOT_SUPPORTED",
+      parameters = Map("className" -> "java.lang.CharSequence"))
   }
 }
