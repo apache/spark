@@ -455,6 +455,20 @@ class PandasToArrowConversionTests(unittest.TestCase):
         self.assertEqual(result.column(0).type, pa.int64())
         self.assertEqual(result.column(0).to_pylist(), [1, None, 2])
 
+    def test_from_pandas_arrow_dtype_requested_type_legacy_error_handling(self):
+        # SPARK-60009: The legacy error-handling path must honor the declared type too.
+        import pandas as pd
+        import pyarrow as pa
+
+        series = pd.Series([1, None, 2], dtype=pd.ArrowDtype(pa.int32()))
+        schema = StructType([StructField("value", LongType())])
+
+        result = PandasToArrowConversion.from_pandas(
+            [series], schema, use_legacy_error_handling=True, arrow_cast=True
+        )
+        self.assertEqual(result.column(0).type, pa.int64())
+        self.assertEqual(result.column(0).to_pylist(), [1, None, 2])
+
     def test_arrow_table_from_pandas_arrow_dtype_requested_type(self):
         # SPARK-60009: The createDataFrame input path must honor the requested type too.
         import pandas as pd
