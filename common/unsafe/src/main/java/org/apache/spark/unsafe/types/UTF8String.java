@@ -143,6 +143,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
   public static final UTF8String ZERO_UTF8 = UTF8String.fromString("0");
   public static final UTF8String SPACE_UTF8 = UTF8String.fromString(" ");
+  private static final UTF8String TRUE_UTF8 = UTF8String.fromString("true");
+  private static final UTF8String FALSE_UTF8 = UTF8String.fromString("false");
 
 
   /**
@@ -192,6 +194,44 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     byte[] spaces = new byte[length];
     Arrays.fill(spaces, (byte) ' ');
     return fromBytes(spaces);
+  }
+
+  /**
+   * Creates an UTF8String holding the base-10 representation of a long, equivalent to
+   * `fromString(Long.toString(value))` but without allocating an intermediate `java.lang.String`.
+   * Callers with narrower integral types (byte, short, int) can widen to long without changing the
+   * result.
+   */
+  public static UTF8String fromLong(long value) {
+    if (value == 0) {
+      return ZERO_UTF8;
+    }
+    boolean negative = value < 0;
+    // Extract digits in negative space so that Long.MIN_VALUE is representable (it cannot be
+    // negated). For a negative v, `v % 10` is in [-9, 0], and `'0' - (v % 10)` is the ASCII digit.
+    long v = negative ? value : -value;
+    int len = negative ? 1 : 0;
+    for (long t = v; t != 0; t /= 10) {
+      len++;
+    }
+    byte[] bytes = new byte[len];
+    int pos = len;
+    while (v != 0) {
+      bytes[--pos] = (byte) ('0' - (v % 10));
+      v /= 10;
+    }
+    if (negative) {
+      bytes[0] = (byte) '-';
+    }
+    return fromBytes(bytes);
+  }
+
+  /**
+   * Creates an UTF8String holding the string representation of a boolean ("true" or "false"),
+   * matching `String.valueOf(boolean)`. Returns a shared, cached instance without allocating.
+   */
+  public static UTF8String fromBoolean(boolean value) {
+    return value ? TRUE_UTF8 : FALSE_UTF8;
   }
 
   /**

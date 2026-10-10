@@ -199,6 +199,13 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     case _: DecimalType if useDecimalPlainString =>
       acceptAny[Decimal](d => UTF8String.fromString(d.toPlainString))
     case _: StringType => acceptAny[UTF8String](identity[UTF8String])
+    // Format integral and boolean values directly into a UTF8String, avoiding an intermediate
+    // java.lang.String. byte/short/int widen to long without changing the decimal representation.
+    case ByteType => acceptAny[Byte](b => UTF8String.fromLong(b.toLong))
+    case ShortType => acceptAny[Short](s => UTF8String.fromLong(s.toLong))
+    case IntegerType => acceptAny[Int](i => UTF8String.fromLong(i.toLong))
+    case LongType => acceptAny[Long](l => UTF8String.fromLong(l))
+    case BooleanType => acceptAny[Boolean](b => UTF8String.fromBoolean(b))
     case _ => o => UTF8String.fromString(o.toString)
   }
 
@@ -353,6 +360,12 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toPlainString());"
       case _: StringType =>
         (c, evPrim) => code"$evPrim = $c;"
+      // Format integral and boolean values directly into a UTF8String, avoiding an intermediate
+      // java.lang.String. byte/short/int widen to long in the generated code.
+      case ByteType | ShortType | IntegerType | LongType =>
+        (c, evPrim) => code"$evPrim = UTF8String.fromLong($c);"
+      case BooleanType =>
+        (c, evPrim) => code"$evPrim = UTF8String.fromBoolean($c);"
       case _ =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
