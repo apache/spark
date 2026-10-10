@@ -20,7 +20,10 @@
 // interface structs by hand. It provides three data sources:
 //
 //   native_range    Reads rows [0, end) with columns of several types. Supports predicate,
-//                   column and limit pushdown.
+//                   column and limit pushdown. With the option "extra", the schema has one more
+//                   column: "map" adds a map whose entry fields are named "keys" and "values",
+//                   as arrow-rs names them, and "decimal256" adds a decimal256. With the option
+//                   "slice", the columns of the batches have an offset of 1.
 //   native_sink     Writes the rows as CSV files under the directory in the option "path".
 //   native_counter  Streams the rows [0, max_offset) with a single column "id", making "step"
 //                   more rows available each time Spark asks for the latest offset.
@@ -137,17 +140,31 @@ const ColumnType kColumns[] = {
     {"ts", "tsu:UTC"}  // timestamp
 };
 
+// The columns that native_range adds with the option "extra", by its value.
+const std::map<std::string, ColumnType> kExtraColumns = {
+    {"map", {"m", "+m"}},               // map<string, bigint>: {"k<id>": id}
+    {"decimal256", {"dec", "d:10,2,256"}}  // decimal256(10, 2): id
+};
+
 const ColumnType* findColumn(const std::string& name) {
   for (const auto& column : kColumns) {
     if (name == column.name) return &column;
   }
+  for (const auto& extra : kExtraColumns) {
+    if (name == extra.second.name) return &extra.second;
+  }
   throw std::runtime_error("unknown column " + name);
 }
 
-std::vector<std::string> allColumns(bool counter) {
+std::vector<std::string> allColumns(bool counter, const std::string& extra = "") {
   if (counter) return {"id"};
   std::vector<std::string> names;
   for (const auto& column : kColumns) names.push_back(column.name);
+  if (!extra.empty()) {
+    auto it = kExtraColumns.find(extra);
+    if (it == kExtraColumns.end()) throw std::runtime_error("unknown extra column " + extra);
+    names.push_back(it->second.name);
+  }
   return names;
 }
 
@@ -185,18 +202,30 @@ void initSchema(ArrowSchema* out, const std::string& format, const std::string& 
   out->private_data = data;
 }
 
+// Adds a child to a schema initialized by initSchema, and returns it.
+ArrowSchema* addChild(ArrowSchema* parent, const std::string& format, const std::string& name,
+                      int64_t flags) {
+  auto* data = static_cast<SchemaData*>(parent->private_data);
+  auto child = std::make_unique<ArrowSchema>();
+  initSchema(child.get(), format, name, flags);
+  data->child_pointers.push_back(child.get());
+  data->children.push_back(std::move(child));
+  parent->n_children = static_cast<int64_t>(data->children.size());
+  parent->children = data->child_pointers.data();
+  return data->children.back().get();
+}
+
 // Exports a struct type with the given columns.
 void exportSchema(const std::vector<std::string>& columns, ArrowSchema* out) {
   initSchema(out, "+s", "", 0);
-  auto* data = static_cast<SchemaData*>(out->private_data);
   for (const auto& name : columns) {
-    auto child = std::make_unique<ArrowSchema>();
-    initSchema(child.get(), findColumn(name)->format, name, ARROW_FLAG_NULLABLE);
-    data->child_pointers.push_back(child.get());
-    data->children.push_back(std::move(child));
+    ArrowSchema* column = addChild(out, findColumn(name)->format, name, ARROW_FLAG_NULLABLE);
+    if (name == "m") {
+      ArrowSchema* entries = addChild(column, "+s", "entries", 0);
+      addChild(entries, "u", "keys", 0);
+      addChild(entries, "l", "values", ARROW_FLAG_NULLABLE);
+    }
   }
-  out->n_children = static_cast<int64_t>(data->children.size());
-  out->children = data->child_pointers.data();
 }
 
 // Reads the column names of a struct schema exported by Spark, and releases it.
@@ -259,6 +288,16 @@ void setBit(std::vector<uint8_t>& bitmap, int64_t i) {
   bitmap[i / 8] |= static_cast<uint8_t>(1 << (i % 8));
 }
 
+// Adds a child to an array initialized by initArray, and returns it to be initialized.
+ArrowArray* addChild(ArrowArray* parent) {
+  auto* data = static_cast<ArrayData*>(parent->private_data);
+  data->children.push_back(std::make_unique<ArrowArray>());
+  data->child_pointers.push_back(data->children.back().get());
+  parent->n_children = static_cast<int64_t>(data->children.size());
+  parent->children = data->child_pointers.data();
+  return data->children.back().get();
+}
+
 // Exports the values of a column for the ids [lo, hi).
 void exportColumn(const std::string& name, int64_t lo, int64_t hi, ArrowArray* out) {
   int64_t n = hi - lo;
@@ -305,24 +344,52 @@ void exportColumn(const std::string& name, int64_t lo, int64_t hi, ArrowArray* o
     std::vector<int64_t> values;
     for (int64_t id = lo; id < hi; id++) values.push_back(id * 1000000);
     initArray(out, n, 0, {no_validity, toBytes(values)});
+  } else if (name == "m") {
+    // A single entry for each row.
+    std::vector<int32_t> offsets;
+    for (int64_t i = 0; i <= n; i++) offsets.push_back(static_cast<int32_t>(i));
+    initArray(out, n, 0, {no_validity, toBytes(offsets)});
+    ArrowArray* entries = addChild(out);
+    initArray(entries, n, 0, {no_validity});
+    std::vector<int32_t> key_offsets{0};
+    std::string keys;
+    std::vector<int64_t> values;
+    for (int64_t id = lo; id < hi; id++) {
+      keys += "k" + std::to_string(id);
+      key_offsets.push_back(static_cast<int32_t>(keys.size()));
+      values.push_back(id);
+    }
+    initArray(addChild(entries), n, 0,
+              {no_validity, toBytes(key_offsets), std::vector<uint8_t>(keys.begin(), keys.end())});
+    initArray(addChild(entries), n, 0, {no_validity, toBytes(values)});
+  } else if (name == "dec") {
+    // 256-bit little-endian unscaled values of the scale 2.
+    std::vector<int64_t> words;
+    for (int64_t id = lo; id < hi; id++) {
+      int64_t unscaled = id * 100;
+      int64_t sign = unscaled < 0 ? -1 : 0;
+      words.insert(words.end(), {unscaled, sign, sign, sign});
+    }
+    initArray(out, n, 0, {no_validity, toBytes(words)});
   } else {
     throw std::runtime_error("unknown column " + name);
   }
 }
 
-// Exports a struct array with the given columns for the ids [lo, hi).
-void exportBatch(const std::vector<std::string>& columns, int64_t lo, int64_t hi,
+// Exports a struct array with the given columns for the ids [lo, hi). A sliced batch exports
+// the columns for [lo - 1, hi), with an offset of 1, like a zero-copy slice.
+void exportBatch(const std::vector<std::string>& columns, int64_t lo, int64_t hi, bool slice,
                  ArrowArray* out) {
   initArray(out, hi - lo, 0, {std::vector<uint8_t>()});
-  auto* data = static_cast<ArrayData*>(out->private_data);
   for (const auto& name : columns) {
-    auto child = std::make_unique<ArrowArray>();
-    exportColumn(name, lo, hi, child.get());
-    data->child_pointers.push_back(child.get());
-    data->children.push_back(std::move(child));
+    ArrowArray* column = addChild(out);
+    exportColumn(name, slice ? lo - 1 : lo, hi, column);
+    if (slice) {
+      column->offset = 1;
+      column->length = hi - lo;
+      column->null_count = -1;  // Unknown.
+    }
   }
-  out->n_children = static_cast<int64_t>(data->children.size());
-  out->children = data->child_pointers.data();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -630,6 +697,7 @@ struct Stream {
   int64_t end;
   int64_t batch_size;
   bool fail;
+  bool slice;
   std::string last_error;
 };
 
@@ -650,7 +718,7 @@ int streamGetNext(ArrowArrayStream* stream, ArrowArray* out) {
     return 0;
   }
   int64_t hi = std::min(state->end, state->next + state->batch_size);
-  exportBatch(state->columns, state->next, hi, out);
+  exportBatch(state->columns, state->next, hi, state->slice, out);
   state->next = hi;
   return 0;
 }
@@ -776,7 +844,8 @@ SPARK_JNI(void, schema)(JNIEnv* env, jclass, jlong handle, jlong schema_address)
     if (source->name == name("native_sink")) {
       throw std::runtime_error("native_sink has no schema; it can only be written");
     }
-    exportSchema(allColumns(source->name == name("native_counter")),
+    bool counter = source->name == name("native_counter");
+    exportSchema(allColumns(counter, get(source->options, "extra", "")),
                  reinterpret_cast<ArrowSchema*>(schema_address));
   });
 }
@@ -796,6 +865,7 @@ SPARK_JNI(jlong, createReader)(JNIEnv* env, jclass, jlong handle, jlong schema_a
     reader->state["partitions"] = get(source->options, "partitions", "2");
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     reader->state["fail"] = get(source->options, "fail", "");
+    reader->state["slice"] = get(source->options, "slice", "");
     return toHandle(reader);
   });
 }
@@ -871,7 +941,10 @@ SPARK_JNI(jbooleanArray, pushPredicates)(JNIEnv* env, jclass, jlong handle,
 
 SPARK_JNI(jboolean, pushLimit)(JNIEnv* env, jclass, jlong handle, jint limit) {
   return guarded<jboolean>(env, JNI_FALSE, [&] {
-    fromHandle<Reader>(handle)->state["limit"] = std::to_string(limit);
+    auto* reader = fromHandle<Reader>(handle);
+    // NativeBridge calls pushLimit at most once.
+    if (reader->state.count("limit") > 0) throw std::runtime_error("pushLimit was called twice");
+    reader->state["limit"] = std::to_string(limit);
     return JNI_TRUE;
   });
 }
@@ -978,7 +1051,8 @@ SPARK_JNI(void, read)(JNIEnv* env, jclass, jbyteArray reader_state, jbyteArray p
     stream->release = streamRelease;
     stream->private_data = new Stream{split(get(state, "columns", "")), std::stoll(bounds[0]),
                                       std::stoll(bounds[1]), getLong(state, "batch_size", 1000),
-                                      get(state, "fail", "") == "read", ""};
+                                      get(state, "fail", "") == "read",
+                                      get(state, "slice", "") == "true", ""};
   });
 }
 
@@ -1010,6 +1084,9 @@ jlong createAnyWriter(JNIEnv* env, jlong handle, jlong schema_address, jboolean 
       delete writer;
       throw std::runtime_error("the option 'path' is required");
     }
+    // Records that a writer was created, which Spark then commits or aborts.
+    makeDirs(path);
+    writeFile(path + "/_CREATED", "");
     return toHandle(writer);
   });
 }

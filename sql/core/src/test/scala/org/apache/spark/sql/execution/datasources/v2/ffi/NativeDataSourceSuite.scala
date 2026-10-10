@@ -322,6 +322,37 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val df = range(newSession(defaultPackage), "end" -> "100", "partitions" -> "5").limit(3)
     assert(df.collect().length == 3)
     assert(scan(df).getMetaData()("PushedLimit") == "LIMIT 3")
+
+    // Spark pushes the limit of LIMIT ... OFFSET twice, but the library, which fails if
+    // pushLimit is called again, is only asked once.
+    val withOffset = range(newSession(defaultPackage), "end" -> "100", "partitions" -> "5")
+      .limit(10).offset(5)
+    checkRows(withOffset, (5L until 10L).map(expectedRow))
+    assert(scan(withOffset).getMetaData()("PushedLimit") == "LIMIT 10")
+  }
+
+  nativeTest("read maps whose entry fields have other names") {
+    // The library names the fields of the entries `keys` and `values`, as arrow-rs does.
+    val df = range(newSession(defaultPackage), "end" -> "3", "extra" -> "map").select("id", "m")
+    assert(df.schema("m").dataType == MapType(StringType, LongType, valueContainsNull = true))
+    checkRows(df, (0L until 3L).map(id => Row(id, Map(s"k$id" -> id))))
+  }
+
+  nativeTest("reject the Arrow data that Spark cannot read") {
+    def check(msg: String, options: (String, String)*): Unit = {
+      val e = intercept[Exception] {
+        range(newSession(defaultPackage), options :+ ("end" -> "4"): _*).collect()
+      }
+      checkError(
+        exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+        condition = "NATIVE_DATA_SOURCE_ERROR",
+        parameters = Map("action" -> "read", "name" -> "native_range", "msg" -> msg))
+    }
+    // Arrow Java would read a slice from the start of its buffers.
+    check("The column id has an offset of 1, but Spark only reads arrays with an offset of 0. " +
+      "Copy sliced arrays before exporting them.", "slice" -> "true")
+    check("The column dec contains the Arrow type Decimal(10, 2, 256), which is not supported.",
+      "extra" -> "decimal256")
   }
 
   nativeTest("batch write") {
@@ -393,6 +424,22 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(new File(dir, "_ABORTED").isFile)
     assert(new File(dir, "_CLOSED").isFile)
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
+  }
+
+  nativeTest("create no writer when computing the data to write fails") {
+    val session = newSession(defaultPackage)
+    val dir = Utils.createTempDir()
+    // The error happens in a shuffle stage, which adaptive query execution runs before the write.
+    val e = intercept[Exception] {
+      session.range(10).selectExpr("id", "if(id >= 0, raise_error('boom'), 'x') AS name")
+        .repartition(2)
+        .write.format("native_sink").option("path", dir.getPath).mode("append").save()
+    }
+    assert(e.getMessage.contains("boom"))
+    assert(!new File(dir, "_CREATED").exists())
+
+    session.range(2).write.format("native_sink").option("path", dir.getPath).mode("append").save()
+    assert(new File(dir, "_CREATED").isFile)
   }
 
   nativeTest("abort a write whose commit failed") {

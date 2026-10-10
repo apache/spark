@@ -88,7 +88,8 @@ The [Javadoc of `NativeBridge`](api/java/org/apache/spark/sql/datasource/NativeB
 specifies each function, including the ownership of the Arrow structs and the JSON format of the
 pushed predicates. A predicate that a library reports as evaluated completely must follow the
 semantics of Spark SQL, for example for NaN values, which are equal to each other and greater
-than any other value.
+than any other value. The arrays that a library exports must have an offset of 0: copy a sliced
+array, such as the result of `RecordBatch::slice` in arrow-rs, before exporting it.
 
 ## Finding Native Data Sources
 

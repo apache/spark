@@ -23,10 +23,10 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import org.apache.arrow.c.{ArrowArray, ArrowArrayStream, ArrowSchema, Data}
+import org.apache.arrow.c.{ArrowArray, ArrowArrayStream, ArrowSchema, CDataDictionaryProvider, Data}
 import org.apache.arrow.vector.{FieldVector, VectorSchemaRoot}
-import org.apache.arrow.vector.ipc.ArrowReader
-import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.complex.MapVector
+import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
 
 import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
@@ -39,6 +39,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Utils
 
 /**
@@ -361,8 +362,8 @@ object NativeWriterCommitMessage {
 }
 
 /**
- * Reads a partition of a native data source: the Arrow stream exported by the library is
- * imported into Arrow vectors that back the returned batch.
+ * Reads a partition of a native data source: each array of the Arrow stream exported by the
+ * library is checked, and imported into the Arrow vectors that back the returned batch.
  */
 class NativePartitionReader(
     location: NativeLibraryLocation,
@@ -375,39 +376,60 @@ class NativePartitionReader(
 
   private val allocator =
     ArrowUtils.rootAllocator.newChildAllocator(s"native data source $name", 0, Long.MaxValue)
-  private var reader: ArrowReader = _
+  // Read here rather than with `Data.importArrayStream`, to check each array before importing it.
+  private val stream = ArrowArrayStream.allocateNew(allocator)
+  private val dictionaries = new CDataDictionaryProvider()
   private var root: VectorSchemaRoot = _
   private var batch: ColumnarBatch = _
 
   try {
-    reader = openStream()
-    root = call(name, "read")(reader.getVectorSchemaRoot)
+    openStream()
+    root = VectorSchemaRoot.create(importSchema(), allocator)
     checkSchema()
-    batch = new ColumnarBatch(
-      root.getFieldVectors.asScala.map(new ArrowColumnVector(_): ColumnVector).toArray)
+    batch = new ColumnarBatch(root.getFieldVectors.asScala.map(columnVector).toArray)
   } catch {
     case e: Throwable =>
       close()
       throw e
   }
 
-  private def openStream(): ArrowReader = {
+  private def openStream(): Unit = {
     val library = NativeLibraries.get(location)
-    val stream = ArrowArrayStream.allocateNew(allocator)
+    call(name, "read")(optional(library.read(readerState, partition, stream.memoryAddress())))
+      .getOrElse {
+        throw new SparkUnsupportedOperationException(
+          "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED", Map("description" -> name))
+      }
+  }
+
+  private def importSchema(): Schema = {
+    val arrowSchema = ArrowSchema.allocateNew(allocator)
     try {
-      call(name, "read")(optional(library.read(readerState, partition, stream.memoryAddress())))
-        .getOrElse {
-          throw new SparkUnsupportedOperationException(
-            "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED", Map("description" -> name))
-        }
-      Data.importArrayStream(allocator, stream)
-    } catch {
-      case e: Throwable =>
-        stream.release()
-        throw e
+      call(name, "read")(stream.getSchema(arrowSchema))
+      val imported = call(name, "read")(Data.importSchema(allocator, arrowSchema, dictionaries))
+      new Schema(
+        imported.getFields.asScala.map(withMapEntryNames).asJava, imported.getCustomMetadata)
     } finally {
-      stream.close()
+      arrowSchema.close()
     }
+  }
+
+  /**
+   * Names the fields of the entries of the maps `key` and `value`, which ArrowColumnVector looks
+   * up by name. Arrow does not fix these names: arrow-rs names them `keys` and `values`, for
+   * example. The arrays are imported by position, so the names do not change how they are read.
+   */
+  private def withMapEntryNames(field: Field): Field = {
+    val children = field.getChildren.asScala.map(withMapEntryNames).toSeq
+    val renamed = (field.getType, children) match {
+      case (_: ArrowType.Map, Seq(entries)) if entries.getChildren.size == 2 =>
+        val Seq(key, value) = entries.getChildren.asScala.toSeq
+        Seq(new Field(entries.getName, entries.getFieldType, Seq(
+          new Field(MapVector.KEY_NAME, key.getFieldType, key.getChildren),
+          new Field(MapVector.VALUE_NAME, value.getFieldType, value.getChildren)).asJava))
+      case _ => children
+    }
+    new Field(field.getName, field.getFieldType, renamed.asJava)
   }
 
   private def checkSchema(): Unit = {
@@ -417,6 +439,17 @@ class NativePartitionReader(
     root.getSchema.getFields.asScala.find(isDictionaryEncoded).foreach { field =>
       throw error(name, "read", s"The column ${field.getName} is dictionary-encoded, which " +
         "is not supported.")
+    }
+    // The Arrow types that convert to Spark types, but that ArrowColumnVector cannot read.
+    def unsupportedType(field: Field): Option[ArrowType] = field.getType match {
+      case decimal: ArrowType.Decimal if decimal.getBitWidth != 128 => Some(decimal)
+      case _ => field.getChildren.asScala.view.flatMap(unsupportedType).headOption
+    }
+    root.getSchema.getFields.asScala.foreach { field =>
+      unsupportedType(field).foreach { arrowType =>
+        throw error(name, "read", s"The column ${field.getName} contains the Arrow type " +
+          s"$arrowType, which is not supported.")
+      }
     }
     val actual = ArrowUtils.fromArrowSchema(root.getSchema)
     // The schema to read as the library got it: Arrow does not carry everything, such as the
@@ -435,21 +468,80 @@ class NativePartitionReader(
     }
   }
 
-  override def next(): Boolean = {
-    val hasNext = call(name, "read")(reader.loadNextBatch())
-    if (hasNext) {
-      batch.setNumRows(root.getRowCount)
+  private def columnVector(vector: FieldVector): ColumnVector = {
+    try {
+      new ArrowColumnVector(vector)
+    } catch {
+      case NonFatal(e) =>
+        throw QueryExecutionErrors.nativeDataSourceError("read", name,
+          s"Spark cannot read the column ${vector.getName} of the Arrow type " +
+            s"${vector.getField.getType}: ${message(e)}", e)
     }
-    hasNext
+  }
+
+  override def next(): Boolean = {
+    val array = ArrowArray.allocateNew(allocator)
+    try {
+      call(name, "read")(stream.getNext(array))
+      val snapshot = array.snapshot()
+      if (snapshot.release == 0) {
+        // The end of the stream.
+        false
+      } else {
+        try {
+          checkOffsets(snapshot)
+        } catch {
+          case e: Throwable =>
+            array.release()
+            throw e
+        }
+        call(name, "read")(Data.importIntoVectorSchemaRoot(allocator, array, root, dictionaries))
+        batch.setNumRows(root.getRowCount)
+        true
+      }
+    } finally {
+      array.close()
+    }
+  }
+
+  /**
+   * Checks that the array of a batch, and the arrays of its columns at every level, have an
+   * offset of 0: Arrow Java ignores the offsets of the arrays it imports, so it would read a
+   * sliced array from the start of its buffers.
+   */
+  private def checkOffsets(array: ArrowArray.Snapshot): Unit = {
+    def children(array: ArrowArray.Snapshot): Seq[ArrowArray.Snapshot] = {
+      (0 until array.n_children.toInt).map { i =>
+        ArrowArray.wrap(Platform.getLong(null, array.children + 8L * i)).snapshot()
+      }
+    }
+    def checkColumn(array: ArrowArray.Snapshot, column: String): Unit = {
+      if (array.offset != 0) {
+        throw error(name, "read", s"The column $column has an offset of ${array.offset}, but " +
+          "Spark only reads arrays with an offset of 0. Copy sliced arrays before exporting them.")
+      }
+      children(array).foreach(checkColumn(_, column))
+    }
+    if (array.offset != 0) {
+      throw error(name, "read", s"The batch has an offset of ${array.offset}, but Spark only " +
+        "reads arrays with an offset of 0. Copy sliced arrays before exporting them.")
+    }
+    children(array).zip(root.getSchema.getFields.asScala).foreach { case (column, field) =>
+      checkColumn(column, field.getName)
+    }
   }
 
   override def get(): ColumnarBatch = batch
 
   override def close(): Unit = {
     Utils.tryWithSafeFinally {
-      if (reader != null) {
-        reader.close()
+      if (root != null) {
+        root.close()
       }
+      dictionaries.close()
+      // Releases the stream of the library, unless it was not exported.
+      stream.release()
+      stream.close()
     }(Utils.tryLogNonFatalError(allocator.close()))
   }
 }
@@ -600,9 +692,11 @@ object NativeCalls {
   // How Arrow reports the error message of an Arrow C stream.
   private val StreamError = """(?s)\[errno \d+\] CDataJniException\{errno=\d+, message=(.*)\}""".r
 
-  private def message(e: Throwable): String = Option(e.getMessage).getOrElse(e.toString) match {
-    case StreamError(message) => message
-    case message => message
+  private[ffi] def message(e: Throwable): String = {
+    Option(e.getMessage).getOrElse(e.toString) match {
+      case StreamError(message) => message
+      case message => message
+    }
   }
 
   /** Calls a function that the library may not implement. Returns None if it does not. */

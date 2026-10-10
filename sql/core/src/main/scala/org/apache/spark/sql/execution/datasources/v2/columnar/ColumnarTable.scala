@@ -91,6 +91,8 @@ class ColumnarScanBuilder(
 
   private var pushed: Array[Predicate] = Array.empty
   private var pushedLimit: Option[Int] = None
+  // The limit passed to the reader, and whether the reader applies it.
+  private var limitResult: Option[(Int, Boolean)] = None
   private var readSchema: StructType = schema
 
   private def batchReader: ColumnarReader = {
@@ -108,12 +110,18 @@ class ColumnarScanBuilder(
 
   override def pushedPredicates(): Array[Predicate] = pushed
 
-  override def pushLimit(limit: Int): Boolean = {
-    val isPushed = batchReader.pushLimit(limit)
-    if (isPushed) {
-      pushedLimit = Some(limit)
-    }
-    isPushed
+  override def pushLimit(limit: Int): Boolean = limitResult match {
+    // Spark can push a limit more than once, for example the limit of LIMIT ... OFFSET, but the
+    // reader is only asked once. A limit at least as large as the first one is already applied.
+    case Some((firstLimit, isPushed)) =>
+      isPushed && limit >= firstLimit
+    case None =>
+      val isPushed = batchReader.pushLimit(limit)
+      limitResult = Some(limit -> isPushed)
+      if (isPushed) {
+        pushedLimit = Some(limit)
+      }
+      isPushed
   }
 
   // Spark always applies the limit again: a data source is free to return more rows.
