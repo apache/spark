@@ -557,6 +557,74 @@ class PythonPipelineSuite
   }
 
   gridTest(
+    "SPARK-59663: eagerly analyzed DataFrame operations keep the dependency on an internal " +
+      "dataset")(Seq(false, true)) { datasetsExistInCatalog =>
+    withTable("spark_catalog.default.src", "spark_catalog.default.events") {
+      if (datasetsExistInCatalog) {
+        // Simulate a pipeline re-run: the internal datasets were materialized by a prior run.
+        sql(
+          "CREATE TABLE spark_catalog.default.src AS " +
+            "SELECT id, CAST(id AS TIMESTAMP) AS ts FROM RANGE(5)")
+        sql(
+          "CREATE TABLE spark_catalog.default.events AS " +
+            "SELECT CAST(id AS TIMESTAMP) AS timestamp, id AS value FROM RANGE(5)")
+      }
+      val graph = buildGraph("""
+          |from pyspark.sql.functions import lit
+          |
+          |@dp.materialized_view
+          |def src():
+          |  return spark.range(5).selectExpr("id", "CAST(id AS TIMESTAMP) AS ts")
+          |
+          |@dp.table
+          |def events():
+          |  return spark.readStream.format("rate").load()
+          |
+          |@dp.materialized_view
+          |def with_columns():
+          |  return spark.read.table("src").withColumn("x", lit(1))
+          |
+          |@dp.materialized_view
+          |def with_columns_renamed():
+          |  return spark.read.table("src").withColumnRenamed("id", "id2")
+          |
+          |@dp.materialized_view
+          |def drop():
+          |  return spark.read.table("src").drop("ts")
+          |
+          |@dp.materialized_view
+          |def na_fill():
+          |  return spark.read.table("src").na.fill(0)
+          |
+          |@dp.materialized_view
+          |def na_drop():
+          |  return spark.read.table("src").na.drop()
+          |
+          |@dp.materialized_view
+          |def spark_sql_with_columns():
+          |  return spark.sql("SELECT * FROM src").withColumn("x", lit(1))
+          |
+          |@dp.table
+          |def with_watermark():
+          |  return spark.readStream.table("events").withWatermark("timestamp", "1 minute")
+          |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
+
+      Seq(
+        "with_columns" -> "src",
+        "with_columns_renamed" -> "src",
+        "drop" -> "src",
+        "na_fill" -> "src",
+        "na_drop" -> "src",
+        "spark_sql_with_columns" -> "src",
+        "with_watermark" -> "events").foreach { case (flowName, input) =>
+        assert(
+          graph.resolvedFlow(graphIdentifier(flowName)).inputs == Set(graphIdentifier(input)),
+          s"flow $flowName lost its dependency on $input")
+      }
+    }
+  }
+
+  gridTest(
     "reading internal datasets outside query function that trigger " +
       "eager analysis or execution will fail")(
     Seq("""spark.sql("SELECT * FROM src")""", """spark.read.table("src").collect()""")) {

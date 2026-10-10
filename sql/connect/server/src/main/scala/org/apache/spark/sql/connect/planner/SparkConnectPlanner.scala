@@ -119,6 +119,31 @@ class SparkConnectPlanner(
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
+  // Resolves the reads of tables in a plan. Only set when planning a pipeline flow, see
+  // `transformPipelineFlowRelation`.
+  private var tableReadsResolver: Option[LogicalPlan => LogicalPlan] = None
+
+  /**
+   * Transforms the relation of a pipeline flow. The pipeline must resolve the reads of its
+   * datasets, but some DataFrame operations are analyzed eagerly here, which would resolve the
+   * datasets to tables in the catalog. So `resolveTableReads` is applied to the plans that read
+   * tables before anything else is done with them. The plans cached by the session are not used,
+   * as they may have been analyzed already.
+   */
+  private[connect] def transformPipelineFlowRelation(
+      rel: proto.Relation,
+      resolveTableReads: LogicalPlan => LogicalPlan): LogicalPlan = {
+    tableReadsResolver = Some(resolveTableReads)
+    try {
+      transformRelation(rel)
+    } finally {
+      tableReadsResolver = None
+    }
+  }
+
+  private def resolveTableReads(plan: LogicalPlan): LogicalPlan =
+    tableReadsResolver.map(_(plan)).getOrElse(plan)
+
   /**
    * The root of the query plan is a relation and we apply the transformations to it. The resolved
    * logical plan will not get cached. If the result needs to be cached, use
@@ -144,7 +169,7 @@ class SparkConnectPlanner(
    */
   @DeveloperApi
   def transformRelation(rel: proto.Relation, cachePlan: Boolean): LogicalPlan = {
-    val plan = sessionHolder.usePlanCache(rel, cachePlan) { rel =>
+    def transform(rel: proto.Relation): LogicalPlan = {
       val plan = rel.getRelTypeCase match {
         // DataFrame API
         case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
@@ -246,6 +271,11 @@ class SparkConnectPlanner(
         plan.setTagValue(LogicalPlan.PLAN_ID_TAG, rel.getCommon.getPlanId)
       }
       plan
+    }
+    val plan = if (tableReadsResolver.isDefined) {
+      transform(rel)
+    } else {
+      sessionHolder.usePlanCache(rel, cachePlan)(transform)
     }
 
     if (executeHolderOpt.isDefined) {
@@ -360,7 +390,7 @@ class SparkConnectPlanner(
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
     val parameterContext = buildParameterContext(sql)
-    parameterContext match {
+    val plan = parameterContext match {
       case Some(ctx) =>
         // Use parsePlanWithParameters for proper position mapping
         parser.parsePlanWithParameters(sql.getQuery, ctx)
@@ -368,6 +398,7 @@ class SparkConnectPlanner(
         // No parameters - use regular parsing
         parser.parsePlan(sql.getQuery)
     }
+    resolveTableReads(plan)
   }
 
   /**
@@ -1720,7 +1751,7 @@ class SparkConnectPlanner(
           temporalIdent.nameParts,
           new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap),
           isStreaming = rel.getIsStreaming)
-        temporalIdent.wrapTimeTravel(relation)
+        resolveTableReads(temporalIdent.wrapTimeTravel(relation))
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if !rel.getIsStreaming =>
         val reader = session.read
