@@ -818,6 +818,24 @@ class BaseUDFTestsMixin:
         # test_types.DataTypeTests; this UDF test is the end-to-end smoke that exercises both the
         # driver-side converter (via Spark Connect collect() / classic fromInternal) and, when the
         # Python worker inherits a matching TZ, the UDF-boundary round trip.
+        #
+        # Legacy pandas conversion (spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled)
+        # takes a different path that drops fold on the way to the worker; SPARK-60081 only covers
+        # the current non-legacy Arrow and classic Python UDF paths, so skip under the legacy
+        # variant inherited by ArrowPythonUDFLegacyTests.
+        try:
+            legacy_pandas = (
+                self.spark.conf.get(
+                    "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false"
+                ).lower()
+                == "true"
+            )
+        except Exception:
+            legacy_pandas = False
+        if legacy_pandas:
+            raise unittest.SkipTest(
+                "SPARK-60081 does not cover the legacy pandas pythonUDF conversion path"
+            )
         tz = "America/Los_Angeles"
         tz_prev = os.environ.get("TZ", None)
         try:
