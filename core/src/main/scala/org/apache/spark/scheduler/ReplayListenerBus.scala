@@ -52,7 +52,10 @@ private[spark] class ReplayListenerBus(
 
   private var skippedLines = 0L
 
-  /** Number of over-long lines skipped so far by [[replay()]] calls on an [[InputStream]]. */
+  /**
+   * Number of over-long lines skipped so far by [[replay()]] calls on an [[InputStream]]. The
+   * `Iterator[String]` overload does not apply the limit, so it never updates this count.
+   */
   private[spark] def numSkippedLines: Long = skippedLines
 
   /**

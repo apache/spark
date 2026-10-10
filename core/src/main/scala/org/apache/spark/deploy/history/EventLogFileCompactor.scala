@@ -69,8 +69,8 @@ class EventLogFileCompactor(
    * This method skips compaction for some circumstances described below:
    * - not enough files on the range of compaction
    * - score is lower than the threshold of compaction (meaning compaction won't help much)
-   * - some lines exceed the event log line-length limit, so replay skips them and the filters
-   *   cannot know whether the events in those files are still needed
+   * - replay does not fully read the files to compact (e.g. some lines exceed the event log
+   *   line-length limit), so the filters cannot know whether the events are still needed
    *
    * If this method returns the compaction result as SUCCESS, caller needs to re-read the list
    * of event log files, as new compact file is available as well as old event log files are
@@ -89,12 +89,7 @@ class EventLogFileCompactor(
     } else {
       initializeBuilders(fs, filesToCompact.map(_.getPath)) match {
         case None =>
-          logWarning(log"Skipping compaction of event log files in " +
-            log"${MDC(LogKeys.PATH, filesToCompact.head.getPath.getParent)}: some lines exceed " +
-            log"${MDC(LogKeys.CONFIG, History.EVENT_LOG_MAX_LINE_LENGTH.key)} " +
-            log"(${MDC(LogKeys.MAX_SIZE, ReplayListenerBus.maxLineLength(sparkConf))} bytes). " +
-            log"Increase the limit to compact these files.")
-          CompactionResult(CompactionResultCode.LINES_OVER_LENGTH_LIMIT, None)
+          CompactionResult(CompactionResultCode.INCOMPLETE_REPLAY, None)
 
         case Some(builders) =>
           val filters = builders.map(_.createFilter())
@@ -104,7 +99,7 @@ class EventLogFileCompactor(
             CompactionResult(CompactionResultCode.LOW_SCORE_FOR_COMPACTION, None)
           } else {
             // Replay read every line of these files within the line-length limit, so the
-            // unbounded reads in rewrite stay within it as well.
+            // reads in rewrite stay within it as well.
             rewrite(filters, filesToCompact)
             cleanupCompactedFiles(filesToCompact)
             CompactionResult(CompactionResultCode.SUCCESS, Some(
@@ -126,10 +121,11 @@ class EventLogFileCompactor(
    * Loads all available EventFilterBuilders in classloader via ServiceLoader, and initializes
    * them via replaying events in given files.
    *
-   * Returns None if replay skips any line over the line-length limit. The builders have not seen
-   * the skipped events (e.g. the start of a live job), so filters created from them could reject
-   * events that are still needed, and those events would be lost once the original files are
-   * removed.
+   * Returns None if replay does not fully read the given files: a line over the line-length
+   * limit is skipped, or replay stops in the middle of a file on an error. The builders have not
+   * seen the missed events (e.g. the start of a live job), so filters created from them could
+   * reject events that are still needed, and those events would be lost once the original files
+   * are removed.
    */
   private def initializeBuilders(
       fs: FileSystem,
@@ -140,14 +136,30 @@ class EventLogFileCompactor(
       Utils.getContextOrSparkClassLoader).asScala.toSeq
     builders.foreach(bus.addListener)
 
-    // Stop replaying once a line is skipped, as compaction will not proceed.
-    files.iterator.takeWhile(_ => bus.numSkippedLines == 0).foreach { log =>
-      Utils.tryWithResource(EventLogFileReader.openEventLog(log, fs)) { in =>
+    // Stop at the first file that is not fully replayed, as compaction will not proceed. The
+    // check happens between files, so that file itself is still read to the end.
+    val replayedAll = files.forall { log =>
+      val completed = Utils.tryWithResource(EventLogFileReader.openEventLog(log, fs)) { in =>
         bus.replay(in, log.getName)
+      }
+      if (bus.numSkippedLines > 0) {
+        logWarning(log"Skipping compaction of event log files in " +
+          log"${MDC(LogKeys.PATH, log.getParent)}: ${MDC(LogKeys.FILE_NAME, log.getName)} has " +
+          log"lines longer than ${MDC(LogKeys.CONFIG, History.EVENT_LOG_MAX_LINE_LENGTH.key)} " +
+          log"(${MDC(LogKeys.MAX_SIZE, ReplayListenerBus.maxLineLength(sparkConf))} bytes). " +
+          log"Compaction stays skipped until the limit is increased.")
+        false
+      } else if (!completed) {
+        logWarning(log"Skipping compaction of event log files in " +
+          log"${MDC(LogKeys.PATH, log.getParent)}: failed to replay " +
+          log"${MDC(LogKeys.FILE_NAME, log.getName)} entirely.")
+        false
+      } else {
+        true
       }
     }
 
-    if (bus.numSkippedLines == 0) Some(builders) else None
+    if (replayedAll) Some(builders) else None
   }
 
   private def calculateScore(stats: FilterStatistics): Double = {
@@ -231,7 +243,7 @@ class EventLogFileCompactor(
 case class CompactionResult(code: CompactionResultCode.Value, compactIndex: Option[Long])
 
 object CompactionResultCode extends Enumeration {
-  val SUCCESS, NOT_ENOUGH_FILES, LOW_SCORE_FOR_COMPACTION, LINES_OVER_LENGTH_LIMIT = Value
+  val SUCCESS, NOT_ENOUGH_FILES, LOW_SCORE_FOR_COMPACTION, INCOMPLETE_REPLAY = Value
 }
 
 /**

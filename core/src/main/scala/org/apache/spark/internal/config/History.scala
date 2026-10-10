@@ -177,7 +177,9 @@ private[spark] object History {
         "the retained buffer; use 128m to reach a smaller capacity. Values at or below 0, " +
         s"or above $EVENT_LOG_MAX_LINE_LENGTH_LIMIT, use the maximum supported limit of " +
         s"$EVENT_LOG_MAX_LINE_LENGTH_LIMIT bytes (512 MiB). This cap avoids JVM array-size " +
-        "limits but does not guarantee sufficient heap space. " +
+        "limits but does not guarantee sufficient heap space. If a longer line is in the " +
+        "event log files to compact, compaction of the rolling event log files of that " +
+        "application is skipped until the limit is increased. " +
         "Introduced in 4.3.0; also available in 3.5.10, 4.0.5, 4.1.4 and 4.2.1; and in " +
         "all versions after 4.3.0.")
       .version("4.3.0")
