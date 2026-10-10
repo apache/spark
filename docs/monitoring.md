@@ -131,7 +131,7 @@ The compaction tries to exclude the events which point to the outdated data. As 
 Once rewriting is done, original log files will be deleted, via best-effort manner. The History Server may not be able to delete
 the original log files, but it will not affect the operation of the History Server.
 
-Please note that Spark History Server may not compact the old event log files if figures out not a lot of space
+Please note that Spark History Server may not compact the old event log files if it figures out that not a lot of space
 would be reduced during compaction. For streaming query we normally expect compaction
 will run as each micro-batch will trigger one or more jobs which will be finished shortly, but compaction won't run
 in many cases for batch query.
