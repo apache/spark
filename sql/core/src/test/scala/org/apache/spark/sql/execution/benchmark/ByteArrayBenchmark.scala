@@ -112,6 +112,59 @@ object ByteArrayBenchmark extends BenchmarkBase {
       deltaOffset: Int,
       len: Int)
 
+  /** Returns `len` bytes of lowercase words of 2-9 letters separated by single spaces. */
+  def randomText(len: Int): Array[Byte] = {
+    val bytes = new Array[Byte](len)
+    var i = 0
+    while (i < len) {
+      val wordEnd = math.min(len, i + 2 + randomChar.nextInt(8))
+      while (i < wordEnd) {
+        bytes(i) = ('a' + randomChar.nextInt(26)).toByte
+        i += 1
+      }
+      if (i < len) {
+        bytes(i) = ' '.toByte
+        i += 1
+      }
+    }
+    bytes
+  }
+
+  def byteArrayContains(len: Int, iters: Long): Unit = {
+    val count = 16 * 1000
+    val text = Array.fill(count)(UTF8String.fromBytes(randomText(len)))
+    val needleInMiddle = UTF8String.fromString("spark")
+    val textWithNeedle = Array.fill(count) {
+      val bytes = randomText(len)
+      System.arraycopy(needleInMiddle.getBytes, 0, bytes, len / 2, needleInMiddle.numBytes())
+      UTF8String.fromBytes(bytes)
+    }
+    val sameByte = Array.fill(count)(UTF8String.fromBytes(Array.fill(len)('a'.toByte)))
+
+    def contains(data: Array[UTF8String], sub: UTF8String) = { _: Int =>
+      var found = 0L
+      for (_ <- 0L until iters) {
+        var i = 0
+        while (i < count) {
+          if (data(i).contains(sub)) found += 1
+          i += 1
+        }
+      }
+    }
+
+    val benchmark = new Benchmark(
+      s"Byte Array contains, $len byte rows", count * iters, 10, output = output)
+    benchmark.addCase("not found")(contains(text, UTF8String.fromString("QXZJV")))
+    // Every space matches the first byte of the needle.
+    benchmark.addCase("not found, frequent first byte")(
+      contains(text, UTF8String.fromString(" QZX")))
+    benchmark.addCase("found in the middle")(contains(textWithNeedle, needleInMiddle))
+    // Every position matches the first and last byte of the needle.
+    benchmark.addCase("not found, all positions candidates")(
+      contains(sameByte, UTF8String.fromString("aQa")))
+    benchmark.run()
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("byte array comparisons") {
       byteArrayComparisons(1024 * 4)
@@ -119,6 +172,13 @@ object ByteArrayBenchmark extends BenchmarkBase {
 
     runBenchmark("byte array equals") {
       byteArrayEquals(1000 * 10)
+    }
+
+    runBenchmark("byte array contains") {
+      // Each row length scans the same total number of bytes.
+      byteArrayContains(16, 2048)
+      byteArrayContains(128, 256)
+      byteArrayContains(1024, 32)
     }
   }
 }
