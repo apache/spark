@@ -264,6 +264,9 @@ case class JsonTupleEvaluator(foldableFieldNames: Array[Option[String]]) {
   // And count the number of foldable fields, we'll use this later to optimize evaluation.
   @transient private lazy val constantFields: Int = foldableFieldNames.count(_ != null)
 
+  // Reused across a row's fields; reset() before each use to avoid a per-field allocation.
+  @transient private lazy val outputBuffer = new ByteArrayOutputStream()
+
   private def getFieldNameStrings(fields: Array[UTF8String]): Array[String] = {
     // Evaluate the field names as String rather than UTF8String to
     // optimize lookups from the json token, which is also a String.
@@ -298,15 +301,15 @@ case class JsonTupleEvaluator(foldableFieldNames: Array[Option[String]]) {
         var idx = fieldNames.indexOf(jsonField)
         if (idx >= 0) {
           // It is, copy the child tree to the correct location in the output row.
-          val output = new ByteArrayOutputStream()
+          outputBuffer.reset()
 
           // Write the output directly to UTF8 encoded byte array.
           if (parser.nextToken() != JsonToken.VALUE_NULL) {
-            Utils.tryWithResource(jsonFactory.createGenerator(output, JsonEncoding.UTF8)) {
+            Utils.tryWithResource(jsonFactory.createGenerator(outputBuffer, JsonEncoding.UTF8)) {
               generator => copyCurrentStructure(generator, parser)
             }
 
-            val jsonValue = UTF8String.fromBytes(output.toByteArray)
+            val jsonValue = UTF8String.fromBytes(outputBuffer.toByteArray)
 
             // SPARK-21804: json_tuple returns null values within repeated columns
             // except the first one; so that we need to check the remaining fields.
@@ -493,6 +496,9 @@ object PositionResult {
 case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: Boolean) {
   import PathInstruction._
   import SharedFactory._
+
+  // Reused across elements/values; reset() before each use to avoid a per-value allocation.
+  @transient private lazy val outputBuffer = new ByteArrayOutputStream()
 
   /**
    * Returns the per-row JSON documents selected by the row path as an iterator, or `None` if the
@@ -1037,14 +1043,14 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
    * via [[JsonTableEvaluator.unquotedString]].
    */
   private def serializeCurrentValue(parser: JsonParser): UTF8String = {
-    val output = new ByteArrayOutputStream()
-    Utils.tryWithResource(jsonFactory.createGenerator(output, JsonEncoding.UTF8)) {
+    outputBuffer.reset()
+    Utils.tryWithResource(jsonFactory.createGenerator(outputBuffer, JsonEncoding.UTF8)) {
       // `copyCurrentStructureExact` preserves floating-point tokens byte-for-byte; the plain
       // `copyCurrentStructure` may round them for textual formats, which would corrupt a
       // high-precision fraction before JSON_TABLE casts the reserialized text to DECIMAL/STRING.
       generator => generator.copyCurrentStructureExact(parser)
     }
-    UTF8String.fromBytes(output.toByteArray)
+    UTF8String.fromBytes(outputBuffer.toByteArray)
   }
 
   // The array parser currently owned by an outstanding `arrayElementIterator`, or null. Since
