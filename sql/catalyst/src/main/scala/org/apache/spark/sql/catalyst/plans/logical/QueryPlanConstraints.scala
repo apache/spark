@@ -160,7 +160,7 @@ trait ConstraintHelper {
     // already produces.
     val validComparisons = constraints.filter {
       case b: BinaryComparison =>
-        b.deterministic && !b.isInstanceOf[EqualNullSafe] &&
+        b.deterministic && !b.throwable && !b.isInstanceOf[EqualNullSafe] &&
           (!b.isInstanceOf[EqualTo] || b.left.foldable || b.right.foldable) &&
           isBinaryStable(b.left.dataType) && isBinaryStable(b.right.dataType)
       case _ => false
@@ -179,7 +179,7 @@ trait ConstraintHelper {
     // into both directions, unlike GreaterThan/GreaterThanOrEqual, because an equality acts as
     // both an upper and a lower bound and the matching below is direction-sensitive on which
     // side carries the literal.
-    val canonical = validComparisons.toSet[Expression].flatMap {
+    val canonical = validComparisons.flatMap {
       case GreaterThan(l, r) => LessThan(r, l) :: Nil
       case GreaterThanOrEqual(l, r) => LessThanOrEqual(r, l) :: Nil
       case EqualTo(l, r) => EqualTo(l, r) :: EqualTo(r, l) :: Nil

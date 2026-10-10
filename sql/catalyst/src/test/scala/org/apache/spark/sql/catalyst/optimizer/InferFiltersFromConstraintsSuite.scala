@@ -633,4 +633,20 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     assert(pushedToRight, s"Expected b.v >= 5 pushed to right side; plan was:\n$optimized")
   }
 
+  test("SPARK-30768: do not infer filters from throwable expressions") {
+    val x = testRelation.where($"b" < 10).subquery("x")
+    val y = testRelation.subquery("y")
+    val raiseErr = new RaiseError(Literal("neg")).cast(IntegerType)
+    val caseExpr = CaseWhen(Seq(("y.b".attr < 0, raiseErr)), elseValue = Some("y.b".attr))
+    val cond = Some("x.a".attr === "y.a".attr && caseExpr < "x.b".attr)
+    val query = x.join(y, Inner, cond).analyze
+    val optimized = Optimize.execute(query)
+    var inferredThrowable = false
+    optimized.foreach {
+      case Join(_, Filter(cond, _), _, _, _) =>
+        inferredThrowable = cond.throwable
+      case _ =>
+    }
+    assert(!inferredThrowable, s"Unexpected throwable filter condition inferred: $optimized")
+  }
 }
