@@ -19,11 +19,19 @@ package org.apache.spark.sql.execution.history
 
 import java.util.Properties
 
-import org.apache.spark.SparkFunSuite
+import scala.io.{Codec, Source}
+
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.history.{CompactionResultCode, EventLogFileCompactor, EventLogFileReader, EventLogFileWriter, EventLogTestHelper}
+import org.apache.spark.internal.config.History
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.status.ListenerEventsTestHelper
+import org.apache.spark.util.Utils
 
 class SQLEventFilterBuilderSuite extends SparkFunSuite {
   import ListenerEventsTestHelper._
@@ -104,5 +112,53 @@ class SQLEventFilterBuilderSuite extends SparkFunSuite {
     assert(listener.liveStages.isEmpty)
     assert(listener.liveTasks.isEmpty)
     assert(listener.liveRDDs.isEmpty)
+  }
+
+  test("SPARK-60110: Don't compact files if a live SQL execution start is skipped") {
+    withTempDir { dir =>
+      val sparkConf = new SparkConf()
+      val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+      val planInfo = new SparkPlanInfo("node", "str", Seq.empty, Map.empty, Seq.empty)
+      val maxLineLength = 8 * 1024
+
+      // SQL execution 1 is still live and has no jobs yet, and its start line exceeds the
+      // line-length limit. SQL execution 2 is finished.
+      val sqlStart1 = SparkListenerSQLExecutionStart(1, Some(1), "desc1", "details1",
+        "x" * maxLineLength, planInfo, 0L)
+      val sqlStart2 = SparkListenerSQLExecutionStart(2, Some(2), "desc2", "details2", "plan",
+        planInfo, 0L)
+      val appStart = SparkListenerApplicationStart("app", Some("app"), 0, "user", None)
+
+      // 1~2 are candidates to compact, 3~5 are dummies to ensure max files to retain
+      val fileStatuses = EventLogTestHelper.writeEventsToRollingWriter(fs, "app", dir,
+        sparkConf, hadoopConf,
+        Seq(sqlStart1),
+        Seq(sqlStart2, SparkListenerSQLExecutionEnd(2, 0L)),
+        Seq(appStart),
+        Seq(appStart),
+        Seq(appStart))
+      val maxFilesToRetain = 3
+
+      // Replay skips the start of SQL execution 1, so the filters would treat it as finished
+      // and drop it. Compaction must not proceed.
+      val limitedConf = sparkConf.clone()
+        .set(History.EVENT_LOG_MAX_LINE_LENGTH, maxLineLength.toLong)
+      val limitedCompactor = new EventLogFileCompactor(limitedConf, hadoopConf, fs,
+        maxFilesToRetain, 0.0d)
+      val result = limitedCompactor.compact(fileStatuses)
+      assert(result.code === CompactionResultCode.INCOMPLETE_REPLAY)
+      fileStatuses.foreach { status => assert(fs.exists(status.getPath)) }
+
+      // With the default limit, the start of live SQL execution 1 is kept in the compact file.
+      val compactor = new EventLogFileCompactor(sparkConf, hadoopConf, fs, maxFilesToRetain, 0.0d)
+      assert(compactor.compact(fileStatuses).code === CompactionResultCode.SUCCESS)
+      val compactFilePath = new Path(fileStatuses(1).getPath.getParent,
+        fileStatuses(1).getPath.getName + EventLogFileWriter.COMPACTED)
+      Utils.tryWithResource(EventLogFileReader.openEventLog(compactFilePath, fs)) { is =>
+        val lines = Source.fromInputStream(is)(Codec.UTF8).getLines().toList
+        assert(lines === Seq(EventLogTestHelper.convertEvent(sqlStart1)))
+      }
+    }
   }
 }

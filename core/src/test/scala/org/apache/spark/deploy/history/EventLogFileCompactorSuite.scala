@@ -17,6 +17,9 @@
 
 package org.apache.spark.deploy.history
 
+import java.io.File
+import java.util.Properties
+
 import scala.collection.mutable
 import scala.io.{Codec, Source}
 
@@ -24,7 +27,8 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.history.EventLogTestHelper.writeEventsToRollingWriter
+import org.apache.spark.deploy.history.EventLogTestHelper.{convertEvent, writeEventsToRollingWriter}
+import org.apache.spark.internal.config.History
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.status.ListenerEventsTestHelper._
@@ -202,6 +206,107 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-60110: Don't compact files if some lines exceed the line-length limit") {
+    withTempDir { dir =>
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+
+      // job 1 is finished
+      val stage1 = createStage(1, createRddsWithId(1 to 2), Nil)
+      val tasks1 = createTasks(4, Array("exec1"), 0L).map(createTaskStartEvent(_, 1, 0))
+
+      // job 2 is still live, and its job start line exceeds the line-length limit
+      val stage2 = createStage(2, createRddsWithId(3 to 4), Nil)
+      val tasks2 = createTasks(4, Array("exec1"), 4L).map(createTaskStartEvent(_, 2, 0))
+      val maxLineLength = 8 * 1024
+      val props = new Properties()
+      props.setProperty("large", "x" * maxLineLength)
+      val jobStart2 = SparkListenerJobStart(2, 0, Seq(stage2), props)
+      val stageSubmitted2 = SparkListenerStageSubmitted(stage2)
+
+      // 1~3 are candidates to compact, 4~6 are dummies to ensure max files to retain
+      val fileStatuses = writeEventsToRollingWriter(fs, "app", dir, sparkConf, hadoopConf,
+        Seq(SparkListenerJobStart(1, 0, Seq(stage1)), SparkListenerStageSubmitted(stage1)) ++
+          tasks1,
+        Seq(jobStart2, stageSubmitted2) ++ tasks2,
+        Seq(SparkListenerJobEnd(1, 0, JobSucceeded)),
+        testEvent,
+        testEvent,
+        testEvent)
+
+      // Replay skips job 2's start, so the filters would treat job 2 as finished and drop
+      // all of its events. Compaction must not proceed.
+      val limitedConf = sparkConf.clone()
+        .set(History.EVENT_LOG_MAX_LINE_LENGTH, maxLineLength.toLong)
+      val limitedCompactor = new EventLogFileCompactor(limitedConf, hadoopConf, fs,
+        TEST_ROLLING_MAX_FILES_TO_RETAIN, TEST_COMPACTION_SCORE_THRESHOLD)
+      assertNoCompaction(fs, fileStatuses, limitedCompactor.compact(fileStatuses),
+        CompactionResultCode.INCOMPLETE_REPLAY)
+
+      // With the default limit, the events of live job 2 are kept in the compact file.
+      val compactor = new EventLogFileCompactor(sparkConf, hadoopConf, fs,
+        TEST_ROLLING_MAX_FILES_TO_RETAIN, TEST_COMPACTION_SCORE_THRESHOLD)
+      assertCompaction(fs, fileStatuses, compactor.compact(fileStatuses),
+        expectedNumOfFilesCompacted = 3)
+
+      val compactFilePath = getCompactFilePath(fileStatuses(2).getPath)
+      Utils.tryWithResource(EventLogFileReader.openEventLog(compactFilePath, fs)) { is =>
+        val lines = Source.fromInputStream(is)(Codec.UTF8).getLines().toList
+        val expectedLines = (Seq(jobStart2, stageSubmitted2) ++ tasks2).map(convertEvent)
+        assert(lines === expectedLines)
+      }
+    }
+  }
+
+  test("SPARK-60110: Stop replaying files to compact after the file with a skipped line") {
+    withTempDir { dir =>
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+      val maxLineLength = 8 * 1024
+      val testLine = convertEvent(testEvent.head)
+
+      // 1~2 are candidates to compact. Replay would throw on the malformed line in file 2 if it
+      // were not stopped after file 1.
+      val fileStatuses = writeLinesToRollingWriter(fs, dir,
+        Seq(testLine, "x" * (maxLineLength + 1)),
+        Seq("{"),
+        Seq(testLine),
+        Seq(testLine),
+        Seq(testLine))
+
+      val conf = sparkConf.clone().set(History.EVENT_LOG_MAX_LINE_LENGTH, maxLineLength.toLong)
+      val compactor = new EventLogFileCompactor(conf, hadoopConf, fs,
+        TEST_ROLLING_MAX_FILES_TO_RETAIN, TEST_COMPACTION_SCORE_THRESHOLD)
+      assertNoCompaction(fs, fileStatuses, compactor.compact(fileStatuses),
+        CompactionResultCode.INCOMPLETE_REPLAY)
+    }
+  }
+
+  test("SPARK-60110: Don't compact files if replay stops in the middle of a file") {
+    withTempDir { dir =>
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+
+      // job 1 is still live, but its job start comes after a line that is valid JSON but not a
+      // valid event, which makes replay stop reading the rest of file 1
+      val stage1 = createStage(1, createRddsWithId(1 to 2), Nil)
+      val tasks1 = createTasks(4, Array("exec1"), 0L).map(createTaskStartEvent(_, 1, 0))
+      val testLine = convertEvent(testEvent.head)
+
+      // 1~2 are candidates to compact, 3~5 are dummies to ensure max files to retain
+      val fileStatuses = writeLinesToRollingWriter(fs, dir,
+        Seq("{\"Event\":\"SparkListenerJobStart\"}") ++
+          (Seq(SparkListenerJobStart(1, 0, Seq(stage1)), SparkListenerStageSubmitted(stage1)) ++
+            tasks1).map(convertEvent),
+        Seq(testLine),
+        Seq(testLine),
+        Seq(testLine),
+        Seq(testLine))
+
+      val compactor = new EventLogFileCompactor(sparkConf, hadoopConf, fs,
+        TEST_ROLLING_MAX_FILES_TO_RETAIN, TEST_COMPACTION_SCORE_THRESHOLD)
+      assertNoCompaction(fs, fileStatuses, compactor.compact(fileStatuses),
+        CompactionResultCode.INCOMPLETE_REPLAY)
+    }
+  }
+
   test("rewrite files with test filters") {
     class TestEventFilter1 extends EventFilter {
       override def acceptFn(): PartialFunction[SparkListenerEvent, Boolean] = {
@@ -318,6 +423,20 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
     assert(expectedCompactRet === compactRet.code)
     assert(None === compactRet.compactIndex)
     originalFiles.foreach { status => assert(fs.exists(status.getPath)) }
+  }
+
+  private def writeLinesToRollingWriter(
+      fs: FileSystem,
+      dir: File,
+      linesFiles: Seq[String]*): Seq[FileStatus] = {
+    val writer = new RollingEventLogFilesWriter("app", None, dir.toURI, sparkConf, hadoopConf)
+    writer.start()
+    linesFiles.zipWithIndex.foreach { case (lines, index) =>
+      lines.foreach(writer.writeEvent(_, flushLogger = true))
+      if (index < linesFiles.length - 1) writer.rollEventLogFile()
+    }
+    writer.stop()
+    EventLogFileReader(fs, new Path(writer.logPath)).get.listEventLogFiles
   }
 
   private def testEvent: Seq[SparkListenerEvent] =

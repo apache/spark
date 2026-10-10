@@ -50,6 +50,14 @@ private[spark] class ReplayListenerBus(
   private[scheduler] val effectiveMaxLineLength =
     ReplayListenerBus.normalizeMaxLineLength(maxLineLength)
 
+  private var skippedLines = 0L
+
+  /**
+   * Number of over-long lines skipped so far by [[replay()]] calls on an [[InputStream]]. The
+   * `Iterator[String]` overload does not apply the limit, so it never updates this count.
+   */
+  private[spark] def numSkippedLines: Long = skippedLines
+
   /**
    * Replay each event in the order maintained in the given stream. The stream is expected to
    * contain one JSON-encoded SparkListenerEvent per line.
@@ -134,6 +142,7 @@ private[spark] class ReplayListenerBus(
                 log"${MDC(FILE_NAME, sourceName)}; first skipped line: ${MDC(LINE_NUM, index + 1)}")
               warned = true
             }
+            skippedLines += 1
             logDebug(s"Skipped event log line ${index + 1} in $sourceName")
             fetchLine()
           } else {
