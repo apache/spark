@@ -650,6 +650,20 @@ class ArrowEncoderSuite extends ConnectFunSuite {
     }
   }
 
+  test("SPARK-55396: java record with array components") {
+    import ArrowEncoderRecordTestData.{Address, ArrayRecord}
+    val encoder = JavaTypeInference.encoderFor[ArrayRecord](classOf[ArrayRecord])
+    roundTripAndCheckIdentical(encoder) { () =>
+      val maybeNull = MaybeNull(5)
+      Iterator.tabulate(100) { i =>
+        new ArrayRecord(
+          maybeNull(Array(i, i + 1)),
+          maybeNull(Array("s" + i, maybeNull("t" + i))),
+          maybeNull(Array(new Address("c" + i, "z" + i), maybeNull(new Address("d", "y")))))
+      }
+    }
+  }
+
   test("SPARK-55396: java record with generic record components") {
     import ArrowEncoderRecordTestData.{Box, BoxHolder, ComparableBox, NumberBox}
     val encoder = JavaTypeInference.encoderFor[BoxHolder](classOf[BoxHolder])
