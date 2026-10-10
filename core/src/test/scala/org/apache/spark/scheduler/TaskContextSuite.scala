@@ -757,6 +757,89 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(invocationOrder === Seq("C", "B", "A", "D"))
   }
 
+  test("SPARK-60113: pre-completion listeners run before all completion listeners") {
+    val context = TaskContext.empty()
+    val invocationOrder = ArrayBuffer.empty[String]
+
+    def makeLoggingListener(id: String): TaskCompletionListener = new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = {
+        invocationOrder += id
+      }
+    }
+    context.addTaskCompletionListener(makeLoggingListener("A"))
+    context.addTaskPreCompletionListener(makeLoggingListener("P1"))
+    context.addTaskPreCompletionListener(makeLoggingListener("P2"))
+    // Added after the pre-completion listeners, e.g. lazily by the thread they stop. An ordinary
+    // completion listener added here would run before them.
+    context.addTaskCompletionListener(makeLoggingListener("B"))
+
+    context.markTaskCompleted(None)
+    assert(invocationOrder === Seq("P2", "P1", "B", "A"))
+    // Called immediately once the task has completed, like completion listeners.
+    context.addTaskPreCompletionListener(makeLoggingListener("P3"))
+    assert(invocationOrder === Seq("P2", "P1", "B", "A", "P3"))
+  }
+
+  test("SPARK-60113: completion listeners run even if a pre-completion listener fails") {
+    val context = TaskContext.empty()
+    val listener = mock(classOf[TaskCompletionListener])
+    context.addTaskCompletionListener(listener)
+    context.addTaskPreCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("pre")
+    })
+
+    val e = intercept[TaskCompletionListenerException] {
+      context.markTaskCompleted(None)
+    }
+    assert(e.getMessage.contains("pre"))
+    verify(listener, times(1)).onTaskCompletion(any())
+    assert(context.isFailed())
+  }
+
+  test("SPARK-60113: failures of pre-completion and completion listeners are both reported") {
+    val context = TaskContext.empty()
+    context.addTaskCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("post")
+    })
+    context.addTaskPreCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("pre")
+    })
+
+    val e = intercept[TaskCompletionListenerException] {
+      context.markTaskCompleted(None)
+    }
+    assert(e.getMessage.contains("pre"))
+    assert(e.getMessage.contains("post"))
+  }
+
+  test("SPARK-60113: a pre-completion listener added during completion runs next") {
+    val context = TaskContext.empty()
+    val invocationOrder = ArrayBuffer.empty[String]
+
+    def makeLoggingListener(id: String): TaskCompletionListener = new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = {
+        invocationOrder += id
+      }
+    }
+    context.addTaskCompletionListener(makeLoggingListener("A"))
+    context.addTaskCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = {
+        invocationOrder += "B"
+        // Added from a second thread while this thread runs the completion listeners, so the
+        // call returns without running it; this thread must still run it.
+        val thread = new Thread(() => {
+          context.addTaskPreCompletionListener(makeLoggingListener("P"))
+        })
+        thread.start()
+        thread.join()
+        assert(invocationOrder === Seq("B"))
+      }
+    })
+
+    context.markTaskCompleted(None)
+    assert(invocationOrder === Seq("B", "P", "A"))
+  }
+
   test("SPARK-46480: Add isFailed in TaskContext") {
     val context = TaskContext.empty()
     var isFailed = false

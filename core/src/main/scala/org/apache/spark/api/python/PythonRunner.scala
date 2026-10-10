@@ -183,33 +183,38 @@ private[spark] object BasePythonRunner extends Logging {
     ThreadUtils.newDaemonCachedThreadPool("python-udf-pipelined-writer")
   }
 
-  /** How often to log while a task completion listener waits for a pipelined writer to exit. */
+  /** How often to log while task completion waits for a pipelined writer to exit. */
   private val pipelinedWriterExitWarnIntervalMs = 10000L
 
   /**
-   * Runs `writer` on [[pipelinedWriterThreadPool]] and registers a task completion listener
+   * Runs `writer` on [[pipelinedWriterThreadPool]] and registers a task pre-completion listener
    * that interrupts it and blocks until it has exited.
    *
-   * Listeners registered earlier run later (LIFO) and free memory backing the input rows, e.g.
-   * the off-heap pages of a HybridRowQueue or of an off-heap vectorized reader. If the writer
-   * were still serializing or buffering such a row at that point, it would be a use-after-free
-   * that can crash the executor (SPARK-33277). `Future.get()` cannot be used for this wait:
+   * Task completion listeners free memory that the writer may still read or write, e.g. the
+   * pages of the HybridRowQueue that buffers the input rows, or the off-heap column vectors of a
+   * vectorized reader. If the writer were still running at that point, it would be a
+   * use-after-free that can crash the executor (SPARK-33277). The listener is added with
+   * `addTaskPreCompletionListener` so that it runs before all of them, including the ones that
+   * the writer thread adds lazily while it pulls the upstream iterator, which would run first if
+   * this were an ordinary completion listener. `Future.get()` cannot be used for this wait:
    * once `cancel(true)` succeeds it throws `CancellationException` immediately, without waiting
    * for the interrupted runnable to return.
    */
   private[python] def startPipelinedWriter(writer: Runnable, context: TaskContext): Unit = {
-    val writerTask = new PipelinedWriterTask(writer)
+    val writerTask = new PipelinedWriterTask(writer, taskIdentifier(context))
     val writerFuture = pipelinedWriterThreadPool.submit(writerTask)
-    context.addTaskCompletionListener[Unit] { _ =>
-      writerTask.stopAndAwaitExit(writerFuture, taskIdentifier(context))
-    }
+    context.addTaskPreCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit =
+        writerTask.stopAndAwaitExit(writerFuture)
+    })
   }
 
   /**
-   * Wraps a pipelined writer so that a task completion listener can wait until the writer has
-   * either exited or is guaranteed never to run.
+   * Wraps a pipelined writer so that task completion can wait until the writer has either
+   * exited or is guaranteed never to run.
    */
-  private[python] class PipelinedWriterTask(writer: Runnable) extends Runnable {
+  private[python] class PipelinedWriterTask(writer: Runnable, taskName: String)
+    extends Runnable {
     // Set by whichever of run() and stopAndAwaitExit() gets here first. If run() wins, the
     // writer runs and stopAndAwaitExit() waits for it; otherwise run() skips the writer.
     private val claimed = new AtomicBoolean(false)
@@ -219,45 +224,51 @@ private[spark] object BasePythonRunner extends Logging {
       if (claimed.compareAndSet(false, true)) {
         try {
           writer.run()
+        } catch {
+          case t: Throwable =>
+            // The thread pool's FutureTask would keep this to itself, and the result of a
+            // cancelled future cannot be retrieved, so log it here.
+            logError(log"Pipelined Python writer of ${MDC(TASK_NAME, taskName)} failed", t)
+            throw t
         } finally {
           exited.countDown()
         }
       }
     }
 
-    def stopAndAwaitExit(future: Future[_], taskName: String): Unit = {
+    def stopAndAwaitExit(future: Future[_]): Unit = {
       // Interrupts the writer thread if the writer is running. This unblocks channel.write
-      // (the JDK closes the channel and throws ClosedByInterruptException), and the writer
-      // loop checks the interrupt flag between rows, so the wait below is normally short.
+      // (the JDK closes the channel and throws ClosedByInterruptException). Otherwise the writer
+      // sees the interrupt only between calls to writeNextInputToStream, each of which can pull
+      // and serialize a whole batch of input rows (e.g. for the Arrow runners).
       future.cancel(true)
       if (claimed.compareAndSet(false, true)) {
         // The writer never started and now never will.
         return
       }
-      // Wait without a time bound: giving up would let the listeners that run next free memory
-      // the writer may still be reading, and failing this listener would not stop them either.
-      // A killed task that stays stuck here is handled by the task reaper, if enabled.
+      // Wait without a time bound. The completion listeners that run next free memory that
+      // the writer may still access: even a writer blocked in upstream I/O that ignores
+      // interrupts adds the row it gets next to the HybridRowQueue. Giving up here would allow
+      // that use-after-free, and failing this listener would not stop those listeners either.
+      // The price is that task completion is held for as long as such upstream I/O blocks.
+      //
+      // An interrupt of this thread (e.g. a task kill) is not restored after the wait: the kill
+      // is already recorded in the TaskContext, and the flag would make the blocking channel
+      // and lock operations of the completion listeners that run next fail and skip cleanup.
       val startNs = System.nanoTime()
-      var interrupted = false
-      try {
-        var done = false
-        while (!done) {
-          try {
-            done = exited.await(pipelinedWriterExitWarnIntervalMs, TimeUnit.MILLISECONDS)
-            if (!done) {
-              val waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
-              logWarning(log"Still waiting for the pipelined Python writer of " +
-                log"${MDC(TASK_NAME, taskName)} to exit after " +
-                log"${MDC(TOTAL_TIME, waitedMs)} ms; task completion cleanup is blocked " +
-                log"until it does.")
-            }
-          } catch {
-            case _: InterruptedException => interrupted = true
+      var done = false
+      while (!done) {
+        try {
+          done = exited.await(pipelinedWriterExitWarnIntervalMs, TimeUnit.MILLISECONDS)
+          if (!done) {
+            val waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
+            logWarning(log"Still waiting for the pipelined Python writer of " +
+              log"${MDC(TASK_NAME, taskName)} to exit after " +
+              log"${MDC(TOTAL_TIME, waitedMs)} ms; task completion cleanup is blocked " +
+              log"until it does.")
           }
-        }
-      } finally {
-        if (interrupted) {
-          Thread.currentThread().interrupt()
+        } catch {
+          case _: InterruptedException => // Keep waiting; see above.
         }
       }
     }
@@ -1398,9 +1409,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           // automatically closed by the JVM, which will cause Python to receive
           // EOF and the reader thread to get IOException.
           Thread.currentThread().interrupt()
-        case NonFatal(t) =>
+        case t: Throwable =>
           // InterruptedException and ClosedByInterruptException are matched above; what
-          // remains here is genuine non-fatal failure that needs to be propagated to the
+          // remains here is genuine failure that needs to be propagated to the
           // reader through writer.exception + a socket EOF.
           writer.setException(t)
           // Shut down the socket output so Python receives EOF and terminates.
@@ -1410,6 +1421,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           // and propagate the failure.
           if (worker.channel.isConnected) {
             Utils.tryLog(worker.channel.shutdownOutput())
+          }
+          // Also rethrow a fatal error (e.g. OutOfMemoryError) so that PipelinedWriterTask
+          // logs it.
+          if (!NonFatal(t)) {
+            throw t
           }
       } finally {
         TaskContext.unset()

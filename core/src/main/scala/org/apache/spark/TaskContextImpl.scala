@@ -70,6 +70,12 @@ private[spark] class TaskContextImpl(
    */
   @transient private val onCompleteCallbacks = new Stack[TaskCompletionListener]
 
+  /**
+   * List of callback functions to execute when the task completes, before any of
+   * `onCompleteCallbacks`. Processed in reverse order of registration, like `onCompleteCallbacks`.
+   */
+  @transient private val onPreCompleteCallbacks = new Stack[TaskCompletionListener]
+
   /** List of callback functions to execute when the task fails. */
   @transient private val onFailureCallbacks = new Stack[TaskFailureListener]
 
@@ -128,6 +134,20 @@ private[spark] class TaskContextImpl(
     this
   }
 
+  override private[spark] def addTaskPreCompletionListener(
+      listener: TaskCompletionListener): this.type = {
+    val needToCallListener = synchronized {
+      // Same as `addTaskCompletionListener`: if a thread is already invoking listeners, it will
+      // execute the new listener.
+      onPreCompleteCallbacks.push(listener)
+      completed
+    }
+    if (needToCallListener) {
+      invokeTaskCompletionListeners(None)
+    }
+    this
+  }
+
   override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
     synchronized {
       onFailureCallbacks.push(listener)
@@ -159,7 +179,7 @@ private[spark] class TaskContextImpl(
   }
 
   private[spark] def invokePostStatusUpdateListeners(): Unit = {
-    invokeListeners(onPostStatusUpdateCallbacks, "PostStatusUpdateListener", None) {
+    invokeListeners(Seq(onPostStatusUpdateCallbacks), "PostStatusUpdateListener", None) {
       _.onStatusUpdateSent(this)
     }
   }
@@ -189,9 +209,12 @@ private[spark] class TaskContextImpl(
   }
 
   private def invokeTaskCompletionListeners(error: Option[Throwable]): Unit = {
-    // It is safe to access the reference to `onCompleteCallbacks` without holding the TaskContext
-    // lock. `invokeListeners()` acquires the lock before accessing the contents.
-    invokeListeners(onCompleteCallbacks, "TaskCompletionListener", error) {
+    // It is safe to access the references to `onPreCompleteCallbacks` and `onCompleteCallbacks`
+    // without holding the TaskContext lock. `invokeListeners()` acquires the lock before accessing
+    // the contents. Pre-completion listeners are taken first, including those added while
+    // completion listeners are running.
+    invokeListeners(
+        Seq(onPreCompleteCallbacks, onCompleteCallbacks), "TaskCompletionListener", error) {
       _.onTaskCompletion(this)
     }
   }
@@ -199,7 +222,7 @@ private[spark] class TaskContextImpl(
   private def invokeTaskFailureListeners(error: Throwable): Unit = {
     // It is safe to access the reference to `onFailureCallbacks` without holding the TaskContext
     // lock. `invokeListeners()` acquires the lock before accessing the contents.
-    invokeListeners(onFailureCallbacks, "TaskFailureListener", Option(error)) {
+    invokeListeners(Seq(onFailureCallbacks), "TaskFailureListener", Option(error)) {
       _.onTaskFailure(this, error)
     }
   }
@@ -239,8 +262,13 @@ private[spark] class TaskContextImpl(
     }
   }
 
+  /**
+   * Invokes and removes the listeners in `listenerStacks`, each in reverse order of registration.
+   * A listener is always taken from the first non-empty stack, so all listeners of a stack run
+   * before those of the stacks after it that are still pending.
+   */
   private def invokeListeners[T](
-      listeners: Stack[T],
+      listenerStacks: Seq[Stack[T]],
       name: String,
       error: Option[Throwable])(
       callback: T => Unit): Unit = {
@@ -267,13 +295,14 @@ private[spark] class TaskContextImpl(
     }
 
     def getNextListenerOrDeregisterThread(): Option[T] = synchronized {
-      if (listeners.empty()) {
-        // We have executed all listeners that have been added so far. Deregister this thread as the
-        // callback invocation thread.
-        listenerInvocationThread = None
-        None
-      } else {
-        Some(listeners.pop())
+      listenerStacks.find(!_.empty()) match {
+        case Some(listeners) =>
+          Some(listeners.pop())
+        case None =>
+          // We have executed all listeners that have been added so far. Deregister this thread as
+          // the callback invocation thread.
+          listenerInvocationThread = None
+          None
       }
     }
 
