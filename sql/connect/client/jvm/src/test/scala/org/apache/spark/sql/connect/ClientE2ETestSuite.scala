@@ -1248,6 +1248,22 @@ class ClientE2ETestSuite
       spark.createDataFrame(beans, classOf[SimpleBean]))
   }
 
+  test("SPARK-55396: Java records") {
+    import ClientE2ERecords.SimpleRecord
+    val records =
+      java.util.Arrays.asList(new SimpleRecord(1, "a", 1.5), new SimpleRecord(2, null, null))
+    checkSameResult(
+      Seq(Row(1, "a", 1.5), Row(2, null, null)),
+      spark.createDataFrame(records, classOf[SimpleRecord]))
+    val encoder = org.apache.spark.sql.Encoders.record(classOf[SimpleRecord])
+    val ds = spark.createDataset(records)(encoder)
+    checkSameResult(records.asScala, ds)
+    // The server deserializes the input and serializes the output with the record encoder.
+    checkSameResult(
+      Seq(new SimpleRecord(2, "a", 1.5), new SimpleRecord(3, null, null)),
+      ds.map(r => new SimpleRecord(r.id + 1, r.name, r.score))(encoder))
+  }
+
   test("SparkSession typed createDataSet/createDataframe") {
     val session = spark
     import session.implicits._

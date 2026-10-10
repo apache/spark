@@ -48,6 +48,30 @@ public class ArrowEncoderRecordTestData {
     }
   }
 
+  public static class BeanWithRecord {
+    private Address address;
+
+    public Address getAddress() {
+      return address;
+    }
+
+    public void setAddress(Address address) {
+      this.address = address;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      return o instanceof BeanWithRecord other && Objects.equals(address, other.address);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(address);
+    }
+  }
+
+  public record RecordWithBean(String id, BeanWithRecord bean) {}
+
   public record Box<T>(T value) {}
 
   public record NumberBox<T extends Number>(T value) {}
