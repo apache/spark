@@ -43,9 +43,10 @@ object NativeDataSourceRegistry extends Logging {
   /** The prefix of the names of the installed native data source libraries. */
   val LIBRARY_NAME_PREFIX = "spark_datasource_"
 
-  // The result of the last lookup by `DataSource.lookupDataSource` on this thread that found a
+  // The result of the last lookup by `DataSource.lookupDataSource` on this thread, if it found a
   // native data source, by the name it looked up. The provider that the caller creates next for
-  // that name takes it, so that it does not look the name up again: see [[takeLookup]].
+  // that name takes it, so that it does not look the name up again: see [[takeLookup]]. Each
+  // lookup clears it first, so a provider never takes the result of an earlier lookup.
   private val lastLookup = new ThreadLocal[(String, (String, NativeLibraryLocation))]
 
   /**
@@ -57,8 +58,29 @@ object NativeDataSourceRegistry extends Logging {
     if (!conf.getConf(StaticSQLConf.NATIVE_DATA_SOURCE_ENABLED)) {
       return None
     }
-    lookupPackage(name, configuredPackageFiles(conf) ++ artifactPackageFiles())
+    val (invalid, valid) = (configuredPackageFiles(conf) ++ artifactPackageFiles())
+      .map(NativeDataSourcePackage.tryRead).partitionMap(identity)
+    // A package of a version of the interface that Spark does not support is unusable too.
+    val (unsupported, usable) = valid.partitionMap { pkg =>
+      if (pkg.manifest.abiVersion == NativeBridge.ABI_VERSION) Right(pkg) else Left(pkg)
+    }
+    lookupPackage(name, usable)
       .orElse(lookupInstalledLibrary(name))
+      .orElse {
+        // An unusable package is only reported when no other package or installed library
+        // provides the data source: a stale copy does not hide a valid one. An invalid package
+        // whose manifest cannot be read is only logged, when it is read.
+        unsupported.find(_.manifest.dataSources.exists(_.equalsIgnoreCase(name))).foreach { pkg =>
+          throw QueryExecutionErrors.invalidNativeDataSourcePackageError(
+            pkg.path,
+            "UNSUPPORTED_ABI_VERSION",
+            Map(
+              "version" -> pkg.manifest.abiVersion.toString,
+              "supported" -> NativeBridge.ABI_VERSION.toString))
+        }
+        invalid.find(_.dataSources.exists(_.equalsIgnoreCase(name))).foreach(p => throw p.error)
+        None
+      }
   }
 
   /**
@@ -71,38 +93,30 @@ object NativeDataSourceRegistry extends Logging {
     result
   }
 
-  /** Takes the result of [[lookupForProvider]] for the given name on this thread, if any. */
+  /**
+   * Takes the result of the last [[lookupForProvider]] on this thread, if it was for the given
+   * name, and forgets it.
+   */
   def takeLookup(name: String): Option[(String, NativeLibraryLocation)] = {
-    Option(lastLookup.get()).filter(_._1.equalsIgnoreCase(name)).map { case (_, found) =>
-      lastLookup.remove()
-      found
-    }
+    val last = Option(lastLookup.get())
+    lastLookup.remove()
+    last.collect { case (lookedUp, found) if lookedUp.equalsIgnoreCase(name) => found }
   }
+
+  /** Forgets the result of the last [[lookupForProvider]] on this thread. */
+  def clearLookup(): Unit = lastLookup.remove()
 
   private def lookupPackage(
       name: String,
-      files: Seq[File]): Option[(String, NativeDataSourcePackage)] = {
-    val (invalid, valid) = files.map(NativeDataSourcePackage.tryRead).partitionMap(identity)
-    // An invalid package does not prevent finding the data sources of the other packages, unless
-    // its manifest lists the data source. An invalid package is logged when it is read.
-    invalid.find(_.dataSources.exists(_.equalsIgnoreCase(name))).foreach(p => throw p.error)
-    val found = valid
+      packages: Seq[NativeDataSourcePackage]): Option[(String, NativeDataSourcePackage)] = {
+    val found = packages
       .flatMap(pkg => pkg.manifest.dataSources.find(_.equalsIgnoreCase(name)).map(_ -> pkg))
       // The same package can be found more than once, for example when it is in a configured
       // directory and was also added as an artifact.
       .groupBy(_._2.sha256).values.map(_.head).toSeq
     found match {
       case Seq() => None
-      case Seq(result @ (_, pkg)) =>
-        if (pkg.manifest.abiVersion != NativeBridge.ABI_VERSION) {
-          throw QueryExecutionErrors.invalidNativeDataSourcePackageError(
-            pkg.path,
-            "UNSUPPORTED_ABI_VERSION",
-            Map(
-              "version" -> pkg.manifest.abiVersion.toString,
-              "supported" -> NativeBridge.ABI_VERSION.toString))
-        }
-        Some(result)
+      case Seq(result) => Some(result)
       case _ =>
         throw QueryCompilationErrors.nativeDataSourcePackageConflictError(
           name, found.map(_._2.path).sorted)

@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.DataSourceRegister
@@ -140,6 +141,30 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(TestColumnarSink.rows(table).sorted == (0L until 5L).map(id => (id, s"name$id")))
     assert(TestColumnarSink.epochs.get(table) == Seq(0L))
   }
+
+  test("create a stream writer for each micro-batch") {
+    val table = "micro_batch_write"
+    val input = MemoryStream[(Long, String)]
+    val query = input.toDF().toDF("id", "name")
+      .writeStream
+      .format(format)
+      .option("table", table)
+      .option("checkpointLocation", Utils.createTempDir().getPath)
+      .start()
+    try {
+      (0L until 3L).foreach { id =>
+        input.addData((id, s"name$id"))
+        query.processAllAvailable()
+      }
+    } finally {
+      query.stop()
+    }
+    assert(TestColumnarSink.rows(table).sorted == (0L until 3L).map(id => (id, s"name$id")))
+    assert(TestColumnarSink.epochs.get(table) == Seq(0L, 1L, 2L))
+    // Each micro-batch creates its stream writer with the ID of the query, so that the native
+    // data sources close the stream writer of the previous micro-batch of the query.
+    assert(TestColumnarSink.streamWriterQueryIds.get(table) == Seq.fill(3)(query.id.toString))
+  }
 }
 
 /** Reads the ids [0, end) and their names, and writes to [[TestColumnarSink]]. */
@@ -180,6 +205,8 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
       schema: StructType,
       overwrite: Boolean,
       queryId: String): ColumnarStreamWriter = {
+    TestColumnarSink.streamWriterQueryIds.compute(
+      table, (_, old) => Option(old).getOrElse(Nil) :+ queryId)
     new TestSinkStreamWriter(table)
   }
 }
@@ -275,6 +302,7 @@ object TestColumnarSink {
   val committed = new ConcurrentHashMap[String, Seq[TestCommitMessage]]()
   val aborted = ConcurrentHashMap.newKeySet[String]()
   val epochs = new ConcurrentHashMap[String, Seq[Long]]()
+  val streamWriterQueryIds = new ConcurrentHashMap[String, Seq[String]]()
 
   def rows(table: String): Seq[(Long, String)] = committed.get(table).flatMap(_.rows)
 

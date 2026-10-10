@@ -680,6 +680,8 @@ object DataSource extends Logging {
       provider: String,
       conf: SQLConf,
       includeNativeDataSources: Boolean): Class[_] = {
+    // The provider created for a native data source only takes the result of this lookup.
+    NativeDataSourceRegistry.clearLookup()
     val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native" =>

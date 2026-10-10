@@ -332,6 +332,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     write("append", 0 until 4)
     assert(written() == (0 until 4).map(i => s"$i,v$i").toSet)
     assert(new File(dir, "_SUCCESS").isFile)
+    // The writer is closed after the commit.
+    assert(new File(dir, "_CLOSED").isFile)
     write("append", 4 until 6)
     assert(written() == (0 until 6).map(i => s"$i,v$i").toSet)
     write("overwrite", 10 until 12)
@@ -383,6 +385,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "name" -> "native_sink",
         "msg" -> "injected failure in write"))
     assert(new File(dir, "_ABORTED").isFile)
+    assert(new File(dir, "_CLOSED").isFile)
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
   }
 
@@ -426,6 +429,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }
     // Each call to latestOffset makes 5 more rows available: [0, 5), [5, 10) and [10, 12).
     assert((0 to 2).forall(epoch => new File(dir, s"_EPOCH_$epoch").isFile))
+    // Each micro-batch creates a new stream writer, which closes the one of the previous
+    // micro-batch. The last one is closed once it is no longer referenced.
+    assert((0 to 1).forall(epoch => new File(dir, s"_CLOSED_$epoch").isFile))
     val written = dir.listFiles().filter(_.getName.startsWith("part-"))
       .flatMap(file => Files.readAllLines(file.toPath).asScala)
     assert(written.sorted.toSeq == (0 until 12).map(_.toString).sorted)
@@ -577,6 +583,14 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // no longer configured.
     session.conf.unset(SQLConf.NATIVE_DATA_SOURCE_PATHS.key)
     assert(provider.inferSchema(CaseInsensitiveStringMap.empty()).fieldNames.head == "id")
+
+    // The result is only kept until the next lookup on the thread, whatever it finds, so a
+    // provider never takes the result of an earlier lookup.
+    session.conf.set(SQLConf.NATIVE_DATA_SOURCE_PATHS.key, defaultPackage.getPath)
+    assert(DataSource.lookupDataSource("native_range", session.sessionState.conf) ==
+      classOf[NativeDataSourceV2])
+    assert(DataSource.lookupDataSource("json", session.sessionState.conf) != null)
+    assert(NativeDataSourceRegistry.takeLookup("native_range").isEmpty)
   }
 
   nativeTest("Python data sources take precedence") {
@@ -750,7 +764,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       parameters = Map("provider" -> "com.typo.Missing"))
     val e = intercept[AnalysisException](session.sql("SELECT * FROM missing_db.missing_table"))
     assert(e.getCondition == "TABLE_OR_VIEW_NOT_FOUND")
-    // The invalid package whose manifest lists the data source reports why it is invalid.
+    // The invalid package whose manifest lists the data source reports why it is invalid, when
+    // no other package or installed library provides the data source.
     checkError(
       exception = intercept[SparkRuntimeException] {
         session.read.format("other_source").load()
@@ -759,6 +774,60 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "path" -> otherSource.getCanonicalPath,
         "reason" -> "The package does not contain the library lib.so."))
+  }
+
+  nativeTest("stale packages do not hide a valid one") {
+    // A shared directory still has broken and outdated copies of the package of native_range.
+    val dir = Utils.createTempDir()
+    createZip(dir, "native_range-1.sparkpkg",
+      NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
+        dataSources(""), Map(NativePlatform.current -> "lib.so")).getBytes(UTF_8))
+    createPackage(library, dataSources(""), dir = dir, fileName = "native_range-2.sparkpkg",
+      abiVersion = 2)
+    val session = newSession(dir)
+    checkError(
+      exception = intercept[SparkRuntimeException](range(session)),
+      condition = "INVALID_NATIVE_DATA_SOURCE_PACKAGE.UNSUPPORTED_ABI_VERSION",
+      parameters = Map(
+        "path" -> new File(dir, "native_range-2.sparkpkg").getCanonicalPath,
+        "version" -> "2",
+        "supported" -> "1"))
+
+    // A valid package added to the session takes precedence over them, without a conflict.
+    session.addArtifact(defaultPackage.getPath)
+    checkRows(range(session, "end" -> "2"), (0L until 2L).map(expectedRow))
+
+    // So does an installed library.
+    val libraries = Utils.createTempDir()
+    installLibrary(installedLibrary, "installed_native_range", libraries)
+    createZip(dir, "installed-1.sparkpkg",
+      NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
+        Seq("installed_native_range"), Map(NativePlatform.current -> "lib.so")).getBytes(UTF_8))
+    withLibraryPath(libraries) {
+      checkRows(
+        newSession(dir).read.format("installed_native_range").option("end", "2").load()
+          .select("id"),
+        Seq(Row(0L), Row(1L)))
+    }
+  }
+
+  nativeTest("forget the packages of a session that is cleaned up") {
+    val session = spark.newSession()
+    session.addArtifact(defaultPackage.getPath)
+    val added = session.artifactManager.getNativeDataSourcePackages._1.head.getCanonicalPath
+    NativeDataSourcePackage.read(new File(added))
+    assert(NativeDataSourcePackage.isCached(added))
+    session.artifactManager.cleanUpResourcesForTesting()
+    assert(!NativeDataSourcePackage.isCached(added))
+
+    // Only the packages under the directory are forgotten.
+    val dir = Utils.createTempDir()
+    val pkg = createPackage(library, dataSources(""), dir = dir).getCanonicalPath
+    NativeDataSourcePackage.read(new File(pkg))
+    NativeDataSourcePackage.forgetPackagesIn(new File(dir.getPath + "x"))
+    assert(NativeDataSourcePackage.isCached(pkg))
+    NativeDataSourcePackage.forgetPackagesIn(dir)
+    assert(!NativeDataSourcePackage.isCached(pkg))
   }
 
   nativeTest("invalid installed libraries") {
