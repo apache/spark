@@ -149,7 +149,7 @@ trait AdaptiveSparkPlanHelper {
    */
   def stripAQEPlan(p: SparkPlan): SparkPlan = p match {
     case a: AdaptiveSparkPlanExec => stripAQEPlan(a.executedPlan)
-    case ResultQueryStageExec(_, plan, _) => plan
+    case ResultQueryStageExec(_, plan, _, _) => plan
     case other => other
   }
 }
