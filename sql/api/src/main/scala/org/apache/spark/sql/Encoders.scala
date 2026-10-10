@@ -204,11 +204,30 @@ object Encoders {
    *   - java.math.BigDecimal, java.math.BigInteger
    *   - time related: java.sql.Date, java.sql.Timestamp, java.time.LocalDate, java.time.Instant
    *   - collection types: array, java.util.List, and map
-   *   - nested java bean.
+   *   - nested java beans and Java records.
+   *
+   * If T is a Java record, this returns the same encoder as `Encoders.record`.
    *
    * @since 1.6.0
    */
   def bean[T](beanClass: Class[T]): Encoder[T] = JavaTypeInference.encoderFor(beanClass)
+
+  /**
+   * Creates an encoder for a Java record (`java.lang.Record`) of type T.
+   *
+   * T must be a publicly accessible Java record without type parameters.
+   *
+   * Each record component becomes a field, in declaration order. Components support the same
+   * types as java bean fields (see [[bean]]).
+   *
+   * @since 4.4.0
+   */
+  def record[T](recordClass: Class[T]): Encoder[T] = {
+    if (!recordClass.isRecord) {
+      throw ExecutionErrors.notARecordClassError(recordClass.getName)
+    }
+    JavaTypeInference.encoderFor(recordClass)
+  }
 
   /**
    * Creates a [[Row]] encoder for schema `schema`.

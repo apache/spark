@@ -23,7 +23,10 @@ import java.util.{HashSet, LinkedList, List => JList, Map => JMap, Set => JSet}
 import scala.beans.{BeanProperty, BooleanBeanProperty}
 import scala.reflect.{classTag, ClassTag}
 
-import org.apache.spark.SparkFunSuite
+import test.org.apache.spark.sql.JavaRecordEncoderTestData._
+
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.JavaTypeInferenceBeans.{Bar, Foo, JavaBeanWithGenericBase, JavaBeanWithGenericHierarchy, JavaBeanWithGenericsABC, StringBarWrapper, StringFooWrapper}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, UDTCaseClass, UDTForCaseClass}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
@@ -300,5 +303,113 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
       ))
     ))
     assert(encoder === expected)
+  }
+
+  private def recordField(
+      name: String,
+      encoder: AgnosticEncoder[_],
+      nullable: Option[Boolean] = None): EncoderField = {
+    EncoderField(name, encoder, nullable.getOrElse(encoder.nullable), Metadata.empty,
+      readMethod = Some(name), writeMethod = None)
+  }
+
+  private def listEncoder(element: AgnosticEncoder[_]): AgnosticEncoder[_] =
+    IterableEncoder(ClassTag(classOf[JList[_]]), element, containsNull = true,
+      lenientSerialization = false)
+
+  private val expectedAddressEncoder = JavaRecordEncoder[Address](ClassTag(classOf[Address]), Seq(
+    recordField("street", StringEncoder),
+    recordField("city", StringEncoder)))
+
+  private def genericBoxEncoder(value: AgnosticEncoder[_]): AgnosticEncoder[_] =
+    JavaRecordEncoder(ClassTag(classOf[GenericBox[_]]), Seq(recordField("value", value)))
+
+  test("SPARK-55396: resolve record encoders in component declaration order") {
+    val expected = JavaRecordEncoder(ClassTag(classOf[Person]), Seq(
+      recordField("name", StringEncoder),
+      recordField("age", PrimitiveIntEncoder),
+      recordField("address", expectedAddressEncoder)))
+    assert(JavaTypeInference.encoderFor(classOf[Person]) === expected)
+    assert(Encoders.record(classOf[Person]) === expected)
+    assert(Encoders.bean(classOf[Person]) === expected)
+  }
+
+  test("SPARK-55396: resolve record leaf and collection component encoders") {
+    assert(JavaTypeInference.encoderFor(classOf[LeafTypesRecord]) ===
+      JavaRecordEncoder(ClassTag(classOf[LeafTypesRecord]), Seq(
+        recordField("flag", PrimitiveBooleanEncoder),
+        recordField("dec", DEFAULT_JAVA_DECIMAL_ENCODER),
+        recordField("date", STRICT_LOCAL_DATE_ENCODER),
+        recordField("instant", STRICT_INSTANT_ENCODER),
+        recordField("color", JavaEnumEncoder(ClassTag(classOf[Color]))))))
+    assert(JavaTypeInference.encoderFor(classOf[CollectionRecord]) ===
+      JavaRecordEncoder(ClassTag(classOf[CollectionRecord]), Seq(
+        recordField("items", listEncoder(StringEncoder)),
+        recordField("numbers", IterableEncoder(ClassTag(classOf[JSet[_]]), BoxedIntEncoder,
+          containsNull = true, lenientSerialization = false)),
+        recordField("addresses", listEncoder(expectedAddressEncoder)),
+        recordField("addressesByName", MapEncoder(ClassTag(classOf[JMap[_, _]]), StringEncoder,
+          expectedAddressEncoder, valueContainsNull = true)))))
+    assert(JavaTypeInference.encoderFor(classOf[ArrayRecord]) ===
+      JavaRecordEncoder(ClassTag(classOf[ArrayRecord]), Seq(
+        recordField("ints", ArrayEncoder(PrimitiveIntEncoder, containsNull = false)),
+        recordField("strings", ArrayEncoder(StringEncoder, containsNull = true)),
+        recordField("addresses", ArrayEncoder(expectedAddressEncoder, containsNull = true)))))
+  }
+
+  test("SPARK-55396: @Nonnull record components are not nullable") {
+    assert(JavaTypeInference.encoderFor(classOf[NonnullRecord]) ===
+      JavaRecordEncoder(ClassTag(classOf[NonnullRecord]), Seq(
+        recordField("name", StringEncoder, nullable = Some(false)),
+        recordField("count", BoxedIntEncoder, nullable = Some(false)),
+        recordField("note", StringEncoder))))
+  }
+
+  test("SPARK-55396: only record components become fields") {
+    assert(JavaTypeInference.encoderFor(classOf[WithExtraMethods]) ===
+      JavaRecordEncoder(ClassTag(classOf[WithExtraMethods]), Seq(
+        recordField("a", PrimitiveIntEncoder))))
+    assert(JavaTypeInference.encoderFor(classOf[EmptyRecord]) ===
+      JavaRecordEncoder(ClassTag(classOf[EmptyRecord]), Nil))
+  }
+
+  test("SPARK-55396: records and JavaBeans nest in each other") {
+    val beanEncoder = JavaBeanEncoder(ClassTag(classOf[SimpleBean]), Seq(
+      encoderField("name", StringEncoder),
+      encoderField("value", PrimitiveIntEncoder)))
+    assert(JavaTypeInference.encoderFor(classOf[RecordWithBean]) ===
+      JavaRecordEncoder(ClassTag(classOf[RecordWithBean]), Seq(
+        recordField("id", StringEncoder),
+        recordField("bean", beanEncoder))))
+    assert(JavaTypeInference.encoderFor(classOf[BeanWithRecord]) ===
+      JavaBeanEncoder(ClassTag(classOf[BeanWithRecord]), Seq(
+        encoderField("address", expectedAddressEncoder))))
+  }
+
+  test("SPARK-55396: resolve generic record components bound by the enclosing record") {
+    assert(JavaTypeInference.encoderFor(classOf[BoxHolder]) ===
+      JavaRecordEncoder(ClassTag(classOf[BoxHolder]), Seq(
+        recordField("stringBox", genericBoxEncoder(StringEncoder)),
+        recordField("intBox", genericBoxEncoder(BoxedIntEncoder)),
+        recordField("boxes", listEncoder(genericBoxEncoder(StringEncoder))))))
+  }
+
+  test("SPARK-55396: unsupported record classes") {
+    checkError(
+      exception = intercept[SparkRuntimeException](Encoders.record(classOf[String])),
+      condition = "NOT_A_RECORD_CLASS",
+      parameters = Map("className" -> "java.lang.String"))
+    // Type parameters are unbound at the top level or when used as a raw type.
+    Seq(classOf[GenericBox[_]], classOf[RawBoxHolder]).foreach { cls =>
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException](Encoders.record(cls)),
+        condition = "GENERIC_RECORD_NOT_SUPPORTED",
+        parameters = Map("recordClass" -> classOf[GenericBox[_]].getName, "typeParams" -> "T"))
+    }
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException](
+        Encoders.record(classOf[SelfReferencingRecord])),
+      condition = "CIRCULAR_CLASS_REFERENCE",
+      parameters = Map("t" -> s"'${classOf[SelfReferencingRecord]}'"))
   }
 }

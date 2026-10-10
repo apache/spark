@@ -425,6 +425,22 @@ object ArrowDeserializers {
           }
         }
 
+      case (JavaRecordEncoder(tag, fields), StructVectors(struct, vectors)) =>
+        // Use the declared component types: a generic component's canonical constructor
+        // parameter has the erased type, not the bound type argument.
+        val componentTypes = tag.runtimeClass.getRecordComponents.map(_.getType)
+        val constructor = methodLookup.unreflectConstructor(
+          tag.runtimeClass.getDeclaredConstructor(componentTypes.toIndexedSeq: _*))
+        val lookup = createFieldLookup(vectors)
+        val deserializers = fields.map { field =>
+          deserializerFor(field.enc, lookup(field.name), timeZoneId)
+        }
+        new StructFieldSerializer[Any](struct) {
+          def value(i: Int): Any = {
+            constructor.invokeWithArguments(deserializers.map(_.get(i).asInstanceOf[AnyRef]): _*)
+          }
+        }
+
       case (TransformingEncoder(_, encoder, provider, _), v) =>
         new Deserializer[Any] {
           private[this] val codec = provider()

@@ -43,7 +43,7 @@ import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NameParameterizedQuery, ParameterizedQueryArgumentsValidator, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.{HybridParameterContext, NamedParameterContext, ParserInterface, PositionalParameterContext}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, LogicalPlan, OneRowRelation, Project, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -353,13 +353,8 @@ class SparkSession private(
 
   /** @inheritdoc */
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = withActive {
-    val attributeSeq: Seq[AttributeReference] = getSchema(beanClass)
-    val className = beanClass.getName
-    val rowRdd = rdd.mapPartitions { iter =>
-    // BeanInfo is not serializable so we must rediscover it remotely for each partition.
-      SQLContext.beansToRows(iter, Utils.classForName(className), attributeSeq)
-    }
-    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd.setName(rdd.name))(self))
+    implicit val encoder: Encoder[Any] = beanEncoderFor(beanClass)
+    createDataset(rdd.asInstanceOf[RDD[Any]]).toDF()
   }
 
   /** @inheritdoc */
@@ -369,9 +364,8 @@ class SparkSession private(
 
   /** @inheritdoc */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = withActive {
-    val attrSeq = getSchema(beanClass)
-    val rows = SQLContext.beansToRows(data.asScala.iterator, beanClass, attrSeq)
-    Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
+    implicit val encoder: Encoder[Any] = beanEncoderFor(beanClass)
+    createDataset(data.asInstanceOf[java.util.List[Any]]).toDF()
   }
 
   /** @inheritdoc */
@@ -901,13 +895,11 @@ class SparkSession private(
   }
 
   /**
-   * Returns a Catalyst Schema for the given java bean class.
+   * Encoder for the `createDataFrame(..., beanClass)` overloads. Same as `Encoders.bean`, so Java
+   * records are supported too.
    */
-  private def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
-    val (dataType, _) = JavaTypeInference.inferDataType(beanClass)
-    dataType.asInstanceOf[StructType].fields.map { f =>
-      AttributeReference(f.name, f.dataType, f.nullable)()
-    }.toImmutableArraySeq
+  private def beanEncoderFor(beanClass: Class[_]): Encoder[Any] = {
+    JavaTypeInference.encoderFor(beanClass.asInstanceOf[Class[Any]])
   }
 
   private[sql] def leafNodeDefaultParallelism: Int = {
