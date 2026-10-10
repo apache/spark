@@ -635,8 +635,9 @@ object Decimal {
     }
   }
 
-  private def numDigitsInIntegralPart(bigDecimal: JavaBigDecimal): Int =
-    bigDecimal.precision - bigDecimal.scale
+  // Computed in Long since `precision - scale` can overflow Int, e.g. for "1e2147483647".
+  private def numDigitsInIntegralPart(bigDecimal: JavaBigDecimal): Long =
+    bigDecimal.precision.toLong - bigDecimal.scale
 
   private def stringToJavaBigDecimal(str: UTF8String): JavaBigDecimal = {
     // According the benchmark test,  `s.toString.trim` is much faster than `s.trim.toString`.
@@ -648,8 +649,10 @@ object Decimal {
     try {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
-      // For example: Decimal("6.0790316E+25569151")
-      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
+      // For example: Decimal("6.0790316E+25569151"). Zero fits any decimal type whatever its
+      // exponent, e.g. "0e39", so it is not checked.
+      if (bigDecimal.signum != 0 &&
+        numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
         !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
         null
       } else {
@@ -668,8 +671,10 @@ object Decimal {
     try {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
-      // For example: Decimal("6.0790316E+25569151")
-      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
+      // For example: Decimal("6.0790316E+25569151"). Zero fits any decimal type whatever its
+      // exponent, e.g. "0e39", so it is not checked.
+      if (bigDecimal.signum != 0 &&
+        numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
         !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
         throw DataTypeErrors.outOfDecimalTypeRangeError(str)
       } else {
