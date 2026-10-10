@@ -38,6 +38,7 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
   override def afterEach(): Unit = {
     try {
       ResourceProfile.clearDefaultProfile()
+      ResourceProfile.resetNextProfileIdForTesting()
     } finally {
       super.afterEach()
     }
@@ -496,6 +497,27 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
 
     treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.7)
     new ResourceProfileBuilder().require(treqs).build()
+  }
+
+  test("custom ResourceProfile id must not collide with DEFAULT_RESOURCE_PROFILE_ID") {
+    // Create a custom ResourceProfile *before* the default profile is initialised.
+    // Prior to the fix, getNextProfileId started at 0 so the first custom profile
+    // received ID 0, which is identical to DEFAULT_RESOURCE_PROFILE_ID.
+    val customRp = new ResourceProfileBuilder()
+      .require(new ExecutorResourceRequests().cores(2).memory("2048"))
+      .require(new TaskResourceRequests().cpus(1))
+      .build()
+
+    val defaultRp = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
+
+    assert(customRp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
+      s"Custom profile id (${customRp.id}) must not equal DEFAULT_RESOURCE_PROFILE_ID " +
+        s"(${ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID})")
+    assert(customRp.id != defaultRp.id,
+      s"Custom profile id (${customRp.id}) must not equal the default profile id (${defaultRp.id})")
+    assert(defaultRp.id == ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
+      s"Default profile id (${defaultRp.id}) must equal DEFAULT_RESOURCE_PROFILE_ID " +
+        s"(${ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID})")
   }
 
   private def withMockSparkEnv(conf: SparkConf)(f: => Unit): Unit = {

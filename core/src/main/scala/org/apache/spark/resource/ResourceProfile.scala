@@ -371,7 +371,8 @@ object ResourceProfile extends Logging {
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0
 
-  private lazy val nextProfileId = new AtomicInteger(0)
+  // Start at 1: ID 0 is reserved for DEFAULT_RESOURCE_PROFILE_ID.
+  private lazy val nextProfileId = new AtomicInteger(1)
   private val DEFAULT_PROFILE_LOCK = new Object()
 
   // The default resource profile uses the application level configs.
@@ -471,6 +472,11 @@ object ResourceProfile extends Logging {
       defaultProfile = None
       defaultProfileExecutorResources = None
     }
+  }
+
+  // for testing only
+  private[spark] def resetNextProfileIdForTesting(): Unit = {
+    nextProfileId.set(1)
   }
 
   /*
