@@ -298,17 +298,6 @@ if [ "$MAKE_PIP" == "true" ]; then
   python3 packaging/connect/setup.py sdist
   python3 packaging/client/setup.py sdist
   rm -f LICENSE NOTICE
-
-  # Guard against regressions: every PySpark sdist must contain LICENSE and NOTICE
-  # at the package root. The missing files were only caught by a Spark 4.2.0 RC1
-  # vote -1 (SPARK-57393); fail the release build here instead of at vote time.
-  for f in dist/pyspark*.tar.gz; do
-    listing=$(tar tzf "$f")
-    for required in LICENSE NOTICE; do
-      grep -qE "^[^/]+/$required\$" <<< "$listing" || \
-        { echo "ERROR: $f is missing $required at the package root"; exit 1; }
-    done
-  done
   popd > /dev/null
 else
   echo "Skipping building python distribution package"
@@ -338,14 +327,6 @@ if [ "$MAKE_R" == "true" ]; then
   NO_TESTS=1 "$SPARK_HOME/R/check-cran.sh"
   mv -f "$SPARK_HOME/R/DESCRIPTION.orig" pkg/DESCRIPTION
   rm -f pkg/LICENSE pkg/NOTICE
-
-  # Guard against regressions: the SparkR source package must contain LICENSE and
-  # NOTICE at the package root (SPARK-57393).
-  listing=$(tar tzf "SparkR_$R_PACKAGE_VERSION.tar.gz")
-  for required in LICENSE NOTICE; do
-    grep -qE "^[^/]+/$required\$" <<< "$listing" || \
-      { echo "ERROR: SparkR source package is missing $required"; exit 1; }
-  done
 
   # Move R source package to match the Spark release version if the versions are not the same.
   # NOTE(shivaram): `mv` throws an error on Linux if source and destination are same file
@@ -415,3 +396,21 @@ if [ "$MAKE_TGZ" == "true" ]; then
     rm -rf "$TARDIR"
   fi
 fi
+
+echo "Running distribution validation..."
+if [ "$MAKE_TGZ" == "true" ]; then
+  DIST_ARG="$SPARK_HOME/spark-$VERSION-bin-$NAME.tgz"
+else
+  DIST_ARG="$DISTDIR"
+fi
+VALIDATE_CMD=("$SPARK_HOME/dev/validate-distribution" "$DIST_ARG")
+if [ "$MAKE_PIP" == "true" ]; then
+  VALIDATE_CMD+=(--pip "$SPARK_HOME/python/dist")
+fi
+if [ "$MAKE_R" == "true" ]; then
+  VALIDATE_CMD+=(--r "$SPARK_HOME/R/SparkR_$VERSION.tar.gz")
+fi
+if [[ "$MAKE_TGZ" == "true" && "$MAKE_SPARK_CONNECT" == "true" ]]; then
+  VALIDATE_CMD+=(--connect "$SPARK_HOME/spark-$VERSION-bin-$NAME-connect.tgz")
+fi
+"${VALIDATE_CMD[@]}"
