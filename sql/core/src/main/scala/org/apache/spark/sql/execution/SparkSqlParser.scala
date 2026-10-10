@@ -1347,8 +1347,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         inSerdeClass, outSerdeClass,
         inSerdeProps, outSerdeProps,
         reader, writer,
-        schemaLess,
-        conf.charVarcharStandardSemantics)
+        schemaLess)
     }
   }
 

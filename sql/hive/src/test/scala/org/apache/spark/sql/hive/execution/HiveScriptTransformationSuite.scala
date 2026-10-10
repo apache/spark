@@ -20,15 +20,8 @@ package org.apache.spark.sql.hive.execution
 import java.sql.Timestamp
 import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
-import java.util.{Arrays, Properties}
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.serde.serdeConstants
-import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.io.{Text, Writable}
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TestUtils}
@@ -380,14 +373,16 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     }
   }
 
-  test("SPARK-59277: TRANSFORM supports nested collated CHAR/VARCHAR with Hive SerDe") {
+  test("SPARK-60090: TRANSFORM CHAR/VARCHAR with Hive SerDe uses Project assignment") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // Hive sessions default to LazySimpleSerDe; script I/O stays STRING-shaped and
+      // Project applies pad / EXCEED_LIMIT_LENGTH for the declared AS types.
       val query = sql(
         """
           |SELECT TRANSFORM(
           |  array(CAST('ab' AS CHAR(4) COLLATE UTF8_LCASE)),
-          |  named_struct('value', CAST('xyz' AS VARCHAR(6) COLLATE UNICODE_CI)))
+          |  named_struct('value', CAST('xyz' AS VARCHAR(6))))
           |USING 'cat'
           |AS (
           |  chars ARRAY<CHAR(4) COLLATE UTF8_LCASE>,
@@ -398,60 +393,29 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         ArrayType(CharType(4, "UTF8_LCASE")),
         StructType(Seq(StructField("value", VarcharType(6, "UNICODE_CI"))))))
       checkAnswer(query, Row(Seq("ab  "), Row("xyz")))
-    }
-  }
 
-  test("SPARK-59277: TRANSFORM CHAR overflow with Hive SerDe raises EXCEED_LIMIT_LENGTH") {
-    assume(TestUtils.testCommandAvailable("/bin/bash"))
-    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      val exception = intercept[Exception] {
-        sql(
-          """
-            |SELECT TRANSFORM('abcdef')
-            |USING 'cat'
-            |AS (c CHAR(4))
-            |FROM VALUES (1) input(dummy)
-            |""".stripMargin).collect()
-      }
-      val runtimeException = exception match {
-        case s: org.apache.spark.SparkRuntimeException => s
-        case other =>
-          other.getCause.asInstanceOf[org.apache.spark.SparkRuntimeException]
-      }
-      checkError(
-        exception = runtimeException,
-        condition = "EXCEED_LIMIT_LENGTH",
-        parameters = Map("limit" -> "4"))
-    }
-  }
-
-  test("SPARK-59277: TRANSFORM VARCHAR overflow with Hive SerDe raises EXCEED_LIMIT_LENGTH") {
-    assume(TestUtils.testCommandAvailable("/bin/bash"))
-    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      val exception = intercept[Exception] {
-        sql(
-          """
-            |SELECT TRANSFORM('abcdefgh')
-            |USING 'cat'
-            |AS (v VARCHAR(5))
-            |FROM VALUES (1) input(dummy)
-            |""".stripMargin).collect()
-      }
-      val runtimeException = exception match {
-        case s: org.apache.spark.SparkRuntimeException => s
-        case other =>
-          other.getCause.asInstanceOf[org.apache.spark.SparkRuntimeException]
-      }
-      checkError(
-        exception = runtimeException,
-        condition = "EXCEED_LIMIT_LENGTH",
-        parameters = Map("limit" -> "5"))
-    }
-  }
-
-  test("SPARK-59277: nested CHAR/VARCHAR overflow with Hive SerDe") {
-    assume(TestUtils.testCommandAvailable("/bin/bash"))
-    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      checkExceedLimitLength(
+        intercept[Exception] {
+          sql(
+            """
+              |SELECT TRANSFORM('abcdef')
+              |USING 'cat'
+              |AS (c CHAR(4))
+              |FROM VALUES (1) input(dummy)
+              |""".stripMargin).collect()
+        },
+        "4")
+      checkExceedLimitLength(
+        intercept[Exception] {
+          sql(
+            """
+              |SELECT TRANSFORM('abcdefgh')
+              |USING 'cat'
+              |AS (v VARCHAR(5))
+              |FROM VALUES (1) input(dummy)
+              |""".stripMargin).collect()
+        },
+        "5")
       Seq(
         """
           |SELECT TRANSFORM(array('abcdef'))
@@ -464,107 +428,13 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           |USING 'cat'
           |AS (value STRUCT<value: VARCHAR(4)>)
           |FROM VALUES (1) input(dummy)
-          |""".stripMargin).foreach { query =>
-        val exception = intercept[Exception] {
-          sql(query).collect()
-        }
-        val runtimeException = exception match {
-          case s: org.apache.spark.SparkRuntimeException => s
-          case other =>
-            other.getCause.asInstanceOf[org.apache.spark.SparkRuntimeException]
-        }
-        checkError(
-          exception = runtimeException,
-          condition = "EXCEED_LIMIT_LENGTH",
-          parameters = Map("limit" -> "4"))
+          |""".stripMargin).foreach { q =>
+        checkExceedLimitLength(intercept[Exception](sql(q).collect()), "4")
       }
     }
   }
 
-  test("SPARK-59277: output SerDe CHAR/VARCHAR rewrite is LazySimpleSerDe-only") {
-    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      val output = Seq(
-        AttributeReference("c", CharType(4))(),
-        AttributeReference("v", VarcharType(5))(),
-        AttributeReference("nested", ArrayType(CharType(4)))())
-
-      val (_, lazySoi) = HiveScriptIOSchema.initOutputSerDe(hiveIOSchema, output).get
-      assert(lazySoi.getAllStructFieldRefs.get(0).getFieldObjectInspector.getTypeName ===
-        "string")
-      assert(lazySoi.getAllStructFieldRefs.get(1).getFieldObjectInspector.getTypeName ===
-        "string")
-      assert(lazySoi.getAllStructFieldRefs.get(2).getFieldObjectInspector.getTypeName ===
-        "array<string>")
-
-      val subclassSchema = hiveIOSchema.copy(
-        outputSerdeClass = Some(classOf[TestLazySimpleSerDe].getCanonicalName))
-      val (_, subclassSoi) = HiveScriptIOSchema.initOutputSerDe(subclassSchema, output).get
-      assert(subclassSoi.getAllStructFieldRefs.get(0).getFieldObjectInspector.getTypeName ===
-        "string")
-
-      SchemaCapturingSerDe.lastColumnTypes = null
-      val customSchema = defaultIOSchema.copy(
-        outputSerdeClass = Some(classOf[SchemaCapturingSerDe].getCanonicalName))
-      HiveScriptIOSchema.initOutputSerDe(customSchema, output)
-      val captured = SchemaCapturingSerDe.lastColumnTypes
-      assert(captured.contains("char(4)"))
-      assert(captured.contains("varchar(5)"))
-      assert(captured.contains("array<char(4)>"))
-    }
-  }
-
-  test("SPARK-59683: preserve-only does not rewrite LazySimpleSerDe CHAR/VARCHAR") {
-    withSQLConf(
-        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
-      val output = Seq(
-        AttributeReference("c", CharType(4))(),
-        AttributeReference("v", VarcharType(5))(),
-        AttributeReference("nested", ArrayType(CharType(4)))())
-      val (_, soi) = HiveScriptIOSchema.initOutputSerDe(hiveIOSchema, output).get
-      assert(soi.getAllStructFieldRefs.get(0).getFieldObjectInspector.getTypeName ===
-        "char(4)")
-      assert(soi.getAllStructFieldRefs.get(1).getFieldObjectInspector.getTypeName ===
-        "varchar(5)")
-      assert(soi.getAllStructFieldRefs.get(2).getFieldObjectInspector.getTypeName ===
-        "array<char(4)>")
-    }
-  }
-
-  test("SPARK-59683: bound Hive SerDe CHAR/VARCHAR mode survives conf change") {
-    val output = Seq(
-      AttributeReference("c", CharType(4))(),
-      AttributeReference("v", VarcharType(5))(),
-      AttributeReference("nested", ArrayType(CharType(4)))())
-    val enabledSchema = withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      hiveIOSchema
-    }
-    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
-      val (_, soi) = HiveScriptIOSchema.initOutputSerDe(enabledSchema, output).get
-      assert(soi.getAllStructFieldRefs.get(0).getFieldObjectInspector.getTypeName ===
-        "string")
-      assert(soi.getAllStructFieldRefs.get(1).getFieldObjectInspector.getTypeName ===
-        "string")
-      assert(soi.getAllStructFieldRefs.get(2).getFieldObjectInspector.getTypeName ===
-        "array<string>")
-    }
-    val disabledSchema = withSQLConf(
-        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
-      hiveIOSchema
-    }
-    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      val (_, soi) = HiveScriptIOSchema.initOutputSerDe(disabledSchema, output).get
-      assert(soi.getAllStructFieldRefs.get(0).getFieldObjectInspector.getTypeName ===
-        "char(4)")
-      assert(soi.getAllStructFieldRefs.get(1).getFieldObjectInspector.getTypeName ===
-        "varchar(5)")
-      assert(soi.getAllStructFieldRefs.get(2).getFieldObjectInspector.getTypeName ===
-        "array<char(4)>")
-    }
-  }
-
-  test("SPARK-59683: Hive TRANSFORM view keeps bound CHAR/VARCHAR mode") {
+  test("SPARK-60090: Hive TRANSFORM view keeps CHAR/VARCHAR Project assignment") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       withView("v") {
@@ -584,18 +454,9 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             |SELECT TRANSFORM('abcdef') USING 'cat' AS (c CHAR(4))
             |FROM VALUES (1) input(dummy)""".stripMargin)
         withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
-          val exception = intercept[Exception] {
-            sql("SELECT * FROM v_overflow").collect()
-          }
-          val runtimeException = exception match {
-            case s: org.apache.spark.SparkRuntimeException => s
-            case other =>
-              other.getCause.asInstanceOf[org.apache.spark.SparkRuntimeException]
-          }
-          checkError(
-            exception = runtimeException,
-            condition = "EXCEED_LIMIT_LENGTH",
-            parameters = Map("limit" -> "4"))
+          checkExceedLimitLength(
+            intercept[Exception](sql("SELECT * FROM v_overflow").collect()),
+            "4")
         }
       }
     }
@@ -896,30 +757,4 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           """.stripMargin), identity, Row("1,2") :: Nil)
     }
   }
-}
-
-class TestLazySimpleSerDe extends LazySimpleSerDe
-
-class SchemaCapturingSerDe extends AbstractSerDe {
-  override def initialize(conf: Configuration, tbl: Properties): Unit = {
-    SchemaCapturingSerDe.lastColumnTypes =
-      tbl.getProperty(serdeConstants.LIST_COLUMN_TYPES)
-  }
-
-  override def getObjectInspector: ObjectInspector =
-    ObjectInspectorFactory.getStandardStructObjectInspector(
-      Arrays.asList("col"),
-      Arrays.asList(PrimitiveObjectInspectorFactory.javaStringObjectInspector))
-
-  override def getSerializedClass: Class[_ <: Writable] = classOf[Text]
-
-  override def getSerDeStats: SerDeStats = null
-
-  override def serialize(obj: Any, inspector: ObjectInspector): Writable = null
-
-  override def deserialize(blob: Writable): AnyRef = null
-}
-
-object SchemaCapturingSerDe {
-  @volatile var lastColumnTypes: String = _
 }

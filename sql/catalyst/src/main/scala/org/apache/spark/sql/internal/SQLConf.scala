@@ -7749,7 +7749,9 @@ object SQLConf {
       "for SQL standard CHAR/VARCHAR behavior (CAST/LCT/STRING-returning transforms). " +
       "ORC reads with a CHAR/VARCHAR schema over STRING storage return the stored values " +
       "without ORC truncation, matching Parquet. Read-side length checks apply only when " +
-      "spark.sql.charVarchar.standardSemantics.enabled is true.")
+      "spark.sql.charVarchar.standardSemantics.enabled is true. Hive TRANSFORM/MAP/REDUCE " +
+      "with CHAR/VARCHAR AS types still applies Spark assignment (pad / EXCEED_LIMIT_LENGTH) " +
+      "when this flag is true, because script I/O is STRING-on-the-wire.")
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
