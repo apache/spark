@@ -1339,11 +1339,13 @@ private[spark] class BlockManager(
       None
     } else {
       val locationsAndStatus = locationsAndStatusOption.get
-      val blockSize = locationsAndStatus.status.diskSize.max(locationsAndStatus.status.memSize)
 
-      locationsAndStatus.localDirs.flatMap { localDirs =>
+      locationsAndStatus.locations.collectFirst {
+        case BlockManagerMessages.BlockLocationAndStatus(_, Some(status), Some(localDirs)) =>
+          (status, localDirs)
+      }.flatMap { case (status, localDirs) =>
         val blockDataOption =
-          readDiskBlockFromSameHostExecutor(blockId, localDirs, locationsAndStatus.status.diskSize)
+          readDiskBlockFromSameHostExecutor(blockId, localDirs, status.diskSize)
         val res = blockDataOption.flatMap { blockData =>
           try {
             Some(bufferTransformer(blockData))
@@ -1358,7 +1360,7 @@ private[spark] class BlockManager(
           log"${MDC(STATUS, if (res.isDefined) "successful." else "failed.")}")
         res
       }.orElse {
-        fetchRemoteManagedBuffer(blockId, blockSize, locationsAndStatus).map(bufferTransformer)
+        fetchRemoteManagedBuffer(blockId, locationsAndStatus).map(bufferTransformer)
       }
     }
   }
@@ -1394,20 +1396,20 @@ private[spark] class BlockManager(
    */
   private def fetchRemoteManagedBuffer(
       blockId: BlockId,
-      blockSize: Long,
       locationsAndStatus: BlockManagerMessages.BlockLocationsAndStatus): Option[ManagedBuffer] = {
     // If the block size is above the threshold, we should pass our FileManger to
     // BlockTransferService, which will leverage it to spill the block; if not, then passed-in
     // null value means the block will be persisted in memory.
-    val tempFileManager = if (blockSize > maxRemoteBlockToMem) {
+    val tempFileManager = if (locationsAndStatus.blockSize > maxRemoteBlockToMem) {
       remoteBlockTempFileManager
     } else {
       null
     }
     var runningFailureCount = 0
     var totalFailureCount = 0
-    val locations = sortLocations(locationsAndStatus.locations)
+    val locations = sortLocations(locationsAndStatus.locations.map(_.blockManagerId))
     val maxFetchFailures = locations.size
+    var currentLocationsAndStatus = Option(locationsAndStatus)
     var locationIterator = locations.iterator
     while (locationIterator.hasNext) {
       val loc = locationIterator.next()
@@ -1415,7 +1417,24 @@ private[spark] class BlockManager(
       val data = try {
         val buf = blockTransferService.fetchBlockSync(loc.host, loc.port, loc.executorId,
           blockId.toString, tempFileManager)
-        if (blockSize > 0 && buf.size() == 0) {
+        // For deserialized blocks, memSize is the estimated size of the JVM objects rather than
+        // the size of their serialized representation. An empty iterator can occupy memory while
+        // serializing to an empty buffer, so this size cannot be used to reject an empty response.
+        // Accept an empty response only from a location whose own status reports a nonempty
+        // deserialized memory block.
+        val locationStatus = currentLocationsAndStatus
+          .flatMap(_.locations.find(_.blockManagerId == loc))
+          .flatMap(_.status)
+        val canServeEmptyDeserializedMemoryBlock = locationStatus.exists { status =>
+          status.storageLevel.useMemory &&
+            status.storageLevel.deserialized &&
+            status.memSize > 0
+        }
+        // A status-less location has no evidence that an empty response is valid.
+        if (!canServeEmptyDeserializedMemoryBlock && locationStatus.forall { status =>
+          status.diskSize.max(status.memSize) > 0
+        } &&
+            buf.size() == 0) {
           throw SparkException.internalError("Empty buffer received for non empty block " +
             s"when fetching remote block $blockId from $loc", category = "STORAGE")
         }
@@ -1443,9 +1462,14 @@ private[spark] class BlockManager(
           // If there is a large number of executors then locations list can contain a
           // large number of stale entries causing a large number of retries that may
           // take a significant amount of time. To get rid of these stale entries
-          // we refresh the block locations after a certain number of fetch failures
+          // we refresh the block locations and status after a certain number of fetch failures.
           if (runningFailureCount >= maxFailuresBeforeLocationRefresh) {
-            locationIterator = sortLocations(master.getLocations(blockId)).iterator
+            currentLocationsAndStatus =
+              master.getLocationsAndStatus(blockId, blockManagerId.host)
+            locationIterator = sortLocations(
+              currentLocationsAndStatus
+                .map(_.locations.map(_.blockManagerId))
+                .getOrElse(master.getLocations(blockId))).iterator
             logDebug(s"Refreshed locations from the driver " +
               s"after ${runningFailureCount} fetch failures.")
             runningFailureCount = 0
