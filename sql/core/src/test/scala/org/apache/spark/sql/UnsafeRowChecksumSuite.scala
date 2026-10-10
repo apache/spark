@@ -19,10 +19,11 @@ package org.apache.spark.sql
 
 import java.nio.ByteBuffer
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeRowChecksum}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 
 class UnsafeRowChecksumSuite extends SparkFunSuite {
   private val schema = new StructType().add("value", IntegerType)
@@ -145,5 +146,74 @@ class UnsafeRowChecksumSuite extends SparkFunSuite {
 
     assert(rowBasedChecksum1.getValue != 0)
     assert(rowBasedChecksum2.getValue != 0)
+  }
+
+  // --- Invalid-row guard ---
+  // Production crashed with a SIGSEGV in XXH64.hashBytesByWords -> Platform.getLong (si_addr=0x0)
+  // when the checksum read an UnsafeRow whose backing pointer was invalid. The guard flags such a
+  // row before it is dereferenced and either recovers (default) or fails the task.
+
+  // The production crash shape: an off-heap row (null baseObject) whose baseOffset points into the
+  // first memory page. Reading it would fault near si_addr 0x0.
+  private def nullLowAddressRow(size: Int = 16): UnsafeRow = {
+    val row = new UnsafeRow(1)
+    row.pointTo(null, 0L, size)
+    row
+  }
+
+  test("validate accepts a well-formed row and flags invalid backing memory") {
+    assert(UnsafeRowChecksum.validate(toUnsafeRow(Row(20)).asInstanceOf[UnsafeRow]).isEmpty)
+
+    // Empty row: nothing is dereferenced.
+    val empty = new UnsafeRow(1)
+    empty.pointTo(null, 0L, 0)
+    assert(UnsafeRowChecksum.validate(empty).isEmpty)
+
+    // A long[]-backed on-heap row (a common UnsafeRow buffer) must be accepted, not mistaken for
+    // an invalid base type.
+    val longBacked = new UnsafeRow(1)
+    longBacked.pointTo(new Array[Long](2), Platform.LONG_ARRAY_OFFSET, 16)
+    assert(UnsafeRowChecksum.validate(longBacked).isEmpty)
+
+    // Null baseObject pointing into the first page (the si_addr=0x0 crash).
+    assert(UnsafeRowChecksum.validate(nullLowAddressRow()).exists(_.contains("first memory page")))
+
+    // Negative size (corrupt size field). A large-but-positive size is deliberately NOT flagged.
+    val negSize = new UnsafeRow(1)
+    negSize.pointTo(null, 0x100000L, -8)
+    assert(UnsafeRowChecksum.validate(negSize).exists(_.contains("negative sizeInBytes")))
+  }
+
+  test("recover mode disables the checksum on an invalid row instead of crashing") {
+    val rowBasedChecksum = new UnsafeRowChecksum(failOnInvalidRow = false)
+    // Must neither throw nor dereference the bad pointer; getValue then returns the default 0.
+    rowBasedChecksum.update(0, nullLowAddressRow())
+    assert(rowBasedChecksum.getValue == 0L)
+    // A subsequent valid row does not revive the checksum once it is in the error state.
+    rowBasedChecksum.update(0, toUnsafeRow(Row(20)))
+    assert(rowBasedChecksum.getValue == 0L)
+  }
+
+  test("fail mode (the default) raises a descriptive error on an invalid row") {
+    val rowBasedChecksum = new UnsafeRowChecksum(failOnInvalidRow = true)
+    val e = intercept[SparkException] {
+      rowBasedChecksum.update(0, nullLowAddressRow())
+    }
+    assert(e.getMessage.contains("Invalid row in shuffle row-based checksum"))
+    // The no-arg constructor defaults to fail mode.
+    intercept[SparkException] {
+      new UnsafeRowChecksum().update(0, nullLowAddressRow())
+    }
+  }
+
+  test("createUnsafeRowChecksums threads the fail-on-invalid-row flag") {
+    val recover = UnsafeRowChecksum.createUnsafeRowChecksums(1, failOnInvalidRow = false)
+    recover(0).update(0, nullLowAddressRow())
+    assert(recover(0).getValue == 0L)
+
+    val fail = UnsafeRowChecksum.createUnsafeRowChecksums(1, failOnInvalidRow = true)
+    intercept[SparkException] {
+      fail(0).update(0, nullLowAddressRow())
+    }
   }
 }
