@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.jdk.CollectionConverters._
 
-import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
+import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder, ServicePortBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH, KUBERNETES_DRIVER_SERVICE_IP_FAMILIES, KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY, KUBERNETES_DRIVER_SERVICE_PUBLISH_NOT_READY_ADDRESSES}
@@ -63,6 +63,21 @@ private[spark] class DriverServiceFeatureStep(
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
+    // A Service port of 0 is invalid (Kubernetes requires > 0).
+    val servicePorts = Seq(
+      (DRIVER_PORT_NAME, driverPort, None),
+      (BLOCK_MANAGER_PORT_NAME, driverBlockManagerPort, None),
+      (UI_PORT_NAME, driverUIPort, None),
+      (SPARK_CONNECT_SERVER_PORT_NAME, driverSparkConnectServerPort, Some("grpc"))
+    ).collect { case (name, port, appProtocol) if port != 0 =>
+      val portBuilder = new ServicePortBuilder()
+        .withName(name)
+        .withPort(port)
+        .withNewTargetPort(port)
+      appProtocol.foreach(portBuilder.withAppProtocol)
+      portBuilder.build()
+    }
+
     val driverService = new ServiceBuilder()
       .withNewMetadata()
         .withName(resolvedServiceName)
@@ -76,27 +91,7 @@ private[spark] class DriverServiceFeatureStep(
         .withIpFamilyPolicy(ipFamilyPolicy)
         .withIpFamilies(ipFamilies)
         .withSelector(kubernetesConf.labels.asJava)
-        .addNewPort()
-          .withName(DRIVER_PORT_NAME)
-          .withPort(driverPort)
-          .withNewTargetPort(driverPort)
-          .endPort()
-        .addNewPort()
-          .withName(BLOCK_MANAGER_PORT_NAME)
-          .withPort(driverBlockManagerPort)
-          .withNewTargetPort(driverBlockManagerPort)
-          .endPort()
-        .addNewPort()
-          .withName(UI_PORT_NAME)
-          .withPort(driverUIPort)
-          .withNewTargetPort(driverUIPort)
-          .endPort()
-        .addNewPort()
-          .withName(SPARK_CONNECT_SERVER_PORT_NAME)
-          .withPort(driverSparkConnectServerPort)
-          .withNewTargetPort(driverSparkConnectServerPort)
-          .withAppProtocol("grpc")
-          .endPort()
+        .addAllToPorts(servicePorts.asJava)
         .endSpec()
       .build()
     Seq(driverService)
