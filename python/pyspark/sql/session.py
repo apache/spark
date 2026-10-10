@@ -2267,10 +2267,14 @@ class SparkSession(SparkConversionMixin):
         .. versionchanged:: 4.0.0
             Supports Spark Classic.
 
+        .. versionchanged:: 4.4.0
+            Supports native data source packages (``.sparkpkg`` files).
+
         Parameters
         ----------
         *path : tuple of str
-            Artifact's URIs to add.
+            Artifact's URIs to add. A native data source package (a ``.sparkpkg`` file) makes
+            the native data sources it contains available to the session.
         pyfile : bool
             Whether to add them as Python dependencies such as .py, .egg, .zip or .jar files.
             The pyfiles are directly inserted into the path when executing Python functions
@@ -2292,6 +2296,12 @@ class SparkSession(SparkConversionMixin):
                     "condition": "True together",
                 },
             )
+        # Native data source packages are artifacts of the session in the JVM, whatever the
+        # flags, as with Spark Connect.
+        for p in path:
+            if p.endswith(".sparkpkg"):
+                self._jsparkSession.addArtifact(os.path.abspath(p))
+        path = tuple(p for p in path if not p.endswith(".sparkpkg"))
         for p in path:
             normalized_path = os.path.abspath(p)
             target_dir = os.path.join(

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.python
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.execution.datasources.v2.NamedTableProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -26,10 +27,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 /**
  * Data Source V2 wrapper for Python Data Source.
  */
-class PythonDataSourceV2 extends TableProvider {
+class PythonDataSourceV2 extends NamedTableProvider {
   private var name: String = _
 
-  def setShortName(str: String): Unit = {
+  override def setShortName(str: String): Unit = {
     assert(name == null)
     name = str
   }

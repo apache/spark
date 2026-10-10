@@ -40,8 +40,7 @@ import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldRefe
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
-import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2, NamedTableProvider}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.runtime.RealTimeModeAllowlist
 import org.apache.spark.sql.execution.streaming.sources._
@@ -254,51 +253,55 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
       val sink = new ForeachBatchSink[T](foreachBatchWriter, ds.exprEnc)
       startQuery(sink, extraOptions, catalogTable = catalogTable)
     } else {
-      val cls = DataSource.lookupDataSource(source, ds.sparkSession.sessionState.conf)
-      val disabledSources =
-        Utils.stringToSeq(ds.sparkSession.sessionState.conf.disabledV2StreamingWriters)
-      val useV1Source = disabledSources.contains(cls.getCanonicalName) ||
-        // file source v2 does not support streaming yet.
-        classOf[FileDataSourceV2].isAssignableFrom(cls)
-
       val optionsWithPath = if (path.isEmpty) {
         extraOptions
       } else {
         extraOptions + ("path" -> path.get)
       }
-
-      val sink = if (classOf[TableProvider].isAssignableFrom(cls) && !useV1Source) {
-        val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
-        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          source = provider, conf = ds.sparkSession.sessionState.conf)
-        val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
-          optionsWithPath.originalMap
-        val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-        // If the source accepts external table metadata, here we pass the schema of input query
-        // to `getTable`. This is for avoiding schema inference, which can be very expensive.
-        // If the query schema is not compatible with the existing data, the behavior is undefined.
-        val outputSchema = if (provider.supportsExternalMetadata()) {
-          Some(ds.schema)
-        } else {
-          None
-        }
-        provider match {
-          case p: PythonDataSourceV2 => p.setShortName(source)
-          case _ =>
-        }
-        val table = DataSourceV2Utils.getTableFromProvider(
-          provider, dsOptions, userSpecifiedSchema = outputSchema)
-        import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-        table match {
-          case table: SupportsWrite if table.supports(STREAMING_WRITE) =>
-            table
-          case _ => createV1Sink(optionsWithPath)
-        }
-      } else {
-        createV1Sink(optionsWithPath)
-      }
-
+      // The sink is resolved with the session active, like a query is analyzed: the lookups of
+      // the Python and native data sources use the active session.
+      val sink = ds.sparkSession.withActive(resolveSink(optionsWithPath))
       startQuery(sink, optionsWithPath, catalogTable = catalogTable)
+    }
+  }
+
+  private def resolveSink(optionsWithPath: CaseInsensitiveMap[String]): Table = {
+    val cls = DataSource.lookupDataSource(source, ds.sparkSession.sessionState.conf)
+    val disabledSources =
+      Utils.stringToSeq(ds.sparkSession.sessionState.conf.disabledV2StreamingWriters)
+    val useV1Source = disabledSources.contains(cls.getCanonicalName) ||
+      // file source v2 does not support streaming yet.
+      classOf[FileDataSourceV2].isAssignableFrom(cls)
+
+    if (classOf[TableProvider].isAssignableFrom(cls) && !useV1Source) {
+      val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
+      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+        source = provider, conf = ds.sparkSession.sessionState.conf)
+      val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
+        optionsWithPath.originalMap
+      val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
+      // If the source accepts external table metadata, here we pass the schema of input query
+      // to `getTable`. This is for avoiding schema inference, which can be very expensive.
+      // If the query schema is not compatible with the existing data, the behavior is undefined.
+      val outputSchema = if (provider.supportsExternalMetadata()) {
+        Some(ds.schema)
+      } else {
+        None
+      }
+      provider match {
+        case p: NamedTableProvider => p.setShortName(source)
+        case _ =>
+      }
+      val table = DataSourceV2Utils.getTableFromProvider(
+        provider, dsOptions, userSpecifiedSchema = outputSchema)
+      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+      table match {
+        case table: SupportsWrite if table.supports(STREAMING_WRITE) =>
+          table
+        case _ => createV1Sink(optionsWithPath)
+      }
+    } else {
+      createV1Sink(optionsWithPath)
     }
   }
 

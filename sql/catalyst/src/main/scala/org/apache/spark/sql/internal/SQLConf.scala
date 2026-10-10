@@ -7240,6 +7240,19 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val NATIVE_DATA_SOURCE_PATHS = buildConf("spark.sql.dataSource.native.paths")
+    .doc("Comma-separated list of native data source packages (.sparkpkg files), and of " +
+      "directories that contain them, on the local file system of the driver. Spark adds a " +
+      "package to the artifacts of the session when one of its data sources is used, so that " +
+      "the executors get it too. Packages can also be added with spark.addArtifact. These " +
+      "packages take precedence over the native data source libraries installed in the native " +
+      "library path. See spark.sql.dataSource.native.enabled.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
     .version("3.0.0")
