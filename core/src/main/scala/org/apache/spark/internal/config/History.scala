@@ -148,6 +148,13 @@ private[spark] object History {
     .intConf
     .createWithDefault(18080)
 
+  val HISTORY_SERVER_UI_LOG_ENABLED = ConfigBuilder("spark.history.ui.log.enable")
+    .version("4.2.0")
+    .doc("Specifies whether to enable access to the History Server log in the History " +
+      "Server UI.")
+    .booleanConf
+    .createWithDefault(false)
+
   val FAST_IN_PROGRESS_PARSING =
     ConfigBuilder("spark.history.fs.inProgressOptimization.enabled")
       .doc("Enable optimized handling of in-progress logs. This option may leave finished " +
