@@ -323,6 +323,17 @@ private[spark] class DAGScheduler(
    */
   private val shuffleFileLostEpoch = new HashMap[String, Long]
 
+  /**
+   * Per (executor, shuffleId), the latest epoch a FetchFailed for a reliably-stored shuffle was
+   * processed at. Such a shuffle is kept through executor loss (output presumed off-executor); a
+   * FetchFailed disproves that for one shuffle, so it bypasses the executor-level
+   * shuffleFileLostEpoch fence once per epoch without reopening it for the duplicates behind it.
+   */
+  private val reliableShuffleFileLostEpoch = new HashMap[(String, Int), Long]
+
+  /** VisibleForTest. Number of live reliable-loss fence entries. */
+  private[scheduler] def reliableShuffleFileLostEpochSize: Int = reliableShuffleFileLostEpoch.size
+
   private [scheduler] val outputCommitCoordinator = env.outputCommitCoordinator
 
   // A closure serializer that we reuse.
@@ -757,16 +768,16 @@ private[spark] class DAGScheduler(
     // before addActiveJob (its sole populator) runs, so a pipelined stage's mapStageJobs is always
     // empty; and checkAndScheduleShuffleMergeFinalize's getStatistics is on the push-based-merge
     // path, which a pipelined dependency rejects up front (checkPipelinedProducerSupported).
-    // `outputTracker` is None only for a pipelined shuffle whose in-process manager needs no
-    // tracker; such a shuffle registers with no output tracker (its availability lives on the
-    // stage). Otherwise register as before.
     outputTracker.foreach { tracker =>
       if (!tracker.containsShuffle(shuffleDep.shuffleId)) {
         logInfo(log"Registering RDD ${MDC(RDD_ID, rdd.id)} " +
           log"(${MDC(CREATION_SITE, rdd.getCreationSite)}) as input to " +
           log"shuffle ${MDC(SHUFFLE_ID, shuffleDep.shuffleId)}")
         tracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length,
-          shuffleDep.partitioner.numPartitions, jobId)
+          shuffleDep.partitioner.numPartitions, jobId,
+          // Per-shuffle handle wins; None falls back to the app-global flag.
+          isReliablyStored = shuffleDep.shuffleHandle.reliablyStored.getOrElse(
+            sc.shuffleDriverComponents.supportsReliableStorage()))
       }
     }
     stage
@@ -812,6 +823,20 @@ private[spark] class DAGScheduler(
       }
     } else {
       Some(mapOutputTracker)
+    }
+  }
+
+  private[spark] def isShuffleReliablyStored(shuffleId: Int): Boolean = {
+    if (mapOutputTracker.containsShuffle(shuffleId)) {
+      mapOutputTracker.isReliablyStored(shuffleId)
+    } else {
+      sc.env.streamingShuffleOutputTracker
+        .collect {
+          case tracker: StreamingShuffleOutputTrackerMaster
+              if tracker.containsShuffle(shuffleId) =>
+            tracker.isReliablyStored(shuffleId)
+        }
+        .getOrElse(false)
     }
   }
 
@@ -866,6 +891,12 @@ private[spark] class DAGScheduler(
     // backstop against that being bypassed.
     if (shuffleDep.shuffleMergeEnabled) {
       throw pipelinedUnsupportedError("push-based shuffle merge as a pipelined shuffle")
+    }
+    // reliablyStored is a map-output-tracker contract: the streaming tracker never consults it, so
+    // an explicit Some(_) here would be silently ignored. Reject it rather than accept a guarantee
+    // we cannot honor; a pipelined handle must leave reliablyStored None.
+    if (shuffleDep.shuffleHandle.reliablyStored.isDefined) {
+      throw pipelinedUnsupportedError("an explicit reliablyStored value on a pipelined shuffle")
     }
     // A reliable RDD checkpoint in a member's within-stage chain (producer OR consumer side) is
     // rejected in checkPipelinedGroupsSupportedInRDDGraph, at job submission before any stage is
@@ -1228,15 +1259,9 @@ private[spark] class DAGScheduler(
 
   /** Classify `finalRDD`'s shuffle graph; see [[JobShuffleShape]] for the shape semantics. */
   private[scheduler] def classifyJobShuffleShape(finalRDD: RDD[_]): JobShuffleShape = {
-    // Cheap pre-pass first: which KINDS of boundary the graph has, over the shared
-    // `traverseRDDGraph` (a HashSet[RDD] visited set, no per-visit allocation). Only a job with
-    // BOTH kinds can be an unsupported mix, and only then are the two below-regular facts
-    // meaningful:
-    //   - all-regular  (no pipelined dep)  => nothing can be pipelined-below-regular;
-    //   - all-pipelined (no regular dep)   => no regular boundary to be below, or to materialize.
-    // So every job that is not mixed -- which is EVERY job on a deployment that never enables the
-    // feature -- costs exactly what it costs without this feature, instead of paying for the
-    // (RDD, Boolean)-keyed two-context walk and the boundary map below.
+    // Cheap pre-pass first: only a job with BOTH kinds can be an unsupported mix. So a non-mixed
+    // job -- every job on a feature-off deployment -- skips the expensive (RDD, belowRegular)-keyed
+    // walk and boundary map below.
     val (hasPipelinedKind, hasRegularKind) = classifyJobShuffleKinds(finalRDD)
     if (!hasPipelinedKind || !hasRegularKind) {
       return JobShuffleShape(
@@ -1251,17 +1276,10 @@ private[spark] class DAGScheduler(
     // check (a regular boundary below another one is never a runnable suffix member).
     val regularBoundaries = new HashMap[Int, ShuffleDependency[_, _, _]]
 
-    // ONE walk, carrying `belowRegular` (true once the path from the final RDD has crossed a
-    // regular boundary), computes hasPipelined and pipelinedBelow together -- replacing the old
-    // per-boundary rddGraphHasPipelinedDependency re-walks (O(K x graph) on shared ancestors).
-    // A node reachable BOTH above and below a regular boundary must be explored in BOTH contexts:
-    // a pipelined dep under it counts as pipelinedBelow on the below path but not on the above
-    // path. So the visited set is keyed on (RDD, belowRegular), NOT on the RDD alone -- keying on
-    // the RDD alone would let the first-reached context win and drop the other, missing a
-    // pipelined-below-regular dep (a wrongly-accepted job). A node is thus visited at most twice,
-    // keeping the cost O(graph) rather than O(K x graph). hasPipelined is set only above a regular
-    // boundary, matching the old walk (which stopped at boundaries): a below-boundary pipelined
-    // dep is the pipelinedBelow reject case, never a runnable group member.
+    // ONE walk carrying `belowRegular` (true once the path has crossed a regular boundary) computes
+    // hasPipelined and pipelinedBelow together. Key the visited set on (RDD, belowRegular), NOT the
+    // RDD alone: a node reachable both above and below a boundary must be explored in both cases,
+    // else a pipelined-below-regular dep is missed (a wrongly-accepted job). Cost stays O(graph).
     val visited = new HashSet[(RDD[_], Boolean)]
     val stack = new ListBuffer[(RDD[_], Boolean)]
     stack += ((finalRDD, false))
@@ -1284,28 +1302,16 @@ private[spark] class DAGScheduler(
       }
     }
 
-    // The materialization check only matters for a pipelined job: `isUnsupportedMix` consumes
-    // `hasUnmaterializedRegularBoundary` only when `hasPipelined` is true (a pipelined shuffle
-    // below an unmaterialized regular boundary is the rejected shape). A job with no pipelined
-    // dependency -- every job on a feature-off deployment -- would otherwise pay K
-    // getNumAvailableOutputs lookups (a read-locked shuffleStatuses count) for a value never read,
-    // on the single-threaded event loop. So skip the loop entirely unless the walk saw a pipelined
-    // dependency; a non-pipelined job reports hasUnmaterialized = false (unused).
+    // Only a pipelined job consumes hasUnmaterializedRegularBoundary, so skip the K
+    // getNumAvailableOutputs lookups (a read-locked count on the event loop) otherwise; a
+    // non-pipelined job reports false (unused).
     var hasUnmaterialized = false
     if (hasPipelined) {
       regularBoundaries.values.foreach { sd =>
-        // Materialized means every MAP partition has a registered output: the tracker counts map
-        // outputs, so compare against the producer RDD's partition count (matching how
-        // ShuffleMapStage.isAvailable derives completeness), not the reducer-side partitioner.
-        // This is a point-in-time check at job submission. If a materialized prefix's output were
-        // LOST after this classification but before the pipelined suffix finished (executor loss),
-        // the prefix would need to re-run while the gang holds all slots -- the very deadlock this
-        // shape check forbids. That is safe here for two reasons: (1) the only supported deployment
-        // is single-executor local mode, where executor loss does not occur in normal operation;
-        // and (2) if a FetchFailed did strip the prefix, handleTaskCompletion routes it to a
-        // WHOLE-GROUP abort (the failing stage is a pipelined group member), not a lone-stage
-        // resubmit into the held slots. A caller must rematerialize lost prefixes before retrying;
-        // the SQL channel rules exclude this mixed shape.
+        // Materialized means every MAP partition has a registered output, so compare against the
+        // producer RDD's partition count (as ShuffleMapStage.isAvailable does), not the reducer
+        // partitioner. A point-in-time check: a prefix lost mid-group routes to a whole-group abort
+        // (the failing stage is a group member), not a lone resubmit into the gang's held slots.
         if (mapOutputTracker.getNumAvailableOutputs(sd.shuffleId) != sd.rdd.partitions.length) {
           hasUnmaterialized = true
         }
@@ -1550,6 +1556,9 @@ private[spark] class DAGScheduler(
                 }
                 for ((k, v) <- shuffleIdToMapStage.find(_._2 == stage)) {
                   shuffleIdToMapStage.remove(k)
+                  // Retire this shuffle's reliable-loss fences so they are bounded by live
+                  // shuffles, not left to accumulate as failed executors are replaced by new ids.
+                  reliableShuffleFileLostEpoch.filterInPlace { case ((_, id), _) => id != k }
                 }
                 if (waitingStages.contains(stage)) {
                   logDebug("Removing stage %d from waiting set.".format(stageId))
@@ -1965,10 +1974,8 @@ private[spark] class DAGScheduler(
    */
   /**
    * Whether the configured pipelined manager consumes the driver's live-reduce-partition hint and
-   * per-run epoch (see `PipelinedShuffleManager.supportsLiveReducePartitionHints`). False for the
-   * RPC streaming transport, whose writer reads neither -- so for a Real-Time Mode job the
-   * scheduler skips computing and stamping them, and skips the partial-read abort whose remedy
-   * (disabling the batch SQL flag) does not apply to it.
+   * per-run epoch. False for the RPC streaming transport (Real-Time Mode), whose writer reads
+   * neither, so the scheduler skips computing/stamping them and the partial-read abort.
    */
   private def pipelinedManagerWantsLiveReduceHints: Boolean = {
     val mgr = sc.env.pipelinedShuffleManager
@@ -1981,25 +1988,15 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * The set of reduce partitions of `targetShuffleId` that the result stage actually reads, given
-   * the result RDD and the subset of ITS partitions the job runs (`liveResultPartitions`). Used to
-   * tell a pipelined producer which of its reduce partitions have a consumer, so it can drop the
-   * rest (a partial read -- LIMIT / executeTake -- runs only some result partitions).
+   * The reduce partitions of `targetShuffleId` that the result stage actually reads, given the
+   * subset of result RDD partitions the job runs (`liveResultPartitions`). Tells a pipelined
+   * producer which reduce partitions have a consumer so it can drop the rest (a partial read like
+   * LIMIT / executeTake runs only some result partitions). Walks the narrow chain from `rdd` to the
+   * target, threading the live set through each dependency's `getParents`.
    *
-   * Walk from `rdd` toward the target shuffle, threading the live partition-index set. Each hop is
-   * either a `NarrowDependency` -- map the live set through its generic `getParents(p)` contract
-   * (OneToOne is identity, RangeDependency is an offset, a coalesce dependency is a range, etc.;
-   * no per-operator special-casing) and recurse into the parent -- or the target
-   * `ShuffleDependency` itself, at which point the reader RDD's partition index equals the reduce
-   * partition index (the pipelined reader always uses a width-1 CoalescedPartitionSpec(i, i+1);
-   * the count check below guards against a future offset spec). A node with several dependencies
-   * (a join's ZippedPartitionsRDD) contributes from every branch that reaches the target shuffle.
-   *
-   * Returns None if an edge cannot be mapped (a non-target ShuffleDependency in the path -- which a
-   * result-feeding producer never has, since pipelined-below-regular is rejected earlier -- or a
-   * reader RDD whose partition count does not match the shuffle's, i.e. a non-identity spec).
-   * The caller treats None as "cannot determine": safe to ignore for a full read, fail-fast for a
-   * partial read.
+   * Returns None when an edge cannot be mapped (a non-target ShuffleDependency in the path, or a
+   * reader RDD with a non-identity spec). The caller treats None as "cannot determine": safe to
+   * ignore for a full read, fail-fast for a partial read.
    */
   private def liveReduceSet(
       rdd: RDD[_], liveResultPartitions: Set[Int], targetShuffleId: Int): Option[Set[Int]] = {
@@ -2009,14 +2006,10 @@ private[spark] class DAGScheduler(
     // diamond (a shared ancestor reached by several branches, e.g. a self-join's zip).
     val reaches = rddReachesShuffle(rdd, targetShuffleId)
 
-    // Explicit worklist (not recursion) so a chain thousands of operators deep does not overflow
-    // the dag-scheduler event-loop's stack. The work unit is (rdd -> the live subset of ITS
-    // partition indices on the path from the result RDD). A node reachable via several branches
-    // with different live subsets is processed with the UNION of them: getParents distributes over
-    // union (union(A,B).flatMap(f) == union(A.flatMap(f), B.flatMap(f))), so merging the live sets
-    // at a node and mapping once equals the recursion's per-branch map + final union. Re-enqueue a
-    // node only when its accumulated set actually GREW (set inequality, not size -- two distinct
-    // sets can share a size); sets grow monotonically in a finite index domain, so it converges.
+    // Explicit worklist (not recursion) so a deep chain does not overflow the event-loop stack. The
+    // work unit is (rdd -> the live subset of ITS partition indices). A node reached via several
+    // branches is processed with the UNION of their live sets (getParents distributes over union).
+    // Re-enqueue only when the set actually GREW; it grows monotonically, so this converges.
     val liveAt = new HashMap[RDD[_], Set[Int]]
     val worklist = new ListBuffer[RDD[_]]
     val resultReduce = scala.collection.mutable.Set.empty[Int]
@@ -2032,13 +2025,10 @@ private[spark] class DAGScheduler(
         case sd: ShuffleDependency[_, _, _] if sd.shuffleId == targetShuffleId => sd
       } match {
         case Some(sd) =>
-          // Ask the reader RDD which reduce partition each live partition index reads, rather than
-          // assuming index == reduce id when the counts happen to match: a reader that skew-splits
-          // one reducer and coalesces two others has the same count and a different mapping, and
-          // guessing wrong here is not a hang but SILENTLY DROPPED records (the producer skips
-          // every partition outside the set it is told about). A reader that cannot name a single
-          // reduce partition for some live index makes the whole mapping uncomputable, which the
-          // caller treats as "keep everything live".
+          // Ask the reader RDD which reduce partition each live index reads, rather than assuming
+          // index == reduce id: a reader that skew-splits and coalesces reducers has the same count
+          // and a different mapping, and guessing wrong SILENTLY DROPS records. A reader that can't
+          // name a reduce partition for some live index makes the mapping uncomputable.
           cur match {
             case mapping: ShuffleReducePartitionMapping =>
               val mapped = live.map(mapping.reducePartitionIndex)
@@ -2075,12 +2065,10 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Whether the RDD graph rooted at `startRdd` reaches `targetShuffleId`: some dependency IS the
-   * target shuffle, or some NarrowDependency's rdd reaches it. A non-target ShuffleDependency does
-   * NOT propagate reachability (a regular boundary is not crossed). Memoized and computed
-   * iteratively (a two-phase post-order over an explicit stack) so a shared ancestor is visited
-   * once and a deep chain does not overflow the stack. Returns the full memo so a caller walking
-   * the same graph can query any node.
+   * Whether the graph rooted at `startRdd` reaches `targetShuffleId` through narrow edges (a
+   * non-target ShuffleDependency does not propagate reachability). Memoized and iterative
+   * (post-order over an explicit stack) so a shared ancestor is visited once and a deep chain does
+   * not overflow the stack. Returns the full memo so a caller walking the same graph can query it.
    */
   private def rddReachesShuffle(
       startRdd: RDD[_], targetShuffleId: Int): HashMap[RDD[_], Boolean] = {
@@ -2115,22 +2103,17 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * The total concurrent-task demand of a pipelined job's group, computed from the RDD graph
-   * BEFORE any stage is created (so a rejection based on it leaves no partial scheduler state,
-   * exactly as the barrier slot check and the speculation/DA reject do). A pipelined job's group
-   * is the final result stage plus every pipelined producer; a materialized-prefix mixed job (see
-   * JobShuffleShape) contributes no additional members, since its regular prefix never re-runs
-   * and (by the shape check) has no pipelined shuffle below it. Each member's task count is its
-   * RDD's partition count (`rdd.partitions.length`), matching how `createShuffleMapStage` derives
-   * `numTasks`. `finalNumPartitions` is the result stage's task count (the number of partitions
-   * the job runs, which may be a subset of `finalRDD.partitions`).
+   * The total concurrent-task demand of a pipelined job's group, computed from the RDD graph BEFORE
+   * any stage exists (so a rejection leaves no partial scheduler state). The group is the final
+   * result stage plus every pipelined producer; a materialized-prefix mixed job (see
+   * JobShuffleShape) adds no members, since its regular prefix never re-runs. Each member's task
+   * count is its RDD's partition count. `finalNumPartitions` is the result stage's task count (may
+   * be a subset of `finalRDD.partitions`).
    *
-   * Count each producer once per SHUFFLE ID, matching what execution schedules: one stage is
-   * created per shuffle ID (`getOrCreateShuffleMapStage`), not per dependency edge. A fan-out or
-   * diamond graph references one `PipelinedShuffleDependency` from more than one consumer RDD, so
-   * charging its producer per edge would over-count and could reject a group whose stages actually
-   * fit. Dedup on `shuffleId`, not `pd.rdd`: two distinct dependencies can share a producer RDD yet
-   * carry distinct shuffle IDs and produce distinct stages, and both must be counted.
+   * Count each producer once per SHUFFLE ID (one stage is created per shuffle ID, not per edge), so
+   * a fan-out or diamond referencing one dependency from several consumers is not over-counted.
+   * Dedup on `shuffleId`, not `pd.rdd`: two dependencies can share a producer RDD yet make distinct
+   * stages, and both must be counted.
    */
   private def pipelinedJobConcurrentTaskDemand(finalRDD: RDD[_], finalNumPartitions: Int): Int = {
     var demand = finalNumPartitions
@@ -2447,11 +2430,6 @@ private[spark] class DAGScheduler(
       case None => return
     }
 
-    // A job's shuffle graph must be all-regular, all-pipelined, or the materialized-prefix mixed
-    // shape (every regular boundary fully materialized and below the pipelined suffix -- see
-    // JobShuffleShape). Anything else is rejected up front (before any stage is created): an
-    // unmaterialized regular stage would have to run while gang-admitted producers hold slots
-    // blocked on transport backpressure, which admission does not account for and can deadlock.
     val hasPipelined = shape.hasPipelined
     if (shape.isUnsupportedMix) {
       logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: a job mixing a pipelined shuffle with " +
@@ -2464,12 +2442,10 @@ private[spark] class DAGScheduler(
       return
     }
 
-    // Gang admission for a pipelined job: the runnable stage graph is one pipelined group (a
-    // materialized prefix's stages never run), so check up front (before any stage is created)
-    // that the cluster can run the entire group concurrently. If it cannot fit, fail the job now
-    // -- no partial scheduler state, and no member ever left running while a sibling waits on
-    // slots (true all-or-nothing gang admission). Inert for a regular job (no pipelined
-    // dependency).
+    // Gang admission for a pipelined job: the runnable stage graph is one group (a materialized
+    // prefix's stages never run), so check up front that the cluster can run it all concurrently.
+    // If it cannot fit, fail now (all-or-nothing gang admission, no partial state). Inert for a
+    // regular job.
     if (hasPipelined && rejectUnadmittablePipelinedGroup(jobId, finalRDD, partitions, listener)) {
       return
     }
@@ -3918,7 +3894,8 @@ private[spark] class DAGScheduler(
           // external shuffle service, an ExecutorLost would NOT clean these, so this is the only
           // proactive channel). Safe for the pipelined shuffle itself: it registers no map outputs
           // in the tracker, so this can only strip regular/durable outputs.
-          unregisterOutputsOnFetchFailedExecutor(bmAddress, task)
+          val failedMapShuffleId = if (mapIndex != -1) Some(shuffleId) else None
+          unregisterOutputsOnFetchFailedExecutor(bmAddress, task, failedMapShuffleId)
           abortStage(failedStage,
             s"A pipelined group member failed with a fetch failure: $failureMessage", None)
         } else {
@@ -4054,7 +4031,10 @@ private[spark] class DAGScheduler(
           }
 
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
-          unregisterOutputsOnFetchFailedExecutor(bmAddress, task)
+          // Exempt the failed shuffle from reliable-preservation only on a map-output failure
+          // (mapIndex != -1); a merged-chunk failure says nothing about its reliable map output.
+          val failedMapShuffleId = if (mapIndex != -1) Some(shuffleId) else None
+          unregisterOutputsOnFetchFailedExecutor(bmAddress, task, failedMapShuffleId)
         }
 
       case failure: TaskFailedReason if task.isBarrier =>
@@ -4577,23 +4557,26 @@ private[spark] class DAGScheduler(
    * Responds to an executor being lost. This is called inside the event loop, so it assumes it can
    * modify the scheduler's internal state. Use executorLost() to post a loss event from outside.
    *
-   * We will also assume that we've lost all shuffle blocks associated with the executor if the
-   * executor serves its own blocks (i.e., we're not using an external shuffle service), or the
-   * entire Standalone worker is lost.
+   * We will also assume that we've lost the non-reliably-stored shuffle blocks associated with the
+   * executor if the executor serves its own blocks (i.e., we're not using an external shuffle
+   * service), or the entire Standalone worker is lost. Output marked reliably stored lives
+   * off-executor and is left registered.
    */
   private[scheduler] def handleExecutorLost(
       execId: String,
       workerHost: Option[String]): Unit = {
-    // if the cluster manager explicitly tells us that the entire worker was lost, then
-    // we know to unregister shuffle output.  (Note that "worker" specifically refers to the process
-    // from a Standalone cluster, where the shuffle service lives in the Worker.)
-    val fileLost = !sc.shuffleDriverComponents.supportsReliableStorage() &&
-      (workerHost.isDefined || !env.blockManager.externalShuffleServiceEnabled)
+    // Whether these outputs are candidates for removal at all; reliability is then honored per
+    // shuffle via respectReliablyStored below. workerHost.isDefined means the whole Standalone
+    // worker (which hosts the shuffle service) is gone.
+    val fileLost = workerHost.isDefined || !env.blockManager.externalShuffleServiceEnabled
     removeExecutorAndUnregisterOutputs(
       execId = execId,
       fileLost = fileLost,
       hostToUnregisterOutputs = workerHost,
-      maybeEpoch = None)
+      maybeEpoch = None,
+      // Executor loss (not a fetch failure): preserve shuffles whose output is reliably stored
+      // off-executor. Their data survives the executor, so recomputing them would be wasteful.
+      respectReliablyStored = true)
   }
 
   /**
@@ -4605,9 +4588,15 @@ private[spark] class DAGScheduler(
    * ExecutorLost does not clean them, so FetchFailed is the only proactive channel). No-op when
    * `bmAddress` is null. Safe for a pipelined shuffle: it registers no map outputs in the tracker,
    * so this can only strip regular/durable outputs.
+   *
+   * `failedShuffleId` is set only for a map-output FetchFailed, so that shuffle's correlated map
+   * output on the lost executor/host is cleared even when reliable. None for a merged-chunk
+   * failure, whose evidence does not bear on the original map output.
    */
   private def unregisterOutputsOnFetchFailedExecutor(
-      bmAddress: BlockManagerId, task: Task[_]): Unit = {
+      bmAddress: BlockManagerId,
+      task: Task[_],
+      failedShuffleId: Option[Int]): Unit = {
     // TODO: mark the executor as failed only if there were lots of fetch failures on it
     if (bmAddress != null) {
       val externalShuffleServiceEnabled = env.blockManager.externalShuffleServiceEnabled
@@ -4638,7 +4627,11 @@ private[spark] class DAGScheduler(
         // proceed with unconditional removal of shuffle outputs from all executors on that
         // host, including from those that we still haven't confirmed as lost due to heartbeat
         // delays.
-        ignoreShuffleFileLostEpoch = isHostDecommissioned)
+        ignoreShuffleFileLostEpoch = isHostDecommissioned,
+        // Preserve unrelated reliable shuffles, but exempt the failed shuffle so its correlated
+        // map outputs on this executor/host clear in one pass instead of one-per-retry.
+        respectReliablyStored = true,
+        failedShuffleId = failedShuffleId)
     }
   }
 
@@ -4651,17 +4644,28 @@ private[spark] class DAGScheduler(
    *   with the executor; this happens if the executor serves its own blocks (i.e., we're not
    *   using an external shuffle service), the entire Standalone worker is lost, or a FetchFailed
    *   occurred (in which case we presume all shuffle data related to this executor to be lost).
+   *   When `respectReliablyStored` is also true this "all lost" assumption is qualified: reliably
+   *   stored shuffles are preserved and only the rest is treated as lost.
    * @param hostToUnregisterOutputs (optional) executor host if we're unregistering all the
    *   outputs on the host
    * @param maybeEpoch (optional) the epoch during which the failure was caught (this prevents
    *   reprocessing for follow-on fetch failures)
+   * @param ignoreShuffleFileLostEpoch if true, bypass the shuffleFileLostEpoch gate (reliability
+   *   filtering still applies). Set from host-decommission state by the FetchFailed caller.
+   * @param respectReliablyStored if true, preserve shuffles whose output is reliably stored
+   *   off-executor; only non-reliable output is removed. Set on executor/worker loss and on a
+   *   FetchFailed, whose evidence is specific to the already-unregistered failed map.
+   * @param failedShuffleId (optional) on a FetchFailed, the shuffle that failed; cleaned even when
+   *   reliable so its correlated map output clears in one pass, while other reliable shuffles stay.
    */
   private def removeExecutorAndUnregisterOutputs(
       execId: String,
       fileLost: Boolean,
       hostToUnregisterOutputs: Option[String],
       maybeEpoch: Option[Long] = None,
-      ignoreShuffleFileLostEpoch: Boolean = false): Unit = {
+      ignoreShuffleFileLostEpoch: Boolean = false,
+      respectReliablyStored: Boolean = false,
+      failedShuffleId: Option[Int] = None): Unit = {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     logDebug(s"Considering removal of executor $execId; " +
       s"fileLost: $fileLost, currentEpoch: $currentEpoch")
@@ -4685,27 +4689,53 @@ private[spark] class DAGScheduler(
       clearCacheLocs()
     }
     if (fileLost) {
-      // When the fetch failure is for a merged shuffle chunk, ignoreShuffleFileLostEpoch is true
-      // and so all the files will be removed.
-      val remove = if (ignoreShuffleFileLostEpoch) {
-        true
-      } else if (!shuffleFileLostEpoch.contains(execId) ||
-        shuffleFileLostEpoch(execId) < currentEpoch) {
-        shuffleFileLostEpoch(execId) = currentEpoch
-        true
-      } else {
-        false
+      // ignoreShuffleFileLostEpoch (set from host-decommission state) bypasses the fence, but
+      // reliability filtering still applies. A FetchFailed for a reliably-stored shuffle is exempt
+      // once per epoch even when the executor fence rejects it: the executor loss preserved that
+      // shuffle, so its cleanup must still run when it is proven gone.
+      val passesExecutorFence = ignoreShuffleFileLostEpoch ||
+        !shuffleFileLostEpoch.contains(execId) ||
+        shuffleFileLostEpoch(execId) < currentEpoch
+      val reliableFetchFailedBypass = !passesExecutorFence && failedShuffleId.exists { id =>
+        mapOutputTracker.isReliablyStored(id) &&
+          reliableShuffleFileLostEpoch.get((execId, id)).forall(_ < currentEpoch)
       }
-      if (remove) {
+      if (passesExecutorFence || reliableFetchFailedBypass) {
+        // A bypass-only admission touches just the failed shuffle: only it is proven gone, so
+        // co-located shuffles (their freshly recomputed maps) must not be swept.
         hostToUnregisterOutputs match {
           case Some(host) =>
             logInfo(log"Shuffle files lost for host: ${MDC(HOST, host)} (epoch " +
               log"${MDC(EPOCH, currentEpoch)}")
-            mapOutputTracker.removeOutputsOnHost(host)
+            failedShuffleId match {
+              case None => mapOutputTracker.removeOutputsOnHost(host, respectReliablyStored)
+              case failed =>
+                mapOutputTracker.removeOutputsOnHost(host, respectReliablyStored, failed,
+                  restrictToFailedShuffle = reliableFetchFailedBypass)
+            }
           case None =>
-              logInfo(log"Shuffle files lost for executor: ${MDC(EXECUTOR_ID, execId)} " +
-                log"(epoch ${MDC(EPOCH, currentEpoch)})")
-            mapOutputTracker.removeOutputsOnExecutor(execId)
+            logInfo(log"Shuffle files lost for executor: ${MDC(EXECUTOR_ID, execId)} " +
+              log"(epoch ${MDC(EPOCH, currentEpoch)})")
+            failedShuffleId match {
+              case None => mapOutputTracker.removeOutputsOnExecutor(execId, respectReliablyStored)
+              case failed =>
+                mapOutputTracker.removeOutputsOnExecutor(execId, respectReliablyStored, failed,
+                  restrictToFailedShuffle = reliableFetchFailedBypass)
+            }
+        }
+        // A genuine executor-wide cleanup advances the executor fence (monotonically) to dedup
+        // same-epoch duplicates. A bypass-only admission must not move it (it did not clean the
+        // executor); it only records the per-shuffle fence so that shuffle's own duplicates are
+        // deduped. Both stamps are monotonic. Match prior behavior: skip under ignore.
+        if (!ignoreShuffleFileLostEpoch) {
+          if (passesExecutorFence) {
+            shuffleFileLostEpoch(execId) = currentEpoch
+          }
+          failedShuffleId.foreach { id =>
+            val key = (execId, id)
+            val prev = reliableShuffleFileLostEpoch.getOrElse(key, Long.MinValue)
+            reliableShuffleFileLostEpoch(key) = math.max(prev, currentEpoch)
+          }
         }
       }
     }
@@ -4715,8 +4745,9 @@ private[spark] class DAGScheduler(
    * Responds to a worker being removed. This is called inside the event loop, so it assumes it can
    * modify the scheduler's internal state. Use workerRemoved() to post a loss event from outside.
    *
-   * We will assume that we've lost all shuffle blocks associated with the host if a worker is
-   * removed, so we will remove them all from MapStatus.
+   * We will assume that we've lost all non-reliably-stored shuffle blocks associated with the
+   * host if a worker is removed, so we will remove them from MapStatus. Output marked reliably
+   * stored survives the worker and is left registered.
    *
    * @param workerId identifier of the worker that is removed.
    * @param host host of the worker that is removed.
@@ -4728,7 +4759,9 @@ private[spark] class DAGScheduler(
       message: String): Unit = {
     logInfo(log"Shuffle files lost for worker ${MDC(WORKER_ID, workerId)} " +
       log"on host ${MDC(HOST, host)}")
-    mapOutputTracker.removeOutputsOnHost(host)
+    // Worker loss (not a fetch failure): reliably-stored shuffle output lives off the worker and
+    // survives, so leave those outputs registered and only drop the rest.
+    mapOutputTracker.removeOutputsOnHost(host, respectReliablyStored = true)
     clearCacheLocs()
   }
 
@@ -4739,6 +4772,7 @@ private[spark] class DAGScheduler(
       executorFailureEpoch -= execId
     }
     shuffleFileLostEpoch -= execId
+    reliableShuffleFileLostEpoch.filterInPlace { case ((exec, _), _) => exec != execId }
 
     if (pushBasedShuffleEnabled) {
       // Only set merger locations for stages that are not yet finished and have empty mergers
