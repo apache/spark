@@ -67,8 +67,10 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
   }
 
   // See https://www.h2database.com/javadoc/org/h2/api/ErrorCode.html
+  // Only SYNTAX_ERROR_1 (42000) and SYNTAX_ERROR_2 (42001) are syntax errors. Other class 42
+  // states, e.g. 42S02 (table not found) and 42S22 (column not found), are not.
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    Option(exception.getSQLState).exists(_.startsWith("42"))
+    Set("42000", "42001").contains(exception.getSQLState)
   }
 
   override def getCatalystType(
