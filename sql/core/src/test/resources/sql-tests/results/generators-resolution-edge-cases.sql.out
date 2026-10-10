@@ -483,6 +483,17 @@ struct<col:int,arr:array<int>>
 
 
 -- !query
+SELECT explode(b) AS a,
+       explode(c) AS b,
+       explode(array(array(array(1)), array(array(2)))) AS c
+-- !query schema
+struct<a:int,b:array<int>,c:array<array<int>>>
+-- !query output
+1	[1]	[[1]]
+2	[2]	[[2]]
+
+
+-- !query
 SELECT col + 1 as col2, explode(array(1, 2, 3)) as col
 -- !query schema
 struct<col2:int,col:int>
