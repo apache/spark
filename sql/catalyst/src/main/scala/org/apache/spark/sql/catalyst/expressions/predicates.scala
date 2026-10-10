@@ -186,6 +186,16 @@ trait PredicateHelper extends AliasHelper with Logging {
   }
 
   /**
+   * Option-returning form of [[buildBalancedPredicate]]: `None` for an empty input, otherwise the
+   * combined predicate.
+   */
+  protected def buildBalancedPredicateOption(
+      expressions: Seq[Expression],
+      op: (Expression, Expression) => Expression): Option[Expression] = {
+    if (expressions.isEmpty) None else Some(buildBalancedPredicate(expressions, op))
+  }
+
+  /**
    * Returns true if `expr` can be evaluated using only the output of `plan`.  This method
    * can be used to determine when it is acceptable to move expression evaluation within a query
    * plan.
