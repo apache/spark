@@ -40,7 +40,7 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, MapType, Metadata, MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, Metadata, MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -426,8 +426,9 @@ private[sql] object CatalogV2Util {
             .getOrElse(throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3226"))
         Some(field.copy(dataType = map.copy(keyType = updated.dataType)))
 
-      case (Seq("key", names @ _*), map @ MapType(keyStruct: StructType, _, _)) =>
-        Some(field.copy(dataType = map.copy(keyType = replace(keyStruct, names, update, ifExists))))
+      case (Seq("key", names @ _*), map: MapType) =>
+        Some(field.copy(dataType = map.copy(keyType =
+          replaceNested(map.keyType, names, update, ifExists))))
 
       case (Seq("value"), map @ MapType(_, mapValueType, isNullable)) =>
         val updated = update(StructField("value", mapValueType, nullable = isNullable))
@@ -436,9 +437,9 @@ private[sql] object CatalogV2Util {
           valueType = updated.dataType,
           valueContainsNull = updated.nullable)))
 
-      case (Seq("value", names @ _*), map @ MapType(_, valueStruct: StructType, _)) =>
+      case (Seq("value", names @ _*), map: MapType) =>
         Some(field.copy(dataType = map.copy(valueType =
-          replace(valueStruct, names, update, ifExists))))
+          replaceNested(map.valueType, names, update, ifExists))))
 
       case (Seq("element"), array @ ArrayType(elementType, isNullable)) =>
         val updated = update(StructField("element", elementType, nullable = isNullable))
@@ -447,9 +448,9 @@ private[sql] object CatalogV2Util {
           elementType = updated.dataType,
           containsNull = updated.nullable)))
 
-      case (Seq("element", names @ _*), array @ ArrayType(elementStruct: StructType, _)) =>
+      case (Seq("element", names @ _*), array: ArrayType) =>
         Some(field.copy(dataType = array.copy(elementType =
-          replace(elementStruct, names, update, ifExists))))
+          replaceNested(array.elementType, names, update, ifExists))))
 
       case (names, dataType) =>
         if (!ifExists) {
@@ -468,6 +469,55 @@ private[sql] object CatalogV2Util {
     }
 
     new StructType(newFields)
+  }
+
+  /**
+   * Applies `update` to the nested field addressed by `fieldNames`, where `dataType` is the type
+   * reached after stepping into a map key/value or an array element. Unlike `replace`, which only
+   * descends into structs, this also recurses through nested maps and arrays, matching the paths
+   * emitted for schema changes computed against nested collection types.
+   */
+  private def replaceNested(
+      dataType: DataType,
+      fieldNames: Seq[String],
+      update: StructField => Option[StructField],
+      ifExists: Boolean): DataType = {
+    (fieldNames, dataType) match {
+      case (names, struct: StructType) =>
+        replace(struct, names, update, ifExists)
+
+      case (Seq("key"), map @ MapType(keyType, _, _)) =>
+        val updated = update(StructField("key", keyType, nullable = false))
+            .getOrElse(throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3226"))
+        map.copy(keyType = updated.dataType)
+
+      case (Seq("key", names @ _*), map: MapType) =>
+        map.copy(keyType = replaceNested(map.keyType, names, update, ifExists))
+
+      case (Seq("value"), map @ MapType(_, mapValueType, isNullable)) =>
+        val updated = update(StructField("value", mapValueType, nullable = isNullable))
+            .getOrElse(throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3225"))
+        map.copy(valueType = updated.dataType, valueContainsNull = updated.nullable)
+
+      case (Seq("value", names @ _*), map: MapType) =>
+        map.copy(valueType = replaceNested(map.valueType, names, update, ifExists))
+
+      case (Seq("element"), array @ ArrayType(elementType, isNullable)) =>
+        val updated = update(StructField("element", elementType, nullable = isNullable))
+            .getOrElse(throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3224"))
+        array.copy(elementType = updated.dataType, containsNull = updated.nullable)
+
+      case (Seq("element", names @ _*), array: ArrayType) =>
+        array.copy(elementType = replaceNested(array.elementType, names, update, ifExists))
+
+      case (names, other) =>
+        if (!ifExists) {
+          throw new SparkIllegalArgumentException(
+            errorClass = "_LEGACY_ERROR_TEMP_3223",
+            messageParameters = Map("name" -> names.head, "dataType" -> other.simpleString))
+        }
+        dataType
+    }
   }
 
   def loadTable(
