@@ -80,6 +80,36 @@ options { tokenVocab = SqlBaseLexer; }
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
            la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN;
   }
+
+  /**
+   * Checks if the next token is a top-level COLON inside a `jsonObjectColonKey`, i.e. the
+   * JSON_OBJECT member separator, so the key does not absorb it as `k:v` or `'k' :v`.
+   */
+  public boolean isJsonObjectColonSeparator() {
+    Token next = _input.LT(1);
+    if (next.getType() != COLON) {
+      return false;
+    }
+    for (ParserRuleContext ctx = _ctx; ctx != null; ctx = ctx.getParent()) {
+      if (ctx instanceof JsonObjectColonKeyContext) {
+        int start = ctx.getStart().getTokenIndex();
+        int depth = 0;
+        // END is non-reserved, so it only closes an open CASE (a column named `end` does not).
+        int caseDepth = 0;
+        for (int i = start; i < next.getTokenIndex(); i++) {
+          switch (_input.get(i).getType()) {
+            case LEFT_PAREN: case LEFT_BRACKET: depth++; break;
+            case RIGHT_PAREN: case RIGHT_BRACKET: depth--; break;
+            case CASE: caseDepth++; break;
+            case END: if (caseDepth > 0) caseDepth--; break;
+            default: break;
+          }
+        }
+        return depth == 0 && caseDepth == 0 && next.getTokenIndex() > start;
+      }
+    }
+    return false;
+  }
 }
 
 compoundOrSingleStatement
@@ -1486,10 +1516,12 @@ primaryExpression
       (nullBehavior=jsonConstructorNullBehavior ON NULL)?
       (RETURNING returning=dataType)?
       RIGHT_PAREN                                  #jsonArray
+    | jsonObjectConstructor                                                                    #jsonObject
     | constant                                                                                 #constantDefault
     | ASTERISK exceptClause?                                                                   #star
     | qualifiedName DOT ASTERISK exceptClause?                                                 #star
-    | col=primaryExpression COLON path=semiStructuredExtractionPath                            #semiStructuredExtract
+    | col=primaryExpression {!isJsonObjectColonSeparator()}?
+      COLON path=semiStructuredExtractionPath                                                  #semiStructuredExtract
     | LEFT_PAREN namedExpression (COMMA namedExpression)+ RIGHT_PAREN                          #rowConstructor
     | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
     | functionName LEFT_PAREN (setQuantifier? argument+=functionArgument
@@ -1564,6 +1596,51 @@ jsonConstructorNullBehavior
 // lexically-nested JSON constructor (e.g. JSON_ARRAY(JSON_ARRAY(1))) carries this implicitly.
 jsonArrayValue
     : value=expression (FORMAT JSON)?
+    ;
+
+// Kept out of `primaryExpression` so its generated method stays under the JIT size limit.
+jsonObjectConstructor
+    : JSON_OBJECT LEFT_PAREN (
+        jsonObjectMember (COMMA jsonObjectMember)*
+        | jsonObjectCommaMember (COMMA jsonObjectCommaMember)*)?
+      (nullBehavior=jsonConstructorNullBehavior ON NULL)?
+      (RETURNING returning=dataType)? RIGHT_PAREN
+    ;
+
+// A key-value pair in JSON_OBJECT: `key VALUE value`, `KEY key VALUE value`, or `key : value`.
+// Both sides accept a full `expression` (not just `valueExpression`) so that ordinary predicates --
+// e.g. `JSON_OBJECT('present' VALUE x IS NOT NULL)` -- work without parentheses, matching normal
+// function-argument syntax. The optional `FORMAT JSON` clause marks a string value as already-JSON
+// text to splice in raw instead of quoting; a lexically-nested JSON constructor carries it
+// implicitly (see `jsonArrayValue`). The KEY form precedes the plain VALUE form (which would read
+// `KEY 'k'` as a typed literal), except before a `value` identifier, so that
+// `JSON_OBJECT(key VALUE value + 1)` reads `key` as the member name; the last alternative still
+// accepts `KEY value VALUE ...`.
+jsonObjectMember
+    : {_input.LA(2) != VALUE}? KEY keyExpr=expression VALUE valueExpr=expression (FORMAT JSON)?
+    | keyExpr=expression VALUE valueExpr=expression (FORMAT JSON)?
+    | colonKey=jsonObjectColonKey COLON valueExpr=expression (FORMAT JSON)?
+    | KEY keyExpr=expression VALUE valueExpr=expression (FORMAT JSON)?
+    ;
+
+// The key of a `key : value` member. A top-level `:` after the key's first token ends the key, so
+// `JSON_OBJECT(k: v:x)` is key `k` with value `v:x`; a key that is itself an extraction needs
+// parentheses, e.g. `(v:x) : 1`.
+jsonObjectColonKey
+    : keyExpr=expression
+    ;
+
+// Compatibility form used by systems such as MySQL: `JSON_OBJECT(key, value[, key, value]...)`.
+// Kept as a separate alternative from `jsonObjectMember` because COMMA is both the key/value
+// separator inside a member and the separator between members.
+//
+// The `jsonObjectMember` (colon/VALUE) list is listed first in `#jsonObject`, so when a token
+// stream matches both forms the colon-member reading wins. This only overlaps when a comma-form
+// argument itself contains a `:` extraction, e.g. `JSON_OBJECT(v:k, v:x)`: this parses as the two
+// colon members `v:k` and `v:x` (the natural reading), not as one comma-form pair. To force the
+// comma form on colon-bearing arguments, parenthesize them: `JSON_OBJECT((v:k), (v:x))`.
+jsonObjectCommaMember
+    : keyExpr=expression COMMA valueExpr=expression
     ;
 
 semiStructuredExtractionPath
@@ -2085,7 +2162,7 @@ singleStringLit
     ;
 
 parameterMarker
-    : {parameter_substitution_enabled}? namedParameterMarker                                   #namedParameterMarkerRule
+    : {parameter_substitution_enabled && !isJsonObjectColonSeparator()}? namedParameterMarker #namedParameterMarkerRule
     | {parameter_substitution_enabled}? QUESTION                                               #positionalParameterMarkerRule
     ;
 
@@ -2314,6 +2391,7 @@ ansiNonReserved
     | JSON
     | JSON_ARRAY
     | JSON_EXISTS
+    | JSON_OBJECT
     | JSON_QUERY
     | JSON_TABLE
     | JSON_VALUE
@@ -2765,6 +2843,7 @@ nonReserved
     | JSON
     | JSON_ARRAY
     | JSON_EXISTS
+    | JSON_OBJECT
     | JSON_QUERY
     | JSON_TABLE
     | JSON_VALUE
