@@ -178,6 +178,60 @@ class SegmentTreeWindowMetricsSuite
     }
   }
 
+  private def groupsDF(frame: String): org.apache.spark.sql.DataFrame = spark.sql(
+    s"select id, min(v) over (partition by pk order by id $frame) as mn from " +
+      "(select id, (id % 3) AS pk, CAST(id AS INT) AS v from range(0, 120))")
+
+  // Use ROWS as a control for the expected frame count.
+  test("GROUPS frame takes the segment-tree path") {
+    withSQLConf(
+        SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
+        SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val rowsDf = baseDF.select($"id", min($"v").over(winSpec).as("mn"))
+      val rowsMetrics = windowMetricValues(rowsDf)
+      assert(rowsMetrics("number of segment-tree frames prepared") === 3L,
+        s"expected the ROWS control query to take the segment-tree path, got $rowsMetrics")
+
+      // Cover moving and shrinking factory branches.
+      Seq(
+        "groups between 3 preceding and 3 following",
+        "groups between current row and 3 following",
+        "groups between 3 preceding and current row",
+        "groups between 3 preceding and unbounded following").foreach { frame =>
+        val m = windowMetricValues(groupsDF(frame))
+        assert(m("number of segment-tree frames prepared") === 3L,
+          s"GROUPS frame '$frame' must take the segment-tree path, got $m")
+        assert(m("number of segment-tree fallback frames prepared") === 0L,
+          s"GROUPS frame '$frame' must not fall back, got $m")
+      }
+    }
+  }
+
+  test("GROUPS frame honours the min-partition-rows fallback") {
+    withSQLConf(
+        SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
+        // Force every partition below the segment-tree threshold.
+        SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1000",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val m = windowMetricValues(groupsDF("groups between 3 preceding and 3 following"))
+      assert(m("number of segment-tree fallback frames prepared") === 3L,
+        s"expected 3 GROUPS fallback frames (one per partition under threshold), got $m")
+      assert(m("number of segment-tree frames prepared") === 0L,
+        s"segtree counter must be 0 when all GROUPS partitions fall back, got $m")
+    }
+  }
+
+  test("feature flag off leaves GROUPS counters at zero") {
+    withSQLConf(
+        SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "false",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val m = windowMetricValues(groupsDF("groups between 3 preceding and 3 following"))
+      assert(m("number of segment-tree frames prepared") === 0L, s"got $m")
+      assert(m("number of segment-tree fallback frames prepared") === 0L, s"got $m")
+    }
+  }
+
   test("T4 (G4) mixed segtree + fallback, non-aliasing order") {
     withSQLConf(
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",

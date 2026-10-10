@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{HiveTestJars, TestHiveContext}
-import org.apache.spark.sql.internal.SQLConf.{LEGACY_TIME_PARSER_POLICY, SHUFFLE_PARTITIONS}
+import org.apache.spark.sql.internal.SQLConf.{ADAPTIVE_EXECUTION_ENABLED, LEGACY_TIME_PARSER_POLICY, SHUFFLE_PARTITIONS, WINDOW_SEGMENT_TREE_ENABLED, WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS}
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.types.{DecimalType, StructType}
 import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
@@ -212,6 +212,20 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SPARK_14244.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
+      "--master", "local-cluster[2,1,512]",
+      "--conf", s"${EXECUTOR_MEMORY.key}=512m",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
+      unusedJar.toString)
+    runSparkSubmit(args)
+  }
+
+  test("SPARK-58980 GROUPS window frames in cluster mode") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SPARK_58980.getClass.getName.stripSuffix("$"),
+      "--name", "GroupsWindowClusterTest",
       "--master", "local-cluster[2,1,512]",
       "--conf", s"${EXECUTOR_MEMORY.key}=512m",
       "--conf", "spark.ui.enabled=false",
@@ -817,6 +831,69 @@ object SPARK_14244 extends QueryTest {
       val window = Window.orderBy("id")
       val df = spark.range(2).select(cume_dist().over(window).as("cdist")).orderBy("cdist")
       checkAnswer(df, Seq(Row(0.5D), Row(1.0D)))
+    } finally {
+      sparkContext.stop()
+    }
+  }
+}
+
+object SPARK_58980 extends QueryTest {
+  protected var spark: SparkSession = _
+
+  def main(args: Array[String]): Unit = {
+    TestUtils.configTestLog4j2("INFO")
+
+    val sparkContext = new SparkContext(
+      new SparkConf()
+        .set(UI_ENABLED, false)
+        .set(SHUFFLE_PARTITIONS.key, "8")
+        .set(ADAPTIVE_EXECUTION_ENABLED.key, "false"))
+
+    val hiveContext = new TestHiveContext(sparkContext)
+    spark = hiveContext.sparkSession
+
+    try {
+      // Each account's six rows originate in different input partitions. ORDER BY has four
+      // peer groups, including ties and a gap, so ROWS and RANGE cannot produce these results.
+      spark.range(0, 64 * 6, 1, 8)
+        .selectExpr("id % 64 AS account", "CAST(id DIV 64 AS INT) AS item")
+        .createOrReplaceTempView("input")
+      spark.sql(
+        """
+          |SELECT account, item,
+          |  CASE item WHEN 0 THEN 1 WHEN 1 THEN 1 WHEN 2 THEN 2
+          |    WHEN 3 THEN 3 WHEN 4 THEN 3 ELSE 9 END AS batch,
+          |  (CASE item WHEN 0 THEN 10 WHEN 1 THEN 15 WHEN 2 THEN 20
+          |    WHEN 3 THEN 25 WHEN 4 THEN 30 ELSE 40 END) * (account + 1) AS amount
+          |FROM input
+          |""".stripMargin).createOrReplaceTempView("batches")
+
+      val totals = Seq(Row(25L, null), Row(25L, null), Row(45L, 25L),
+        Row(75L, 45L), Row(75L, 45L), Row(95L, 75L))
+      val expected = (0 until 64).flatMap { account =>
+        totals.zipWithIndex.map { case (total, item) =>
+          val factor = account + 1L
+          Row(account.toLong, item, total.getLong(0) * factor,
+            if (total.isNullAt(1)) null else total.getLong(1) * factor)
+        }
+      }
+      for (segmentTree <- Seq(false, true)) {
+        withSQLConf(
+          WINDOW_SEGMENT_TREE_ENABLED.key -> segmentTree.toString,
+          WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1") {
+          checkAnswer(
+            spark.sql(
+              """
+                |SELECT account, item,
+                |  sum(amount) OVER (PARTITION BY account ORDER BY batch
+                |    GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) AS trailing,
+                |  sum(amount) OVER (PARTITION BY account ORDER BY batch
+                |    GROUPS BETWEEN 2 PRECEDING AND 1 PRECEDING) AS preceding
+                |FROM batches
+                |""".stripMargin),
+            expected)
+        }
+      }
     } finally {
       sparkContext.stop()
     }

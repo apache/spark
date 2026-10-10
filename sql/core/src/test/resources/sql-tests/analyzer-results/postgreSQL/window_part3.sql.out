@@ -81,6 +81,197 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT sum(unique1) over (order by four groups between unbounded preceding and current row),
+unique1, four
+FROM tenk1 WHERE unique1 < 10
+-- !query analysis
+Project [sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL, unique1#x, four#x]
++- Project [unique1#x, four#x, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
+   +- Window [sum(unique1#x) windowspecdefinition(four#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, unboundedpreceding$(), currentrow$())) AS sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL], [four#x ASC NULLS FIRST]
+      +- Project [unique1#x, four#x]
+         +- Filter (unique1#x < 10)
+            +- SubqueryAlias spark_catalog.default.tenk1
+               +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
+
+
+-- !query
+SELECT sum(unique1) over (order by four groups between unbounded preceding and unbounded following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10
+-- !query analysis
+Project [sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, unique1#x, four#x]
++- Project [unique1#x, four#x, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL]
+   +- Window [sum(unique1#x) windowspecdefinition(four#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, unboundedpreceding$(), unboundedfollowing$())) AS sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL], [four#x ASC NULLS FIRST]
+      +- Project [unique1#x, four#x]
+         +- Filter (unique1#x < 10)
+            +- SubqueryAlias spark_catalog.default.tenk1
+               +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
+
+
+-- !query
+SELECT sum(unique1) over (order by four groups between current row and unbounded following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10
+-- !query analysis
+Project [sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL, unique1#x, four#x]
++- Project [unique1#x, four#x, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL]
+   +- Window [sum(unique1#x) windowspecdefinition(four#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, currentrow$(), unboundedfollowing$())) AS sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL], [four#x ASC NULLS FIRST]
+      +- Project [unique1#x, four#x]
+         +- Filter (unique1#x < 10)
+            +- SubqueryAlias spark_catalog.default.tenk1
+               +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
+
+
+-- !query
+SELECT sum(unique1) over (order by four groups between 1 preceding and unbounded following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10
+-- !query analysis
+Project [sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING)#xL, unique1#x, four#x]
++- Project [unique1#x, four#x, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING)#xL, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING)#xL]
+   +- Window [sum(unique1#x) windowspecdefinition(four#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, -1, unboundedfollowing$())) AS sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING)#xL], [four#x ASC NULLS FIRST]
+      +- Project [unique1#x, four#x]
+         +- Filter (unique1#x < 10)
+            +- SubqueryAlias spark_catalog.default.tenk1
+               +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
+
+
+-- !query
+SELECT sum(unique1) over (order by four groups between 1 following and unbounded following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10
+-- !query analysis
+Project [sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING)#xL, unique1#x, four#x]
++- Project [unique1#x, four#x, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING)#xL, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING)#xL]
+   +- Window [sum(unique1#x) windowspecdefinition(four#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, 1, unboundedfollowing$())) AS sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING)#xL], [four#x ASC NULLS FIRST]
+      +- Project [unique1#x, four#x]
+         +- Filter (unique1#x < 10)
+            +- SubqueryAlias spark_catalog.default.tenk1
+               +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
+
+
+-- !query
+SELECT sum(unique1) over (order by four groups between unbounded preceding and 2 following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10
+-- !query analysis
+Project [sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN UNBOUNDED PRECEDING AND 2 FOLLOWING)#xL, unique1#x, four#x]
++- Project [unique1#x, four#x, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN UNBOUNDED PRECEDING AND 2 FOLLOWING)#xL, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN UNBOUNDED PRECEDING AND 2 FOLLOWING)#xL]
+   +- Window [sum(unique1#x) windowspecdefinition(four#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, unboundedpreceding$(), 2)) AS sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN UNBOUNDED PRECEDING AND 2 FOLLOWING)#xL], [four#x ASC NULLS FIRST]
+      +- Project [unique1#x, four#x]
+         +- Filter (unique1#x < 10)
+            +- SubqueryAlias spark_catalog.default.tenk1
+               +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
+
+
+-- !query
+SELECT sum(unique1) over (order by four groups between 2 preceding and 1 preceding),
+unique1, four
+FROM tenk1 WHERE unique1 < 10
+-- !query analysis
+Project [sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL, unique1#x, four#x]
++- Project [unique1#x, four#x, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL]
+   +- Window [sum(unique1#x) windowspecdefinition(four#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, -2, -1)) AS sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL], [four#x ASC NULLS FIRST]
+      +- Project [unique1#x, four#x]
+         +- Filter (unique1#x < 10)
+            +- SubqueryAlias spark_catalog.default.tenk1
+               +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
+
+
+-- !query
+SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10
+-- !query analysis
+Project [sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 2 PRECEDING AND 1 FOLLOWING)#xL, unique1#x, four#x]
++- Project [unique1#x, four#x, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 2 PRECEDING AND 1 FOLLOWING)#xL, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 2 PRECEDING AND 1 FOLLOWING)#xL]
+   +- Window [sum(unique1#x) windowspecdefinition(four#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, -2, 1)) AS sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 2 PRECEDING AND 1 FOLLOWING)#xL], [four#x ASC NULLS FIRST]
+      +- Project [unique1#x, four#x]
+         +- Filter (unique1#x < 10)
+            +- SubqueryAlias spark_catalog.default.tenk1
+               +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
+
+
+-- !query
+SELECT sum(unique1) over (order by four groups between 0 preceding and 0 following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10
+-- !query analysis
+Project [sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 0 PRECEDING AND 0 FOLLOWING)#xL, unique1#x, four#x]
++- Project [unique1#x, four#x, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 0 PRECEDING AND 0 FOLLOWING)#xL, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 0 PRECEDING AND 0 FOLLOWING)#xL]
+   +- Window [sum(unique1#x) windowspecdefinition(four#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, -0, 0)) AS sum(unique1) OVER (ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 0 PRECEDING AND 0 FOLLOWING)#xL], [four#x ASC NULLS FIRST]
+      +- Project [unique1#x, four#x]
+         +- Filter (unique1#x < 10)
+            +- SubqueryAlias spark_catalog.default.tenk1
+               +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
+
+
+-- !query
+SELECT sum(unique1) over (partition by ten
+  order by four groups between 0 preceding and 0 following),unique1, four, ten
+FROM tenk1 WHERE unique1 < 10
+-- !query analysis
+Project [sum(unique1) OVER (PARTITION BY ten ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 0 PRECEDING AND 0 FOLLOWING)#xL, unique1#x, four#x, ten#x]
++- Project [unique1#x, four#x, ten#x, sum(unique1) OVER (PARTITION BY ten ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 0 PRECEDING AND 0 FOLLOWING)#xL, sum(unique1) OVER (PARTITION BY ten ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 0 PRECEDING AND 0 FOLLOWING)#xL]
+   +- Window [sum(unique1#x) windowspecdefinition(ten#x, four#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, -0, 0)) AS sum(unique1) OVER (PARTITION BY ten ORDER BY four ASC NULLS FIRST GROUPS BETWEEN 0 PRECEDING AND 0 FOLLOWING)#xL], [ten#x], [four#x ASC NULLS FIRST]
+      +- Project [unique1#x, four#x, ten#x]
+         +- Filter (unique1#x < 10)
+            +- SubqueryAlias spark_catalog.default.tenk1
+               +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
+
+
+-- !query
+select first_value(enroll_date) over(order by enroll_date groups between 1 preceding and 1 following),
+nth_value(enroll_date, 1) over(order by enroll_date groups between 1 preceding and 1 following),
+salary, enroll_date from empsalary
+-- !query analysis
+Project [first_value(enroll_date) OVER (ORDER BY enroll_date ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x, nth_value(enroll_date, 1) OVER (ORDER BY enroll_date ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x, salary#x, enroll_date#x]
++- Project [salary#x, enroll_date#x, first_value(enroll_date) OVER (ORDER BY enroll_date ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x, nth_value(enroll_date, 1) OVER (ORDER BY enroll_date ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x, first_value(enroll_date) OVER (ORDER BY enroll_date ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x, nth_value(enroll_date, 1) OVER (ORDER BY enroll_date ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x]
+   +- Window [first_value(enroll_date#x, false) windowspecdefinition(enroll_date#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, -1, 1)) AS first_value(enroll_date) OVER (ORDER BY enroll_date ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x, nth_value(enroll_date#x, 1, false) windowspecdefinition(enroll_date#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, -1, 1)) AS nth_value(enroll_date, 1) OVER (ORDER BY enroll_date ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x], [enroll_date#x ASC NULLS FIRST]
+      +- Project [salary#x, enroll_date#x]
+         +- SubqueryAlias spark_catalog.default.empsalary
+            +- Relation spark_catalog.default.empsalary[depname#x,empno#x,salary#x,enroll_date#x] parquet
+
+
+-- !query
+select lead(salary) over(order by enroll_date groups between 1 preceding and 1 following)
+from empsalary
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1035",
+  "messageParameters" : {
+    "prettyName" : "lead"
+  }
+}
+
+
+-- !query
+select last(enroll_date) over(order by enroll_date groups between 1 preceding and 1 following),
+salary, enroll_date from empsalary
+-- !query analysis
+Project [last(enroll_date) OVER (ORDER BY enroll_date ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x, salary#x, enroll_date#x]
++- Project [salary#x, enroll_date#x, last(enroll_date) OVER (ORDER BY enroll_date ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x, last(enroll_date) OVER (ORDER BY enroll_date ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x]
+   +- Window [last(enroll_date#x, false) windowspecdefinition(enroll_date#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, -1, 1)) AS last(enroll_date) OVER (ORDER BY enroll_date ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x], [enroll_date#x ASC NULLS FIRST]
+      +- Project [salary#x, enroll_date#x]
+         +- SubqueryAlias spark_catalog.default.empsalary
+            +- Relation spark_catalog.default.empsalary[depname#x,empno#x,salary#x,enroll_date#x] parquet
+
+
+-- !query
+select lag(salary) over(order by enroll_date groups between 1 preceding and 1 following)
+from empsalary
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1035",
+  "messageParameters" : {
+    "prettyName" : "lag"
+  }
+}
+
+
+-- !query
 WITH cte (x) AS (
         SELECT * FROM range(1, 36, 2)
 )
@@ -119,6 +310,28 @@ WithCTE
 +- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL]
    +- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL]
       +- Window [sum(x#xL) windowspecdefinition(x#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as bigint), cast(1 as bigint))) AS sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL], [x#xL ASC NULLS FIRST]
+         +- Project [x#xL]
+            +- SubqueryAlias cte
+               +- CTERelationRef xxxx, true, [x#xL], false, false, 18
+
+
+-- !query
+WITH cte (x) AS (
+        SELECT * FROM range(1, 36, 2)
+)
+SELECT x, (sum(x) over w)
+FROM cte
+WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias cte
+:     +- Project [id#xL AS x#xL]
+:        +- Project [id#xL]
+:           +- Range (1, 36, step=2)
++- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL]
+   +- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL]
+      +- Window [sum(x#xL) windowspecdefinition(x#xL ASC NULLS FIRST, specifiedwindowframe(GroupFrame, -1, 1)) AS sum(x) OVER (ORDER BY x ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL], [x#xL ASC NULLS FIRST]
          +- Project [x#xL]
             +- SubqueryAlias cte
                +- CTERelationRef xxxx, true, [x#xL], false, false, 18
@@ -185,6 +398,39 @@ WithCTE
 +- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL]
    +- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL]
       +- Window [sum(x#xL) windowspecdefinition(x#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as bigint), cast(1 as bigint))) AS sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL], [x#xL ASC NULLS FIRST]
+         +- Project [x#xL]
+            +- SubqueryAlias cte
+               +- CTERelationRef xxxx, true, [x#xL], false, false, 26
+
+
+-- !query
+WITH cte (x) AS (
+        select 1 union all select 1 union all select 1 union all
+        SELECT * FROM range(5, 50, 2)
+)
+SELECT x, (sum(x) over w)
+FROM cte
+WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias cte
+:     +- Project [1#xL AS x#xL]
+:        +- Union false, false
+:           :- Project [cast(1#x as bigint) AS 1#xL]
+:           :  +- Union false, false
+:           :     :- Union false, false
+:           :     :  :- Project [1 AS 1#x]
+:           :     :  :  +- OneRowRelation
+:           :     :  +- Project [1 AS 1#x]
+:           :     :     +- OneRowRelation
+:           :     +- Project [1 AS 1#x]
+:           :        +- OneRowRelation
+:           +- Project [id#xL]
+:              +- Range (5, 50, step=2)
++- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL]
+   +- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL]
+      +- Window [sum(x#xL) windowspecdefinition(x#xL ASC NULLS FIRST, specifiedwindowframe(GroupFrame, -1, 1)) AS sum(x) OVER (ORDER BY x ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL], [x#xL ASC NULLS FIRST]
          +- Project [x#xL]
             +- SubqueryAlias cte
                +- CTERelationRef xxxx, true, [x#xL], false, false, 26
@@ -285,6 +531,64 @@ from t1 where f1 = f2
 Project [f1#x, sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING)#xL]
 +- Project [f1#x, f2#x, sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING)#xL, sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING)#xL]
    +- Window [sum(f1#x) windowspecdefinition(f1#x, f2#x, f2#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, 1, 2)) AS sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING)#xL], [f1#x, f2#x], [f2#x ASC NULLS FIRST]
+      +- Project [f1#x, f2#x]
+         +- Filter (f1#x = f2#x)
+            +- SubqueryAlias spark_catalog.default.t1
+               +- Relation spark_catalog.default.t1[f1#x,f2#x] parquet
+
+
+-- !query
+select f1, sum(f1) over (partition by f1,
+groups between 1 preceding and 1 following)
+from t1 where f1 = f2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'preceding'",
+    "hint" : ": extra input 'preceding'"
+  }
+}
+
+
+-- !query
+select f1, sum(f1) over (partition by f1 order by f2
+groups between 1 preceding and 1 following)
+from t1 where f1 = f2
+-- !query analysis
+Project [f1#x, sum(f1) OVER (PARTITION BY f1 ORDER BY f2 ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL]
++- Project [f1#x, f2#x, sum(f1) OVER (PARTITION BY f1 ORDER BY f2 ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL, sum(f1) OVER (PARTITION BY f1 ORDER BY f2 ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL]
+   +- Window [sum(f1#x) windowspecdefinition(f1#x, f2#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, -1, 1)) AS sum(f1) OVER (PARTITION BY f1 ORDER BY f2 ASC NULLS FIRST GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL], [f1#x], [f2#x ASC NULLS FIRST]
+      +- Project [f1#x, f2#x]
+         +- Filter (f1#x = f2#x)
+            +- SubqueryAlias spark_catalog.default.t1
+               +- Relation spark_catalog.default.t1[f1#x,f2#x] parquet
+
+
+-- !query
+select f1, sum(f1) over (partition by f1, f1 order by f2
+groups between 2 preceding and 1 preceding)
+from t1 where f1 = f2
+-- !query analysis
+Project [f1#x, sum(f1) OVER (PARTITION BY f1, f1 ORDER BY f2 ASC NULLS FIRST GROUPS BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL]
++- Project [f1#x, f2#x, sum(f1) OVER (PARTITION BY f1, f1 ORDER BY f2 ASC NULLS FIRST GROUPS BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL, sum(f1) OVER (PARTITION BY f1, f1 ORDER BY f2 ASC NULLS FIRST GROUPS BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL]
+   +- Window [sum(f1#x) windowspecdefinition(f1#x, f1#x, f2#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, -2, -1)) AS sum(f1) OVER (PARTITION BY f1, f1 ORDER BY f2 ASC NULLS FIRST GROUPS BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL], [f1#x, f1#x], [f2#x ASC NULLS FIRST]
+      +- Project [f1#x, f2#x]
+         +- Filter (f1#x = f2#x)
+            +- SubqueryAlias spark_catalog.default.t1
+               +- Relation spark_catalog.default.t1[f1#x,f2#x] parquet
+
+
+-- !query
+select f1, sum(f1) over (partition by f1, f2 order by f2
+groups between 1 following and 2 following)
+from t1 where f1 = f2
+-- !query analysis
+Project [f1#x, sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST GROUPS BETWEEN 1 FOLLOWING AND 2 FOLLOWING)#xL]
++- Project [f1#x, f2#x, sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST GROUPS BETWEEN 1 FOLLOWING AND 2 FOLLOWING)#xL, sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST GROUPS BETWEEN 1 FOLLOWING AND 2 FOLLOWING)#xL]
+   +- Window [sum(f1#x) windowspecdefinition(f1#x, f2#x, f2#x ASC NULLS FIRST, specifiedwindowframe(GroupFrame, 1, 2)) AS sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST GROUPS BETWEEN 1 FOLLOWING AND 2 FOLLOWING)#xL], [f1#x, f2#x], [f2#x ASC NULLS FIRST]
       +- Project [f1#x, f2#x]
          +- Filter (f1#x = f2#x)
             +- SubqueryAlias spark_catalog.default.t1
