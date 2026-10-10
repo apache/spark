@@ -1,0 +1,110 @@
+================================================================================================
+Spill merger: PriorityQueue vs LoserTree
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.5
+Apple M4
+k-way merge scenario=low-prefix-collision runs=4 recordsPerRun=500000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+priority-queue                                                                    31             32           1         64.9          15.4       1.0X
+loser-tree                                                                        21             21           0         95.9          10.4       1.5X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.5
+Apple M4
+k-way merge scenario=low-prefix-collision runs=8 recordsPerRun=500000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+priority-queue                                                                   123            128           4         32.5          30.8       1.0X
+loser-tree                                                                        68             70           2         59.0          17.0       1.8X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.5
+Apple M4
+k-way merge scenario=low-prefix-collision runs=16 recordsPerRun=500000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------
+priority-queue                                                                    386            399          11         20.7          48.2       1.0X
+loser-tree                                                                        178            186          11         44.8          22.3       2.2X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.5
+Apple M4
+k-way merge scenario=low-prefix-collision runs=64 recordsPerRun=500000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------
+priority-queue                                                                   3175           3251         107         10.1          99.2       1.0X
+loser-tree                                                                       1111           1126          22         28.8          34.7       2.9X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.5
+Apple M4
+k-way merge scenario=low-prefix-collision runs=256 recordsPerRun=500000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+priority-queue                                                                   19406          20651        1761          6.6         151.6       1.0X
+loser-tree                                                                        7561           7568           9         16.9          59.1       2.6X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.5
+Apple M4
+k-way merge scenario=medium-prefix-collision runs=4 recordsPerRun=500000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+priority-queue                                                                       41             42           1         49.1          20.4       1.0X
+loser-tree                                                                           21             22           0         93.8          10.7       1.9X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.5
+Apple M4
+k-way merge scenario=medium-prefix-collision runs=8 recordsPerRun=500000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+priority-queue                                                                      135            138           4         29.5          33.8       1.0X
+loser-tree                                                                           60             60           0         66.9          14.9       2.3X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.5
+Apple M4
+k-way merge scenario=medium-prefix-collision runs=16 recordsPerRun=500000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+priority-queue                                                                       396            401           4         20.2          49.6       1.0X
+loser-tree                                                                           160            161           1         50.0          20.0       2.5X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.5
+Apple M4
+k-way merge scenario=medium-prefix-collision runs=64 recordsPerRun=500000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+priority-queue                                                                      2642           2681          56         12.1          82.6       1.0X
+loser-tree                                                                          1319           1321           2         24.3          41.2       2.0X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.5
+Apple M4
+k-way merge scenario=medium-prefix-collision runs=256 recordsPerRun=500000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+priority-queue                                                                      14540          14605          92          8.8         113.6       1.0X
+loser-tree                                                                           8228           8257          41         15.6          64.3       1.8X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.5
+Apple M4
+k-way merge scenario=high-prefix-collision runs=4 recordsPerRun=500000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------
+priority-queue                                                                     47             50           5         42.5          23.5       1.0X
+loser-tree                                                                         34             35           1         58.2          17.2       1.4X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.5
+Apple M4
+k-way merge scenario=high-prefix-collision runs=8 recordsPerRun=500000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------
+priority-queue                                                                    155            160           6         25.9          38.6       1.0X
+loser-tree                                                                         99            100           1         40.6          24.6       1.6X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.5
+Apple M4
+k-way merge scenario=high-prefix-collision runs=16 recordsPerRun=500000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+priority-queue                                                                     425            427           2         18.8          53.1       1.0X
+loser-tree                                                                         250            254           3         32.0          31.2       1.7X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.5
+Apple M4
+k-way merge scenario=high-prefix-collision runs=64 recordsPerRun=500000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+priority-queue                                                                    2421           2452          44         13.2          75.6       1.0X
+loser-tree                                                                        1342           1360          25         23.9          41.9       1.8X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.5
+Apple M4
+k-way merge scenario=high-prefix-collision runs=256 recordsPerRun=500000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+priority-queue                                                                    13211          13214           5          9.7         103.2       1.0X
+loser-tree                                                                         7445           7456          16         17.2          58.2       1.8X
+
+
