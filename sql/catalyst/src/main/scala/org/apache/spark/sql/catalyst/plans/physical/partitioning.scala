@@ -735,13 +735,12 @@ case class KeyedPartitioning(
    * and a partitioning can hold one key per split. And `dataTypes` has its naming erased, so
    * printing it would put a struct field name into a plan that appears nowhere in the query. A
    * field the layout grows is therefore a decision here, and the default is to print it: the plan
-   * string is the only place a reader sees why a marked partitioning still shuffles. The roles
-   * are one per partition, so they print as a `Seq` arg, which `maxFields` truncates, as the
-   * partition keys do.
+   * string is the only place a reader sees why a marked partitioning still shuffles. The origins
+   * remain one sequence argument, retaining their order and repetitions.
    */
   override protected def stringArgs: Iterator[Any] =
     Iterator(expressions, partitionKeys, isGrouped, isCollapsed,
-      mayContainUnknownPartitionKeys) ++ ungroupingOrigins.getOrElse(Nil)
+      mayContainUnknownPartitionKeys) ++ ungroupingOrigins
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): KeyedPartitioning =

@@ -2705,11 +2705,11 @@ object SQLConf {
     buildConf("spark.sql.sources.v2.bucketing.skewJoin.enabled")
       .doc("During a storage-partitioned join, whether to split skewed key groups instead of " +
         "coalescing each key's input partitions into a single partition. A key group is skewed " +
-        "when its combined input partition count over both sides is larger than the maximum of " +
+        "when its input partition count on a join side is larger than the maximum of " +
         "spark.sql.sources.v2.bucketing.skewJoin.skewedPartitionsPerGroupThreshold and " +
-        "the median group count times " +
-        "spark.sql.sources.v2.bucketing.skewJoin.skewedGroupFactor. A skewed key's side " +
-        "holding more of its input partitions spreads them over output partitions holding " +
+        "that side's median group count times " +
+        "spark.sql.sources.v2.bucketing.skewJoin.skewedGroupFactor. An eligible skewed side " +
+        "spreads its input partitions over output partitions holding " +
         "about spark.sql.sources.v2.bucketing.advisoryInputPartitionsPerOutputPartition " +
         "of them each, and the other side replicates its group to each of those; if the join " +
         "type forbids replicating that side the roles swap where they can. The counts are the " +
@@ -2730,10 +2730,10 @@ object SQLConf {
 
   val V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR =
     buildConf("spark.sql.sources.v2.bucketing.skewJoin.skewedGroupFactor")
-      .doc("A key group of a storage-partitioned join is considered skewed when its combined " +
-        "input partition count over both sides is larger than the maximum of " +
+      .doc("A key group of a storage-partitioned join is considered skewed when its " +
+        "input partition count on that side is larger than the maximum of " +
         "spark.sql.sources.v2.bucketing.skewJoin.skewedPartitionsPerGroupThreshold " +
-        s"and the median group count times this factor, when " +
+        s"and that side's median group count times this factor, when " +
         s"${V2_BUCKETING_SKEW_JOIN_ENABLED.key} is enabled. The partition-count " +
         s"counterpart of ${SKEW_JOIN_SKEWED_PARTITION_FACTOR.key}.")
       .version("4.4.0")
@@ -2745,9 +2745,10 @@ object SQLConf {
 
   val V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD =
     buildConf("spark.sql.sources.v2.bucketing.skewJoin.skewedPartitionsPerGroupThreshold")
-      .doc("A key group of a storage-partitioned join is considered skewed when its combined " +
-        "input partition count over both sides is larger than the maximum of this threshold " +
-        s"and the median group count times ${V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key}, " +
+      .doc("A key group of a storage-partitioned join is considered skewed when its " +
+        "input partition count on that side is larger than the maximum of this threshold " +
+        "and that side's median group count times " +
+        s"${V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key}, " +
         s"when ${V2_BUCKETING_SKEW_JOIN_ENABLED.key} is enabled. The partition-count " +
         s"counterpart of ${SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key}, with a different " +
         "consequence: a key held in one huge input partition is not skewed here, while a key " +
@@ -2775,20 +2776,6 @@ object SQLConf {
       .checkValue(_ > 0, "The value of spark.sql.sources.v2.bucketing." +
         "advisoryInputPartitionsPerOutputPartition must be positive")
       .createWithDefault(1)
-
-  val V2_BUCKETING_FORCE_OPTIMIZE_SKEWED_JOIN =
-    buildConf("spark.sql.sources.v2.bucketing.forceOptimizeSkewedJoin")
-      .doc("When true, keep a skewed key group's split where an operator above the join needs " +
-        "the join's keys grouped, instead of standing the split down for it. The operator then " +
-        "re-partitions the join's output by its own keys, which is the extra shuffle standing " +
-        "the split down avoids, and every key keeps the parallelism the split gave it. Which " +
-        "answer is cheaper depends on how much of the data the skewed keys hold: the counts " +
-        "this optimization reads say how many partitions a key has, not how large they are. " +
-        s"Requires ${V2_BUCKETING_SKEW_JOIN_ENABLED.key} to be enabled.")
-      .version("4.4.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
-      .booleanConf
-      .createWithDefault(false)
 
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed.")
@@ -9731,9 +9718,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def v2BucketingAdvisoryInputPartitionsPerOutputPartition: Int =
     getConf(SQLConf.V2_BUCKETING_ADVISORY_INPUT_PARTITIONS_PER_OUTPUT_PARTITION)
-
-  def v2BucketingForceOptimizeSkewedJoin: Boolean =
-    getConf(SQLConf.V2_BUCKETING_FORCE_OPTIMIZE_SKEWED_JOIN)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)

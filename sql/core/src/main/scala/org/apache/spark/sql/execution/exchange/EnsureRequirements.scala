@@ -29,10 +29,9 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.datasources.v2.{ExpectedKeyMode, GroupPartitionsExec}
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.datasources.v2.{ExpectedKeySpec, GroupPartitionsExec}
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.Utils
 
 /**
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
@@ -102,24 +101,20 @@ case class EnsureRequirements(
 
     // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
     distributed.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
-      ensureOrdering(child, requiredOrdering)
+      // If child.outputOrdering already satisfies the requiredOrdering, we do not need to sort.
+      if (SortOrder.orderingSatisfies(child.outputOrdering, requiredOrdering)) {
+        child
+      } else {
+        // Before adding a SortExec, check whether a GroupPartitionsExec anywhere in the child
+        // subtree can self-satisfy via sorted merge. tryEnableSortedMerge generates all alternative
+        // plans where one or more GPEs have sorted merge enabled; we take the first one whose
+        // outputOrdering satisfies the requirement.
+        tryEnableSortedMerge(child)
+          .find(newChild => SortOrder.orderingSatisfies(newChild.outputOrdering, requiredOrdering))
+          .getOrElse(SortExec(requiredOrdering, global = false, child = child))
+      }
     }
   }
-
-  /**
-   * `child`, sorted where it does not answer `requiredOrdering` as it stands. Before adding a
-   * `SortExec`, ask whether a `GroupPartitionsExec` under the child can self-satisfy through a
-   * sorted merge: `tryEnableSortedMerge` enumerates the alternative plans that turn one on, and
-   * the first that answers is taken for a child none of them does.
-   */
-  private def ensureOrdering(child: SparkPlan, requiredOrdering: Seq[SortOrder]): SparkPlan =
-    if (SortOrder.orderingSatisfies(child.outputOrdering, requiredOrdering)) {
-      child
-    } else {
-      tryEnableSortedMerge(child)
-        .find(newChild => SortOrder.orderingSatisfies(newChild.outputOrdering, requiredOrdering))
-        .getOrElse(SortExec(requiredOrdering, global = false, child = child))
-    }
 
   /**
    * What `child` needs to satisfy `distribution` on its own: nothing, a [[GroupPartitionsExec]], a
@@ -158,10 +153,8 @@ case class EnsureRequirements(
                 val sortedGroupedKeys = satisfyingKeyedPartitioning.partitionKeys
                   .groupBy(identity).view.mapValues(_.size)
                   .toSeq.sortBy(_._1)(satisfyingKeyedPartitioning.keyOrderingFor(o))
-                  .map { case (k, numSplits) =>
-                    // The keys stay ungrouped so that the ordering the operator reads is the one
-                    // derived from them, which is no side of a pairing.
-                    k -> ExpectedKeyMode(numSplits, Some(SPLIT_FOR_ORDERING))
+                  .map { case (key, numSplits) =>
+                    key -> ExpectedKeySpec(numSplits, Some(SPLIT_FOR_ORDERING))
                   }
                 GroupPartitionsExec(child,
                   expectedPartitionKeys = Some(sortedGroupedKeys)
@@ -175,11 +168,9 @@ case class EnsureRequirements(
             // A KeyedPartitioning satisfies the distribution only after a GroupPartitionsExec:
             // to coalesce duplicate partition keys, to project the partition keys down to the
             // cluster keys, or both. The positions to project to come from whichever member
-            // of the child's partitioning leaves the most partitions. A child that is a join
-            // split for skew asks for that wrap precisely to coalesce the split away, which is
-            // one of two answers to it. See `unskewJoinForParent`.
+            // of the child's partitioning leaves the most partitions.
             case (_, scala.Right((_, positions))) =>
-              unskewJoinForParent(child, distribution, positions, shuffleOrigin)
+              GroupPartitionsExec(child, joinKeyPositions = positions)
           }
 
         case None =>
@@ -270,103 +261,6 @@ case class EnsureRequirements(
       linedUp.getOrElse(shuffleToCoPartition(resolved, coPartitioned))
     }
   }
-
-  /**
-   * Whether `child` is the spread side of a skew split: its alignment, under the local sort the
-   * ordering step stacks over one. Read the way `peelGroupPartitions` reads the same two, so an
-   * alignment of a lower operator is never taken for this join's.
-   */
-  private def carriesSkewSplit(child: SparkPlan): Boolean = child match {
-    case g: GroupPartitionsExec =>
-      g.expectedKeyModes.exists(_.exists(m => m.skewed && m.numSplits > 1))
-    case s: SortExec if !s.global => carriesSkewSplit(s.child)
-    case _ => false
-  }
-
-  /**
-   * The node [[resolveChild]] answers a `ClusteredDistribution` with, for a child whose skew
-   * split that answer would collapse. A split join reports its spread keys repeated on purpose,
-   * so any parent clustering on the join's keys finds the child ungrouped and would stack a
-   * grouping that coalesces every spread key back into one partition: the replicated reads of
-   * the other side remain, while the spread partitions execute sequentially inside the one
-   * consumer task, buying nothing. Two answers avoid that, and the split's own keys decide
-   * neither:
-   *
-   *  - The default stands the split down: the pair is re-decided without it, and its grouped
-   *    answer serves the parent as it stands, so nothing is shuffled at all. Every key's work,
-   *    the join's and the parent's, then runs in one task.
-   *  - `spark.sql.sources.v2.bucketing.forceOptimizeSkewedJoin` keeps the split and
-   *    re-partitions the child onto the parent's keys, which groups the spread partitions back
-   *    together while every key keeps the parallelism the split gave it.
-   *
-   * Which is cheaper is the workload's to say: the counts this optimization reads say how many
-   * partitions a key holds, not how large they are, so a split that looks worth keeping may be
-   * worth nothing. See the config's own documentation.
-   */
-  private def unskewJoinForParent(
-      child: SparkPlan,
-      distribution: Distribution,
-      positions: Option[Seq[Int]],
-      shuffleOrigin: ShuffleOrigin): SparkPlan = {
-    val unskewed = standDownSplitJoin(child)
-    if (unskewed.isDefined && conf.v2BucketingForceOptimizeSkewedJoin) {
-      // What reached this branch is a keyed child that serves the distribution only through a
-      // grouping node, and the distribution is the clustering that grouping would answer: the
-      // parent's own keys re-partition the child, which is the shuffle the alignment otherwise
-      // saves it.
-      ShuffleExchangeExec(
-        distribution.createPartitioning(
-          distribution.requiredNumPartitions.getOrElse(conf.numShufflePartitions)),
-        child,
-        shuffleOrigin)
-    } else {
-      // The caller is here because the child does not answer the distribution as it stands, so
-      // the question left is whether standing its split down did.
-      val plan = unskewed.getOrElse(child)
-      if (plan.outputPartitioning.satisfies(distribution)) plan
-      else GroupPartitionsExec(plan, joinKeyPositions = positions)
-    }
-  }
-
-  /**
-   * `plan`, with the skew split join under it rebuilt without its split. The walk passes through
-   * unary nodes that report their child's keys unchanged: a partial aggregate above a split join
-   * answers the parent's clustering with the join's own repeated keys, and the wrap would
-   * serialize the split chains below it all the same. Any other node stops the walk, so a rebuild
-   * never reaches across a boundary that already reports its own layout.
-   *
-   * The pair is re-decided from the children as their sources report them, with the split off: the
-   * peel inside `checkKeyGroupCompatible` lands on the same raw children the split was decided
-   * from, so what comes back is the base alignment, partially clustered spreads included, and
-   * `None` only where no pairing forms at all. The rebuilt children replace the ones the ordering
-   * step had laid out, so the join's own child ordering is restored on them.
-   */
-  private def standDownSplitJoin(plan: SparkPlan): Option[SparkPlan] = plan match {
-    case j: BaseJoinExec if j.children.exists(carriesSkewSplit) =>
-      j.requiredChildDistribution match {
-        case Seq(leftRequired: ClusteredDistribution, rightRequired: ClusteredDistribution) =>
-          checkKeyGroupCompatible(j, j.left, leftRequired, j.right, rightRequired,
-            allowSkewSplit = false).map { newChildren =>
-            j.withNewChildren(newChildren.zip(j.requiredChildOrdering)
-              .map { case (child, ordering) => ensureOrdering(child, ordering) })
-          }
-        case _ => None
-      }
-    case u: UnaryExecNode if reportsSameKeySequence(u) =>
-      standDownSplitJoin(u.child).map(newChild => u.withNewChildren(Seq(newChild)))
-    case _ => None
-  }
-
-  // Whether `unary` lays out its own partitions on the key sequence its child lays out on:
-  // equal instances answer it outright, and an attribute remapping (a projection, say)
-  // answers it through the layout, whose partition keys must agree position by position.
-  // Same keys means same split structure, so the walk passes; any node that grouped,
-  // coalesced or re-routed stops it.
-  private def reportsSameKeySequence(unary: UnaryExecNode): Boolean =
-    PartitioningCollection.representativeOf(unary.outputPartitioning).exists { here =>
-      PartitioningCollection.representativeOf(unary.child.outputPartitioning)
-        .exists(below => here.layout.describesSameKeys(below.layout))
-    }
 
   /**
    * The layout the co-partitioned children are lined up on, and the member each of them pairs with
@@ -703,18 +597,15 @@ case class EnsureRequirements(
       left: SparkPlan,
       leftRequired: ClusteredDistribution,
       right: SparkPlan,
-      rightRequired: ClusteredDistribution,
-      allowSkewSplit: Boolean = true): Option[Seq[SparkPlan]] = {
+      rightRequired: ClusteredDistribution): Option[Seq[SparkPlan]] = {
     parent match {
       // A keyed alignment is planned for these two operators only. A `SortMergeAsOfJoinExec` is
       // a `ShuffledJoin` and gets none: its matches are read in the order within a partition,
       // which neither a spread side nor a repeating one preserves.
       case smj: SortMergeJoinExec =>
-        checkKeyGroupCompatible(
-          left, leftRequired, right, rightRequired, smj.joinType, allowSkewSplit)
+        checkKeyGroupCompatible(left, leftRequired, right, rightRequired, smj.joinType)
       case sj: ShuffledHashJoinExec =>
-        checkKeyGroupCompatible(
-          left, leftRequired, right, rightRequired, sj.joinType, allowSkewSplit)
+        checkKeyGroupCompatible(left, leftRequired, right, rightRequired, sj.joinType)
       case _ =>
         None
     }
@@ -725,8 +616,7 @@ case class EnsureRequirements(
       leftRequired: ClusteredDistribution,
       right: SparkPlan,
       rightRequired: ClusteredDistribution,
-      joinType: JoinType,
-      allowSkewSplit: Boolean): Option[Seq[SparkPlan]] = {
+      joinType: JoinType): Option[Seq[SparkPlan]] = {
     // Plan from the children as their sources report them, stripping any grouping this rule put
     // there: the one the distribution step above just added, and on a re-run the aligned one an
     // earlier pass left behind. Everything below then lives in one index space, the source's raw
@@ -838,16 +728,9 @@ case class EnsureRequirements(
     // Entering the push branch is not the same as taking it. The keys agree for this pair by
     // construction, since `agreeingPairs` filtered on exactly that and an empty result returned
     // above, so what the branch pushes always applies to the pair it was chosen for. The gate at
-    // the end can still discard the result, when a node it builds gives up its keyed claim, and
-    // the skew term below can still back out, when the decision reserves no key for a pair that
-    // is compatible as it stands.
-    //
-    // The skew term keeps the branch on for pairs that are compatible as they stand: a split can
-    // apply there too, and the decision below is what tells the pairs that split from the ones
-    // that back out.
+    // the end can still discard the result, when a node it builds gives up its keyed claim.
     val pushCommonValues =
-      (!compatibleAsIs || conf.v2BucketingPartiallyClusteredDistributionEnabled ||
-        (allowSkewSplit && conf.v2BucketingSkewJoinEnabled)) &&
+      (!compatibleAsIs || conf.v2BucketingPartiallyClusteredDistributionEnabled) &&
         (conf.v2BucketingPushPartValuesEnabled ||
           conf.v2BucketingAllowKeysSubsetOfPartitionKeys)
     // Neither route lines the two sides up, so there is no pairing to commit to. Asked here rather
@@ -925,27 +808,6 @@ case class EnsureRequirements(
       var replicateRightSide = false
       var applyPartialClustering = false
 
-      // Whether replicating a side over the other's splits preserves the result. Partial
-      // clustering needs any side to be replicable; the skew split is gated per key, since a join
-      // type admitting one side still forbids the other (a left outer join replicates the right
-      // side only).
-      val canReplicateLeft = ShuffledJoin.canDuplicateLeftSide(joinType)
-      val canReplicateRight = ShuffledJoin.canDuplicateRightSide(joinType)
-
-      // Per-key input partition splits of a side. The counts and the side statistics both come
-      // from the raw plan the alignment is built over, for the same reason: on a re-run the
-      // aligned reports hold the same number of keys, so comparing them decides nothing, while
-      // the raw splits are what a re-run must reproduce. The partitioning holds a
-      // `KeyedPartitioning`, else this side would have had no spec at all.
-      def splitsPerKey(
-          raw: SparkPlan, spec: KeyedShuffleSpec): Map[InternalRowComparableWrapper, Int] = {
-        val keyed = PartitioningCollection.representativeOf(raw.outputPartitioning).get
-        spec.joinKeyPositions.fold(keyed.partitionKeys)(keyed.projectKeys(_)._2)
-          .groupBy(identity).view.mapValues(_.size).toMap
-      }
-      lazy val leftSplitsPerKey = splitsPerKey(rawLeft, leftSpec)
-      lazy val rightSplitsPerKey = splitsPerKey(rawRight, rightSpec)
-
       // This means we allow partitions that are not clustered on their values,
       // that is, multiple partitions with the same partition value. In the
       // following, we calculate how many partitions that each distinct partition
@@ -960,6 +822,9 @@ case class EnsureRequirements(
         // optimization cannot be applied to a left outer join, where the left hand
         // side is chosen as the side to replicate partitions according to stats.
         // Otherwise, query result could be incorrect.
+        val canReplicateLeft = ShuffledJoin.canDuplicateLeftSide(joinType)
+        val canReplicateRight = ShuffledJoin.canDuplicateRightSide(joinType)
+
         if (!canReplicateLeft && !canReplicateRight) {
           logInfo(log"Skipping partially clustered distribution as it cannot be applied for " +
             log"join type '${MDC(LogKeys.JOIN_TYPE, joinType)}'")
@@ -1014,10 +879,28 @@ case class EnsureRequirements(
               log"distribution.")
             replicateRightSide = false
           } else {
-            // In partially clustered distribution, we should use un-grouped partition values:
-            // the side that keeps its splits sizes every key from its own pre-alignment counts.
+            // In partially clustered distribution, we should use un-grouped partition values.
+            // The child that keeps its splits and the positions projecting its keys both come
+            // from the raw side. The positions are the spec's, and the spec was built from that
+            // same raw report.
+            val (partiallyClusteredChild, partiallyClusteredPositions) =
+              if (replicateLeftSide) {
+                (rawRight, rightSpec.joinKeyPositions)
+              } else {
+                (rawLeft, leftSpec.joinKeyPositions)
+              }
+            // The side that keeps its splits still holds the original partition keys, one per
+            // input split. `outputPartitioning` is either a `PartitioningCollection` or a
+            // `KeyedPartitioning`, otherwise `createKeyedShuffleSpecs()` would have returned
+            // nothing.
+            val originalKeyedPartitioning = PartitioningCollection
+              .representativeOf(partiallyClusteredChild.outputPartitioning).get
+            val projectedOriginalPartitionKeys = partiallyClusteredPositions
+              .fold(originalKeyedPartitioning.partitionKeys)(
+                originalKeyedPartitioning.projectKeys(_)._2)
+
             val numExpectedPartitions =
-              if (replicateLeftSide) rightSplitsPerKey else leftSplitsPerKey
+              projectedOriginalPartitionKeys.groupBy(identity).view.mapValues(_.size)
 
             mergedPartitionKeys = mergedPartitionKeys.map { case (key, numParts) =>
               (key, numExpectedPartitions.getOrElse(key, numParts))
@@ -1030,121 +913,31 @@ case class EnsureRequirements(
         }
       }
 
-      // Per-key skew split: the default alignment coalesces each key into one output partition
-      // per side, leaving a key holding disproportionately many input partitions to a single
-      // join task. Like `OptimizeSkewedJoin`, a key group whose combined input partition count
-      // over both sides exceeds the threshold spreads the side holding more of its splits over
-      // output partitions holding about the advisory count each, and the other side replicates
-      // its group to each of those.
+      // Now we need to push-down the common partition information to the `GroupPartitionsExec`s.
       //
-      // A reducer regroups the keys into a space the per-key split counts do not cover, so the
-      // optimization stands down when this pass derives one.
-      val hasReducer = leftReducers.isDefined || rightReducers.isDefined
-      // A marked layout holds rows of undeclared keys that only its own routing keeps co-located,
-      // and any grouping other than an identity one makes `GroupPartitionsExec` give up the keyed
-      // partitioning (see `computeOutputPartitioning`). Replicating a marked child to match a
-      // split is exactly such a grouping, and its one partition per declared key can only be the
-      // replicating side, so no key qualifies.
-      val markedChild = PartitioningCollection.keyedMarkerOf(leftPartitioning).contains(true) ||
-        PartitioningCollection.keyedMarkerOf(rightPartitioning).contains(true)
-      var skewedGroupSplits: Map[InternalRowComparableWrapper, (Int, Boolean)] = Map.empty
-      if (allowSkewSplit && conf.v2BucketingSkewJoinEnabled && !hasReducer && !markedChild &&
-          mergedPartitionKeys.nonEmpty) {
-        val partitionsPerGroup = mergedPartitionKeys.map { case (key, _) =>
-          key -> (leftSplitsPerKey.getOrElse(key, 0) + rightSplitsPerKey.getOrElse(key, 0))
+      // Where `applyPartialClustering` holds, exactly one side repeats: `replicateRightSide` is
+      // the negation of `replicateLeftSide`, and the branch above is taken only when the side it
+      // picked may replicate for the join type. That split is the whole of the pairing's
+      // soundness: for a key, a partition holding part of it on the spread side holds all of it
+      // on the repeating side, so pairing the two index by index loses no match, and
+      // `ValidateRequirements` cannot tell such a pair from two sides that split the key between
+      // them. Each side stamps why it is left ungrouped (`UngroupingOrigin`), so a reader of the
+      // finished plan judges the pair on the layouts it holds; the stamp also decides the node's
+      // routing through the per-key modes (`GroupPartitionsExec.distributePartitions`).
+      def expectedKeys(replicate: Boolean):
+          Seq[(InternalRowComparableWrapper, ExpectedKeySpec)] = {
+        val origin = Option.when(applyPartialClustering)(
+          if (replicate) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)
+        mergedPartitionKeys.map { case (key, numSplits) =>
+          key -> ExpectedKeySpec(numSplits, origin)
         }
-        val median =
-          Utils.median(partitionsPerGroup.map(_._2.toLong).toArray, alreadySorted = false)
-        val skewThreshold = conf.v2BucketingSkewJoinSkewedPartitionsPerGroupThreshold.toLong.max(
-          (median * conf.v2BucketingSkewJoinSkewedGroupFactor).toLong)
-        val advisory = conf.v2BucketingAdvisoryInputPartitionsPerOutputPartition
-        // Which side keeps its splits while the other replicates is gated by the join type: an
-        // inner join replicates either side, so the side holding more splits distributes them; a
-        // one-sided type forces the spread onto the side it cannot replicate; a type that may
-        // replicate neither leaves every key coalesced. Like `OptimizeSkewedJoin`, the spreading
-        // side's own count must also exceed the threshold, else spreading the small side of a
-        // lopsided key multiplies the large group's reads while every task still reads it whole.
-        // A spread landing on a single partition is the unsplit layout, so it is not marked.
-        def chooseSplit(nL: Int, nR: Int): Option[(Int, Boolean)] = {
-          val candidate =
-            (canReplicateLeft, canReplicateRight) match {
-              case (true, true) => Some(if (nL >= nR) (nL, true) else (nR, false))
-              case (false, true) => Some((nL, true))
-              case (true, false) => Some((nR, false))
-              case (false, false) => None
-            }
-          candidate.flatMap { case (own, leftDistributes) =>
-            val numSplits = math.ceil(own.toDouble / advisory).toInt
-            Option.when(own > skewThreshold && numSplits > 1)((numSplits, leftDistributes))
-          }
-        }
-        skewedGroupSplits = partitionsPerGroup.iterator.collect {
-          case (key, total) if total > skewThreshold =>
-            chooseSplit(leftSplitsPerKey.getOrElse(key, 0), rightSplitsPerKey.getOrElse(key, 0))
-              .map(key -> _)
-        }.flatten.toMap
       }
-
-      // Nothing to align: the pair is compatible as it stands, the skew decision reserved no key,
-      // and partial clustering is off. The branch backs out and the caller leaves the children to
-      // `groupIfNeeded`, which for such a pair adds only the plain grouping the sources' own
-      // duplicate keys need, or none when they are grouped already. The config check, not
-      // `applyPartialClustering`, is the load-bearing term: with partial clustering enabled the
-      // branch follows its base contract even for a pair the optimization gated out.
-      val nothingToAlign = compatibleAsIs && skewedGroupSplits.isEmpty &&
-        !conf.v2BucketingPartiallyClusteredDistributionEnabled
-      Option.when(!nothingToAlign) {
-        // Now we need to push-down the common partition information to the
-        // `GroupPartitionsExec`s. Each expected key carries the count it is reserved and the role
-        // this side takes for it: a skew-split key from `chooseSplit`, and the rest from the
-        // side-wide alignment below.
-        //
-        // Where `applyPartialClustering` holds, exactly one side repeats: `replicateRightSide` is
-        // the negation of `replicateLeftSide`, and the branch above is taken only when the side it
-        // picked may replicate for the join type. A skew split keeps that shape per key rather
-        // than side-wide, which is what `chooseSplit` decides. That split is the whole of the
-        // pairing's soundness: for a key, a partition holding part of it on the spread side holds
-        // all of it on the repeating side, so pairing the two index by index loses no match, and
-        // `ValidateRequirements` cannot tell such a pair from two sides that split the key between
-        // them. Each side stamps the role it took per key (`UngroupingOrigin`), so a reader of the
-        // finished plan judges the pair on the layouts it holds.
-        //
-        // Only a pair something aligned is stamped: partial clustering, or a split the skew
-        // decision reserved. The keys the skew split left alone take the side-wide role there,
-        // since one alignment covers the whole pair and a key that is one partition on each side
-        // is spread by one of them and repeated by the other like any other. Without either, the
-        // pair is the plain grouping of the merged counts, which claims nothing.
-        val aligned = applyPartialClustering || skewedGroupSplits.nonEmpty
-        // A key the skew decision spread can put the spread on either side, and the rest follow
-        // the side-wide alignment. Where only the skew split built the pair there is no side-wide
-        // one to follow: the roles still have to be one of each per key, and the left is named
-        // the spread side.
-        def spreadsSide(isLeft: Boolean): Boolean = if (applyPartialClustering) {
-          if (isLeft) !replicateLeftSide else !replicateRightSide
-        } else {
-          isLeft
-        }
-        def expectedKeys(isLeft: Boolean):
-            Seq[(InternalRowComparableWrapper, ExpectedKeyMode)] =
-          mergedPartitionKeys.map { case (key, numSplits) =>
-            skewedGroupSplits.get(key) match {
-              case Some((skewSplits, leftDistributes)) =>
-                val spreads = if (isLeft) leftDistributes else !leftDistributes
-                val role = if (spreads) SPLIT_FOR_JOIN else REPLICATED_FOR_JOIN
-                key -> ExpectedKeyMode(skewSplits, Some(role), skewed = true)
-              case None =>
-                val role = Option.when(aligned)(
-                  if (spreadsSide(isLeft)) SPLIT_FOR_JOIN else REPLICATED_FOR_JOIN)
-                key -> ExpectedKeyMode(numSplits, role)
-            }
-          }
-        (
-          GroupPartitionsExec(rawLeft, leftSpec.joinKeyPositions,
-            Some(expectedKeys(isLeft = true)), leftReducers),
-          GroupPartitionsExec(rawRight, rightSpec.joinKeyPositions,
-            Some(expectedKeys(isLeft = false)), rightReducers))
-      }
-    }.flatten
+      (
+        GroupPartitionsExec(rawLeft, leftSpec.joinKeyPositions,
+          Some(expectedKeys(replicateLeftSide)), leftReducers),
+        GroupPartitionsExec(rawRight, rightSpec.joinKeyPositions,
+          Some(expectedKeys(replicateRightSide)), rightReducers))
+    }
 
     // The pairing is only worth committing to if both children still declare the same aligned key
     // sequence once the grouping has been pushed into them. A `GroupPartitionsExec` gives up its
@@ -1175,12 +968,11 @@ case class EnsureRequirements(
       case _ => false
     }
     // Announced here rather than where the branch runs, since the gate can still discard what it
-    // built, and the skew stand-down can still leave the branch empty, and a log that names a
-    // pushdown should name one that happens.
+    // built, and a log that names a pushdown should name one that happens.
     if (pushCommonValues) {
-      if (pushed.isDefined && committed) {
+      if (committed) {
         logInfo("Pushing common partition values for storage-partitioned join")
-      } else if (!committed) {
+      } else {
         logInfo("Not storage-partitioning this join after all: the two sides no longer declare " +
           "the same partition keys once regrouped onto the merged partition values")
       }
@@ -1282,11 +1074,10 @@ case class EnsureRequirements(
    */
   private[exchange] def withJoinKeyPositions(plan: SparkPlan, positions: Seq[Int]): SparkPlan = {
     plan match {
-      // Only a plain grouping is rebuilt. An aligned one carries a merged key set with its
-      // per-key modes, or a reducer, neither of which this rebuild reproduces, so it is wrapped
-      // below instead.
+      // Only a plain grouping is rebuilt. An aligned one carries a merged key count, a reducer or
+      // a replication, none of which this rebuild reproduces, so it is wrapped below instead.
       case g: GroupPartitionsExec
-          if g.expectedKeyModes.isEmpty && g.reducers.isEmpty =>
+          if g.expectedKeySpecs.isEmpty && g.reducers.isEmpty =>
         // Rebuilt rather than copied: the positions are an input to the node's grouping, and a
         // `copy` would keep the grouping derived from the old ones.
         //

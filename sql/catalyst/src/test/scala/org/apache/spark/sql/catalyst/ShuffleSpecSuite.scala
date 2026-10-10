@@ -113,6 +113,18 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     assert(specs.head.isInstanceOf[HashShuffleSpec], s"and it is the hash one, got $specs")
   }
 
+  test("SPARK-59436: plan strings truncate the per-partition origins as one argument") {
+    val a = AttributeReference("a", IntegerType)()
+    val keys = Seq.fill(8)(InternalRow(1))
+    val partitioning = KeyedPartitioning(Seq(a), keys).withLayout(
+      _.copy(ungroupingOrigins = Some(Seq.fill(keys.size)(SPLIT_FOR_JOIN))))
+    val complete = partitioning.toString
+    val truncated = partitioning.argString(2)
+    assert(complete.sliding("SPLIT_FOR_JOIN".length).count(_ == "SPLIT_FOR_JOIN") == 8)
+    assert(truncated.sliding("SPLIT_FOR_JOIN".length).count(_ == "SPLIT_FOR_JOIN") == 2)
+    assert(truncated.contains("more fields"), truncated)
+  }
+
   test("SPARK-59671: the specs a side offers are the layouts it reports") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
