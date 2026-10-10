@@ -118,6 +118,11 @@ object PlanMerger {
  * Propagation is also skipped when both the left and right children simultaneously produce filter
  * attributes, as combining them would require an additional AND alias above the join (not yet
  * supported).
+ * When the two plans filter different children of the join, the merged join reads both children
+ * unfiltered. It then also pairs the rows that fail one plan's filter on one side with the rows
+ * that fail the other plan's filter on the other side. Neither plan needs those pairs, and they
+ * can multiply the join's work. Both plans have a differing filter then, so this needs
+ * `symmetricFilterPropagationEnabled` like the other such cases.
  *
  * {{{
  *   // Input plans
@@ -678,6 +683,11 @@ class PlanMerger(
                     // AND them into a new alias above the join, which is not yet supported.
                     if !(leftNPFilter.isDefined && rightNPFilter.isDefined) &&
                        !(leftCPFilter.isDefined && rightCPFilter.isDefined) &&
+                       // When the two plans filter different children, the merge is symmetric
+                       // filter propagation and needs its config, see the class doc.
+                       (symmetricFilterPropagationEnabled ||
+                         !(leftNPFilter.isDefined && cachedFilters(cp.right, rightCPFilter) ||
+                           rightNPFilter.isDefined && cachedFilters(cp.left, leftCPFilter))) &&
                        // Gate join-crossing filter propagation behind its own config flag.
                        // When no filter attributes are in play the merge is unconditionally safe.
                        (leftNPFilter.isEmpty && leftCPFilter.isEmpty &&
@@ -997,6 +1007,21 @@ class PlanMerger(
       requiredOrdering.nonEmpty &&
       !SortOrder.orderingSatisfies(merged.ordering.getOrElse(Nil), requiredOrdering)
     kgpDegraded || orderingDegraded
+  }
+
+  // Whether every plan merged into this cached plan filters this cached join child. That is the
+  // case when the child's merge brought up a cached-plan filter, or when the child holds a merged
+  // Filter from an earlier round. A cached plan without a filter there would have dropped that
+  // Filter. The merge does not bring up a merged Filter's condition, because the cached aggregates
+  // already carry it. An Aggregate below has consumed its own propagated filters, so the search
+  // stops there.
+  private def cachedFilters(cachedChild: LogicalPlan, cpFilter: Option[Attribute]): Boolean = {
+    def hasMergedFilter(plan: LogicalPlan): Boolean = plan match {
+      case f: Filter if f.getTagValue(PlanMerger.MERGED_FILTER_TAG).isDefined => true
+      case _: Aggregate => false
+      case p => p.children.exists(hasMergedFilter)
+    }
+    cpFilter.isDefined || hasMergedFilter(cachedChild)
   }
 
   // Returns true when a filter attribute originating from `fromLeft` child of a join with

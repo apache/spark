@@ -479,4 +479,46 @@ class PlanMergingSuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-60106: Merge subqueries that filter different join children only when symmetric") {
+    // The 1st subquery filters the left child and the 2nd the right child, so a merged join would
+    // build pairs that neither subquery needs.
+    Seq(false, true).foreach { enableAQE =>
+      Seq(false, true).foreach { symmetric =>
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+          SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> symmetric.toString,
+          SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true",
+          // ObjectSerializerPruning produces different scan shapes depending on whether a Filter is
+          // present. Disabling the rule makes both scans identical so PlanMerger can merge them.
+          SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+            "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning") {
+          val df = sql(
+            """
+              |SELECT
+              |  (SELECT sum(l.a) FROM testData2 l JOIN testData2 r ON l.a = r.a WHERE l.b = 1),
+              |  (SELECT max(r.a) FROM testData2 l JOIN testData2 r ON l.a = r.a WHERE r.b = 2)
+            """.stripMargin)
+
+          checkAnswer(df, Row(12, 3) :: Nil)
+
+          val plan = df.queryExecution.executedPlan
+          val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+          val reusedSubqueryIds = collectWithSubqueries(plan) {
+            case rs: ReusedSubqueryExec => rs.child.id
+          }
+
+          if (symmetric) {
+            assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+            assert(reusedSubqueryIds.size == 1,
+              "Missing or unexpected ReusedSubqueryExec in the plan")
+          } else {
+            assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+            assert(reusedSubqueryIds.isEmpty,
+              "Missing or unexpected ReusedSubqueryExec in the plan")
+          }
+        }
+      }
+    }
+  }
 }
