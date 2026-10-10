@@ -448,14 +448,19 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
   test("UTF8String to Decimal with exponent near Int.MaxValue") {
     // The number of integral digits (precision - scale) of these values overflows Int.
-    Seq("1e2147483647", "-1E+2147483647", "0e2147483647", "12e2147483647",
-      "1.5e2147483647", "1e2147483648").foreach { string =>
+    Seq("1e2147483647", "-1E+2147483647", "12e2147483647", "1.5e2147483647",
+      "1e2147483648").foreach { string =>
       assert(Decimal.fromString(UTF8String.fromString(string)) === null)
       checkError(
         exception = intercept[SparkArithmeticException](
           Decimal.fromStringANSI(UTF8String.fromString(string))),
         condition = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
         parameters = Map("value" -> string))
+    }
+    // Zero fits any decimal type whatever its exponent.
+    Seq("0e39", "-0E+100", "0e2147483647", "0.0e2147483648").foreach { string =>
+      assert(Decimal.fromString(UTF8String.fromString(string)) === Decimal(0))
+      assert(Decimal.fromStringANSI(UTF8String.fromString(string)) === Decimal(0))
     }
   }
 

@@ -649,8 +649,10 @@ object Decimal {
     try {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
-      // For example: Decimal("6.0790316E+25569151")
-      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
+      // For example: Decimal("6.0790316E+25569151"). Zero fits any decimal type whatever its
+      // exponent, e.g. "0e39", so it is not checked.
+      if (bigDecimal.signum != 0 &&
+        numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
         !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
         null
       } else {
@@ -669,8 +671,10 @@ object Decimal {
     try {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
-      // For example: Decimal("6.0790316E+25569151")
-      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
+      // For example: Decimal("6.0790316E+25569151"). Zero fits any decimal type whatever its
+      // exponent, e.g. "0e39", so it is not checked.
+      if (bigDecimal.signum != 0 &&
+        numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
         !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
         throw DataTypeErrors.outOfDecimalTypeRangeError(str)
       } else {

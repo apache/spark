@@ -475,10 +475,13 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     checkExceptionInExpression[ArithmeticException](
       cast("6E+37", DecimalType(38, 1)),
       "cannot be represented as Decimal(38, 1)")
-    Seq("1e2147483647", "0e2147483647", "1.5e2147483647", "1e2147483648").foreach { s =>
+    Seq("1e2147483647", "1.5e2147483647", "1e2147483648").foreach { s =>
       checkExceptionInExpression[ArithmeticException](
         cast(s, DecimalType(10, 2)),
         "NUMERIC_OUT_OF_SUPPORTED_RANGE")
+    }
+    Seq("0e39", "0e2147483647", "0.0e2147483648").foreach { s =>
+      checkEvaluation(cast(s, DecimalType(10, 2)), Decimal("0.00"))
     }
 
     checkExceptionInExpression[NumberFormatException](
