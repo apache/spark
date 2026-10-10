@@ -16,8 +16,10 @@
  */
 package org.apache.spark.sql.connect.client.arrow;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Java records used by ArrowEncoderSuite. Records cannot be declared in Scala.
@@ -30,6 +32,21 @@ public class ArrowEncoderRecordTestData {
 
   public record Person(String name, long age, Address address, List<String> tags,
       Map<String, Integer> counts) {}
+
+  // Records compare array components by reference, so compare their contents instead.
+  public record ArrayRecord(int[] ints, String[] strings, Address[] addresses) {
+    @Override
+    public boolean equals(Object o) {
+      return o instanceof ArrayRecord other && Arrays.equals(ints, other.ints) &&
+        Arrays.equals(strings, other.strings) && Arrays.equals(addresses, other.addresses);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(
+        Arrays.hashCode(ints), Arrays.hashCode(strings), Arrays.hashCode(addresses));
+    }
+  }
 
   public record Box<T>(T value) {}
 
