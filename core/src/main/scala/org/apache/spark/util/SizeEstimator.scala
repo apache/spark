@@ -17,6 +17,7 @@
 
 package org.apache.spark.util
 
+import java.lang.ref.Reference
 import java.lang.reflect.{Field, Modifier}
 import java.util.{IdentityHashMap, Random}
 
@@ -28,6 +29,7 @@ import com.google.common.collect.MapMaker
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.{TEST_USE_COMPACT_OBJECT_HEADERS_KEY, TEST_USE_COMPRESSED_OOPS_KEY}
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -127,7 +129,7 @@ object SizeEstimator extends Logging {
     }
     pointerSize = if (is64bit && !isCompressedOops) 8 else 4
     classInfos.clear()
-    classInfos.put(classOf[Object], new ClassInfo(objectSize, Nil))
+    classInfos.put(classOf[Object], new ClassInfo(objectSize, Nil, Nil))
   }
 
   private def getIsCompactObjectHeaders: Boolean = {
@@ -194,13 +196,15 @@ object SizeEstimator extends Logging {
   }
 
   /**
-   * Cached information about each class. We remember two things: the "shell size" of the class
-   * (size of all non-static fields plus the java.lang.Object size), and any fields that are
-   * pointers to objects.
+   * Cached information about each class. We remember three things: the "shell size" of the class
+   * (size of all non-static fields plus the java.lang.Object size), any fields that are
+   * pointers to objects, and the offsets of pointer fields that reflection can't read (see
+   * `getClassInfo`).
    */
   private class ClassInfo(
     val shellSize: Long,
-    val pointerFields: List[Field]) {}
+    val pointerFields: List[Field],
+    val unsafePointerFieldOffsets: List[Long]) {}
 
   private def estimate(obj: AnyRef, visited: IdentityHashMap[AnyRef, AnyRef]): Long = {
     val state = new SearchState(visited)
@@ -231,6 +235,9 @@ object SizeEstimator extends Logging {
           state.size += alignSize(classInfo.shellSize)
           for (field <- classInfo.pointerFields) {
             state.enqueue(field.get(obj))
+          }
+          for (offset <- classInfo.unsafePointerFieldOffsets) {
+            state.enqueue(Platform.getObject(obj, offset))
           }
       }
     }
@@ -332,6 +339,7 @@ object SizeEstimator extends Logging {
     val parent = getClassInfo(cls.getSuperclass)
     var shellSize = parent.shellSize
     var pointerFields = parent.pointerFields
+    var unsafePointerFieldOffsets = parent.unsafePointerFieldOffsets
     val sizeCount = Array.ofDim[Int](fieldSizes.max + 1)
 
     // iterate through the fields of this class and gather information.
@@ -344,11 +352,19 @@ object SizeEstimator extends Logging {
           try {
             if (field.trySetAccessible()) { // Enable future get()'s on this field
               pointerFields = field :: pointerFields
+            } else if (cls != classOf[Reference[_]]) {
+              // The field's package is not opened to Spark (e.g. java.math, java.time), so
+              // reflection can't read it, but Unsafe can. Fields of java.lang.ref.Reference are
+              // left unvisited: they lead to weakly reachable objects and JVM-wide reference
+              // queues rather than to memory owned by the object.
+              unsafePointerFieldOffsets =
+                Platform.objectFieldOffset(field) :: unsafePointerFieldOffsets
             }
           } catch {
-            // If the field isn't accessible, we can still record the pointer size
-            // but can't know more about the field, so ignore it
-            case _: SecurityException =>
+            // If the field can't be read (Unsafe rejects fields of hidden classes and records),
+            // we can still record the pointer size but can't know more about the field, so
+            // ignore it
+            case _: SecurityException | _: UnsupportedOperationException =>
               // do nothing
           }
           sizeCount(pointerSize) += 1
@@ -386,7 +402,7 @@ object SizeEstimator extends Logging {
     shellSize = alignSizeUp(alignedSize, pointerSize)
 
     // Create and cache a new ClassInfo
-    val newInfo = new ClassInfo(shellSize, pointerFields)
+    val newInfo = new ClassInfo(shellSize, pointerFields, unsafePointerFieldOffsets)
     classInfos.put(cls, newInfo)
     newInfo
   }
