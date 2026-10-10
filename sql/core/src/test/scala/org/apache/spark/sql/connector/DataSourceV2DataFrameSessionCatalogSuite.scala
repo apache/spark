@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.connector
 
+import java.util
 import java.util.Locale
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog._
@@ -52,6 +53,25 @@ class DataSourceV2DataFrameSessionCatalogSuite
   }
 
   override protected val catalogAndNamespace: String = ""
+
+  test("display properties survive ALTER TABLE in the session catalog") {
+    val t = "display_properties"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint) USING $v2Format")
+      val table = sessionCatalog.loadTable(Identifier.of(Array("default"), t))
+        .asInstanceOf[InMemoryTable]
+      table.setDisplayProperties(util.Map.of("catalog-label", "catalog-value"))
+
+      sql(s"ALTER TABLE $t SET TBLPROPERTIES ('k' = 'v')")
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $t"),
+        Seq(Row("catalog-label", "catalog-value"), Row("k", "v")))
+      checkAnswer(sql(s"DESCRIBE TABLE EXTENDED $t").where("col_name = 'Table Properties'"),
+        Row("Table Properties", "[catalog-label=catalog-value,k=v]", ""))
+
+      sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('k')")
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $t"), Row("catalog-label", "catalog-value"))
+    }
+  }
 
   test("saveAsTable: Append mode should not fail if the table already exists " +
     "and a same-name temp view exist") {
@@ -177,6 +197,7 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
 
         val newTable = new InMemoryTable(table.name, schema, table.partitioning, properties)
           .alterTableWithData(table.data, schema)
+        newTable.setDisplayProperties(table.displayProperties())
 
         tables.put(ident, newTable)
 

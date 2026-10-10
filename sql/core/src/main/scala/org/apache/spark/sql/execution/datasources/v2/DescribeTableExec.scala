@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable.ArrayBuffer
-import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, ClusterBySpec}
@@ -189,7 +188,8 @@ case class DescribeTableExec(
     rows += toCatalystRow("# Detailed Table Information", "", "")
     addIdentifierRows(rows, catalogName, identifier, entityLabel = "Table")
 
-    val tableType = if (table.properties().containsKey(TableCatalog.PROP_EXTERNAL)) {
+    val tableProperties = table.properties()
+    val tableType = if (tableProperties.containsKey(TableCatalog.PROP_EXTERNAL)) {
       CatalogTableType.EXTERNAL.name
     } else {
       CatalogTableType.MANAGED.name
@@ -198,13 +198,13 @@ case class DescribeTableExec(
     CatalogV2Util.TABLE_RESERVED_PROPERTIES
       .filterNot(_ == TableCatalog.PROP_EXTERNAL)
       .foreach(propKey => {
-        if (table.properties.containsKey(propKey)) {
-          rows += toCatalystRow(propKey.capitalize, table.properties.get(propKey), "")
+        if (tableProperties.containsKey(propKey)) {
+          rows += toCatalystRow(propKey.capitalize, tableProperties.get(propKey), "")
         }
       })
     val properties =
-      conf.redactOptions(table.properties.asScala.toMap).toList
-        .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
+      CatalogV2Util.tablePropertiesForDisplay(
+        tableProperties, table.displayProperties(), conf).toList
         .sortBy(_._1).map {
         case (key, value) => key + "=" + value
       }.mkString("[", ",", "]")

@@ -76,6 +76,8 @@ abstract class InMemoryBaseTable(
   // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
 
+  private var tableDisplayProperties: util.Map[String, String] = null
+
   // Assign column IDs to columns that do not have one, including nested struct fields within
   // arrays and maps. This simulates connectors that support column identity tracking.
   private var tableColumns: Array[Column] = InMemoryBaseTable.assignMissingIds(initialColumns)
@@ -86,6 +88,14 @@ abstract class InMemoryBaseTable(
     tableColumns = newColumns
   }
 
+  override def displayProperties(): util.Map[String, String] = {
+    Option(tableDisplayProperties).getOrElse(super.displayProperties())
+  }
+
+  def setDisplayProperties(displayProperties: util.Map[String, String]): Unit = {
+    tableDisplayProperties = new util.HashMap[String, String](displayProperties)
+  }
+
   override def version(): String = tableVersion.toString
 
   def setVersion(version: String): Unit = {
@@ -93,7 +103,7 @@ abstract class InMemoryBaseTable(
   }
 
   /**
-   * Copies version and validated version from another table.
+   * Copies version, validated version and display-only metadata from another table.
    *
    * Some test catalogs (e.g. [[NullColumnIdInMemoryTableCatalog]],
    * [[NullTableIdAndNullColumnIdInMemoryTableCatalog]]) create a new table object
@@ -104,7 +114,8 @@ abstract class InMemoryBaseTable(
    * [[InMemoryTable]].copy, validated-version propagation, and the join-refresh
    * tests in [[DSv2IncrementallyConstructedQueryTests]]).
    */
-  def setVersionAndValidatedVersionFrom(sourceTable: InMemoryBaseTable): Unit = {
+  def copyTableStateFrom(sourceTable: InMemoryBaseTable): Unit = {
+    setDisplayProperties(sourceTable.displayProperties())
     setVersion(sourceTable.version())
     if (sourceTable.validatedVersion() != null) {
       setValidatedVersion(sourceTable.validatedVersion())
