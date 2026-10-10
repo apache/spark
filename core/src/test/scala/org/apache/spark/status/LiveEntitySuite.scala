@@ -20,6 +20,7 @@ package org.apache.spark.status
 import java.util.Arrays
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{AccumulatorMetadata, CollectionAccumulator}
 
@@ -193,6 +194,34 @@ class LiveEntitySuite extends SparkFunSuite {
       "Zero input metric should be converted to -1")
     assert(negatedZeroMetrics.outputMetrics.bytesWritten === -1L,
       "Zero output metric should be converted to -1")
+  }
+
+  test("SPARK-59711: LiveExecutorStageSummary only stores primitives, String, or " +
+      "ExecutorMetrics, and addTaskMetrics increments every declared task-metric field") {
+    val fields = classOf[LiveExecutorStageSummary].getDeclaredFields
+
+    val allowedTypes = Set[Class[_]](
+      classOf[Long], classOf[Int], classOf[Boolean], classOf[String], classOf[ExecutorMetrics])
+    val disallowed = fields.map(_.getType).filterNot(allowedTypes.contains)
+    assert(disallowed.isEmpty,
+      s"LiveExecutorStageSummary holds unexpected field type(s): ${disallowed.mkString(", ")}")
+
+    val summary = new LiveExecutorStageSummary(1, 0, "1")
+    val delta = LiveEntityHelpers.createMetrics(default = 1L)
+    summary.addTaskMetrics(delta)
+
+    // taskTime is updated elsewhere (onTaskEnd), not by addTaskMetrics.
+    val exempt = Set("taskTime")
+    val untouched = fields
+      .filter(_.getType == classOf[Long])
+      .filterNot(f => exempt.contains(f.getName))
+      .filter { f =>
+        f.setAccessible(true)
+        f.getLong(summary) == 0L
+      }
+      .map(_.getName)
+    assert(untouched.isEmpty,
+      s"addTaskMetrics left these fields at their zero default: ${untouched.mkString(", ")}")
   }
 
   private def checkSize(seq: Seq[_], expected: Int): Unit = {
