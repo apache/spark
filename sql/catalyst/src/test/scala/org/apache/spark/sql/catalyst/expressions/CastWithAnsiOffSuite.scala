@@ -563,6 +563,15 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     checkEvaluation(cast("abcd", DecimalType(38, 1)), null)
   }
 
+  test("SPARK-60119: cast string with a huge exponent to decimal with negative scale allowed") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      Seq("1e2147483647", "-1e2147483646", "12e2147483647", "1e100000000").foreach { str =>
+        checkEvaluation(cast(str, DecimalType(10, 2)), null)
+      }
+      checkEvaluation(cast("0e2147483647", DecimalType(10, 2)), Decimal("0.00"))
+    }
+  }
+
   test("data type casting II") {
     checkEvaluation(
       cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
