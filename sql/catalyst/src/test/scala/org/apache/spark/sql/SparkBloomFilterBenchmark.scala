@@ -229,6 +229,58 @@ object SparkBloomFilterBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
+  /**
+   * Compares a bit size that is a power of two, where the bit index of a hash is computed with a
+   * mask, against one that is 64 bits larger and therefore has to use a modulo. The two filters
+   * hold practically the same number of bits, so what the comparison shows is the cost of the
+   * reduction itself. The Spark SQL runtime bloom filter sizes are powers of two, see
+   * `spark.sql.optimizer.runtime.bloomFilter.numBits`.
+   */
+  private def benchmarkBitSizeShape(numItems: Int, valuesPerIteration: Int): Unit = {
+    val pow2Bits = java.lang.Long.highestOneBit(optimalNumOfBits(numItems, 0.03) - 1) << 1
+    val nonPow2Bits = pow2Bits + 64
+    val sizes = Seq("power of two" -> pow2Bits, "non power of two" -> nonPow2Bits)
+
+    val putBenchmark = new Benchmark(
+      s"Put Operation - $numItems items, $pow2Bits bits vs $nonPow2Bits bits",
+      valuesPerIteration,
+      output = output)
+
+    for (version <- Seq(V1, V2); (sizeName, numBits) <- sizes) {
+      putBenchmark.addCase(s"$version - $sizeName", 3) { _ =>
+        val bf = create(version, numItems, numBits, DEFAULT_SEED)
+        var i = 0
+        while (i < valuesPerIteration) {
+          bf.put(i.toLong)
+          i += 1
+        }
+      }
+    }
+    putBenchmark.run()
+
+    val testItems = (0 until valuesPerIteration).map(_.toLong).toArray
+    val queryBenchmark = new Benchmark(
+      s"MightContain Operation - $numItems items, $pow2Bits bits vs $nonPow2Bits bits",
+      valuesPerIteration,
+      output = output)
+
+    for (version <- Seq(V1, V2); (sizeName, numBits) <- sizes) {
+      queryBenchmark.addTimerCase(s"$version - $sizeName", 3) { timer =>
+        val bf = create(version, numItems, numBits, DEFAULT_SEED)
+        testItems.foreach(bf.put(_))
+
+        timer.startTiming()
+        var i = 0
+        while (i < valuesPerIteration) {
+          bf.mightContain(testItems(i))
+          i += 1
+        }
+        timer.stopTiming()
+      }
+    }
+    queryBenchmark.run()
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
 
     runBenchmark("Put Operation - Small Scale") {
@@ -307,6 +359,11 @@ object SparkBloomFilterBenchmark extends BenchmarkBase {
       benchmarkBinaryMightContainOperation(MEDIUM_ITEMS, 100000, 0.01, 0.5)  // Low FPP
       benchmarkBinaryMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.5)  // Default FPP
       benchmarkBinaryMightContainOperation(MEDIUM_ITEMS, 100000, 0.05, 0.5)  // High FPP
+    }
+
+    runBenchmark("Bit Size Shape Impact") {
+      benchmarkBitSizeShape(MEDIUM_ITEMS, 100000)
+      benchmarkBitSizeShape(LARGE_ITEMS, 1000000)
     }
 
     runBenchmark("Hit Rate Impact on Binary Operations") {
