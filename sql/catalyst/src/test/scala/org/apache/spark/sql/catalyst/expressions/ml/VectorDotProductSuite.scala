@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions.ml
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, ExpressionEvalHelper, GenericInternalRow, If, Literal, UnsafeArrayData}
 
 class VectorDotProductSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val vectorSqlType = VectorDotProduct.vectorSqlType
@@ -41,6 +42,14 @@ class VectorDotProductSuite extends SparkFunSuite with ExpressionEvalHelper {
     Literal(row, vectorSqlType)
   }
 
+  private def nonLiteralFoldable(vector: Literal): Expression = {
+    If(Literal.TrueLiteral, vector, vector)
+  }
+
+  private def inputRow(vector: Literal): InternalRow = {
+    new GenericInternalRow(Array[Any](vector.value))
+  }
+
   test("vector dot product interpreted and code-generated evaluation") {
     val denseVector = dense(1.0, 2.0, 3.0)
     val sparseVector = sparse(3, Array(0, 2), Array(1.0, 3.0))
@@ -53,6 +62,30 @@ class VectorDotProductSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(VectorDotProduct(denseVector, sparseWeights), 22.0)
     checkEvaluation(VectorDotProduct(sparseVector, denseWeights), 22.0)
     checkEvaluation(VectorDotProduct(sparseVector, sparseWeights), 22.0)
+  }
+
+  test("vector dot product with a foldable vector") {
+    val vector = BoundReference(0, vectorSqlType, nullable = false)
+    val denseVector = dense(1.0, 2.0, 3.0)
+    val sparseVector = sparse(3, Array(0, 2), Array(1.0, 3.0))
+    val denseWeights = dense(4.0, 5.0, 6.0)
+    val sparseWeights = sparse(3, Array(0, 2), Array(4.0, 6.0))
+
+    checkEvaluation(VectorDotProduct(vector, denseWeights), 32.0, inputRow(denseVector))
+    checkEvaluation(VectorDotProduct(vector, denseWeights), 22.0, inputRow(sparseVector))
+    checkEvaluation(
+      VectorDotProduct(vector, nonLiteralFoldable(sparseWeights)),
+      22.0,
+      inputRow(denseVector))
+    checkEvaluation(
+      VectorDotProduct(vector, nonLiteralFoldable(sparseWeights)),
+      22.0,
+      inputRow(sparseVector))
+    checkEvaluation(VectorDotProduct(denseWeights, vector), 22.0, inputRow(sparseVector))
+    checkEvaluation(
+      VectorDotProduct(nonLiteralFoldable(sparseWeights), vector),
+      22.0,
+      inputRow(denseVector))
   }
 
   test("vector dot product with null vectors") {
