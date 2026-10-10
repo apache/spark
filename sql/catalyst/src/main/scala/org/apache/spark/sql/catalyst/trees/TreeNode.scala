@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.trees
 
 import java.util.{IdentityHashMap, UUID}
+import java.util.regex.Pattern
 
 import scala.annotation.nowarn
 import scala.collection.{mutable, Map}
@@ -64,6 +65,11 @@ case class TreeNodeTag[T](name: String)
 // A functor that always returns true.
 object AlwaysProcess {
   val fn: TreePatternBits => Boolean = { _ => true}
+}
+
+object TreeNode {
+  // Keep the regex semantics of '$', including matching before a final line terminator.
+  private val execSuffix = Pattern.compile("Exec$")
 }
 
 // scalastyle:off
@@ -891,7 +897,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    * Returns the name of this type of TreeNode.  Defaults to the class name.
    * Note that we remove the "Exec" suffix for physical operators here.
    */
-  def nodeName: String = simpleClassName.replaceAll("Exec$", "")
+  def nodeName: String = TreeNode.execSuffix.matcher(simpleClassName).replaceAll("")
 
   /**
    * The arguments that should be included in the arg string.  Defaults to the `productIterator`.

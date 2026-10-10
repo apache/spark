@@ -23,6 +23,7 @@ import java.util.UUID
 import scala.annotation.nowarn
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.xbean.asm9.{ClassWriter, Opcodes}
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
@@ -738,6 +739,61 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val result = before.withNewChildren(LazyList(Literal(1), Literal(3)))
     val expected = Coalesce(LazyList(Literal(1), Literal(3)))
     assert(result === expected)
+  }
+
+  test("SPARK-60136: nodeName preserves Exec suffix regex semantics for JVM class names") {
+    // Generate JVM class names directly so they can contain line terminators such as LF and CR.
+    class NodeClassLoader extends ClassLoader(classOf[TreeNodeSuite].getClassLoader) {
+      def newNode(name: String): TreeNode[_] = {
+        val writer = new ClassWriter(0)
+        val parentName = classOf[Dummy].getName.replace('.', '/')
+        writer.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, name, null, parentName, null)
+        val constructor = writer.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null)
+        constructor.visitCode()
+        constructor.visitVarInsn(Opcodes.ALOAD, 0)
+        constructor.visitInsn(Opcodes.ACONST_NULL)
+        constructor.visitMethodInsn(
+          Opcodes.INVOKESPECIAL, parentName, "<init>", "(Lscala/Option;)V", false)
+        constructor.visitInsn(Opcodes.RETURN)
+        constructor.visitMaxs(2, 1)
+        constructor.visitEnd()
+        writer.visitEnd()
+        val bytes = writer.toByteArray
+        defineClass(name, bytes, 0, bytes.length).getConstructor().newInstance()
+          .asInstanceOf[TreeNode[_]]
+      }
+    }
+
+    val ordinaryNames = Seq(
+      "Node" -> "Node",
+      "NodeExec" -> "Node",
+      "Exec" -> "",
+      "NodeExecExec" -> "NodeExec",
+      "ExecNode" -> "ExecNode",
+      "NodeExecExtra" -> "NodeExecExtra",
+      "Nodeexec" -> "Nodeexec",
+      "NodeEXEC" -> "NodeEXEC",
+      "NodeExec$" -> "NodeExec$")
+    // scalastyle:off nonascii
+    val lineTerminators = Seq("\n", "\r", "\r\n", "\u0085", "\u2028", "\u2029")
+    // scalastyle:on nonascii
+    val terminatedNames = lineTerminators.flatMap { terminator =>
+      Seq(
+        s"NodeExec$terminator" -> s"Node$terminator",
+        s"NodeExec$terminator$terminator" -> s"NodeExec$terminator$terminator",
+        s"NodeExec${terminator}Extra" -> s"NodeExec${terminator}Extra")
+    }
+    val otherEndings = Seq("\n\r", "\u000b", "\f", " ", "\t").map { ending =>
+      s"NodeExec$ending" -> s"NodeExec$ending"
+    }
+    val loader = new NodeClassLoader
+    (ordinaryNames ++ terminatedNames ++ otherEndings).foreach { case (name, expected) =>
+      val node = loader.newNode(name)
+      assert(node.getClass.getSimpleName == name)
+      assert(name.replaceAll("Exec$", "") == expected)
+      assert(node.nodeName == expected)
+    }
+    assert(new Dummy(None) {}.nodeName == "")
   }
 
   test("treeString limits plan length") {
