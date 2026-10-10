@@ -12139,16 +12139,6 @@
       "CaseInsensitiveStringMap is read-only."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3152" : {
-    "message" : [
-      "Datatype not supported <dataType>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3155" : {
-    "message" : [
-      "Datatype not supported <dataType>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3160" : {
     "message" : [
       ""
