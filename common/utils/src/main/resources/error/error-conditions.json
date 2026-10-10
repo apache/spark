@@ -9608,7 +9608,7 @@
   "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY" : {
     "message" : [
       "The JSON object name <key> is not a valid key for the map key type <dataType>.",
-      "A CHAR(n) key must be exactly n characters and a VARCHAR(n) key at most n characters; keys are never padded or trimmed. Use a STRING map key to accept any name."
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
     ],
     "sqlState" : "0A000"
   },

@@ -2739,10 +2739,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
-  // A SparkRuntimeException (not SparkSQLFeatureNotSupportedException) despite the 0A000
-  // SQLSTATE: restricting CHAR/VARCHAR JSON map keys is a limitation, but the error is
-  // raised while parsing a row and must flow through Jackson's throw/catch parse-mode
-  // model (PERMISSIVE wraps it as a bad record, FAILFAST surfaces it).
+  // SQLSTATE is 0A000 (feature-not-supported), not the 54006 of the value-side
+  // EXCEED_LIMIT_LENGTH: a too-long CHAR/VARCHAR value is truncatable overflow, but a JSON object
+  // name is a key that is never padded or trimmed, so an off-width name has no representation in
+  // a CHAR(n)/VARCHAR(n) map at all. It is a SparkRuntimeException (not
+  // SparkSQLFeatureNotSupportedException) because it is raised while parsing a row and must flow
+  // through Jackson's throw/catch parse-mode model (PERMISSIVE wraps it as a bad record, FAILFAST
+  // surfaces it).
   def unsupportedJsonCharVarcharMapKey(
       key: UTF8String, dataType: DataType): SparkRuntimeException = {
     // The key is a raw JSON object name, which in map-shaped data is often user data (ids,

@@ -3119,11 +3119,40 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         Row(Seq(Row("abc", 1), Row("abc", 2))))
       // Length counts characters (code points), not UTF-16 units or bytes: one non-BMP code
       // point is exactly CHAR(1) and is kept verbatim, and the same name is rejected by CHAR(2).
+      // scalastyle:off nonascii (the \u escape is decoded before the nonascii check runs)
       val nonBmp = "\uD83D\uDE00" // U+1F600, one code point stored as a UTF-16 surrogate pair
+      // scalastyle:on nonascii
       checkAnswer(
         sql(s"""SELECT map_keys(from_json('{"$nonBmp": 1}', 'MAP<CHAR(1), INT>'))[0]"""),
         Row(nonBmp))
       checkAnswer(sql(s"""SELECT from_json('{"$nonBmp": 1}', 'MAP<CHAR(2), INT>')"""), Row(null))
+
+      // Length-0 boundary: CHAR(0)/VARCHAR(0) accept only the empty-string name, and any
+      // non-empty name is rejected (the empty key is still kept as a real map entry).
+      checkAnswer(
+        sql("""SELECT from_json('{"": 1}', 'MAP<CHAR(0), INT>')"""),
+        Row(Map("" -> 1)))
+      checkAnswer(
+        sql("""SELECT from_json('{"": 1}', 'MAP<VARCHAR(0), INT>')"""),
+        Row(Map("" -> 1)))
+      checkAnswer(sql("""SELECT from_json('{"a": 1}', 'MAP<CHAR(0), INT>')"""), Row(null))
+      checkAnswer(sql("""SELECT from_json('{"a": 1}', 'MAP<VARCHAR(0), INT>')"""), Row(null))
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"a": 1}', 'MAP<CHAR(0), INT>', map('mode', 'FAILFAST'))""",
+        key = "a",
+        dataTypeSql = "CHAR(0)")
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"a": 1}', 'MAP<VARCHAR(0), INT>', map('mode', 'FAILFAST'))""",
+        key = "a",
+        dataTypeSql = "VARCHAR(0)")
+
+      // A key longer than the 128-character echo cap is truncated with a trailing "..." in the
+      // error so a huge JSON object name does not bloat the message.
+      val longKey = "a" * 200
+      assertUnsupportedJsonMapKey(
+        s"""SELECT from_json('{"$longKey": 1}', 'MAP<CHAR(3), INT>', map('mode', 'FAILFAST'))""",
+        key = "a" * 128 + "...",
+        dataTypeSql = "CHAR(3)")
 
       // Valid keys inside nested containers.
       checkAnswer(
@@ -3161,6 +3190,28 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assertUnsupportedJsonMapKey(
         """SELECT from_json('[{"a": 1}]',
           |  'ARRAY<MAP<CHAR(3), INT>>', map('mode', 'FAILFAST'))""".stripMargin,
+        key = "a",
+        dataTypeSql = "CHAR(3)")
+
+      // The DataFrame functions.from_json path constructs JsonToStructs the same way and must
+      // behave identically: accepted key kept, rejected key null in PERMISSIVE and surfaced in
+      // FAILFAST.
+      checkAnswer(
+        spark.range(1).select(
+          functions.from_json(
+            functions.lit("""{"ab ": 1}"""), "MAP<CHAR(3), INT>", Map.empty[String, String])),
+        Row(Map("ab " -> 1)))
+      checkAnswer(
+        spark.range(1).select(
+          functions.from_json(
+            functions.lit("""{"a": 1}"""), "MAP<CHAR(3), INT>", Map.empty[String, String])),
+        Row(null))
+      assertUnsupportedJsonMapKeyError(
+        spark.range(1).select(
+          functions.from_json(
+            functions.lit("""{"a": 1}"""),
+            "MAP<CHAR(3), INT>",
+            Map("mode" -> "FAILFAST"))).collect(),
         key = "a",
         dataTypeSql = "CHAR(3)")
 

@@ -66,10 +66,11 @@ class JacksonParser(
   // to a value in a field for `InternalRow`.
   private type ValueConverter = JsonParser => AnyRef
 
-  // CHAR/VARCHAR JSON map keys are length-checked without pad or trim under this flag. Declared
-  // before the converters below because `makeMapKeyChecker` reads it while they are built, and
-  // Scala initializes vals in declaration order.
-  private val charVarcharStandardSemantics =
+  // CHAR/VARCHAR JSON map keys are length-checked without pad or trim under this flag. Lazy so
+  // its value is independent of field declaration order: `makeMapKeyChecker` reads it while the
+  // converters below are built, and an eager val read before its own initializer would silently
+  // see `false` and disable the check.
+  private lazy val charVarcharStandardSemantics =
     charVarcharStandardSemanticsOverride.getOrElse(SQLConf.get.charVarcharStandardSemantics)
 
   // `ValueConverter`s for the root schema for all fields in the schema
@@ -639,11 +640,17 @@ class JacksonParser(
    * must already be at most n characters. Padding, trimming, and `mapKeyDedupPolicy` are not
    * applied, and duplicate names are kept, exactly as for STRING keys. This differs from XML,
    * which pads keys and then applies `mapKeyDedupPolicy`.
+   *
+   * A rejected key is treated like a failed value, regardless of `enablePartialResults`: the
+   * cause is recorded and the parser steps past the value so the loop still consumes the map's
+   * END_OBJECT, leaving the key unpaired. The check must not surface its result while the parser
+   * is still on the FIELD_NAME, or an enclosing struct would misread the map's remaining entries
+   * as its own sibling fields (SPARK-60108). STRING keys have no checker and take the fast path.
    */
   private def convertMap(
       parser: JsonParser,
       fieldConverter: ValueConverter,
-      keyChecker: Option[UTF8String => Unit]): MapData = {
+      keyChecker: Option[UTF8String => Option[Throwable]]): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
@@ -651,18 +658,10 @@ class JacksonParser(
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       val key = UTF8String.fromString(parser.currentName)
       keys += key
-      // A rejected CHAR/VARCHAR key is treated like a failed value, regardless of
-      // enablePartialResults: record the cause and step past the value so the loop still
-      // consumes the map's END_OBJECT, leaving the key unpaired. Letting the check throw with
-      // the parser still on this FIELD_NAME would make an enclosing struct misread the map's
-      // remaining entries as its own sibling fields (SPARK-60108). STRING keys have no checker.
-      val keyRejection = keyChecker.flatMap { check =>
-        try {
-          check(key)
-          None
-        } catch {
-          case NonFatal(e) => Some(e)
-        }
+      // Avoid allocating a closure per entry on the common no-checker path.
+      val keyRejection = keyChecker match {
+        case Some(check) => check(key)
+        case None => None
       }
       keyRejection match {
         case Some(e) =>
@@ -706,10 +705,11 @@ class JacksonParser(
    * Builds the length check applied to this map's CHAR/VARCHAR keys, or `None` when the keys
    * need no check (STRING keys, or standard semantics are off). Built once per map converter so
    * the per-entry loop in `convertMap` does not re-inspect the key type. The check never pads or
-   * trims; the actual key type (collation included) is passed to the error so the message is
-   * accurate.
+   * trims; it returns the rejection cause (with the actual key type, collation included, so the
+   * message is accurate) rather than throwing, so `convertMap` keeps full control of the parser
+   * position when a key is rejected.
    */
-  private def makeMapKeyChecker(keyType: DataType): Option[UTF8String => Unit] = {
+  private def makeMapKeyChecker(keyType: DataType): Option[UTF8String => Option[Throwable]] = {
     if (!charVarcharStandardSemantics) {
       None
     } else {
@@ -722,16 +722,20 @@ class JacksonParser(
   }
 
   // A CHAR(n) JSON object name is never padded: it must already be exactly n characters.
-  private def checkCharJsonMapKey(key: UTF8String, keyType: CharType): Unit = {
+  private def checkCharJsonMapKey(key: UTF8String, keyType: CharType): Option[Throwable] = {
     if (key.numChars() != keyType.length) {
-      throw QueryExecutionErrors.unsupportedJsonCharVarcharMapKey(key, keyType)
+      Some(QueryExecutionErrors.unsupportedJsonCharVarcharMapKey(key, keyType))
+    } else {
+      None
     }
   }
 
   // A VARCHAR(n) JSON object name is never trimmed: it must already be at most n characters.
-  private def checkVarcharJsonMapKey(key: UTF8String, keyType: VarcharType): Unit = {
+  private def checkVarcharJsonMapKey(key: UTF8String, keyType: VarcharType): Option[Throwable] = {
     if (key.numChars() > keyType.length) {
-      throw QueryExecutionErrors.unsupportedJsonCharVarcharMapKey(key, keyType)
+      Some(QueryExecutionErrors.unsupportedJsonCharVarcharMapKey(key, keyType))
+    } else {
+      None
     }
   }
 
