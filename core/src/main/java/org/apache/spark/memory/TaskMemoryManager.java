@@ -183,7 +183,9 @@ public class TaskMemoryManager {
     this.memoryManager = memoryManager;
     this.tungstenMemoryAllocator = tungstenMemoryAllocator;
     this.taskAttemptId = taskAttemptId;
-    this.consumers = Collections.newSetFromMap(new IdentityHashMap<>());
+    // A task rarely has more than a few consumers; the default expected size of IdentityHashMap
+    // would eagerly allocate a much larger table for every task.
+    this.consumers = Collections.newSetFromMap(new IdentityHashMap<>(4));
   }
 
   /**

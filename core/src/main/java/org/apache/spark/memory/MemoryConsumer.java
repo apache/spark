@@ -28,6 +28,11 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
  * A memory consumer of {@link TaskMemoryManager} that supports spilling.
  *
  * Note: this only supports allocation / spilling of Tungsten memory.
+ *
+ * {@link TaskMemoryManager} tracks consumers by identity, so distinct consumer instances are
+ * always tracked, spilled and reported separately, regardless of how they implement
+ * {@code equals} and {@code hashCode}. Code that keeps consumers in a collection should likewise
+ * key them by identity rather than relying on {@code equals}/{@code hashCode}.
  */
 public abstract class MemoryConsumer {
 
