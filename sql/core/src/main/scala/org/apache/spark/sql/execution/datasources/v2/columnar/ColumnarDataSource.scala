@@ -49,12 +49,14 @@ trait ColumnarDataSource {
   def writer(schema: StructType, overwrite: Boolean): ColumnarWriter
 
   /**
-   * Returns a writer for a streaming write.
+   * Returns a writer for a streaming write. A micro-batch streaming query creates a new one for
+   * each micro-batch.
    *
    * @param overwrite whether to replace the existing data in each micro-batch (output mode
    *                  "complete") instead of appending to it
+   * @param queryId the ID of the streaming query
    */
-  def streamWriter(schema: StructType, overwrite: Boolean): ColumnarStreamWriter
+  def streamWriter(schema: StructType, overwrite: Boolean, queryId: String): ColumnarStreamWriter
 }
 
 /**

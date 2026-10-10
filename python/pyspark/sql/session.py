@@ -2296,11 +2296,12 @@ class SparkSession(SparkConversionMixin):
                     "condition": "True together",
                 },
             )
-        if not (file or pyfile or archive) and all(p.endswith(".sparkpkg") for p in path):
-            # Native data source packages are artifacts of the session in the JVM.
-            for p in path:
+        # Native data source packages are artifacts of the session in the JVM, whatever the
+        # flags, as with Spark Connect.
+        for p in path:
+            if p.endswith(".sparkpkg"):
                 self._jsparkSession.addArtifact(os.path.abspath(p))
-            return
+        path = tuple(p for p in path if not p.endswith(".sparkpkg"))
         for p in path:
             normalized_path = os.path.abspath(p)
             target_dir = os.path.join(

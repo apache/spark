@@ -83,45 +83,83 @@ case class NativeDataSourcePackage(
   def fileName: String = new File(path).getName
 }
 
-object NativeDataSourcePackage {
+/**
+ * A package file that is not a valid native data source package.
+ *
+ * @param error the error that explains why the package is invalid
+ * @param dataSources the data sources listed in the manifest of the package, if it can be read
+ */
+case class InvalidNativeDataSourcePackage(error: Throwable, dataSources: Seq[String])
+
+object NativeDataSourcePackage extends Logging {
   val FILE_EXTENSION: String = Artifact.NATIVE_DATA_SOURCE_PACKAGE_EXTENSION
   val MANIFEST_NAME = "spark-native-datasource.json"
 
   private case class CacheKey(path: String, length: Long, lastModified: Long)
 
-  private val packages = new ConcurrentHashMap[CacheKey, NativeDataSourcePackage]()
+  private[ffi] type ReadResult = Either[InvalidNativeDataSourcePackage, NativeDataSourcePackage]
+
+  private val packages = new ConcurrentHashMap[CacheKey, ReadResult]()
   private val mapper = new ObjectMapper()
 
   /** Reads the package in the given file. The result is cached until the file changes. */
-  def read(file: File): NativeDataSourcePackage = {
-    val canonical = file.getCanonicalFile
+  def read(file: File): NativeDataSourcePackage = tryRead(file).fold(p => throw p.error, identity)
+
+  /**
+   * Reads the package in the given file, or returns why it is invalid. The result is cached until
+   * the file changes, and an invalid package is logged once.
+   */
+  private[ffi] def tryRead(file: File): ReadResult = {
+    val canonical = try {
+      file.getCanonicalFile
+    } catch {
+      case e: IOException =>
+        return Left(InvalidNativeDataSourcePackage(
+          invalidManifestError(file, s"The package cannot be read: $e", e), Nil))
+    }
     val key = CacheKey(canonical.getPath, canonical.length(), canonical.lastModified())
-    packages.computeIfAbsent(key, _ => parse(canonical))
+    packages.computeIfAbsent(key, _ => {
+      val result = parse(canonical)
+      result.swap.foreach { invalid =>
+        logWarning(log"Invalid native data source package ${MDC(PATH, canonical)}.",
+          invalid.error)
+      }
+      result
+    })
   }
 
-  private def parse(file: File): NativeDataSourcePackage = {
-    def invalid(reason: String, cause: Throwable = null): Throwable = {
-      QueryExecutionErrors.invalidNativeDataSourcePackageError(
-        file.getPath, "INVALID_MANIFEST", Map("reason" -> reason), cause)
+  private def invalidManifestError(file: File, reason: String, cause: Throwable = null) = {
+    QueryExecutionErrors.invalidNativeDataSourcePackageError(
+      file.getPath, "INVALID_MANIFEST", Map("reason" -> reason), cause)
+  }
+
+  private def parse(file: File): ReadResult = {
+    def invalid(reason: String, dataSources: Seq[String] = Nil, cause: Throwable = null) = {
+      Left(InvalidNativeDataSourcePackage(invalidManifestError(file, reason, cause), dataSources))
     }
     val manifest = try {
       Utils.tryWithResource(new ZipFile(file)) { zip =>
-        val entry = Option(zip.getEntry(MANIFEST_NAME)).getOrElse {
-          throw invalid(s"The package does not contain the manifest $MANIFEST_NAME.")
+        Option(zip.getEntry(MANIFEST_NAME)) match {
+          case None => invalid(s"The package does not contain the manifest $MANIFEST_NAME.")
+          case Some(entry) =>
+            val json = Utils.tryWithResource(zip.getInputStream(entry)) { in =>
+              new String(in.readAllBytes(), StandardCharsets.UTF_8)
+            }
+            parseManifest(json) match {
+              case Left(reason) => invalid(reason)
+              case Right(manifest) =>
+                manifest.libraries.values.find(zip.getEntry(_) == null) match {
+                  case Some(library) => invalid(
+                    s"The package does not contain the library $library.", manifest.dataSources)
+                  case None => Right(manifest)
+                }
+            }
         }
-        val json = Utils.tryWithResource(zip.getInputStream(entry)) { in =>
-          new String(in.readAllBytes(), StandardCharsets.UTF_8)
-        }
-        val manifest = parseManifest(json).fold(reason => throw invalid(reason), identity)
-        manifest.libraries.values.find(zip.getEntry(_) == null).foreach { library =>
-          throw invalid(s"The package does not contain the library $library.")
-        }
-        manifest
       }
     } catch {
-      case e: IOException => throw invalid(s"The package is not a valid zip file: $e", e)
+      case e: IOException => invalid(s"The package is not a valid zip file: $e", cause = e)
     }
-    NativeDataSourcePackage(file.getPath, sha256(file), manifest)
+    manifest.map(NativeDataSourcePackage(file.getPath, sha256(file), _))
   }
 
   private[ffi] def parseManifest(json: String): Either[String, NativeDataSourceManifest] = {
@@ -294,7 +332,9 @@ object NativeLibraries extends Logging {
   /** Finds a copy of the package on this node: the one on the driver, or a distributed one. */
   private def locate(pkg: NativeDataSourcePackage): File = {
     (new File(pkg.path) +: NativeDataSourceRegistry.distributedCopies(pkg))
-      .find(file => file.isFile && NativeDataSourcePackage.read(file).sha256 == pkg.sha256)
+      .find { file =>
+        file.isFile && NativeDataSourcePackage.tryRead(file).exists(_.sha256 == pkg.sha256)
+      }
       .getOrElse {
         throw QueryExecutionErrors.nativeDataSourcePackageNotFoundError(pkg.fileName, pkg.sha256)
       }

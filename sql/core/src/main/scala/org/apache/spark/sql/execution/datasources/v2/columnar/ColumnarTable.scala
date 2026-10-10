@@ -56,7 +56,8 @@ class ColumnarTable(
     util.EnumSet.of(BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new ColumnarScanBuilder(tableSchema, () => createDataSource(withTableOptions(options)))
+    new ColumnarScanBuilder(
+      shortName, tableSchema, () => createDataSource(withTableOptions(options)))
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
@@ -73,7 +74,10 @@ class ColumnarTable(
   }
 }
 
-class ColumnarScanBuilder(schema: StructType, createDataSource: () => ColumnarDataSource)
+class ColumnarScanBuilder(
+    shortName: String,
+    schema: StructType,
+    createDataSource: () => ColumnarDataSource)
   extends ScanBuilder
   with SupportsPushDownV2Filters
   with SupportsPushDownLimit
@@ -126,11 +130,13 @@ class ColumnarScanBuilder(schema: StructType, createDataSource: () => ColumnarDa
   }
 
   override def build(): Scan = {
-    new ColumnarScan(schema, readSchema, () => batchReader, () => dataSource, pushed, pushedLimit)
+    new ColumnarScan(
+      shortName, schema, readSchema, () => batchReader, () => dataSource, pushed, pushedLimit)
   }
 }
 
 class ColumnarScan(
+    shortName: String,
     fullSchema: StructType,
     prunedSchema: StructType,
     batchReader: () => ColumnarReader,
@@ -144,8 +150,7 @@ class ColumnarScan(
 
   override def readSchema(): StructType = prunedSchema
 
-  // The class that implements the data source, such as NativeDataSource for a native one.
-  override def description(): String = dataSource().getClass.getSimpleName
+  override def description(): String = shortName
 
   override def columnarSupportMode(): Scan.ColumnarSupportMode =
     Scan.ColumnarSupportMode.SUPPORTED

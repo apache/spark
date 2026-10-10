@@ -43,8 +43,10 @@ object NativeDataSourceRegistry extends Logging {
   /** The prefix of the names of the installed native data source libraries. */
   val LIBRARY_NAME_PREFIX = "spark_datasource_"
 
-  /** Returns whether the native data source with the given name exists. */
-  def exists(name: String, conf: SQLConf): Boolean = lookup(name, conf).isDefined
+  // The result of the last lookup by `DataSource.lookupDataSource` on this thread that found a
+  // native data source, by the name it looked up. The provider that the caller creates next for
+  // that name takes it, so that it does not look the name up again: see [[takeLookup]].
+  private val lastLookup = new ThreadLocal[(String, (String, NativeLibraryLocation))]
 
   /**
    * Finds the package or the installed library that provides the native data source with the
@@ -59,10 +61,32 @@ object NativeDataSourceRegistry extends Logging {
       .orElse(lookupInstalledLibrary(name))
   }
 
+  /**
+   * Like [[lookup]], and keeps the result for the provider that the caller creates next for the
+   * given name, which takes it with [[takeLookup]].
+   */
+  def lookupForProvider(name: String, conf: SQLConf): Option[(String, NativeLibraryLocation)] = {
+    val result = lookup(name, conf)
+    result.foreach(found => lastLookup.set(name -> found))
+    result
+  }
+
+  /** Takes the result of [[lookupForProvider]] for the given name on this thread, if any. */
+  def takeLookup(name: String): Option[(String, NativeLibraryLocation)] = {
+    Option(lastLookup.get()).filter(_._1.equalsIgnoreCase(name)).map { case (_, found) =>
+      lastLookup.remove()
+      found
+    }
+  }
+
   private def lookupPackage(
       name: String,
       files: Seq[File]): Option[(String, NativeDataSourcePackage)] = {
-    val found = files.map(_.getCanonicalFile).distinct.map(NativeDataSourcePackage.read)
+    val (invalid, valid) = files.map(NativeDataSourcePackage.tryRead).partitionMap(identity)
+    // An invalid package does not prevent finding the data sources of the other packages, unless
+    // its manifest lists the data source. An invalid package is logged when it is read.
+    invalid.find(_.dataSources.exists(_.equalsIgnoreCase(name))).foreach(p => throw p.error)
+    val found = valid
       .flatMap(pkg => pkg.manifest.dataSources.find(_.equalsIgnoreCase(name)).map(_ -> pkg))
       // The same package can be found more than once, for example when it is in a configured
       // directory and was also added as an artifact.
@@ -130,8 +154,10 @@ object NativeDataSourceRegistry extends Logging {
   }
 
   /**
-   * Makes the library available to the executors of the active session. Returns where the
-   * executors find it. An installed library is already installed on every node.
+   * Makes the library available to the executors of the active session, which runs the jobs of
+   * the scan or the write: for a streaming query, it is the session of the query, a clone of the
+   * session that started it. Returns where the executors find it. An installed library is already
+   * installed on every node.
    */
   def distribute(location: NativeLibraryLocation): NativeLibraryLocation = location match {
     case pkg: NativeDataSourcePackage =>
@@ -149,24 +175,39 @@ object NativeDataSourceRegistry extends Logging {
       pkg: NativeDataSourcePackage): NativeDataSourcePackage = {
     val artifactManager = session.artifactManager
     val (added, artifactUUID) = artifactManager.getNativeDataSourcePackages
-    if (!added.exists(_.getName == pkg.fileName)) {
-      artifactManager.addLocalArtifacts(Artifact.newFileArtifact(
-        Paths.get(pkg.fileName), new Artifact.LocalFile(Paths.get(pkg.path))) :: Nil)
+    // The executors find the package by its file name, so the session cannot have another
+    // package with the same file name.
+    added.find(_.getName == pkg.fileName) match {
+      case Some(file) =>
+        val sha256 = NativeDataSourcePackage.tryRead(file).map(_.sha256).getOrElse("")
+        if (sha256 != pkg.sha256) {
+          throw QueryExecutionErrors.nativeDataSourcePackageFileNameConflictError(
+            pkg.path, pkg.fileName)
+        }
+      case None =>
+        artifactManager.addLocalArtifacts(Artifact.newFileArtifact(
+          Paths.get(pkg.fileName), new Artifact.LocalFile(Paths.get(pkg.path))) :: Nil)
     }
     pkg.copy(artifactUUID = artifactUUID)
   }
 
   /**
-   * The local copies, on an executor, of a package distributed with [[distribute]]. The files of
-   * an isolated session are stored in a directory named after the UUID of the session.
+   * The local copies, on an executor, of a package distributed with [[distribute]], in the order
+   * to check them. The files of an isolated session are stored in a directory named after the
+   * UUID of the session; the copies of other sessions are checked last, because the executors
+   * check the checksum of the package anyway.
    */
   def distributedCopies(pkg: NativeDataSourcePackage): Seq[File] = {
     if (SparkEnv.get == null) {
       Nil
     } else {
       val root = new File(SparkFiles.getRootDirectory())
-      pkg.artifactUUID.map(uuid => new File(new File(root, uuid), pkg.fileName)).toSeq :+
-        new File(root, pkg.fileName)
+      val sessionCopies = Option(root.listFiles()).toSeq.flatten
+        .filter(_.isDirectory)
+        .sortBy(_.getName)
+        .map(new File(_, pkg.fileName))
+      (pkg.artifactUUID.map(uuid => new File(new File(root, uuid), pkg.fileName)).toSeq ++
+        Seq(new File(root, pkg.fileName)) ++ sessionCopies).distinct
     }
   }
 

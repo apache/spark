@@ -16,7 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.ffi
 
-import java.lang.ref.Cleaner
+import java.lang.ref.{Cleaner, WeakReference}
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.jdk.CollectionConverters._
@@ -44,7 +45,8 @@ import org.apache.spark.util.Utils
  * A [[ColumnarDataSource]] implemented by a native library, through
  * `org.apache.spark.sql.datasource.NativeBridge`.
  *
- * @param location where the library is
+ * @param location where the library is on the driver. The readers and the writers distribute it
+ *                 to the executors of the active session when they are created.
  * @param name the name of the data source, as listed in the manifest of its package or in lower
  *             case for an installed library
  */
@@ -65,26 +67,29 @@ class NativeDataSource(
   }
 
   override def reader(schema: StructType): ColumnarReader = {
+    val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
     val handle = create(library, "plan a scan of", "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED") {
       dataSource =>
         NativeArrow.exportSchema(schema)(address => library.createReader(dataSource, address))
     }
     new NativeDataSourceReader(
-      location, name, schema, new NativeHandle(handle, library.closeReader))
+      executorLocation, name, schema, new NativeHandle(handle, library.closeReader))
   }
 
   override def streamReader(schema: StructType): ColumnarStreamReader = {
+    val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
     val handle = create(library, "plan a scan of", "DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED") {
       dataSource =>
         NativeArrow.exportSchema(schema)(address => library.createStreamReader(dataSource, address))
     }
     new NativeDataSourceStreamReader(
-      location, name, schema, new NativeHandle(handle, library.closeStreamReader))
+      executorLocation, name, schema, new NativeHandle(handle, library.closeStreamReader))
   }
 
   override def writer(schema: StructType, overwrite: Boolean): ColumnarWriter = {
+    val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
     val handle = new NativeHandle(
       create(library, "plan a write to", "DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED") { dataSource =>
@@ -93,10 +98,14 @@ class NativeDataSource(
         }
       },
       library.closeWriter)
-    new NativeDataSourceWriter(location, name, handle, serializeWriter(library, handle))
+    new NativeDataSourceWriter(executorLocation, name, handle, serializeWriter(library, handle))
   }
 
-  override def streamWriter(schema: StructType, overwrite: Boolean): ColumnarStreamWriter = {
+  override def streamWriter(
+      schema: StructType,
+      overwrite: Boolean,
+      queryId: String): ColumnarStreamWriter = {
+    val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
     val handle = new NativeHandle(
       create(library, "plan a write to", "DATA_SOURCE_STREAMING_WRITE_NOT_SUPPORTED") {
@@ -106,7 +115,10 @@ class NativeDataSource(
           }
       },
       library.closeWriter)
-    new NativeDataSourceStreamWriter(location, name, handle, serializeWriter(library, handle))
+    val writer = new NativeDataSourceStreamWriter(
+      executorLocation, name, handle, serializeWriter(library, handle))
+    NativeStreamWriters.register(queryId, handle)
+    writer
   }
 
   /** Runs `f` with a new native data source, which is closed afterwards. */
@@ -161,7 +173,7 @@ class NativeDataSourceReader(
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     // Only the predicates that can be expressed in JSON are passed to the library.
     val encoded = predicates.zipWithIndex.flatMap { case (predicate, i) =>
-      NativePredicates.toJson(predicate).map(_ -> i)
+      NativePredicates.toJson(predicate, schema).map(_ -> i)
     }
     val pushed = if (encoded.isEmpty) {
       Set.empty[Int]
@@ -290,7 +302,10 @@ class NativeDataSourceWriter(
   }
 }
 
-/** Writes to a native data source for a streaming write. */
+/**
+ * Writes to a native data source for a streaming write. Its handle is closed when the streaming
+ * query creates its next stream writer, see [[NativeStreamWriters]].
+ */
 class NativeDataSourceStreamWriter(
     location: NativeLibraryLocation,
     name: String,
@@ -445,7 +460,8 @@ class NativeDataWriter(
   import NativeCalls._
 
   private val library = NativeLibraries.get(location)
-  // Zero once the data writer was committed or aborted, which releases it.
+  // Zero once the data writer was committed or aborted, which releases it. It stays set if the
+  // commit fails, so that Spark aborts the data writer.
   private var handle: Long = call(name, "write to") {
     library.createDataWriter(writerState, partitionId, taskId, epochId)
   }
@@ -480,10 +496,12 @@ class NativeDataWriter(
   }
 
   override def commit(): WriterCommitMessage = {
-    val dataWriter = handle
+    if (handle == 0) {
+      throw SparkException.internalError("The data writer was already committed or aborted.")
+    }
+    val message = call(name, "write to")(library.commitDataWriter(handle))
     handle = 0
-    NativeWriterCommitMessage(
-      bytesOrEmpty(call(name, "write to")(Some(library.commitDataWriter(dataWriter)))))
+    NativeWriterCommitMessage(bytesOrEmpty(Some(message)))
   }
 
   override def abort(): Unit = {
@@ -534,6 +552,26 @@ object NativeHandle extends Logging {
         }
       }
     }
+  }
+}
+
+/**
+ * The stream writers of the streaming queries, by query ID. The Data Source V2 streaming write
+ * has no hook for when the query stops, but a micro-batch streaming query creates a new stream
+ * writer for each micro-batch, after the previous micro-batch committed or aborted its write, and
+ * a restarted query creates a new one. So the previous stream writer of a query is closed when
+ * the query creates a new one, and the last one when it becomes unreachable.
+ */
+object NativeStreamWriters {
+  // Weak, so that the last stream writer of a query can still become unreachable.
+  private val writers = new ConcurrentHashMap[String, WeakReference[NativeHandle]]()
+
+  /** Registers the new stream writer of the query, and closes its previous one. */
+  def register(queryId: String, handle: NativeHandle): Unit = {
+    // Forgets the queries whose last stream writer was released.
+    writers.values().removeIf(_.get() == null)
+    Option(writers.put(queryId, new WeakReference(handle))).flatMap(r => Option(r.get()))
+      .foreach(_.close())
   }
 }
 

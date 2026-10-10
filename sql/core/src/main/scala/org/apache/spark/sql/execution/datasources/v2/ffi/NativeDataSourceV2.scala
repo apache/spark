@@ -33,20 +33,22 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 class NativeDataSourceV2 extends NamedTableProvider {
   private var shortName: String = _
+  // The result of the lookup that `DataSource.lookupDataSource` made to find this provider class.
+  private var lookup: Option[(String, NativeLibraryLocation)] = None
 
   override def setShortName(name: String): Unit = {
     assert(shortName == null)
     shortName = name
+    lookup = NativeDataSourceRegistry.takeLookup(name)
   }
 
-  // The name of the data source, and where its library is. Resolved on first use, which is while
-  // the query is analyzed, with the configuration of its session.
+  // The name of the data source, and where its library is on the driver. Resolved on first use,
+  // which is while the query is analyzed, with the configuration of its session.
   private lazy val resolved: (String, NativeLibraryLocation) = {
     assert(shortName != null)
-    val (name, location) = NativeDataSourceRegistry.lookup(shortName, SQLConf.get).getOrElse {
+    lookup.orElse(NativeDataSourceRegistry.lookup(shortName, SQLConf.get)).getOrElse {
       throw QueryCompilationErrors.dataSourceDoesNotExist(shortName)
     }
-    (name, NativeDataSourceRegistry.distribute(location))
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {

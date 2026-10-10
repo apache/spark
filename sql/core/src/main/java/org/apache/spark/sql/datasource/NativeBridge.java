@@ -62,16 +62,22 @@ import org.apache.spark.annotation.Evolving;
  *   {@link #createStreamWriter}, and serializes its state with {@link #serializeWriter}. On the
  *   executors, each task creates a data writer with {@link #createDataWriter}, calls
  *   {@link #write} for each batch of at most {@code spark.sql.execution.arrow.maxRecordsPerBatch}
- *   rows, and calls {@link #commitDataWriter}, or {@link #abortDataWriter} if it fails. Then the
- *   driver calls {@link #commit} with the messages of the tasks if they all succeeded, or
- *   {@link #abort} otherwise. A streaming write commits or aborts each micro-batch (epoch).</li>
+ *   rows, and calls {@link #commitDataWriter}, or {@link #abortDataWriter} if the task or the
+ *   commit fails. Then the driver calls {@link #commit} with the messages of the tasks if they
+ *   all succeeded, or {@link #abort} otherwise, and closes the writer. A streaming write commits
+ *   or aborts each micro-batch (epoch). A micro-batch streaming query creates a new stream writer
+ *   for each micro-batch, and Spark closes the previous stream writer of the query when the query
+ *   creates a new one. Spark is not told when a streaming query stops, so it closes the last
+ *   stream writer of the query once the writer is no longer referenced, or when the query is
+ *   restarted.</li>
  * </ul>
  *
  * <h2>Conventions</h2>
  * <ul>
  *   <li><b>Handles.</b> The {@code create} methods return an opaque, non-zero handle, typically a
  *   pointer. Spark releases each handle exactly once with the matching {@code close} method, or
- *   with {@link #commitDataWriter} or {@link #abortDataWriter} for data writers. A reader or
+ *   with {@link #commitDataWriter} or {@link #abortDataWriter} for data writers, though not
+ *   always right after the last use of a stream writer (see Writes above). A reader or
  *   writer handle must not depend on the data source handle it was created from, because Spark
  *   closes the data source handle right after creating it.</li>
  *   <li><b>State.</b> Partitions, the state of readers and writers, and commit messages are byte
@@ -212,7 +218,15 @@ public final class NativeBridge {
    *   {@code =}, {@code <}, {@code IN}, {@code IS_NULL}, {@code STARTS_WITH}, {@code AND},
    *   {@code OR} and {@code NOT}.</li>
    * </ul>
-   * Spark does not pass predicates that it cannot express this way.
+   * Spark does not pass predicates that it cannot express this way, nor predicates on columns
+   * that contain strings with a non-binary collation, such as {@code UTF8_LCASE}: strings are
+   * compared by their UTF-8 bytes.
+   * <p>
+   * A predicate that the reader evaluates completely must follow the semantics of Spark SQL. In
+   * particular, for floating-point columns, NaN is equal to NaN and greater than any other value,
+   * including positive infinity, and {@code -0.0} is equal to {@code 0.0}, unlike IEEE 754
+   * comparisons. For example, {@code d > 1.0} is true for a NaN value of {@code d}. Comparisons
+   * with null are null, so a row only matches if the predicate is true.
    *
    * @return for each predicate, whether the reader evaluates it completely, so that Spark does
    *         not have to evaluate it again. The reader can still use the other predicates to skip
@@ -359,7 +373,9 @@ public final class NativeBridge {
   public static native void write(long dataWriter, long arrayAddress, long schemaAddress);
 
   /**
-   * Commits the data written by the task and releases the data writer handle.
+   * Commits the data written by the task and releases the data writer handle. If it fails, the
+   * handle is not released: Spark then calls {@link #abortDataWriter} with it, to abort the data
+   * written by the task and release the handle.
    *
    * @return the message to pass to {@link #commit} on the driver
    */

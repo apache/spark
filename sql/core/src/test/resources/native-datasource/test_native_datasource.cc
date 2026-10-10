@@ -1099,9 +1099,13 @@ SPARK_JNI(void, write)(JNIEnv* env, jclass, jlong handle, jlong array_address,
 
 SPARK_JNI(jbyteArray, commitDataWriter)(JNIEnv* env, jclass, jlong handle) {
   return guarded<jbyteArray>(env, nullptr, [&] {
-    std::unique_ptr<DataWriter> writer(fromHandle<DataWriter>(handle));
+    auto* writer = fromHandle<DataWriter>(handle);
+    // If the commit fails, the data writer stays valid: Spark aborts it with abortDataWriter.
+    maybeFail(writer->state, "commitDataWriter");
+    jbyteArray message = newBytes(env, writer->temp_path);
     std::fclose(writer->file);
-    return newBytes(env, writer->temp_path);
+    delete writer;
+    return message;
   });
 }
 

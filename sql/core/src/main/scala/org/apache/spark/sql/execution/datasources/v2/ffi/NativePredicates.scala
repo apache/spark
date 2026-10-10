@@ -32,35 +32,67 @@ import org.apache.spark.sql.types._
 object NativePredicates {
   private val mapper = new ObjectMapper()
 
-  /** Returns the JSON of the predicate, or None if it cannot be expressed in JSON. */
-  def toJson(predicate: Predicate): Option[String] = {
-    encode(predicate).map(mapper.writeValueAsString)
+  /**
+   * Returns the JSON of the predicate on the columns of the given schema, or None if it cannot
+   * be expressed in JSON.
+   */
+  def toJson(predicate: Predicate, schema: StructType): Option[String] = {
+    encode(predicate, schema).map(mapper.writeValueAsString)
   }
 
-  private def encode(expression: Expression): Option[ObjectNode] = expression match {
-    case reference: NamedReference =>
+  private def encode(expression: Expression, schema: StructType): Option[ObjectNode] = {
+    expression match {
+      case reference: NamedReference =>
+        encodeColumn(reference, schema)
+
+      case literal: Literal[_] =>
+        encodeLiteral(literal.value(), literal.dataType())
+
+      case function: GeneralScalarExpression =>
+        val children = function.children().map(encode(_, schema))
+        if (children.forall(_.isDefined)) {
+          val node = mapper.createObjectNode()
+            .put("type", "function")
+            .put("name", function.name())
+          val array = node.putArray("children")
+          children.foreach(child => array.add(child.get))
+          Some(node)
+        } else {
+          None
+        }
+
+      case _ => None
+    }
+  }
+
+  private def encodeColumn(reference: NamedReference, schema: StructType): Option[ObjectNode] = {
+    // A source compares strings by their bytes, so a column that contains strings with a
+    // non-binary collation, such as UTF8_LCASE, is not pushed down. Neither is a column that is
+    // not in the schema.
+    val hasNonBinaryCollation = columnType(reference.fieldNames().toSeq, schema).forall {
+      _.existsRecursively {
+        case st: StringType => !st.isUTF8BinaryCollation
+        case _ => false
+      }
+    }
+    if (hasNonBinaryCollation) {
+      None
+    } else {
       val node = mapper.createObjectNode().put("type", "column")
       val name = node.putArray("name")
       reference.fieldNames().foreach(name.add)
       Some(node)
+    }
+  }
 
-    case literal: Literal[_] =>
-      encodeLiteral(literal.value(), literal.dataType())
-
-    case function: GeneralScalarExpression =>
-      val children = function.children().map(encode)
-      if (children.forall(_.isDefined)) {
-        val node = mapper.createObjectNode()
-          .put("type", "function")
-          .put("name", function.name())
-        val array = node.putArray("children")
-        children.foreach(child => array.add(child.get))
-        Some(node)
-      } else {
-        None
-      }
-
-    case _ => None
+  /** The type of the column or the nested field with the given name parts. */
+  private def columnType(names: Seq[String], dataType: DataType): Option[DataType] = {
+    (names, dataType) match {
+      case (Seq(), _) => Some(dataType)
+      case (name +: rest, struct: StructType) =>
+        struct.fields.find(_.name == name).flatMap(field => columnType(rest, field.dataType))
+      case _ => None
+    }
   }
 
   private def encodeLiteral(value: Any, dataType: DataType): Option[ObjectNode] = {
