@@ -19,6 +19,7 @@ import base64
 import datetime
 import decimal
 import json
+import math
 import struct
 from array import array
 from typing import Any, Callable, Dict, List, NamedTuple, Tuple
@@ -403,6 +404,9 @@ class VariantUtils:
 
             return cls._handle_array(value, pos, handle_array)
         else:
+            is_float32 = (
+                variant_type is float and cls._get_type_info(value, pos)[1] == VariantUtils.FLOAT
+            )
             value = cls._get_scalar(variant_type, value, metadata, pos, zone_id)
             if value is None:
                 return "null"
@@ -413,9 +417,104 @@ class VariantUtils:
             if isinstance(value, bytes):
                 # decoding simply converts byte array to string
                 return '"' + base64.b64encode(value).decode("utf-8") + '"'
-            if isinstance(value, (datetime.date, datetime.datetime)):
+            if isinstance(value, float):
+                return cls._float_to_json(value, is_float32)
+            if isinstance(value, decimal.Decimal):
+                return cls._decimal_to_json(value)
+            if isinstance(value, datetime.datetime):
+                return '"' + cls._timestamp_to_json(value) + '"'
+            if isinstance(value, datetime.date):
                 return '"' + str(value) + '"'
             return str(value)
+
+    # The helpers below format scalars the same way as the JVM `Variant.toJson` on JDK 19+, so
+    # that `VariantVal.toJson` and the `to_json` SQL function produce the same output. On older
+    # JDKs, `to_json` can print a longer, still round-tripping digit string for some doubles and
+    # floats (see `_float_to_json`).
+
+    @classmethod
+    def _float_to_json(cls, f: float, is_float32: bool) -> str:
+        """
+        Formats a double or float like Java's `Double.toString` and `Float.toString` on JDK 19+,
+        which print the shortest digits (JDK-4511638). Older JDKs can print a longer, still
+        round-tripping digit string for some values, e.g. 2^-24 as 5.9604644775390625E-8 instead
+        of 5.960464477539063E-8. Non-finite values are quoted because they are not valid JSON
+        numbers.
+        """
+        if math.isnan(f):
+            return '"NaN"'
+        if math.isinf(f):
+            return '"Infinity"' if f > 0 else '"-Infinity"'
+
+        def round_trips(s: str) -> bool:
+            if not is_float32:
+                return float(s) == f
+            try:
+                return struct.pack("<f", float(s)) == struct.pack("<f", f)
+            except OverflowError:
+                return False
+
+        # Use an explicit context so that the result does not depend on the caller's decimal
+        # context, e.g. a lowered `decimal.getcontext().prec`.
+        context = decimal.Context(prec=VariantUtils.MAX_DECIMAL16_PRECISION)
+
+        # Like Java, pick the shortest decimal that round-trips, using at least 2 significant
+        # digits (e.g. Double.MIN_VALUE is "4.9E-324", not "5.0E-324"), and the one closest to
+        # `f` among those of that length.
+        for precision in range(2, 18):
+            s = "%.*e" % (precision - 1, f)
+            if round_trips(s):
+                break
+            # When `f` is a power of two, the values that round to it extend only half as far
+            # toward zero as away from it. So the closest decimal of this length can fail to
+            # round-trip while the next one away from zero still does (e.g. 2^-24 is
+            # "5.960464477539063E-8", not "5.9604644775390625E-8").
+            closest = decimal.Decimal(s)
+            exponent = closest.as_tuple().exponent
+            assert isinstance(exponent, int)
+            last_digit = decimal.Decimal(1).scaleb(exponent, context)
+            if f > 0:
+                s = str(context.add(closest, last_digit))
+            else:
+                s = str(context.subtract(closest, last_digit))
+            if round_trips(s):
+                break
+        d = decimal.Decimal(s).normalize(context)
+        if d.is_zero() or 1e-3 <= abs(f) < 1e7:
+            plain = format(d, "f")
+            return plain if "." in plain else plain + ".0"
+        sign, digits, exponent = d.as_tuple()
+        assert isinstance(exponent, int)
+        mantissa = str(digits[0]) + "." + ("".join(map(str, digits[1:])) or "0")
+        return ("-" if sign else "") + mantissa + "E" + str(len(digits) - 1 + exponent)
+
+    @classmethod
+    def _decimal_to_json(cls, d: decimal.Decimal) -> str:
+        """
+        Formats a decimal like Java's `BigDecimal.stripTrailingZeros().toPlainString()`.
+        """
+        context = decimal.Context(prec=VariantUtils.MAX_DECIMAL16_PRECISION)
+        return format(d.normalize(context), "f")
+
+    @classmethod
+    def _timestamp_to_json(cls, ts: datetime.datetime) -> str:
+        """
+        Formats a timestamp as "yyyy-MM-dd HH:mm:ss[.fraction][+HH:MM]", where the fraction has
+        no trailing zeros and the offset is present only for timezone-aware timestamps.
+        """
+        s = ts.replace(microsecond=0, tzinfo=None).isoformat(sep=" ")
+        if ts.microsecond:
+            s += ("." + "%06d" % ts.microsecond).rstrip("0")
+        offset = ts.utcoffset()
+        if offset is not None:
+            total_seconds = int(offset.total_seconds())
+            abs_seconds = abs(total_seconds)
+            s += "%s%02d:%02d" % (
+                "-" if total_seconds < 0 else "+",
+                abs_seconds // 3600,
+                abs_seconds // 60 % 60,
+            )
+        return s
 
     @classmethod
     def _to_python(cls, value: bytes, metadata: bytes, pos: int) -> Any:
