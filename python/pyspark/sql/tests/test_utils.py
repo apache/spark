@@ -1884,6 +1884,52 @@ class UtilsTestsMixin:
             assertSchemaEqual(s1, StructType([StructField("ts", TimestampNTZNanosType(7), True)]))
 
 
+class SchemaComparisonTests(unittest.TestCase):
+    def test_parameterized_data_types(self):
+        from pyspark.sql.types import (
+            CharType,
+            DayTimeIntervalType,
+            TimeType,
+            VarcharType,
+            YearMonthIntervalType,
+        )
+
+        pairs = [
+            (StringType(), StringType("UTF8_LCASE")),
+            (CharType(1), CharType(10)),
+            (VarcharType(1), VarcharType(10)),
+            (TimeType(3), TimeType(6)),
+            (DayTimeIntervalType(0, 0), DayTimeIntervalType(0, 3)),
+            (YearMonthIntervalType(0, 0), YearMonthIntervalType(0, 1)),
+            (DecimalType(10, 2), DecimalType(10, 3)),
+        ]
+        for left, right in pairs:
+            for wrap in [
+                lambda data_type: data_type,
+                ArrayType,
+                lambda data_type: MapType(StringType(), data_type),
+                lambda data_type: MapType(data_type, StringType()),
+                lambda data_type: StructType([StructField("nested", data_type)]),
+            ]:
+                with self.subTest(left=left, right=right, wrap=wrap):
+                    actual = StructType([StructField("value", wrap(left))])
+                    expected = StructType([StructField("value", wrap(right))])
+                    with self.assertRaises(PySparkAssertionError) as error:
+                        assertSchemaEqual(actual, expected)
+                    self.assertEqual(error.exception.getCondition(), "DIFFERENT_SCHEMA")
+                    assertSchemaEqual(actual, actual)
+
+    def test_nested_nullability_is_ignored(self):
+        data_type = StringType("UTF8_LCASE")
+        actual = StructType(
+            [StructField("value", ArrayType(MapType(data_type, data_type, False), False), False)]
+        )
+        expected = actual.toNullable()
+        assertSchemaEqual(actual, expected)
+        with self.assertRaises(PySparkAssertionError):
+            assertSchemaEqual(actual, expected, ignoreNullable=False)
+
+
 class UtilsTests(UtilsTestsMixin, ReusedSQLTestCase):
     pass
 
