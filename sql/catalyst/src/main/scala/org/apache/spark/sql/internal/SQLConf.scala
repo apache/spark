@@ -1954,19 +1954,12 @@ object SQLConf {
     buildConf("spark.sql.parquet.storageFilterPushdown.maxSplicedRowGroupBytes")
       .internal()
       .doc("The limit, in bytes, on what the vectorized Parquet reader buffers for one row group " +
-        "while it applies a storage filter. What is counted is an estimate of what the buffer " +
-        "holds, not a bound on what the column vectors behind it allocate. " +
-        "Two things count against it, and both grow with the number of surviving rows. The " +
-        "first is the row ranges those rows fall into, which the second phase needs to select " +
-        "its pages. They are always on heap. The second is the surviving key values, buffered " +
-        "to splice into the output batches. They follow the reader's memory mode. Off heap they " +
-        s"are native memory outside ${MEMORY_OFFHEAP_SIZE.key}, so they come out of " +
-        s"${EXECUTOR_MEMORY_OVERHEAD.key}. " +
-        "The count is examined after every surviving row. Past the limit the reader first " +
-        "releases the buffered key values, and reads every projected column of the surviving " +
-        "rows instead, which costs one extra read of the key columns. If the row ranges alone " +
-        "still pass the limit, it reads the row group with no filter applied at all. That is " +
-        "correct and pays the same extra read, so it is slower than not pushing the filter.")
+        "while it applies a storage filter, which is the surviving rows' key values and row " +
+        "ranges. It is an estimate, not a bound on what the column vectors allocate. Off heap, " +
+        s"the key values are native memory outside ${MEMORY_OFFHEAP_SIZE.key}, so they come " +
+        s"out of ${EXECUTOR_MEMORY_OVERHEAD.key}. Past the limit the reader drops the buffered " +
+        "key values and reads the key columns again for the surviving rows. If the row ranges " +
+        "alone pass it, the reader reads the row group with no filter applied.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
@@ -1976,37 +1969,17 @@ object SQLConf {
   val PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED =
     buildConf("spark.sql.parquet.storageFilterPushdown.enabled")
       .doc("If true, the vectorized reader of the V1 Parquet file source may apply a runtime " +
-        "storage filter, such as a bloom filter from join runtime filtering, while it reads. " +
-        "It reads the columns the " +
-        "filter needs first, evaluates the filter per row, and then reads the remaining columns " +
-        "only for the rows that survived. This is a planning-time decision. " +
-        "A filter that is attached also stays in the post-scan filter, the way a pushed data " +
-        "filter does, so the reader is free to stop applying it wherever doing so would cost " +
-        "more than it saves, and the answer does not change. In a scan that returns columnar " +
-        "batches, the post-scan filter skips it on the rows the reader applied it to, which the " +
-        "reader marks in a column named _tmp_storage_filter_checked. A table with a column of " +
-        "that name is not offered storage filters, and a file holding one outside the table's " +
-        "schema is not supported. A row group where the reader stops applying the filter reads " +
-        "its key columns twice, which is slower than not pushing the filter. " +
-        "Under spark.sql.files.ignoreCorruptFiles the answer can change, because this reader " +
-        "reads different pages in a different order than a plain read. Which rows survive a " +
-        "corrupt page can then differ from a plain read, in either direction. " +
-        "Returning only the surviving rows of a row group relies on the Parquet page index, so a " +
-        "file whose page index is wrong can pair a row's key with another row's values, or " +
-        "return rows the filter rejects. Setting " +
-        "parquet.filter.columnindex.enabled to false makes the reader fall back to skipping " +
-        "whole row groups in which the filter rejects every row. A row group with a surviving " +
-        "row then reads its key columns twice, and the post-scan filter evaluates the filter " +
-        "on each of its rows. A file without a page index falls back the same " +
-        "way. It gains only where a whole row group has no surviving row, a bloom's false " +
-        "positives included, and every other row group reads its key columns twice. A read " +
-        "with pushed data filters already relies on the page index, and that conf turns it off " +
-        "there too. A read with no pushed data filter relies on it only with this feature. " +
-        "Note that the surviving key values of a whole row group are buffered before that row " +
-        "group's first batch is produced. Each reader holds them and their row ranges for one " +
-        "row group at a time, up to " +
-        s"${PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES.key}. Like the reader's " +
-        "own column vectors, they are not tracked by Spark's memory manager.")
+        "bloom filter from join runtime filtering while it reads, and skip the pages and row " +
+        "groups of the other columns that hold no matching rows. The filter also stays in the " +
+        "post-scan filter, so the answer does not change, with two exceptions. Under " +
+        "spark.sql.files.ignoreCorruptFiles the rows returned from a corrupt file can differ. A " +
+        "file with a wrong Parquet page index can return wrong rows. Setting " +
+        "parquet.filter.columnindex.enabled to false stops relying on the page index. Only " +
+        "ParquetFileFormat itself is supported, not its subclasses. A table with a column named " +
+        "_tmp_storage_filter_checked is not offered storage filters, and a file holding one " +
+        "outside the table's schema is not supported. It can be slower when the matching rows " +
+        "are spread across most pages. The matching key values of a row group are buffered " +
+        "while it is read, outside Spark's memory manager.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

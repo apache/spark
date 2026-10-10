@@ -303,10 +303,9 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
 
   // Filters on non-partition columns.
   def dataFilters: Seq[Expression]
-  // Filters the storage layer evaluates to prune value-column IO based on key-column evaluation.
-  // These may reference subqueries (e.g. a runtime bloom filter built from a join build side),
-  // which are materialized on the driver while the RDD is built, before the reader is serialized.
-  // Nil for a scan that does not support pushing them.
+  // Filters the storage layer evaluates to skip reading the columns they do not reference, see
+  // `FileFormat.buildReaderWithStorageFilters`. Their subqueries are materialized on the driver
+  // while the RDD is built.
   def storageFilters: Seq[Expression] = Nil
   // Disable bucketed scan based on physical query plan, see rule
   // [[DisableUnnecessaryBucketedScan]] for details.
@@ -561,10 +560,7 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
         "PushedFilters" -> seqToString(pushedFiltersForDisplay),
         "DataFilters" -> seqToString(dataFilters),
         "Location" -> locationDesc) ++
-      // Only surface storage filters when the scan actually has some. `simpleString` renders every
-      // metadata entry verbatim, unlike `verboseStringWithOperatorId` which drops empty ones, so an
-      // unconditional entry would append `StorageFilters: []` to every file-scan explain line for a
-      // feature that is off by default.
+      // Only when there are some, since `simpleString` would render an empty entry too.
       Option.when(storageFilters.nonEmpty)("StorageFilters" -> seqToString(storageFilters))
 
     relation.bucketSpec.map { spec =>
@@ -654,8 +650,7 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
     }
   } ++ storageFilterMetrics ++ driverMetrics
 
-  // The format names and creates these, since what a storage filter avoids is measured in the
-  // format's own units. This node only carries them into `metrics` so they reach the SQL UI.
+  // The format creates these, and this node carries them into `metrics` for the SQL UI.
   protected lazy val storageFilterMetrics: Map[String, SQLMetric] = if (storageFilters.nonEmpty) {
     relation.fileFormat.storageFilterMetrics(sparkContext)
   } else {
@@ -774,11 +769,9 @@ case class FileSourceScanExec(
   lazy val inputRDD: RDD[InternalRow] = {
     val options = relation.options +
       (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
-    // The storage-filter entry point is only asked when there is something to push, so a
-    // `FileFormat` subclass which customizes reading by overriding `buildReaderWithPartitionValues`
-    // keeps being used on every other query. A format that declines, which is the default, falls
-    // back to that builder here rather than inside itself. Each builder gets a conf of its own, so
-    // whatever a declining builder set up in it cannot reach the fallback.
+    // The storage-filter entry point is only asked when there is something to push, so a format
+    // that customizes `buildReaderWithPartitionValues` keeps it on every other query. Each builder
+    // gets a conf of its own, so a declining builder's setup cannot reach the fallback.
     val storageFilterReader = if (preparedStorageFilters.isEmpty) {
       None
     } else {
@@ -814,16 +807,9 @@ case class FileSourceScanExec(
     readRDD
   }
 
-  // Materialize scalar subqueries inside storage filters to literals and bind AttributeReferences
-  // to BoundReferences targeting positions in `requiredSchema`. Subqueries must have been prepared
-  // by SparkPlan before this is forced (same contract as `pushedDownFilters`).
-  //
-  // No conf check here, since the conf decides at planning time whether a scan is offered storage
-  // filters at all, and re-reading it now could only make this scan drop work it already has.
-  //
-  // `output` is `readDataColumns ++ generatedMetadataColumns ++ storageFilterCheckedColumn ++
-  // partitionColumns ++ constantMetadataColumns` and `requiredSchema` is the StructType of the
-  // first three groups, so the first `requiredSchema.length` attributes line up with its fields.
+  // The storage filters with their scalar subqueries materialized, bound to `requiredSchema`,
+  // whose fields are the first `requiredSchema.length` attributes of `output`. Subqueries must be
+  // prepared before this is forced, as for `pushedDownFilters`.
   @transient
   protected lazy val preparedStorageFilters: Seq[Expression] = {
     val requestedDataAttrs = output.take(requiredSchema.length)
