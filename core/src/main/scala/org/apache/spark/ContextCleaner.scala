@@ -124,6 +124,21 @@ private[spark] class ContextCleaner(
     listeners.add(listener)
   }
 
+  /**
+   * Notify listeners of a shuffle reclaimed outside the reference-tracking path, i.e. by the
+   * shuffle TTL cleaner. Needed so that `ExecutorMonitor` sees the shuffle go away and dynamic
+   * allocation can release an executor that only held it.
+   */
+  private[spark] def notifyShuffleCleaned(shuffleId: Int): Unit = {
+    // Contained the same way doCleanupShuffle contains its own fan-out. This runs on the shuffle
+    // TTL cleaner's thread, at the end of a reap that has already deleted the files and
+    // unregistered the shuffle, so letting a listener's exception escape would only report a
+    // completed reap as failed.
+    Utils.tryLogNonFatalError {
+      listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
+    }
+  }
+
   /** Start the cleaner. */
   def start(): Unit = {
     cleaningThread.setDaemon(true)
