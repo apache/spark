@@ -667,7 +667,14 @@ void streamRelease(ArrowArrayStream* stream) {
 // The driver-side writer of native_sink.
 struct Writer {
   Options state;  // path, overwrite, fail.
+  // The file that closeWriter creates, so that the tests can check that the writer of a committed
+  // or aborted write is closed: _CLOSED for a batch write, _CLOSED_<epoch> for a streaming one.
+  std::string closed_marker;
 };
+
+[[maybe_unused]] std::string closedMarker(jlong epoch_id) {
+  return epoch_id < 0 ? "/_CLOSED" : "/_CLOSED_" + std::to_string(epoch_id);
+}
 
 // Writes the rows of a task as CSV lines to a temporary file, renamed on commit.
 struct DataWriter {
@@ -1043,12 +1050,15 @@ SPARK_JNI(void, commit)(JNIEnv* env, jclass, jlong handle, jlong epoch_id,
     }
     writeFile(path + (epoch_id < 0 ? "/_SUCCESS" : "/_EPOCH_" + std::to_string(epoch_id)),
               std::to_string(temp_files.size()));
+    writer->closed_marker = closedMarker(epoch_id);
   });
 }
 
-SPARK_JNI(void, abort)(JNIEnv* env, jclass, jlong handle, jlong, jobjectArray messages) {
+SPARK_JNI(void, abort)(JNIEnv* env, jclass, jlong handle, jlong epoch_id,
+                       jobjectArray messages) {
   guardedVoid(env, [&] {
     auto* writer = fromHandle<Writer>(handle);
+    writer->closed_marker = closedMarker(epoch_id);
     bool has_null = false;
     for (const auto& temp_file : toByteStrings(env, messages, &has_null)) {
       unlink(temp_file.c_str());
@@ -1057,7 +1067,14 @@ SPARK_JNI(void, abort)(JNIEnv* env, jclass, jlong handle, jlong, jobjectArray me
   });
 }
 
-SPARK_JNI(void, closeWriter)(JNIEnv*, jclass, jlong handle) { delete fromHandle<Writer>(handle); }
+SPARK_JNI(void, closeWriter)(JNIEnv* env, jclass, jlong handle) {
+  std::unique_ptr<Writer> writer(fromHandle<Writer>(handle));
+  guardedVoid(env, [&] {
+    if (!writer->closed_marker.empty()) {
+      writeFile(writer->state["path"] + writer->closed_marker, "");
+    }
+  });
+}
 
 SPARK_JNI(jlong, createDataWriter)(JNIEnv* env, jclass, jbyteArray writer_state,
                                    jint partition_id, jlong task_id, jlong epoch_id) {

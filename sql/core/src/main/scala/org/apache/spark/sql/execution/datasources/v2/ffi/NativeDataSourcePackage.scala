@@ -28,6 +28,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import com.google.common.cache.{Cache, CacheBuilder}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
@@ -99,7 +100,12 @@ object NativeDataSourcePackage extends Logging {
 
   private[ffi] type ReadResult = Either[InvalidNativeDataSourcePackage, NativeDataSourcePackage]
 
-  private val packages = new ConcurrentHashMap[CacheKey, ReadResult]()
+  // Bounded, because each session stores its artifacts in a directory of its own, so a
+  // long-running server where many sessions add packages reads many different files.
+  private val MAX_CACHED_PACKAGES = 1000
+
+  private val packages: Cache[CacheKey, ReadResult] =
+    CacheBuilder.newBuilder().maximumSize(MAX_CACHED_PACKAGES).build[CacheKey, ReadResult]()
   private val mapper = new ObjectMapper()
 
   /** Reads the package in the given file. The result is cached until the file changes. */
@@ -107,7 +113,7 @@ object NativeDataSourcePackage extends Logging {
 
   /**
    * Reads the package in the given file, or returns why it is invalid. The result is cached until
-   * the file changes, and an invalid package is logged once.
+   * the file changes, and an invalid package is logged when it is read.
    */
   private[ffi] def tryRead(file: File): ReadResult = {
     val canonical = try {
@@ -118,14 +124,29 @@ object NativeDataSourcePackage extends Logging {
           invalidManifestError(file, s"The package cannot be read: $e", e), Nil))
     }
     val key = CacheKey(canonical.getPath, canonical.length(), canonical.lastModified())
-    packages.computeIfAbsent(key, _ => {
+    Option(packages.getIfPresent(key)).getOrElse {
       val result = parse(canonical)
       result.swap.foreach { invalid =>
         logWarning(log"Invalid native data source package ${MDC(PATH, canonical)}.",
           invalid.error)
       }
+      packages.put(key, result)
       result
-    })
+    }
+  }
+
+  /**
+   * Forgets the packages read from the files under the given directory, such as the artifacts of
+   * a session that is cleaned up.
+   */
+  def forgetPackagesIn(dir: File): Unit = {
+    val prefix = dir.getCanonicalPath + File.separator
+    packages.asMap().keySet().removeIf(_.path.startsWith(prefix))
+  }
+
+  /** Returns whether a package read from the file at the given canonical path is cached. */
+  private[ffi] def isCached(canonicalPath: String): Boolean = {
+    packages.asMap().keySet().asScala.exists(_.path == canonicalPath)
   }
 
   private def invalidManifestError(file: File, reason: String, cause: Throwable = null) = {
@@ -137,8 +158,8 @@ object NativeDataSourcePackage extends Logging {
     def invalid(reason: String, dataSources: Seq[String] = Nil, cause: Throwable = null) = {
       Left(InvalidNativeDataSourcePackage(invalidManifestError(file, reason, cause), dataSources))
     }
-    val manifest = try {
-      Utils.tryWithResource(new ZipFile(file)) { zip =>
+    try {
+      val manifest = Utils.tryWithResource(new ZipFile(file)) { zip =>
         Option(zip.getEntry(MANIFEST_NAME)) match {
           case None => invalid(s"The package does not contain the manifest $MANIFEST_NAME.")
           case Some(entry) =>
@@ -156,10 +177,10 @@ object NativeDataSourcePackage extends Logging {
             }
         }
       }
+      manifest.map(NativeDataSourcePackage(file.getPath, sha256(file), _))
     } catch {
       case e: IOException => invalid(s"The package is not a valid zip file: $e", cause = e)
     }
-    manifest.map(NativeDataSourcePackage(file.getPath, sha256(file), _))
   }
 
   private[ffi] def parseManifest(json: String): Either[String, NativeDataSourceManifest] = {

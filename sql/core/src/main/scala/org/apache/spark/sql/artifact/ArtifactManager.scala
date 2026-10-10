@@ -36,6 +36,7 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST, JAR_IVY_CONNECT_TIMEOUT, JAR_IVY_READ_TIMEOUT, JAR_IVY_REPO_PATH, JAR_IVY_SETTING_PATH}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.execution.datasources.v2.ffi.NativeDataSourcePackage
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.storage.{BlockManager, CacheId, StorageLevel}
@@ -630,6 +631,9 @@ object ArtifactManager extends Logging {
         sparkContext.postEnvironmentUpdate()
       }
     }
+
+    // Forget the native data source packages read from the artifacts folder
+    Utils.tryLogNonFatalError(NativeDataSourcePackage.forgetPackagesIn(artifactPath.toFile))
 
     // Clean up artifacts folder
     try {

@@ -173,7 +173,8 @@ A session finds the packages in two places, and the executors get them automatic
 The packages of a session take precedence over the installed libraries. Give packages distinct
 file names, for example with their version: sessions that are not isolated share the files they
 add, and a session cannot use two different packages with the same file name. Spark ignores, and
-logs, a package that it cannot read, unless its manifest lists the data source that a query uses.
+logs, a package that it cannot read or whose version it does not support, unless its manifest
+lists the data source that a query uses and no other package or installed library provides it.
 
 ## Example in Rust
 
