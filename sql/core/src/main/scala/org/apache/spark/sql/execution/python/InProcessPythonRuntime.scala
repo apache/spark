@@ -99,7 +99,8 @@ private[python] object InProcessPythonRuntime extends Logging {
       }
     }
     if (active != null && !active.isTerminated) {
-      active.requireCompatible(sitePackages)
+      // The sitePackages were checked above: an active session bootstrapped them.
+      active.requireRunning()
     } else {
       InterpreterConfiguration.configure(sitePackages)
       val candidate = new InterpreterSession(sitePackages)
@@ -161,14 +162,10 @@ private[python] object InProcessPythonRuntime extends Logging {
     def isRunning: Boolean = running
     def isTerminated: Boolean = executor.isTerminated
 
-    def requireCompatible(paths: Seq[String]): Unit = {
+    def requireRunning(): Unit = {
       if (!isRunning) {
         throw new LifecycleException("In-process Python is still stopping. Wait for outstanding " +
           "native work to finish or replace the executor process before starting a new context.")
-      }
-      if (sitePackages != paths) {
-        throw new LifecycleException("In-process Python is already running with different " +
-          "sitePackages. Restart the executor process before changing interpreter configuration.")
       }
     }
 

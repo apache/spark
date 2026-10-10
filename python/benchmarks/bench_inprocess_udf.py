@@ -117,7 +117,7 @@ class InProcessUDFTimeBench:
             if udf_type == "inprocess":
                 from pyspark.inprocess.udf import inprocess_udf
 
-                udf = inprocess_udf(return_type=return_type)(operation)
+                udf = inprocess_udf(returnType=return_type)(operation)
             elif udf_type == "arrow":
                 udf = arrow_udf(return_type)(operation)
             else:

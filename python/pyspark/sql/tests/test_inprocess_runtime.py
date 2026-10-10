@@ -811,8 +811,11 @@ class InProcessRuntimeTests(unittest.TestCase):
         self.assertTrue(udf.deterministic)
         self.assertIs(udf.asNondeterministic(), udf)
         self.assertFalse(udf.deterministic)
-        with self.assertRaises(PySparkTypeError):
+        # The keyword matches udf, pandas_udf and arrow_udf.
+        self.assertEqual(inprocess_udf(returnType=LongType())(identity).returnType, LongType())
+        with self.assertRaises(PySparkTypeError) as error:
             inprocess_udf(42)(identity)
+        self.assertEqual(error.exception.getMessageParameters()["arg_name"], "returnType")
         # DDL decoration does not require a live Spark session.
         self.assertIsNone(inprocess_udf("long")(identity)._parsed_return_type)
 

@@ -62,7 +62,7 @@ private[spark] object Python {
     "contain single quotes, newlines, NUL, surrogate characters (including supplementary " +
     "Unicode characters) or the platform path separator"
 
-  val IN_PROCESS_SITE_PACKAGES = ConfigBuilder("spark.inprocess.python.sitePackages")
+  val IN_PROCESS_SITE_PACKAGES = ConfigBuilder("spark.python.inProcess.sitePackages")
     .doc("Comma-separated executor directories containing packages for in-process Python UDFs. " +
       "These directories are processed with site.addsitedir after Spark distribution paths " +
       "and the process PYTHONPATH. JEP must be directly importable from these directories. " +

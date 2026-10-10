@@ -142,7 +142,7 @@ these APIs. For archived environments, access files by their configured executor
 rather than `SparkFiles.get`. Captured broadcast and accumulator
 objects are rejected during serialization; functions must not access them through
 imported modules either. Install modules on executors before startup, optionally
-using `spark.inprocess.python.sitePackages`. Session-scoped `spark.pythonWorkerEnv.*`
+using `spark.python.inProcess.sitePackages`. Session-scoped `spark.pythonWorkerEnv.*`
 settings are rejected: the shared interpreter cannot apply per-session process
 environments. Configure environment variables before the executor starts, for example
 with `spark.executorEnv.NAME` (or the launching environment in local mode).
@@ -236,7 +236,7 @@ import pyarrow.compute as pc
 from pyspark.inprocess.udf import inprocess_udf
 from pyspark.sql.types import LongType
 
-@inprocess_udf(return_type=LongType())
+@inprocess_udf(returnType=LongType())
 def double(x):
     return pc.multiply(x, 2)
 
@@ -257,7 +257,7 @@ import pyarrow.compute as pc
 from pyspark.inprocess.udf import inprocess_udf
 from pyspark.sql.types import StringType
 
-@inprocess_udf(return_type=StringType())
+@inprocess_udf(returnType=StringType())
 def upper(s):
     return pc.utf8_upper(s)
 
@@ -280,7 +280,7 @@ import pyarrow.compute as pc
 from pyspark.inprocess.udf import inprocess_udf
 from pyspark.sql.types import DoubleType
 
-@inprocess_udf(return_type=DoubleType())
+@inprocess_udf(returnType=DoubleType())
 def weighted_sum(x, y):
     return pc.add(pc.multiply(x, 0.6), pc.multiply(y, 0.4))
 
@@ -302,7 +302,7 @@ from pyspark.sql.types import DoubleType
 
 SCALE_FACTOR = 100.0
 
-@inprocess_udf(return_type=DoubleType())
+@inprocess_udf(returnType=DoubleType())
 def scale(x):
     return pc.multiply(x, SCALE_FACTOR)
 ```
@@ -319,7 +319,7 @@ import pyarrow.compute as pc
 from pyspark.inprocess.udf import inprocess_udf
 from pyspark.sql.types import DoubleType
 
-@inprocess_udf(return_type=DoubleType(), deterministic=False)
+@inprocess_udf(returnType=DoubleType(), deterministic=False)
 def add_noise(x):
     noise = pa.array([random.gauss(0.0, 0.01) for _ in range(len(x))])
     return pc.add(x, noise)
@@ -377,7 +377,7 @@ ARROW_C_DATA_JAR=/absolute/path/to/arrow-c-data.jar
 spark-submit --master 'local[1]' \
   --driver-class-path "$JEP_DIR/*:$ARROW_C_DATA_JAR" \
   --conf "spark.driver.extraLibraryPath=$JEP_DIR" \
-  --conf "spark.inprocess.python.sitePackages=$(dirname "$JEP_DIR")" \
+  --conf "spark.python.inProcess.sitePackages=$(dirname "$JEP_DIR")" \
   --conf spark.plugins=org.apache.spark.sql.execution.python.InProcessPythonPlugin \
   my_app.py
 ```
@@ -416,7 +416,7 @@ spark-submit \
   --conf spark.task.cpus=1 \
   --conf spark.pyspark.python=./myvenv/bin/python3 \
   --conf spark.executor.extraLibraryPath=./myvenv/lib/python3.11/site-packages/jep \
-  --conf spark.inprocess.python.sitePackages=./myvenv/lib/python3.11/site-packages \
+  --conf spark.python.inProcess.sitePackages=./myvenv/lib/python3.11/site-packages \
   my_app.py
 ```
 
@@ -441,7 +441,7 @@ Then prepare the image with:
 
 - the JEP JAR and matching Arrow CDI JAR in `/opt/spark/jars`;
 - JEP's native library directory on the JVM library path before startup;
-- `spark.inprocess.python.sitePackages` pointing to `/opt/venv`'s site-packages;
+- `spark.python.inProcess.sitePackages` pointing to `/opt/venv`'s site-packages;
 - Spark's matching `python/lib/pyspark.zip` and Py4J zip in the Spark distribution.
 
 The plugin adds Spark's Python distribution paths itself, ahead of any PySpark
@@ -456,7 +456,7 @@ spark-submit \
   --master k8s://https://<k8s-api-server>:<port> \
   --deploy-mode cluster \
   --conf spark.kubernetes.container.image=my-registry/spark-inprocess:tested-build \
-  --conf spark.inprocess.python.sitePackages=/opt/venv/lib/python3.11/site-packages \
+  --conf spark.python.inProcess.sitePackages=/opt/venv/lib/python3.11/site-packages \
   --conf spark.executor.extraJavaOptions=-Djava.library.path=/opt/venv/lib/python3.11/site-packages/jep \
   --conf spark.plugins=org.apache.spark.sql.execution.python.InProcessPythonPlugin \
   --conf spark.executor.cores=1 \
@@ -493,7 +493,7 @@ spark-submit \
   --conf spark.task.cpus=1 \
   --conf spark.pyspark.python=./myvenv/bin/python3 \
   --conf spark.executor.extraJavaOptions="-Djava.library.path=./myvenv/lib/python3.11/site-packages/jep" \
-  --conf spark.inprocess.python.sitePackages=./myvenv/lib/python3.11/site-packages \
+  --conf spark.python.inProcess.sitePackages=./myvenv/lib/python3.11/site-packages \
   my_app.py
 ```
 
@@ -515,7 +515,7 @@ Task calls and cleanup never create or restart an interpreter.
 
 ---
 
-### `spark.inprocess.python.sitePackages`
+### `spark.python.inProcess.sitePackages`
 
 | Default | `(none)` |
 |---|---|
@@ -536,7 +536,7 @@ venv's site-packages. Setting this config tells the plugin where to find the ven
 **Typical usage with `--archives`:**
 
 ```
-spark.inprocess.python.sitePackages = ./myvenv/lib/python3.11/site-packages
+spark.python.inProcess.sitePackages = ./myvenv/lib/python3.11/site-packages
 ```
 
 The relative path `./myvenv/` resolves to the directory where Spark extracted your archive on
@@ -555,11 +555,16 @@ local driver process) before changing this configuration or replacing its instal
 **Multiple paths** (comma-separated):
 
 ```
-spark.inprocess.python.sitePackages = ./venv/lib/python3.11/site-packages,/opt/custom/lib
+spark.python.inProcess.sitePackages = ./venv/lib/python3.11/site-packages,/opt/custom/lib
 ```
 
 **When you do NOT need this:**
 - Executors where all required packages are pre-installed on the system Python path.
+
+Unlike Python workers, the embedded interpreter does not search the user site-packages
+directory, e.g. packages installed with `pip install --user`, since it runs in Python's
+isolated mode. List that directory here (`python -m site --user-site` prints it) if
+packages such as PyArrow are installed there.
 
 ---
 
@@ -616,6 +621,8 @@ Nested values must satisfy the declared nullability. Map keys cannot be null.
 Only types representable by Spark's Arrow conversion and JVM Arrow accessors are
 supported; this is not a guarantee for every Spark SQL type. Unsupported return
 types are rejected on the driver before the function is serialized or tasks start.
+CHAR and VARCHAR return types, including nested ones, are rejected as for other Python
+UDFs; declare `StringType` instead.
 
 ---
 
@@ -646,7 +653,7 @@ import pyarrow.compute as pc
 from pyspark.inprocess.udf import inprocess_udf
 from pyspark.sql.types import LongType
 
-@inprocess_udf(return_type=LongType())
+@inprocess_udf(returnType=LongType())
 def double_inprocess(x):          # x is pa.Array, not pd.Series
     return pc.multiply(x, 2)
 ```
@@ -662,7 +669,7 @@ def upper_pandas(s: pd.Series) -> pd.Series:
 
 ```python
 # inprocess_udf  — replace .str.upper() with pc.utf8_upper()
-@inprocess_udf(return_type=StringType())
+@inprocess_udf(returnType=StringType())
 def upper_inprocess(s):
     return pc.utf8_upper(s)
 ```
@@ -678,7 +685,7 @@ def score_pandas(x: pd.Series, y: pd.Series) -> pd.Series:
 
 ```python
 # inprocess_udf  — chain pc.multiply / pc.add instead of pandas arithmetic
-@inprocess_udf(return_type=DoubleType())
+@inprocess_udf(returnType=DoubleType())
 def score_inprocess(x, y):
     return pc.add(pc.multiply(x, 0.6), pc.multiply(y, 0.4))
 ```

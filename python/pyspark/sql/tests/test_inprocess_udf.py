@@ -70,7 +70,7 @@ class InProcessUDFTests(ReusedSQLTestCase):
             .set("spark.driver.extraClassPath", os.pathsep.join([str(cls.jep_jar), cls.cdi_jar]))
             .set("spark.driver.extraLibraryPath", str(cls.jep_dir))
             .set(
-                "spark.inprocess.python.sitePackages",
+                "spark.python.inProcess.sitePackages",
                 ",".join([cls.site_packages, str(cls.jep_dir.parent)]),
             )
             .set("spark.plugins", "org.apache.spark.sql.execution.python.InProcessPythonPlugin")
@@ -689,6 +689,26 @@ class BootstrapFailureProbe {
         plan = self.spark.range(1).select(identity("id"))._jdf.queryExecution().analyzed()
         self.assertFalse(plan.expressions().apply(0).deterministic())
 
+    def test_calls_share_one_jvm_function(self):
+        from pyspark.inprocess import inprocess_udf
+
+        jvm = self.spark._jvm
+        double = inprocess_udf("long")(lambda x: x * 2)
+
+        def functions(*cols):
+            plan = self.spark.range(1).select(*cols)._jdf.queryExecution().analyzed()
+            udfs = [plan.expressions().apply(i).child() for i in range(len(cols))]
+            return [jvm.System.identityHashCode(udf.func()) for udf in udfs], udfs
+
+        # The command crosses py4j once, however many expressions call the UDF.
+        ids, _ = functions(double("id"), double("id"))
+        self.assertEqual(ids[0], ids[1])
+        # Nondeterminism is part of the JVM function, which is then created again.
+        double.asNondeterministic()
+        later, udfs = functions(double("id"))
+        self.assertNotEqual(later[0], ids[0])
+        self.assertFalse(udfs[0].udfDeterministic())
+
     def test_traceback_settings_are_per_registration(self):
         from pyspark.inprocess import inprocess_udf
 
@@ -881,9 +901,10 @@ class BootstrapFailureProbe {
                 df.select(identity(df.id), fail(df.id)).collect()
             assert_released()
             # Deserialization fails before Python imports any input CDI structures.
-            identity._serialized = b"invalid pickle"
+            broken = inprocess_udf(LongType())(lambda x: x)
+            broken._serialized = b"invalid pickle"
             with self.assertRaisesRegex(Exception, "UnpicklingError"):
-                df.select(identity(df.id)).collect()
+                df.select(broken(df.id)).collect()
             assert_released()
 
     def test_double_long(self):
@@ -893,7 +914,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import LongType
 
-        @inprocess_udf(return_type=LongType())
+        @inprocess_udf(returnType=LongType())
         def double(x):
             return pc.multiply(x, 2)
 
@@ -908,7 +929,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import DoubleType
 
-        @inprocess_udf(return_type=DoubleType())
+        @inprocess_udf(returnType=DoubleType())
         def negate(x):
             return pc.negate(x)
 
@@ -924,7 +945,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import IntegerType
 
-        @inprocess_udf(return_type=IntegerType())
+        @inprocess_udf(returnType=IntegerType())
         def identity(x):
             return x
 
@@ -940,7 +961,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import BooleanType
 
-        @inprocess_udf(return_type=BooleanType())
+        @inprocess_udf(returnType=BooleanType())
         def invert(x):
             return pc.invert(x)
 
@@ -960,7 +981,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import LongType
 
-        @inprocess_udf(return_type=LongType())
+        @inprocess_udf(returnType=LongType())
         def negate(x):
             return pc.negate(x)
 
@@ -979,7 +1000,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import LongType, StructField, StructType
 
-        @inprocess_udf(return_type=LongType())
+        @inprocess_udf(returnType=LongType())
         def double(x):
             return pc.multiply(x, 2)
 
@@ -1002,7 +1023,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import LongType
 
-        @inprocess_udf(return_type=LongType())
+        @inprocess_udf(returnType=LongType())
         def add(a, b):
             return pc.add(a, b)
 
@@ -1018,7 +1039,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import DoubleType
 
-        @inprocess_udf(return_type=DoubleType())
+        @inprocess_udf(returnType=DoubleType())
         def multiply(a, b):
             return pc.multiply(a, b)
 
@@ -1039,11 +1060,11 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import LongType
 
-        @inprocess_udf(return_type=LongType())
+        @inprocess_udf(returnType=LongType())
         def double(x):
             return pc.multiply(x, 2)
 
-        @inprocess_udf(return_type=LongType())
+        @inprocess_udf(returnType=LongType())
         def triple(x):
             return pc.multiply(x, 3)
 
@@ -1059,7 +1080,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import LongType
 
-        @inprocess_udf(return_type=LongType())
+        @inprocess_udf(returnType=LongType())
         def double(x):
             return pc.multiply(x, 2)
 
@@ -1110,7 +1131,7 @@ class BootstrapFailureProbe {
 
         factor = 7  # captured in closure
 
-        @inprocess_udf(return_type=LongType())
+        @inprocess_udf(returnType=LongType())
         def scale(x):
             return pc.multiply(x, factor)
 
@@ -1129,7 +1150,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import LongType
 
-        @inprocess_udf(return_type=LongType(), deterministic=False)
+        @inprocess_udf(returnType=LongType(), deterministic=False)
         def double(x):
             return pc.multiply(x, 2)
 
@@ -1144,7 +1165,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import LongType
 
-        @inprocess_udf(return_type=LongType(), deterministic=False)
+        @inprocess_udf(returnType=LongType(), deterministic=False)
         def double(x):
             return pc.multiply(x, 2)
 
@@ -1183,7 +1204,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import StringType
 
-        @inprocess_udf(return_type=StringType())
+        @inprocess_udf(returnType=StringType())
         def identity(s):
             return s
 
@@ -1201,7 +1222,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import StringType
 
-        @inprocess_udf(return_type=StringType())
+        @inprocess_udf(returnType=StringType())
         def upper(s):
             return pc.utf8_upper(s)
 
@@ -1219,7 +1240,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import BinaryType
 
-        @inprocess_udf(return_type=BinaryType())
+        @inprocess_udf(returnType=BinaryType())
         def identity(b):
             return b
 
@@ -1239,7 +1260,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import ArrayType, LongType
 
-        @inprocess_udf(return_type=ArrayType(LongType()))
+        @inprocess_udf(returnType=ArrayType(LongType()))
         def identity(arr):
             return arr
 
@@ -1262,7 +1283,7 @@ class BootstrapFailureProbe {
         inner = StructType([StructField("a", LongType()), StructField("b", DoubleType())])
         outer = StructType([StructField("v", inner)])
 
-        @inprocess_udf(return_type=inner)
+        @inprocess_udf(returnType=inner)
         def identity(s):
             return s
 
@@ -1285,7 +1306,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import DateType
 
-        @inprocess_udf(return_type=DateType())
+        @inprocess_udf(returnType=DateType())
         def identity(d):
             return d
 
@@ -1308,7 +1329,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import TimestampType
 
-        @inprocess_udf(return_type=TimestampType())
+        @inprocess_udf(returnType=TimestampType())
         def identity(ts):
             return ts
 
@@ -1415,7 +1436,7 @@ class BootstrapFailureProbe {
         from pyspark.inprocess.udf import inprocess_udf
         from pyspark.sql.types import LongType
 
-        @inprocess_udf(return_type=LongType())
+        @inprocess_udf(returnType=LongType())
         def always_fails(x):
             raise ValueError("intentional test error from always_fails")
 

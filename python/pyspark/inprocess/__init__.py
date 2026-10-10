@@ -30,7 +30,7 @@ Example::
     from pyspark.inprocess import inprocess_udf
     from pyspark.sql.types import LongType
 
-    @inprocess_udf(return_type=LongType())
+    @inprocess_udf(returnType=LongType())
     def double(x):
         return pc.multiply(x, 2)
 

@@ -46,32 +46,28 @@ import org.apache.spark.util.Utils
 object InProcessPythonUDFBuilder {
 
   /**
-   * Build a [[Column]] backed by an in-process [[PythonUDF]] expression.
+   * Creates an in-process Python UDF, once per Python wrapper, so that its command crosses
+   * py4j and lives in the driver once however many expressions call it.
    *
    * @param name            display name (Python function ``__name__``)
    * @param serializedFunc  cloudpickle bytes of the Python UDF
    * @param returnTypeJson  JSON string of the Spark SQL return type
-   * @param jColumns        Java List of JVM [[Column]] objects (the UDF inputs)
    * @param deterministic   whether the UDF always returns the same output for the same input;
    *                        set to false for UDFs that use randomness or external state
    * @param pythonVersion   driver's Python major.minor version
-   * @return                [[Column]] backed by an in-process [[PythonUDF]] expression
    */
-  def build(
+  def create(
       name: String,
       serializedFunc: Array[Byte],
       returnTypeJson: String,
-      jColumns: JList[Column],
       deterministic: Boolean,
-      pythonVersion: String): Column = {
+      pythonVersion: String): InProcessPythonFunction = {
     val returnType = DataType.fromJson(returnTypeJson)
     // As in `UserDefinedPythonFunction.builder`, so that no client can skip its own check.
     if (CharVarcharUtils.hasCharVarcharIncludingUDT(returnType)) {
       throw QueryCompilationErrors.charVarcharNotSupportedInPython(
         "Python UDF return types", returnType.catalogString)
     }
-    val inputExprs = jColumns.asScala.map(col => ColumnNodeExpression(col.node)).toSeq
-    NamedParametersSupport.splitAndCheckNamedArguments(inputExprs, name, SQLConf.get.resolver)
     val function = new SimplePythonFunction(
       serializedFunc,
       Collections.emptyMap[String, String](),
@@ -80,10 +76,18 @@ object InProcessPythonUDFBuilder {
       pythonVersion,
       Collections.emptyList(),
       null)
-    ExpressionUtils.column(PythonUDF(
-      name, function, returnType, inputExprs,
-      PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF, deterministic))
+    new InProcessPythonFunction(name, function, returnType, deterministic)
   }
+
+  /** Creates an in-process Python UDF and applies it to `jColumns`. */
+  def build(
+      name: String,
+      serializedFunc: Array[Byte],
+      returnTypeJson: String,
+      jColumns: JList[Column],
+      deterministic: Boolean,
+      pythonVersion: String): Column =
+    create(name, serializedFunc, returnTypeJson, deterministic, pythonVersion).apply(jColumns)
 
   private val UnsupportedSessionConfiguration =
     "INVALID_SPARK_CONFIG.UNSUPPORTED_IN_PROCESS_PYTHON_UDF"
@@ -126,4 +130,25 @@ object InProcessPythonUDFBuilder {
     }
   }
 
+}
+
+/** An in-process Python UDF, whose calls share one [[SimplePythonFunction]]. */
+class InProcessPythonFunction private[python] (
+    name: String,
+    function: SimplePythonFunction,
+    returnType: DataType,
+    deterministic: Boolean) {
+
+  /**
+   * Returns a [[Column]] backed by an in-process [[PythonUDF]] expression.
+   *
+   * @param jColumns  Java List of JVM [[Column]] objects (the UDF inputs)
+   */
+  def apply(jColumns: JList[Column]): Column = {
+    val inputExprs = jColumns.asScala.map(col => ColumnNodeExpression(col.node)).toSeq
+    NamedParametersSupport.splitAndCheckNamedArguments(inputExprs, name, SQLConf.get.resolver)
+    ExpressionUtils.column(PythonUDF(
+      name, function, returnType, inputExprs,
+      PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF, deterministic))
+  }
 }

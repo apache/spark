@@ -288,7 +288,7 @@ of the most common options to set are:
   <td>0.7.0</td>
 </tr>
 <tr>
-  <td><code>spark.inprocess.python.sitePackages</code></td>
+  <td><code>spark.python.inProcess.sitePackages</code></td>
   <td>(none)</td>
   <td>
     Comma-separated executor directories for packages used by opt-in in-process Python UDFs.

@@ -129,14 +129,11 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     }
   }
 
-  test("lifecycle errors distinguish configuration mismatch from stopping") {
-    val mismatch = intercept[InProcessPythonRuntime.LifecycleException] {
-      runtime.requireCompatible(Seq("different"))
-    }
-    assert(mismatch.getMessage.contains("different sitePackages"))
+  test("a session that is still stopping rejects a new context") {
+    runtime.requireRunning()
     runtime.shutdown()
     val stopping = intercept[InProcessPythonRuntime.LifecycleException] {
-      runtime.requireCompatible(Seq.empty)
+      runtime.requireRunning()
     }
     assert(stopping.getMessage.contains("still stopping"))
   }
@@ -206,6 +203,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
   private class Releases {
     val taskMemory = new AtomicInteger()
     val abandoned = new AtomicInteger()
+    val recorded = new AtomicInteger()
     val others = new AtomicInteger()
 
     def resources(lockWaitMillis: Long = 10000L)
@@ -213,6 +211,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
       new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(
         () => taskMemory.incrementAndGet(),
         () => abandoned.incrementAndGet(),
+        () => recorded.incrementAndGet(),
         () => others.incrementAndGet(),
         lockWaitMillis)
   }
@@ -283,9 +282,12 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     val closedAfterPython = withConsumer(resources, inPython = true) {
       resources.close()
       // The listener does not wait for Python, but keeps the Arrow vectors Python may use.
+      // It records the time, which the consumer would add after the task reports it.
       assert(releases.taskMemory.get == 1 && releases.others.get == 0)
+      assert(releases.recorded.get == 1)
     }
     assert(closedAfterPython && releases.taskMemory.get == 1 && releases.others.get == 1)
+    assert(releases.recorded.get == 1)
   }
 
   test("task completion waits only briefly for a consumer blocked on its input") {

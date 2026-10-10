@@ -44,8 +44,9 @@ private[python] object InProcessEvaluatorTestUtils {
    * An evaluator without UDFs over `rowCount` rows of one long column, so that its iterator
    * runs without Python. The input blocks on `gate` before it reads row `blockAt`: in
    * `hasNext`, or in `next` if `blockInNext`. If `blockInCopy`, it returns that row instead,
-   * which blocks when its value is read, i.e. when the evaluator copies it into a batch. For
-   * `ReadBack`, which takes any row, `copied` counts the copies of input rows.
+   * which blocks when its value is read, i.e. when the evaluator copies it into a batch; only
+   * `ReadBack` takes such a row, since `Buffered` queues unsafe rows. For `ReadBack`, `copied`
+   * counts the copies of input rows.
    */
   class BlockingInput(
       joinInput: InProcessArrowEvalPythonEvaluatorFactory.JoinInput,
@@ -56,6 +57,8 @@ private[python] object InProcessEvaluatorTestUtils {
       blockInNext: Boolean = false,
       blockInCopy: Boolean = false,
       batchSize: Int = 10) {
+    require(!blockInCopy || joinInput == InProcessArrowEvalPythonEvaluatorFactory.ReadBack,
+      "Only ReadBack takes a row that blocks when it is copied")
     val reached = new CountDownLatch(1)
     val gate = new CountDownLatch(1)
     val pulled = new AtomicInteger()

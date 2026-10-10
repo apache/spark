@@ -206,10 +206,10 @@ class InProcessArrowEvalPythonEvaluatorFactory(
           Utils.deleteQuietly(spillDir)
         }
       },
+      recordTime = () => if (startedAt != 0L) {
+        metrics("pythonTotalTime") += (System.nanoTime() - startedAt) / 1000000
+      },
       releaseOthers = () => {
-        if (startedAt != 0L) {
-          metrics("pythonTotalTime") += (System.nanoTime() - startedAt) / 1000000
-        }
         Utils.tryWithSafeFinally {
           closeBatch()
         } {
@@ -276,13 +276,13 @@ class InProcessArrowEvalPythonEvaluatorFactory(
         }
       }
 
-      // Runs Python without the lock unless task completion already happened, and ends the
-      // input instead of returning the result if it happens meanwhile.
-      private def python[T](body: => T): T = {
+      // Runs Python without the lock unless task completion already happened, adds the time
+      // it took, and ends the input if task completion happened meanwhile.
+      private def python(timer: InProcessArrowEvalPythonEvaluatorFactory.NanosecondTimer)(
+          body: => Long): Unit = {
         if (resources.isClosed) endOfInput
-        val result = resources.withoutLock(body)
+        timer.add(resources.withoutLock(body))
         if (resources.isClosed) endOfInput
-        result
       }
 
       /**
@@ -332,9 +332,9 @@ class InProcessArrowEvalPythonEvaluatorFactory(
           registered = true
           functions.indices.foreach { i =>
             val func = functions(i)
-            initTime.add(python(runtime.register(handles(i), func.command.toArray,
+            python(initTime)(runtime.register(handles(i), func.command.toArray,
               expectedFields(i), func.pythonVer, hideTraceback, simplifiedTraceback,
-              tracebackWithLocals, fullValidation)))
+              tracebackWithLocals, fullValidation))
           }
         }
         writer.finish()
@@ -363,12 +363,12 @@ class InProcessArrowEvalPythonEvaluatorFactory(
               InProcessArrowBridge.exportColumn(
                 writer.root.getVector(ordinals(i)), inArrays(i), inSchemas(i))
             }
-            processingTime.add(python(runtime.invoke(
+            python(processingTime)(runtime.invoke(
               handle,
               inArrays.map(_.memoryAddress()).toArray,
               inSchemas.map(_.memoryAddress()).toArray,
               outArray.memoryAddress(), outSchema.memoryAddress(),
-              count, argMetas(udfIndex).map(_.name.getOrElse("")))))
+              count, argMetas(udfIndex).map(_.name.getOrElse(""))))
             results += InProcessArrowBridge.cdiToColumn(
               outArray, outSchema, Some(expectedFields(udfIndex)))
             metrics("pythonDataReceived") += results.last.getValueVector.getBufferSize
@@ -441,6 +441,7 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
   class IteratorResources(
       releaseTaskMemory: () => Unit,
       abandonTaskMemory: () => Unit,
+      recordTime: () => Unit,
       releaseOthers: () => Unit,
       lockWaitMillis: Long = 1000L) {
     private val lock = new ReentrantLock()
@@ -450,6 +451,7 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
     private val taskMemory = new AtomicInteger(TaskMemoryHeld)
     // Guarded by the lock.
     private var inPython = false
+    private var timeRecorded = false
     private var othersReleased = false
 
     // Set while the consumer reads input; see `startReadingInput`.
@@ -539,9 +541,17 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
       Utils.tryWithSafeFinally {
         if (taskMemory.compareAndSet(TaskMemoryHeld, TaskMemoryReleased)) releaseTaskMemory()
       } {
-        if (!othersReleased && !inPython) {
-          othersReleased = true
-          releaseOthers()
+        // Recorded with the lock, but also while Python runs, so that the task reports it.
+        Utils.tryWithSafeFinally {
+          if (!timeRecorded) {
+            timeRecorded = true
+            recordTime()
+          }
+        } {
+          if (!othersReleased && !inPython) {
+            othersReleased = true
+            releaseOthers()
+          }
         }
       }
     }

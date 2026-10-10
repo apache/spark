@@ -24,7 +24,7 @@ Usage::
     from pyspark.inprocess import inprocess_udf
     from pyspark.sql.types import LongType
 
-    @inprocess_udf(return_type=LongType())
+    @inprocess_udf(returnType=LongType())
     def double(x):
         # x is a pa.Array; return a pa.Array
         return pc.multiply(x, 2)
@@ -36,13 +36,16 @@ import io
 import sys
 from functools import update_wrapper
 from inspect import signature
-from typing import Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 from pyspark import Accumulator, Broadcast, cloudpickle
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError, PySparkValueError
 from pyspark.sql.column import Column
 from pyspark.sql.types import DataType, _parse_datatype_string
 from pyspark.util import PythonEvalType
+
+if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
 
 
 class _InProcessPickler(cloudpickle.CloudPickler):
@@ -73,18 +76,18 @@ class InProcessUDFWrapper:
     """
 
     def __init__(
-        self, func: Callable, return_type: Union[DataType, str], deterministic: bool = True
+        self, func: Callable, returnType: Union[DataType, str], deterministic: bool = True
     ) -> None:
-        if not isinstance(return_type, (DataType, str)):
+        if not isinstance(returnType, (DataType, str)):
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "expected_type": "DataType or str",
-                    "arg_name": "return_type",
-                    "arg_type": type(return_type).__name__,
+                    "arg_name": "returnType",
+                    "arg_type": type(returnType).__name__,
                 },
             )
-        self._return_type = return_type
+        self._return_type = returnType
         self._parsed_return_type: Optional[DataType] = None
         self.evalType = PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF
         self._deterministic: bool = deterministic
@@ -100,6 +103,8 @@ class InProcessUDFWrapper:
             )
         self._func = func
         self._serialized: Optional[bytes] = None
+        # The JVM-side function, created once so that calls do not resend the command.
+        self._jfunc: Optional["JavaObject"] = None
         update_wrapper(self, func, updated=())
 
     @property
@@ -129,6 +134,7 @@ class InProcessUDFWrapper:
 
     def asNondeterministic(self) -> "InProcessUDFWrapper":
         self._deterministic = False
+        self._jfunc = None
         return self
 
     def _serialize(self) -> bytes:
@@ -178,27 +184,27 @@ class InProcessUDFWrapper:
         for jcol in jcols:
             jlist.add(jcol)
 
-        # Use the existing PythonUDF planning contracts with an in-process eval type.
-        jcol = jvm.org.apache.spark.sql.execution.python.InProcessPythonUDFBuilder.build(
-            self._name,
-            self._serialize(),
-            self.returnType.json(),
-            jlist,
-            self._deterministic,
-            "%d.%d" % sys.version_info[:2],
-        )
+        if self._jfunc is None:
+            # Use the existing PythonUDF planning contracts with an in-process eval type.
+            builder = jvm.org.apache.spark.sql.execution.python.InProcessPythonUDFBuilder
+            self._jfunc = builder.create(
+                self._name,
+                self._serialize(),
+                self.returnType.json(),
+                self._deterministic,
+                "%d.%d" % sys.version_info[:2],
+            )
+        return Column(self._jfunc.apply(jlist))
 
-        return Column(jcol)
 
-
-def inprocess_udf(return_type: Union[DataType, str], deterministic: bool = True) -> Callable:
+def inprocess_udf(returnType: Union[DataType, str], deterministic: bool = True) -> Callable:
     """
     Decorator to register a Python function as an in-process UDF.
 
     .. versionadded:: 4.4.0
 
     The decorated function receives one ``pa.Array`` per input column and must
-    return a single ``pa.Array`` of the declared ``return_type``.
+    return a single ``pa.Array`` of the declared ``returnType``.
 
     The result must have the same length as the input batch and its Arrow type
     must match the declared Spark type, including nested fields. Timezone-aware
@@ -218,7 +224,7 @@ def inprocess_udf(return_type: Union[DataType, str], deterministic: bool = True)
 
     Parameters
     ----------
-    return_type : :class:`pyspark.sql.types.DataType` or str
+    returnType : :class:`pyspark.sql.types.DataType` or str
         The return type of the UDF, as a DataType or a DDL-formatted type string.
     deterministic : bool, optional
         Whether this UDF produces the same output for the same input. Set to ``False``
@@ -234,18 +240,18 @@ def inprocess_udf(return_type: Union[DataType, str], deterministic: bool = True)
     --------
     .. code-block:: python
 
-        @inprocess_udf(return_type=LongType())
+        @inprocess_udf(returnType=LongType())
         def double(x):
             import pyarrow.compute as pc
             return pc.multiply(x, 2)
 
-        @inprocess_udf(return_type=LongType(), deterministic=False)
+        @inprocess_udf(returnType=LongType(), deterministic=False)
         def random_noise(x):
             import pyarrow as pa, numpy as np
             return pa.array(np.random.randint(0, 100, len(x)), type=pa.int64())
     """
 
     def decorator(func: Callable) -> InProcessUDFWrapper:
-        return InProcessUDFWrapper(func, return_type, deterministic)
+        return InProcessUDFWrapper(func, returnType, deterministic)
 
     return decorator
