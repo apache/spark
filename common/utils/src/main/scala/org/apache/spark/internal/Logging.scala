@@ -307,6 +307,10 @@ trait Logging {
     log.isTraceEnabled
   }
 
+  protected def withLogLevel(level: Slf4jLevel)(f: => Unit): Unit = {
+    if (log.isEnabledForLevel(level)) f
+  }
+
   protected def logBasedOnLevel(level: Slf4jLevel)(f: => MessageWithContext): Unit = {
     level match {
       case Slf4jLevel.TRACE => logTrace(f.message)
