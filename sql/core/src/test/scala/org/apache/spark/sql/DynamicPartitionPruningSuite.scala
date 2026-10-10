@@ -45,6 +45,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, Streaming
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * Test suite for the filtering ratio policy used to trigger dynamic partition pruning (DPP).
@@ -2148,6 +2149,135 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
         checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = false)
         checkAnswer(df, Row(1) :: Row(2) :: Row(3) :: Nil)
       }
+    }
+  }
+
+  test("RUNTIME_FILTER hint injects a standalone DPP subquery without an estimated benefit") {
+    // `dim_store` carries no selective predicate, so DPP finds no evidence of a pruning benefit
+    // and, with no broadcast to reuse, injects nothing. The hint asserts the benefit, so the same
+    // join gets a standalone DPP subquery -- partition pruning, not a row-level filter -- with
+    // `reuseBroadcastOnly` at its default.
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val unhinted = sql(
+        "SELECT f.date_id, f.store_id FROM fact_sk f JOIN dim_store s ON f.store_id = s.store_id")
+      checkPartitionPruningPredicate(unhinted, withSubquery = false, withBroadcast = false)
+
+      val hinted = sql(
+        """SELECT /*+ RUNTIME_FILTER(s) */ f.date_id, f.store_id
+          |FROM fact_sk f JOIN dim_store s ON f.store_id = s.store_id""".stripMargin)
+      checkPartitionPruningPredicate(hinted, withSubquery = true, withBroadcast = false)
+      checkAnswer(hinted, unhinted.collect().toSeq)
+    }
+  }
+
+  test("RUNTIME_FILTER hint still reuses a broadcast when one is available") {
+    // Overriding `reuseBroadcastOnly` must not stop the cheaper option being taken: with a
+    // broadcast hash join the DPP filter reuses that broadcast rather than duplicating the
+    // filtering side into a standalone subquery.
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val hinted = sql(
+        """SELECT /*+ RUNTIME_FILTER(s), BROADCAST(s) */ f.date_id, f.store_id
+          |FROM fact_sk f JOIN dim_store s ON f.store_id = s.store_id""".stripMargin)
+      checkPartitionPruningPredicate(hinted, withSubquery = false, withBroadcast = true)
+      checkAnswer(hinted,
+        sql("SELECT date_id, store_id FROM fact_sk WHERE store_id IN (SELECT store_id FROM " +
+          "dim_store)").collect().toSeq)
+    }
+  }
+
+  test("RUNTIME_FILTER hint keeps DPP's partition-key requirement") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // `fact_np` is not partitioned, so partition pruning cannot apply however strongly the user
+      // asserts a benefit. The hint must not manufacture a DPP filter here.
+      val hinted = sql(
+        """SELECT /*+ RUNTIME_FILTER(s) */ f.date_id, f.store_id
+          |FROM fact_np f JOIN dim_store s ON f.store_id = s.store_id""".stripMargin)
+      checkPartitionPruningPredicate(hinted, withSubquery = false, withBroadcast = false)
+      checkAnswer(hinted,
+        sql("SELECT date_id, store_id FROM fact_np WHERE store_id IN (SELECT store_id FROM " +
+          "dim_store)").collect().toSeq)
+    }
+  }
+
+  test("RUNTIME_FILTER hint keeps DPP's repeatable-source requirement") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // DPP re-evaluates the filtering side, so a sample without a seed, which draws different
+      // rows per evaluation, is not accepted as a source however strongly the user asserts a
+      // benefit. The same predicate gates the row-level filter.
+      val hinted = sql(
+        """SELECT /*+ RUNTIME_FILTER(s) */ f.date_id, f.store_id
+          |FROM fact_sk f JOIN (SELECT store_id FROM dim_store TABLESAMPLE (50 PERCENT)) s
+          |ON f.store_id = s.store_id""".stripMargin)
+      checkPartitionPruningPredicate(hinted, withSubquery = false, withBroadcast = false)
+    }
+  }
+
+  test("RUNTIME_FILTER hint never prunes the hinted side") {
+    // Both tables are partitioned by `store_id`, so DPP could prune either; the hint decides
+    // which one it prunes, and it is never the hinted side.
+    def prunedTables(df: DataFrame): Seq[String] = {
+      df.collect()
+      collect(df.queryExecution.executedPlan) {
+        case s: FileSourceScanExec
+            if s.partitionFilters.exists(_.isInstanceOf[DynamicPruningExpression]) =>
+          s.tableIdentifier.map(_.table).getOrElse("")
+      }
+    }
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val expected = sql(
+        "SELECT f.date_id, c.code FROM fact_sk f JOIN code_stats c ON f.store_id = c.store_id")
+      val hintedFact = sql(
+        """SELECT /*+ RUNTIME_FILTER(f) */ f.date_id, c.code
+          |FROM fact_sk f JOIN code_stats c ON f.store_id = c.store_id""".stripMargin)
+      checkPartitionPruningPredicate(hintedFact, withSubquery = true, withBroadcast = false)
+      assert(prunedTables(hintedFact) == Seq("code_stats"))
+      checkAnswer(hintedFact, expected.collect().toSeq)
+      val hintedCode = sql(
+        """SELECT /*+ RUNTIME_FILTER(c) */ f.date_id, c.code
+          |FROM fact_sk f JOIN code_stats c ON f.store_id = c.store_id""".stripMargin)
+      checkPartitionPruningPredicate(hintedCode, withSubquery = true, withBroadcast = false)
+      assert(prunedTables(hintedCode) == Seq("fact_sk"))
+      checkAnswer(hintedCode, expected.collect().toSeq)
+    }
+  }
+
+  test("RUNTIME_FILTER hint does not build a DPP filter from a side with a Python UDF") {
+    import IntegratedUDFTestUtils._
+    assume(shouldTestPythonUDFs)
+    // The filtering side is planned as a standalone subquery without the Python UDF extraction
+    // the main plan gets, so a Python UDF could not be evaluated there.
+    registerTestUDF(TestPythonUDF(name = "py_identity", returnType = Some(IntegerType)), spark)
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val hinted = sql(
+        """SELECT /*+ RUNTIME_FILTER(s) */ f.date_id, f.store_id
+          |FROM fact_sk f JOIN (SELECT py_identity(store_id) AS k FROM dim_store) s
+          |ON f.store_id = s.k""".stripMargin)
+      checkPartitionPruningPredicate(hinted, withSubquery = false, withBroadcast = false)
+      checkAnswer(hinted,
+        sql("SELECT date_id, store_id FROM fact_sk WHERE store_id IN (SELECT store_id FROM " +
+          "dim_store)").collect().toSeq)
+    }
+  }
+
+  test("RUNTIME_FILTER hint on both join sides leaves DPP to its own estimates") {
+    // The confs and query of "simple inner join triggers DPP with mock-up tables": an ambiguous
+    // hint is ignored, so the selective predicate on `dim_store` still gets DPP as without a hint,
+    // rather than each hinted side blocking the other.
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      val hinted = sql(
+        """
+          |SELECT /*+ RUNTIME_FILTER(f, s) */ f.date_id, f.store_id FROM fact_sk f
+          |JOIN dim_store s ON f.store_id = s.store_id AND s.country = 'NL'
+        """.stripMargin)
+      checkPartitionPruningPredicate(hinted, withSubquery = true, withBroadcast = false)
+      checkAnswer(hinted, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
     }
   }
 

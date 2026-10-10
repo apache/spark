@@ -3448,7 +3448,8 @@ class Hint(google.protobuf.message.Message):
     name: builtins.str
     """(Required) Hint name.
 
-    Supported Join hints include BROADCAST, MERGE, SHUFFLE_HASH, SHUFFLE_REPLICATE_NL.
+    Supported Join hints include BROADCAST, MERGE, SHUFFLE_HASH, SHUFFLE_REPLICATE_NL,
+    RUNTIME_FILTER.
 
     Supported partitioning hints include COALESCE, REPARTITION, REPARTITION_BY_RANGE.
     """

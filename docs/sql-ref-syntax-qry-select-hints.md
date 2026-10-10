@@ -172,6 +172,40 @@ SELECT /*+ SHUFFLE_REPLICATE_NL(t1) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.ke
 SELECT /*+ BROADCAST(t1), MERGE(t1, t2) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.key;
 ```
 
+### Runtime Filter Hints
+
+Runtime filter hints allow users to suggest which side of a join Spark should build a runtime
+filter from, to prune the other side. Spark decides on its own whether a runtime filter is worth
+building, based on statistics; the hint overrides that decision, but not the requirements that make
+the filter correct, so Spark is not guaranteed to follow it and issues a warning when it cannot.
+
+#### Runtime Filter Hints Types
+
+* **RUNTIME_FILTER**
+
+    Suggests that Spark build a runtime filter from the hinted relation and use it to prune the
+    other side of the join. Use it when the hinted side matches only a small fraction of the other
+    side but Spark does not choose a runtime filter on its own, e.g. because table statistics are
+    missing or misleading. The hinted side must produce the same rows and join keys whenever it is
+    evaluated. `RUNTIME_FILTER` can be combined with a join strategy hint.
+
+#### Examples
+
+```sql
+-- Build a runtime filter from t2 and use it to prune t1.
+SELECT /*+ RUNTIME_FILTER(t2) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.key;
+
+-- The hinted side may be any relation or subquery, not only a table.
+SELECT /*+ RUNTIME_FILTER(t2) */ *
+FROM t1 INNER JOIN (SELECT DISTINCT key FROM t3) t2 ON t1.key = t2.key;
+
+-- A runtime filter hint can be combined with a join strategy hint.
+SELECT /*+ MERGE(t1, t2), RUNTIME_FILTER(t2) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.key;
+
+-- Hinting both sides is ambiguous, so Spark issues a warning and ignores the hint.
+SELECT /*+ RUNTIME_FILTER(t1, t2) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.key;
+```
+
 ### Related Statements
 
 * [JOIN](sql-ref-syntax-qry-select-join.html)

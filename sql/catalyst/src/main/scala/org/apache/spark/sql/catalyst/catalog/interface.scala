@@ -1195,6 +1195,8 @@ case class HiveTableRelation(
   // The partition column should always appear after data columns.
   override def output: Seq[AttributeReference] = dataCols ++ partitionCols
 
+  override def isOutputRepeatable: Boolean = true
+
   def isPartitioned: Boolean = partitionCols.nonEmpty
 
   override def doCanonicalize(): HiveTableRelation = copy(
