@@ -208,6 +208,11 @@ public final class UnsafeRowWriter extends UnsafeWriter {
         BitSetMethods.set(getBuffer(), startingOffset, ordinal);
         // keep the offset for future update
         setOffsetAndSize(ordinal, 0);
+      } else if (input.isCompact()) {
+        // Write the unscaled Long directly, in the same bytes BigInteger.toByteArray() returns.
+        final int numBytes =
+          UnsafeRow.writeCompactUnscaledBytes(getBuffer(), cursor(), input.toUnscaledLong());
+        setOffsetAndSize(ordinal, numBytes);
       } else {
         final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
         final int numBytes = bytes.length;
