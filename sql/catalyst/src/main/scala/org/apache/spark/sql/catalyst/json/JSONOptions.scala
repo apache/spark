@@ -248,6 +248,9 @@ class JSONOptions(
     parameters.get(ENABLE_STREAMING_TOP_LEVEL_ARRAY).map(_.toBoolean).getOrElse(
       SQLConf.get.getConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY))
 
+  val alternateVariantEncoding: Option[AlternateVariantEncoding] = parameters
+    .get(ALTERNATE_VARIANT_ENCODING).flatMap(AlternateVariantEncoding.fromStringOpt)
+
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {
     val streamReadConstraints = StreamReadConstraints
@@ -315,6 +318,23 @@ object JSONOptionsInRead {
   )
 }
 
+/**
+ * Used to handle the use case where variant data within JSON is not encoded as JSON but as a
+ * different encoding, for example, Z85
+ */
+sealed trait AlternateVariantEncoding {
+  def name: String
+}
+
+case object VariantZ85Encoding extends AlternateVariantEncoding { val name = "Z85" }
+
+object AlternateVariantEncoding {
+  def fromStringOpt(encoding: String): Option[AlternateVariantEncoding] = encoding match {
+    case "Z85" => Some(VariantZ85Encoding)
+    case _ => None
+  }
+}
+
 object JSONOptions extends DataSourceOptions {
   val SAMPLING_RATIO = newOption("samplingRatio")
   val PRIMITIVES_AS_STRING = newOption("primitivesAsString")
@@ -348,6 +368,7 @@ object JSONOptions extends DataSourceOptions {
   val EXPLODE_EMBEDDED_ARRAY = newOption(DataSourceOptions.EXPLODE_EMBEDDED_ARRAY)
   val USE_UNSAFE_ROW = newOption("useUnsafeRow")
   val ENABLE_STREAMING_TOP_LEVEL_ARRAY = newOption("enableStreamingTopLevelArray")
+  val ALTERNATE_VARIANT_ENCODING = newOption("alternateVariantEncoding")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

@@ -698,6 +698,24 @@ public class VariantUtil {
     return Arrays.compareUnsigned(left, right);
   }
 
+  public static int metadataSize(byte[] metadata) {
+    checkIndex(0, metadata.length);
+    // Similar to the logic from getMetadataKey where "id" is equal to "dictSize".
+    int offsetSize = ((metadata[0] >> 6) & 0x3) + 1;
+    int dictSize = readUnsigned(metadata, 1, offsetSize);
+    // Use long arithmetic to detect overflow: dictSize can be large, causing int overflow.
+    long lastOffsetPosLong = 1L + ((long) dictSize + 1) * offsetSize;
+    if (lastOffsetPosLong > Integer.MAX_VALUE || lastOffsetPosLong < 0) throw malformedVariant();
+    int lastOffset = readUnsigned(metadata, (int) lastOffsetPosLong, offsetSize);
+    long sizeLong = 1L + ((long) dictSize + 2) * offsetSize + lastOffset;
+    if (sizeLong > Integer.MAX_VALUE || sizeLong < 0) throw malformedVariant();
+    int size = (int) sizeLong;
+    if (size > metadata.length) {
+      throw malformedVariant();
+    }
+    return size;
+  }
+
   // Get a key at `id` in the variant metadata.
   // Throw `MALFORMED_VARIANT` if the variant is malformed. An out-of-bound `id` is also considered
   // a malformed variant because it is read from the corresponding variant value.

@@ -42,6 +42,7 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant._
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String, VariantVal}
+import org.apache.spark.util.Codec
 import org.apache.spark.util.Utils
 
 /**
@@ -107,6 +108,8 @@ class JacksonParser(
 
   private val enablePartialResults = SQLConf.get.jsonEnablePartialResults
 
+  private val alternateVariantEncoding = options.alternateVariantEncoding
+
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema. This is a wrapper for the method
@@ -142,13 +145,25 @@ class JacksonParser(
     if (parser.getCurrentToken == FIELD_NAME) {
       parser.nextToken()
     }
-    try {
-      val v = VariantBuilder.parseJson(
-        parser, variantAllowDuplicateKeys, variantValidateUnicodeInJsonParsing)
-      new VariantVal(v.getValue, v.getMetadata)
-    } catch {
-      case _: VariantSizeLimitException =>
-        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, "JacksonParser")
+    alternateVariantEncoding match {
+      case Some(VariantZ85Encoding) =>
+        // The token should always be a single Z85 string.
+        val token: JsonToken = parser.currentToken()
+        token match {
+          case VALUE_STRING => JacksonParser.getVariantFromZ85(parser.getText())
+          case _ => throw QueryExecutionErrors.malformedVariant()
+        }
+      case None =>
+        // If `alternateVariantEncoding` is None, variant must be encoded as a JSON in the string.
+        try {
+          val v = VariantBuilder.parseJson(
+            parser, variantAllowDuplicateKeys, variantValidateUnicodeInJsonParsing)
+          new VariantVal(v.getValue, v.getMetadata)
+        } catch {
+          case _: VariantSizeLimitException =>
+            throw QueryExecutionErrors.variantSizeLimitError(
+              VariantUtil.SIZE_LIMIT, "JacksonParser")
+        }
     }
   }
 
@@ -883,5 +898,17 @@ class JacksonParser(
         closeParser()
         rows.iterator
     }
+  }
+}
+
+object JacksonParser {
+  def getVariantFromZ85(z85: String): VariantVal = {
+    val decoded = Codec.Base85Codec.decodeBytes(z85, z85.length)
+    val metadataSize = VariantUtil.metadataSize(decoded)
+    val valueWithPadding = decoded.slice(metadataSize, decoded.length)
+    val valueSize = VariantUtil.valueSize(valueWithPadding, 0)
+    val value = valueWithPadding.slice(0, valueSize)
+    val metadata = decoded.slice(0, metadataSize)
+    new VariantVal(value, metadata)
   }
 }
