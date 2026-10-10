@@ -57,6 +57,29 @@ class ExecutorKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with B
     assertSAName("executor-name", spec)
   }
 
+  test("SPARK-59518: an empty executor service account falls back to the driver's") {
+    baseConf.set(KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME, "driver-name")
+    baseConf.set(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME, "")
+    val spec = evaluateStep()
+    assertSAName("driver-name", spec)
+  }
+
+  test("SPARK-59518: an empty executor service account without a driver's leaves the pod " +
+    "untouched") {
+    baseConf.set(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME, "")
+    val spec = evaluateStep()
+    assert(spec.getServiceAccountName === null)
+    assert(spec.getServiceAccount === null)
+  }
+
+  test("SPARK-59518: empty executor and driver service accounts leave the pod untouched") {
+    baseConf.set(KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME, "")
+    baseConf.set(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME, "")
+    val spec = evaluateStep()
+    assert(spec.getServiceAccountName === null)
+    assert(spec.getServiceAccount === null)
+  }
+
   test("SPARK-58910: keep the service account named by the executor pod template") {
     // Either spelling means the template already picked an account, so the configured one must not
     // replace it. Varying the configuration alongside the spelling keeps the driver fallback
@@ -163,6 +186,18 @@ class ExecutorKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with B
     ).foreach { case (confs, pod) =>
       val output = allOutput(runWith(confs, pod))
       assert(output.isEmpty, s"nothing was displaced with $confs, so nothing to say: $output")
+    }
+  }
+
+  test("SPARK-59518: an empty configured account is not reported as displaced by the template") {
+    // The report reads the same filtered values as the fallback, so an empty configuration, which
+    // was never going to apply, has nothing to say rather than a warning naming an empty account.
+    Seq(
+      Seq(EXECUTOR_SA_CONF -> "") -> podWithAccount(serviceAccountName = Some("template-name")),
+      Seq(DRIVER_SA_CONF -> "") -> podWithAccount(serviceAccountName = Some("template-name"))
+    ).foreach { case (confs, pod) =>
+      val output = allOutput(runWith(confs, pod))
+      assert(output.isEmpty, s"an empty $confs could not have been displaced: $output")
     }
   }
 
