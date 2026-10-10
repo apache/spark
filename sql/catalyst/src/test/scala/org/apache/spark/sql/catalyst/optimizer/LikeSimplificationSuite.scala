@@ -312,6 +312,49 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery), originalQuery)
   }
 
+  test("derive exact length guard for '_'-only LIKE patterns") {
+    // No `%` and no literals: exact length; the guard replaces the LIKE.
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "_").analyze),
+      testRelation.where(Length($"a") === 1).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "___").analyze),
+      testRelation.where(Length($"a") === 3).analyze)
+  }
+
+  test("derive minimum length guard for '_' with '%' LIKE patterns") {
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "_%").analyze),
+      testRelation.where(Length($"a") >= 1).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "%_%").analyze),
+      testRelation.where(Length($"a") >= 1).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "_%_").analyze),
+      testRelation.where(Length($"a") >= 2).analyze)
+  }
+
+  test("derive additive length guard for '_' patterns with literals") {
+    // No `%`: exact length; the literal means the LIKE is kept as the exact residual.
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "a_c").analyze),
+      testRelation.where(Length($"a") === 3 && ($"a" like "a_c")).analyze)
+    // With `%`: minimum length.
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "a_b%").analyze),
+      testRelation.where(Length($"a") >= 3 && ($"a" like "a_b%")).analyze)
+  }
+
+  test("no length guard when '_' is escaped or absent") {
+    // Escaped `_`: pattern contains the escape char, so it is not simplified.
+    val escaped = testRelation.where($"a" like "a\\_b").analyze
+    comparePlans(Optimize.execute(escaped), escaped)
+    // No `_`: existing behavior is unchanged (StartsWith), not a length guard.
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "abc%").analyze),
+      testRelation.where(StartsWith($"a", "abc")).analyze)
+  }
+
   // scalastyle:off nonascii
   test("SPARK-59063: LikeSimplification preserves LIKE semantics under non-binary collation") {
     // Under UTF8_LCASE, StartsWith/EndsWith are collation-aware, so a single code point
