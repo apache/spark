@@ -24,7 +24,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.sql.types import (
     ArrayType,
     CharType,
@@ -491,8 +491,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self._check_print_schema(query)
 
     def test_char_varchar_result_schema(self):
-        # SPARK-58794: Python Connect maps first-class CHAR/VARCHAR the same as classic.
-        query = "SELECT CAST('ab' AS CHAR(4)) AS c, CAST('cd' AS VARCHAR(6)) AS v"
+        # SPARK-59276: Python Connect maps first-class CHAR/VARCHAR the same as classic.
+        query = """
+            SELECT
+              CAST('ab' AS CHAR(4)) AS c,
+              CAST('cd' AS VARCHAR(6)) AS v,
+              CAST('ef' AS CHAR(4) COLLATE UTF8_LCASE) AS collated_c,
+              CAST('gh' AS VARCHAR(6) COLLATE UNICODE_CI) AS collated_v
+        """
         conf = {"spark.sql.charVarchar.standardSemantics.enabled": "true"}
         with self.both_conf(conf):
             classic_df = self.spark.sql(query)
@@ -500,8 +506,142 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assertEqual(classic_df.schema, connect_df.schema)
             self.assertEqual(classic_df.schema["c"].dataType, CharType(4))
             self.assertEqual(classic_df.schema["v"].dataType, VarcharType(6))
+            self.assertEqual(classic_df.schema["collated_c"].dataType, CharType(4, "UTF8_LCASE"))
+            self.assertEqual(classic_df.schema["collated_v"].dataType, VarcharType(6, "UNICODE_CI"))
             self.assertEqual(classic_df.collect(), connect_df.collect())
-            self.assertEqual(connect_df.collect(), [Row(c="ab  ", v="cd")])
+            self.assertEqual(
+                connect_df.collect(),
+                [Row(c="ab  ", v="cd", collated_c="ef  ", collated_v="gh")],
+            )
+
+    def test_create_dataframe_with_char_varchar_schema(self):
+        schema = StructType(
+            [
+                StructField("c", CharType(4)),
+                StructField("explicit_c", CharType(4, "UTF8_BINARY")),
+                StructField("v", VarcharType(3, "UTF8_LCASE")),
+                StructField(
+                    "nested",
+                    StructType(
+                        [
+                            StructField("c", CharType(3, "UTF8_BINARY")),
+                            StructField(
+                                "values",
+                                ArrayType(VarcharType(4, "UNICODE_CI"), containsNull=False),
+                            ),
+                            StructField(
+                                "lookup",
+                                MapType(
+                                    CharType(3, "UTF8_LCASE"),
+                                    VarcharType(4, "UTF8_BINARY"),
+                                    valueContainsNull=False,
+                                ),
+                            ),
+                        ]
+                    ),
+                ),
+            ]
+        )
+        rows = [
+            (
+                "ab",
+                "cd",
+                "ef",
+                Row(c="x", values=["gh", "ij"], lookup={"k": "lm"}),
+            )
+        ]
+        standard_conf = {
+            "spark.sql.charVarchar.standardSemantics.enabled": "true",
+            "spark.sql.legacy.charVarcharAsString": "false",
+        }
+        with self.both_conf(standard_conf):
+            df = self.connect.createDataFrame(rows, schema)
+            self.assertEqual(df.schema, schema)
+            self.assertEqual(
+                df.collect(),
+                [
+                    Row(
+                        c="ab  ",
+                        explicit_c="cd  ",
+                        v="ef",
+                        nested=Row(
+                            c="x  ",
+                            values=["gh", "ij"],
+                            lookup={"k  ": "lm"},
+                        ),
+                    )
+                ],
+            )
+            empty = self.connect.createDataFrame([], schema)
+            self.assertEqual(empty.schema, schema)
+            self.assertEqual(empty.collect(), [])
+
+        legacy_conf = {
+            "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            "spark.sql.legacy.charVarcharAsString": "true",
+        }
+        with self.both_conf(legacy_conf):
+            expected = StructType(
+                [
+                    StructField("c", StringType()),
+                    StructField("explicit_c", StringType("UTF8_BINARY")),
+                    StructField("v", StringType("UTF8_LCASE")),
+                    StructField(
+                        "nested",
+                        StructType(
+                            [
+                                StructField("c", StringType("UTF8_BINARY")),
+                                StructField(
+                                    "values",
+                                    ArrayType(StringType("UNICODE_CI"), containsNull=False),
+                                ),
+                                StructField(
+                                    "lookup",
+                                    MapType(
+                                        StringType("UTF8_LCASE"),
+                                        StringType("UTF8_BINARY"),
+                                        valueContainsNull=False,
+                                    ),
+                                ),
+                            ]
+                        ),
+                    ),
+                ]
+            )
+            df = self.connect.createDataFrame(rows, schema)
+            self.assertEqual(df.schema, expected)
+            self.assertEqual(
+                df.collect(),
+                [
+                    Row(
+                        c="ab",
+                        explicit_c="cd",
+                        v="ef",
+                        nested=Row(
+                            c="x",
+                            values=["gh", "ij"],
+                            lookup={"k": "lm"},
+                        ),
+                    )
+                ],
+            )
+            empty = self.connect.createDataFrame([], schema)
+            self.assertEqual(empty.schema, expected)
+            self.assertEqual(empty.collect(), [])
+
+        default_conf = {
+            "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            "spark.sql.legacy.charVarcharAsString": "false",
+        }
+        with self.both_conf(default_conf):
+            for data in (rows, []):
+                with self.assertRaises(AnalysisException) as ctx:
+                    self.connect.createDataFrame(data, schema).schema
+                self.check_error(
+                    exception=ctx.exception,
+                    errorClass="UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
+                    messageParameters={},
+                )
 
     def test_to(self):
         # SPARK-41464: test DataFrame.to()

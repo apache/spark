@@ -28,7 +28,7 @@ import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
 import org.apache.spark._
 import org.apache.spark.deploy.{ApplicationDescription, Command, DeployTestUtils}
-import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestApplicationHold, RequestMasterState, WorkerDecommissioning}
+import org.apache.spark.deploy.DeployMessages.{ApplicationHoldResponse, MasterStateResponse, RequestApplicationHold, RequestMasterState, WorkerDecommissioning}
 import org.apache.spark.deploy.master.{ApplicationInfo, Master}
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.internal.{config, Logging}
@@ -264,6 +264,10 @@ class AppClientSuite
         assert(getApplications().length === 1, "master should have 1 registered app")
       }
       val appId = getApplications().head.id
+      ci.client.reportHoldStatus(supported = true, held = false)
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().head.holdSupported)
+      }
 
       // A hold requested from the Master UI reaches the driver.
       master.self.send(RequestApplicationHold(appId, hold = true))
@@ -301,6 +305,49 @@ class AppClientSuite
       getApplications()
       Thread.sleep(100)
       assert(ci.listener.holdRequestList.isEmpty)
+
+      ci.client.stop()
+
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().isEmpty, "master should have 0 registered apps")
+      }
+    }
+  }
+
+  test("SPARK-59916: hold and resume an application through an ask to the Master") {
+    Utils.tryWithResource(new AppClientInst(masterRpcEnv.address.toSparkURL)) { ci =>
+      ci.client.start()
+
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().length === 1, "master should have 1 registered app")
+      }
+      val appId = getApplications().head.id
+
+      // The REST server asks rather than sends, and the reply tells whether the request was
+      // forwarded to the driver.
+      def askHold(id: String, hold: Boolean): ApplicationHoldResponse =
+        master.self.askSync[ApplicationHoldResponse](RequestApplicationHold(id, hold))
+
+      // Rejected until the driver reports that it can be held.
+      val unsupported = askHold(appId, hold = true)
+      assert(!unsupported.success)
+      assert(unsupported.message.contains("has not reported that it can be held"))
+
+      val unknown = askHold("unknown-app", hold = true)
+      assert(!unknown.success)
+      assert(unknown.message.contains("unknown or finished application"))
+      assert(ci.listener.holdRequestList.isEmpty)
+
+      ci.client.reportHoldStatus(supported = true, held = false)
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(getApplications().head.holdSupported)
+      }
+      Seq(true, false).foreach { hold =>
+        assert(askHold(appId, hold).success)
+      }
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(ci.listener.holdRequestList.asScala.toSeq === Seq(true, false))
+      }
 
       ci.client.stop()
 

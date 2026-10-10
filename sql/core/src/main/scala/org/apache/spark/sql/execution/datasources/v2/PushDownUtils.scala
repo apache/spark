@@ -357,8 +357,8 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * Returns a Seq of [[PartitionPredicateField]] representing partition transform expression types,
-   * if schema is supported for [[PartitionPredicate]] push down. None if not supported.
+   * Returns one [[PartitionPredicateField]] per transform of `relation.table.partitioning`, if
+   * the partitioning supports [[PartitionPredicate]] push down. None if not supported.
    */
   def getPartitionPredicateSchema(relation: DataSourceV2Relation)
   : Option[Seq[PartitionPredicateField]] = {
@@ -366,8 +366,8 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * Returns a Seq of [[PartitionPredicateField]] representing partition transform expression types,
-   * if schema is supported for [[PartitionPredicate]] push down. None if not supported.
+   * Returns one [[PartitionPredicateField]] per transform of `table.partitioning`, if the
+   * partitioning supports [[PartitionPredicate]] push down. None if not supported.
    */
   def getPartitionPredicateSchema(table: Table, output: Seq[AttributeReference])
   : Option[Seq[PartitionPredicateField]] = {
@@ -375,8 +375,15 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * Returns a Seq of [[PartitionPredicateField]] representing partition transform expression types,
-   * if schema is supported for [[PartitionPredicate]] push down. None if not supported.
+   * Returns one [[PartitionPredicateField]] per transform, in partitioning order, if the
+   * partitioning supports [[PartitionPredicate]] push down. None if not supported.
+   *
+   * Only an identity transform yields a field with an attribute, so only filters over identity
+   * partition columns become partition predicates. Any other transform is kept as a field without
+   * an attribute: Spark cannot evaluate a filter against its partition value, but the field must
+   * keep its ordinal since a predicate is evaluated against the full partition key. The
+   * partitioning is not supported when it is empty, has no identity transform, or has an identity
+   * transform that does not resolve against `output`.
    *
    * Use this overload when the caller has access to the partition transforms but not the
    * full [[Table]].
@@ -392,11 +399,11 @@ object PushDownUtils extends Logging {
       val fields = transforms.flatMap {
         case t: IdentityTransform =>
           resolveIdentityPartitionField(t, rootStruct).map { sf =>
-            PartitionPredicateField(t.ref.fieldNames().toSeq, DataTypeUtils.toAttribute(sf))
+            PartitionPredicateField(t.ref.fieldNames().toSeq, Some(DataTypeUtils.toAttribute(sf)))
           }
-        case _ => None
+        case t => Some(PartitionPredicateField(Seq(t.describe()), None))
       }
-      if (fields.length == transforms.length) {
+      if (fields.length == transforms.length && fields.exists(_.attrRef.isDefined)) {
         Some(fields.toSeq)
       } else {
         None
@@ -435,18 +442,22 @@ object PushDownUtils extends Logging {
    * @param flattenedFilters Catalyst filter expressions with partition field references
    *                         already flattened.
    * @param partitionFields Partition field metadata.
+   * @param keepOnEvalFailure whether a created predicate reports a partition as matching when it
+   *                          cannot be evaluated, instead of propagating the failure.
+   *                          See [[PartitionPredicateImpl]].
    * @return a pair of (created partition predicates, remaining filters not converted).
    */
   private[v2] def createPartitionPredicates(
       flattenedFilters: Seq[Expression],
-      partitionFields: Seq[PartitionPredicateField])
+      partitionFields: Seq[PartitionPredicateField],
+      keepOnEvalFailure: Boolean = false)
   : (Seq[PartitionPredicateImpl], Seq[Expression]) = {
-    val partitionAttributes = partitionFields.map(_.attrRef)
+    val partitionAttributes = partitionFields.flatMap(_.attrRef)
     val (partFilters, nonPartitionFilters) =
       DataSourceUtils.getPartitionFiltersAndDataFilters(partitionAttributes, flattenedFilters)
     val (pushable, nonPushable) = partFilters.partition(isPushablePartitionFilter(_))
     val (partitionPredicates, errorPartitionPredicates) = pushable.partitionMap { e =>
-      PartitionPredicateImpl(e, partitionFields).toLeft(e)
+      PartitionPredicateImpl(e, partitionFields, keepOnEvalFailure).toLeft(e)
     }
     (partitionPredicates, nonPartitionFilters ++ nonPushable ++ errorPartitionPredicates)
   }
@@ -481,7 +492,11 @@ object PushDownUtils extends Logging {
       partitionFields: Seq[PartitionPredicateField]): Seq[PartitionPredicateImpl] = {
     val catalystExprs = runtimeFilters.flatMap(unwrapRuntimeFilterExpression)
     val flattened = flattenNestedPartitionFilters(catalystExprs, partitionFields).keys
-    createPartitionPredicates(flattened.toSeq, partitionFields)._1
+    // A runtime filter only prunes: its rows are filtered anyway, by the post-scan `FilterExec`
+    // for a scalar subquery filter, by the join it was derived from for a DPP filter, and by the
+    // rewrite re-applying its own condition for a row-level operation's group filter. So a
+    // partition the source cannot evaluate can be kept rather than failing the query.
+    createPartitionPredicates(flattened.toSeq, partitionFields, keepOnEvalFailure = true)._1
   }
 
   /** Unwraps a runtime filter to the Catalyst predicate for pushdown. */
@@ -529,7 +544,9 @@ object PushDownUtils extends Logging {
       filters: Seq[Expression],
       partitionFields: Seq[PartitionPredicateField])
   : Map[Expression, Expression] = {
-    val pathToAttr = partitionFields.map(f => f.fieldNames -> f.attrRef).toMap
+    val pathToAttr = partitionFields.collect {
+      case PartitionPredicateField(names, Some(attr)) => names -> attr
+    }.toMap
     filters.map(f => doNormalizePartitionFilters(f, pathToAttr) -> f).toMap
   }
 

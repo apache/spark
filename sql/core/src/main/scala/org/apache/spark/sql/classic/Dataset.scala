@@ -2132,7 +2132,10 @@ class Dataset[T] private[sql](
    * Converts a JavaRDD to a PythonRDD.
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
-    javaToPython(queryExecution.withRegularShuffle)
+    val qe = queryExecution.withRegularShuffle
+    withNewRDDExecutionId("javaToPython", qe) {
+      javaToPython(qe)
+    }
   }
 
   private def javaToPython(qe: QueryExecution): JavaRDD[Array[Byte]] = {
@@ -2314,9 +2317,11 @@ class Dataset[T] private[sql](
    * them with an execution. Before performing the action, the metrics of the executed plan will be
    * reset.
    */
-  private def withNewRDDExecutionId[U](name: String)(body: => U): U = {
-    SQLExecution.withNewExecutionId(rddQueryExecution, Some(name)) {
-      rddQueryExecution.executedPlan.resetMetrics()
+  private def withNewRDDExecutionId[U](
+      name: String,
+      qe: QueryExecution = rddQueryExecution)(body: => U): U = {
+    SQLExecution.withNewExecutionId(qe, Some(name)) {
+      qe.executedPlan.resetMetrics()
       body
     }
   }

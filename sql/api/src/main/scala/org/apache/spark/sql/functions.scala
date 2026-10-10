@@ -484,8 +484,10 @@ object functions {
    * space.
    *
    * @param e
-   *   The column to compute the sketch on. A column that evaluates to an integral, string or
-   *   binary.
+   *   The column to compute the sketch on. A column that evaluates to an integral, a time, a
+   *   string or binary. A TIME column is counted by its nanoseconds-of-day; look it up in the
+   *   resulting sketch by that value (e.g. `LocalTime.toNanoOfDay`). TIME support was added in
+   *   4.4.0.
    * @param eps
    *   The relative error, must be positive. A column that evaluates to a numeric. Must be a
    *   constant.
@@ -509,8 +511,10 @@ object functions {
    * space.
    *
    * @param e
-   *   The column to compute the sketch on. A column that evaluates to an integral, string or
-   *   binary.
+   *   The column to compute the sketch on. A column that evaluates to an integral, a time, a
+   *   string or binary. A TIME column is counted by its nanoseconds-of-day; look it up in the
+   *   resulting sketch by that value (e.g. `LocalTime.toNanoOfDay`). TIME support was added in
+   *   4.4.0.
    * @param eps
    *   The relative error, must be positive. A column that evaluates to a numeric. Must be a
    *   constant.
@@ -5288,7 +5292,7 @@ object functions {
    * @group math_funcs
    * @since 3.3.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a decimal, whatever the type of `e`.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5304,7 +5308,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a long, or a decimal when `e` is a decimal.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5320,7 +5324,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a long, or a decimal when the column is a decimal.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5339,7 +5343,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a decimal, whatever the type of `e`.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5355,7 +5359,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a long, or a decimal when `e` is a decimal.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5533,7 +5537,7 @@ object functions {
    * @group math_funcs
    * @since 3.3.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a decimal, whatever the type of `e`.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5549,7 +5553,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a long, or a decimal when `e` is a decimal.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5565,7 +5569,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a long, or a decimal when the column is a decimal.
    *
    * @note
    *   Affected by these public SQL configurations:

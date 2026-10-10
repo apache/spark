@@ -27,9 +27,18 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.types._
 
-case class FilterEstimation(plan: Filter) extends Logging {
+object FilterEstimation {
+  def apply(plan: Filter): FilterEstimation = {
+    new FilterEstimation(
+      plan.condition, plan.child.stats, plan.output, plan.child.isInstanceOf[LeafNode])
+  }
+}
 
-  private val childStats = plan.child.stats
+case class FilterEstimation(
+    condition: Expression,
+    childStats: Statistics,
+    output: Seq[Attribute],
+    childIsLeaf: Boolean) extends Logging {
 
   private val colStatsMap = ColumnStatsMap(childStats.attributeStats)
 
@@ -48,7 +57,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
     // Estimate selectivity of this filter predicate, and update column stats if needed.
     // For not-supported condition, set filter selectivity to a conservative estimate 100%
     val filterSelectivity =
-      calculateFilterSelectivity(plan.condition).map(boundProbability).getOrElse(1.0)
+      calculateFilterSelectivity(condition).map(boundProbability).getOrElse(1.0)
 
     val childRowCount = childStats.rowCount.get
     val filteredRowCount: BigInt =
@@ -60,7 +69,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
       colStatsMap.outputColumnStats(rowsBeforeFilter = childRowCount,
         rowsAfterFilter = filteredRowCount)
     }
-    val sizeByOutputAttrs = getOutputSize(plan.output, filteredRowCount, newColStats)
+    val sizeByOutputAttrs = getOutputSize(output, filteredRowCount, newColStats)
     val sizeByChildScaling = if (childRowCount > 0 && filteredRowCount > 0) {
       ceil(
         BigDecimal(childStats.sizeInBytes) * BigDecimal(filteredRowCount) /
@@ -73,6 +82,24 @@ case class FilterEstimation(plan: Filter) extends Logging {
 
     Some(childStats.copy(sizeInBytes = filteredSizeInBytes, rowCount = Some(filteredRowCount),
       attributeStats = newColStats))
+  }
+
+  /**
+   * An inferred condition is implied by the original condition, so their selectivities must not
+   * be multiplied. Estimate each against the same input, with separate mutable column statistics,
+   * and keep the smaller estimate together with its size and column statistics.
+   */
+  def estimateWithInferredCondition(inferredCondition: Expression): Option[Statistics] = {
+    for {
+      originalStats <- estimate
+      inferredStats <- copy(condition = inferredCondition).estimate
+    } yield {
+      if (originalStats.rowCount.get <= inferredStats.rowCount.get) {
+        originalStats
+      } else {
+        inferredStats
+      }
+    }
   }
 
   /**
@@ -193,10 +220,10 @@ case class FilterEstimation(plan: Filter) extends Logging {
       // So for IsNull and IsNotNull predicates, we only estimate them when the child is a leaf
       // node, whose `nullCount` is accurate.
       // This is a limitation due to lack of advanced stats. We should remove it in the future.
-      case IsNull(ar: Attribute) if plan.child.isInstanceOf[LeafNode] =>
+      case IsNull(ar: Attribute) if childIsLeaf =>
         evaluateNullCheck(ar, isNull = true, update)
 
-      case IsNotNull(ar: Attribute) if plan.child.isInstanceOf[LeafNode] =>
+      case IsNotNull(ar: Attribute) if childIsLeaf =>
         evaluateNullCheck(ar, isNull = false, update)
 
       case op @ Equality(attrLeft: Attribute, attrRight: Attribute) =>

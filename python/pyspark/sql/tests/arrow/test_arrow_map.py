@@ -92,6 +92,19 @@ class MapInArrowTestsMixin:
             expected = df.collect()
             self.assertEqual(actual, expected)
 
+    def test_map_in_arrow_accept_any_iterable_by_default(self):
+        # The legacy flag defaults to true, so returning a non-Iterator iterable (e.g. list) is
+        # accepted without setting any config. This guards the default against regression: the
+        # *_legacy_accept_any_iterable tests above force the flag on and would still pass if the
+        # default were flipped back to false.
+        def list_not_iter(iterator):
+            return [batch for batch in iterator]
+
+        df = self.spark.range(10)
+        actual = df.mapInArrow(list_not_iter, "id long").collect()
+        expected = df.collect()
+        self.assertEqual(actual, expected)
+
     def test_map_in_arrow_with_limit(self):
         def get_size(iterator):
             for batch in iterator:

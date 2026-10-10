@@ -195,12 +195,13 @@ object ScdType {
  *                               which has no run concept and therefore no history-tracking columns.
  *                               See the "run of upsert events" concept in the `Scd2BatchProcessor`
  *                               scaladoc for the precise definition of a run.
- * @param ignoreNullSelection    Selects the columns whose nulls are treated as declined
- *                               authorship rather than authored nulls. None means ignore-null
- *                               is off completely. An empty include list is rejected; an empty
- *                               exclude list selects every eligible column. Eligible columns
- *                               are those surviving the column selection that are neither keys
- *                               nor columns whose names start with the reserved AutoCDC prefix.
+ * @param ignoreNullSelection    Selects the columns for which a null in an upsert event is treated
+ *                               as unauthored rather than as an authored null. None means
+ *                               ignore-null is off completely. An empty include list is rejected;
+ *                               an empty exclude list selects every eligible column. Eligible
+ *                               columns are those surviving the column selection and are neither
+ *                               keys nor columns whose names start with the reserved AutoCDC
+ *                               prefix.
  *                               Naming a struct selects every leaf beneath it.
  */
 case class ChangeArgs(

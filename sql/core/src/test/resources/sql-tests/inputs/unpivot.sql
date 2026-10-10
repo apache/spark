@@ -42,3 +42,32 @@ SELECT * FROM courseEarningsAndSales
 UNPIVOT (
   (earnings, sales) FOR year IN ((earnings2012, sales2012) as `2012`, (earnings2013, sales2013) as `2013`, (earnings2014, sales2014) as `2014`)
 );
+
+
+create temporary view mixedTypeValues as select
+  1 as id,
+  cast('2026-01-01' as date) as date1, cast(null as int) as int1,
+  cast(null as date) as date2, 2 as int2,
+  cast(null as date) as date3, cast(null as int) as int3;
+
+-- EXCLUDE NULLS keeps partially-null tuples and removes all-null tuples across different types
+SELECT * FROM mixedTypeValues
+UNPIVOT EXCLUDE NULLS (
+  (date_value, int_value) FOR kind IN (
+    (date1, int1) as date_only,
+    (date2, int2) as int_only,
+    (date3, int3) as all_null
+  )
+)
+ORDER BY kind;
+
+-- INCLUDE NULLS retains the all-null tuple that EXCLUDE NULLS drops above
+SELECT * FROM mixedTypeValues
+UNPIVOT INCLUDE NULLS (
+  (date_value, int_value) FOR kind IN (
+    (date1, int1) as date_only,
+    (date2, int2) as int_only,
+    (date3, int3) as all_null
+  )
+)
+ORDER BY kind;

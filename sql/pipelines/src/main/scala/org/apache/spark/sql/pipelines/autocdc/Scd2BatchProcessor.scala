@@ -124,9 +124,9 @@ case class Scd2BatchProcessor(
    *
    * Step ordering is load-bearing: the row-extension steps reference user data columns that
    * target-column selection is allowed to drop. Selection therefore runs after those extensions,
-   * followed by target-schema alignment. Unlike SCD1, no per-key deduplication step is performed
-   * here - SCD2 preserves every event as part of the row's history, including byte-identical
-   * full-event duplicates.
+   * followed by target-schema alignment and version-map population. Unlike SCD1, no per-key
+   * deduplication step is performed here - SCD2 preserves every event as part of the row's history,
+   * including byte-identical full-event duplicates.
    *
    * Duplicate event elimination (e.g., collapsing two identical events at the same sequence),
    * whether across microbatches or within the same microbatch, is the responsibility of
@@ -151,6 +151,7 @@ case class Scd2BatchProcessor(
       .transform(extendMicrobatchRowsWithCdcMetadata)
       .transform(projectTargetColumnsOntoMicrobatch)
       .transform(alignMicrobatchToTargetSchema(_, targetTableDf))
+      .transform(extendMicrobatchRowsWithVersionMap)
   }
 
   /**
@@ -189,20 +190,71 @@ case class Scd2BatchProcessor(
   /**
    * Project the operational CDC metadata column carrying the literal event sequence. Downstream
    * merges rely on it to preserve original event lineage regardless of how rows start/end-at are
-   * coalesced.
+   * coalesced. The version map is initially null; [[extendMicrobatchRowsWithVersionMap]] populates
+   * it after column selection runs.
    */
   private def extendMicrobatchRowsWithCdcMetadata(microbatchDf: DataFrame): DataFrame = {
     microbatchDf.withColumn(
       colName = AutoCdcReservedNames.cdcMetadataColName,
       col = Scd2BatchProcessor.constructCdcMetadataCol(
         recordStartAt = changeArgs.sequencing,
-        // TODO (SPARK-59183): actually populate version map according to ignore-null selection and
-        // actual authorship in microbatch.
         versionMap = F.lit(null),
         sequencingType = resolvedSequencingType
       )
     )
   }
+
+  /**
+   * Populates the version map on each microbatch row, recording which leaves the event authored.
+   *
+   * Delete-encoded rows (those matching [[ChangeArgs.deleteCondition]]) receive a null version
+   * map: their data-column values are not part of the SCD2 contract, so authorship tracking
+   * is not applicable.
+   *
+   * Must run after [[projectTargetColumnsOntoMicrobatch]] and
+   * [[alignMicrobatchToTargetSchema]], because the eligible schema is computed from the selected,
+   * target-aligned schema.
+   *
+   * TODO(SPARK-59343): decide how to handle the ignore-null selection changing between
+   * partial-retry attempts of the same microbatch.
+   *
+   * @param alignedDf Microbatch rows aligned to the target schema, with a CDC metadata column whose
+   *                  version map field is initialized to null.
+   * @return `alignedDf` unchanged when ignore-null is disabled; otherwise, a DataFrame whose
+   *         upsert-row version maps record null authorship under the active ignore-null selection.
+   *         Delete-encoded rows retain a null version map.
+   */
+  private def extendMicrobatchRowsWithVersionMap(alignedDf: DataFrame): DataFrame =
+    changeArgs.ignoreNullSelection match {
+      case None => alignedDf
+      case Some(ignoreNullSelection) =>
+        val cdcMetadataCol = F.col(AutoCdcReservedNames.cdcMetadataColName)
+        val resolver = alignedDf.sparkSession.sessionState.conf.resolver
+
+        // Only upsert rows get a populated version map. By convention, delete-encoded
+        // rows always maintain a null version map. We detect deletes via endAt rather
+        // than changeArgs.deleteCondition because column selection may have already
+        // dropped the column the delete condition references.
+        val isUpsertRow = F.col(Scd2BatchProcessor.endAtColName).isNull
+        val versionMap = F.when(isUpsertRow, Scd2VersionMap.buildVersionMap(
+          schema = AutoCdcSchemaUtils.excludeColumns(
+            schema = alignedDf.schema,
+            // Keys and framework columns always author nulls, so they should not be part of the
+            // schema the version map is constructed from.
+            columnNamesToExclude =
+              changeArgs.keys.map(_.name) ++ Scd2BatchProcessor.reservedFrameworkColNames,
+            resolver = resolver
+          ),
+          ignoreNullSelection = ignoreNullSelection,
+          resolver = resolver
+        ))
+
+        alignedDf.withColumn(
+          colName = AutoCdcReservedNames.cdcMetadataColName,
+          col = cdcMetadataCol
+            .withField(Scd2BatchProcessor.versionMapFieldName, versionMap)
+        )
+    }
 
   /**
    * Apply the user's target column selection while preserving the SCD2 framework columns; the
@@ -1460,24 +1512,22 @@ object Scd2BatchProcessor {
   private[pipelines] def computeTrackedHistoryColumns(
       schema: StructType,
       changeArgs: ChangeArgs,
-      resolver: Resolver): Seq[String] = {
-    val keyColNames = changeArgs.keys.map(_.name)
-
-    val eligibleSchema = StructType(schema.fields.filterNot { field =>
-      reservedFrameworkColNames.exists(resolver(_, field.name)) ||
-        keyColNames.exists(resolver(_, field.name))
-    })
-
+      resolver: Resolver): Seq[String] =
     ColumnSelection
       .applyToSchema(
         schemaName = "trackHistorySelection",
-        schema = eligibleSchema,
+        schema = AutoCdcSchemaUtils.excludeColumns(
+          schema = schema,
+          // Keys and framework columns are not eligible for track history. Keys are identity rows,
+          // and framework columns are operational metadata, not data emitted by events from the
+          // change feed.
+          columnNamesToExclude = changeArgs.keys.map(_.name) ++ reservedFrameworkColNames,
+          resolver = resolver),
         columnSelection = changeArgs.trackHistorySelection,
         resolver = resolver
       )
       .fieldNames
       .toImmutableArraySeq
-  }
 
   /**
    * Name of temporary column projected onto microbatch to compute the min sequencing value per
@@ -1619,11 +1669,11 @@ object Scd2BatchProcessor {
         // decomposition tails, which are temporarily and synthetically constructed during
         // reconciliation, have a null record start at.
         StructField(recordStartAtFieldName, sequencingType, nullable = true),
-        // The version map representing null-authorship for the row. If the version map is null for
-        // a row, that row was ingested with ignore-null off, and all columns are considered
-        // explicitly authored (null or not). If the version map is non-null, the row was ingested
-        // with ignore-null on, and contents of the map comply with the contract defined in
-        // [[Scd2VersionMap]].
+        // The version map representing null-authorship for the row. For persisted rows:
+        // If the version map is null, that row was ingested with ignore-null off, and all columns
+        // are considered explicitly authored (null or not). If the version map is non-null, the
+        // row was ingested with ignore-null on, and contents of the map comply with the contract
+        // defined in [[Scd2VersionMap]].
         //
         // Tombstones and decomposition tails also always hold null version maps because column
         // authorship is not applicable - they are delete markers.

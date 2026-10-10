@@ -15,18 +15,23 @@
 # limitations under the License.
 #
 
-from pyspark.sql.tests.test_creation import DataFrameCreationTestsMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
+"""Type aliases and variables for the eval type handlers.
 
+The Arrow element types are forward refs so pyarrow stays a type-checking-only
+import at runtime, as elsewhere in the worker.
+"""
 
-class DataFrameCreationParityTests(
-    DataFrameCreationTestsMixin,
-    ReusedConnectTestCase,
-):
-    pass
+from collections.abc import Iterator
+from typing import TYPE_CHECKING, TypeVar
 
+if TYPE_CHECKING:
+    import pyarrow as pa
 
-if __name__ == "__main__":
-    from pyspark.testing import main
+# Grouped-category input element, matching what the serializer yields: a group
+# serializer yields a lazy iterator; a co-group serializer materializes each side.
+GroupedBatch = Iterator["pa.RecordBatch"]
+CoGroupedBatch = tuple[list["pa.RecordBatch"], list["pa.RecordBatch"]]
 
-    main()
+# Handler input and output stream element types.
+InputBatch = TypeVar("InputBatch")
+OutputBatch = TypeVar("OutputBatch")

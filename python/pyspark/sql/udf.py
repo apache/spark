@@ -32,6 +32,7 @@ from pyspark.sql.types import (
     DataType,
     StringType,
     StructType,
+    _check_no_char_varchar,
     _parse_datatype_string,
 )
 from pyspark.sql.utils import get_active_spark_context
@@ -213,15 +214,25 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
+        if isinstance(returnType, DataType):
+            # Constrained SQL strings are rejected at construction. Eval-type Arrow/Pandas
+            # conversion stays on ``returnType`` so unrelated types fail only when consumed.
+            _check_no_char_varchar(returnType, "Python UDF return types")
         # Schema of the intermediate aggregation buffer, set only for an incremental Python
         # aggregator (see :class:`pyspark.sql.aggregator.Aggregator`); ``None`` otherwise. It is a
         # first-class field so it survives reconstruction paths such as ``_wrapped()``,
         # ``asNondeterministic()`` and ``spark.udf.register``, and is threaded to the JVM in
         # ``_create_judf`` so ``PythonAggregate`` can plan the two-stage aggregation.
         self.bufferSchema = bufferSchema
+        if bufferSchema is not None:
+            _check_no_char_varchar(bufferSchema, "Python UDAF buffer schemas")
         # Extract Python UDF details if transpilation is enabled.
         self.transpiled: list = []
         self._transpiled_param_names: list[str] = []
+        # The subset of the names above that Python forbids calling by keyword.
+        # The kwargs rewrite in ``__call__`` must leave these alone rather than
+        # silently coerce them to positional -- see the note there.
+        self._positional_only_param_names: frozenset = frozenset()
         # Per-option input-type categories ("numeric"/"string" per public param),
         # parallel to ``self.transpiled``; the JVM picks the option matching the
         # actual column types or falls back to interpreted Python.
@@ -296,10 +307,16 @@ class UserDefinedFunction:
                     errors,
                     self._transpiled_param_names,
                     self._transpiled_input_categories,
+                    positional_only,
                 ) = _transpile_func(session, func, self.returnType)
+                self._positional_only_param_names = frozenset(positional_only)
                 if not self.transpiled:
                     detail = f": {errors}" if errors else ""
                     warnings.warn(f"Unable to transpile UDF {func}{detail}")
+        except PySparkNotImplementedError:
+            # ``self.returnType`` parses DDL and rejects CHAR/VARCHAR. That is
+            # not a transpilation failure; do not swallow it as a warning.
+            raise
         except Exception as e:
             # An inability to transpile must never break a working UDF -- fall
             # back to interpreted Python execution and surface the failure as a
@@ -311,9 +328,11 @@ class UserDefinedFunction:
             self.transpiled = []
             self._transpiled_param_names = []
             self._transpiled_input_categories = []
+            self._positional_only_param_names = frozenset()
 
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
+        _check_no_char_varchar(returnType, "Python UDF return types")
         if evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF:
             try:
                 to_arrow_type(returnType, timezone="UTC")
@@ -565,12 +584,19 @@ class UserDefinedFunction:
         # rejects named arguments). Resolve kwargs to positional here
         # using the parameter list captured at transpilation time so the
         # rewritten expression sees plain column refs in declared order.
+        #
+        # A positional-only param is never resolved here -- Python itself
+        # rejects calling one by keyword, and rewriting would paper over that.
+        # Left unresolved, its kwarg reaches the JVM as a
+        # ``NamedArgumentExpression``, which drops the transpiled expression and
+        # falls back to interpreted Python, so the worker's own keyword call
+        # raises the same ``TypeError`` Python would.
         if kwargs and self.transpiled and self._transpiled_param_names:
             params = self._transpiled_param_names
             ordered: list = list(args)
             remaining_kwargs = dict(kwargs)
             for pname in params[len(args) :]:
-                if pname in remaining_kwargs:
+                if pname in remaining_kwargs and pname not in self._positional_only_param_names:
                     ordered.append(remaining_kwargs.pop(pname))
                 else:
                     # Caller didn't supply this param positionally or by
@@ -737,6 +763,7 @@ class UserDefinedFunction:
         self.transpiled = []
         self._transpiled_param_names = []
         self._transpiled_input_categories = []
+        self._positional_only_param_names = frozenset()
         return self
 
 
