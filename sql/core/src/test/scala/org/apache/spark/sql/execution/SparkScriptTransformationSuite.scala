@@ -216,11 +216,11 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("SPARK-60090: TRANSFORM view created at default follows the caller session flag") {
+  test("SPARK-60090: TRANSFORM view created with flag off uses stored schema cast") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
-    // PERSISTED stores the create-time flag when it is set true (see the test above).
-    // The default false is not stored on the view, so a later session with the flag on
-    // re-parses the view text and applies assignment.
+    // PERSISTED parses the view text under the stored flag (off), so there is no
+    // assignment Project. The CHAR(4) result and padding come from the view output
+    // cast against the stored schema, not from re-parsing under the caller session.
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
       withView("v_disabled") {
         sql(

@@ -135,6 +135,46 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
+  test("SPARK-60090: TRANSFORM mixed CHAR and non-CHAR columns") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val query = sql(
+        """
+          |SELECT TRANSFORM(id, name, note)
+          |USING 'cat' AS (id INT, name CHAR(4), note STRING)
+          |FROM VALUES (1, 'ab', 'hello') t(id, name, note)
+          |""".stripMargin)
+      assert(query.schema.map(_.dataType) === Seq(IntegerType, CharType(4), StringType))
+      checkAnswer(query, Row(1, "ab  ", "hello"))
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-60090: TRANSFORM CHAR comparison with a STRING literal") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    val subquery =
+      """
+        |SELECT * FROM (
+        |  SELECT TRANSFORM(c) USING 'cat' AS (c CHAR(4))
+        |  FROM VALUES ('ab') t(c)
+        |)
+        |""".stripMargin
+    // Either first-class-types flag yields a CharType attribute, so `=` promotes
+    // CHAR to STRING instead of padding the literal (table preserve-only padding
+    // applies only to StringType attributes that carry CHAR metadata).
+    Seq(
+      Map(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"),
+      Map(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")).foreach { confs =>
+      withSQLConf(confs.toSeq: _*) {
+        checkAnswer(sql(subquery + " WHERE c = 'ab'"), Seq.empty)
+        checkAnswer(sql(subquery), Row("ab  "))
+      }
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
   test("SPARK-60090: TRANSFORM CHAR/VARCHAR null token") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
