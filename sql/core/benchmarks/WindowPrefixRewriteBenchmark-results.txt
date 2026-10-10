@@ -1,0 +1,59 @@
+================================================================================================
+Section A - production-like shape: 6 measures x widths 2/6/29/89/179
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.4.1
+Apple M4 Pro
+Section A - production-like shape: 6 measures x widths 2/6/29/89/179:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------------
+sliding frames (rewrite off, segtree off)                                     19693          19775          93          0.1        9390.4       1.0X
+segment tree (rewrite off, segtree on)                                        13158          13226          67          0.2        6274.4       1.5X
+prefix differences (rewrite on)                                                1693           1698           5          1.2         807.4      11.6X
+
+
+================================================================================================
+Section B - single measure, widths 2/6/29/89/179 (total width 310)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.4.1
+Apple M4 Pro
+Section B - single measure, widths 2/6/29/89/179 (total width 310):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+sliding frames (rewrite off, segtree off)                                    4975           5060          87          0.4        2372.5       1.0X
+segment tree (rewrite off, segtree on)                                       5202           5244          45          0.4        2480.5       1.0X
+prefix differences (rewrite on)                                               740            748           9          2.8         352.7       6.7X
+
+
+================================================================================================
+Section C - wide partitions (32768 days/user), 6 measures x widths 2/6/29/89/179
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.4.1
+Apple M4 Pro
+Section C - wide partitions (32768 days/user), 6 measures x widths 2/6/29/89/179:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+sliding frames (rewrite off, segtree off)                                                 16492          16530          48          0.1        7864.1       1.0X
+segment tree (rewrite off, segtree on)                                                    10105          10142          46          0.2        4818.5       1.6X
+prefix differences (rewrite on)                                                            2459           2487          32          0.9        1172.4       6.7X
+
+
+================================================================================================
+Section D - gate sweep: naive vs Form-A rewrite, widths 2/4/8/16/32
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.4.1
+Apple M4 Pro
+Section D - gate sweep (single measure):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+naive, width 2                                      408            419          16          5.1         194.7       1.0X
+Form-A rewrite, width 2                             508            520          15          4.1         242.2       0.8X
+naive, width 4                                      436            443           9          4.8         207.7       0.9X
+Form-A rewrite, width 4                             517            522           8          4.1         246.5       0.8X
+naive, width 8                                      475            488          21          4.4         226.7       0.9X
+Form-A rewrite, width 8                             518            529          12          4.0         247.1       0.8X
+naive, width 16                                     593            605          13          3.5         283.0       0.7X
+Form-A rewrite, width 16                            514            525          17          4.1         245.2       0.8X
+naive, width 32                                     789            795           8          2.7         376.2       0.5X
+Form-A rewrite, width 32                            522            530          12          4.0         249.0       0.8X
+
+

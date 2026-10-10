@@ -118,6 +118,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         CollapseRepartition,
         CollapseProject,
         OptimizeWindowFunctions,
+        RewriteSlidingFramesAsPrefixDifferences,
         CollapseWindow,
         EliminateOffsets,
         EliminateLimits,
