@@ -6848,6 +6848,30 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-60044: the debug() helper runs a planned k-way merge") {
+    // Without AQE, `debug()` wraps every node of the executed plan in a `DebugExec`, including the
+    // nodes under a merging `GroupPartitionsExec`. That wrapper must not stop the planned merge.
+    import org.apache.spark.sql.execution.debug._
+    createTable(items, itemsColumns, Array(identity("id"), days("arrive_time"), identity("name")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'bb', 10.0, cast('2021-01-01' as timestamp)), " +
+      "(1, 'aa', 20.0, cast('2022-01-01' as timestamp)), " +
+      "(2, 'cc', 30.0, cast('2021-01-01' as timestamp))")
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      val df = sql(
+        s"""SELECT id, name, arrive_time, ROW_NUMBER() OVER (PARTITION BY id ORDER BY name) AS rn
+           |FROM testcat.ns.$items
+           |""".stripMargin)
+      assert(collectAllGroupPartitions(df.queryExecution.executedPlan).exists(_.enableSortedMerge),
+        "test setup: the plan has a k-way merge")
+      df.debug()
+    }
+  }
+
   test("SPARK-46367: partition key alias in subquery projects KeyedPartitioning") {
     // A subquery that renames a partition key (id -> pk) creates a ProjectExec between the scan and
     // the join. This test verifies that KeyedPartitioning expressions are correctly projected
