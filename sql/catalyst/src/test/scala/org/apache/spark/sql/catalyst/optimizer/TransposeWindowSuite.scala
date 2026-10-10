@@ -199,9 +199,30 @@ class TransposeWindowSuite extends PlanTest {
 
   // specF is a strict subset of specP; specS is incomparable to both.
   private val specF = Seq(k1, k2)
+  private val specKF = Seq(k2, k1)
   private val specP = Seq(k1, k2, k3)
   private val specS = Seq(k1, k4)
+  // Partition spec with an extra key between two shared keys (subset-compatible with specF).
+  private val specFExtra = Seq(k1, k4, k2)
   private val order = Seq(k1.asc)
+
+  test("don't reorder window stacks with non-deterministic expressions") {
+    // Interleaved partition specs that are regrouped when stack reordering is enabled (see the
+    // test below). `reorderable` must reject the whole chain when any window is
+    // non-deterministic, not only the legacy adjacent-pair path.
+    val query = wideRelation
+      .window(Seq(sum(v).as("f_s")), specF, order)
+      .window(Seq(sum(v).as("p_s")), specP, order)
+      .window(Seq(sum(v).as("s_s")), specS, order)
+      .window(Seq(Rand(0).as("r"), sum(v).as("f_a")), specF, order)
+      .window(Seq(sum(v).as("p_a")), specP, order)
+      .window(Seq(sum(v).as("s_a")), specS, order)
+
+    val analyzed = query.analyze
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(analyzed), analyzed)
+    }
+  }
 
   test("reorder a window stack by grouping minimal partition specs") {
     val query = wideRelation
@@ -246,21 +267,22 @@ class TransposeWindowSuite extends PlanTest {
     }
   }
 
-  test("windows with equal order specs become adjacent within a group") {
-    // Every partition spec contains (k1), so all windows ride one exchange in any order.
-    // The original order (k1, k2, k1) pays one sort per window; moving the two k1-ordered
-    // windows next to each other lets the second ride the first one's sort, for one fewer.
+  test("windows with equal required child orderings become adjacent within a group") {
+    // All three windows share ORDER BY k3, but WindowExec prepends partition keys to the
+    // required sort. The middle window's extra partition key (k4) must not sit between the
+    // two specF windows, which share the complete ordering k1, k2, k3.
+    val orderK3 = Seq(k3.asc)
     val query = wideRelation
-      .window(Seq(sum(v).as("s1")), Seq(k1), Seq(k1.asc))
-      .window(Seq(sum(v).as("s2")), specF, Seq(k2.asc))
-      .window(Seq(sum(v).as("s3")), specP, Seq(k1.asc))
+      .window(Seq(sum(v).as("s1")), specF, orderK3)
+      .window(Seq(sum(v).as("s2")), specFExtra, orderK3)
+      .window(Seq(sum(v).as("s3")), specF, orderK3)
 
     val analyzed = query.analyze
 
     val correctAnswer = wideRelation
-      .window(Seq(sum(v).as("s1")), Seq(k1), Seq(k1.asc))
-      .window(Seq(sum(v).as("s3")), specP, Seq(k1.asc))
-      .window(Seq(sum(v).as("s2")), specF, Seq(k2.asc))
+      .window(Seq(sum(v).as("s1")), specF, orderK3)
+      .window(Seq(sum(v).as("s3")), specF, orderK3)
+      .window(Seq(sum(v).as("s2")), specFExtra, orderK3)
       .select($"k1", $"k2", $"k3", $"k4", $"v", $"u", $"s1", $"s2", $"s3")
 
     withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
@@ -343,6 +365,29 @@ class TransposeWindowSuite extends PlanTest {
     }
   }
 
+  test("requireAllClusterKeysForDistribution distinguishes partition key order") {
+    // Under strict clustering, (k1, k2) and (k2, k1) are distinct specs. The two (k1, k2)
+    // windows must be regrouped together without treating (k2, k1) as the same class.
+    val query = wideRelation
+      .window(Seq(sum(v).as("sum_fk1")), specF, Seq(k1.asc))
+      .window(Seq(sum(v).as("sum_kf")), specKF, Seq(k2.asc))
+      .window(Seq(sum(v).as("sum_fk2")), specF, Seq(k2.asc))
+
+    val analyzed = query.analyze
+
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("sum_fk1")), specF, Seq(k1.asc))
+      .window(Seq(sum(v).as("sum_fk2")), specF, Seq(k2.asc))
+      .window(Seq(sum(v).as("sum_kf")), specKF, Seq(k2.asc))
+      .select($"k1", $"k2", $"k3", $"k4", $"v", $"u", $"sum_fk1", $"sum_kf", $"sum_fk2")
+
+    withSQLConf(
+      SQLConf.WINDOW_REORDER_ENABLED.key -> "true",
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key -> "true") {
+      comparePlans(Optimize.execute(analyzed), correctAnswer.analyze)
+    }
+  }
+
   test("windowReorder disabled still transposes compatible adjacent windows") {
     // With the stack reordering off, the original adjacent-pair transposition applies: the
     // upper window's partition spec (k1, k2) is a proper subset of the lower one's (k1, k2,
@@ -421,6 +466,47 @@ class TransposeWindowSuite extends PlanTest {
       .window(Seq(sum(v).as("sum_a")), specF, order)
       .select(k1, k2, k3, k4, v, u, $"sum_a",
         (v + u).as("s"), $"sum_b")
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(analyzed)
+      comparePlans(optimized, correctAnswer.analyze)
+    }
+  }
+
+  test("nondeterministic project between windows blocks stack reordering") {
+    // Same reorderable window pair as the derived-alias link test, but the between-window
+    // project adds a nondeterministic alias. `isTransparentLink` must reject it so the
+    // chain is not reordered when stack reordering is enabled.
+    val query = wideRelation
+      .window(Seq(sum(v).as("sum_a")), specF, order)
+      .select(k1, k2, k3, k4, v, u, $"sum_a", Rand(0).as("r"))
+      .window(Seq(sum(v).as("sum_b")), Seq(k1), order)
+
+    val analyzed = query.analyze
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(analyzed), analyzed)
+    }
+  }
+
+  test("stack reordering preserves attributes across two transparent links") {
+    // Two between-window projects: the lower link defines `s`, the upper link references
+    // `s` but no window does. Rebuilding hoisted links must keep `s` available for the
+    // upper link (`refsAbove` / missing-attribute propagation).
+    val query = wideRelation
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .select(k1, k2, k3, k4, v, u, $"sum_f", (v + u).as("s"))
+      .window(Seq(sum(v).as("sum_k1")), Seq(k1), order)
+      .select(k1, k2, k3, k4, v, u, $"sum_f", $"sum_k1", $"s", ($"s" + 0).as("t"))
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+
+    val analyzed = query.analyze
+
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("sum_k1")), Seq(k1), order)
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+      .select(k1, k2, k3, k4, (v + u).as("s"), $"sum_f", $"sum_k1", $"sum_p", u, v)
+      .select(k1, k2, k3, k4, v, u, $"sum_f", $"sum_k1", $"s", ($"s" + 0).as("t"), $"sum_p")
 
     withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
       val optimized = Optimize.execute(analyzed)
@@ -705,6 +791,76 @@ class TransposeWindowSuite extends PlanTest {
     withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
       val withGroupLimit = OptimizeMore.execute(analyzed)
       assert(withGroupLimit.collect { case _: WindowGroupLimit => () }.nonEmpty)
+    }
+  }
+
+  test("rank filter across two renaming top projects pins the top window") {
+    // Two stacked top projects: the filter references the outer rename `rank2`, whose
+    // definition goes through the inner rename `rank`. `isRankFilterOnTopWindow` must peel
+    // both aliases, one link at a time, to see the rank reference underneath. The derived
+    // alias `s` is passed through and consumed by the outer link, so CollapseProject
+    // cannot merge the two links without duplicating `v + u` (and thus keeps two links).
+    val query = wideRelation
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(rankAlias), specP, order)
+      .select(k1, k2, k3, k4, v, u, $"rn".as("rank"), (v + u).as("s"))
+      .select(k1, k2, k3, k4, v, u, $"rank".as("rank2"), ($"rank" + 0).as("rank3"),
+        $"s", ($"s" + 0).as("t"))
+      .where($"rank2" <= 1)
+
+    val analyzed = query.analyze
+
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+      .select(k1, k2, k3, k4, v, u, $"sum_p", $"sum_f")
+      .window(Seq(rankAlias), specP, order)
+      .select(k1, k2, k3, k4, v, u, $"rn".as("rank"), (v + u).as("s"))
+      .select(k1, k2, k3, k4, v, u, $"rank".as("rank2"), ($"rank" + 0).as("rank3"),
+        $"s", ($"s" + 0).as("t"))
+      .where($"rank2" <= 1)
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(analyzed)
+      comparePlans(optimized, correctAnswer.analyze)
+    }
+
+    object OptimizeMore extends RuleExecutor[LogicalPlan] {
+      val batches =
+        Batch("TransposeWindow", Once, TransposeWindow) ::
+        Batch("PushDownPredicates", Once, PushDownPredicates) ::
+        Batch("InferWindowGroupLimit", Once, InferWindowGroupLimit) :: Nil
+    }
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val withGroupLimit = OptimizeMore.execute(analyzed)
+      assert(withGroupLimit.collect { case _: WindowGroupLimit => () }.nonEmpty)
+    }
+  }
+
+  test("non-rank condition on a computed top-link alias does not pin the top window") {
+    // The top project computes the derived alias `t = v + u`; `isRankFilterOnTopWindow`
+    // peels it off the filter condition, sees no rank limit underneath, and does not pin,
+    // so the whole chain stays reorderable (pinning would only cost reorder opportunities).
+    val query = wideRelation
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(rankAlias), specP, order)
+      .select(k1, k2, k3, k4, v, u, $"rn", (v + u).as("t"))
+      .where($"t" <= 2)
+
+    val analyzed = query.analyze
+
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+      .window(Seq(rankAlias), specP, order)
+      .select(k1, k2, k3, k4, v, u, $"rn", (v + u).as("t"))
+      .where($"t" <= 2)
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(analyzed)
+      comparePlans(optimized, correctAnswer.analyze)
     }
   }
 

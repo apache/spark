@@ -4886,14 +4886,16 @@ object SQLConf {
   val WINDOW_REORDER_ENABLED =
     buildConf("spark.sql.optimizer.windowReorder.enabled")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .doc("When true, a stack of adjacent Window operators connected by transparent " +
-        "projections is reordered, grouping windows that share a partition spec so that " +
-        "the number of inserted exchanges (shuffles) is minimized: one exchange per " +
-        "distinct minimal partition spec. Within a partition group, windows with equal " +
-        "order specs are made adjacent, so that they share the same sort or can be " +
-        "merged. Windows are grouped by the minimal partition spec their partition spec " +
-        "contains (or by their exact partition spec under " +
-        "`spark.sql.requireAllClusterKeysForDistribution`). When false, only adjacent " +
+      .doc("When true, a stack of adjacent Window operators connected by transparent projections " +
+        "is reordered, grouping windows that share a partition spec so as to reduce inserted " +
+        "exchanges toward one per distinct minimal partition spec (a lower bound when the " +
+        "bottom child does not already satisfy a partition spec; incomparable minimal groups " +
+        "are ordered without consulting child output partitioning; optimality with respect to " +
+        "sort requirements is not claimed). Within a partition group, windows with equal " +
+        "complete required child orderings are made adjacent so they may share sorts or be " +
+        "merged. Each window is grouped with, and rides the exchange of, the first minimal " +
+        "partition spec contained in its partition spec (or shares its exact partition spec " +
+        "under `spark.sql.requireAllClusterKeysForDistribution`). When false, only adjacent " +
         "window pairs with compatible partitions are transposed.")
       .version("4.4.0")
       .booleanConf

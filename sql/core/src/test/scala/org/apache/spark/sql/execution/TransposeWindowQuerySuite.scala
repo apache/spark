@@ -25,10 +25,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * SQL end-to-end tests for the exchange-minimizing window stack reordering done by
- * the `TransposeWindow` optimizer rule, run through a full SparkSession. The
- * logical-rule transformations themselves are covered in
- * [[org.apache.spark.sql.catalyst.optimizer.TransposeWindowSuite]].
+ * SQL end-to-end tests for window stack reordering done by the `TransposeWindow` optimizer
+ * rule, run through a full SparkSession. The logical-rule transformations themselves are
+ * covered in [[org.apache.spark.sql.catalyst.optimizer.TransposeWindowSuite]].
  */
 class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
 
@@ -53,8 +52,8 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
 
   test("stacked windows are regrouped to minimize exchanges") {
     // Partition specs (k1, k2), (k1, k2, k3) and (k1, k4) interleaved in select-list order;
-    // (k1, k2) and (k1, k4) are the minimal specs, so 2 exchanges are optimal. Distinct
-    // order specs keep CollapseWindow from merging the same-spec windows.
+    // (k1, k2) and (k1, k4) are the minimal specs, so reordering targets 2 exchanges on a
+    // scan child. Distinct order specs keep CollapseWindow from merging the same-spec windows.
     val query =
       """
         |SELECT k1, k2, k3, k4, v,
@@ -203,6 +202,43 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
         |  FROM t
         |) WHERE rn <= 1
       """.stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = sql(query)
+          assert(df.queryExecution.executedPlan.collect {
+            case _: WindowGroupLimitExec => ()
+          }.nonEmpty)
+          assert(numExchanges(df) == 1)
+          df
+        }
+        val expectedDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          sql(query)
+        }
+        checkAnswer(actualDf, expectedDf)
+      }
+    }
+  }
+
+  test("rank filter with a computed top project still gets a window group limit") {
+    // The derived alias n is computed by the subquery project between the row_number
+    // window and the outer rank filter. The rank conjunct pins the top window and the
+    // two windows below are reordered to ride a single exchange, while the limit stays
+    // firing through the later predicate pushdown.
+    val query =
+      """
+        |SELECT * FROM (
+        |  SELECT k1, k2, k3, k4, v, p1, f1, rn, v + k1 AS n
+        |  FROM (
+        |    SELECT k1, k2, k3, k4, v,
+        |      sum(v) OVER (PARTITION BY k1, k2, k3 ORDER BY k1) AS p1,
+        |      sum(v) OVER (PARTITION BY k1, k2 ORDER BY k1) AS f1,
+        |      row_number() OVER (PARTITION BY k1, k2, k3 ORDER BY v) AS rn
+        |    FROM t
+        |  )
+        |) WHERE rn <= 1 AND n < 100
+    """.stripMargin
 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withInput {

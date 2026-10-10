@@ -1845,21 +1845,26 @@ object CollapseWindow extends Rule[LogicalPlan] {
 }
 
 /**
- * Reorder a stack of `Window` operators so that the fewest possible exchanges are inserted
- * for it. Window operators only append their output columns and each of them
- * (re-)partitions/(re-)sorts its input independently of its position in the stack, so two
- * windows can be swapped freely as long as neither references the other's output. Physically,
- * a window rides the exchange created for the nearest window below it iff that exchange's key
- * set is a subset of the window's partition spec (`HashPartitioning` satisfying
- * `ClusteredDistribution`), and `EnsureRequirements` only creates exchanges keyed on exactly
- * some window's partition spec. The minimum exchange count for a stack therefore equals the
- * number of its minimal partition specs (under semantic subset), and it is achieved by
- * grouping the windows by the minimal partition spec their own partition spec contains,
- * smaller specs first within a group. This subsumes the previous adjacent-pair transposition.
+ * Reorder a stack of `Window` operators to reduce the exchanges inserted for it. Window
+ * operators only append their output columns and each of them (re-)partitions/(re-)sorts
+ * its input independently of its position in the stack, so two windows can be swapped
+ * freely as long as neither references the other's output. Physically, a window rides the
+ * exchange created for the nearest window below it iff that exchange's key set is a subset
+ * of the window's partition spec (`HashPartitioning` satisfying `ClusteredDistribution`),
+ * and `EnsureRequirements` only creates exchanges keyed on exactly some window's partition
+ * spec. The exchange count is at least the number of minimal partition specs in the stack
+ * (under semantic subset); grouping windows by the minimal partition spec their own
+ * partition spec contains reaches that lower bound when the bottom child does not already
+ * satisfy any window's clustering. Incomparable minimal groups are ordered without
+ * consulting the bottom child's output partitioning. Within a group, smaller specs come
+ * first. Windows with the same complete required child ordering (partition keys as ascending
+ * sort keys, then order spec) are made adjacent so they may share sorts; sort minimization
+ * is not claimed. This subsumes the previous adjacent-pair transposition.
  * Under `requireAllClusterKeysForDistribution`, a partitioning only satisfies a window's
- * `ClusteredDistribution` with the exact same keys in the same order, so the subset relation
- * degenerates to exact spec equality: the minimum equals the number of distinct exact
- * partition specs, achieved by grouping identical specs adjacently.
+ * `ClusteredDistribution` with the exact same keys in the same order, so the subset
+ * relation degenerates to exact spec equality: the lower bound equals the number of
+ * distinct exact partition specs, reached by grouping identical specs adjacently when the
+ * bottom child does not already satisfy any window's clustering.
  *
  * The matched stack is a maximal run of `Window` operators connected by transparent links,
  * where a transparent link is a deterministic `Project` made only of plain attributes and
@@ -1977,10 +1982,17 @@ object TransposeWindow extends Rule[LogicalPlan] {
   private def equivalent(spec1: Seq[Expression], spec2: Seq[Expression]): Boolean =
     canRideExchange(spec1, spec2) && canRideExchange(spec2, spec1)
 
-  /** Semantic equality of two order specs, i.e. element-wise `semanticEquals`. */
-  private def sameOrderSpec(orderSpec1: Seq[SortOrder], orderSpec2: Seq[SortOrder]): Boolean =
-    orderSpec1.length == orderSpec2.length &&
-      orderSpec1.zip(orderSpec2).forall { case (o1, o2) => o1.semanticEquals(o2) }
+  /** Semantic equality of two sort order sequences, i.e. element-wise `semanticEquals`. */
+  private def sameSortOrders(orders1: Seq[SortOrder], orders2: Seq[SortOrder]): Boolean =
+    orders1.length == orders2.length &&
+      orders1.zip(orders2).forall { case (o1, o2) => o1.semanticEquals(o2) }
+
+  /** Required child ordering for a window, matching `WindowExecBase`. */
+  private def requiredChildOrdering(window: Window): Seq[SortOrder] =
+    window.partitionSpec.map(SortOrder(_, Ascending)) ++ window.orderSpec
+
+  private def sameRequiredChildOrdering(w1: Window, w2: Window): Boolean =
+    sameSortOrders(requiredChildOrdering(w1), requiredChildOrdering(w2))
 
   /**
    * The chain is reorderable if all windows are deterministic and have a non-empty partition
@@ -2019,9 +2031,9 @@ object TransposeWindow extends Rule[LogicalPlan] {
   }
 
   /**
-   * Returns the exchange-minimal window order as indices into `windows` (bottom-to-top):
-   * the plan needs one exchange per distinct minimal partition spec, and windows with
-   * equal order specs are made adjacent to share sorts.
+   * Returns a window order as indices into `windows` (bottom-to-top) that groups by minimal
+   * partition spec and makes equal complete required child orderings adjacent. Does not use
+   * the bottom child's output partitioning when ordering incomparable minimal groups.
    */
   private def optimalOrder(windows: Seq[Window]): Seq[Int] = {
     val specs = windows.map(_.partitionSpec)
@@ -2050,20 +2062,20 @@ object TransposeWindow extends Rule[LogicalPlan] {
     val leaders = minimalSpecs.indices.map { g =>
       specs.indices.find(i => classOf(i) == g && equivalent(specs(i), minimalSpecs(g))).get
     }
-    // The order-spec classes of the windows that are not ranked -1, in first-appearance
-    // order among those windows. Windows whose order spec equals their group leader's get
-    // the special rank -1: they belong right after the leader, where they ride its sort
-    // as well as its exchange (or merge with it). Ranking them by first appearance like
-    // the other classes would not be stable: the leader is forced to the front, which
-    // changes its class's first appearance, so re-applying the rule would compute a
-    // different order. With the special rank the first application is a fixed point.
+    // The required-ordering classes of the windows that are not ranked -1, in first-appearance
+    // order among those windows. Windows whose complete required child ordering equals their
+    // group leader's get the special rank -1: they belong right after the leader, where they
+    // ride its sort as well as its exchange (or merge with it). Ranking them by first
+    // appearance like the other classes would not be stable: the leader is forced to the
+    // front, which changes its class's first appearance, so re-applying the rule would
+    // compute a different order. With the special rank the first application is a fixed point.
     val orderClass = Array.fill(windows.length)(-1)
     val rankedOrders = mutable.ArrayBuffer.empty[Seq[SortOrder]]
     windows.indices.foreach { i =>
       val leader = leaders(classOf(i))
-      if (i != leader && !sameOrderSpec(windows(leader).orderSpec, windows(i).orderSpec)) {
-        val spec = windows(i).orderSpec
-        val rank = rankedOrders.indexWhere(sameOrderSpec(_, spec))
+      if (i != leader && !sameRequiredChildOrdering(windows(leader), windows(i))) {
+        val spec = requiredChildOrdering(windows(i))
+        val rank = rankedOrders.indexWhere(sameSortOrders(_, spec))
         if (rank < 0) {
           rankedOrders += spec
           orderClass(i) = rankedOrders.length - 1
@@ -2073,9 +2085,9 @@ object TransposeWindow extends Rule[LogicalPlan] {
       }
     }
     // The other members ride the leader's exchange in any order, so they are ordered by
-    // orderClass (then by partition spec length, for stability): windows with equal order
-    // specs become adjacent and share the sort inserted for the first of them, without
-    // affecting the exchange count.
+    // orderClass (then by partition spec length, for stability): windows with equal complete
+    // required child orderings become adjacent and share the sort inserted for the first of
+    // them, without affecting the exchange count.
     minimalSpecs.indices.flatMap { g =>
       val members = specs.indices.filter(classOf(_) == g)
       val leader = leaders(g)
@@ -2134,13 +2146,13 @@ object TransposeWindow extends Rule[LogicalPlan] {
   }
 
   /**
-   * Reorder `chain` into the exchange-minimal order and rebuild it, keeping the top window in
-   * place if `pinTopWindow` (see `isRankFilterOnTopWindow`): only the windows below it are
-   * reordered then and the order-restoring `Project` is placed below the pinned window, so
-   * that the strict `Filter`-over-`Window` match of `InferWindowGroupLimit` survives. The
-   * stripped links are re-applied above the reordered windows (below the pinned window if
-   * pinned), each additionally passing through the attributes that anything above it still
-   * references. Returns `None` if the chain is already in an optimal order.
+   * Reorder `chain` using `optimalOrder` and rebuild it, keeping the top window in place if
+   * `pinTopWindow` (see `isRankFilterOnTopWindow`): only the windows below it are reordered
+   * then and the order-restoring `Project` is placed below the pinned window, so that the
+   * strict `Filter`-over-`Window` match of `InferWindowGroupLimit` survives. The stripped
+   * links are re-applied above the reordered windows (below the pinned window if pinned),
+   * each additionally passing through the attributes that anything above it still references.
+   * Returns `None` if the chain is already in that target order.
    */
   private def reorderChain(chain: WindowChain, pinTopWindow: Boolean): Option[LogicalPlan] = {
     val windows = chain.windows
@@ -2214,10 +2226,10 @@ object TransposeWindow extends Rule[LogicalPlan] {
   }
 
   /**
-   * Reorder whole window chains so that the fewest possible exchanges are inserted. Each
-   * chain is rewritten at its top boundary: the nearest ancestor that is not a window or a
-   * transparent link, so that the whole chain is visible and a rank `Filter` parent (the
-   * `InferWindowGroupLimit` pattern) can pin the top window.
+   * Reorder whole window chains to reduce inserted exchanges (see the `TransposeWindow`
+   * overview for scope). Each chain is rewritten at its top boundary: the nearest ancestor
+   * that is not a window or a transparent link, so that the whole chain is visible and a
+   * rank `Filter` parent (the `InferWindowGroupLimit` pattern) can pin the top window.
    */
   private def reorderWindowStacks(plan: LogicalPlan): LogicalPlan = {
     val rewritten = plan.transformUpWithPruning(_.containsPattern(WINDOW), ruleId) {
