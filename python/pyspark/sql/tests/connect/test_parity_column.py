@@ -24,9 +24,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ColumnParityTests(ColumnTestsMixin, ReusedConnectTestCase):
-    def assert_column_resolution_error(self, exception, *, classic_condition, connect_condition):
-        self.assertEqual(exception.getCondition(), connect_condition)
-
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -42,6 +39,65 @@ class ColumnParityTests(ColumnTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Requires JVM access.")
     def test_validate_column_types(self):
         super().test_validate_column_types()
+
+    # Connect resolves tagged DataFrame columns by plan id, while Classic tracks
+    # attribute ids. Keep these tests explicit so the resulting public error
+    # differences are not hidden by inheritance.
+
+    def test_resolve_after_chained_withcolumn_shadow(self):
+        df = self.spark.sql("SELECT 1 AS c")
+        with self.assertRaises(AnalysisException) as error:
+            df.withColumn("c", sf.col("c").cast("string")).withColumn(
+                "c", sf.col("c").cast("int")
+            ).select(df.c).collect()
+        self.assertEqual(error.exception.getCondition(), "CANNOT_RESOLVE_DATAFRAME_COLUMN")
+
+    def test_resolve_after_select_alias_shadow(self):
+        df = self.spark.sql("SELECT 1 AS c")
+        with self.assertRaises(AnalysisException) as error:
+            df.select(df.c.cast("string").alias("c")).select(df.c).collect()
+        self.assertEqual(error.exception.getCondition(), "CANNOT_RESOLVE_DATAFRAME_COLUMN")
+
+    def test_resolve_after_withcolumnrenamed(self):
+        df = self.spark.sql("SELECT 1 AS c")
+        with self.assertRaises(AnalysisException) as error:
+            df.withColumnRenamed("c", "c2").select(df.c).collect()
+        self.assertEqual(error.exception.getCondition(), "CANNOT_RESOLVE_DATAFRAME_COLUMN")
+
+    def test_resolve_after_drop(self):
+        df = self.spark.sql("SELECT 1 AS c, 2 AS d")
+        with self.assertRaises(AnalysisException) as error:
+            df.drop("c").select(df.c).collect()
+        self.assertEqual(error.exception.getCondition(), "CANNOT_RESOLVE_DATAFRAME_COLUMN")
+
+    def test_resolve_generator_after_projection(self):
+        df = self.spark.sql("SELECT array(1, 2) AS arr")
+        projected = df.select(sf.lit(0).alias("keep"))
+        with self.assertRaises(AnalysisException) as error:
+            projected.select(sf.explode(df.arr)).collect()
+        self.assertEqual(error.exception.getCondition(), "CANNOT_RESOLVE_DATAFRAME_COLUMN")
+
+    def test_resolve_after_agg_alias_shadow(self):
+        df = self.spark.sql("SELECT 1 AS c")
+        with self.assertRaises(AnalysisException) as error:
+            df.groupBy().agg(sf.sum("c").alias("c")).select(df.c).collect()
+        self.assertEqual(error.exception.getCondition(), "CANNOT_RESOLVE_DATAFRAME_COLUMN")
+
+    def test_resolve_self_join_alias(self):
+        # Both sides match the tagged plan id at the same depth. Connect reports
+        # AMBIGUOUS_COLUMN_REFERENCE instead of Classic's legacy self-join error.
+        df = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
+        a, b = df.alias("a"), df.alias("b")
+        with self.assertRaises(AnalysisException) as error:
+            a.join(b, a.c == b.c).select(df.c).collect()
+        self.assertEqual(error.exception.getCondition(), "AMBIGUOUS_COLUMN_REFERENCE")
+
+    def test_resolve_cross_dataframe_illegal_reference(self):
+        df1 = self.spark.range(3)
+        df2 = self.spark.range(5)
+        with self.assertRaises(AnalysisException) as error:
+            df1.select(df2.id).collect()
+        self.assertEqual(error.exception.getCondition(), "CANNOT_RESOLVE_DATAFRAME_COLUMN")
 
     def test_resolve_after_union(self):
         # Connect diverges from Classic here: Union is treated as a leaf when
