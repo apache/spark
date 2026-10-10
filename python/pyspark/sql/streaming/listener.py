@@ -449,6 +449,7 @@ class StreamingQueryProgress(dict):
         observedMetrics: Dict[str, Row],
         jprogress: Optional["JavaObject"] = None,
         jdict: Optional[Dict[str, Any]] = None,
+        trigger: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(
             id=id,
@@ -466,6 +467,7 @@ class StreamingQueryProgress(dict):
             inputRowsPerSecond=inputRowsPerSecond,
             processedRowsPerSecond=processedRowsPerSecond,
             observedMetrics=observedMetrics,
+            trigger=trigger,
         )
         self._jprogress: Optional["JavaObject"] = jprogress
         self._jdict: Optional[Dict[str, Any]] = jdict
@@ -474,6 +476,7 @@ class StreamingQueryProgress(dict):
     def fromJObject(cls, jprogress: "JavaObject") -> "StreamingQueryProgress":
         from pyspark import SparkContext
 
+        trigger_json = jprogress.trigger()
         return cls(
             jprogress=jprogress,
             id=uuid.UUID(jprogress.id().toString()),
@@ -498,6 +501,7 @@ class StreamingQueryProgress(dict):
                 )
                 for k, jr in dict(jprogress.observedMetrics()).items()
             },
+            trigger=json.loads(trigger_json) if trigger_json is not None else None,
         )
 
     @classmethod
@@ -528,6 +532,7 @@ class StreamingQueryProgress(dict):
                 if "observedMetrics" in j
                 else {}
             ),
+            trigger=j.get("trigger"),
         )
 
     @property
@@ -582,6 +587,15 @@ class StreamingQueryProgress(dict):
         The process duration of each batch.
         """
         return self["batchDuration"]
+
+    @property
+    def trigger(self) -> Optional[Dict[str, Any]]:
+        """
+        The configured trigger type and options, or ``None`` when unavailable.
+
+        .. versionadded:: 5.0.0
+        """
+        return self["trigger"]
 
     @property
     def durationMs(self) -> Dict[str, int]:

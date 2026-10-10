@@ -25,6 +25,7 @@ import java.util.UUID
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 
+import org.json4s.JNothing
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
@@ -33,6 +34,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.execution.streaming.Triggers
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -43,6 +45,71 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
 
 class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually with Matchers {
+  gridTest("SPARK-59986: trigger metadata")(Seq[(Trigger, String)](
+    Trigger.ProcessingTime(0) -> """{"type":"ProcessingTime","intervalMs":0}""",
+    Trigger.ProcessingTime(3000000000L) ->
+      """{"type":"ProcessingTime","intervalMs":3000000000}""",
+    Trigger.Continuous(2000) -> """{"type":"Continuous","intervalMs":2000}""",
+    Trigger.RealTime(3000) -> """{"type":"RealTime","batchDurationMs":3000}""",
+    Trigger.AvailableNow() -> """{"type":"AvailableNow"}""",
+    Trigger.Once() -> """{"type":"OneTime"}""",
+    new Trigger {} -> null)) {
+    case (trigger, expected) => assert(Triggers.toJson(trigger) === expected)
+  }
+
+  test("SPARK-59986: trigger JSON serialization") {
+    val progress = StreamingQueryProgress.fromJson(testProgress3.json)
+    progress.trigger = """{"type":"ProcessingTime","intervalMs":3000000000}"""
+    Seq(progress.json, progress.prettyJson, StreamingQueryProgress.jsonString(progress))
+      .foreach { json =>
+        assert(parse(json) \ "trigger" === parse(progress.trigger))
+      }
+    assert(StreamingQueryProgress.fromJson(progress.json).trigger === progress.trigger)
+  }
+
+  test("SPARK-59986: micro-batch progress reports the configured trigger") {
+    import testImplicits._
+
+    val input = MemoryStream[Int]
+    testStream(input.toDS())(
+      AddData(input, 1),
+      StartStream(Trigger.ProcessingTime(1000)),
+      CheckAnswer(1),
+      Execute { query =>
+        eventually(timeout(streamingTimeout)) {
+          assert(query.lastProgress != null)
+          assert(parse(query.lastProgress.json) \ "trigger" ===
+            parse("""{"type":"ProcessingTime","intervalMs":1000}"""))
+        }
+      },
+      StopStream)
+  }
+
+  test("SPARK-59986: idle progress preserves the configured trigger") {
+    import testImplicits._
+
+    val input = MemoryStream[Int]
+    val triggerClock = new StreamManualClock
+    withSQLConf(SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "0") {
+      testStream(input.toDS())(
+        AddData(input, 1),
+        StartStream(Trigger.ProcessingTime(1000), triggerClock = triggerClock),
+        AdvanceManualClock(1000),
+        CheckAnswer(1),
+        AdvanceManualClock(1000),
+        Execute { query =>
+          eventually(timeout(streamingTimeout)) {
+            val idleProgress = query.lastProgress
+            assert(idleProgress != null)
+            assert(!idleProgress.durationMs.containsKey("addBatch"))
+            assert(parse(idleProgress.json) \ "trigger" ===
+              parse("""{"type":"ProcessingTime","intervalMs":1000}"""))
+          }
+        },
+        StopStream)
+    }
+  }
+
   test("StreamingQueryProgress - prettyJson") {
     val json1 = testProgress1.prettyJson
     assertJson(
@@ -313,6 +380,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     ).foreach { input =>
       val jsonString = StreamingQueryProgress.jsonString(input)
       val result = StreamingQueryProgress.fromJson(jsonString)
+      assert(parse(jsonString) \ "trigger" === JNothing)
+      assert(result.trigger == null)
       assert(input.id == result.id)
       assert(input.runId == result.runId)
       assert(input.name == result.name)

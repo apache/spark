@@ -30,7 +30,7 @@ import org.apache.spark.sql.streaming.{SinkProgress, SourceProgress, StateOperat
 import org.apache.spark.sql.streaming.ui.{StreamingQueryData, StreamingQueryProgressWrapper}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.status.api.v1.sql.SqlResourceSuite
-import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
+import org.apache.spark.status.protobuf.{KVStoreProtobufSerializer, StoreTypes}
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
 
@@ -377,6 +377,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         sink = sink,
         observedMetrics = observedMetrics
       )
+      progress.trigger = """{"type":"ProcessingTime","intervalMs":3000000000}"""
       new StreamingQueryProgressWrapper(progress)
     }
 
@@ -455,6 +456,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       // Do serialization and deserialization
       val bytes = serializer.serialize(input)
       val result = serializer.deserialize(bytes, classOf[StreamingQueryProgressWrapper])
+      val storedProgress = StoreTypes.StreamingQueryProgressWrapper.parseFrom(bytes).getProgress
+      assert(storedProgress.hasTrigger == !hasNullValue)
 
       // Assertion results
       val progress = input.progress
@@ -465,6 +468,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       assert(progress.timestamp == resultProcess.timestamp)
       assert(progress.batchId == resultProcess.batchId)
       assert(progress.batchDuration == resultProcess.batchDuration)
+      assert(progress.trigger == resultProcess.trigger)
       if (hasNullValue) {
         assert(resultProcess.durationMs.isEmpty)
         assert(resultProcess.eventTime.isEmpty)

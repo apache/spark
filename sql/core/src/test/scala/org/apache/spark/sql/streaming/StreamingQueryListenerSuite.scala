@@ -319,6 +319,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress4))
     testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress5))
     testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress6))
+    val progress = StreamingQueryProgress.fromJson(
+      StreamingQueryStatusAndProgressSuite.testProgress3.json)
+    progress.trigger = """{"type":"ProcessingTime","intervalMs":3000000000}"""
+    testSerialization(new QueryProgressEvent(progress))
   }
 
   test("QueryTerminatedEvent serialization") {

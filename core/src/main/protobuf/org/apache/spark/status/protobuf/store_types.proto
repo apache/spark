@@ -814,6 +814,7 @@ message StreamingQueryProgress {
   repeated SourceProgress sources = 10;
   SinkProgress sink = 11;
   map<string, string> observed_metrics = 12;
+  optional string trigger = 13;
 }
 
 message StreamingQueryProgressWrapper {

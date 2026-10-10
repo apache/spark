@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.annotation.{JsonInclude, JsonRawValue}
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.{DeserializationContext, DeserializationFeature, JsonDeserializer, JsonNode, ObjectMapper}
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
@@ -219,6 +220,12 @@ class StreamingQueryProgress private[spark] (
     val observedMetrics: ju.Map[String, Row])
     extends Serializable {
 
+  // JSON for the configured trigger, omitted for legacy progress records.
+  @JsonRawValue
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  @JsonDeserialize(using = classOf[ObjectToStringDeserializer])
+  private[spark] var trigger: String = _
+
   /** The aggregate (across all sources) number of records processed in a trigger. */
   def numInputRows: Long = sources.map(_.numInputRows).sum
 
@@ -243,6 +250,7 @@ class StreamingQueryProgress private[spark] (
       ("timestamp" -> JString(timestamp)) ~
       ("batchId" -> JInt(batchId)) ~
       ("batchDuration" -> JInt(batchDuration)) ~
+      ("trigger" -> Option(trigger).map(parse(_)).getOrElse(JNothing)) ~
       ("numInputRows" -> JInt(numInputRows)) ~
       ("inputRowsPerSecond" -> safeDecimalToJValue(inputRowsPerSecond)) ~
       ("processedRowsPerSecond" -> safeDecimalToJValue(processedRowsPerSecond)) ~
