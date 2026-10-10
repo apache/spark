@@ -175,10 +175,11 @@ than guarded:
   than the column type. Python has no width at all, so widening moves the
   lowering *towards* Python; the declared return type is what either side
   finally produces. Visible in ``explain()``, not in results.
-* *Evaluation count.* ``//``, ``<<`` and ``min``/``max`` reference an operand
-  more than once (a floor correction, an overflow round-trip, a NULL guard)
-  where Python evaluates it once. Operands here are pure column reads, so
-  this costs plan size and nothing else.
+* *Evaluation count.* The NULL guards read each operand a second time
+  (``x ** 0`` excepted -- its result is a literal), as do ``//``'s floor
+  correction and ``<<``'s overflow round-trip, where Python evaluates it
+  once. Operands here are pure column reads, so this costs plan size and
+  nothing else.
 
 **2. Value-visible, and deliberately kept.** These need runtime values rather
 than types to detect, so no static check can route around them. They are
@@ -203,13 +204,14 @@ accepted, documented, and pinned:
   an int column at Integer.MaxValue and ``abs(x)`` on a smallint holding -32768
   both compute now instead of raising. ``<<`` and a negative ``round()`` scale
   are the two that still overflow on their own terms.
-* *NULL against TypeError.* Numeric arithmetic is not NULL-guarded: ``x + 1``
-  on NULL is NULL, where Python raises ``TypeError``. The comparison,
-  ``min``/``max`` and string-concat lowerings *do* guard, because there Spark
-  would otherwise return a plausible wrong answer (or a wrong string) rather
-  than a NULL. Guarding every arithmetic operand too would cost a branch per
-  operand on the hottest path for a divergence that at least never produces a
-  wrong *number*.
+
+NULL against TypeError used to sit in this tier: Spark's arithmetic propagates
+NULL, so ``x + 1`` on NULL came back NULL where Python raises ``TypeError``.
+The answer was at least never a wrong *number*, but a row that should have
+failed came back silently missing, so every numeric lowering now guards the way
+the comparisons, ``min``/``max`` and string concat always have: a NULL operand
+raises (via ``raise_error``, see ``_raise_on_null_operand``) rather than
+propagating.
 
 NaN used to sit in this tier. It no longer does: Spark treats ``NaN = NaN`` as
 true and orders NaN above every value where Python makes every NaN comparison
@@ -369,6 +371,27 @@ def _promoting(op: str, *cols: Column) -> Column:
     ``sql-expression-schema.md``, for a function nobody should call by name.
     """
     return InternalFunction._invoke_internal_function_over_columns(f"python_promoting_{op}", *cols)
+
+
+def _raise_on_null_operand(op_repr: str, result: Column, *cols: Column) -> Column:
+    """``result``, but raising where CPython gets a ``None`` operand.
+
+    Spark's arithmetic propagates NULL (``x + 1`` on NULL is NULL) where Python
+    raises ``TypeError`` (``None + 1``), and a row that should have failed
+    coming back silently missing is worse than any wrong answer, so every
+    lowered operator guards the way the comparisons and ``min`` / ``max`` do:
+    NULL in, ``raise_error`` out. A caller that already proved non-null (``if x
+    is not None: return x + 1``) takes the otherwise branch and never trips it.
+    """
+    err = lit(
+        f"Python UDF transpiler: cannot apply `{op_repr}` to NULL; "
+        "Python would raise TypeError here. Add an `is not None` guard or "
+        "filter NULLs upstream."
+    )
+    any_null = cols[0].isNull()
+    for c in cols[1:]:
+        any_null = any_null | c.isNull()
+    return when(any_null, raise_error(err)).otherwise(result)
 
 
 def _is_numeric_cat(category: Optional[str]) -> bool:
@@ -907,9 +930,8 @@ class CatalystTranspiler(AbstractTranspiler):
         """
         remainder = left_col.__mod__(right_col)
         signs_differ = (remainder < lit(0)) != (right_col < lit(0))
-        return when((remainder != lit(0)) & signs_differ, remainder + right_col).otherwise(
-            remainder
-        )
+        mod = when((remainder != lit(0)) & signs_differ, remainder + right_col).otherwise(remainder)
+        return _raise_on_null_operand("%", mod, left_col, right_col)
 
     def _lower_int_pow(self, base_col: Column, exponent: ast.AST) -> Column:
         """Lower ``base ** k`` for a constant non-negative integer ``k``.
@@ -944,7 +966,7 @@ class CatalystTranspiler(AbstractTranspiler):
             # Folding to a bare `lit(1)` would drop the base, inventing 1 for a
             # NULL input and swallowing errors from computing the base, so keep it
             # in the condition.
-            return when(base_col.isNull(), lit(None)).otherwise(lit(1))
+            return _raise_on_null_operand("**", lit(1), base_col)
         # Each step is a promoting multiply, so the expansion widens as it grows rather than
         # all at once: `x ** 2` on a tinyint lands on smallint, on an int it lands on bigint,
         # and on a bigint there is nowhere left to go so it raises exactly as it did before
@@ -954,7 +976,7 @@ class CatalystTranspiler(AbstractTranspiler):
         result = base_col
         for _ in range(k - 1):
             result = _promoting("multiply", result, base_col)
-        return result
+        return _raise_on_null_operand("**", result, base_col)
 
     def _lower_shift(self, left_col: Column, right_col: Column, left_shift: bool) -> Column:
         """Lower ``a << n`` / ``a >> n``, handling Python's error cases exactly.
@@ -976,7 +998,9 @@ class CatalystTranspiler(AbstractTranspiler):
         drops bits raises the way ``*`` reports overflow under ANSI. Under 64 the
         round trip is a real check, since nothing is masked. The count is clamped
         before the cast below, so both of those report the transpiler's own error
-        rather than a cast overflow however far out of range the count is.
+        rather than a cast overflow however far out of range the count is. A NULL
+        operand raises the guard's error like everywhere else; the guard wraps
+        the whole chain, so the branches below only ever see non-NULL operands.
         """
         # The count must be IntegerType (BitShiftOperation's inputTypes). Implicit
         # coercion would insert that cast itself, but then an out-of-range count
@@ -996,26 +1020,23 @@ class CatalystTranspiler(AbstractTranspiler):
         )
         guarded: Column = when(count < lit(0), raise_error(negative_count))
         if not left_shift:
-            # The NULL check has to be explicit: `base < 0` is NULL for a NULL
-            # operand, so without it the zero branch fires and invents a value
-            # where every other lowering here (and `>>` under 64) yields NULL.
-            return (
-                guarded.when(base.isNull(), lit(None))
-                .when(count >= lit(_LONG_BITS), when(base < lit(0), lit(-1)).otherwise(lit(0)))
-                .otherwise(call_function("shiftright", base, count))
-            )
+            chain = guarded.when(
+                count >= lit(_LONG_BITS), when(base < lit(0), lit(-1)).otherwise(lit(0))
+            ).otherwise(call_function("shiftright", base, count))
+            return _raise_on_null_operand(">>", chain, left_col, right_col)
         shifted = call_function("shiftleft", base, count)
         overflow = lit(
             "Python UDF transpiler: `<<` overflowed the column type; Python "
             "would promote to an arbitrary-precision int here."
         )
-        return (
+        chain = (
             # A zero operand survives any count, so it falls through to the round
             # trip and agrees; anything else has lost every bit.
             guarded.when((count >= lit(_LONG_BITS)) & (base != lit(0)), raise_error(overflow))
             .when(call_function("shiftright", shifted, count) != base, raise_error(overflow))
             .otherwise(shifted)
         )
+        return _raise_on_null_operand("<<", chain, left_col, right_col)
 
     def _lower_builtin_call(self, params: List[str], node: ast.Call) -> Column:
         """Lower a call to one of ``abs`` / ``min`` / ``max`` / ``round``."""
@@ -1057,14 +1078,18 @@ class CatalystTranspiler(AbstractTranspiler):
             # positive counterpart for a width's minimum: `abs(x)` on a smallint holding
             # -32768 raised where Python answers 32768.
             abs_col = self._convert_chunk(params, args[0])
-            return _promoting_if_numeric("abs", [result_cat], lambda: _abs(abs_col), abs_col)
+            return _raise_on_null_operand(
+                "abs()",
+                _promoting_if_numeric("abs", [result_cat], lambda: _abs(abs_col), abs_col),
+                abs_col,
+            )
         if name in ("min", "max"):
             # `least`/`greatest` skip nulls, so `min(None, 3)` would return 3 where
             # Python raises -- guard rather than diverge. Floats are out because
             # Python returns the first argument for a NaN operand while Spark orders
             # NaN highest; checking the unified category covers both orders. Only a
-            # pair is handled: `least`/`greatest` are variadic, but the NULL guard
-            # and category unification here are written for two operands.
+            # pair is handled: `least`/`greatest` are variadic, but category
+            # unification (`_builtin_call_category`) is written for two operands.
             if _is_numeric_cat(result_cat) and result_cat not in _INTEGRAL_CATEGORIES:
                 raise UnsupportedOperationException(
                     f"`{name}()` is only lowered for integral or string "
@@ -1073,13 +1098,8 @@ class CatalystTranspiler(AbstractTranspiler):
                     "to interpreted Python"
                 )
             cols = [self._convert_chunk(params, a) for a in args]
-            err = lit(
-                f"Python UDF transpiler: cannot apply `{name}()` to NULL; Python "
-                "would raise TypeError here. Add an `is not None` guard or filter "
-                "NULLs upstream."
-            )
             picked = least(*cols) if name == "min" else greatest(*cols)
-            return when(cols[0].isNull() | cols[1].isNull(), raise_error(err)).otherwise(picked)
+            return _raise_on_null_operand(f"{name}()", picked, *cols)
         # round: HALF_EVEN, like Python. Integral operands only. A negative scale
         # can overflow the column type (`round(Long.MaxValue, -1)` raises where
         # Python promotes) -- the usual overflow caveat.
@@ -1114,7 +1134,8 @@ class CatalystTranspiler(AbstractTranspiler):
         # since the worst case is `magnitude(input) * 10**|scale|`. It needs a widening
         # cast the transpiler cannot size (only the JVM knows the column width), so it
         # wants a promoting expression of its own rather than a Python-side hack.
-        return bround(self._convert_chunk(params, args[0]), scale)
+        round_col = self._convert_chunk(params, args[0])
+        return _raise_on_null_operand("round()", bround(round_col, scale), round_col)
 
     def _safe_category(self, params: List[str], node: Optional[ast.AST]) -> Optional[str]:
         """Best-effort input-type category for an if/else branch, or ``None`` when
@@ -1610,11 +1631,17 @@ class CatalystTranspiler(AbstractTranspiler):
                     # minimum. `forNegation` is the shared rule.
                     neg_cat = self._category(params, operand)
                     neg_col = self._convert_chunk(params, operand)
-                    return _promoting_if_numeric(
-                        "negate", [neg_cat], lambda: neg_col.__neg__(), neg_col
+                    return _raise_on_null_operand(
+                        "unary -",
+                        _promoting_if_numeric(
+                            "negate", [neg_cat], lambda: neg_col.__neg__(), neg_col
+                        ),
+                        neg_col,
                     )
-                # `+x` -- identity, kept for symmetry with USub.
-                return self._convert_chunk(params, operand)
+                # `+x` -- identity on a value, but `+None` raises TypeError like
+                # every other operator, so it gets the guard too.
+                plus_col = self._convert_chunk(params, operand)
+                return _raise_on_null_operand("unary +", plus_col, plus_col)
             case ast.UnaryOp(op=ast.Invert(), operand=operand):
                 # `~x` is `-x - 1` in both languages, but int-only: Python raises
                 # on a float and BitwiseNot fails analysis for a double child,
@@ -1629,7 +1656,8 @@ class CatalystTranspiler(AbstractTranspiler):
                 # Normalise to a long, as the bitwise binary operators do. Also added for
                 # a promoted decimal child that the LongType ceiling now makes impossible,
                 # so likewise defensive rather than load bearing.
-                return bitwise_not(self._convert_chunk(params, operand).cast("long"))
+                inv_col = self._convert_chunk(params, operand)
+                return _raise_on_null_operand("~", bitwise_not(inv_col.cast("long")), inv_col)
             case ast.BoolOp(op=op, values=values):
                 # Python `and` / `or` short-circuit and return one of the
                 # operands rather than a strict boolean. For the booleans
@@ -1787,13 +1815,8 @@ class CatalystTranspiler(AbstractTranspiler):
                         if lc == rc == "string":
                             # `concat` propagates NULL where Python raises
                             # TypeError on `'a' + None`, so guard rather than
-                            # return a value Python never would. Numeric `+` is
-                            # deliberately *not* guarded this way -- see the
-                            # tier-2 "NULL against TypeError" row in the module
-                            # docstring -- because there the unguarded answer is
-                            # NULL, which is at least not a wrong number, and
-                            # guarding every arithmetic operand would cost a
-                            # branch per operand on the common path.
+                            # return a value Python never would -- the same
+                            # guard every numeric lowering carries.
                             concat_null = lit(
                                 "Python UDF transpiler: cannot concatenate NULL; "
                                 "Python would raise TypeError here. Add an `is not "
@@ -1804,28 +1827,43 @@ class CatalystTranspiler(AbstractTranspiler):
                                 raise_error(concat_null),
                             ).otherwise(concat(left_col, right_col))
                         if both_numeric:
-                            return _promoting_if_numeric(
-                                "add",
-                                [lc, rc],
-                                lambda: left_col.__add__(right_col),
+                            return _raise_on_null_operand(
+                                "+",
+                                _promoting_if_numeric(
+                                    "add",
+                                    [lc, rc],
+                                    lambda: left_col.__add__(right_col),
+                                    left_col,
+                                    right_col,
+                                ),
                                 left_col,
                                 right_col,
                             )
                     case ast.Sub():
                         if both_numeric:
-                            return _promoting_if_numeric(
-                                "subtract",
-                                [lc, rc],
-                                lambda: left_col.__sub__(right_col),
+                            return _raise_on_null_operand(
+                                "-",
+                                _promoting_if_numeric(
+                                    "subtract",
+                                    [lc, rc],
+                                    lambda: left_col.__sub__(right_col),
+                                    left_col,
+                                    right_col,
+                                ),
                                 left_col,
                                 right_col,
                             )
                     case ast.Mult():
                         if both_numeric:
-                            return _promoting_if_numeric(
-                                "multiply",
-                                [lc, rc],
-                                lambda: left_col.__mul__(right_col),
+                            return _raise_on_null_operand(
+                                "*",
+                                _promoting_if_numeric(
+                                    "multiply",
+                                    [lc, rc],
+                                    lambda: left_col.__mul__(right_col),
+                                    left_col,
+                                    right_col,
+                                ),
                                 left_col,
                                 right_col,
                             )
@@ -1835,10 +1873,14 @@ class CatalystTranspiler(AbstractTranspiler):
                         # narrow the count and let a double column drop the option.
                         if lc == "string" and _is_numeric_cat(rc) and rc != "fractional":
                             self._narrow(params, "integral", right)
-                            return repeat(left_col, right_col.cast("int"))
+                            return _raise_on_null_operand(
+                                "*", repeat(left_col, right_col.cast("int")), left_col, right_col
+                            )
                         if _is_numeric_cat(lc) and lc != "fractional" and rc == "string":
                             self._narrow(params, "integral", left)
-                            return repeat(right_col, left_col.cast("int"))
+                            return _raise_on_null_operand(
+                                "*", repeat(right_col, left_col.cast("int")), left_col, right_col
+                            )
                     case ast.Mod():
                         if both_numeric:
                             return self._python_mod(left_col, right_col)
@@ -1854,7 +1896,9 @@ class CatalystTranspiler(AbstractTranspiler):
                         # where Python divides the exact integers. Narrow to int32
                         # so a bigint column drops the option rather than using it.
                         if both_numeric and (lc == "fractional" or rc == "fractional"):
-                            return left_col.__div__(right_col)
+                            return _raise_on_null_operand(
+                                "/", left_col.__div__(right_col), left_col, right_col
+                            )
                         if both_numeric:
                             int32_params: Set[int] = set()
                             if not (
@@ -1869,7 +1913,9 @@ class CatalystTranspiler(AbstractTranspiler):
                                     "falls back to interpreted Python"
                                 )
                             self._narrow_indexes(int32_params, "integral32")
-                            return left_col.__div__(right_col)
+                            return _raise_on_null_operand(
+                                "/", left_col.__div__(right_col), left_col, right_col
+                            )
                     case ast.FloorDiv():
                         # Python floors toward -inf where `div` truncates toward
                         # zero, so subtract one when the remainder is non-zero and
@@ -1895,7 +1941,8 @@ class CatalystTranspiler(AbstractTranspiler):
                             needs_floor = (remainder != lit(0)) & (
                                 (left_col < lit(0)) != (right_col < lit(0))
                             )
-                            return when(needs_floor, quotient - lit(1)).otherwise(quotient)
+                            floored = when(needs_floor, quotient - lit(1)).otherwise(quotient)
+                            return _raise_on_null_operand("//", floored, left_col, right_col)
                         if both_numeric:
                             raise UnsupportedOperationException(
                                 "`//` is only lowered for integral operands: on "
@@ -1927,10 +1974,15 @@ class CatalystTranspiler(AbstractTranspiler):
                             left_bits = left_col.cast("long")
                             right_bits = right_col.cast("long")
                             if isinstance(op, ast.BitAnd):
-                                return left_bits.bitwiseAND(right_bits)
-                            if isinstance(op, ast.BitOr):
-                                return left_bits.bitwiseOR(right_bits)
-                            return left_bits.bitwiseXOR(right_bits)
+                                combined = left_bits.bitwiseAND(right_bits)
+                                symbol = "&"
+                            elif isinstance(op, ast.BitOr):
+                                combined = left_bits.bitwiseOR(right_bits)
+                                symbol = "|"
+                            else:
+                                combined = left_bits.bitwiseXOR(right_bits)
+                                symbol = "^"
+                            return _raise_on_null_operand(symbol, combined, left_col, right_col)
                         if both_numeric:
                             raise UnsupportedOperationException(
                                 f"`{type(op).__name__}` is only lowered for integral "

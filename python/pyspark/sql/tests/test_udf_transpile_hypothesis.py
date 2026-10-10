@@ -55,7 +55,9 @@ four before we can claim it's bounded correctly:
    reading these tests tells you what the UDF contract actually promises. NaN
    comparison used to be pinned here too and no longer is -- ``_nan_guard``
    closed it, so ``test_nan_comparison_matches_python`` now asserts the
-   opposite of what it originally did.
+   opposite of what it originally did. Arithmetic on a NULL operand went the
+   same way: it used to come back NULL where CPython raised, which ``_run``
+   masked, and the NULL guards closed it -- both sides raise now.
 
 The suite is gated on two things, both required:
 
@@ -533,6 +535,13 @@ if _have_hypothesis:
         same trick ``_multi_row_single_arg_df`` already plays for the LongType
         tests. Only safe for UDFs that never raise at the job level for any value
         the (capped) strategy can draw; a raising row would abort the whole batch.
+        A None cell is exactly such a row for an unguarded body -- CPython raises
+        TypeError and the lowering's NULL guard raises too -- so ``_run``'s
+        both-raised path swallows the rest of the batch. The width-test bodies
+        below are unguarded, so a batch with any None cell proves nothing about
+        its other rows: their width-edge coverage comes from the seeded
+        single-row examples, and only NULL-self-guarded bodies (``add_two``)
+        get real random multi-row coverage.
         """
         dtype, low, high = draw(st.sampled_from(widths))
         if cap is not None:
@@ -2040,9 +2049,10 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             # to come back exactly as it would have alone.
             #
             # `add_two` rather than `add_pair` because it guards NULL itself: an
-            # unguarded body raises in CPython on a NULL row, `_run` then masks the
-            # comparison, and a masked row proves nothing. Guarded, every row in
-            # the batch carries a real expected value.
+            # unguarded body raises on a NULL row (CPython's TypeError, and the
+            # lowering's NULL guard too), the raise aborts the whole batch
+            # collect, and `_run`'s both-raised path then proves nothing about
+            # the other rows. Guarded, every row carries a real expected value.
             df = self._multi_row_two_arg_df(rows, IntegerType())
             transpiled, interpreted = self._run(add_two, LongType(), df, "a", "b", all_rows=True)
             self.assertSameValue(
