@@ -251,6 +251,14 @@ package object config extends Logging {
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("100s")
 
+  private[spark] val AM_SC_INIT_TIMEOUT_THREAD_DUMP =
+    ConfigBuilder("spark.yarn.am.sparkContextInitTimeout.threadDump")
+      .doc(s"Whether to print all thread stacks when SparkContext initialization times out " +
+        s"(see ${AM_MAX_WAIT_TIME.key}).")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val YARN_METRICS_NAMESPACE = ConfigBuilder("spark.yarn.metrics.namespace")
     .doc("The root namespace for AM metrics reporting.")
     .version("2.4.0")
