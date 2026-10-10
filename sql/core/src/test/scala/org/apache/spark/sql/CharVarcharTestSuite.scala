@@ -2903,17 +2903,19 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         val df = spark.read.schema("c CHAR(4), i INT").csv(path.getCanonicalPath)
         checkAnswer(df.selectExpr("concat('<', c, '>')", "i"),
           Seq(Row("<ab  >", 1), Row("<xy  >", 2)))
-        df.createOrReplaceTempView("csv_char")
-        // The CHAR cast pads after filter translation, so the parser must not apply the
-        // translated unpadded literal as STRING equality.
-        checkAnswer(
-          sql("SELECT * FROM csv_char WHERE c = CAST('ab' AS CHAR(4))"),
-          Row("ab  ", 1))
-        // Sibling non-CHAR columns still push down.
-        checkAnswer(df.filter($"i" === 2), Row("xy  ", 2))
-        checkAnswer(
-          sql("SELECT * FROM csv_char WHERE c = CAST('ab' AS CHAR(4)) AND i = 1"),
-          Row("ab  ", 1))
+        withTempView("csv_char") {
+          df.createOrReplaceTempView("csv_char")
+          // ConstantFolding pads CAST('ab' AS CHAR(4)) before filter translation, so
+          // the pushed EqualTo already matches the padded parsed value.
+          checkAnswer(
+            sql("SELECT * FROM csv_char WHERE c = CAST('ab' AS CHAR(4))"),
+            Row("ab  ", 1))
+          // Sibling non-CHAR columns still push down.
+          checkAnswer(df.filter($"i" === 2), Row("xy  ", 2))
+          checkAnswer(
+            sql("SELECT * FROM csv_char WHERE c = CAST('ab' AS CHAR(4)) AND i = 1"),
+            Row("ab  ", 1))
+        }
       }
     }
   }
