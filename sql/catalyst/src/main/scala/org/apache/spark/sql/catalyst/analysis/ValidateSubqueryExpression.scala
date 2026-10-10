@@ -286,6 +286,7 @@ object ValidateSubqueryExpression
       case _: Filter => true
       case _: Project => usingDecorrelateInnerQueryFramework
       case _: Join => usingDecorrelateInnerQueryFramework
+      case _: AsOfJoin => usingDecorrelateInnerQueryFramework
       case _ => false
     }
 
@@ -471,6 +472,19 @@ object ValidateSubqueryExpression
         // and it does not impact the results for IN/EXISTS subqueries.
         case d: Distinct =>
           checkPlan(d.child, aggregated = isLateral, canContainOuter)
+
+        // ASOF JOIN can host correlated expressions in ON, like Join, but not in MATCH_CONDITION.
+        // Only DecorrelateInnerQuery can decorrelate it. Otherwise it stays in Category 4.
+        case j: AsOfJoin if usingDecorrelateInnerQueryFramework =>
+          failOnInvalidOuterReference(j)
+          j.joinType match {
+            case Inner =>
+              j.children.foreach(child => checkPlan(child, aggregated, canContainOuter))
+            // Like a normal left join, the right input cannot be on a correlation path.
+            case _ =>
+              checkPlan(j.left, aggregated, canContainOuter)
+              checkPlan(j.right, aggregated, canContainOuter = false)
+          }
 
         // Join can host correlated expressions.
         case j @ Join(left, right, joinType, _, _) =>

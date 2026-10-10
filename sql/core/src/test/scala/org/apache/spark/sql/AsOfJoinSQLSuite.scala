@@ -363,6 +363,34 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("MATCH_CONDITION rejects a column of the outer query") {
+    setupTradeQuoteViews()
+    val sqlText =
+      """
+        |SELECT (SELECT count(*)
+        |  FROM trades t ASOF JOIN quotes q
+        |    MATCH_CONDITION (t.trade_time >= q.quote_time + o.lag)
+        |    ON t.symbol = q.symbol)
+        |FROM VALUES (INTERVAL '1' SECOND) AS o(lag)
+        |""".stripMargin
+    Seq("false", "true").foreach { singlePass =>
+      withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass) {
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+          sqlState = Some("42K0E"),
+          parameters = Map("refs1" -> "\"trade_time\"", "refs2" -> "\"quote_time + lag\""),
+          queryContext = Array(
+            ExpectedContext(
+              fragment = """ASOF JOIN quotes q
+                           |    MATCH_CONDITION (t.trade_time >= q.quote_time + o.lag)
+                           |    ON t.symbol = q.symbol""".stripMargin,
+              start = 41,
+              stop = 144)))
+      }
+    }
+  }
+
   test("MATCH_CONDITION rejects scalar subquery operand") {
     setupTradeQuoteViews()
     val sqlText =
