@@ -434,7 +434,8 @@ class SparkConnectPlanner(
    */
   private def transformSample(rel: proto.Sample): LogicalPlan = {
     val plan = if (rel.getDeterministicOrder) {
-      val input = Dataset.ofRows(session, transformRelation(rel.getInput))
+      val input =
+        Dataset.ofRows(session, transformRelation(rel.getInput), refreshPhaseEnabled = false)
 
       // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
       // constituent partitions each time a split is materialized which could result in
@@ -486,7 +487,8 @@ class SparkConnectPlanner(
       throw InvalidInputErrors.naFillValuesLengthMismatch()
     }
 
-    val dataset = Dataset.ofRows(session, transformRelation(rel.getInput))
+    val dataset =
+      Dataset.ofRows(session, transformRelation(rel.getInput), refreshPhaseEnabled = false)
 
     val cols = rel.getColsList.asScala.toArray
     val values = rel.getValuesList.asScala.toArray
@@ -504,7 +506,8 @@ class SparkConnectPlanner(
   }
 
   private def transformNADrop(rel: proto.NADrop): LogicalPlan = {
-    val dataset = Dataset.ofRows(session, transformRelation(rel.getInput))
+    val dataset =
+      Dataset.ofRows(session, transformRelation(rel.getInput), refreshPhaseEnabled = false)
 
     val cols = rel.getColsList.asScala.toArray
 
@@ -558,14 +561,14 @@ class SparkConnectPlanner(
   }
 
   private def transformStatCov(rel: proto.StatCov): LogicalPlan = {
-    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
+    val df = Dataset.ofRows(session, transformRelation(rel.getInput), refreshPhaseEnabled = false)
     StatFunctions
       .calculateCovImpl(df, Seq(rel.getCol1, rel.getCol2))
       .logicalPlan
   }
 
   private def transformStatCorr(rel: proto.StatCorr): LogicalPlan = {
-    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
+    val df = Dataset.ofRows(session, transformRelation(rel.getInput), refreshPhaseEnabled = false)
     if (rel.hasMethod) {
       StatFunctions
         .calculateCorrImpl(df, Seq(rel.getCol1, rel.getCol2), rel.getMethod)
@@ -600,7 +603,7 @@ class SparkConnectPlanner(
 
   private def transformStatFreqItems(rel: proto.StatFreqItems): LogicalPlan = {
     val cols = rel.getColsList.asScala.toSeq
-    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
+    val df = Dataset.ofRows(session, transformRelation(rel.getInput), refreshPhaseEnabled = false)
     if (rel.hasSupport) {
       df.stat.freqItems(cols, rel.getSupport).logicalPlan
     } else {
@@ -1809,7 +1812,7 @@ class SparkConnectPlanner(
     }
     def ds: Dataset[String] = {
       val input = transformRelation(rel.getInput)
-      val df = Dataset.ofRows(session, input)
+      val df = Dataset.ofRows(session, input, refreshPhaseEnabled = false)
       val fields = df.schema.fields
       if (fields.length != 1) {
         throw QueryCompilationErrors.dataframeInputNotSingleColumnError(fields.length)
@@ -2580,8 +2583,9 @@ class SparkConnectPlanner(
   }
 
   private def transformAsOfJoin(rel: proto.AsOfJoin): LogicalPlan = {
-    val left = Dataset.ofRows(session, transformRelation(rel.getLeft))
-    val right = Dataset.ofRows(session, transformRelation(rel.getRight))
+    val left = Dataset.ofRows(session, transformRelation(rel.getLeft), refreshPhaseEnabled = false)
+    val right =
+      Dataset.ofRows(session, transformRelation(rel.getRight), refreshPhaseEnabled = false)
     val leftAsOf = Column(transformExpression(rel.getLeftAsOf))
     val rightAsOf = Column(transformExpression(rel.getRightAsOf))
     val joinType = rel.getJoinType
@@ -2636,8 +2640,9 @@ class SparkConnectPlanner(
     assertPlan(rel.getJoinType.nonEmpty, "NearestByJoin.join_type must be set")
     assertPlan(rel.getMode.nonEmpty, "NearestByJoin.mode must be set")
     assertPlan(rel.getDirection.nonEmpty, "NearestByJoin.direction must be set")
-    val left = Dataset.ofRows(session, transformRelation(rel.getLeft))
-    val right = Dataset.ofRows(session, transformRelation(rel.getRight))
+    val left = Dataset.ofRows(session, transformRelation(rel.getLeft), refreshPhaseEnabled = false)
+    val right =
+      Dataset.ofRows(session, transformRelation(rel.getRight), refreshPhaseEnabled = false)
     val rankingExpression = Column(transformExpression(rel.getRankingExpression))
     left
       .nearestByJoin(
@@ -2701,7 +2706,8 @@ class SparkConnectPlanner(
   }
 
   private def transformDrop(rel: proto.Drop): LogicalPlan = {
-    var output = Dataset.ofRows(session, transformRelation(rel.getInput))
+    var output =
+      Dataset.ofRows(session, transformRelation(rel.getInput), refreshPhaseEnabled = false)
     if (rel.getColumnsCount > 0) {
       val cols = rel.getColumnsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
       output = output.drop(cols.head, cols.tail: _*)
@@ -2789,7 +2795,8 @@ class SparkConnectPlanner(
           rel.getPivot.getValuesList.asScala.toSeq.map(transformLiteral)
         } else {
           RelationalGroupedDataset
-            .collectPivotValues(Dataset.ofRows(session, logicalPlan), Column(pivotExpr))
+            .collectPivotValues(
+              Dataset.ofRows(session, logicalPlan, refreshPhaseEnabled = false), Column(pivotExpr))
             .map(expressions.Literal.apply)
         }
         logical.Pivot(
@@ -3406,7 +3413,7 @@ class SparkConnectPlanner(
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val dataset = Dataset.ofRows(session, plan, tracker)
+    val dataset = Dataset.ofRows(session, plan, tracker, refreshPhaseEnabled = false)
 
     val w = dataset.write.asInstanceOf[DataFrameWriter[_]]
     if (writeOperation.getMode != proto.WriteOperation.SaveMode.SAVE_MODE_UNSPECIFIED) {
@@ -3466,7 +3473,9 @@ class SparkConnectPlanner(
 
   private def transformAndRunCommand(transformer: QueryPlanningTracker => LogicalPlan): Unit = {
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
-    val qe = new QueryExecution(session, transformer(tracker), tracker)
+    // Spark Connect re-resolves the plan on each request, so the refresh phase would only re-issue
+    // redundant catalog loads for tables just resolved in this same QueryExecution.
+    val qe = new QueryExecution(session, transformer(tracker), tracker, refreshPhaseEnabled = false)
     qe.assertCommandExecuted()
     executeHolder.eventsManager.postFinished()
   }
@@ -3485,7 +3494,7 @@ class SparkConnectPlanner(
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val dataset = Dataset.ofRows(session, plan, tracker)
+    val dataset = Dataset.ofRows(session, plan, tracker, refreshPhaseEnabled = false)
 
     val w = dataset.writeTo(table = writeOperation.getTableName)
 
@@ -3548,7 +3557,7 @@ class SparkConnectPlanner(
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val plan = transformRelation(writeOp.getInput)
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
-    val dataset = Dataset.ofRows(session, plan, tracker)
+    val dataset = Dataset.ofRows(session, plan, tracker, refreshPhaseEnabled = false)
     // Call manually as writeStream does not trigger ReadyForExecution
     tracker.setReadyForExecution()
 
@@ -4095,7 +4104,8 @@ class SparkConnectPlanner(
     val notMatchedActions = transformActions(cmd.getNotMatchedActionsList)
     val notMatchedBySourceActions = transformActions(cmd.getNotMatchedBySourceActionsList)
 
-    val sourceDs = Dataset.ofRows(session, transformRelation(cmd.getSourceTablePlan), tracker)
+    val sourceDs = Dataset.ofRows(
+      session, transformRelation(cmd.getSourceTablePlan), tracker, refreshPhaseEnabled = false)
     val mergeInto = sourceDs
       .mergeInto(cmd.getTargetTableName, Column(transformExpression(cmd.getMergeCondition)))
       .asInstanceOf[MergeIntoWriter[Row]]
