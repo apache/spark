@@ -383,11 +383,19 @@ public class OneForOneBlockFetcher {
 
     @Override
     public void onFailure(String streamId, Throwable cause) throws IOException {
-      channel.close();
-      // On receipt of a failure, fail every block from chunkIndex onwards.
-      String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
-      failRemainingBlocks(remainingBlockIds, cause);
-      targetFile.delete();
+      // Fail the remaining blocks even if channel cleanup throws. This callback has already been
+      // polled off the response handler's queue, so a connection teardown cannot notify it again;
+      // if a close() failure skipped failRemainingBlocks, the blocks would be left outstanding
+      // indefinitely. Run the notification in a finally so it always happens, while still letting
+      // the cleanup error propagate.
+      try {
+        channel.close();
+      } finally {
+        // On receipt of a failure, fail every block from chunkIndex onwards.
+        String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
+        failRemainingBlocks(remainingBlockIds, cause);
+        targetFile.delete();
+      }
     }
   }
 }
