@@ -54,7 +54,7 @@ case class MicroBatchScanExec(
 
   override lazy val inputRDD: RDD[InternalRow] = {
     val inputRDD = new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar,
-      customMetrics)
+      customMetrics, conf.ignoreDataLocality)
     postDriverMetrics(scan.reportDriverMetrics())
     inputRDD
   }

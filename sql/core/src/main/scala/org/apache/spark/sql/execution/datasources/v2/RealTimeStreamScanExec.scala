@@ -164,7 +164,8 @@ case class RealTimeStreamScanExec(
         endOffsetsAccumulator
       ),
       supportsColumnar,
-      customMetrics
+      customMetrics,
+      conf.ignoreDataLocality
     )
     postDriverMetrics(scan.reportDriverMetrics())
     inputRDD

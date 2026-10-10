@@ -89,6 +89,7 @@ class FileScanRDD(
 
   private val ignoreCorruptFiles = options.ignoreCorruptFiles
   private val ignoreMissingFiles = options.ignoreMissingFiles
+  private val ignoreDataLocality = sparkSession.sessionState.conf.ignoreDataLocality
 
   /** Whether this reader fails instead of silently skipping missing or corrupt input files. */
   private[sql] val hasStrictFileReads: Boolean = options.hasStrictFileReads
@@ -327,6 +328,10 @@ class FileScanRDD(
   override protected def getPartitions: Array[RDDPartition] = filePartitions.toArray
 
   override protected def getPreferredLocations(split: RDDPartition): Seq[String] = {
-    split.asInstanceOf[FilePartition].preferredLocations().toImmutableArraySeq
+    if (ignoreDataLocality) {
+      Nil
+    } else {
+      split.asInstanceOf[FilePartition].preferredLocations().toImmutableArraySeq
+    }
   }
 }

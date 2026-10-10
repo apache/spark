@@ -104,7 +104,8 @@ case class BatchScanExec(
       new EmptyRDDWithPartitions(sparkContext, 1)
     } else {
       new DataSourceRDD(
-        sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics)
+        sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics,
+        conf.ignoreDataLocality)
     }
     postDriverMetrics(scan.reportDriverMetrics())
     rdd
