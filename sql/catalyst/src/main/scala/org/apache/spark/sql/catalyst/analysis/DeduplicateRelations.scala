@@ -246,11 +246,16 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         }
       }
 
-      val planWithNewSubquery = plan.transformExpressions {
-        case subquery: SubqueryExpression =>
-          val (renewed, changed) = renewDuplicatedRelations(existingRelations, subquery.plan)
-          if (changed) planChanged = true
-          subquery.withNewPlan(renewed)
+      val planWithNewSubquery = if (plan.containsPattern(PLAN_EXPRESSION)) {
+        // Do not cache ineffective transformations: existingRelations changes during traversal.
+        plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+          case subquery: SubqueryExpression =>
+            val (renewed, changed) = renewDuplicatedRelations(existingRelations, subquery.plan)
+            if (changed) planChanged = true
+            subquery.withNewPlan(renewed)
+        }
+      } else {
+        plan
       }
 
       if (planChanged) {
