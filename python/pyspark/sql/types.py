@@ -490,18 +490,21 @@ def _naive_dt_to_epoch_seconds(dt: datetime.datetime) -> int:
     Shared by :meth:`TimestampType.toInternal` and :meth:`TimestampLTZNanosType.toInternal`
     so both local-time types agree on the repeated DST hour (SPARK-60081).
 
-    ``dt.replace(microsecond=0).timestamp()`` is used instead of ``time.mktime(dt.timetuple())``
-    so the result honors ``datetime.fold``. Dropping the microseconds first keeps the float
-    integer-valued (and the ``int()`` conversion exact) across the full 0001..9999 range, so
-    the caller can add ``dt.microsecond`` back without the double-counting / truncation that
-    plain ``int(dt.timestamp())`` produces for pre-1970 and far-future values.
+    ``datetime.datetime.timestamp(dt.replace(microsecond=0))`` is used instead of
+    ``time.mktime(dt.timetuple())`` so the result honors ``datetime.fold``. The unbound
+    call is required: ``pandas.Timestamp.timestamp`` treats a naive value as UTC, and
+    ``replace`` keeps that subclass. Dropping the microseconds first keeps the float
+    integer-valued (and the ``int()`` conversion exact) across the full 0001..9999 range,
+    so the caller can add ``dt.microsecond`` back without the double-counting that plain
+    ``int(dt.timestamp())`` produces for pre-1970 and far-future values.
 
-    ``datetime.timestamp()`` probes the UTC offset one day earlier on 0001-01-01 and raises
-    ``OverflowError`` ("year 0 is out of range"); fall back to ``time.mktime`` for that
-    range-edge case so ``datetime.min`` still round-trips.
+    Naive ``datetime.min.timestamp()`` raises ``ValueError`` ("year 0 is out of range");
+    fall back to ``time.mktime`` so ``toInternal`` keeps the previous value for these
+    range-edge inputs. ``datetime.min`` does not round-trip through ``fromInternal``.
     """
     try:
-        seconds = dt.replace(microsecond=0).timestamp()
+        # Unbound stdlib method: a bound call would dispatch to pandas.Timestamp.timestamp.
+        seconds = datetime.datetime.timestamp(dt.replace(microsecond=0))
     except (OverflowError, ValueError):
         seconds = time.mktime(dt.timetuple())
     return int(seconds)

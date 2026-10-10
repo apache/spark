@@ -91,7 +91,11 @@ from pyspark.testing.objects import (
     PythonOnlyUDT,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import PySparkErrorTestUtils
+from pyspark.testing.utils import (
+    PySparkErrorTestUtils,
+    have_pandas,
+    pandas_requirement_message,
+)
 
 
 class TypesTestsMixin:
@@ -3890,8 +3894,8 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         self.assertEqual([v for v in r], [1, 2, 3])
 
     # SPARK-60081: naive-datetime handling in TimestampType.toInternal and
-    # TimestampLTZNanosType.toInternal, and in the Arrow-to-row TIMESTAMP converter. The
-    # production code only runs on POSIX systems where ``time.tzset`` works; skip elsewhere.
+    # TimestampLTZNanosType.toInternal, and in the Arrow-to-row TIMESTAMP converter.
+    # These tests need time.tzset() (POSIX only); skip elsewhere.
     @staticmethod
     @contextlib.contextmanager
     def _tz(tz):
@@ -3924,6 +3928,39 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
                 )
 
     @unittest.skipUnless(hasattr(time, "tzset"), "requires time.tzset()")
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_naive_pandas_timestamp_to_internal_matches_stdlib(self):
+        # pandas.Timestamp.timestamp() reads a naive value as UTC. toInternal has to call
+        # the stdlib method so a naive pandas value matches the same wall-time datetime in a
+        # non-UTC zone, for both local-time types, including the repeated DST hour.
+        import pandas as pd
+
+        cases = (
+            datetime.datetime(2021, 1, 1, 12, 0),
+            datetime.datetime(2021, 1, 1, 12, 0, 0, 123456),
+            datetime.datetime(2021, 11, 7, 1, 30, fold=0),
+            datetime.datetime(2021, 11, 7, 1, 30, fold=1),
+            datetime.datetime(1969, 12, 31, 23, 59, 59, 500000),
+            datetime.datetime.min,
+            datetime.datetime.max,
+        )
+        for tt in (TimestampType(), TimestampLTZNanosType(9)):
+            for tz in ("America/Los_Angeles", "Asia/Seoul"):
+                with self.subTest(type=tt, tz=tz), self._tz(tz):
+                    for dt in cases:
+                        self.assertEqual(tt.toInternal(dt), tt.toInternal(pd.Timestamp(dt)))
+            with self.subTest(type=tt), self._tz("America/Los_Angeles"):
+                # fold=1 is the later instant (09:30Z); fold=0 is the earlier one (08:30Z).
+                self.assertEqual(
+                    1636277400 * 1000000,
+                    tt.toInternal(pd.Timestamp(datetime.datetime(2021, 11, 7, 1, 30, fold=1))),
+                )
+                self.assertEqual(
+                    1636273800 * 1000000,
+                    tt.toInternal(pd.Timestamp(datetime.datetime(2021, 11, 7, 1, 30, fold=0))),
+                )
+
+    @unittest.skipUnless(hasattr(time, "tzset"), "requires time.tzset()")
     def test_naive_timestamp_to_internal_pre_1970_microseconds(self):
         # Pre-1970 naive values with sub-second microseconds must stay exact. int(dt.timestamp())
         # alone truncates toward zero for negative epoch seconds and shifts these values by +1s.
@@ -3949,7 +3986,8 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         for tt in (TimestampType(), TimestampLTZNanosType(9)):
             for tz in ("UTC", "America/Los_Angeles"):
                 with self.subTest(type=tt, tz=tz), self._tz(tz):
-                    # datetime.min: pre-PR time.mktime value (depends on tz) must still round-trip.
+                    # datetime.min: compare with the previous time.mktime-based path. This is not
+                    # a round trip; fromInternal of that value raises ValueError.
                     expected_min = int(time.mktime(datetime.datetime.min.timetuple())) * 1000000
                     self.assertEqual(expected_min, tt.toInternal(datetime.datetime.min))
 
@@ -3957,8 +3995,8 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
                     # year boundary and without losing the microsecond tail.
                     dmax = datetime.datetime.max  # 9999-12-31 23:59:59.999999
                     got = tt.toInternal(dmax)
-                    # Reconstruct the expected whole-second epoch via time.mktime (pre-PR path),
-                    # then re-attach microseconds, to express the invariant independent of tz.
+                    # Reconstruct the expected whole-second epoch via time.mktime (the previous
+                    # time.mktime-based path), then re-attach microseconds, independent of tz.
                     expected_max = (
                         int(time.mktime(dmax.replace(microsecond=0).timetuple())) * 1000000
                         + dmax.microsecond
@@ -4003,6 +4041,37 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
                     self.assertEqual(aware.microsecond, out.microsecond)
                     # The naive local wall time has to match the aware input's instant exactly.
                     self.assertEqual(aware.timestamp(), out.timestamp())
+
+    @unittest.skipUnless(hasattr(time, "tzset"), "requires time.tzset()")
+    def test_arrow_convert_timestamp_year1(self):
+        # fromtimestamp probes the offset a day earlier and raises ValueError ("year 0 is
+        # out of range") for instants in roughly the first day of year 1, longer in zones
+        # west of UTC. Those instants must match the previous astimezone() results.
+        from pyspark.sql.conversion import ArrowTableToRowsConversion
+
+        utc = datetime.timezone.utc
+        # Instants the previous astimezone() path converted and fromtimestamp rejects.
+        # 0001-01-01 00:00Z under America/Los_Angeles is also out of range for astimezone().
+        by_tz = {
+            "UTC": (
+                datetime.datetime(1, 1, 1, 0, 0, tzinfo=utc),
+                datetime.datetime(1, 1, 1, 12, 0, 0, 5, tzinfo=utc),
+            ),
+            "America/Los_Angeles": (
+                datetime.datetime(1, 1, 1, 12, 0, 0, 5, tzinfo=utc),
+                datetime.datetime(1, 1, 2, 7, 0, tzinfo=utc),
+            ),
+        }
+        for data_type in (TimestampType(), TimestampLTZNanosType(9)):
+            convert = ArrowTableToRowsConversion._create_converter(data_type)
+            for tz, instants in by_tz.items():
+                with self.subTest(type=data_type, tz=tz), self._tz(tz):
+                    for aware in instants:
+                        out = convert(aware)
+                        expected = aware.astimezone().replace(tzinfo=None)
+                        self.assertEqual(expected, out)
+                        self.assertIsNone(out.tzinfo)
+                        self.assertEqual(aware.microsecond, out.microsecond)
 
 
 class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
