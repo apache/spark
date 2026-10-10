@@ -380,7 +380,7 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
         except Exception as e:  # classified below
             if (
                 isinstance(e, PySparkNotImplementedError)
-                and e.getErrorClass() == "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON"
+                and e.getCondition() == "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON"
             ):
                 return REJECTED_CHAR_VARCHAR
             if "Invalid return type with Arrow-optimized Python UDF" in str(e):
@@ -427,11 +427,14 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
         # type, and afterwards the verdicts must equal the pickled ones -- except for the
         # return types Arrow cannot express at all, which fail earlier and either way.
         expected = {}
-        for label in _EXPECTED_RETURN_VERDICT:
+        for label, verdict in _EXPECTED_RETURN_VERDICT.items():
             if label in _ARROW_REJECTED_RETURN_TYPES:
                 expected[label] = REJECTED_BY_ARROW
+            elif verdict == REJECTED_CHAR_VARCHAR:
+                # Rejected at UDF construction for every eval type, gate or no gate.
+                expected[label] = REJECTED_CHAR_VARCHAR
             elif ARROW_TRANSPILE_SUPPORTED:
-                expected[label] = _EXPECTED_RETURN_VERDICT[label]
+                expected[label] = verdict
             else:
                 expected[label] = NO_TRANSPILE
 
