@@ -1869,3 +1869,160 @@ org.apache.spark.SparkIllegalArgumentException
     "parameter" : "`unit`"
   }
 }
+
+
+-- !query
+CREATE TEMPORARY VIEW nanos_l AS SELECT * FROM VALUES
+  (1, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (2, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (3, CAST(NULL AS TIMESTAMP_LTZ(9))) AS t(lid, c)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW nanos_r AS SELECT * FROM VALUES
+  (10, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (20, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500 UTC'),
+  (30, CAST(NULL AS TIMESTAMP_LTZ(9))) AS t(rid, c)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT lid, rid FROM nanos_l l JOIN nanos_r r ON l.c = r.c
+-- !query schema
+struct<lid:int,rid:int>
+-- !query output
+2	10
+
+
+-- !query
+SELECT lid, rid FROM nanos_l l LEFT JOIN nanos_r r ON l.c = r.c ORDER BY lid
+-- !query schema
+struct<lid:int,rid:int>
+-- !query output
+1	NULL
+2	10
+3	NULL
+
+
+-- !query
+SELECT lid, rid FROM nanos_l l RIGHT JOIN nanos_r r ON l.c = r.c ORDER BY rid
+-- !query schema
+struct<lid:int,rid:int>
+-- !query output
+2	10
+NULL	20
+NULL	30
+
+
+-- !query
+SELECT lid, rid FROM nanos_l l FULL JOIN nanos_r r ON l.c = r.c ORDER BY lid, rid
+-- !query schema
+struct<lid:int,rid:int>
+-- !query output
+NULL	20
+NULL	30
+1	NULL
+2	10
+3	NULL
+
+
+-- !query
+SELECT lid FROM nanos_l l LEFT SEMI JOIN nanos_r r ON l.c = r.c
+-- !query schema
+struct<lid:int>
+-- !query output
+2
+
+
+-- !query
+SELECT lid FROM nanos_l l LEFT ANTI JOIN nanos_r r ON l.c = r.c ORDER BY lid
+-- !query schema
+struct<lid:int>
+-- !query output
+1
+3
+
+
+-- !query
+SELECT lid, rid FROM nanos_l l CROSS JOIN nanos_r r WHERE l.c < r.c ORDER BY lid, rid
+-- !query schema
+struct<lid:int,rid:int>
+-- !query output
+1	10
+1	20
+
+
+-- !query
+SELECT * FROM nanos_l JOIN nanos_r USING (c)
+-- !query schema
+struct<c:timestamp_ltz(9),lid:int,rid:int>
+-- !query output
+2019-12-31 16:00:00.000000999	2	10
+
+
+-- !query
+SELECT * FROM nanos_l FULL JOIN nanos_r USING (c) ORDER BY lid, rid
+-- !query schema
+struct<c:timestamp_ltz(9),lid:int,rid:int>
+-- !query output
+2019-12-31 16:00:00.0000005	NULL	20
+NULL	NULL	30
+2019-12-31 16:00:00.000000001	1	NULL
+2019-12-31 16:00:00.000000999	2	10
+NULL	3	NULL
+
+
+-- !query
+SELECT a.c, b.c FROM VALUES (TIMESTAMP_LTZ '2020-01-01 00:00:00.0000009 UTC') AS a(c)
+  JOIN VALUES (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000900 UTC'),
+              (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000901 UTC') AS b(c) ON a.c = b.c
+-- !query schema
+struct<c:timestamp_ltz(7),c:timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.0000009	2019-12-31 16:00:00.0000009
+
+
+-- !query
+SELECT * FROM VALUES
+  ('a', TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  ('a', TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  ('b', TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500 UTC') AS t(g, c)
+PIVOT (max(c) FOR g IN ('a' AS a, 'b' AS b))
+-- !query schema
+struct<a:timestamp_ltz(9),b:timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000999	2019-12-31 16:00:00.0000005
+
+
+-- !query
+SELECT * FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 1),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 2),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 3) AS t(c, v)
+PIVOT (sum(v) FOR c IN (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' AS x,
+                        TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC' AS y))
+-- !query schema
+struct<x:bigint,y:bigint>
+-- !query output
+1	5
+
+
+-- !query
+SELECT * FROM (
+  SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.1234567 UTC' AS c7,
+         TIMESTAMP_LTZ '2020-01-01 00:00:00.12345678 UTC' AS c8,
+         TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' AS c9)
+UNPIVOT (c FOR name IN (c7, c8, c9)) ORDER BY name
+-- !query schema
+struct<name:string,c:timestamp_ltz(9)>
+-- !query output
+c7	2019-12-31 16:00:00.1234567
+c8	2019-12-31 16:00:00.12345678
+c9	2019-12-31 16:00:00.123456789
