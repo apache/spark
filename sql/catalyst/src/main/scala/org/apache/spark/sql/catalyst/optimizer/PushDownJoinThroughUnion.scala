@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -141,17 +140,9 @@ case class PushDownJoinThroughUnion(override val conf: SQLConf)
   }
 
   /**
-   * Creates a copy of `plan` with fresh ExprIds on all output attributes,
-   * using the same "fake self-join + DeduplicateRelations" pattern as InlineCTE.
+   * Creates a copy of `plan` with fresh ExprIds on all output attributes.
    */
   private def dedupRight(plan: LogicalPlan): LogicalPlan = {
-    DeduplicateRelations(
-      Join(plan, plan, Inner, None, JoinHint.NONE)
-    ) match {
-      case Join(_, deduped, _, _, _) => deduped
-      case other =>
-        throw SparkException.internalError(
-          s"Unexpected plan shape after DeduplicateRelations: ${other.getClass.getName}")
-    }
+    DeduplicateRelations.deduplicateRight(plan, plan)
   }
 }

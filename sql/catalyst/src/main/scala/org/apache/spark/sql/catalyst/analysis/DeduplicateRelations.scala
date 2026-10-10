@@ -29,6 +29,13 @@ import org.apache.spark.sql.internal.SQLConf
 object DeduplicateRelations extends Rule[LogicalPlan] {
   type ExprIdMap = mutable.HashMap[Class[_], mutable.HashSet[Long]]
 
+  /** Renews `right` against expression IDs collected from `left`. */
+  private[sql] def deduplicateRight(left: LogicalPlan, right: LogicalPlan): LogicalPlan = {
+    val existingRelations = mutable.HashMap.empty[Class[_], mutable.HashSet[Long]]
+    renewDuplicatedRelations(existingRelations, left)
+    renewDuplicatedRelations(existingRelations, right)._1
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val newPlan = renewDuplicatedRelations(mutable.HashMap.empty, plan)._1
 
@@ -67,24 +74,25 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           DeduplicateUnionChildOutput.deduplicateOutputPerChild(u)
         // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
         // feature in streaming.
-        val newChildren =
-          unionWithChildOutputsDeduplicated.children.foldRight(Seq.empty[LogicalPlan]) {
-            (head, tail) =>
-              head +: tail.map {
-                case child if head.outputSet.intersect(child.outputSet).isEmpty =>
-                  child
-                case child =>
-                  val projectList = child.output.map { attr =>
-                    Alias(attr, attr.name)()
-                  }
-                  val project = Project(projectList, child)
-                  project.setTagValue(
-                    ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION,
-                    ()
-                  )
-                  project
-              }
+        val seenExprIds = mutable.HashSet.empty[Long]
+        val newChildren = unionWithChildOutputsDeduplicated.children.map { child =>
+          val childOutput = child.output
+          val hasConflictingExprId = childOutput.exists(attr => seenExprIds(attr.exprId.id))
+          childOutput.foreach(attr => seenExprIds += attr.exprId.id)
+          if (hasConflictingExprId) {
+            val projectList = childOutput.map { attr =>
+              Alias(attr, attr.name)()
+            }
+            val project = Project(projectList, child)
+            project.setTagValue(
+              ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION,
+              ()
+            )
+            project
+          } else {
+            child
           }
+        }
         unionWithChildOutputsDeduplicated.copy(children = newChildren)
       case merge: MergeIntoTable
           if !merge.duplicateResolved && noMissingInput(merge.sourceTable) =>
