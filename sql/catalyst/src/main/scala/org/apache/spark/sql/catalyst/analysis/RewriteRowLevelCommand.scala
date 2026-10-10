@@ -92,16 +92,6 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     relation.copy(table = table, output = attrs)
   }
 
-  protected def buildNarrowRelationWithAttrs(
-      relation: DataSourceV2Relation,
-      table: RowLevelOperationTable,
-      dataAttrs: Seq[AttributeReference],
-      metadataAttrs: Seq[AttributeReference],
-      rowIdAttrs: Seq[AttributeReference] = Nil): DataSourceV2Relation = {
-    val attrs = dedupAttrs(dataAttrs ++ rowIdAttrs ++ metadataAttrs)
-    relation.copy(table = table, output = attrs)
-  }
-
   protected def dedupAttrs(attrs: Seq[AttributeReference]): Seq[AttributeReference] = {
     val exprIds = mutable.Set.empty[ExprId]
     attrs.flatMap { attr =>
@@ -125,7 +115,8 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
 
   /**
    * Resolves the connector-declared required data attributes for column-update writes against
-   * the given relation. Non-existent columns are rejected with an `AnalysisException`.
+   * the given relation. An empty declaration, nested fields, duplicate columns, columns that do
+   * not exist in the relation and metadata columns are rejected with an `AnalysisException`.
    */
   protected def resolveRequiredDataAttrs(
       relation: DataSourceV2Relation,
@@ -143,17 +134,30 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       val name = ref.fieldNames.head
       if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
     }
-    val duplicates = normalizedNames.groupBy(identity).collect {
-      case (_, occurrences) if occurrences.length > 1 => occurrences.head
+    val duplicates = refs.zip(normalizedNames).groupBy(_._2).collect {
+      case (_, occurrences) if occurrences.length > 1 => occurrences.head._1.describe()
     }.toSeq
     if (duplicates.nonEmpty) {
       throw QueryCompilationErrors.duplicateRequiredDataAttributeError(
         operation.getClass.getName, duplicates)
     }
-    val resolved = V2ExpressionUtils.resolveRefs[AttributeReference](
-      refs.toImmutableArraySeq,
-      relation)
-    // `resolveRefs` matches case-insensitively but keeps the declared spelling, so map each
+    val resolvedOpts = refs.toImmutableArraySeq.map(V2ExpressionUtils.resolveRefOpt(_, relation))
+    val unknown = refs.toImmutableArraySeq.zip(resolvedOpts).collect {
+      case (ref, None) => ref.describe()
+    }
+    if (unknown.nonEmpty) {
+      throw QueryCompilationErrors.unknownRequiredDataAttributeError(
+        operation.getClass.getName, unknown)
+    }
+    val resolved = resolvedOpts.flatten.map(_.asInstanceOf[AttributeReference])
+    val metadata = refs.toImmutableArraySeq.zip(resolved).collect {
+      case (ref, attr) if MetadataAttribute.isValid(attr.metadata) => ref.describe()
+    }
+    if (metadata.nonEmpty) {
+      throw QueryCompilationErrors.metadataRequiredDataAttributeError(
+        operation.getClass.getName, metadata)
+    }
+    // `resolveRefOpt` matches case-insensitively but keeps the declared spelling, so map each
     // resolved attribute back to the relation's own (by exprId) to avoid a spelling mismatch
     // between the connector's declaration and the table's actual column name.
     val byExprId = relation.output.map(a => a.exprId -> a).toMap
@@ -188,7 +192,10 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     key.semanticEquals(valueWithoutAlias)
   }
 
-  // returns the table attributes that are genuinely updated (non-identity) by these assignments
+  /**
+   * Returns the table attributes that these assignments set to a new value, skipping identity
+   * assignments.
+   */
   protected def collectUpdatedAttrs(assignments: Seq[Assignment]): Seq[AttributeReference] = {
     assignments.collect {
       case Assignment(key: AttributeReference, value) if !isIdentityAssignment(key, value) => key
@@ -276,29 +283,11 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   protected def buildReplaceDataProjections(
       plan: LogicalPlan,
       rowAttrs: Seq[Attribute],
-      metadataAttrs: Seq[Attribute],
-      updateRowAttrs: Seq[Attribute] = Nil): ReplaceDataProjections = {
+      metadataAttrs: Seq[Attribute]): ReplaceDataProjections = {
     val outputs = extractOutputs(plan)
 
-    val rowProjection = if (updateRowAttrs.nonEmpty) {
-      val outputsForInsert = filterOutputs(outputs,
-        OPERATIONS_WITH_ROW -- Set(UPDATE_OPERATION, COPY_OPERATION))
-      if (outputsForInsert.isEmpty) {
-        ProjectingInternalRow(StructType(Nil), Nil)
-      } else {
-        newLazyProjection(plan, outputsForInsert, rowAttrs)
-      }
-    } else {
-      val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
-      newLazyProjection(plan, outputsWithRow, rowAttrs)
-    }
-
-    val updateRowProjection = if (updateRowAttrs.nonEmpty) {
-      val outputsForUpdate = filterOutputs(outputs, Set(UPDATE_OPERATION, COPY_OPERATION))
-      Some(newLazyProjection(plan, outputsForUpdate, updateRowAttrs))
-    } else {
-      None
-    }
+    val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
+    val rowProjection = newLazyProjection(plan, outputsWithRow, rowAttrs)
 
     val metadataProjection = if (metadataAttrs.nonEmpty) {
       val outputsWithMetadata = filterOutputs(outputs, OPERATIONS_WITH_METADATA)
@@ -307,38 +296,19 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       None
     }
 
-    ReplaceDataProjections(rowProjection, updateRowProjection, metadataProjection)
+    ReplaceDataProjections(rowProjection, metadataProjection)
   }
 
   protected def buildWriteDeltaProjections(
       plan: LogicalPlan,
       rowAttrs: Seq[Attribute],
       rowIdAttrs: Seq[Attribute],
-      metadataAttrs: Seq[Attribute],
-      updateRowAttrs: Seq[Attribute] = Nil): WriteDeltaProjections = {
+      metadataAttrs: Seq[Attribute]): WriteDeltaProjections = {
     val outputs = extractOutputs(plan)
 
-    // When updateRowAttrs is non-empty, the row projection covers INSERT-shaped rows only and a
-    // separate updateRowProjection handles UPDATE/COPY/REINSERT-shaped rows.
-    val rowProjection = if (updateRowAttrs.nonEmpty) {
-      val outputsForInsert = filterOutputs(outputs,
-        OPERATIONS_WITH_ROW -- Set(UPDATE_OPERATION, COPY_OPERATION, REINSERT_OPERATION))
-      if (outputsForInsert.isEmpty) {
-        Some(ProjectingInternalRow(StructType(Nil), Nil))
-      } else {
-        Some(newLazyProjection(plan, outputsForInsert, rowAttrs))
-      }
-    } else if (rowAttrs.nonEmpty) {
+    val rowProjection = if (rowAttrs.nonEmpty) {
       val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
       Some(newLazyProjection(plan, outputsWithRow, rowAttrs))
-    } else {
-      None
-    }
-
-    val updateRowProjection = if (updateRowAttrs.nonEmpty) {
-      val outputsForUpdate = filterOutputs(outputs,
-        Set(UPDATE_OPERATION, COPY_OPERATION, REINSERT_OPERATION))
-      Some(newLazyProjection(plan, outputsForUpdate, updateRowAttrs))
     } else {
       None
     }
@@ -353,7 +323,25 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       None
     }
 
-    WriteDeltaProjections(rowProjection, updateRowProjection, rowIdProjection, metadataProjection)
+    WriteDeltaProjections(rowProjection, rowIdProjection, metadataProjection)
+  }
+
+  /**
+   * Moves the query columns that no projection reads after the ones that are read, and returns
+   * the reordered query with a map from each old ordinal to the new one. The optimizer prunes the
+   * query columns after the last one the write reads, which then never changes an ordinal.
+   */
+  protected def orderReadColumnsFirst(
+      plan: LogicalPlan,
+      projections: Seq[ProjectingInternalRow]): (LogicalPlan, Int => Int) = {
+    val readOrdinals = (0 +: projections.flatMap(_.colOrdinals)).distinct.sorted
+    val readOrdinalSet = readOrdinals.toSet
+    val order = readOrdinals ++ plan.output.indices.filterNot(readOrdinalSet.contains)
+    if (order == plan.output.indices) {
+      (plan, identity)
+    } else {
+      (reorderOutputs(plan, order), order.zipWithIndex.toMap)
+    }
   }
 
   private def extractOutputs(plan: LogicalPlan): Seq[Seq[Expression]] = {
@@ -363,6 +351,17 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       case m: MergeRows => m.outputs
       case u: Union => u.children.flatMap(extractOutputs)
       case _ => throw SparkException.internalError("Can't extract outputs from plan: " + plan)
+    }
+  }
+
+  private def reorderOutputs(plan: LogicalPlan, order: Seq[Int]): LogicalPlan = {
+    plan match {
+      case p: Project => p.copy(projectList = order.map(p.projectList))
+      case e: Expand =>
+        e.copy(projections = e.projections.map(output => order.map(output)),
+          output = order.map(e.output))
+      case u: Union => u.withNewChildren(u.children.map(reorderOutputs(_, order)))
+      case _ => throw SparkException.internalError("Can't reorder outputs of plan: " + plan)
     }
   }
 

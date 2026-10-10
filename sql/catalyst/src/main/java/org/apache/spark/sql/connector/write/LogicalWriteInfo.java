@@ -47,6 +47,10 @@ public interface LogicalWriteInfo {
 
   /**
    * the schema of the input data from Spark to data source.
+   * <p>
+   * When {@link #columnUpdateSchema()} is present, this schema covers only newly inserted rows, as
+   * updated, copied, and reinserted rows follow {@link #columnUpdateSchema()}. It is then empty
+   * when the command inserts no new rows, such as UPDATE.
    */
   StructType schema();
 
@@ -67,12 +71,16 @@ public interface LogicalWriteInfo {
   }
 
   /**
-   * the narrow schema for updates. Present only when the connector mixes in
-   * {@link SupportsColumnUpdates}.
+   * the schema of updated, copied, and reinserted rows from Spark to data source in a
+   * column-level update. Present when the operation mixes in {@link SupportsColumnUpdates} and
+   * Spark delivers these rows with the columns of
+   * {@link SupportsColumnUpdates#requiredDataAttributes()}, which currently happens only for
+   * UPDATE. It covers every table column if every column is declared. When present,
+   * {@link #schema()} covers only newly inserted rows.
    *
-   * @since 4.3.0
+   * @since 4.4.0
    */
-  default Optional<StructType> updateSchema() {
+  default Optional<StructType> columnUpdateSchema() {
     return Optional.empty();
   }
 }

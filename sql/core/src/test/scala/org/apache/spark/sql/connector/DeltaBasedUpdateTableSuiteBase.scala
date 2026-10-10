@@ -23,7 +23,7 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
 
   override protected def deltaUpdate: Boolean = true
 
-  test("updatedColumns: single non-identity assignment") {
+  test("SPARK-58111: updatedColumns: single non-identity assignment") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |""".stripMargin)
@@ -33,7 +33,7 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
     checkLastUpdatedColumns("id")
   }
 
-  test("updatedColumns: multiple non-identity assignments") {
+  test("SPARK-58111: updatedColumns: multiple non-identity assignments") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |""".stripMargin)
@@ -43,7 +43,7 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
     checkLastUpdatedColumns("id", "dep")
   }
 
-  test("updatedColumns: identity assignments are excluded") {
+  test("SPARK-58111: updatedColumns: identity assignments are excluded") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |""".stripMargin)
@@ -53,17 +53,17 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
     checkLastUpdatedColumns("id")
   }
 
-  test("updatedColumns: empty when all assignments are identity") {
+  test("SPARK-58111: updatedColumns: empty when all assignments are identity") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |""".stripMargin)
 
     sql(s"UPDATE $tableNameAsString SET id = id, dep = dep WHERE pk = 1")
 
-    checkLastUpdatedColumns() // expects empty
+    checkLastUpdatedColumns()
   }
 
-  test("updatedColumns: no WHERE clause still reports assigned columns") {
+  test("SPARK-58111: updatedColumns: no WHERE clause still reports assigned columns") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
@@ -74,15 +74,15 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
     checkLastUpdatedColumns("dep")
   }
 
-  test("updatedColumns: cross-column assignment is not treated as identity") {
+  test("SPARK-58111: updatedColumns: assignment from another column is not identity") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
+      """{ "pk": 1, "id": 10, "dep": "hr" }
         |""".stripMargin)
 
-    // SET id = dep assigns a different column's value -- not identity
-    sql(s"UPDATE $tableNameAsString SET id = 0, dep = dep WHERE pk = 1")
+    sql(s"UPDATE $tableNameAsString SET id = pk WHERE pk = 1")
 
     checkLastUpdatedColumns("id")
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 1, "hr") :: Nil)
   }
 
   test("nullable row ID attrs") {

@@ -85,50 +85,56 @@ public interface DataWriter<T> extends Closeable {
   }
 
   /**
-   * Writes one updated, copied, or reinserted record with metadata.
+   * Writes one updated or copied record with metadata in the column update layout.
    * <p>
-   * Connectors that mix in {@link SupportsColumnUpdates} without also mixing in
-   * {@link SupportsDelta} (i.e. group-based operations) receive records here in the schema
-   * declared by {@link LogicalWriteInfo#updateSchema()}. An operation that mixes in both
-   * instead delivers narrow rows through {@link DeltaWriter#update} / {@link DeltaWriter#reinsert}
-   * and never calls this method. By default, delegates to {@link #writeUpdate(Object)} for
-   * connectors that do not need metadata; implementations that do need it should override this
-   * method directly.
+   * When {@link LogicalWriteInfo#columnUpdateSchema()} is present for a row-level operation that
+   * does not mix in {@link SupportsDelta}, Spark passes updated and copied records to this method
+   * instead of {@link #write(Object, Object)} if the operation returns a non-empty
+   * {@link RowLevelOperation#requiredMetadataAttributes()}, and to
+   * {@link #writeColumnUpdate(Object)} otherwise. The record follows
+   * {@link LogicalWriteInfo#columnUpdateSchema()} and the metadata follows
+   * {@link LogicalWriteInfo#metadataSchema()}. Operations that mix in {@link SupportsDelta} receive
+   * such rows through {@link DeltaWriter#update} and {@link DeltaWriter#reinsert} instead.
+   * <p>
+   * By default, delegates to {@link #writeColumnUpdate(Object)} and drops the metadata.
    * <p>
    * If this method fails (by throwing an exception), {@link #abort()} will be called and this
    * data writer is considered to have been failed.
    *
    * @throws IOException if failure happens during disk/network IO like writing files.
-   * @throws SparkUnsupportedOperationException if the connector mixes in
-   *         {@link SupportsColumnUpdates} but overrides neither {@code writeUpdate} overload.
+   * @throws SparkUnsupportedOperationException if neither this method nor
+   *         {@link #writeColumnUpdate(Object)} is overridden.
    *
-   * @since 4.3.0
+   * @since 4.4.0
    */
-  default void writeUpdate(T metadata, T record) throws IOException {
-    writeUpdate(record);
+  default void writeColumnUpdate(T metadata, T record) throws IOException {
+    writeColumnUpdate(record);
   }
 
   /**
-   * Writes one updated, copied, or reinserted record without metadata.
+   * Writes one updated or copied record without metadata in the column update layout.
    * <p>
-   * Connectors that mix in {@link SupportsColumnUpdates} without also mixing in
-   * {@link SupportsDelta} (i.e. group-based operations) receive records here in the schema
-   * declared by {@link LogicalWriteInfo#updateSchema()}. Implementations must override this method,
-   * or {@link #writeUpdate(Object, Object)}, when mixing in {@link SupportsColumnUpdates} without
-   * {@link SupportsDelta}.
+   * When {@link LogicalWriteInfo#columnUpdateSchema()} is present for a row-level operation that
+   * does not mix in {@link SupportsDelta}, Spark passes updated and copied records to this method
+   * instead of {@link #write(Object)} if the operation returns no
+   * {@link RowLevelOperation#requiredMetadataAttributes()}. The record follows
+   * {@link LogicalWriteInfo#columnUpdateSchema()}.
+   * <p>
+   * A writer for such an operation must override this method, unless the operation returns a
+   * non-empty {@link RowLevelOperation#requiredMetadataAttributes()} and the writer overrides
+   * {@link #writeColumnUpdate(Object, Object)}.
    * <p>
    * If this method fails (by throwing an exception), {@link #abort()} will be called and this
    * data writer is considered to have been failed.
    *
    * @throws IOException if failure happens during disk/network IO like writing files.
-   * @throws SparkUnsupportedOperationException if the connector mixes in
-   *         {@link SupportsColumnUpdates} but overrides neither {@code writeUpdate} overload.
+   * @throws SparkUnsupportedOperationException if this method is not overridden.
    *
-   * @since 4.3.0
+   * @since 4.4.0
    */
-  default void writeUpdate(T record) throws IOException {
+  default void writeColumnUpdate(T record) throws IOException {
     throw new SparkUnsupportedOperationException(
-      "DATA_SOURCE_WRITE_UPDATE_NOT_IMPLEMENTED",
+      "DATA_SOURCE_WRITE_COLUMN_UPDATE_NOT_IMPLEMENTED",
       Map.of("class", getClass().getName()));
   }
 
